@@ -10,6 +10,7 @@ import {
     readFontSize,
 } from '@workspace/lib/constants/fonts';
 import {
+    type FigureAttrs,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     type PageSetup,
@@ -38,6 +39,7 @@ import {
     W14_NS,
     WP_NS,
 } from '../../core/ooxml';
+import { uriReference } from '../../core/opc';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { readStoredEquation } from '../../document/equation';
@@ -67,7 +69,7 @@ import {
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
-import type { ExportMedia } from '../../document/transform/protocol';
+import { type ExportMedia, toTransferableBuffer } from '../../document/transform/protocol';
 import {
     BORDER_SIDES,
     CHECKBOX_GLYPHS,
@@ -85,19 +87,17 @@ import {
     TWIPS_PER_PX,
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
+import { splitDataUri } from '../../shared/data-uri';
 import { DOCX_FONT_FILES, type DocxFontFiles, fontLineHeight, sfntTables } from '../fonts';
-import { figureMediaKey } from './docx-image';
+import { encodeOfficeImage, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
-
-// An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
-export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,
     setup: PageSetup,
-    media: DocxMedia[],
+    media: OfficeMedia[],
     title: string,
     publicOrigin: string | undefined,
 ): Promise<Uint8Array> {
@@ -160,6 +160,45 @@ export async function eigendocToDocx(
     ]);
 }
 
+// The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
+// under that src. A media name holds no `/`, so the two never meet.
+function figureMediaKey({ mediaName, src }: FigureAttrs): string | null {
+    return mediaName ?? (src && splitDataUri(src) ? src : null);
+}
+
+// A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
+// here, once, through the encode a media file takes; an SVG through the sanitizer the main thread's media took.
+export async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
+    const pasted = new Map<string, { mediaType: string | null; base64: string }>();
+    const visit = (node: JSONContent) => {
+        if (node.type === 'figure') {
+            const attrs = readFigureAttrs(node.attrs ?? {});
+            const key = figureMediaKey(attrs);
+            if (key && key === attrs.src) {
+                const split = splitDataUri(key);
+                if (split) pasted.set(key, split);
+            }
+        }
+        for (const child of node.content ?? []) visit(child);
+    };
+    visit(json);
+    if (pasted.size === 0) return [];
+    const { sharpResize } = await import('../../shared/sharp-resize');
+    const media: ExportMedia[] = [];
+    for (const [src, { mediaType, base64 }] of pasted) {
+        const data = Buffer.from(base64, 'base64');
+        if (mediaType === 'image/svg+xml') {
+            media.push({ name: src, contentType: mediaType, data: toTransferableBuffer(data) });
+            continue;
+        }
+        const item = await encodeOfficeImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
+        if (item) media.push(item);
+    }
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { sanitizeExportMedia } = await import('../sanitize');
+    return sanitizeExportMedia(media);
+}
+
 const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
@@ -213,7 +252,7 @@ type Package = {
     bullets: Map<number, number>;
     checkboxes: boolean;
     languages: Set<string>;
-    media: Map<string, DocxMedia>;
+    media: Map<string, OfficeMedia>;
     images: Map<string, Image>;
     files: [path: string, data: ArrayBuffer][];
     drawings: number;
@@ -1121,11 +1160,6 @@ const TABLE_LOOK = {
 // One image part and relationship per media name; an SVG's PNG is its blip, the SVG its extension.
 type Image = { rId: string; svgRId?: string; part: string; width: number; height: number };
 
-const RASTER_EXTENSIONS = new Map([
-    ['image/png', 'png'],
-    ['image/jpeg', 'jpeg'],
-]);
-
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
     const attrs = readFigureAttrs(node.attrs ?? {});
@@ -1467,10 +1501,7 @@ function hyperlinkOf(node: JSONContent, publicOrigin: string | undefined): Hyper
     // Gated after the strip, or a character XML can't hold could hide a scheme; trimmed as a URL parser trims.
     const kept = stripNonXmlChars(href).replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, '');
     if (!kept || !isAllowedUri(kept)) return undefined;
-    // What a URI reference can't hold; `%` stays, so an encoded href encodes no further.
-    const target = absoluteHref(kept, publicOrigin).replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) =>
-        encodeURIComponent(character),
-    );
+    const target = uriReference(absoluteHref(kept, publicOrigin));
     const title = attrs?.['title'];
     return { target, tooltip: typeof title === 'string' && title ? title : undefined };
 }

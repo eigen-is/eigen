@@ -1,13 +1,13 @@
-import { DOCX_MIME, XLSX_MIME } from '@workspace/lib/constants/mime';
+import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
 import { type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { getPublicOrigin } from '../config/server-config';
 import { ApiError } from '../core/errors';
 import type {
-    DocumentExportFormat,
     EigendocExportFormat,
     ExportTransformJob,
     SheetExportFormat,
+    SlidesExportFormat,
     VectorExportFormat,
 } from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
@@ -32,16 +32,17 @@ const EXPORT_ENVELOPES = {
     svg: { workerFormat: 'svg', contentType: 'image/svg+xml', extension: 'svg' },
     xlsx: { workerFormat: 'xlsx', contentType: XLSX_MIME, extension: 'xlsx' },
     docx: { workerFormat: 'docx', contentType: DOCX_MIME, extension: 'docx' },
+    pptx: { workerFormat: 'pptx', contentType: PPTX_MIME, extension: 'pptx' },
 } as const;
 
 type ExportEnvelope = (typeof EXPORT_ENVELOPES)[keyof typeof EXPORT_ENVELOPES];
 
 // What the Worker is asked to render. One arm per document type, so a format its route
-// rejects — a docx from a deck, an xlsx from a document — does not compile.
+// rejects — a docx from a deck, a pptx from a document — does not compile.
 export type ExportJob =
     | { documentType: 'eigensheets'; format: SheetExportFormat }
     | { documentType: 'eigendoc'; format: EigendocExportFormat }
-    | { documentType: 'eigenslides'; format: DocumentExportFormat }
+    | { documentType: 'eigenslides'; format: SlidesExportFormat }
     | { documentType: 'eigenvector'; format: VectorExportFormat };
 
 // `signal` aborts the off-thread transforms when the client disconnects — the runner
@@ -120,7 +121,7 @@ async function serveExport(
 
 // The one main-thread entry every export takes: prepare what the Worker cannot fetch,
 // then run the shared transform seam. The Worker returns the finished bytes — the UTF-8
-// document for html and pdf-html, the zip for xlsx and docx.
+// document for html and pdf-html, the zip for xlsx, docx and pptx.
 export async function runDocumentExport(
     job: ExportJob,
     mount: Mount,

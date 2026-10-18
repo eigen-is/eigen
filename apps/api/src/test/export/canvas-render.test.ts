@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { DEFAULT_SCENE_META, type VectorElement, type VectorScene } from '@workspace/lib/vector';
+import {
+    DEFAULT_SCENE_META,
+    ELEMENT_KINDS,
+    SLIDES_STYLE_DEFAULTS,
+    solidFill,
+    type VectorElement,
+    type VectorScene,
+} from '@workspace/lib/vector';
 import {
     drawingPage,
     emptyPage,
@@ -8,6 +15,7 @@ import {
     renderFittedPage,
     renderPrintPage,
 } from '../../lib/export/canvas/render';
+import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { buildGoldenDeckScene, buildGoldenVectorScene, GOLDEN_MEDIA_NAME } from '../fixtures/golden-documents';
 
 // Box fields only: a Partial of the whole union would widen `type` on the spread below and stop the
@@ -132,6 +140,28 @@ describe('renderCanvasPage', () => {
         expect(html).toContain('overflow:visible');
         // roughjs drew the rectangle inside it.
         expect(html).toContain('<path ');
+    });
+
+    test('a path layer is the kind fragment, holes and all, and the export sanitizer keeps it', () => {
+        const golden = buildGoldenVectorScene();
+        const path: VectorElement = {
+            ...golden.elements[0],
+            ...ELEMENT_KINDS.path.defaults(SLIDES_STYLE_DEFAULTS),
+            id: 'v-path',
+            type: 'path',
+            width: 200,
+            height: 100,
+            roughness: 0,
+            path: 'M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.25 0.25 L 0.25 0.75 L 0.75 0.75 L 0.75 0.25 Z',
+            closed: true,
+            fill: solidFill('#ff0000'),
+        };
+        const page = drawingPage({ ...golden, elements: [path] }, noMedia);
+        if (!page) throw new Error('expected a page');
+        const html = sanitizeExportHtml(renderCanvasPage(page, 1));
+        // one fill for both rings, so the inner one cuts the hole
+        expect(html.match(/fill="#ff0000"/g)).toHaveLength(1);
+        expect(html).toMatch(/<path d="M0 0 [^"]*M50 25 [^"]*" fill="#ff0000"/);
     });
 
     test('a painted rich text layer is its backdrop viewport plus the styled div', () => {

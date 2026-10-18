@@ -5,11 +5,11 @@
 
 import { chartColor, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';
 import { type ChartSpec, type ChartStacking, LEGEND_POSITIONS, type LegendPosition } from '@workspace/lib/types/chart';
-import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
     ColorRow,
     FontRow,
     MergedSelect,
+    PropertyCheckbox,
     PropertyNumberInput,
     PropertyRow,
     PropertySection,
@@ -86,27 +86,50 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
         });
     };
 
-    const categoryTitle = (placeholder: string) => (
-        <PropertyRow label="Title">
-            <PropertyTextInput
-                value={categoryAxis.title}
-                placeholder={placeholder}
-                maxLength={MAX_CHART_LABEL_LENGTH}
-                onChange={(title) => onChange({ ...spec, categoryAxis: { title } })}
+    // An axis's rows take their section's name, since a bar chart swaps which section holds which axis.
+    type AxisName = 'Horizontal axis' | 'Vertical axis';
+    const showAxisRow = (axis: AxisName, visible: boolean, onVisible: (visible: boolean) => void) => (
+        <PropertyCheckbox
+            label="Show axis"
+            aria-label={`${axis}: Show axis`}
+            checked={visible}
+            onCheckedChange={onVisible}
+        />
+    );
+    const setCategoryAxis = (patch: Partial<ChartSpec['categoryAxis']>) =>
+        onChange({ ...spec, categoryAxis: { ...categoryAxis, ...patch } });
+
+    const categoryRows = (axis: AxisName) => (
+        <>
+            <PropertyRow label="Title">
+                <PropertyTextInput
+                    value={categoryAxis.title}
+                    placeholder={`${axis} title`}
+                    maxLength={MAX_CHART_LABEL_LENGTH}
+                    onChange={(title) => setCategoryAxis({ title })}
+                />
+            </PropertyRow>
+            {showAxisRow(axis, categoryAxis.visible, (visible) => setCategoryAxis({ visible }))}
+            <PropertyCheckbox
+                label="Reverse axis order"
+                aria-label={`${axis}: Reverse axis order`}
+                checked={categoryAxis.reversed}
+                onCheckedChange={(reversed) => setCategoryAxis({ reversed })}
             />
-        </PropertyRow>
+        </>
     );
 
-    const valueRows = (placeholder: string) => (
+    const valueRows = (axis: AxisName) => (
         <>
             <PropertyRow label="Title">
                 <PropertyTextInput
                     value={valueAxis.title}
-                    placeholder={placeholder}
+                    placeholder={`${axis} title`}
                     maxLength={MAX_CHART_LABEL_LENGTH}
                     onChange={(title) => setValueAxis({ title })}
                 />
             </PropertyRow>
+            {showAxisRow(axis, valueAxis.visible, (visible) => setValueAxis({ visible }))}
             <PropertyRow label="Min">
                 <PropertyNumberInput
                     value={shownBound(valueAxis.min)}
@@ -123,13 +146,12 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                     onClear={() => setValueAxis({ max: null })}
                 />
             </PropertyRow>
-            <PropertyRow label="Gridlines">
-                <Checkbox
-                    aria-label="Gridlines"
-                    checked={valueAxis.gridlines}
-                    onCheckedChange={(checked) => setValueAxis({ gridlines: checked === true })}
-                />
-            </PropertyRow>
+            <PropertyCheckbox
+                label="Gridlines"
+                aria-label={`${axis}: Gridlines`}
+                checked={valueAxis.gridlines}
+                onCheckedChange={(gridlines) => setValueAxis({ gridlines })}
+            />
         </>
     );
 
@@ -140,7 +162,15 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                     <MergedSelect
                         value={type}
                         options={CHART_TYPE_OPTIONS}
-                        onChange={(next) => onChange({ ...spec, type: next })}
+                        onChange={(next) =>
+                            // Excel's bar chart reads reversed by default, so its direction would turn a
+                            // column chart right to left.
+                            onChange(
+                                (next === 'bar') === (type === 'bar')
+                                    ? { ...spec, type: next }
+                                    : { ...spec, type: next, categoryAxis: { ...categoryAxis, reversed: false } },
+                            )
+                        }
                     />
                 </PropertyRow>
                 {(type === 'column' || type === 'bar') && (
@@ -180,12 +210,12 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
 
             {!pie && (
                 <PropertySection title="Horizontal axis">
-                    {valueHorizontal ? valueRows('Horizontal axis title') : categoryTitle('Horizontal axis title')}
+                    {valueHorizontal ? valueRows('Horizontal axis') : categoryRows('Horizontal axis')}
                 </PropertySection>
             )}
             {!pie && (
                 <PropertySection title="Vertical axis">
-                    {valueHorizontal ? categoryTitle('Vertical axis title') : valueRows('Vertical axis title')}
+                    {valueHorizontal ? categoryRows('Vertical axis') : valueRows('Vertical axis')}
                 </PropertySection>
             )}
 

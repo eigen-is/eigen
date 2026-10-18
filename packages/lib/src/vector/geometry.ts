@@ -824,6 +824,9 @@ export function arrowheadGeometry(
     return { kind: 'barbs', tip, barb1: rotatePoint(base, tip, -angle), barb2: rotatePoint(base, tip, angle) };
 }
 
+// The clearance an arrow label's mask leaves around its text, on every side.
+export const ARROW_LABEL_PAD = 5;
+
 // The label's center (arrow local frame) and box: centered on the polyline's index-midpoint (odd → the
 // middle vertex, even → the middle segment's midpoint), width client-measured (labelWidth),
 // height = line count × the font's line height. null when the arrow has no label. Shared by hit-testing,

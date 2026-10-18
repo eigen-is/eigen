@@ -184,7 +184,8 @@ export function suggestChartSpec(ref: CellRangeRef, resolver: CellResolver): Cha
     const title = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '');
     const corner = range.headerRow && range.headerColumn && !range.seriesInRows;
     const axisTitle = corner ? cellLabel(resolver.getCell(ref.sheetId, ref.row[0], ref.column[0])) : '';
-    return { ...sampleChartSpec('column'), title, categoryAxis: { title: axisTitle }, data };
+    const sample = sampleChartSpec('column');
+    return { ...sample, title, categoryAxis: { ...sample.categoryAxis, title: axisTitle }, data };
 }
 
 // Excel's current region: a single cell grows to the block of filled cells around it, the way Google

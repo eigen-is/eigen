@@ -102,11 +102,15 @@ describe('Eigendoc export route — response contract', () => {
         expect(core).toContain('<dc:title>Doc Contract</dc:title>');
     }, 120_000);
 
-    test('an unsupported format is rejected with 400', async () => {
-        const res = await exportRequest(docPath.id, 'xlsx');
-        expect(res.status).toBe(400);
-        expect(await res.text()).toContain('not supported');
-    }, 60_000);
+    test.each(['xlsx', 'pptx'])(
+        'an unsupported format, %s, is rejected with 400',
+        async (format) => {
+            const res = await exportRequest(docPath.id, format);
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('not supported');
+        },
+        60_000,
+    );
 });
 
 describe('Eigenslides export route — response contract', () => {
@@ -127,6 +131,25 @@ describe('Eigenslides export route — response contract', () => {
         expect(html).toContain('data:image/webp;base64,');
         expect(html).not.toMatch(/<script/i);
         expect(html).toContain('<div class="deck">');
+    }, 120_000);
+
+    test('pptx export serves a presentation with the presentationml content type', async () => {
+        const res = await exportRequest(deckPath.id, 'pptx');
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toBe(
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        );
+        expect(res.headers.get('content-disposition')).toBe('attachment; filename="Deck Contract.pptx"');
+        expect(res.headers.get('content-security-policy')).toBe(EXPORT_CSP);
+        const zip = openZip(Buffer.from(await res.arrayBuffer()));
+        expect(new TextDecoder().decode(zip.read('docProps/core.xml'))).toContain('<dc:title>Deck Contract</dc:title>');
+        // Every slide, the ones past the preview's cap too, and the picture as a PNG from its source.
+        expect(zip.names().filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))).toHaveLength(10);
+        expect(
+            Buffer.from(zip.read('ppt/media/image1.png') ?? [])
+                .subarray(1, 4)
+                .toString(),
+        ).toBe('PNG');
     }, 120_000);
 
     test('an unsupported format is rejected with 400', async () => {

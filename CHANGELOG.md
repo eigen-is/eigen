@@ -16,6 +16,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 - **Equations in Docs** — Insert → **Equation** opens the Equation panel: type LaTeX (or paste MathML) with a live preview, or pick from Google's five symbol menus. **Display** puts an equation on a line of its own. Equations take comments, count in word count and search, and download to Word as Word equations
 - **Word import and PDF** — a Word file's equations come in as equations you can edit, and the PDF draws equations
 - **Paste equations** — an equation copied from Word for the web or a web page that shows math pastes into Docs as an equation you can edit
+- **PowerPoint export** — File → Download → **Microsoft PowerPoint (.pptx)** saves a presentation as a .pptx, also from Drive and ⌘K. Text, shapes, arrows, images and backgrounds carry over; a chart arrives as its shapes
+- **PowerPoint import** — **Convert to Slides** on a .pptx in Drive makes a presentation from it, and File → **Import slides…** adds a .pptx's slides after the open presentation's own. Text, shapes, pictures, charts and backgrounds carry over, and a star, a block arrow, a flowchart shape or a freeform drawing comes in as a shape you can move, resize and recolor. A table, a SmartArt graphic or a chart Slides can't draw leaves a box saying what was there, and Import slides… ends with a message counting what did not come over. A 4:3 file converts to a 4:3 presentation, and slides imported into a presentation of another size are fitted inside its slides
 
 ### Changed
 

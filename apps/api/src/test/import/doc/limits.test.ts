@@ -68,12 +68,14 @@ const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => nod
 // The notes list closes the document, one item per note.
 const notes = (json: JSONContent) => (json.content?.at(-1)?.content ?? []).map((item) => texts(item).join(''));
 
-// A process of its own with a deadline, for a file that could hold the reader in a loop.
+// A process of its own with a deadline, for a file that could hold the reader in a loop. Bun.write, not console.log:
+// once a module reads process.stdout (lib0 does, so anything that reaches yjs), a console.log into the pipe ends at
+// 64 KB when the process exits.
 function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
     const script = `
         const { docxToPmJson } = await import(process.env.READER);
         const { json } = docxToPmJson(Buffer.from(await Bun.stdin.arrayBuffer()));
-        console.log(JSON.stringify(json));
+        await Bun.write(Bun.stdout, JSON.stringify(json));
     `;
     const child = Bun.spawnSync([process.execPath, '-e', script], {
         env: { ...process.env, READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir) },

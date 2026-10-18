@@ -1,6 +1,5 @@
 import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
-import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import type { BandEdge, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { usePrintPdf } from '@workspace/lib/drive';
 import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
@@ -617,8 +616,7 @@ export const EditorToolbar = ({
                 onOpenChange={setImportPickerOpen}
                 title="Import docx file"
                 progressTitle="Importing docx file"
-                mime={DOCX_MIME}
-                accept=".docx"
+                target="eigendoc"
             />
         </>
     );

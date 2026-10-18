@@ -230,7 +230,7 @@ describe('chart text', () => {
         const el = chart({
             id: 'c1',
             chart: specJson({
-                categoryAxis: { title: 'Teams' },
+                categoryAxis: { ...sampleChartSpec('column').categoryAxis, title: 'Teams' },
                 valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
             }),
         });

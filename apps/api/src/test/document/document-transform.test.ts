@@ -7,8 +7,10 @@ import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspa
 import {
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SHEETS,
+    DRIVE_TYPE_SLIDES,
     type DrivePath,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
@@ -45,7 +47,7 @@ import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
 import { type DocxImage, docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
-import { DOCUMENT_TOO_LARGE, SPREADSHEET_TOO_LARGE } from '../../lib/import/messages';
+import { DOCUMENT_TOO_LARGE, PRESENTATION_TOO_LARGE, SPREADSHEET_TOO_LARGE } from '../../lib/import/messages';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
@@ -1524,16 +1526,26 @@ describe('document transform (docx import)', () => {
 
 // openZip refuses an archive past the byte cap anyway, so a file that large is refused before it is read or copied
 // to the transform process, in its format's words.
+// A convert checks write on the destination folder before anything else it pays for.
+const WRITABLE_DRIVE = { canWrite: async () => true } as unknown as Drive;
+// Import slides… opens the deck for its frame, which a refused import must not pay for either.
+const UNOPENED_DRIVE = {
+    getCollabDocument: () => {
+        throw new Error('a refused import opened the document');
+    },
+} as unknown as Drive;
+
 describe('document transform (input bound)', () => {
     test.each([
         [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, SPREADSHEET_TOO_LARGE],
         [DRIVE_TYPE_DOC, DRIVE_MIME_DOC, DOCUMENT_TOO_LARGE],
+        [DRIVE_TYPE_SLIDES, DRIVE_MIME_SLIDES, PRESENTATION_TOO_LARGE],
     ])('an import past the byte cap into a %s is 413 and never runs', async (type, mimeType, message) => {
         const runSpy = spyOn(documentTransformRunner, 'run');
         try {
             const upload = Buffer.allocUnsafe(MAX_DECOMPRESSED_BYTES + 1);
             const path = { id: 'too-large', type, mimeType } as DrivePath;
-            const error = await importIntoDocument({} as unknown as Drive, path, upload, {} as unknown as User).catch(
+            const error = await importIntoDocument(UNOPENED_DRIVE, path, upload, {} as unknown as User).catch(
                 (reason: unknown) => reason,
             );
             expect(error).toMatchObject({ status: 413, message });
@@ -1555,13 +1567,9 @@ describe('document transform (input bound)', () => {
                 },
             } as unknown as Mount;
             const path = { id: 'too-large', parentId: 'parent', name, size: MAX_DECOMPRESSED_BYTES + 1 } as DrivePath;
-            const error = await convertToDocument(
-                {} as unknown as Drive,
-                mount,
-                path,
-                target,
-                {} as unknown as User,
-            ).catch((reason: unknown) => reason);
+            const error = await convertToDocument(WRITABLE_DRIVE, mount, path, target, {} as unknown as User).catch(
+                (reason: unknown) => reason,
+            );
             expect(error).toMatchObject({ status: 413, message });
         },
     );
@@ -1580,7 +1588,7 @@ describe('document transform (input bound)', () => {
             'eigensheets',
             {} as unknown as User,
         ).catch((reason: unknown) => reason);
-        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to sheets' });
+        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to Sheets' });
     });
 });
 
@@ -1643,17 +1651,17 @@ describe('document transform (admission)', () => {
                 throw new Error('a refused import copied the upload');
             },
         });
-        const drive = {} as unknown as Drive;
         const user = {} as unknown as User;
 
         for (const target of [
             { type: DRIVE_TYPE_SHEETS, mimeType: DRIVE_MIME_SHEETS },
             { type: DRIVE_TYPE_DOC, mimeType: DRIVE_MIME_DOC },
+            { type: DRIVE_TYPE_SLIDES, mimeType: DRIVE_MIME_SLIDES },
         ]) {
             const refuse = refuseAdmissionOnce();
             let error: unknown;
             try {
-                await importIntoDocument(drive, { id: 'refused', ...target } as DrivePath, upload, user);
+                await importIntoDocument(UNOPENED_DRIVE, { id: 'refused', ...target } as DrivePath, upload, user);
             } catch (err) {
                 error = err;
             } finally {
@@ -1676,7 +1684,7 @@ describe('document transform (admission)', () => {
         const refuse = refuseAdmissionOnce();
         let error: unknown;
         try {
-            await convertToDocument({} as unknown as Drive, mount, path, 'eigensheets', user);
+            await convertToDocument(WRITABLE_DRIVE, mount, path, 'eigensheets', user);
         } catch (err) {
             error = err;
         } finally {

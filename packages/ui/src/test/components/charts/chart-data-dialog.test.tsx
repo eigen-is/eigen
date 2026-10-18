@@ -262,7 +262,7 @@ describe('ChartDataDialog: the grid', () => {
 
     // The header of the categories column, as in Google.
     test('A1 shows the category axis title and types it', async () => {
-        const dialog = await open({ ...sample(), categoryAxis: { title: 'Teams' } });
+        const dialog = await open({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Teams' } });
         expect(dialog.cell(0, 0).textContent).toBe('Teams');
         expect(dialog.editor().getAttribute('aria-label')).toBe('A1: Teams');
         await dialog.type('Squads');
@@ -272,8 +272,8 @@ describe('ChartDataDialog: the grid', () => {
     });
 
     test("Save leaves a peer's category axis title alone when A1 did not change", async () => {
-        const dialog = await open({ ...sample(), categoryAxis: { title: 'Teams' } });
-        await dialog.rerender({ ...sample(), categoryAxis: { title: 'Squads' } });
+        const dialog = await open({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Teams' } });
+        await dialog.rerender({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Squads' } });
         await dialog.select(1, 1);
         await dialog.type('7');
         expect((await dialog.save()).categoryAxis.title).toBe('Squads');
@@ -569,7 +569,7 @@ describe('ChartDataDialog: paste fits the grid', () => {
     });
 
     test('a pasted corner header titles the category axis, and shows in A1', async () => {
-        const dialog = await open({ ...sample(), categoryAxis: { title: 'Teams' } });
+        const dialog = await open({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Teams' } });
         await dialog.paste(0, 0, { 'text/plain': 'Month\tNorth\nJan\t10' });
         expect(dialog.cell(0, 0).textContent).toBe('Month');
         const spec = await dialog.save();

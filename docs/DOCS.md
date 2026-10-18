@@ -185,7 +185,7 @@ Chrome implements MathML Core, which leaves `columnalign` and `menclose` out, an
 
 ## The page keeps its width and slides, then scales, clear of a panel
 
-The page is centered in a scroll box. Its width never changes, so a line breaks in the same place on every screen, and the drive preview and the HTML export lay the doc out at the same width ([EXPORT.md](EXPORT.md#every-format-but-xlsx-docx-and-svg-is-one-html-document)).
+The page is centered in a scroll box. Its width never changes, so a line breaks in the same place on every screen, and the drive preview and the HTML export lay the doc out at the same width ([EXPORT.md](EXPORT.md#every-format-but-xlsx-docx-pptx-and-svg-is-one-html-document)).
 
 A panel is an absolute overlay on the right of the scroll box, so opening one never reflows the page. Only the text column has to stay clear of it: the page's right margin may tuck under. Below `PANEL_CLEAR_WIDTH_PX` the page slides left by its overlap with the panel, and scales down only once the space left of the page runs out. A screen narrower than the page scales it too. The scale is a CSS transform with a negative bottom margin that gives back the space the transform frees.
 

@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, charts, graphs]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 147
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 You can turn a table of numbers into a chart that floats over the grid. The chart reads its cells, so it changes as soon as you change a value.
@@ -31,7 +31,7 @@ The **Chart editor** opens whenever you double-click a chart. Under **Setup**:
 - **Switch rows/columns** turns each row into a series instead of each column.
 - **Use row 1 as headers** and **Use column A as labels** say whether the first row and column hold names or values.
 
-Below that you pick the chart's **Type** (**Bar**, **Column**, **Line**, or **Pie**), its **Stacking** (**None**, **Standard** or **100%**), **Title**, **Legend** and **Font**, the axis titles, the lowest and highest value on the value axis (a percent on a **100%** stack, and automatic again when you switch to or from **100%**), the gridlines, and a color for each series or pie slice, which reads **Automatic** until you pick one.
+Below that you pick the chart's **Type** (**Bar**, **Column**, **Line**, or **Pie**), its **Stacking** (**None**, **Standard** or **100%**), **Title**, **Legend** and **Font**, the axis titles, whether each axis shows (**Show axis**), whether the category axis runs the other way (**Reverse axis order**), the lowest and highest value on the value axis (a percent on a **100%** stack, and automatic again when you switch to or from **100%**), the gridlines, and a color for each series or pie slice, which reads **Automatic** until you pick one.
 
 Click a cell to close the editor.
 

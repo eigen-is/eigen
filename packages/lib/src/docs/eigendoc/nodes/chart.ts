@@ -2,7 +2,7 @@ import { type CommandProps, Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { parseChartSpec, sampleChartSpec } from '../../../charts';
 import type { ChartSpec, ChartType } from '../../../types/chart';
-import { renderChartSpecSvg } from '../../../vector';
+import { renderChartSpecSvg } from '../../../vector/kinds/chart-render';
 import { MAX_PAPER_MM, mmToPx } from '../page';
 import {
     type FigureFrameAttrs,

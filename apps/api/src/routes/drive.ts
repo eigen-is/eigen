@@ -1,5 +1,10 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
-import { type DriveAccessCheckResult, type DrivePath, isConvertTarget } from '@workspace/lib/types/drive';
+import {
+    type DriveAccessCheckResult,
+    type DrivePath,
+    type ImportResult,
+    isConvertTarget,
+} from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
@@ -239,7 +244,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
-        async ({ params, request, user, server }) => {
+        async ({ params, request, user, server }): Promise<DrivePath> => {
             // Same idle-timeout exemption as the export route: silent while queued + transforming.
             server?.timeout(request, 0);
             if (!isConvertTarget(params.targetType)) {
@@ -262,7 +267,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import',
-        async ({ params, request, user, server }) => {
+        async ({ params, request, user, server }): Promise<ImportResult> => {
             // Same idle-timeout exemption as the export route: silent while queued + transforming.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
@@ -273,20 +278,20 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             // Bounded reader: Content-Length over the ceiling is refused before any read, a lying stream is cancelled as it crosses it.
             const bytes = await readBoundedBodyBytes(request, maxSize);
-            await importIntoDocument(
+            const summary = await importIntoDocument(
                 drive,
                 path,
                 Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
                 user,
                 request.signal,
             );
-            return { success: true };
+            return { success: true, summary };
         },
         { auth: true, parse: 'none' },
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import-from-drive',
-        async ({ params, body, request, user, server }) => {
+        async ({ params, body, request, user, server }): Promise<ImportResult> => {
             // Same idle-timeout exemption as the export route: silent while queued + transforming.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
@@ -301,14 +306,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 rejection: 'Source is not a file',
                 maxBytes: maxSize,
             });
-            await importIntoDocument(
+            const summary = await importIntoDocument(
                 drive,
                 path,
                 Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
                 user,
                 request.signal,
             );
-            return { success: true };
+            return { success: true, summary };
         },
         {
             body: importFromDriveSchema,

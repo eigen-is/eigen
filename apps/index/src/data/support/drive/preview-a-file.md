@@ -6,7 +6,7 @@ category: Files
 tags: [drive, preview, files]
 related: [drive/get-started, drive/download-files]
 order: 60
-updated: 2026-09-20
+updated: 2026-10-14
 ---
 
 Drive can show you the contents of a file without opening a separate app or tab. Images, PDFs, videos, audio, text files, contact files, saved emails, and calendar files all have a built-in preview. Text files over 1 MB show the file card instead.
@@ -52,7 +52,7 @@ The bar at the bottom of the preview has a **Download** button that saves the fi
 
 Some files get extra buttons in the same bar:
 
-- **Convert to Sheet** for an Excel file (`.xlsx`), and **Convert to Document** for a Word file (`.docx`). Eigen makes a copy in its own format and opens it.
+- **Convert to Sheet** for an Excel file (`.xlsx`), **Convert to Document** for a Word file (`.docx`), and **Convert to Slides** for a PowerPoint file (`.pptx`). Eigen makes a copy in its own format and opens it.
 - **Import to Contacts** for a contact file (`.vcf`). It adds the cards in the file to your contacts.
 - **Import to Mail** for a saved email (`.eml`). It puts the message back in your inbox. See [Import an email from a file](/support/mail/import-an-email).
 - **Import to Calendar** for a calendar file (`.ics`). Eigen asks which calendar the events go into. See [Import events from a calendar file](/support/calendar/import-events).
