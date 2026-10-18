@@ -141,7 +141,7 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
 // element's angle. An ellipse's are its axis extremes and a diamond's are its four tips (Excalidraw's
 // getDiamondBaseCorners) — the same four points. Excalidraw's getSnapOutlineMidPoint order, so a
 // bind-time midpoint snap resolves the same side on a tie.
-function boxAnchorPoints(el: VectorElement): Point[] {
+export function boxAnchorPoints(el: VectorElement): Point[] {
     const { x, y, width: w, height: h } = el;
     const center = boxCenter(el);
     return [

@@ -399,6 +399,8 @@ function elementXml(el: VectorElement, slide: Slide): string {
             return freedrawXml(el, slide, opacity);
         case 'arrow':
             return arrowXml(el, slide, opacity);
+        case 'path':
+            return '';
         case 'chart':
             return convertToShapes(el)
                 .map((shape) => elementXml(shape, slide))

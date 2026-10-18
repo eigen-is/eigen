@@ -16,6 +16,7 @@ import {
     Minus,
     MoveUpRight,
     Pencil,
+    Spline,
     Square,
     Type,
 } from 'lucide-react';
@@ -70,6 +71,7 @@ export const ELEMENT_KIND_UI: Record<VectorElementType, ElementKindUi> = {
     diamond: { icon: Diamond, label: 'Diamond', shortcut: { letter: 'D', digit: '3' } },
     ellipse: { icon: Circle, label: 'Ellipse', shortcut: { letter: 'O', digit: '4' } },
     pie: { icon: ChartPie, label: 'Pie' },
+    path: { icon: Spline, label: 'Freeform' },
     chart: { icon: ChartColumn, label: 'Chart', EditDialog: ChartEditDialog, PanelSection: ChartPanelSection },
     arrow: {
         icon: MoveUpRight,

@@ -19,6 +19,7 @@ import { freedrawKind } from './freedraw';
 import { imageKind } from './image';
 import type { Capabilities, ElementKind, StyleDefaults } from './kind';
 import { lineKind } from './line';
+import { pathKind } from './path';
 import { pieKind } from './pie';
 import { rectangleKind } from './rectangle';
 import { richTextKind } from './richtext';
@@ -37,6 +38,7 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
     diamond: diamondKind,
     ellipse: ellipseKind,
     pie: pieKind,
+    path: pathKind,
     chart: chartKind,
     image: imageKind,
     richtext: richTextKind,
