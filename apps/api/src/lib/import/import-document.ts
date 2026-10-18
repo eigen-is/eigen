@@ -240,12 +240,15 @@ export async function importIntoDocument(
     }
 
     if (containerMime === DRIVE_MIME_SLIDES) {
-        // Opened first for the deck's frame: a file of another size is fitted into it, letterboxed. The importer
-        // prefixes its picture names per import, so they land beside the deck's media, never over it.
-        const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
-        const frame = SLIDE_SIZES[readSlideSize(collabDoc.doc)];
+        // Refused before the deck is opened for its frame. A file of another size is fitted into the frame, letterboxed.
+        // The importer prefixes its picture names per import, so they land beside the deck's media, never over it.
+        documentTransformRunner.assertAdmissible('foreground');
+        assertWithinByteCap(buffer.byteLength, 'pptx');
+        const frame = SLIDE_SIZES[readSlideSize((await drive.getCollabDocument(path.mountId, path.id)).doc)];
         const { update, images, warnings } = await importPptxUpdate(buffer, frame, signal);
+        // Opened again: the last tab leaving during the transform closes the deck, and a write into a closed one is lost.
         // As the docx branch: media before the update that names it, the write check last.
+        const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         signal?.throwIfAborted();
         await requireWritePermission(drive, path, user);
         await saveDocImages(drive, path, images, user);
