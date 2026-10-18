@@ -34,6 +34,12 @@ const VENDORED: LicenseVendored[] = [
         url: 'https://github.com/rocicorp/fractional-indexing',
         note: 'vendored verbatim to pin z-order behavior in eigen|vector>',
     },
+    {
+        name: 'ECMA-376 preset shape definitions',
+        license: 'Ecma copyright notice',
+        url: 'https://ecma-international.org/publications-and-standards/standards/ecma-376/',
+        note: "presetShapeDefinitions.xml, unchanged, draws a PowerPoint file's preset shapes on import",
+    },
 ];
 
 // Bundled font files, not packages, so listed by hand.
