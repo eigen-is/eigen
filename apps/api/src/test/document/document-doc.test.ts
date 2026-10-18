@@ -1,11 +1,25 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { getSchema } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import { BAND_ROOTS, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_ROOTS,
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    getDocExtensions,
+    PAGE_ROOT,
+    pageRecord,
+    STYLE_ROOT,
+} from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
-import { commitEigendocImport, readEigendocBands, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
+import {
+    commitEigendocImport,
+    readEigendocBands,
+    readEigendocFromDoc,
+    readEigendocPage,
+    readEigendocStyle,
+} from '../../lib/document/doc';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import { getHome } from '../../lib/home/get-home';
 import { seedBand, seedEigendoc } from '../fixtures/golden-documents';
@@ -55,7 +69,7 @@ describe('document/doc', () => {
         persisted.destroy();
     });
 
-    test('commitEigendocImport replaces the body, the bands and the page in one transaction', () => {
+    test('commitEigendocImport replaces the body, the bands, the page and the Normal in one transaction', () => {
         const doc = new Y.Doc();
         seedEigendoc(doc, {
             type: 'doc',
@@ -72,6 +86,8 @@ describe('document/doc', () => {
         }
         doc.getMap(PAGE_ROOT).set('marginLeft', 50);
         doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
+        doc.getMap(STYLE_ROOT).set('font', 'JetBrains Mono');
+        doc.getMap(STYLE_ROOT).set('color', '#ff0000');
 
         const tempDoc = prosemirrorJSONToYDoc(
             schema,
@@ -86,7 +102,8 @@ describe('document/doc', () => {
         };
         let transactions = 0;
         doc.on('afterTransaction', () => transactions++);
-        commitEigendocImport(doc, { update: Y.encodeStateAsUpdate(tempDoc), page: letter });
+        const style = { ...DEFAULT_NORMAL_STYLE, size: 12, lineSpacing: 1.15, spaceAfter: 10 };
+        commitEigendocImport(doc, { update: Y.encodeStateAsUpdate(tempDoc), page: letter, style });
         tempDoc.destroy();
 
         expect(transactions).toBe(1);
@@ -96,6 +113,9 @@ describe('document/doc', () => {
         for (const root of BAND_ROOTS) expect(doc.getXmlFragment(root).length).toBe(0);
         expect(doc.getMap(PAGE_ROOT).toJSON()).toEqual(pageRecord(letter));
         expect(readEigendocPage(doc)).toEqual(letter);
+        // Every key, the default's too, so the file's Normal replaces the doc's whole.
+        expect(doc.getMap(STYLE_ROOT).toJSON()).toEqual(style);
+        expect(readEigendocStyle(doc)).toEqual(style);
         doc.destroy();
     });
 
@@ -146,9 +166,10 @@ describe('document/doc', () => {
         });
     });
 
-    test('a doc with no page map reads the default page', () => {
+    test('a doc with no page or style map reads the default page and Normal', () => {
         const doc = new Y.Doc();
         expect(readEigendocPage(doc)).toEqual(DEFAULT_PAGE_SETUP);
+        expect(readEigendocStyle(doc)).toEqual(DEFAULT_NORMAL_STYLE);
         doc.destroy();
     });
 

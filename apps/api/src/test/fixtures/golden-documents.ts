@@ -2,7 +2,12 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import { type BandRoot, DEFAULT_PAGE_SETUP, type FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import {
+    type BandRoot,
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    type FigureAttrs,
+} from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -351,6 +356,29 @@ export function buildAllFeaturesDocJson(): JSONContent {
             {
                 type: 'paragraph',
                 content: [
+                    { type: 'text', text: 'A claim with a note' },
+                    {
+                        type: 'footnote',
+                        content: [
+                            {
+                                type: 'paragraph',
+                                content: [
+                                    { type: 'text', text: 'See ' },
+                                    marked('the source', link),
+                                    { type: 'text', text: ', in ' },
+                                    marked('bold', { type: 'bold' }),
+                                    { type: 'text', text: '.' },
+                                ],
+                            },
+                            paragraph('A second paragraph of the note.'),
+                        ],
+                    },
+                    { type: 'text', text: '.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
                     { type: 'text', text: 'Half the sum is ' },
                     equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}')),
                     { type: 'text', text: ', and the squares add up to' },
@@ -579,7 +607,11 @@ export function buildAllFeaturesDocMedia(): OfficeMedia[] {
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     const tempDoc = prosemirrorJSONToYDoc(docSchema(), json, 'default');
-    commitEigendocImport(doc, { update: Y.encodeStateAsUpdate(tempDoc), page: DEFAULT_PAGE_SETUP });
+    commitEigendocImport(doc, {
+        update: Y.encodeStateAsUpdate(tempDoc),
+        page: DEFAULT_PAGE_SETUP,
+        style: DEFAULT_NORMAL_STYLE,
+    });
     tempDoc.destroy();
 }
 

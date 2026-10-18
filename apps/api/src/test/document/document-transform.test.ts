@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import {
     DRIVE_MIME_DOC,
@@ -25,7 +25,13 @@ import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
 import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/core/zip';
-import { commitEigendocImport, readEigendocBands, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
+import {
+    commitEigendocImport,
+    readEigendocBands,
+    readEigendocFromDoc,
+    readEigendocPage,
+    readEigendocStyle,
+} from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
@@ -837,11 +843,14 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved again when equations met headers and footers: the .math-svg rules and the .page-band rule together, and nothing else.
 // Both doc HTML hashes moved again when a paragraph took its line spacing as a multiple of Inter's line: .eigen-prose p's line-height 1.7 to 1.694, and nothing else. The docx hash moved with it: Normal's w:line 337 to 336, and the lines familyLine rescales from it, and nothing else.
 // Both doc HTML hashes moved again when one paragraph followed another at the space after the first alone and a list, quote or cell kept the spacing of the paragraphs it holds: the .eigen-prose > p + p and :is(li, blockquote, td, th) p rules, and nothing else.
+// Both doc HTML hashes moved when the body text came to draw from the doc's Normal: eigen-prose.css's body and paragraph values as var(--doc-*) with Eigen's own as the fallback, .eigen-prose p's padding-top and margin-bottom 1em as 11pt, and the title's and subtitle's padding-top 0, and nothing else (the old hashes come back with each var() replaced by its fallback and those three lines reverted). A doc without the style map declares no --doc-* property, so the preview and docx hashes stayed.
 // All four moved again when headers and footers met paragraph format: the two sides' changes together, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '67b9637f5e5c923a23a54691b29aab3bacc6fdd9ab8b248d84fc6e7295e23a8e';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '67b9637f5e5c923a23a54691b29aab3bacc6fdd9ab8b248d84fc6e7295e23a8e';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'cbccd0e8bdcc6ca7cd54810e9c1e11fce1e89389744868b4dbec86e04cbb0dea';
+// Both doc HTML hashes moved again when headers and footers on paper met the doc's Normal: the two sides' changes together, and nothing else; the preview and docx hashes are headers and footers' alone.
+// The docx hash moved when styles.xml gained Word's FootnoteText and FootnoteReference styles, and nothing else (a doc without notes writes no notes part and names no separators).
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '593ba19708023ffee34bf8db29d47cc4d9072a9c40650601b971a56a80d05a90';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '593ba19708023ffee34bf8db29d47cc4d9072a9c40650601b971a56a80d05a90';
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
@@ -1135,6 +1144,7 @@ describe('document transform (eigendoc)', () => {
             readEigendocFromDoc(persisted),
             readEigendocBands(persisted),
             readEigendocPage(persisted),
+            readEigendocStyle(persisted),
             media,
             path.name,
             undefined,
@@ -1486,17 +1496,21 @@ describe('document transform (docx import)', () => {
 
     test('Worker import returns a Yjs update that commits to the golden document', async () => {
         const response = await runDocxImport(await buildGoldenDocx(TEST_PNG_BYTES));
-        const { update, page, images } = importDocUpdate(response);
+        const { update, page, style, images } = importDocUpdate(response);
         expect(response.ok && response.warnings).toEqual([]);
+        // The golden docx sets no docDefaults: Word's 10 pt, single, nothing after.
+        expect(style).toEqual({ ...DEFAULT_NORMAL_STYLE, size: 10, lineSpacing: 1, spaceAfter: 0 });
 
-        // The page travels beside the update, never in it: commitEigendocImport sets its keys on the live doc.
+        // The page and the Normal travel beside the update, never in it: commitEigendocImport sets their keys on the
+        // live doc.
         const updateOnly = new Y.Doc();
         Y.applyUpdate(updateOnly, new Uint8Array(update));
         expect(updateOnly.share.has(PAGE_ROOT)).toBe(false);
+        expect(updateOnly.share.has(STYLE_ROOT)).toBe(false);
         updateOnly.destroy();
 
         const doc = new Y.Doc();
-        commitEigendocImport(doc, { update: new Uint8Array(update), page });
+        commitEigendocImport(doc, { update: new Uint8Array(update), page, style });
         const committed = readEigendocFromDoc(doc);
         doc.destroy();
         expect(committed).toEqual(await referenceDocument());

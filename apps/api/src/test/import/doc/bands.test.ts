@@ -169,7 +169,7 @@ describe('docx import — headers and footers', () => {
         expect(warnings).toContainEqual({ code: 'band-images-unanchored', count: 1 });
     });
 
-    // The notes list is the body's, so a [n] in a band would link nowhere.
+    // A band's schema holds no note: the note belongs to the body's text.
     test('a note reference in a band is dropped, with a warning', async () => {
         const { json, bands, warnings } = await docxWith([
             {

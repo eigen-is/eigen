@@ -20,7 +20,7 @@ import type { Item } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, onOff, w, wChild } from './package';
-import type { Reader, Scope } from './paragraphs';
+import { type Reader, readNote, type Scope } from './paragraphs';
 import {
     ABSORBED,
     type DocxRunProps,
@@ -205,24 +205,17 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                 break;
             case 'footnoteReference':
             case 'endnoteReference': {
-                // The notes list is the body's, so a band's [n] would link nowhere.
+                // A band's schema holds no note: the note is the body's text's.
                 if (context.scope.story === 'band') {
                     reader.bandDropped++;
                     break;
                 }
-                const type = child.local === 'footnoteReference' ? 'footnote' : 'endnote';
-                const id = w(child, 'id') ?? '';
-                const key = `${type}-${id}`;
-                const note = reader.notes.get(key) ?? { type, id, number: reader.notes.size + 1 };
-                reader.notes.set(key, note);
-                context.pieces.push({
-                    kind: 'node',
-                    node: {
-                        type: 'text',
-                        text: `[${note.number}]`,
-                        marks: [{ type: 'link', attrs: { href: `#${type}-${id}` } }, { type: 'superscript' }],
-                    },
-                });
+                const content = readNote(
+                    reader,
+                    child.local === 'footnoteReference' ? 'footnote' : 'endnote',
+                    w(child, 'id') ?? '',
+                );
+                if (content) context.pieces.push({ kind: 'node', node: { type: 'footnote', content } });
                 break;
             }
             case 'ruby':
@@ -403,11 +396,12 @@ function marksOf(
         const size = complex ? props.sizeCs : props.size;
         return size !== undefined && size <= SMALL_PRINT * (complex ? reader.bodySizeCs : reader.bodySize);
     };
-    // The docx's body draws at the doc's body size, and a heading or a title at its own, so only a size apart from
-    // the one its node draws is a mark; in half-points, Word's default 10 pt where none is set.
-    const nodeRun = absorbed.includes('size')
-        ? mergeRun(styles.docRun, paraRun)
-        : { size: reader.bodySize, sizeCs: reader.bodySizeCs };
+    // The docx's body draws at the doc's body size, and a heading, a title or a note at its own, so only a size apart
+    // from the one its node draws is a mark; in half-points, Word's default 10 pt where none is set.
+    const nodeRun =
+        absorbed.includes('size') || scope.story === 'note'
+            ? mergeRun(styles.docRun, paraRun)
+            : { size: reader.bodySize, sizeCs: reader.bodySizeCs };
     const fontSizeOf = (complex: boolean) => {
         const sizeOf = (run: DocxRunProps) => (complex ? (run.sizeCs ?? run.size) : run.size) ?? 20;
         const size = sizeOf(full);
@@ -454,7 +448,7 @@ function marksOf(
         const code =
             isMonospaceFont(font, reader.fontTable) && (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
         if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font };
-        const fontFamily = fontMark(font, reader.fontTable);
+        const fontFamily = fontMark(font, reader.fontTable, reader.normal.font);
         const fontSize = fontSizeOf(complex);
         const textStyle: Marks =
             color || fontFamily || caps || fontSize

@@ -10,7 +10,13 @@ import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { formatDateTime } from '@workspace/lib/date';
-import { DEFAULT_PAGE_SETUP, type PageSetup, pageBoxStyle, pagePx } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    normalStyleProperties,
+    type PageSetup,
+    pageBoxStyle,
+    pagePx,
+} from '@workspace/lib/docs/eigendoc';
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
@@ -288,6 +294,8 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                     transform: `scale(${scale})`,
                     transformOrigin: 'top left',
                     ...(page ? { width: `${page.widthPx}px`, padding: page.padding } : null),
+                    // A doc's Normal, which its text draws in.
+                    ...(data.style && normalStyleProperties(data.style)),
                 }}
                 dangerouslySetInnerHTML={{ __html: data.body }}
             />

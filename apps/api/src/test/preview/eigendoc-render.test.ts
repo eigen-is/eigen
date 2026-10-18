@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import { DEFAULT_PAGE_SETUP, PAGE_ROOT } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, PAGE_ROOT, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
 import { type MathNode, type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { MATHML_LIMIT } from '../../lib/export/doc/render';
@@ -39,6 +39,16 @@ describe('renderEigendocPreviewBody', () => {
             width: 297,
             height: 210,
         });
+        doc.destroy();
+    });
+
+    test('the preview carries the Normal the doc stores, read as every reader reads it', () => {
+        const doc = new Y.Doc();
+        seedEigendoc(doc, docWithFigure({ mediaName: GOLDEN_MEDIA_NAME }));
+        expect(renderEigendocPreviewBody(doc, mediaUrls).style).toEqual(DEFAULT_NORMAL_STYLE);
+        doc.getMap(STYLE_ROOT).set('size', 12);
+        doc.getMap(STYLE_ROOT).set('font', 'url(x)');
+        expect(renderEigendocPreviewBody(doc, mediaUrls).style).toEqual({ ...DEFAULT_NORMAL_STYLE, size: 12 });
         doc.destroy();
     });
 
@@ -111,5 +121,22 @@ describe('renderEigendocPreviewBody', () => {
 
     test('an empty paragraph keeps the line the editor shows', () => {
         expect(previewOf({ type: 'doc', content: [{ type: 'paragraph' }] })).toBe('<p><br></p>');
+    });
+});
+
+describe('renderEigendocPreviewBody — footnotes', () => {
+    test('a reference is a linked number and its note sits in the list after the body, as the HTML download draws it', () => {
+        const note = (text: string): JSONContent => ({
+            type: 'footnote',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+        });
+        const body = previewOf({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Claim' }, note('See Smith')] }],
+        });
+        expect(body).toContain('<sup><a href="#fn-1" id="fnref-1">1</a></sup>');
+        expect(body).toContain(
+            '<section class="footnotes"><hr><ol><li id="fn-1"><p>See Smith <a href="#fnref-1">↩</a></p></li></ol></section>',
+        );
     });
 });

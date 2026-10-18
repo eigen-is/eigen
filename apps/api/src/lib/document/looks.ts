@@ -127,6 +127,10 @@ export const CAPTION_LOOK = {
     color: proseColor('.eigen-prose figcaption', 'color'),
 };
 
+// A note's text at Google's and Word's footnote size, which eigen-prose.css can't give: the editor lists its notes off
+// the page's prose.
+export const FOOTNOTE_LOOK = { sizePt: 10 };
+
 type TextLook = { color?: string; italic?: true };
 
 // The color and italic eigen-prose.css gives an element's text, where it gives any: a highlighted code token's, a heading's.

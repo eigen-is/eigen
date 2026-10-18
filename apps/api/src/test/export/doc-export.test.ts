@@ -2,7 +2,7 @@ import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import { PAGE_NUMBER_TEXT, PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
+import { type NormalStyle, PAGE_NUMBER_TEXT, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { MATHML_NAMESPACE, type MathNode, type MathRow, writeMathml, writeText } from '@workspace/math';
 import { JSDOM } from 'jsdom';
@@ -30,6 +30,23 @@ function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello
 
 function paragraph(text: string): JSONContent {
     return { type: 'paragraph', content: [{ type: 'text', text }] };
+}
+
+// A Word 2003 body: Times at 12 pt, single, 6 pt before, nothing after, black.
+const WORD_NORMAL: NormalStyle = {
+    font: 'Source Serif 4',
+    size: 12,
+    lineSpacing: 1,
+    spaceBefore: 6,
+    spaceAfter: 0,
+    color: '#000000',
+};
+
+function styledDoc(json?: JSONContent): Y.Doc {
+    const doc = seededDoc(json);
+    const map = doc.getMap(STYLE_ROOT);
+    for (const [key, value] of Object.entries(WORD_NORMAL)) map.set(key, value);
+    return doc;
 }
 
 function brokenDoc(): Y.Doc {
@@ -101,12 +118,65 @@ describe('doc export — the page', () => {
     });
 });
 
+describe('doc export — the Normal', () => {
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws the body in the Normal the doc stores, on its page',
+        async (format) => {
+            const css = await exportStyle(format, styledDoc());
+            expect(css).toContain(
+                `.page { --doc-font-family: ${getFontFamily('Source Serif 4')}; --doc-font-size: 12pt; --doc-line-height: 1.21; --doc-space-before: 6pt; --doc-space-after: 0pt; --doc-color: #000000; }`,
+            );
+            // A doc without the map declares none, so it renders as before the map.
+            expect(await exportStyle(format)).not.toMatch(/--doc-[\w-]+:/);
+        },
+    );
+
+    // Upright Source Serif 4 has small caps of its own, so text in a Source Serif Normal keeps them as typed.
+    test("the pdf fakes small caps by the Normal's font where a run has none of its own", async () => {
+        const doc = styledDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Serif', marks: [{ type: 'textStyle', attrs: { caps: 'small' } }] },
+                    ],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+        expect(new TextDecoder().decode(data)).toContain('<span style="font-variant-caps: small-caps">Serif</span>');
+    });
+
+    test("docx writes the Normal as docDefaults and the Normal style, in the Normal's font's own line", async () => {
+        const { data } = await renderEigendocExport(styledDoc(), 'docx', 'Report.eigendoc', [], undefined);
+        const styles = new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/styles.xml'));
+        expect(styles).toContain(
+            '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4" w:eastAsia="Source Serif 4" w:cs="Source Serif 4"/><w:color w:val="000000"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault>',
+        );
+        // A heading and the title draw in the Normal's font, so their line is the editor's 1.2 in Source Serif 4's own.
+        for (const id of ['Heading1', 'Title'])
+            expect(styles).toMatch(
+                new RegExp(`w:styleId="${id}">(?:(?!</w:style>).)*<w:spacing [^>]*w:line="210" w:lineRule="auto"/>`),
+            );
+        // Single in Inter's line is Source Serif 4's 1.21 / 1.371 of its own.
+        expect(styles).toMatch(
+            /w:styleId="Normal"><w:name w:val="Normal"\/><w:qFormat\/><w:pPr><w:spacing w:before="120" w:after="0" w:line="212" w:lineRule="auto"\/>/,
+        );
+    });
+});
+
 describe('doc export — the stylesheet', () => {
     // The app's tokens (--font-sans and the like) are not in the export; a property the stylesheet declares itself is.
-    test.each(['html', 'pdf-html'] as const)('%s declares every CSS variable it reads', async (format) => {
-        const css = await exportStyle(format);
-        for (const [, name] of css.matchAll(/var\((--[\w-]+)/g)) expect(css).toContain(`${name}:`);
-    });
+    // A doc's Normal (--doc-*) is declared only where it is the doc's own, so those fall back to Eigen's.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s declares every CSS variable it reads without a fallback',
+        async (format) => {
+            const css = await exportStyle(format);
+            for (const [, name] of css.matchAll(/var\((--[\w-]+)\)/g)) expect(css).toContain(`${name}:`);
+            expect([...css.matchAll(/var\((--[\w-]+),/g)].every(([, name]) => name?.startsWith('--doc-'))).toBe(true);
+        },
+    );
 
     test('headings print at medium and bold at 600', async () => {
         const css = await exportStyle('pdf-html');
@@ -118,7 +188,7 @@ describe('doc export — the stylesheet', () => {
     test('h5 and h6 print at the body size, which only eigen-prose sets', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).toContain('h1, h2, h3, h4, h5, h6 { font-size: inherit; }');
-        expect(css.match(/font-size: 11pt/g)).toHaveLength(1);
+        expect(css.match(/font-size: var\(--doc-font-size, 11pt\)/g)).toHaveLength(1);
     });
 
     // Google Docs' Title and Subtitle, which the docx writer reads too.
@@ -135,7 +205,7 @@ describe('doc export — the stylesheet', () => {
     test('the body text font and color are set once, by eigen-prose', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).not.toMatch(/(^|\n)\s*body \{/);
-        expect(css.match(/color: #1a1a2e/g)).toHaveLength(1);
+        expect(css.match(/#1a1a2e/g)).toHaveLength(1);
     });
 
     test('the dark theme stays out, whole', async () => {
@@ -1111,6 +1181,52 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     }, 60_000);
 });
 
+// D16: an unformatted paragraph draws the doc's Normal, and a paragraph's own format still wins.
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — the Normal (WeasyPrint)', () => {
+    test('an unformatted paragraph draws in the Normal: its font, size, line and spacing', async () => {
+        const { data } = await renderEigendocExport(
+            styledDoc({
+                type: 'doc',
+                content: [
+                    paragraph('a'),
+                    paragraph('b'),
+                    { type: 'paragraph', attrs: { spaceBefore: 0 }, content: [{ type: 'text', text: 'c' }] },
+                ],
+            }),
+            'pdf-html',
+            'Report.eigendoc',
+            [],
+            undefined,
+        );
+        const boxes = await laidOut(
+            new TextDecoder().decode(data),
+            "if tag == 'p' and type(box).__name__ == 'BlockBox': print(box.style['font_family'][0], box.style['font_size'], box.style['line_height'][1], float(box.padding_top), float(box.margin_bottom))",
+        );
+        expect(boxes).toEqual([
+            'Source Serif 4 16.0 1.21 8.0 0.0',
+            'Source Serif 4 16.0 1.21 8.0 0.0',
+            'Source Serif 4 16.0 1.21 0.0 0.0',
+        ]);
+    }, 60_000);
+});
+
+// The bands sit in .page, which carries the Normal, so a running header inherits it in its margin box.
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — the Normal in the bands (WeasyPrint)', () => {
+    test("a 12 pt Times Normal draws in the PDF's header as in its body", async () => {
+        const doc = styledDoc({ type: 'doc', content: [paragraph('Body text')] });
+        seedBand(doc, 'header', paragraph('Acme header'));
+        const html = await exported('pdf-html', doc);
+        const page = html.slice(html.indexOf('<div class="page">'));
+        expect(page.indexOf('class="band-header"')).toBeGreaterThan(-1);
+        const boxes = await laidOut(
+            html,
+            "if tag == 'p' and type(box).__name__ == 'BlockBox': print(box.style['font_family'][0], box.style['font_size'], ''.join(getattr(b, 'text', '') for b in walk(box)).strip())",
+        );
+        // The page's own boxes first, then its margin boxes.
+        expect(boxes).toEqual(['Source Serif 4 16.0 Body text', 'Source Serif 4 16.0 Acme header']);
+    }, 60_000);
+});
+
 // D13: a paragraph's own spacing and indents, as Word and Google Docs draw them.
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — paragraph format (WeasyPrint)', () => {
     const formatted = (attrs: Record<string, unknown>, text = 'x'): JSONContent => ({
@@ -1495,41 +1611,114 @@ const MARGIN_PX = px(20);
     }, 60_000);
 });
 
-describe('doc export — footnotes', () => {
-    const note = (...paragraphs: JSONContent[]): JSONContent => ({ type: 'footnote', content: paragraphs });
+const note = (...paragraphs: JSONContent[]): JSONContent => ({ type: 'footnote', content: paragraphs });
 
+// A claim with a two-paragraph note, its second paragraph holding a forged nested note, then a second claim's note.
+const NOTED: JSONContent[] = [
+    {
+        type: 'paragraph',
+        content: [
+            { type: 'text', text: 'Claim' },
+            note(
+                { type: 'paragraph', content: [{ type: 'text', text: 'See', marks: [{ type: 'bold' }] }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Two' }, note(paragraph('nested'))] },
+            ),
+            { type: 'text', text: '.' },
+        ],
+    },
+    { type: 'paragraph', content: [{ type: 'text', text: 'Again' }, note(paragraph('Second'))] },
+];
+
+describe('doc export — footnotes', () => {
     // Through a spec HTML parser: a <p> in the body's <p> would close it.
-    test('a note renders in its paragraph as spans, a note inside it as its text', () => {
-        const html = renderDocHtml(
-            {
-                type: 'doc',
-                content: [
-                    {
-                        type: 'paragraph',
-                        content: [
-                            { type: 'text', text: 'Claim' },
-                            note(
-                                {
-                                    type: 'paragraph',
-                                    content: [{ type: 'text', text: 'See', marks: [{ type: 'bold' }] }],
-                                },
-                                {
-                                    type: 'paragraph',
-                                    content: [{ type: 'text', text: 'Two' }, note(paragraph('nested'))],
-                                },
-                            ),
-                            { type: 'text', text: '.' },
-                        ],
-                    },
-                ],
-            },
-            () => null,
-        );
-        const { body } = new JSDOM(`<body>${html}</body>`).window.document;
-        expect([...body.children].map((element) => element.tagName)).toEqual(['P']);
+    test('the PDF writes a note in its paragraph as spans, a note inside it as its text', async () => {
+        const html = await pdfHtml(...NOTED);
+        const { body } = new JSDOM(html).window.document;
+        expect([...body.querySelectorAll('article > *')].map((element) => element.tagName)).toEqual(['P', 'P']);
         const paragraphs = [...body.querySelectorAll('p > span.footnote > span[data-type="footnote-paragraph"]')];
-        expect(paragraphs.map((span) => span.innerHTML)).toEqual(['<strong>See</strong>', 'Two nested']);
+        expect(paragraphs.map((span) => span.innerHTML)).toEqual(['<strong>See</strong>', 'Two nested', 'Second']);
         expect(body.querySelector('.footnote .footnote')).toBeNull();
-        expect(body.textContent).toBe('ClaimSeeTwo nested.');
+        expect(body.querySelector('.footnotes, sup')).toBeNull();
     });
+
+    test('the PDF floats notes to the page foot only for a doc that has them', async () => {
+        const css = await exportStyle('pdf-html', seededDoc({ type: 'doc', content: NOTED }));
+        expect(css).toContain('float: footnote');
+        expect(css).toContain('::footnote-call');
+        expect(css).toContain('@footnote');
+        expect(await exportStyle('pdf-html')).not.toContain('footnote');
+    });
+
+    // Google's HTML download: a superscript number linking to the note after the body, which links back.
+    test('the HTML writes each reference as a linked number and the notes in a list after the body', async () => {
+        const { body } = new JSDOM(await exported('html', seededDoc({ type: 'doc', content: NOTED }))).window.document;
+        const references = [...body.querySelectorAll('p > sup > a')];
+        expect(references.map((a) => [a.id, a.getAttribute('href'), a.textContent])).toEqual([
+            ['fnref-1', '#fn-1', '1'],
+            ['fnref-2', '#fn-2', '2'],
+        ]);
+        const items = [...body.querySelectorAll('section.footnotes > ol > li')];
+        expect(items.map((li) => li.id)).toEqual(['fn-1', 'fn-2']);
+        expect(items.map((li) => [...li.children].map((child) => child.innerHTML))).toEqual([
+            ['<strong>See</strong>', 'Two nested <a href="#fnref-1">↩</a>'],
+            ['Second <a href="#fnref-2">↩</a>'],
+        ]);
+        expect(body.querySelector('span.footnote')).toBeNull();
+        // The list closes the body, before a footer.
+        expect(body.querySelector('article')?.lastElementChild?.className).toBe('footnotes');
+    });
+
+    // readEigendocBands drops what a band's schema leaves out, so a peer's forged note never renders.
+    test.each(['html', 'pdf-html'] as const)('%s drops a note a peer forged into a band', async (format) => {
+        const doc = seededDoc();
+        seedBand(doc, 'header', {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Head' }, note(paragraph('Forged'))],
+        });
+        const html = await exported(format, doc);
+        expect(html).toContain('Head');
+        expect(html).not.toContain('Forged');
+        expect(html).not.toContain('footnote');
+    });
+});
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — footnotes (WeasyPrint)', () => {
+    // Each page's text boxes, top down, as [text, y]: the body's and the footnote area's.
+    const pagesOf = async (html: string): Promise<[string, number][][]> => {
+        const lines = await laidOut(
+            html,
+            "if box is page._page_box: print('PAGE')\n        if type(box).__name__ == 'TextBox': print(box.position_y, box.text)",
+        );
+        const pages: [string, number][][] = [];
+        for (const line of lines) {
+            if (line === 'PAGE') pages.push([]);
+            else {
+                const [y, ...text] = line.split(' ');
+                pages.at(-1)?.push([text.join(' '), Number(y)]);
+            }
+        }
+        return pages;
+    };
+
+    test("a note prints at the foot of its reference's page, below the body, each paragraph a line", async () => {
+        const body = Array.from({ length: 40 }, (_, index) => paragraph(`Body ${index + 1}`));
+        const claim = {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Claim' }, note(paragraph('First line'), paragraph('Second line'))],
+        };
+        const pages = await pagesOf(await pdfHtml(...body, claim, paragraph('After')));
+        const page = pages.findIndex((boxes) => boxes.some(([text]) => text === 'Claim'));
+        expect(page).toBeGreaterThan(0);
+        const boxes = pages[page];
+        const y = (text: string) => boxes.find(([box]) => box === text)?.[1] ?? Number.NaN;
+        const lowestBody = Math.max(
+            ...boxes.filter(([text]) => /^(Body|Claim|After)/.test(text)).map(([, top]) => top),
+        );
+        expect(y('First line')).toBeGreaterThan(lowestBody);
+        expect(y('Second line')).toBeGreaterThan(y('First line'));
+        // The number in the text and at the note.
+        expect(boxes.filter(([text]) => text.trim() === '1')).toHaveLength(2);
+        for (const other of pages.filter((_, index) => index !== page))
+            expect(other.some(([text]) => text.includes('line'))).toBe(false);
+    }, 60_000);
 });

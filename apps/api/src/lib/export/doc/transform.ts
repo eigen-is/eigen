@@ -3,15 +3,20 @@ import {
     BAND_DISTANCE_MM,
     BAND_ROOTS,
     type BandRoot,
+    FOOTNOTE_PARAGRAPH,
+    footnotesInOrder,
+    type NormalStyle,
+    normalStyleProperties,
     PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
     type PageSetup,
     pageStylesheet,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
-import { readEigendocBands, readEigendocFromDoc, readEigendocPage } from '../../document/doc';
+import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
+import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
 import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import {
@@ -53,13 +58,14 @@ export async function renderEigendocExport(
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const json = readEigendocFromDoc(doc);
     const page = readEigendocPage(doc);
+    const style = readEigendocStyle(doc);
     const bands = readEigendocBands(doc);
     if (format === 'docx') {
         const { eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
         const pasted = await pastedFigureMedia([json, ...Object.values(bands)]);
         const docxMedia = await withSvgFallbacks([...media, ...pasted]);
         return {
-            data: toTransferableBuffer(await eigendocToDocx(json, bands, page, docxMedia, title, publicOrigin)),
+            data: toTransferableBuffer(await eigendocToDocx(json, bands, page, style, docxMedia, title, publicOrigin)),
             warnings: [],
         };
     }
@@ -80,16 +86,17 @@ export async function renderEigendocExport(
             const html = renderDocHtml(
                 withAbsoluteLinks(content, publicOrigin),
                 (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-                { synthesizeSmallCaps: pdf, pageCounters: pdf, equations },
+                { ...(pdf && { smallCapsFont: style.font }), pageCounters: pdf, pageFootnotes: pdf, equations },
             );
             return part === 'body'
                 ? `<article class="eigen-prose tiptap">${html}</article>`
                 : `<div class="band-${part}"><article class="eigen-prose tiptap ${PAGE_BAND_CLASS}">${html}</article></div>`;
         })
         .join('');
+    const notes = footnotesInOrder(json).length > 0 ? (pdf ? PAGE_FOOTNOTES_CSS : FOOTNOTE_LIST_CSS) : '';
     const html = exportHtmlDocument({
         title,
-        css: `${PROSE_CSS}${printExtras(page)}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
+        css: `${PROSE_CSS}${printExtras(page, style)}${notes}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings: [] };
@@ -142,10 +149,48 @@ ${page.differentFirstPage ? '@page :first { @top-center { content: element(heade
 `;
 }
 
-function printExtras(page: PageSetup): string {
+// A note floats to the foot of its reference's page, numbered in the text and at the note, under a short rule, as Google
+// prints it. The note inherits from its reference's paragraph, a heading's, a title's, a quote's or a list item's, and
+// its call too, which takes that text's size: so the note's own font has no line of its own (line-height 0), and its
+// paragraphs and marker set the note's look. The first paragraph is inline, so the marker stays on its line. A page's
+// footnote area draws its background at the image's own size, and reads no background-size, so the rule is an SVG
+// 2 inches long, Word's separator.
+const PAGE_FOOTNOTES_CSS = `
+.footnote { float: footnote; line-height: 0; text-align: start; text-indent: 0; }
+.footnote::footnote-call { content: counter(footnote); vertical-align: super; font-size: 0.75em; line-height: 0; }
+.footnote::footnote-marker, .footnote > [data-type="${FOOTNOTE_PARAGRAPH}"] {
+    font-size: ${FOOTNOTE_LOOK.sizePt}pt;
+    font-weight: 400;
+    font-style: normal;
+    font-variant: normal;
+    line-height: normal;
+    letter-spacing: normal;
+    text-transform: none;
+    color: var(--doc-color, #${BODY.color});
+}
+.footnote::footnote-marker { content: counter(footnote) ' '; vertical-align: super; font-size: ${FOOTNOTE_LOOK.sizePt * 0.75}pt; }
+.footnote > [data-type="${FOOTNOTE_PARAGRAPH}"] { display: block; }
+.footnote > [data-type="${FOOTNOTE_PARAGRAPH}"]:first-child { display: inline; }
+@page {
+    @footnote {
+        margin-top: 1em;
+        padding-top: 4pt;
+        background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='144pt' height='0.5pt'%3E%3Crect width='100%25' height='100%25' fill='%23${BODY.color}'/%3E%3C/svg%3E") no-repeat top left;
+    }
+}
+`;
+
+// The HTML download's notes after the body, in the note size under a short rule.
+const FOOTNOTE_LIST_CSS = `
+.footnotes { font-size: ${FOOTNOTE_LOOK.sizePt}pt; }
+.footnotes hr { width: 144pt; margin: 2em 0 1em; }
+`;
+
+function printExtras(page: PageSetup, style: NormalStyle): string {
+    const normal = Object.entries(normalStyleProperties(style)).map(([name, value]) => `${name}: ${value};`);
     return `
 /* The docs page as the editor draws it; on paper @page draws the margins */
-${pageStylesheet(page, '.page')}
+${pageStylesheet(page, '.page')}${normal.length > 0 ? `\n.page { ${normal.join(' ')} }` : ''}
 
 /* Minimal Tailwind preflight — reset browser defaults that conflict with eigen-prose */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
