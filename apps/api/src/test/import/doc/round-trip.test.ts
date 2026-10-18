@@ -650,6 +650,16 @@ describe("a paragraph's format", () => {
             ],
         ],
         ['an indent in an item, past its text', [bullets([p('One'), formatted({ indentLeft: 36, lineSpacing: 1.5 })])]],
+        // Random seed 326: a table holds no space after, so the writer gives the paragraph below it the gap.
+        ['a paragraph after a table', [table, p('After')]],
+        ['a paragraph after a list whose last item ends in a table', [bullets([p('One'), table]), p('After')]],
+        ['a paragraph after a quote that ends in a table', [quote(p('Said'), table), p('After')]],
+        // Random seed 1215: a quote's lists number by the numbered lists around the item that holds it.
+        ['a numbered list in a quote in a numbered item', [ordered([p('One'), quote(ordered([p('Inner')]))])]],
+        [
+            'a heading after a table',
+            [table, { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'H' }] }],
+        ],
     ])('%s come back as set', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
