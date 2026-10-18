@@ -7,7 +7,8 @@ import { renderInDocument } from '../../render-in-document';
 installHappyDom();
 
 // The header's avatar reads the session.
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => ({ user: null }), useIsGuest: () => false }));
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
 
 const { act, createElement, useState } = await import('react');
 const { MessageView } = await import('../../../components/mail/message-view');
