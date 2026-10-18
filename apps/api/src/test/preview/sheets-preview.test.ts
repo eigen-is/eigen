@@ -533,6 +533,25 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
     });
 });
 
+describe('eigensheets export and preview (hidden sheets)', () => {
+    // The tabs a reader sees are the sheets an export prints, as Excel prints them.
+    test('a hidden sheet renders in neither the export nor the preview', () => {
+        const sheetOf = (id: string, text: string, hide?: number): Sheet => {
+            const cell = { v: text, m: text, ct: { fa: 'General', t: 's' } };
+            return { id, name: id, ...(hide && { hide }), celldata: [{ r: 0, c: 0, v: cell }], data: [[cell]] };
+        };
+        const sheets = [sheetOf('First', 'secret', 1), sheetOf('Second', 'shown'), sheetOf('Third', 'unseen', 1)];
+        const { html } = renderSheetsHtml(sheets, NO_MEDIA);
+        expect(html).toContain('shown');
+        expect(html).not.toContain('secret');
+        expect(html).not.toContain('unseen');
+        const preview = renderSheetsPreviewHtml(sheets, NO_MEDIA);
+        expect(preview.html).toContain('shown');
+        expect(preview.html).not.toContain('secret');
+        expect(preview.truncated).toBe(false);
+    });
+});
+
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
 // an intentional renderer or preview-budget change. Last move: the table takes the
 // body's FONT_STACK_SANS (2026-10-12).

@@ -1087,6 +1087,27 @@ describe('Sheets xlsx export — merged-cell borders', () => {
     });
 });
 
+describe('Sheets xlsx export — the tabs', () => {
+    test('a hidden sheet exports hidden and a tab its colour, and both import back', async () => {
+        const sheets: Sheet[] = [
+            { name: 'Shown', celldata: [], color: '#FF0000' },
+            { name: 'Hidden', celldata: [], hide: 1, color: 'rgb(0, 128, 255)' },
+            { name: 'Plain', celldata: [] },
+        ];
+        const wb = await exportAndReload(sheets);
+        expect(getSheet(wb, 'Shown').state).toBe('visible');
+        expect(getSheet(wb, 'Hidden').state).toBe('hidden');
+        expect(getSheet(wb, 'Shown').properties.tabColor).toEqual({ argb: 'FFFF0000' });
+        expect(getSheet(wb, 'Plain').properties.tabColor).toBeUndefined();
+        const back = await roundTrip(sheets);
+        expect(back.map(({ hide, color }) => ({ hide, color }))).toEqual([
+            { hide: undefined, color: '#FF0000' },
+            { hide: 1, color: '#0080FF' },
+            { hide: undefined, color: undefined },
+        ]);
+    });
+});
+
 describe('Sheets xlsx export — inline rich text', () => {
     test('exports ct.s segments as richText runs with mapped fonts', async () => {
         const sheets: Sheet[] = [

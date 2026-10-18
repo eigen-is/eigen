@@ -74,7 +74,11 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
     const internalLinkLabels = new Map<number, Map<string, string>>();
 
     for (const [sheetIndex, sheet] of sheets.entries()) {
-        const worksheet = workbook.addWorksheet(sheet.name);
+        const tabColor = sheet.color ? argbOf(sheet.color) : undefined;
+        const worksheet = workbook.addWorksheet(sheet.name, {
+            state: sheet.hide === 1 ? 'hidden' : 'visible',
+            ...(tabColor && { properties: { tabColor: { argb: tabColor } } }),
+        });
         const config = sheet.config ?? {};
 
         if (config.columnlen) {

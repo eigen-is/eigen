@@ -129,7 +129,7 @@ export function sheetsHtmlDocument({
     mode: HtmlExportMode;
 }): string {
     const { html, css } = renderSheetsHtml(sheets, mediaUrls);
-    const page = mode === 'pdf' ? pdfPageCss(sheets) : '@page { size: landscape; margin: 1.5cm; }';
+    const page = mode === 'pdf' ? pdfPageCss(shownSheets(sheets)) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
         css: `${SHEET_CSS_BASE}${page}${SHEET_CSS_PRINT}`,
@@ -174,25 +174,32 @@ function createRenderContext(sheets: Sheet[]): { engine: FormulaEngine; resolver
     return { engine, resolver };
 }
 
+// The sheets the tabs show, as Excel prints them; the resolver still spans every sheet, hidden ones too.
+function shownSheets(sheets: Sheet[]): Sheet[] {
+    return sheets.filter((sheet) => sheet.hide !== 1);
+}
+
 export function renderSheetsHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; css: string } {
     const { engine, resolver } = createRenderContext(sheets);
     const styles: StyleRegistry = new Map();
-    const html = sheets
-        .map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver, { styles, mediaUrls }).html)
+    const shown = shownSheets(sheets);
+    const html = shown
+        .map((sheet, i) => renderSheet(sheet, i === shown.length - 1, engine, resolver, { styles, mediaUrls }).html)
         .join('\n');
     return { html, css: serializeStyleRules(styles) };
 }
 
-// Preview is a glance, not a document — render only the first sheet, clipped to
+// Preview is a glance, not a document — render only the first shown sheet, clipped to
 // the hard row/column/cell budget, to keep the cached body small. The resolver
 // still spans every sheet so cross-sheet CF formula refs resolve correctly.
 // `truncated` is true whenever rows, columns, cells, or additional sheets were
 // omitted — the caller appends the shared truncated marker.
 export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): { html: string; truncated: boolean } {
-    if (sheets.length === 0) return { html: '', truncated: false };
+    const shown = shownSheets(sheets);
+    if (shown.length === 0) return { html: '', truncated: false };
     const { engine, resolver } = createRenderContext(sheets);
-    const first = renderSheet(sheets[0], true, engine, resolver, { budget: PREVIEW_SHEET_BUDGET, mediaUrls });
-    return { html: first.html, truncated: first.truncated || sheets.length > 1 };
+    const first = renderSheet(shown[0], true, engine, resolver, { budget: PREVIEW_SHEET_BUDGET, mediaUrls });
+    return { html: first.html, truncated: first.truncated || shown.length > 1 };
 }
 
 // Preview only: a rule may name the whole sheet while the preview renders a small
