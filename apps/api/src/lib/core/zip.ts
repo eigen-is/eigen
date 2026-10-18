@@ -136,8 +136,9 @@ export function openZip(bytes: Uint8Array): ZipReader {
             throw new ZipError('multi-disk');
         }
         if (!inside(end64, 56, end - 20) || u32(end64) !== END64) throw new ZipError('corrupt');
-        // The record runs up to its locator, so no bytes hide between them.
-        if (end64 + 12 + u64(end64 + 4) !== end - 20) throw new ZipError('misplaced');
+        // The record holds no extensible data and runs up to its locator, so no bytes hide between them: Python reads
+        // the 56 bytes before the locator.
+        if (u64(end64 + 4) !== 44 || end64 + 56 !== end - 20) throw new ZipError('misplaced');
         if (u32(end64 + 16) !== 0 || u32(end64 + 20) !== 0 || u64(end64 + 24) !== u64(end64 + 32)) {
             throw new ZipError('multi-disk');
         }

@@ -134,6 +134,34 @@ function infoZipFallback(skip: (zip: Buffer, end: number) => void): Buffer {
     return zip;
 }
 
+// A ZIP64 end record whose extensible data holds a directory naming EVIL's entry, stored in another, and a ZIP64 record
+// naming that directory, last before the locator.
+function extensibleData(): Buffer {
+    const inner = build([EVIL]);
+    const innerEnd = inner.length - 22;
+    const evilLocal = inner.subarray(0, inner.readUInt32LE(innerEnd + 16));
+    const evilCentral = Buffer.from(
+        inner.subarray(evilLocal.length, evilLocal.length + inner.readUInt32LE(innerEnd + 12)),
+    );
+    const zip = build([TYPES, REAL, stored('docProps/custom.bin', evilLocal)], { zip64End: true });
+    const end64 = zip.length - 22 - 20 - 56;
+    const directoryStart = Number(zip.readBigUInt64LE(end64 + 48));
+    evilCentral.writeUInt32LE(zip.indexOf(evilLocal), 42);
+    const directory = Buffer.concat([
+        zip.subarray(directoryStart, directoryStart + 46 + TYPES.name.length),
+        evilCentral,
+    ]);
+    const fake64 = Buffer.from(zip.subarray(end64, end64 + 56));
+    fake64.writeBigUInt64LE(2n, 24);
+    fake64.writeBigUInt64LE(2n, 32);
+    fake64.writeBigUInt64LE(BigInt(directory.length), 40);
+    fake64.writeBigUInt64LE(BigInt(end64 + 56), 48);
+    const data = Buffer.concat([directory, fake64]);
+    const out = Buffer.concat([zip.subarray(0, end64 + 56), data, zip.subarray(end64 + 56)]);
+    out.writeBigUInt64LE(BigInt(44 + data.length), end64 + 4);
+    return out;
+}
+
 const bombs: Record<string, () => Uint8Array> = {
     'an honest 1 GiB bomb': () => build([TYPES, bomb('word/document.xml', GiB, GiB)]),
     'a 1 GiB bomb declaring 1 KB': () => build([TYPES, bomb('word/document.xml', GiB, 1000)]),
@@ -404,6 +432,21 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         'multi-disk',
     ],
     [
+        'a second disk in the ZIP64 locator, over a plain record leading to a hidden directory',
+        () => infoZipFallback((zip, end) => zip.writeUInt32LE(1, end - 16)),
+        'multi-disk',
+    ],
+    [
+        'a second directory disk in the ZIP64 end record, over a plain record leading to a hidden directory',
+        () => infoZipFallback((zip, end) => zip.writeUInt32LE(1, end - 20 - 56 + 20)),
+        'multi-disk',
+    ],
+    [
+        "a ZIP64 end record's entries on this disk short of its total, over a plain record leading to a hidden directory",
+        () => infoZipFallback((zip, end) => zip.writeBigUInt64LE(5n, end - 20 - 56 + 24)),
+        'multi-disk',
+    ],
+    [
         'a second disk in the ZIP64 end record',
         () => {
             const zip = build([TYPES, REAL], { zip64End: true });
@@ -420,6 +463,17 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         },
         'misplaced',
     ],
+    [
+        'bytes between the ZIP64 end record and its locator, its size unchanged',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            const after64 = zip.length - 22 - 20;
+            return Buffer.concat([zip.subarray(0, after64), new Uint8Array(4), zip.subarray(after64)]);
+        },
+        'misplaced',
+    ],
+    // Python reads the 56 bytes before the locator: here a ZIP64 record naming a directory of EVIL's.
+    ['a ZIP64 end record with extensible data', extensibleData, 'misplaced'],
     [
         'a prefix and a byte after the end record',
         () => Buffer.concat([new Uint8Array(1024), build([TYPES, REAL], { base: 1024 }), Buffer.from([0])]),
