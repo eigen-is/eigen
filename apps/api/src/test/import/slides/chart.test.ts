@@ -134,6 +134,16 @@ describe('a chart', () => {
         );
     });
 
+    test("its text and series go through the chart's own colour map, which overrides the slide's", () => {
+        const own = COLUMN.replace(
+            '<c:chart>',
+            '<c:clrMapOvr bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent2" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><c:chart>',
+        );
+        const { element, spec } = chartOf(own, { masters: [{ clrMap: DARK }] });
+        expect(element).toMatchObject({ color: '#000000', strokeColor: '#00000099' });
+        expect(spec?.data.series[0].color).toBe(ACCENT[2]);
+    });
+
     test('a line chart keeps its series, smoothing and markers; a pie its slices in the accents', () => {
         expect(chartOf(LINE).spec).toMatchObject({
             type: 'line',

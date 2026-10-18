@@ -52,8 +52,7 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
     const plotArea = child(chart, 'plotArea');
     const groups = elements(plotArea).filter((element) => element.ns === C_NS && element.local.endsWith('Chart'));
     const title = chartTitle(chart, groups);
-    const override = child(root, 'clrMapOvr');
-    const colors = override ? { scheme: theme.scheme, map: readColorMap(override) } : theme;
+    const colors = chartColors(root, theme);
     try {
         const [group] = groups;
         if (!group || groups.length > 1) unsupported();
@@ -63,6 +62,12 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
         if (error !== UNSUPPORTED) throw error;
     }
     return { unsupported: { title, type: groups.length > 0 ? chartLabel(groups[0].local) : '' } };
+}
+
+// The host's colours through the part's own c:clrMapOvr, which replaces the host's map.
+export function chartColors(root: XmlElement, theme: DrawingTheme): DrawingTheme {
+    const override = child(root, 'clrMapOvr');
+    return override ? { scheme: theme.scheme, map: readColorMap(override) } : theme;
 }
 
 function chartSpec(

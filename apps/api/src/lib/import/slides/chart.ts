@@ -2,7 +2,7 @@ import { FLAT_CHART_PAINT, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace
 import type { VectorElementPatch } from '@workspace/lib/vector';
 import type { DrawingTheme } from '../../core/drawingml';
 import { A_NS, C_NS, R_NS } from '../../core/ooxml';
-import { readChart } from '../../core/ooxml-chart';
+import { chartColors, readChart } from '../../core/ooxml-chart';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import { colorOf, mutedColor, textColorOf } from './inherit';
 import { affords, cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
@@ -88,8 +88,9 @@ function chartName(root: XmlElement): string {
     return CHART_NAMES.get(option ? `${group.local} ${xmlAttr(option, '', 'val')}` : group.local) ?? '';
 }
 
-// c:txPr's colour, else the slide's tx1.
-function textColorIn(root: XmlElement, colors: DrawingTheme): string {
+// c:txPr's colour, else tx1, through the chart's colour map as readChart paints its series.
+function textColorIn(root: XmlElement, slide: DrawingTheme): string {
+    const colors = chartColors(root, slide);
     const properties = childOf(root, C_NS, 'txPr');
     const paragraph = properties && childOf(properties, A_NS, 'p');
     const pPr = paragraph && childOf(paragraph, A_NS, 'pPr');
