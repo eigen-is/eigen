@@ -1125,6 +1125,16 @@ describe('Sheets xlsx export — the active tab', () => {
         expect(await readZipEntry(buffer, 'xl/worksheets/sheet2.xml')).toMatch(/<sheetView\b[^>]*\btabSelected="1"/);
         expect(await readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).not.toMatch(/tabSelected="1"/);
     });
+
+    // Excel refuses a workbook with every sheet hidden; the import shows the first, and so does the export.
+    test('is the first sheet, shown, when every sheet is hidden', async () => {
+        const wb = await exportAndReload([
+            { name: 'One', celldata: [], hide: 1 },
+            { name: 'Two', celldata: [], hide: 1 },
+        ]);
+        expect(getSheet(wb, 'One').state).toBe('visible');
+        expect(getSheet(wb, 'Two').state).toBe('hidden');
+    });
 });
 
 describe('Sheets xlsx export — inline rich text', () => {

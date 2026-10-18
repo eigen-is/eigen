@@ -72,7 +72,8 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
     // Internal-link labels per worksheet (1-based, matching sheetN.xml), injected
     // as the `display` attribute by rewriteInternalHyperlinks below.
     const internalLinkLabels = new Map<number, Map<string, string>>();
-    // Excel opens on the active tab, the first unless told, so a hidden first sheet would open hidden.
+    // Excel opens on the active tab, the first unless told, so a hidden first sheet would open hidden. Excel refuses to
+    // hide every sheet: then the first is the active tab, shown, as the import shows it.
     const activeTab = Math.max(
         sheets.findIndex((sheet) => sheet.hide !== 1),
         0,
@@ -82,7 +83,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
     for (const [sheetIndex, sheet] of sheets.entries()) {
         const tabColor = sheet.color ? argbOf(sheet.color) : undefined;
         const worksheet = workbook.addWorksheet(sheet.name, {
-            state: sheet.hide === 1 ? 'hidden' : 'visible',
+            state: sheet.hide === 1 && sheetIndex !== activeTab ? 'hidden' : 'visible',
             ...(tabColor && { properties: { tabColor: { argb: tabColor } } }),
         });
         const config = sheet.config ?? {};
