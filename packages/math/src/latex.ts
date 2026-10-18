@@ -892,11 +892,13 @@ function writeChar(char: string): string {
 const SLASHABLE = /^(?:\\not ?)*(?:\\[A-Za-z]+|\\[^A-Za-z]|[^\\{}^_&'~])\p{M}*$/u;
 
 // A slashed symbol without a command of its own, such as ≢, is \not before the symbol, as TeX draws it. \not puts its
-// slash last, after the symbol's marks, so a slash before another mark stays as it is.
+// slash last, after the symbol's marks, so a slash before another mark stays as it is, and so does a symbol NFC
+// doesn't compose back from its slash, such as U+2ADC.
 function negation(char: string): string | undefined {
     const decomposed = char.normalize('NFD');
     if (!decomposed.endsWith(NOT)) return undefined;
     const base = decomposed.slice(0, -1).normalize('NFC');
+    if ((base + NOT).normalize('NFC') !== char) return undefined;
     const written = writeChar(base);
     if (SLASHABLE.test(written)) return joined(['\\not', written]);
     // A large operator or a prime by its command, not as writeChar sets it apart; an apostrophe reads back as a prime.

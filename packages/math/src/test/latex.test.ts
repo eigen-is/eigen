@@ -663,6 +663,8 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '≠\u0338' }], '\\not\\ne'],
         [[{ kind: 'operator', text: '{\u0338' }], '\\not\\{'],
         [[{ kind: 'operator', text: '′\u0338' }], '\\not\\prime'],
+        // U+2ADC has a slash in its decomposition, which NFC never composes back: \not would read as U+2ADD and U+0338.
+        [[{ kind: 'operator', text: '\u2ADC' }], '\u2ADC'],
         // \not puts its slash last, after the symbol's marks; it slashes twice as \not\not.
         [[{ kind: 'identifier', text: 'x\u0338\u0338' }], '\\not\\not x'],
         [[{ kind: 'identifier', text: 'Γ\u0338\u0338' }], '\\not\\not\\Gamma'],
@@ -774,6 +776,7 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '^' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
         [[{ kind: 'operator', text: '^\u0338' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
         [[{ kind: 'operator', text: '~\u0338' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
+        [[{ kind: 'operator', text: "'" }], "'", [{ kind: 'operator', text: '′' }]],
         [[{ kind: 'operator', text: "'\u0338" }], '\\not\\prime', [{ kind: 'operator', text: '′\u0338' }]],
         [
             [{ kind: 'fenced', open: '\u0302', close: ')', separator: '\u0302', parts: [x, x] }],
