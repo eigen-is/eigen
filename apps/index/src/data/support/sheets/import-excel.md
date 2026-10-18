@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into an existing spreadsheet to replace its content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
@@ -63,3 +63,5 @@ The following are not imported:
 If these are important, keep the original `.xlsx` file in Drive so you have a reference copy.
 
 A password-protected Excel file can't be imported. Open it in Excel, remove the password, save it, and import it again.
+
+A workbook whose only sheets are chart sheets can't be imported yet, because Sheets has nothing to show from it.

@@ -5,7 +5,7 @@ import { ApiError } from '../../core/errors';
 import { SML_NS } from '../../core/ooxml';
 import { optional } from '../../core/opc';
 import { xmlAttr, xmlChild } from '../../core/xml';
-import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
+import { IMPORT_MESSAGES, importError, ONLY_CHART_SHEETS, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
 import { readBudget, readInBatches, readPackage } from './package';
 import { readRules } from './rules';
@@ -133,7 +133,8 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
             sheets.push(sheet);
         }
         // An import replaces the document's sheets: none read is a file it can't read, never an empty spreadsheet.
-        if (sheets.length === 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
+        if (sheets.length === 0)
+            throw new ApiError(400, book.hasChartSheets ? ONLY_CHART_SHEETS : IMPORT_MESSAGES.xlsx.invalid);
         return sheets;
     } catch (error) {
         throw importError(error, 'xlsx');

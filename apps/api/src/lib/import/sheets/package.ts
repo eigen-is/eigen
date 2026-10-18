@@ -21,6 +21,8 @@ export type XlsxPackage = {
     pkg: OoxmlPackage;
     // In the workbook's order: worksheets only, as a chartsheet holds no grid.
     sheets: WorkbookSheet[];
+    // Whether the workbook names a chartsheet, which the reader skips.
+    hasChartSheets: boolean;
     date1904: boolean;
     styles?: XmlElement;
     theme?: XmlElement;
@@ -37,9 +39,11 @@ export function readPackage(bytes: Uint8Array): XlsxPackage {
     const rels = pkg.relationships(workbookPath);
     const located = (type: string, path: string) => relOfType(rels, type) ?? path;
     const list = xmlChild(workbook, SML_NS, 'sheets');
+    let hasChartSheets = false;
     const entries = (list ? xmlChildren(list, SML_NS, 'sheet') : []).flatMap((sheet): WorkbookSheet[] => {
         const name = xmlAttr(sheet, '', 'name');
         const rel = rels.get(xmlAttr(sheet, R_NS, 'id') ?? '');
+        if (rel?.type.endsWith('/chartsheet')) hasChartSheets = true;
         if (name === undefined || !rel || rel.external || !rel.type.endsWith('/worksheet')) return [];
         return [{ name, path: rel.target, hidden: (xmlAttr(sheet, '', 'state') ?? 'visible') !== 'visible' }];
     });
@@ -51,6 +55,7 @@ export function readPackage(bytes: Uint8Array): XlsxPackage {
     return {
         pkg,
         sheets,
+        hasChartSheets,
         date1904: isOn(properties && xmlAttr(properties, '', 'date1904')) === true,
         // A damaged styles or theme part costs the looks, not the workbook.
         styles: optional(() => pkg.part(located('styles', 'xl/styles.xml'))),

@@ -627,6 +627,22 @@ describe("the reader's output budget", () => {
         expect(refused(xlsxFixture({ sheets: [] }))).toEqual({ status: 400, message: 'Not a valid xlsx file' });
     });
 
+    // A workbook of chart sheets only (LibreOffice's tdf107586) has nothing the reader reads, and says why.
+    test('a workbook of chart sheets only is refused in its own words', () => {
+        const fixture = xlsxFixture({ sheets: [{ name: 'Chart1' }] });
+        const charts = writeZip(
+            [...openZip(fixture).files()].map(([name, read]) => {
+                const data = read();
+                if (name !== 'xl/_rels/workbook.xml.rels') return { name, data };
+                return { name, data: new TextDecoder().decode(data).replace('/worksheet"', '/chartsheet"') };
+            }),
+        );
+        expect(refused(charts)).toEqual({
+            status: 400,
+            message: "This workbook only has chart sheets, which Eigen can't open yet",
+        });
+    });
+
     test("the zip's and the XML's refusals speak of a spreadsheet", () => {
         expect(refused(new Uint8Array(64))).toEqual({ status: 400, message: 'Not a valid xlsx file' });
         expect(refused(buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 300 * 1024 * 1024))).toEqual({
