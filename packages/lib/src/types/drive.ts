@@ -1,4 +1,5 @@
 import type { BytesTextPreviewMode } from '../constants/preview';
+import { BAND_ROOTS } from '../docs/eigendoc/bands';
 import { PAGE_ROOT } from '../docs/eigendoc/page';
 
 export type DriveACL = {
@@ -106,7 +107,11 @@ export const EIGEN_DOC_TYPE_INFO = {
         colorVar: '--app-docs-color',
         softColorVar: '--app-docs-color-soft',
         appName: 'docs',
-        yjsRoots: { default: 'xmlfragment', [PAGE_ROOT]: 'map' },
+        yjsRoots: {
+            default: 'xmlfragment',
+            [PAGE_ROOT]: 'map',
+            ...Object.fromEntries(BAND_ROOTS.map((root) => [root, 'xmlfragment' as const])),
+        },
         exportFormats: ['docx', 'pdf', 'html'],
     },
     stickies: {

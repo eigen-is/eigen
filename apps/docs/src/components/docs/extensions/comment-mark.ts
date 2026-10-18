@@ -4,7 +4,7 @@ import type { EditorState } from '@tiptap/pm/state';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
-import { CommentMarkSchema } from '@workspace/lib/docs/eigendoc';
+import { CommentMarkSchema, equationText } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -21,18 +21,78 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// The card a node anchors: an image holds it as an attribute, text as the comment mark.
+// A node whose schema gives it a commentCardId, an image or an equation, holds its card there: the Yjs binding persists
+// a mark only on text.
+const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.['commentCardId'] !== undefined;
+
+// The card a node anchors: by attribute, or on text as the comment mark.
 export function nodeCommentCardId(node: Node): string | null {
-    if (node.type.name === 'figure') return node.attrs.commentCardId;
+    if (anchorsByAttribute(node)) return node.attrs.commentCardId;
     return node.marks.find((m) => m.type.name === 'comment')?.attrs.cardId ?? null;
 }
 
-// A comment on an image alone has no text to quote, so the image reads as "Image".
+function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: number; end: number }[] {
+    const anchors: { node: Node; pos: number; end: number }[] = [];
+    doc.descendants((node, pos) => {
+        if (nodeCommentCardId(node) === cardId) anchors.push({ node, pos, end: pos + node.nodeSize });
+    });
+    return anchors;
+}
+
+// A new card anchors by attribute on an image or an equation selected alone, else as the mark on the range's text.
+export function addCommentAnchor(editor: Editor, { from, to }: { from: number; to: number }, cardId: string): void {
+    const node = editor.state.doc.nodeAt(from);
+    if (node && anchorsByAttribute(node) && to === from + node.nodeSize) {
+        editor.view.dispatch(editor.state.tr.setNodeAttribute(from, 'commentCardId', cardId));
+        return;
+    }
+    editor.chain().focus().setTextSelection({ from, to }).setComment(cardId).run();
+}
+
+// Whether addCommentAnchor would anchor a card on the selection: a node holding a card attribute selected alone, or
+// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment.
+export function canAnchorComment({ doc, selection: { from, to, empty } }: EditorState): boolean {
+    if (empty) return false;
+    const node = doc.nodeAt(from);
+    if (node && anchorsByAttribute(node) && to === from + node.nodeSize) return true;
+    let text = false;
+    doc.nodesBetween(from, to, (child) => {
+        text ||= child.isText;
+        return !text;
+    });
+    return text;
+}
+
+// A deleted card leaves no anchor behind.
+export function removeCommentAnchors(editor: Editor, cardId: string): void {
+    const { tr } = editor.state;
+    const commentType = editor.state.schema.marks.comment;
+    for (const { node, pos, end } of findCommentAnchors(editor.state.doc, cardId)) {
+        if (anchorsByAttribute(node)) tr.setNodeAttribute(pos, 'commentCardId', null);
+        else tr.removeMark(pos, end, commentType);
+    }
+    editor.view.dispatch(tr);
+}
+
+// Scrolls to a card's first anchor and selects it: a node whole, text at its start.
+export function selectCommentAnchor(editor: Editor, cardId: string): void {
+    const anchors = findCommentAnchors(editor.state.doc, cardId);
+    if (anchors.length === 0) return;
+    const { node, pos } = anchors[0];
+    const chain = editor.chain().focus();
+    const selected = anchorsByAttribute(node) ? chain.setNodeSelection(pos) : chain.setTextSelection(pos);
+    selected.scrollIntoView().run();
+}
+
+// A comment on an image alone has no text to quote, so the image reads as "Image", and an equation with no text as
+// "Equation". The callback replaces every leaf's own text, so any other leaf reads as its leafText.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
-        .textBetween(from, to, ' ', (leaf) =>
-            leaf.type.name === 'figure' ? 'Image' : (leaf.type.spec.leafText?.(leaf) ?? ''),
-        )
+        .textBetween(from, to, ' ', (leaf) => {
+            if (leaf.type.name === 'figure') return 'Image';
+            if (leaf.type.name === 'equation') return equationText(leaf) || 'Equation';
+            return leaf.type.spec.leafText?.(leaf) ?? '';
+        })
         .slice(0, 100);
 }
 
@@ -84,8 +144,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     addKeyboardShortcuts() {
         return {
             'Mod-Alt-m': () => {
-                const { empty } = this.editor.state.selection;
-                if (!empty && this.options.onAddComment) {
+                if (canAnchorComment(this.editor.state) && this.options.onAddComment) {
                     this.options.onAddComment();
                     return true;
                 }
@@ -129,8 +188,8 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                                 onCommentContextMenu(cardId, event);
                                 return true;
                             }
-                            // Right-click with text selected → selection context menu
-                            if (!view.state.selection.empty && onSelectionContextMenu) {
+                            // Right-click on a selection a comment can anchor on → selection context menu
+                            if (canAnchorComment(view.state) && onSelectionContextMenu) {
                                 event.preventDefault();
                                 onSelectionContextMenu(event);
                                 return true;

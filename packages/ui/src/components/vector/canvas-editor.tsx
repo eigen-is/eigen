@@ -862,10 +862,12 @@ export function CanvasEditor({
     // Insert → Chart: Google's sample at the viewport center, selected, one undo step.
     const insertChart = useCallback(
         (type: ChartType) => {
-            const id = sealed(undoManager, () => addElement(newChartElement(type, viewportCenterScene(), viewport)));
+            const id = sealed(undoManager, () =>
+                addElement(newChartElement(type, viewportCenterScene(), viewport, styleDefaults)),
+            );
             if (id) setSelectedIds([id]);
         },
-        [undoManager, addElement, viewportCenterScene, viewport, setSelectedIds],
+        [undoManager, addElement, viewportCenterScene, viewport, styleDefaults, setSelectedIds],
     );
 
     // Publish the handle for the host (cleared on unmount so a stale canvas never places or pans).

@@ -1,17 +1,15 @@
-/* Sheet-overlay colour facts. Each value is the pre-migration colour verbatim so
-   light mode is pixel-identical; the dark-mode pass overrides these under `.dark`.
-   Colours that already equal an app theme token in light mode (white surfaces and
-   background-coloured halos → --background/--popover, header selection borders →
-   --selection-handle) reference the token directly at the callsite instead. */
+/* Sheet-overlay colour facts. The grid's own look (--sheet-grid-line, --sheet-header-background,
+   -text and -highlight, --sheet-cell-text, --sheet-selection-fill, --sheet-editor-*) is shared with
+   the chart Edit data grid, so it lives in ui's globals.css. The canvas draws the header text black,
+   while the DOM header chrome (hover, selection, the column menu's chevron) stays #5e5e5e, its own
+   --sheet-header-chrome. Colours that equal an app theme token in light mode (white surfaces and
+   background-coloured halos → --background/--popover, header selection borders → --selection-handle)
+   reference the token directly at the callsite instead. */
 :root {
     --sheet-scrollbar-thumb: #babac0;
-    --sheet-header-text: #5e5e5e;
+    --sheet-header-chrome: #5e5e5e;
     --sheet-funcrange-border: #5e5e5e;
-    --sheet-grid-border: #dfdfdf;
-    --sheet-cell-text: #000000;
     --sheet-formula-string: forestgreen;
-    --sheet-editor-border: #5292f7;
-    --sheet-input-shadow: rgb(0 0 0 / 40%);
     --sheet-freeze-handle: #ddd;
     --sheet-freeze-line: #ccc;
 }
@@ -110,7 +108,7 @@
     position: relative;
     flex-shrink: 0;
     outline-style: none;
-    color: var(--sheet-header-text);
+    color: var(--sheet-header-chrome);
     overflow: hidden;
     padding: 0;
     margin-top: -2px;
@@ -127,7 +125,7 @@
     border: 0 none;
     left: 0;
     display: none;
-    background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
+    background-color: var(--sheet-header-highlight);
 }
 
 .sheet-row-header-selected {
@@ -136,7 +134,7 @@
     border-right: 1px solid var(--selection-handle);
     left: 0;
     display: none;
-    background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
+    background-color: var(--sheet-header-highlight);
 }
 
 .sheet-col-header-wrap {
@@ -145,7 +143,7 @@
 }
 
 .sheet-col-header {
-    color: var(--sheet-header-text);
+    color: var(--sheet-header-chrome);
     overflow: hidden;
     padding: 0;
     cursor: default;
@@ -156,14 +154,14 @@
 }
 
 .sheet-col-header-hover {
-    color: var(--sheet-header-text);
+    color: var(--sheet-header-chrome);
     cursor: default;
     position: absolute;
     z-index: 11;
     border: 0 none;
     top: 0;
     display: none;
-    background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
+    background-color: var(--sheet-header-highlight);
 }
 
 .sheet-col-header-hover .header-arrow {
@@ -174,20 +172,20 @@
 }
 
 .sheet-col-header-selected {
-    color: var(--sheet-header-text);
+    color: var(--sheet-header-chrome);
     cursor: default;
     position: absolute;
     z-index: 10;
     border-bottom: 1px solid var(--selection-handle);
     top: 0;
     display: none;
-    background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
+    background-color: var(--sheet-header-highlight);
 }
 
 .sheet-left-top {
     width: 44.5px;
     height: 18.5px;
-    border: solid 0 var(--sheet-grid-border);
+    border: solid 0 var(--sheet-grid-line);
     position: relative;
     padding-top: 0;
     border-width: 0 1px 1px 0;
@@ -202,7 +200,7 @@
     z-index: 14;
     /*border:1px solid #fff;*/
     margin: 0px 0 0 0px;
-    background: color-mix(in oklab, var(--selection-handle) 10%, transparent);
+    background: var(--sheet-selection-fill);
     display: none;
 }
 
@@ -270,7 +268,7 @@
     z-index: 15;
     border: 1px solid var(--selection-handle);
     margin: -1px 0 0 -1px;
-    background: color-mix(in oklab, var(--selection-handle) 10%, transparent);
+    background: var(--sheet-selection-fill);
     display: none;
     box-sizing: content-box;
 }
@@ -388,9 +386,9 @@
     overflow: hidden;
     white-space: pre-wrap;
     outline: none;
-    -webkit-box-shadow: 0 2px 5px var(--sheet-input-shadow);
-    -moz-box-shadow: 0 2px 5px var(--sheet-input-shadow);
-    box-shadow: 0 2px 5px var(--sheet-input-shadow);
+    -webkit-box-shadow: 0 2px 5px var(--sheet-editor-shadow);
+    -moz-box-shadow: 0 2px 5px var(--sheet-editor-shadow);
+    box-shadow: 0 2px 5px var(--sheet-editor-shadow);
     word-wrap: break-word;
     background-color: var(--background);
     right: auto;

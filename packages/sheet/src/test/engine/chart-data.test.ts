@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_CHART_LABEL_LENGTH, MAX_CHART_POINTS } from '@workspace/lib/charts';
+import { chartColor, MAX_CHART_LABEL_LENGTH, MAX_CHART_POINTS, sampleChartSpec } from '@workspace/lib/charts';
+import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { resolveRangeChartData } from '../../engine/chart-data';
+import { renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
 import type { Cell } from '../../engine/types';
 
 const STYLE = { color: '#2a78d6', markers: false, smooth: false };
@@ -117,7 +118,26 @@ describe('resolveRangeChartData', () => {
         expect(resolved).toMatchObject({ categories: ['x'.repeat(MAX_CHART_LABEL_LENGTH)] });
     });
 
-    test('a ref spanning rows and columns, a null ref or a ref to a missing sheet is a ref error', () => {
+    test('a series whose values were deleted is left out, and the rest keep their own colors', () => {
+        const red = { ...series(ref([1, 3], [2, 2]), ref([0, 0], [2, 2])), color: '#ff0000' };
+        expect(resolveRangeChartData(data(ref([1, 3], [0, 0]), series(null), red), resolver)).toEqual({
+            categories: ['Ajax', 'PSV', ''],
+            series: [{ ...STYLE, color: '#ff0000', name: 'Goals', values: [3, 1000, 7] }],
+        });
+    });
+
+    // The editor shows a series' automatic color by its index in the spec, so the chart must too.
+    test('an automatic color is the palette color at the series index in the spec, a deleted one before it kept', () => {
+        const automatic = (values: CellRangeRef | null) => ({ ...series(values), color: null });
+        const resolved = resolveRangeChartData(
+            data(null, automatic(ref([1, 3], [1, 1])), automatic(null), automatic(ref([1, 3], [2, 2]))),
+            resolver,
+        );
+        if (typeof resolved === 'string') throw new Error(resolved);
+        expect(resolved.series.map((s) => s.color)).toEqual([chartColor(0), chartColor(2)]);
+    });
+
+    test('a ref spanning rows and columns, no series left or a ref to a missing sheet is a ref error', () => {
         expect(resolveRangeChartData(data(null, series(ref([1, 2], [1, 2]))), resolver)).toBe('ref');
         expect(resolveRangeChartData(data(ref([1, 2], [0, 1]), series(ref([1, 2], [1, 1]))), resolver)).toBe('ref');
         expect(resolveRangeChartData(data(null, series(null)), resolver)).toBe('ref');
@@ -141,5 +161,50 @@ describe('resolveRangeChartData', () => {
         );
         const atLimit = data(null, series(ref([0, half - 1], [0, 0])), series(ref([0, half - 1], [1, 1])));
         expect(resolveRangeChartData(atLimit, resolver)).not.toBeString();
+    });
+});
+
+describe('renderSheetChartSvg', () => {
+    const percent = (v: number): Cell => ({ v, m: `${v * 100}%`, ct: { fa: '0%', t: 'n' } });
+    const shares = createArrayResolver([
+        {
+            id: 's1',
+            name: 'Sheet1',
+            data: [
+                [{ v: 'Ajax', m: 'Ajax' }, percent(0.25)],
+                [{ v: 'PSV', m: 'PSV' }, percent(0.5)],
+            ],
+            calculationChain: [],
+            dynamicArrayCompute: [],
+        },
+    ]);
+    const chart = (format: string | null): SheetChart => {
+        const spec = sampleChartSpec('column');
+        return {
+            id: 'c1',
+            index: 'a0',
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 300,
+            spec: JSON.stringify({
+                ...spec,
+                valueAxis: { ...spec.valueAxis, format },
+                data: data(ref([0, 1], [0, 0]), series(ref([0, 1], [1, 1]), 'Share')),
+            }),
+        };
+    };
+
+    test('draws the box with the cells’ labels, and ticks in the first value cell’s format', () => {
+        const svg = renderSheetChartSvg(chart(null), shares);
+        expect(svg).toStartWith('<svg');
+        expect(svg).toContain('width="400" height="300"');
+        expect(svg).toContain('>Ajax<');
+        expect(svg).toContain('>PSV<');
+        expect(svg).toContain('>50%<');
+    });
+
+    test('a stored axis format wins over the cells’', () => {
+        expect(renderSheetChartSvg(chart('0.00'), shares)).toContain('>0.50<');
     });
 });

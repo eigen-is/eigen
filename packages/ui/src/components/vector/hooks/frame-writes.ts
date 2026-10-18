@@ -1,6 +1,7 @@
-// The editor's frame ops over a canvas Y.Doc: the fractional index arithmetic, and the delete/duplicate
-// passes that must also move the frame's ELEMENTS, over the shared writer (write-vector.ts). Plain
-// functions over the doc, the way element-writes.ts is, so the hook stays the thin React surface.
+// The editor's frame ops over a canvas Y.Doc: the fractional index arithmetic, the delete/duplicate
+// passes that must also move the frame's ELEMENTS, over the shared writer (write-vector.ts), and the
+// meta keys that size them. Plain functions over the doc, the way element-writes.ts is, so the hook
+// stays the thin React surface.
 
 import {
     elementsInFrame,
@@ -10,6 +11,7 @@ import {
     newFrameId,
     readVectorFromDoc,
     type VectorFrame,
+    type VectorMeta,
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
@@ -111,6 +113,15 @@ export function updateFramesInDoc(doc: Y.Doc, patches: { id: string; fields: Par
                 if (key === 'id' || value === undefined) continue;
                 if (FRAME_FIELDS.includes(key)) map.set(key, value);
             }
+        }
+    });
+}
+
+export function updateMetaInDoc(doc: Y.Doc, fields: Partial<VectorMeta>): void {
+    doc.transact(() => {
+        const metaMap = doc.getMap('meta');
+        for (const [key, value] of Object.entries(fields)) {
+            if (value !== undefined) metaMap.set(key, value);
         }
     });
 }

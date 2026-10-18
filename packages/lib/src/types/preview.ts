@@ -1,13 +1,16 @@
 import type { TextPreviewMode } from '../constants/preview';
+import type { PageSetup } from '../docs/eigendoc/page';
 import type { Attendee, CalendarEvent, EventData, ImipMethod } from './calendar';
 import type { Contact } from './contact';
 import type { AddressObject, Attachment } from './mail';
 
 // What a text preview serves, from Drive bytes or a mail part alike: a rendered HTML body plus the mode
-// that tells a surface how to frame it (prose, a code block, a page-sized document).
+// that tells a surface how to frame it (prose, a code block, a page-sized document). A doc's carries the page it
+// is drawn on; a mail part never has one.
 export type TextPreviewResult = {
     body: string;
     mode: TextPreviewMode;
+    page?: PageSetup;
 };
 
 // What a .vcf preview serves: the cards themselves, not a rendered body — the overlay and the drive hero

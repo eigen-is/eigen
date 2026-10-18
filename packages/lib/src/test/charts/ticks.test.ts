@@ -54,4 +54,21 @@ describe('formatTickValue', () => {
         expect(formatTickValue(-0.00001, 0.1)).toBe('0.0');
         expect(formatTickValue(-1e-17, 0.1)).toBe('0.0');
     });
+
+    test('scientific past six decimals or a step of 1e15, each label distinct', () => {
+        expect([0, 5e-21, 1e-20, 1.5e-20].map((value) => formatTickValue(value, 5e-21))).toEqual([
+            '0',
+            '5E-21',
+            '1.0E-20',
+            '1.5E-20',
+        ]);
+        expect(formatTickValue(-0, 1e-9)).toBe('0');
+        expect(formatTickValue(-2e-9, 1e-9)).toBe('-2E-9');
+        expect(formatTickValue(0.000005, 0.000001)).toBe('0.000005');
+        expect(formatTickValue(2e99, 1e99)).toBe('2E99');
+        expect(formatTickValue(1e100, 1e99)).toBe('1.0E100');
+        expect(formatTickValue(1e14, 1e14)).toBe('100,000,000,000,000');
+        expect(formatTickValue(2.5e15, 5e14)).toBe('2,500,000,000,000,000');
+        expect(formatTickValue(2.5e16, 5e15)).toBe('2.5E16');
+    });
 });

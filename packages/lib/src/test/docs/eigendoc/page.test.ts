@@ -18,14 +18,20 @@ import {
 import { EIGEN_DOC_TYPE_INFO } from '../../../types/drive';
 
 // Landscape A4 with four different margins, so no derivation can hide a hard-coded value or a swapped side.
-const LANDSCAPE: PageSetup = { width: 297, height: 210, margin: { top: 10, right: 15, bottom: 25, left: 30 } };
+const LANDSCAPE: PageSetup = {
+    width: 297,
+    height: 210,
+    margin: { top: 10, right: 15, bottom: 25, left: 30 },
+    differentFirstPage: true,
+};
 
 describe('page setup', () => {
-    test('the default page is A4 with 2 cm margins', () => {
+    test('the default page is A4 with 2 cm margins and one header and footer for every page', () => {
         expect(DEFAULT_PAGE_SETUP).toEqual({
             width: 210,
             height: 297,
             margin: { top: 20, right: 20, bottom: 20, left: 20 },
+            differentFirstPage: false,
         });
     });
 
@@ -71,11 +77,13 @@ describe('page setup', () => {
             width: 11906,
             height: 16838,
             margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 },
+            differentFirstPage: false,
         });
         expect(pageTwips(LANDSCAPE)).toEqual({
             width: 16838,
             height: 11906,
             margin: { top: 567, right: 850, bottom: 1417, left: 1701 },
+            differentFirstPage: true,
         });
     });
 
@@ -117,12 +125,14 @@ describe('the stored page', () => {
             marginRight: 15,
             marginBottom: 25,
             marginLeft: 30,
+            differentFirstPage: true,
         });
         expect(readPageSetup(pageRecord(LANDSCAPE))).toEqual(LANDSCAPE);
         const letter: PageSetup = {
             width: 215.9,
             height: 279.4,
             margin: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
+            differentFirstPage: false,
         };
         expect(readPageSetup(pageRecord(letter))).toEqual(letter);
     });
@@ -144,6 +154,14 @@ describe('the stored page', () => {
                 marginLeft: { mm: 5 },
             }),
         ).toEqual(DEFAULT_PAGE_SETUP);
+    });
+
+    // Any peer writes the map, so only a stored true turns it on.
+    test('differentFirstPage reads as true only when it is stored as true', () => {
+        for (const stored of [undefined, false, 'true', 1, null, {}]) {
+            expect(readPageSetup({ differentFirstPage: stored }).differentFirstPage).toBe(false);
+        }
+        expect(readPageSetup({ differentFirstPage: true }).differentFirstPage).toBe(true);
     });
 
     test("the paper is kept between 5 cm and 55.88 cm, Word's 22 inches", () => {

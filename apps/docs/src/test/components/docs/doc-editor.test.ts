@@ -1,0 +1,407 @@
+// One factory builds the body's editor and each band's. A band's editor binds its own root with its own undo, its schema
+// deletes the nodes a band leaves out and keeps every mark, a paste into it drops comment anchors, and an image pasted
+// into it lands in that editor. A table is fitted to the text column of the page the doc holds, not the one on screen.
+import { afterEach, expect, jest, mock, spyOn, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
+
+installHappyDom();
+
+const Y = await import('yjs');
+const { Editor } = await import('@tiptap/react');
+const { default: Collaboration } = await import('@tiptap/extension-collaboration');
+const { prosemirrorJSONToYXmlFragment } = await import('@tiptap/y-tiptap');
+const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pageRecord } = await import(
+    '@workspace/lib/docs/eigendoc'
+);
+const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
+const { docEditorOptions } = await import('../../../components/docs/doc-editor');
+const { createDocUndoManager } = await import('../../../components/docs/page-setup');
+
+type Target = Parameters<typeof docEditorOptions>[0]['target'];
+
+const pastedMediaName = mock(async () => 'logo-copy.png');
+const media = {
+    mediaFolderId: 'media',
+    resolveMediaPath: () => undefined,
+    uploadImage: async () => {},
+    uploadSvg: async () => {},
+    insertFromDrive: async () => {},
+    replaceImage: async () => {},
+    replaceFromDrive: async () => {},
+    pastedMediaName,
+};
+
+const editors: InstanceType<typeof Editor>[] = [];
+afterEach(() => {
+    for (const editor of editors.splice(0)) editor.destroy();
+    pastedMediaName.mockClear();
+});
+
+function mount(doc: InstanceType<typeof Y.Doc>, target: Target) {
+    const editor: InstanceType<typeof Editor> = new Editor({
+        element: document.body.appendChild(document.createElement('div')),
+        ...docEditorOptions({
+            yDoc: doc,
+            editable: true,
+            target,
+            caret: null,
+            coarsePointer: false,
+            media: () => media,
+            editor: () => editor,
+        }),
+    });
+    editors.push(editor);
+    return editor;
+}
+
+const body = (doc: InstanceType<typeof Y.Doc>, cardIds: string[] = []) =>
+    mount(doc, { undoManager: createDocUndoManager(doc), cardIds: () => new Set(cardIds) });
+
+const commentIds = (json: JSONContent): unknown[] => [
+    ...(json.marks ?? []).filter((mark) => mark.type === 'comment').map((mark) => mark.attrs?.['cardId']),
+    ...(json.content ?? []).flatMap(commentIds),
+];
+
+test("a band's editor writes its own root and undoes only its own typing", () => {
+    const doc = new Y.Doc();
+    const undoManager = createDocUndoManager(doc);
+    const page = mount(doc, { undoManager, cardIds: () => new Set() });
+    const header = mount(doc, { field: 'header' });
+
+    page.commands.insertContent('Body');
+    header.commands.insertContent('Acme');
+    expect(doc.getXmlFragment('header').toString()).toBe('<paragraph>Acme</paragraph>');
+    expect(page.getText()).toBe('Body');
+    expect(undoManager.undoStack.length).toBe(1);
+
+    expect(header.commands.undo()).toBe(true);
+    expect(header.getText()).toBe('');
+    expect(page.getText()).toBe('Body');
+});
+
+// A mark a band's schema lacked would delete the text a peer marked with it, so a band leaves out nodes only.
+test("a band's schema has every mark of the body's and its nodes but BAND_EXCLUDED_NODES", () => {
+    const doc = new Y.Doc();
+    const page = body(doc);
+    const header = mount(doc, { field: 'header' });
+    const excluded: readonly string[] = BAND_EXCLUDED_NODES;
+    expect(Object.keys(header.schema.marks)).toEqual(Object.keys(page.schema.marks));
+    expect(Object.keys(header.schema.nodes)).toEqual(
+        Object.keys(page.schema.nodes).filter((name) => !excluded.includes(name)),
+    );
+});
+
+test("a band's editor deletes a node a band leaves out and keeps a comment's text", () => {
+    const peer = new Y.Doc();
+    const full = new Editor({
+        extensions: [...getDocExtensions(), Collaboration.configure({ document: peer, field: 'header' })],
+    });
+    full.commands.setContent({
+        type: 'doc',
+        content: [
+            {
+                type: 'paragraph',
+                content: [{ type: 'text', text: 'Noted', marks: [{ type: 'comment', attrs: { cardId: 'c1' } }] }],
+            },
+            { type: 'pageBreak' },
+        ],
+    });
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(peer));
+    full.destroy();
+
+    const header = mount(doc, { field: 'header' });
+    // The peer's TrailingNode wrote a paragraph after the break.
+    expect(header.getJSON().content?.map((node) => node.type)).toEqual(['paragraph', 'paragraph']);
+    expect(header.state.doc.textContent).toBe('Noted');
+    expect(commentIds(header.getJSON())).toEqual(['c1']);
+    expect(doc.getXmlFragment('header').toString()).not.toContain('pageBreak');
+});
+
+// Comments don't reach a band, so a pasted anchor would mark text no card points at.
+test('a paste into a band drops comment anchors; the body keeps those of its own cards', () => {
+    const html = '<p><span data-comment-id="c1">Noted</span></p>';
+    const doc = new Y.Doc();
+    const header = mount(doc, { field: 'header' });
+    header.view.pasteHTML(html);
+    expect(header.getText()).toBe('Noted');
+    expect(commentIds(header.getJSON())).toEqual([]);
+
+    const page = body(doc, ['c1']);
+    page.view.pasteHTML(html);
+    expect(commentIds(page.getJSON())).toEqual(['c1']);
+});
+
+test('an image pasted into a band lands in that editor, under the name its re-upload gives', async () => {
+    const doc = new Y.Doc();
+    body(doc);
+    const header = mount(doc, { field: 'header' });
+    const event = new ClipboardEvent('paste', { clipboardData: new DataTransfer(), bubbles: true });
+    writeEigenClipboard(event, {
+        version: 1,
+        items: [
+            {
+                type: 'image',
+                mediaName: 'logo.png',
+                sourcePathId: 'p',
+                sourceParentId: 'elsewhere',
+                sourceOwnerId: 'o',
+                sourceMountId: 'm',
+                width: 120,
+                height: 40,
+            },
+        ],
+    });
+    header.view.dom.dispatchEvent(event);
+    // insertEigenItems places the image once every re-upload has settled.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(pastedMediaName).toHaveBeenCalledTimes(1);
+    expect(doc.getXmlFragment('header').toString()).toContain('mediaName="logo-copy.png"');
+    expect(doc.getXmlFragment('default').toString()).not.toContain('logo');
+});
+
+type PageSetup = typeof DEFAULT_PAGE_SETUP;
+
+// A text column of 108 mm, 408 px.
+const A5: PageSetup = { ...DEFAULT_PAGE_SETUP, width: 148, height: 210 };
+// A text column of 259.4 mm, 980.4 px.
+const LETTER_LANDSCAPE: PageSetup = {
+    ...DEFAULT_PAGE_SETUP,
+    width: 279.4,
+    height: 215.9,
+    margin: { top: 10, right: 10, bottom: 10, left: 10 },
+};
+
+function setPage(doc: InstanceType<typeof Y.Doc>, setup: PageSetup) {
+    const page = doc.getMap(PAGE_ROOT);
+    for (const [key, value] of Object.entries(pageRecord(setup))) page.set(key, value);
+}
+
+const wideTable = {
+    type: 'table',
+    content: [
+        {
+            type: 'tableRow',
+            content: [490, 490].map((width) => ({
+                type: 'tableCell',
+                attrs: { colwidth: [width] },
+                content: [{ type: 'paragraph' }],
+            })),
+        },
+    ],
+};
+
+const colwidths = (editor: InstanceType<typeof Editor>) => {
+    const found: unknown[] = [];
+    editor.state.doc.descendants((node) => {
+        if (node.type.name === 'tableCell') found.push(node.attrs['colwidth']);
+    });
+    return found;
+};
+
+// A docx imported into an open doc lands as one update holding the content and the page. The page on screen still
+// draws the old page until React reads the new one, after the clamp has run.
+test('a remote update that brings a wide table and a page it fits keeps the table, while the old page is on screen', () => {
+    const doc = new Y.Doc();
+    setPage(doc, A5);
+    const onScreen = document.body.appendChild(document.createElement('div'));
+    onScreen.setAttribute('data-document', '');
+    Object.defineProperty(onScreen, 'clientWidth', { value: 408 });
+    const editor = body(doc);
+
+    const remote = new Y.Doc();
+    Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+    remote.transact(() => {
+        setPage(remote, LETTER_LANDSCAPE);
+        prosemirrorJSONToYXmlFragment(
+            editor.schema,
+            { type: 'doc', content: [wideTable] },
+            remote.getXmlFragment('default'),
+        );
+    });
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(remote, Y.encodeStateVector(doc)));
+    onScreen.remove();
+
+    expect(colwidths(editor)).toEqual([[490], [490]]);
+});
+
+test('a table wider than a narrower page shrinks to its text column at the next edit', () => {
+    const doc = new Y.Doc();
+    setPage(doc, LETTER_LANDSCAPE);
+    const editor = body(doc);
+    editor.commands.setContent({ type: 'doc', content: [wideTable, { type: 'paragraph' }] });
+    expect(colwidths(editor)).toEqual([[490], [490]]);
+
+    setPage(doc, A5);
+    expect(colwidths(editor)).toEqual([[490], [490]]);
+    editor.commands.insertContentAt(editor.state.doc.content.size - 1, 'x');
+    expect(colwidths(editor)).toEqual([[204], [204]]);
+});
+
+// The uploads below land through the real media resolver; the upload answers when the test lets it.
+const { renderInDocument } = await import('@workspace/ui/test/render-in-document');
+const { act, createElement, useState } = await import('react');
+const { AuthProvider } = await import('@workspace/lib/auth');
+const { MediaResolverProvider } = await import('@workspace/lib/drive');
+const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
+const { drivePath } = await import('@workspace/ui/test/drive-path');
+const { useBandEditors, useDocEditor, useDocMedia } = await import('../../../components/docs/doc-editor');
+const { HeadersFootersPanel } = await import('../../../components/docs/headers-footers-panel');
+
+type Media = ReturnType<typeof useDocMedia>;
+
+const path = drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC });
+
+let finishUpload = (_name: string) => {};
+spyOn(globalThis, 'fetch').mockImplementation(
+    Object.assign(
+        async (_input: RequestInfo | URL, init?: RequestInit) => {
+            if (init?.method !== 'POST') return Response.json(null);
+            const name = await new Promise<string>((resolve) => {
+                finishUpload = resolve;
+            });
+            return Response.json([{ ...path, id: name, name, parentId: 'media', mimeType: 'image/png' }]);
+        },
+        { preconnect: fetch.preconnect },
+    ),
+);
+
+let unmount = async () => {};
+afterEach(() => unmount());
+
+function render(child: ReturnType<typeof createElement>) {
+    return renderInDocument(
+        createElement(
+            AuthProvider,
+            null,
+            createElement(MediaResolverProvider, {
+                ownerId: path.ownerId,
+                mountId: path.mountId,
+                mediaFolderId: 'media',
+                chatFolderId: null,
+                children: child,
+            }),
+        ),
+    );
+}
+
+const logo = new File(['png'], 'logo.png', { type: 'image/png' });
+
+async function settleUpload(name: string) {
+    await act(async () => {
+        finishUpload(name);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+}
+
+// A comment click's handler changes with the layout, and the body's editor is built anew with it.
+test('a body upload that settles after its editor was built anew swaps the name in the new editor', async () => {
+    const doc = new Y.Doc();
+    const undoManager = createDocUndoManager(doc);
+    const rendered: { body: { editor: InstanceType<typeof Editor>; media: Media } | null } = { body: null };
+    let rebuild = () => {};
+    function Body() {
+        const [generation, setGeneration] = useState(0);
+        rebuild = () => setGeneration((n) => n + 1);
+        const media = useDocMedia(path);
+        const editor = useDocEditor(
+            {
+                media,
+                yDoc: doc,
+                provider: null,
+                editable: true,
+                target: { undoManager, cardIds: () => new Set() },
+            },
+            [generation],
+        );
+        rendered.body = { editor, media };
+        return null;
+    }
+    ({ unmount } = await render(createElement(Body)));
+    if (!rendered.body) throw new Error('no editor');
+    const { editor: first, media } = rendered.body;
+    const upload = media.uploadImage(() => rendered.body?.editor ?? null, logo);
+    expect(doc.getXmlFragment('default').toString()).toContain('mediaName="pending:');
+
+    await act(async () => rebuild());
+    expect(rendered.body?.editor).not.toBe(first);
+    await settleUpload('logo-1.png');
+    await upload;
+    expect(doc.getXmlFragment('default').toString()).toContain('mediaName="logo-1.png"');
+});
+
+test("a band upload that settles after the panel closed swaps the name in the band's editor", async () => {
+    const doc = new Y.Doc();
+    const rendered: { host: { header: InstanceType<typeof Editor>; media: Media; close: () => void } | null } = {
+        host: null,
+    };
+    function Host() {
+        const [open, setOpen] = useState(true);
+        const media = useDocMedia(path);
+        const editors = useBandEditors({
+            media,
+            yDoc: doc,
+            provider: null,
+            editable: true,
+        });
+        rendered.host = { header: editors.header, media, close: () => setOpen(false) };
+        return open
+            ? createElement(HeadersFootersPanel, {
+                  editors,
+                  media,
+                  setup: DEFAULT_PAGE_SETUP,
+                  onSetupChange: () => {},
+                  request: { band: 'header' },
+                  onClose: () => {},
+              })
+            : null;
+    }
+    ({ unmount } = await render(createElement(Host)));
+    if (!rendered.host) throw new Error('no editors');
+    const { header, media, close } = rendered.host;
+    const upload = media.uploadImage(() => header, logo);
+    expect(doc.getXmlFragment('header').toString()).toContain('mediaName="pending:');
+
+    await act(async () => close());
+    // Tiptap destroys an unmounted editor a tick later.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(document.querySelector('[data-band]')).toBeNull();
+    await settleUpload('logo-1.png');
+    await upload;
+    expect(doc.getXmlFragment('header').toString()).toContain('mediaName="logo-1.png"');
+});
+
+// A tab closed mid-upload leaves a pending name that a writer's tab sweeps a minute after opening the doc. A viewer's
+// deletion would be dropped by the server, and a read-only band on the page shares its root with the band's editor.
+test.each([
+    ["a writer's editor sweeps", true, '<paragraph>Acme</paragraph>'],
+    ['a read-only editor leaves', false, '<paragraph>Acme<figure mediaName="pending:gone"></figure></paragraph>'],
+])('%s a pending image a closed tab left', async (_, editable, left) => {
+    const doc = new Y.Doc();
+    const figure = new Y.XmlElement('figure');
+    figure.setAttribute('mediaName', 'pending:gone');
+    const paragraph = new Y.XmlElement('paragraph');
+    // Beside text: y-tiptap writes nothing back while the doc reads as a fresh editor's single empty paragraph.
+    paragraph.insert(0, [new Y.XmlText('Acme'), figure]);
+    doc.getXmlFragment('header').insert(0, [paragraph]);
+    function Band() {
+        useDocEditor({
+            media: useDocMedia(path),
+            yDoc: doc,
+            provider: null,
+            editable,
+            target: { field: 'header' },
+        });
+        return null;
+    }
+    jest.useFakeTimers();
+    try {
+        ({ unmount } = await render(createElement(Band)));
+        await act(async () => void jest.advanceTimersByTime(61_000));
+    } finally {
+        jest.useRealTimers();
+    }
+    expect(doc.getXmlFragment('header').toString()).toBe(left);
+});

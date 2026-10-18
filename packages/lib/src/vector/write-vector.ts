@@ -66,8 +66,8 @@ export function writeElementInDoc(
     return id;
 }
 
-// The whole frame record, through the FRAME_FIELDS allow-list — width/height are constants, so a
-// stored size can never become a second source of truth for it. An unstated background is the shared
+// The whole frame record, through the FRAME_FIELDS allow-list — width/height come from the deck's
+// slide size, so a stored size can never become a second source of truth for it. An unstated background is the shared
 // DEFAULT_FRAME_BACKGROUND; a caller copying an existing frame passes its own. Joins a live transact.
 export function writeFrameInDoc(doc: Y.Doc, frame: Partial<VectorFrame> & { id: string }): void {
     const map = new Y.Map<unknown>();

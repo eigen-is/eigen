@@ -45,6 +45,10 @@ A core dump is off: an abort is an expected way for a child to die. macOS refuse
 
 So on a 4 GB arm64 host a 1M-cell xlsx export is refused while the 1M-cell import still fits. At 512 MiB Bun cannot start on x86-64 at all, so a test that dials the limit down stays at 1 GiB. **The usable share depends on the Bun version and the arch: re-measure it on every Bun bump**, with the Linux-only suite of `document-transform-runner.test.ts` and the jobs of the table, and correct the table and the help center's memory advice.
 
+## A package's parts have a parse budget before the memory limit
+
+The memory limit refuses a file only once the parse has spent it, seconds in, and an OOXML part compresses a hundredfold: a 1 MB upload can hold a `[Content_Types].xml` that inflates to 180 MB. So `openPackage` (`apps/api/src/lib/core/opc.ts`) charges every part it parses whole against one budget per package, `[Content_Types].xml` and the relationships parts included: the part's declared size against `MAX_PACKAGE_XML_BYTES` (32 MiB) before it inflates, and its tags against `MAX_PACKAGE_XML_TAGS` (1,500,000) before it parses. A part past the budget refuses the whole file, a 413 in the format's words. One pair of limits serves every format: the docx, xlsx and pptx corpora's most is 15.5 MB and 611,000 tags, under half. The xlsx sheet grid and shared strings are parsed in batches outside this budget, under the xlsx import's own caps ([EXPORT.md](EXPORT.md)). The memory limit stays the backstop past both.
+
 ## Out of memory is the job's, not the server's
 
 The child acknowledges a job the moment it arrives. How it ends decides the outcome (`childOutcome` in `runner.ts`):

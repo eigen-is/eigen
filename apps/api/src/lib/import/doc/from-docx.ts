@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
+import { type PageSetup, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { XmlError } from '../../core/xml';
 import { ZipError } from '../../core/zip';
@@ -24,6 +24,11 @@ export type DocxImage = {
 // heaviest weighs 57,688.
 export const MAX_DOCX_WEIGHT = 150_000;
 
+// The update holds every character, a string attribute's too (a link's href is spelled out for every text node it
+// marks), and a client opens it in one WebSocket message of at most 128 MB: three bytes a character at most. The
+// corpus's most is 511,898.
+export const MAX_DOCX_TEXT = 16_000_000;
+
 // A TableMap slot, a column of a row however spanned or padded, costs about 16 bytes, a unit 1.3 KB and more.
 const SLOTS_PER_UNIT = 64;
 
@@ -34,20 +39,21 @@ const CHARS_PER_UNIT = 512;
 export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): { json: JSONContent; images: DocxImage[]; warnings: TransformWarning[] } {
-    const { doc, images, warnings } = readDocx(buffer, options);
-    return { json: doc.toJSON(), images, warnings };
+): { json: JSONContent; page: PageSetup; images: DocxImage[]; warnings: TransformWarning[] } {
+    const { doc, page, images, warnings } = readDocx(buffer, options);
+    return { json: doc.toJSON(), page, images, warnings };
 }
 
 export function readDocx(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): { doc: Node; images: DocxImage[]; warnings: TransformWarning[] } {
+): { doc: Node; page: PageSetup; images: DocxImage[]; warnings: TransformWarning[] } {
     try {
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
         const content = readDocument(reader);
-        if (weightOf(content) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        const { weight, text } = sizeOf(content);
+        if (weight > MAX_DOCX_WEIGHT || text > MAX_DOCX_TEXT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         const refused = new Set(content.filter((block) => !fits(block)));
         const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
         const doc = docSchema().nodeFromJSON({
@@ -74,7 +80,8 @@ export function readDocx(
         const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
         if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
-        return { doc, images, warnings };
+        if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
+        return { doc, page: reader.page, images, warnings };
     } catch (error) {
         throw importError(error);
     }
@@ -96,23 +103,28 @@ export function importError(error: unknown): Error {
     return new ApiError(400, NOT_A_DOCX, { cause: error });
 }
 
-// Every node and mark, and every table's area.
-function weightOf(nodes: JSONContent[]): number {
+// The weight is every node and mark, and every table's area; the text every character, string attributes' included.
+function sizeOf(nodes: JSONContent[]): { weight: number; text: number } {
     let weight = 0;
     let slots = 0;
+    let text = 0;
     const strings = (attrs: Record<string, unknown> | undefined) => {
         for (const value of Object.values(attrs ?? {}))
-            if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
+            if (typeof value === 'string') {
+                weight += Math.floor(value.length / CHARS_PER_UNIT);
+                text += value.length;
+            }
     };
     const stack = [...nodes];
     for (let node = stack.pop(); node; node = stack.pop()) {
         weight += 1 + (node.marks?.length ?? 0);
+        text += node.text?.length ?? 0;
         slots += (node.attrs?.['colspan'] ?? 0) * (node.attrs?.['rowspan'] ?? 1);
         strings(node.attrs);
         for (const mark of node.marks ?? []) strings(mark.attrs);
         for (const child of node.content ?? []) stack.push(child);
     }
-    return weight + Math.floor(slots / SLOTS_PER_UNIT);
+    return { weight: weight + Math.floor(slots / SLOTS_PER_UNIT), text };
 }
 
 function fits(block: JSONContent): boolean {

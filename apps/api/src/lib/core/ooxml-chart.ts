@@ -1,10 +1,19 @@
-import { chartColor, chartLabel, MAX_CHART_POINTS, MAX_CHART_SERIES, parseChartSpec } from '@workspace/lib/charts';
+import {
+    chartColor,
+    chartLabel,
+    DEFAULT_CHART_FONT,
+    MAX_CHART_POINTS,
+    MAX_CHART_SERIES,
+    parseChartSpec,
+} from '@workspace/lib/charts';
+import { bundledFont } from '@workspace/lib/constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import {
     type CellRangeRef,
     CHART_BLANKS,
     type ChartSeriesStyle,
     type ChartSpec,
+    type ChartStacking,
     type ChartType,
     type LegendPosition,
 } from '@workspace/lib/types/chart';
@@ -28,6 +37,13 @@ const TYPES = new Map<string, ChartType>([
     ['line3DChart', 'line'],
     ['pieChart', 'pie'],
     ['pie3DChart', 'pie'],
+]);
+
+const STACKING_BY_GROUPING = new Map<string, ChartStacking>([
+    ['clustered', 'none'],
+    ['standard', 'none'],
+    ['stacked', 'stacked'],
+    ['percentStacked', 'percent'],
 ]);
 
 const LEGEND_BY_POSITION = new Map<string, LegendPosition>([
@@ -57,7 +73,9 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
     try {
         const [group] = groups;
         if (!group || groups.length > 1) unsupported();
-        const spec = parseChartSpec(JSON.stringify({ ...chartSpec(chart, plotArea, group, colors, data), title }));
+        const spec = parseChartSpec(
+            JSON.stringify({ ...chartSpec(chart, plotArea, group, colors, data), title, fontFamily: chartFont(root) }),
+        );
         if (spec) return { spec };
     } catch (error) {
         if (error !== UNSUPPORTED) throw error;
@@ -71,14 +89,13 @@ function chartSpec(
     group: XmlElement,
     colors: DrawingTheme,
     data: ChartSource,
-): Omit<ChartSpec, 'title'> {
+): Omit<ChartSpec, 'title' | 'fontFamily'> {
     const kind = TYPES.get(group.local) ?? unsupported();
     const type = kind === 'column' && val(child(group, 'barDir')) === 'bar' ? 'bar' : kind;
     const grouping = val(child(group, 'grouping')) ?? (type === 'line' ? 'standard' : 'clustered');
-    const stacked = type !== 'line' && type !== 'pie' && grouping === 'stacked';
-    if (type === 'line' ? grouping !== 'standard' : !stacked && !['clustered', 'standard'].includes(grouping)) {
-        unsupported();
-    }
+    // A pie has no grouping; the spec draws no stacked line.
+    const stacking = type === 'line' && grouping !== 'standard' ? undefined : STACKING_BY_GROUPING.get(grouping);
+    if (!stacking) unsupported();
     const valueAxes = children(plotArea, 'valAx');
     const categoryAxes = [...children(plotArea, 'catAx'), ...children(plotArea, 'dateAx')];
     const [valueAxis] = valueAxes;
@@ -127,7 +144,7 @@ function chartSpec(
     const blanks = child(chart, 'dispBlanksAs');
     const presentation = {
         type,
-        stacked,
+        stacking,
         legend: legendPosition(child(chart, 'legend')),
         // CT_DispBlanksAs: present without a val is zero.
         blanks: CHART_BLANKS.find((option) => option === (blanks ? (val(blanks) ?? 'zero') : 'gap')) ?? 'gap',
@@ -140,7 +157,7 @@ function chartSpec(
             format: format && format !== 'General' ? chartLabel(format) : null,
         },
     };
-    const slices = (total: number): string[] => {
+    const slices = (total: number): ChartSpec['sliceColors'] => {
         if (type !== 'pie' || !first) return [];
         if (total > MAX_CHART_POINTS) unsupported();
         const points = new Map<number, string>();
@@ -319,6 +336,14 @@ function cellOf(ref: string | undefined): [number, number] | undefined {
 }
 
 // An element's children in the chart namespace, an mc:AlternateContent read as the choice this reader understands.
+// The chart-wide text properties' Latin typeface, as a bundled font; a theme font (+mn-lt) or an unbundled one is the default.
+function chartFont(root: XmlElement): string {
+    let latin = child(root, 'txPr');
+    for (const local of ['p', 'pPr', 'defRPr', 'latin']) latin = latin && xmlChild(latin, A_NS, local);
+    const typeface = latin && xmlAttr(latin, '', 'typeface');
+    return (typeface && bundledFont(typeface)) ?? DEFAULT_CHART_FONT;
+}
+
 function elements(element: XmlElement | undefined): XmlElement[] {
     if (!element) return [];
     return xmlElements(element).flatMap((item) => (isAlternateContent(item) ? alternative(item) : [item]));

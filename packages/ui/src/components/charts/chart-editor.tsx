@@ -4,10 +4,11 @@
 // (PropertyGestureContext), so a typed title is one undo step.
 
 import { chartColor, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';
-import { type ChartSpec, type ChartType, LEGEND_POSITIONS, type LegendPosition } from '@workspace/lib/types/chart';
+import { type ChartSpec, type ChartStacking, LEGEND_POSITIONS, type LegendPosition } from '@workspace/lib/types/chart';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
     ColorRow,
+    FontRow,
     MergedSelect,
     PropertyNumberInput,
     PropertyRow,
@@ -16,6 +17,7 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import type { ReactNode } from 'react';
 import { CHART_TYPE_OPTIONS } from './chart-types';
+import { fromPercent } from './percent';
 
 const LEGEND_LABELS: Record<LegendPosition, string> = {
     top: 'Top',
@@ -25,30 +27,42 @@ const LEGEND_LABELS: Record<LegendPosition, string> = {
     none: 'None',
 };
 const LEGEND_OPTIONS = LEGEND_POSITIONS.map((value) => ({ value, label: LEGEND_LABELS[value] }));
-const STACKING_OPTIONS: { value: 'none' | 'stacked'; label: string }[] = [
+// Google's words for Excel's grouping.
+const STACKING_OPTIONS: { value: ChartStacking; label: string }[] = [
     { value: 'none', label: 'None' },
-    { value: 'stacked', label: 'Stacked' },
+    { value: 'stacked', label: 'Standard' },
+    { value: 'percent', label: '100%' },
 ];
 
 type ChartEditorProps = {
     spec: ChartSpec;
     onChange: (spec: ChartSpec) => void;
+    // A sheet's resolved categories, which name a range chart's pie slices, and its series names, one per
+    // series in the spec.
+    categories?: string[];
+    seriesNames?: string[];
     // The host's actions on the chart (the canvas's Edit data), at the end of the Chart section.
     children?: ReactNode;
 };
 
-export function ChartEditor({ spec, onChange, children }: ChartEditorProps) {
+export function ChartEditor({ spec, onChange, categories, seriesNames, children }: ChartEditorProps) {
     const { type, data, valueAxis, categoryAxis } = spec;
     const pie = type === 'pie';
     // A bar chart lies on its side, so its value axis is the horizontal one.
     const valueHorizontal = type === 'bar';
 
-    // Range data names no categories until a sheet resolves it, so its slices go by number.
-    const sliceLabels =
-        data.source === 'inline'
-            ? data.categories.map((category, i) => category || `Slice ${i + 1}`)
-            : spec.sliceColors.map((_, i) => `Slice ${i + 1}`);
-    const sliceColors = sliceLabels.map((_, i) => spec.sliceColors[i] ?? chartColor(i));
+    // Range data names no categories until a sheet resolves it; without them its slices go by number.
+    const sliceLabels = (
+        data.source === 'inline' ? data.categories : (categories ?? spec.sliceColors.map(() => ''))
+    ).map((category, i) => category || `Slice ${i + 1}`);
+    const sliceColors = sliceLabels.map((_, i) => spec.sliceColors[i] ?? null);
+
+    // A 100% stack's min and max are fractions of the whole, Excel's c:min and c:max, shown and typed as
+    // percents; toPrecision keeps 0.07 from showing as 7.000000000000001.
+    const percent = spec.stacking === 'percent' && (type === 'column' || type === 'bar');
+    const shownBound = (bound: number | null) =>
+        bound === null ? undefined : percent ? Number((bound * 100).toPrecision(12)) : bound;
+    const storedBound = (typed: number) => (percent ? fromPercent(typed) : typed);
 
     const setValueAxis = (patch: Partial<ChartSpec['valueAxis']>) => {
         const next = { ...valueAxis, ...patch };
@@ -57,8 +71,11 @@ export function ChartEditor({ spec, onChange, children }: ChartEditorProps) {
         onChange({ ...spec, valueAxis: next });
     };
 
-    const setSeriesColor = (index: number, color: string) => {
-        const recolor = <S extends { color: string }>(series: S[]) =>
+    const setSliceColor = (index: number, color: string | null) =>
+        onChange({ ...spec, sliceColors: sliceColors.map((c, i) => (i === index ? color : c)) });
+
+    const setSeriesColor = (index: number, color: string | null) => {
+        const recolor = <S extends { color: string | null }>(series: S[]) =>
             series.map((s, i) => (i === index ? { ...s, color } : s));
         onChange({
             ...spec,
@@ -92,17 +109,17 @@ export function ChartEditor({ spec, onChange, children }: ChartEditorProps) {
             </PropertyRow>
             <PropertyRow label="Min">
                 <PropertyNumberInput
-                    value={valueAxis.min ?? undefined}
+                    value={shownBound(valueAxis.min)}
                     placeholder="Auto"
-                    onChange={(min) => setValueAxis({ min })}
+                    onChange={(min) => setValueAxis({ min: storedBound(min) })}
                     onClear={() => setValueAxis({ min: null })}
                 />
             </PropertyRow>
             <PropertyRow label="Max">
                 <PropertyNumberInput
-                    value={valueAxis.max ?? undefined}
+                    value={shownBound(valueAxis.max)}
                     placeholder="Auto"
-                    onChange={(max) => setValueAxis({ max })}
+                    onChange={(max) => setValueAxis({ max: storedBound(max) })}
                     onClear={() => setValueAxis({ max: null })}
                 />
             </PropertyRow>
@@ -123,22 +140,22 @@ export function ChartEditor({ spec, onChange, children }: ChartEditorProps) {
                     <MergedSelect
                         value={type}
                         options={CHART_TYPE_OPTIONS}
-                        // A pie colors each category, so a switch to one stores a color per slice.
-                        onChange={(next: ChartType) =>
-                            onChange({
-                                ...spec,
-                                type: next,
-                                sliceColors: next === 'pie' ? sliceColors : spec.sliceColors,
-                            })
-                        }
+                        onChange={(next) => onChange({ ...spec, type: next })}
                     />
                 </PropertyRow>
                 {(type === 'column' || type === 'bar') && (
                     <PropertyRow label="Stacking">
                         <MergedSelect
-                            value={spec.stacked ? 'stacked' : 'none'}
+                            value={spec.stacking}
                             options={STACKING_OPTIONS}
-                            onChange={(next) => onChange({ ...spec, stacked: next === 'stacked' })}
+                            onChange={(stacking) =>
+                                // Shares and raw values don't carry over: a raw max of 100 would be 10,000%.
+                                onChange(
+                                    (stacking === 'percent') === (spec.stacking === 'percent')
+                                        ? { ...spec, stacking }
+                                        : { ...spec, stacking, valueAxis: { ...valueAxis, min: null, max: null } },
+                                )
+                            }
                         />
                     </PropertyRow>
                 )}
@@ -157,6 +174,7 @@ export function ChartEditor({ spec, onChange, children }: ChartEditorProps) {
                         onChange={(legend) => onChange({ ...spec, legend })}
                     />
                 </PropertyRow>
+                <FontRow value={spec.fontFamily} onChange={(fontFamily) => onChange({ ...spec, fontFamily })} />
                 {children}
             </PropertySection>
 
@@ -177,23 +195,33 @@ export function ChartEditor({ spec, onChange, children }: ChartEditorProps) {
                         <ColorRow
                             key={i}
                             label={label}
-                            value={sliceColors[i]}
-                            onChange={(color) =>
-                                onChange({ ...spec, sliceColors: sliceColors.map((c, j) => (j === i ? color : c)) })
-                            }
+                            value={sliceColors[i] ?? chartColor(i)}
+                            onChange={(color) => setSliceColor(i, color)}
+                            automatic={{ active: sliceColors[i] === null, onReset: () => setSliceColor(i, null) }}
                         />
                     ))}
                 </PropertySection>
             ) : (
                 <PropertySection title="Series">
-                    {data.series.map((series, i) => (
-                        <ColorRow
-                            key={i}
-                            label={(typeof series.name === 'string' && series.name) || `Series ${i + 1}`}
-                            value={series.color}
-                            onChange={(color) => setSeriesColor(i, color)}
-                        />
-                    ))}
+                    {/* A range series whose values were deleted draws nothing, so it has no row. */}
+                    {data.series.map((series, i) =>
+                        series.values === null ? null : (
+                            <ColorRow
+                                key={i}
+                                label={
+                                    seriesNames?.[i] ||
+                                    (typeof series.name === 'string' && series.name) ||
+                                    `Series ${i + 1}`
+                                }
+                                value={series.color ?? chartColor(i)}
+                                onChange={(color) => setSeriesColor(i, color)}
+                                automatic={{
+                                    active: series.color === null,
+                                    onReset: () => setSeriesColor(i, null),
+                                }}
+                            />
+                        ),
+                    )}
                 </PropertySection>
             )}
         </>

@@ -1,16 +1,16 @@
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, type FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_RICHTEXT_PROPS,
+    DEFAULT_SCENE_META,
     FRAME_FIELDS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
     generateNKeysBetween,
+    SLIDE_SIZES,
     serializeBackgroundFill,
     serializeFill,
     solidFill,
@@ -20,8 +20,9 @@ import {
     type VectorRichTextElement,
     type VectorScene,
 } from '@workspace/lib/vector';
+import { type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
-import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../lib/export/office-image';
@@ -210,6 +211,46 @@ function marked(text: string, ...marks: NonNullable<JSONContent['marks']>): JSON
     return { type: 'text', text, marks };
 }
 
+// (a+b)/2 with a red a, and the sum of i² from i = 1 to n.
+export const GOLDEN_FRACTION: MathRow = [
+    {
+        kind: 'fraction',
+        numerator: [
+            { kind: 'identifier', text: 'a', color: '#C00000' },
+            { kind: 'operator', text: '+' },
+            { kind: 'identifier', text: 'b' },
+        ],
+        denominator: [{ kind: 'number', text: '2' }],
+        line: 'bar',
+    },
+];
+
+export const GOLDEN_SUM: MathRow = [
+    {
+        kind: 'nary',
+        operator: '∑',
+        limits: 'under',
+        sub: [
+            { kind: 'identifier', text: 'i' },
+            { kind: 'operator', text: '=' },
+            { kind: 'number', text: '1' },
+        ],
+        sup: [{ kind: 'identifier', text: 'n' }],
+        body: [{ kind: 'scripts', base: [{ kind: 'identifier', text: 'i' }], sup: [{ kind: 'number', text: '2' }] }],
+    },
+];
+
+export function equation(mathml: string, display = false): JSONContent {
+    return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
+}
+
+// Until the docx import reads an equation (B2), it comes back as its text, so the trips send none.
+export function withoutEquations(json: JSONContent): JSONContent {
+    return json.content
+        ? { ...json, content: json.content.filter((node) => node.type !== 'equation').map(withoutEquations) }
+        : json;
+}
+
 // Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
 // to the schema's, so a new node fails there until it is added here.
 export function buildAllFeaturesDocJson(): JSONContent {
@@ -294,6 +335,25 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     { type: 'text', text: 'First line\tafter a tab' },
                     { type: 'hardBreak' },
                     { type: 'text', text: 'second line' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Half the sum is ' },
+                    equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}')),
+                    { type: 'text', text: ', and the squares add up to' },
+                    equation(writeMathml(GOLDEN_SUM, '\\sum_{i=1}^{n}{i^{2}}'), true),
+                    { type: 'text', text: 'for every n.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'Page ' },
+                    { type: 'pageNumber', attrs: { kind: 'page' } },
+                    { type: 'text', text: ' of ' },
+                    { type: 'pageNumber', attrs: { kind: 'pages' } },
                 ],
             },
             { type: 'paragraph', attrs: { textAlign: 'center' } },
@@ -498,7 +558,7 @@ export function buildAllFeaturesDocMedia(): OfficeMedia[] {
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     const tempDoc = prosemirrorJSONToYDoc(docSchema(), json, 'default');
-    writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
+    commitEigendocImport(doc, { update: Y.encodeStateAsUpdate(tempDoc), page: DEFAULT_PAGE_SETUP });
     tempDoc.destroy();
 }
 
@@ -513,8 +573,7 @@ function deckFrame(id: string, index: string, background: BackgroundFill | null)
         id,
         index,
         name: '',
-        width: FRAME_WIDTH,
-        height: FRAME_HEIGHT,
+        ...SLIDE_SIZES['16:9'],
         background: serializeBackgroundFill(background),
     };
 }
@@ -607,7 +666,7 @@ export function buildGoldenDeckScene(): VectorScene {
         );
     }
 
-    return { elements, frames, meta: { background: 'transparent' } };
+    return { elements, frames, meta: DEFAULT_SCENE_META };
 }
 
 // Rich text only — no media, so the deck renders without a seeded media/ folder. Every frame carries
@@ -644,7 +703,7 @@ export function buildHeavyDeckScene(frameCount = 60, elementsPerFrame = 6): Vect
             );
         }
     }
-    return { elements, frames, meta: { background: 'transparent' } };
+    return { elements, frames, meta: DEFAULT_SCENE_META };
 }
 
 // A follow-up edit in its own transaction, the way an editor session writes one, so
@@ -847,7 +906,7 @@ export function buildGoldenVectorScene(): VectorScene {
             fill: serializeFill({ type: 'gradient', from: '#e60076', to: '#2563eb', angle: 45, style: 'hachure' }),
         },
     ];
-    return { elements, frames: [], meta: { background: 'transparent' } };
+    return { elements, frames: [], meta: DEFAULT_SCENE_META };
 }
 
 // Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element Y.Map under
@@ -865,11 +924,12 @@ export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
         }
         for (const frame of scene.frames) {
             const yFrame = new Y.Map<unknown>();
-            // width/height are constants, never stored — FRAME_FIELDS is the allow-list.
+            // width/height come from meta.slideSize, never a frame's own keys — FRAME_FIELDS is the allow-list.
             for (const field of FRAME_FIELDS) yFrame.set(field, frameField(frame, field));
             framesMap.set(frame.id, yFrame);
         }
         metaMap.set('background', scene.meta.background);
+        metaMap.set('slideSize', scene.meta.slideSize);
     });
 }
 

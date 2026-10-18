@@ -3,6 +3,7 @@ import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
 import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
+import { canAnchorComment } from '../extensions/comment-mark';
 import { numberedListType, orderedListDepth } from '../list-numbering';
 import { paragraphStyleOf } from '../paragraph-styles';
 
@@ -25,6 +26,7 @@ export type ToolbarState = {
     taskList: boolean;
     link: boolean;
     selectionEmpty: boolean;
+    canComment: boolean;
     table: boolean;
     figure: boolean;
     canMergeCells: boolean;
@@ -98,6 +100,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 taskList: active('taskList'),
                 link: active('link'),
                 selectionEmpty: selection.empty,
+                canComment: canAnchorComment(e.state),
                 table,
                 figure: active('figure'),
                 ...selectCellCommands(e, table),

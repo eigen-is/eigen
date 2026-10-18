@@ -1,6 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import { getFontCSS } from './fonts';
-import { EXPORT_CSP, sanitizeExportHtml } from './sanitize';
+import { EXPORT_CSP, KEEP_MATHML, sanitizeExportHtml } from './sanitize';
 
 // The data-only rule as a <meta>, so it still holds once a download is saved and opened.
 const EXPORT_CSP_META = `<meta http-equiv="Content-Security-Policy" content="${EXPORT_CSP}">`;
@@ -34,7 +34,7 @@ export function exportHtmlDocument({
     <style>${getFontCSS()}${css}</style>
 </head>
 <body>
-    ${sanitizeExportHtml(body, KEEP_LINK_TARGETS)}
+    ${sanitizeExportHtml(body, { ...KEEP_LINK_TARGETS, ...KEEP_MATHML })}
 </body>
 </html>`;
 }

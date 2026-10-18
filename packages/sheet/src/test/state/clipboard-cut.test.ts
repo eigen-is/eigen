@@ -3,15 +3,9 @@ import type { Context } from '../../index';
 import { handleCut } from '../../state/modules/clipboard';
 import { contextFactory } from './factories/context';
 
-// setPendingCopy uses document.createElement to extract plain text from HTML.
-// globalThis is intentionally widened — Bun's test runtime has no DOM.
+// sessionStorage is not available in Bun's test environment.
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.document = {
-    createElement: () => ({ innerHTML: '', innerText: '', textContent: '' }),
-};
-// sessionStorage is not available in Bun's test environment
-g.sessionStorage = { setItem: () => {} };
+(globalThis as any).sessionStorage = { setItem: () => {} };
 
 describe('handleCut', () => {
     it('marks the copy range as cut and populates copy data', () => {

@@ -1,14 +1,5 @@
 // Based on Tailwind Colors
 
-function goldenRatioIndices(n: number): number[] {
-    const phi = (Math.sqrt(5) - 1) / 2; // golden ratio conjugate ≈ 0.6180339887
-    return Array.from({ length: n }, (_, i) => i).sort((a, b) => ((a * phi) % 1) - ((b * phi) % 1));
-}
-
-function goldenRatioShuffle<T>(arr: T[]): T[] {
-    return goldenRatioIndices(arr.length).map((i) => arr[i]);
-}
-
 export type EigenColor = {
     label: string;
     value: string; // hex value
@@ -265,7 +256,31 @@ export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) =>
     col.map((hex, s) => ({ label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex })),
 ) as EigenColor[][];
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
-export const EIGEN_ACCENT_COLORS_SHUFFLED = goldenRatioShuffle(EIGEN_ACCENT_COLORS);
+// The order calendars, labels, chart series and presence hand the accents out in. The ones at 3:1 or more on
+// white lead, every neighbor stays apart for a deuteranope, the faintest (yellow, lime) sit past the first
+// eight, and pink, the color a new deck's title slide opens on, comes last. colors.test.ts pins all four.
+const EIGEN_ACCENT_ORDER = [
+    'indigo',
+    'red',
+    'fuchsia',
+    'orange',
+    'sky',
+    'emerald',
+    'blue',
+    'amber',
+    'teal',
+    'yellow',
+    'cyan',
+    'green',
+    'violet',
+    'rose',
+    'purple',
+    'lime',
+    'pink',
+] as const satisfies readonly (typeof EIGEN_COLOR_NAMES)[number][];
+export const EIGEN_ACCENT_COLORS_SHUFFLED = EIGEN_ACCENT_ORDER.map(
+    (name) => EIGEN_ACCENT_COLORS[EIGEN_COLOR_NAMES.indexOf(name)],
+);
 
 // Deterministic accent color (hex) for a user id. Stable across sessions and
 // editors so a collaborator keeps one color everywhere (docs carets, sheet
