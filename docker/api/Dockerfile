@@ -38,6 +38,19 @@ RUN python3 -m venv /opt/weasyprint \
 
 ENV SHARP_IGNORE_GLOBAL_LIBVIPS=0
 
+# librsvg draws an SVG's text in the system's fonts, and the image has only DejaVu and URW's, so a docx chart's PNG drew
+# its labels in a wider face than the one its layout measured. The faces a chart's labels draw in: each Eigen font's
+# regular and its bold, the 600 a bold label takes.
+COPY packages/ui/src/assets/fonts/inter/Inter-Regular.ttf \
+    packages/ui/src/assets/fonts/inter/Inter-Bold-renamed.ttf \
+    packages/ui/src/assets/fonts/source-serif/SourceSerif4-Regular.ttf \
+    packages/ui/src/assets/fonts/source-serif/SourceSerif4-Bold.ttf \
+    packages/ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Regular.ttf \
+    packages/ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Bold-renamed.ttf \
+    packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.ttf \
+    /usr/share/fonts/truetype/eigen/
+RUN fc-cache /usr/share/fonts/truetype/eigen
+
 COPY --from=manifests /out/ ./
 
 RUN bun install --frozen-lockfile --ignore-scripts
