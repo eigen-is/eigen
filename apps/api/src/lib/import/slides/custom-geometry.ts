@@ -1,7 +1,7 @@
 import { clamp, round4 } from '@workspace/lib/vector';
 import { A_NS, isOn } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
-import { evaluateGuides, type Guides, guideListOf, guideValue } from './guides';
+import { evaluateGuides, type GuideList, type Guides, guideListOf, guideValue } from './guides';
 import { affords, charge, childOf } from './lookup';
 import { emu } from './package';
 
@@ -30,8 +30,17 @@ const RADIANS_PER_UNIT = Math.PI / (180 * DEGREE);
 const FULL_TURN = 360 * DEGREE;
 
 // `filled` follows the path's fill flag: PowerPoint fills an unclosed subpath as if closed, as SVG does, so the element
-// writer fills it, or leaves it open where the shape has no fill.
-export type CustomGeometry = { path: string; closed: boolean; filled: boolean; stroked: boolean };
+// writer fills it, or leaves it open where the shape has no fill. `shade` is a PATH_SHADES value, for a shaded fill.
+export type CustomGeometry = { path: string; closed: boolean; filled: boolean; stroked: boolean; shade?: number };
+
+// A path's fill drawn as the shape's fill shaded, as LibreOffice draws it (EnhancedCustomShape2d.cxx): each sRGB channel
+// blended toward white by a positive fraction, toward black by a negative one. ECMA-376 states no amounts.
+export const PATH_SHADES: ReadonlyMap<string, number> = new Map([
+    ['darken', -0.4],
+    ['darkenLess', -0.2],
+    ['lighten', 0.4],
+    ['lightenLess', 0.2],
+]);
 
 type Point = { x: number; y: number };
 type Segment = { op: 'L' | 'C' | 'Q'; points: Point[] };
@@ -39,29 +48,36 @@ type Subpath = { start: Point; segments: Segment[]; closed: boolean };
 
 // One geometry for each way the paths paint, in the order they first draw, the paths painting alike concatenated; each
 // becomes its own element at the shape's box. Undefined when nothing is drawn, or past a cap: the shape keeps its text.
-// `width` and `height` are the shape's extents in EMU, its guides' w and h.
-export function customGeometry(custGeom: XmlElement, width: number, height: number): CustomGeometry[] | undefined {
+// `width` and `height` are the shape's extents in EMU, its guides' w and h; `adjustments` a preset's, after its avLst.
+export function customGeometry(
+    custGeom: XmlElement,
+    width: number,
+    height: number,
+    adjustments: GuideList = [],
+): CustomGeometry[] | undefined {
     const [avLst, gdLst, pathLst] = ['avLst', 'gdLst', 'pathLst'].map((local) => childOf(custGeom, A_NS, local));
     const nodes = nodesOf([avLst, gdLst], pathLst);
     if (nodes === undefined || !affords(nodes)) return undefined;
-    const guides = evaluateGuides(width, height, guideListOf(avLst), guideListOf(gdLst));
+    const guides = evaluateGuides(width, height, guideListOf(avLst), adjustments, guideListOf(gdLst));
     if (!guides) return undefined;
     const paths = pathLst ? xmlElements(pathLst).filter((path) => path.ns === A_NS && path.local === 'path') : [];
     charge(nodes - (avLst?.children.length ?? 0) - (gdLst?.children.length ?? 0));
     const painted = new Map<string, Omit<CustomGeometry, 'path' | 'closed'> & { subpaths: Subpath[] }>();
     for (const path of paths) {
-        const filled = xmlAttr(path, '', 'fill') !== 'none';
+        const fill = xmlAttr(path, '', 'fill');
+        const filled = fill !== 'none';
+        const shade = PATH_SHADES.get(fill ?? 'norm');
         const stroked = isOn(xmlAttr(path, '', 'stroke')) ?? true;
         if (!filled && !stroked) continue;
         const drawn = subpathsOf(path, guides, width, height);
         const subpaths = filled ? clockwise(drawn) : drawn;
-        const key = `${filled} ${stroked}`;
+        const key = `${filled} ${stroked} ${shade}`;
         const known = painted.get(key);
         if (known) known.subpaths.push(...subpaths);
-        else painted.set(key, { filled, stroked, subpaths });
+        else painted.set(key, { filled, stroked, shade, subpaths });
     }
     const geometries: CustomGeometry[] = [];
-    for (const { filled, stroked, subpaths } of painted.values()) {
+    for (const { filled, stroked, shade, subpaths } of painted.values()) {
         if (subpaths.length === 0) continue;
         let path = fitted(subpaths);
         for (const tolerance of SIMPLIFY_TOLERANCES) {
@@ -69,7 +85,8 @@ export function customGeometry(custGeom: XmlElement, width: number, height: numb
             path = fitted(subpaths.map((subpath) => simplified(subpath, tolerance)));
         }
         if (path === undefined) return undefined;
-        geometries.push({ path, closed: subpaths.every((subpath) => subpath.closed), filled, stroked });
+        const closed = subpaths.every((subpath) => subpath.closed);
+        geometries.push(shade ? { path, closed, filled, stroked, shade } : { path, closed, filled, stroked });
     }
     return geometries.length > 0 ? geometries : undefined;
 }

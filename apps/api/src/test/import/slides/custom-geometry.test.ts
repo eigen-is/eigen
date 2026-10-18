@@ -197,7 +197,26 @@ describe('fill and stroke', () => {
         expect(geometry(path(SQUARE, 'w="100" h="100" fill="none" stroke="false"'))).toBeUndefined();
     });
 
-    test('paths painting alike concatenate; the others are geometries of their own, in the order they first draw', () => {
+    test("a shading fill is a geometry of its own carrying its shade, toward white or black; an unknown one isn't", () => {
+        const shaded = (fill: string) => path(SQUARE, `w="100" h="100" stroke="0" fill="${fill}"`);
+        const fills = ['norm', 'darken', 'darkenLess', 'lighten', 'lightenLess', 'darken', 'sparkle'];
+        expect(geometry(fills.map(shaded).join(''))?.map(({ shade }) => shade)).toEqual([
+            undefined,
+            -0.4,
+            -0.2,
+            0.4,
+            0.2,
+        ]);
+        expect(only(shaded('darken'))).toEqual({
+            path: 'M 0 0 L 1 0 L 1 1 L 0 1 Z',
+            closed: true,
+            filled: true,
+            stroked: false,
+            shade: -0.4,
+        });
+    });
+
+    test('paths painting alike concatenate;the others are geometries of their own, in the order they first draw', () => {
         const filled = path(SQUARE, 'w="100" h="100" stroke="0"');
         const outline = path(moveTo(0, 0) + lnTo(100, 100), 'w="100" h="100" fill="none"');
         const shadow = path(moveTo(0, 0) + lnTo(0, 100) + lnTo(100, 100) + CLOSE, 'w="100" h="100" stroke="0"');
