@@ -1337,7 +1337,14 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         const spacing = { before: 0, after: 0, line: 240 };
         // The caption takes the figure's margin below.
         const inset = { top, bottom: captionRuns ? 0 : bottom };
-        const props = { pBdr: quoteBar(undefined, context), spacing, ind: indentOf(undefined, context), jc };
+        // A note's every paragraph is Footnote Text, its image's too.
+        const props = {
+            ...(context.style === 'FootnoteText' && { style: context.style }),
+            pBdr: quoteBar(undefined, context),
+            spacing,
+            ind: indentOf(undefined, context),
+            jc,
+        };
         const figure: Block[] = [{ props, runs: drawing, inset }];
         if (captionRuns) figure.push(captionParagraph(captionBefore, { top: 0, bottom }));
         return figure;

@@ -204,8 +204,8 @@ function noteElements(pkg: DocxPackage): Map<string, { part: Part; note: XmlElem
     return notes;
 }
 
-// A note's paragraphs, read through its part's own relationships, once however often it is referenced: each copy past
-// the first is charged as the pieces no tag counts are. A note referenced in a note is its text there; one referenced
+// A note's paragraphs, read through its part's own relationships, once however often it is referenced from the body:
+// each copy past the first is charged as the pieces no tag counts are. A note referenced in a note is its text there; one referenced
 // deeper, or from inside itself, is dropped, so the walk nests at most twice. Undefined for a note the file lacks.
 export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: string): JSONContent[] | undefined {
     const key = `${type}-${id}`;
@@ -216,6 +216,8 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     }
     const found = reader.noteElements.get(key);
     if (!found || reader.openNotes.length > 1 || reader.openNotes.includes(key)) return undefined;
+    // Read inside another note, its own notes nest too deep and drop, so only a read at the body's depth is kept.
+    const whole = reader.openNotes.length === 0;
     // A field open in the body around the reference stays open there.
     const fields = reader.fields;
     reader.fields = [];
@@ -230,7 +232,7 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
         content: paragraphs.length > 0 ? paragraphs : [{ type: 'paragraph' }],
     });
     const content = note.content ?? [];
-    reader.notes.set(key, { content, weight: weightOf(content) });
+    if (whole) reader.notes.set(key, { content, weight: weightOf(content) });
     return content;
 }
 

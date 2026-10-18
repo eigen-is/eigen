@@ -341,6 +341,14 @@ describe('notes', () => {
         expect(nodesOfType(nodesOfType(json, 'footnote')[0] ?? {}, 'footnote')).toHaveLength(1);
     });
 
+    // A note first read inside another drops its own notes, which nest too deep there; its own reference reads it whole.
+    test('a note read inside another reads whole at its own reference', async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}${run(' and')}${reference(2)}`), {
+            footnotes: `${note(1, `${run(' One')}${reference(2)}`)}${note(2, `${run(' Two')}${reference(3)}`)}${note(3, run(' Three'))}`,
+        });
+        expect(notesOf(json)).toEqual([['One Two'], ['Two Three']]);
+    });
+
     test('a separator, a missing note and a note with no reference are no notes', async () => {
         const { json } = await importDocxBody(
             paragraph(`${run('Body')}${reference(-1)}${reference(0)}${reference(7)}`),

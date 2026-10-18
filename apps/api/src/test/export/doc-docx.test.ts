@@ -524,6 +524,17 @@ describe('docx writer — footnotes', () => {
         ]);
     });
 
+    // Every paragraph of a note is Footnote Text, an image's own paragraph too, or it would draw at the Normal's spacing.
+    test("a note's image paragraph and the text around it are Footnote Text", async () => {
+        const chart = { type: 'figure', attrs: { mediaName: 'chart.png', width: 100 } };
+        const zip = await unzip(doc(p(text('Claim'), note(p(text('See'), chart, text('here'))))));
+        const paragraphs = xmlChildren(await part(zip, 'word/footnotes.xml'), W, 'footnote')
+            .slice(2)
+            .flatMap((footnote) => xmlChildren(footnote, W, 'p'));
+        expect(paragraphs.length).toBe(3);
+        for (const paragraph of paragraphs) expect(xmlOf(paragraph)).toContain('<w:pStyle w:val="FootnoteText"/>');
+    });
+
     test('the notes part has its content type, a document relationship and its separators named in the settings', async () => {
         const zip = await unzip(doc(p(text('Claim'), note(p(text('A'))))));
         const types = await part(zip, '[Content_Types].xml');
