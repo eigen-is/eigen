@@ -38,8 +38,9 @@ Eigen creates a new document in the same folder, with the same name as the Word 
 
 Your text keeps its bold, italic, underline, strikethrough, color, highlight, all caps, small caps, and alignment. Fonts become Eigen's own: a sans-serif font such as Calibri or Arial shows in Inter, Eigen's default font, a serif font such as Times New Roman in Source Serif 4, and a monospace font such as Courier New in JetBrains Mono.
 
-- Text in a different size from the document's normal text keeps its size. The normal text takes Eigen's 11 pt, and headings take Eigen's heading sizes.
-- A paragraph keeps its indents, but a paragraph in a quote follows the quote's indent, and the first paragraph of a list item the list's. It also keeps its line spacing and the space before and after it where they differ from the document's normal text, which takes Eigen's own spacing. In lists, quotes, and tables the space between paragraphs is Eigen's own.
+- The Word file's normal text becomes the document's normal text: its font, size, color, line spacing, and space before and after. See [Format text](/support/docs/format-text).
+- Text in a different size from the normal text keeps its size. Headings take Eigen's heading sizes.
+- A paragraph keeps its indents, but a paragraph in a quote follows the quote's indent, and the first paragraph of a list item the list's. It also keeps its line spacing and the space before and after it where they differ from the normal text. In lists, quotes, and tables the space between paragraphs is Eigen's own.
 - Headings stay headings, and Word's Title and Subtitle styles become a Title and a Subtitle.
 - Numbered lists keep their numbers, the number they start at, and their style (1, a, A, i, or I). A list keeps counting across a page break, and a page break inside a list item stays in that item.
 - Checkboxes become a checklist, ticked or not.
@@ -56,7 +57,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 
 - Comments, headers, and footers aren't imported. The commented text stays.
 - Tracked changes come in as if you had accepted them all.
-- Line spacing set to **Exactly** or **At least** in Word follows Eigen's own.
+- Line spacing set to **Exactly** or **At least** in Word follows the normal text's, and normal text set that way is single-spaced.
 - A SmartArt graphic comes in as its text, one paragraph per shape, and a chart as its title only.
 - An equation takes the size of the text around it, so a size set inside a Word equation doesn't come across.
 - A WMF or EMF picture, a format older Office files often use, shows as a broken image with its description. You can delete it. When you download the document, it's left out.
