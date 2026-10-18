@@ -2261,7 +2261,15 @@ describe('docx writer — figures', () => {
         const media = await chartMedia(json);
         expect(await blocksOf(json, media)).toEqual([
             imageParagraph(
-                drawing({ id: 1, px: 480, ratio: 300 / 480, part: 'image1.png', embed: 'rId5', svg: 'rId6' }),
+                drawing({
+                    id: 1,
+                    px: 480,
+                    ratio: 300 / 480,
+                    part: 'image1.png',
+                    embed: 'rId5',
+                    svg: 'rId6',
+                    descr: 'Points scored',
+                }),
                 'center',
                 23,
             ),

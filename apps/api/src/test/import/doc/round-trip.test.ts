@@ -139,7 +139,7 @@ describe('the all-features doc', () => {
 });
 
 describe('a chart', () => {
-    test('comes back as an image of its SVG, at its width, its caption and layout kept', async () => {
+    test('comes back as an image of its SVG, at its width, its title its alt, its caption and layout kept', async () => {
         const spec = JSON.stringify(sampleChartSpec('column'));
         const chart = {
             type: 'chart',
@@ -155,7 +155,7 @@ describe('a chart', () => {
                 attrs: {
                     mediaName: 'image-1.svg',
                     src: null,
-                    alt: null,
+                    alt: 'Points scored',
                     caption: 'Points',
                     commentCardId: null,
                     width: 480,

@@ -1264,7 +1264,10 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         cx,
         // Observed in Word: a fractional-twip height refits the width (a 1204×4 px divider drew 466.5 pt wide), so the height is whole.
         Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
-        alt ?? '',
+        // A chart's is the one its HTML gives its image.
+        node.type === 'chart'
+            ? parseChartSpec(readChartAttrs(node.attrs ?? {}).spec ?? '')?.title || 'Chart'
+            : (alt ?? ''),
         context.pkg,
     );
     if (!side) {
