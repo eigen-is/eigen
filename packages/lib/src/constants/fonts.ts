@@ -18,6 +18,10 @@ export const EIGEN_FONTS: EigenFont[] = [
 // A doc's text draws in it without a font mark, so a paste or an import gives it none.
 export const DOCUMENT_FONT = EIGEN_FONTS[0].name;
 
+// Its single line as a multiple of its size, (usWinAscent + usWinDescent) / unitsPerEm as Word and Google Docs draw it:
+// a paragraph's CSS line-height is its line spacing times this, as CSS can't know the fonts of a paragraph's runs.
+export const DOCUMENT_LINE_RATIO = 1.21;
+
 // A doc's text draws at it without a size mark: eigen-prose.css's body, in pt.
 export const DOCUMENT_FONT_SIZE = 11;
 

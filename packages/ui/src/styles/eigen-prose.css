@@ -477,8 +477,10 @@
 
 /* ===== Prose-specific spacing (wider margins for reading) ===== */
 .eigen-prose {
+    /* A doc's paragraph that sets no format: line spacing 1.4 of Inter's 1.21 line, and 11 pt after
+       (DOCUMENT_PARAGRAPH_FORMAT, held to these by looks.test.ts). */
     p {
-        line-height: 1.7;
+        line-height: 1.694;
         margin-bottom: 1em;
     }
 

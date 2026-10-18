@@ -38,7 +38,7 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out. (9) A
 // page number is its cached 1, before the schema joins the text (cachedPageNumbers). (10) Small is written as its look
 // and comes back as that size. (11) OMML has no slot for the typed LaTeX. (12) In Word a display equation is a paragraph
-// of its own.
+// of its own, and every piece but the last keeps the writer's no space after, so the pieces draw as one paragraph.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -87,7 +87,13 @@ function splitAtDisplayEquations(node: JSONContent): JSONContent[] {
         if (isDisplayEquation(child)) pieces.push([child], []);
         else pieces.at(-1)?.push(child);
     }
-    return pieces.filter((piece) => piece.length > 0).map((content) => ({ ...node, content }));
+    return pieces
+        .filter((piece) => piece.length > 0)
+        .map((content, index, all) =>
+            index < all.length - 1
+                ? { ...node, attrs: { ...node.attrs, spaceAfter: 0 }, content }
+                : { ...node, content },
+        );
 }
 
 function blankBeforeBreak(siblings: JSONContent[], index: number): boolean {
@@ -518,6 +524,46 @@ function toggleItalic(node: JSONContent): JSONContent {
     if (marks.length === (node.marks ?? []).length) marks.push({ type: 'italic' });
     return { ...node, marks };
 }
+
+// D13: a paragraph's own format comes back as set, in another family too, where the writer scales its line.
+describe("a paragraph's format", () => {
+    const formatted = (attrs: Record<string, unknown>, ...marks: NonNullable<JSONContent['marks']>): JSONContent => ({
+        type: 'paragraph',
+        attrs,
+        content: [{ type: 'text', text: 'Text', ...(marks.length > 0 && { marks }) }],
+    });
+    const serif = { type: 'textStyle', attrs: { fontFamily: 'Source Serif 4' } };
+    test.each<[string, JSONContent[]]>([
+        [
+            'line spacing and spacing',
+            [
+                formatted({ lineSpacing: 1.15 }),
+                formatted({ lineSpacing: 2, spaceBefore: 6, spaceAfter: 0 }),
+                formatted({ lineSpacing: 1.5 }, serif),
+                formatted({}, serif),
+            ],
+        ],
+        [
+            'indents',
+            [
+                formatted({ indentLeft: 36, indentRight: 18 }),
+                formatted({ indentFirstLine: 18 }),
+                formatted({ indentLeft: 36, indentFirstLine: -36 }),
+            ],
+        ],
+        [
+            'a heading and the title',
+            [
+                { type: 'title', attrs: { spaceAfter: 12 }, content: [{ type: 'text', text: 'T' }] },
+                { type: 'heading', attrs: { level: 2, lineSpacing: 1 }, content: [{ type: 'text', text: 'H' }] },
+            ],
+        ],
+        ['an indent in an item, past its text', [bullets([p('One'), formatted({ indentLeft: 36, lineSpacing: 1.5 })])]],
+    ])('%s come back as set', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
 
 describe("the all-features doc's Google Docs re-save", () => {
     test('comes back as written, but for the named differences and what Google Docs drops', async () => {

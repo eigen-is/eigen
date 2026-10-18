@@ -160,4 +160,7 @@ export function nodeLook(type: string, level = 1): TextLook {
 
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };
 
+// In twips: the writer spaces the block after an in-flow table by it, and the reader takes that space as the table's.
+export const TABLE_MARGIN = twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt));
+
 export const LINK_LOOK = { color: proseColor('.eigen-prose a', 'color') };

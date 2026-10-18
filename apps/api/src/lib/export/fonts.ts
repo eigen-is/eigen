@@ -78,6 +78,25 @@ export function sfntTables(bytes: Buffer): Map<string, Buffer> {
     return tables;
 }
 
+let lineHeights: Map<string, number> | undefined;
+
+// Word's single line of a family, (usWinAscent + usWinDescent) / unitsPerEm of its Regular: the docx writer scales a
+// paragraph's line by it, and the docx reader undoes that.
+export function fontLineHeight(family: string): number {
+    lineHeights ??= new Map(
+        [...DOCX_FONT_FILES].map(([name, files]) => {
+            const tables = sfntTables(fs.readFileSync(files.Regular));
+            const os2 = tables.get('OS/2');
+            const head = tables.get('head');
+            if (!os2 || !head) throw new Error(`no OS/2 or head table for ${name}`);
+            return [name, (os2.readUInt16BE(74) + os2.readUInt16BE(76)) / head.readUInt16BE(18)];
+        }),
+    );
+    const lineHeight = lineHeights.get(family);
+    if (lineHeight === undefined) throw new Error(`no line height for ${family}`);
+    return lineHeight;
+}
+
 let _fontCSS: string | undefined;
 
 export function getFontCSS(): string {

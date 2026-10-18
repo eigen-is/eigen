@@ -26,12 +26,12 @@ describe.each(['title', 'subtitle'])('the %s node', (type) => {
         };
         const html = generateHTML({ type: 'doc', content: [node] }, extensions);
         expect(html).toBe(`<p data-type="${type}" style="text-align: center;"><strong>Plan</strong></p>`);
-        expect(parsed(html)).toEqual([node]);
+        expect(parsed(html)).toMatchObject([node]);
     });
 
     // A web page's p.title is no Title.
     test(`a p with class ${type} stays a paragraph`, () => {
-        expect(parsed(`<p class="${type}">Plan</p>`)).toEqual([block('paragraph', 'Plan', { textAlign: null })]);
+        expect(parsed(`<p class="${type}">Plan</p>`)).toMatchObject([block('paragraph', 'Plan', { textAlign: null })]);
     });
 
     test('Enter at its end starts Normal text, as at the end of a heading', () => {

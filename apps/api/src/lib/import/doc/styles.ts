@@ -51,6 +51,7 @@ export type ParaProps = {
     numId?: string;
     ilvl?: number;
     indLeft?: number;
+    indRight?: number;
     // The first line's offset from the left indent: firstLine to the right, hanging (negative) to the left.
     indFirst?: number;
     pageBreakBefore?: boolean;
@@ -58,6 +59,11 @@ export type ParaProps = {
     borders?: Borders;
     shading?: string;
     exactLine?: number;
+    // In twips; an auto line in 240ths of a line.
+    line?: number;
+    lineRule?: string;
+    before?: number;
+    after?: number;
     markSize?: number;
     markHidden?: boolean;
     // A tracked deletion of the paragraph mark: accepted, the paragraph joins the next.
@@ -252,6 +258,8 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 // Each attribute inherits on its own: a w:ind of only a hanging keeps the style's left.
                 const left = twipsOf(w(child, 'left') ?? w(child, 'start'));
                 if (left !== undefined) props.indLeft = left;
+                const right = twipsOf(w(child, 'right') ?? w(child, 'end'));
+                if (right !== undefined) props.indRight = right;
                 const hanging = twipsOf(w(child, 'hanging'));
                 const first = hanging === undefined ? twipsOf(w(child, 'firstLine')) : -hanging;
                 if (first !== undefined) props.indFirst = first;
@@ -279,7 +287,16 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 break;
             case 'spacing': {
                 const line = twipsOf(w(child, 'line'));
-                if (w(child, 'lineRule') === 'exact' && line !== undefined) props.exactLine = line;
+                const lineRule = w(child, 'lineRule') ?? 'auto';
+                if (line !== undefined) {
+                    props.line = line;
+                    props.lineRule = lineRule;
+                }
+                if (lineRule === 'exact' && line !== undefined) props.exactLine = line;
+                const before = twipsOf(w(child, 'before'));
+                if (before !== undefined) props.before = before;
+                const after = twipsOf(w(child, 'after'));
+                if (after !== undefined) props.after = after;
                 break;
             }
             case 'rPr':
