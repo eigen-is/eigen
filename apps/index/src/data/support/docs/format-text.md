@@ -98,7 +98,7 @@ Click the **Align** button in the toolbar, which shows the current alignment, an
 
 Open **Format**, then **Align and indent**, and choose **Increase indent** (Cmd+] / Ctrl+]) or **Decrease indent** (Cmd+[ / Ctrl+[). Each step moves the paragraph 1.27 cm. In a list, they move the item one level in or out instead.
 
-For an exact indent, choose **Indentation options…**. Set **Left** and **Right** in centimetres, and under **Special indent** choose **First line** to indent only the first line, or **Hanging** to indent every line but the first, with the distance beside it. Click **Apply**.
+For an exact indent, choose **Indentation options…**. Set **Left** and **Right** in centimetres, and under **Special indent** choose **First line** to indent only the first line, or **Hanging** to start the first line that distance left of the others, with the distance beside it. **Left** is where the lines after the first one start. An indent stops at the right edge of the text. Click **Apply**.
 
 ## Change line and paragraph spacing
 
@@ -108,7 +108,7 @@ Open **Format**, then **Line & paragraph spacing**:
 - **Add space before paragraph** and **Add space after paragraph** add 12 points above or below the paragraph. Where the paragraph has space there already, the item reads **Remove space before paragraph** or **Remove space after paragraph** and takes it away.
 - **Custom spacing…** sets the **Line spacing** and the space **Before** and **After** the paragraph in points. Click **Apply**.
 
-Each of these applies to the paragraph the cursor is in, or to every paragraph in the selection.
+Each of these applies to the paragraph the cursor is in, or to every paragraph in the selection. In a list, a quote, or a table, the space before and after a paragraph is the list's, quote's, or table's own, so you can set only the line spacing there.
 
 ## Add a list
 
