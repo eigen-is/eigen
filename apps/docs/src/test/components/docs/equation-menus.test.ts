@@ -14,10 +14,13 @@ test("the five menus hold Google's items", () => {
     ]);
 });
 
-test('every symbol is a symbol in the command table, inserted with a space after it', () => {
+// A screen reader names the character, where it would spell out `leq`.
+test('every symbol is a symbol in the command table, labelled by its character, inserted with a space after it', () => {
     for (const menu of EQUATION_MENUS.filter(({ label }) => label !== 'Math operations')) {
         for (const item of menu.items) {
-            expect([item.name, LATEX_COMMANDS.get(item.name)?.kind]).toEqual([item.name, 'symbol']);
+            const command = LATEX_COMMANDS.get(item.name);
+            expect([item.name, command?.kind]).toEqual([item.name, 'symbol']);
+            expect(command?.kind === 'symbol' && command.char).toBe(item.label);
             expect(item.insert).toBe(`\\${item.name} `);
         }
     }

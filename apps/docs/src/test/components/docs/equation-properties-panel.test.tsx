@@ -144,6 +144,14 @@ test('a blur writes the draft and keeps the equation selected', async () => {
 });
 
 // A Word equation's LaTeX is the tree's, so a visit would otherwise give it an annotation it never had.
+// The comments panel taking the slot, or a phone's width, unmounts the field with no blur.
+test('an unmount writes the draft, as a blur does', async () => {
+    const editor = await mount();
+    await type('y');
+    await unmount();
+    expect(stored(editor)?.['mathml']).toBe(typed('y'));
+});
+
 test('focusing and leaving the field writes nothing', async () => {
     const mathml = writeMathml(readLatex('\\frac{a}{b}'));
     const editor = await mount({ mathml });
@@ -170,10 +178,12 @@ test('a draft that does not parse is never written, and shows its error where th
 
     expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
     expect(field().getAttribute('aria-invalid')).toBe('true');
-    const alert = document.querySelector('[role="alert"]');
-    expect(alert?.textContent).toContain('A { without its }');
+    // The field's description, which no keystroke announces.
+    const error = document.getElementById(field().getAttribute('aria-describedby') ?? '');
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(error?.textContent).toContain('A { without its }');
     // The reader stops at the brace, offset 5.
-    expect(alert?.querySelector('.decoration-wavy')?.textContent).toBe('{');
+    expect(error?.querySelector('.decoration-wavy')?.textContent).toBe('{');
     // The draft stays for the user to finish, and the preview shows the equation as it stands.
     expect(field().value).toBe('\\frac{a');
     expect(preview()?.querySelector('msup')).not.toBeNull();
@@ -246,7 +256,7 @@ test('a symbol menu inserts its command at the caret and gives the field back it
     await openMenu('Greek letters');
     expect(document.querySelectorAll('[role="menuitem"]')).toHaveLength(40);
 
-    await clickItem('alpha');
+    await clickItem('α');
 
     expect(field().value).toBe('a\\alpha b');
     expect(document.activeElement).toBe(field());
@@ -259,10 +269,10 @@ test('a symbol menu inserts its command at the caret and gives the field back it
 
 // Its first slot past a base, which the text before the caret already holds.
 test.each([
-    ['frac', '\\frac{', '}{}'],
-    ['rootof', '\\sqrt[', ']{}'],
-    ['subsuperscript', 'x_{', '}^{}'],
-    ['rbracelr', 'x\\left( ', '\\right)'],
+    ['Fraction', '\\frac{', '}{}'],
+    ['Root', '\\sqrt[', ']{}'],
+    ['Subscript and superscript', 'x_{', '}^{}'],
+    ['Parentheses', 'x\\left( ', '\\right)'],
 ])('a template, %s, puts the caret in its first slot', async (item, before, after) => {
     await mount({ mathml: '' });
     await type(before.startsWith('x') ? 'x' : '');
@@ -286,6 +296,24 @@ test('an equation selected as text takes the draft and the Display toggle', asyn
         document.querySelector<HTMLButtonElement>('button[aria-label="Display on its own line"]')?.click(),
     );
     expect(stored(editor)?.['display']).toBe(true);
+});
+
+// A drag across two equations: the panel shows the last, and its LaTeX is that one's alone, while Display, as a
+// figure's layout, is every one's.
+test('a selection of two equations writes the draft to the one shown and Display to both', async () => {
+    const editor = await mount({ mathml: typed('x^2') }, { mathml: typed('z') });
+    await act(async () => editor.commands.setTextSelection({ from: 2, to: 4 }));
+    expect(field().value).toBe('z');
+    await type('w');
+    await act(async () => field().blur());
+    expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
+    expect(editor.state.doc.nodeAt(3)?.attrs['mathml']).toBe(typed('w'));
+
+    await act(async () =>
+        document.querySelector<HTMLButtonElement>('button[aria-label="Display on its own line"]')?.click(),
+    );
+    expect(stored(editor)?.['display']).toBe(true);
+    expect(editor.state.doc.nodeAt(3)?.attrs['display']).toBe(true);
 });
 
 test('a draft whose write finds no equation stays', async () => {

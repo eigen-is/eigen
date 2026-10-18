@@ -3,15 +3,25 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createDocument, Editor, generateHTML, getSchema, getText, getTextSerializersFromSchema } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readLatex, writeMathml } from '@workspace/math';
+import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readLatex, writeMathml, writeText } from '@workspace/math';
 import { Window } from 'happy-dom';
 import { JSDOM } from 'jsdom';
-import { getDocExtensions, readEquation, unwrapRenderedMath } from '../../../../docs/eigendoc';
+import { getDocExtensions, mathAsText, readEquation, unwrapRenderedMath } from '../../../../docs/eigendoc';
 
 // jsdom's, since happy-dom's HTML parser puts a <math> in the XHTML namespace, where a browser's puts it in MathML's.
 const { window } = new JSDOM();
-const previous = { window: globalThis.window, document: globalThis.document, DOMParser: globalThis.DOMParser };
-Object.assign(globalThis, { window, document: window.document, DOMParser: window.DOMParser });
+const previous = {
+    window: globalThis.window,
+    document: globalThis.document,
+    DOMParser: globalThis.DOMParser,
+    XMLSerializer: globalThis.XMLSerializer,
+};
+Object.assign(globalThis, {
+    window,
+    document: window.document,
+    DOMParser: window.DOMParser,
+    XMLSerializer: window.XMLSerializer,
+});
 afterAll(() => {
     Object.assign(globalThis, previous);
 });
@@ -256,6 +266,45 @@ describe('a drawn equation pastes as its <math> alone', () => {
     });
 });
 
+// A comment's, a mail's or a slide's editor has no equation node, so ProseMirror would keep the text of each token
+// and of the LaTeX annotation.
+describe('an equation pasted where no equation node is', () => {
+    const lightSchema = getSchema(getDocExtensions({ exclude: ['equation'] }));
+    const pasted = (html: string) => createDocument(mathAsText(html), lightSchema).textContent;
+
+    test("a docs copy reads as the equation's linear text", () => {
+        const row = readLatex('x^2+\\frac{a}{b}');
+        const copied = generateHTML(
+            schema
+                .nodeFromJSON({
+                    type: 'doc',
+                    content: [
+                        {
+                            type: 'paragraph',
+                            content: [
+                                { type: 'text', text: 'see ' },
+                                { type: 'equation', attrs: { mathml: writeMathml(row, 'x^2+\\frac{a}{b}') } },
+                                { type: 'text', text: ' here' },
+                            ],
+                        },
+                    ],
+                })
+                .toJSON(),
+            getDocExtensions(),
+        );
+        expect(pasted(copied)).toBe(`see ${writeText(row)} here`);
+    });
+
+    test("a drawn equation from the web reads as its linear text alone, without the drawing's glyphs", () => {
+        const katex = `<p>a <span class="katex"><span class="katex-mathml">${MATH}<msup><mi>x</mi><mn>2</mn></msup></math></span><span class="katex-html" aria-hidden="true">x2</span></span> b</p>`;
+        expect(pasted(katex)).toBe(`a ${writeText(xSquared)} b`);
+    });
+
+    test('HTML with no equation passes as it is', () => {
+        expect(mathAsText('<p>a <b>b</b></p>')).toBe('<p>a <b>b</b></p>');
+    });
+});
+
 describe('readEquation', () => {
     const empty = { row: [], latex: undefined, mathml: `${MATH}</math>`, text: '', display: false };
 
@@ -438,9 +487,9 @@ describe('equation commands', () => {
     test('updateEquation writes the selected equation and keeps it selected', () => {
         const editor = editorOf();
         editor.commands.setNodeSelection(2);
-        expect(editor.commands.updateEquation({ mathml: writeMathml(xSquared, 'x^2'), display: true })).toBe(true);
+        expect(editor.commands.updateEquation({ display: true })).toBe(true);
         expect(editor.state.doc.nodeAt(2)?.attrs).toEqual({
-            mathml: writeMathml(xSquared, 'x^2'),
+            mathml: writeMathml(x, 'x'),
             display: true,
             commentCardId: null,
         });

@@ -1,41 +1,21 @@
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 
-// One MediaQueryList per query string, so subscribe/getSnapshot never re-allocate
-// (an inline subscribe would make useSyncExternalStore re-subscribe every render). Per window too: each component
-// test file brings its own, and a list from an earlier file's would never see this one's viewport.
-const mediaQueryLists = new WeakMap<Window, Map<string, MediaQueryList>>();
-
-function getMediaQueryList(query: string): MediaQueryList {
-    let lists = mediaQueryLists.get(window);
-    if (!lists) {
-        lists = new Map();
-        mediaQueryLists.set(window, lists);
-    }
-    let media = lists.get(query);
-    if (!media) {
-        media = window.matchMedia(query);
-        lists.set(query, media);
-    }
-    return media;
-}
-
-// Prerender-safe media query hook. `getServerSnapshot` returns false (desktop
-// default) so a build-time render and the first client render agree — no
-// hydration mismatch. On the client `getSnapshot` reads the real value
-// synchronously, so client-only apps see no first-render flash.
+// Prerender-safe media query hook. `getServerSnapshot` returns false (desktop default) so a build-time render and the
+// first client render agree — no hydration mismatch. On the client `getSnapshot` reads the real value synchronously,
+// so client-only apps see no first-render flash. One list per query keeps subscribe's identity, which
+// useSyncExternalStore would otherwise re-subscribe on every render.
 export function useMediaQuery(query: string): boolean {
+    const media = useMemo(() => (typeof window === 'undefined' ? undefined : window.matchMedia(query)), [query]);
     const subscribe = useCallback(
         (onChange: () => void) => {
-            if (typeof window === 'undefined') return () => {};
-            const media = getMediaQueryList(query);
-            media.addEventListener('change', onChange);
-            return () => media.removeEventListener('change', onChange);
+            media?.addEventListener('change', onChange);
+            return () => media?.removeEventListener('change', onChange);
         },
-        [query],
+        [media],
     );
     return useSyncExternalStore(
         subscribe,
-        () => getMediaQueryList(query).matches,
+        () => media?.matches ?? false,
         () => false,
     );
 }

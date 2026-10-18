@@ -105,6 +105,23 @@ test('an arrow selecting an equation opens no panel, and a click does until the 
     expect(state?.selectionPanel).toBe('document');
 });
 
+// ProseMirror runs a click's handlers and then dispatches only a selection that differs, so no `pointer` meta comes.
+test('a click on an equation an arrow selected opens its panel with the field focused', async () => {
+    const editor = await mount();
+    await act(async () =>
+        editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, 2))),
+    );
+    const equation = editor.state.doc.child(0).child(1);
+    await act(async () => {
+        editor.view.someProp('handleClickOn', (handle) =>
+            handle(editor.view, 2, equation, 2, new MouseEvent('click'), true),
+        );
+    });
+
+    expect(state?.selectionPanel).toBe('equation');
+    expect(document.activeElement).toBe(field());
+});
+
 test('Enter on a selected equation opens its panel with the field focused', async () => {
     const editor = await mount();
     await act(async () =>

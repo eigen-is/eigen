@@ -18,7 +18,7 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { Rows3 } from 'lucide-react';
-import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { type RefObject, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EQUATION_MENUS } from './equation-menus';
 import { drawnMath, MathMount } from './extensions/equation';
 
@@ -58,12 +58,13 @@ function shownEquation({ doc, selection }: EditorState): { node: ProseMirrorNode
     return shown;
 }
 
-// The draft around where the reader stopped, that character marked.
-function ErrorAt({ text, error }: { text: string; error: MathError }) {
+// The draft around where the reader stopped, that character marked. The field's description, not an alert: half-typed
+// LaTeX is an error at nearly every keystroke.
+function ErrorAt({ id, text, error }: { id: string; text: string; error: MathError }) {
     const at = Math.min(error.offset ?? text.length, text.length);
     const start = Math.max(0, at - 24);
     return (
-        <div role="alert" className="space-y-1 text-xs">
+        <div id={id} className="space-y-1 text-xs">
             <p className="text-destructive">{error.message}</p>
             <p className="font-mono break-all text-muted-foreground">
                 {start > 0 && '…'}
@@ -118,6 +119,7 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
 
     const text = draft?.text ?? latex;
     const read = useMemo(() => readDraft(text), [text]);
+    const errorId = useId();
     // A draft that doesn't parse previews the equation as it stands.
     const row = read.row ?? stored;
     const preview = useMemo(() => (row.length === 0 ? null : drawnMath({ row, display })), [row, display]);
@@ -150,17 +152,28 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
         };
     }, [editor]);
 
-    // A draft that parses is written if it changed; one that doesn't stays, showing its error, as does one whose write
-    // finds no equation.
+    // A draft that parses is written, to the equation shown alone, if it changed; one that doesn't stays, showing its
+    // error, as does one whose write finds no equation.
     const commit = () => {
         const current = draftRef.current;
         if (current === null) return true;
         const { mathml } = readDraft(current.text);
         if (mathml === undefined) return false;
-        if (current.text !== current.base && !editor.commands.updateEquation({ mathml })) return false;
+        if (current.text !== current.base) {
+            const shown = shownEquation(editor.state);
+            if (!shown) return false;
+            editor.commands.command(({ tr }) => {
+                tr.setNodeAttribute(shown.pos, 'mathml', mathml);
+                return true;
+            });
+        }
         setDraft(null);
         return true;
     };
+    // React fires no blur when the field unmounts, as the comments panel taking the slot or a phone's width does.
+    const commitRef = useRef(commit);
+    commitRef.current = commit;
+    useEffect(() => () => void commitRef.current(), []);
 
     const insertAtCaret = ({ insert, caret }: { insert: string; caret: number }) => {
         const field = fieldRef.current;
@@ -236,7 +249,7 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
                                     {menu.items.map((item) => (
                                         <DropdownMenuItem
                                             key={item.name}
-                                            aria-label={item.name}
+                                            aria-label={item.label}
                                             title={item.insert.trim()}
                                             className="h-8 w-8 justify-center p-0"
                                             onClick={() => insertAtCaret(item)}
@@ -252,6 +265,7 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
                         ref={fieldRef}
                         aria-label="LaTeX"
                         aria-invalid={read.error !== undefined}
+                        aria-describedby={read.error && errorId}
                         className="min-h-14 font-mono text-xs md:text-xs"
                         placeholder="x^2"
                         spellCheck={false}
@@ -271,7 +285,7 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
                             if (commit()) editor.chain().focus().setTextSelection(after).run();
                         }}
                     />
-                    {read.error && <ErrorAt text={text} error={read.error} />}
+                    {read.error && <ErrorAt id={errorId} text={text} error={read.error} />}
                 </div>
             </PropertySection>
         </PropertiesPanel>

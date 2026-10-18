@@ -1,4 +1,4 @@
-import { NodeSelection } from '@tiptap/pm/state';
+import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import { CELL_INDICATOR_SIZE } from '@workspace/lib/constants/comment-indicator';
@@ -69,7 +69,7 @@ export function MathMount({ math, className }: { math: Element; className?: stri
 
 export type EquationOptions = {
     onOpenComment: (cardId: string) => void;
-    // None in a band, which has no Equation panel: Enter does there what it does on a figure.
+    // None in a band or on a phone, which have no Equation panel: Enter there splits the paragraph, as on a figure.
     onEdit: (() => void) | undefined;
 };
 
@@ -130,6 +130,25 @@ export const Equation = EquationNode.extend<EquationOptions>({
                 return true;
             },
         };
+    },
+    addProseMirrorPlugins() {
+        const { name, options } = this;
+        return [
+            new Plugin({
+                key: new PluginKey('equationClickSelected'),
+                props: {
+                    // ProseMirror dispatches no selection a click doesn't change, so a click on the equation an arrow
+                    // selected opens its panel here, as Enter does.
+                    handleClickOn(view, _pos, node, nodePos, _event, direct) {
+                        const { selection } = view.state;
+                        const selected = selection instanceof NodeSelection && selection.from === nodePos;
+                        if (!options.onEdit || !direct || node.type.name !== name || !selected) return false;
+                        options.onEdit();
+                        return true;
+                    },
+                },
+            }),
+        ];
     },
     addNodeView() {
         // TipTap skips the re-render when only decorations change, and the comment mark's color arrives as one.

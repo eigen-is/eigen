@@ -237,7 +237,10 @@ const TiptapEditor = ({
                 onOpenComment: handleCommentClick,
                 onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
             },
-            equation: { onOpenComment: handleCommentClick, onEdit: () => editEquationRef.current() },
+            equation: {
+                onOpenComment: handleCommentClick,
+                onEdit: isMobile ? undefined : () => editEquationRef.current(),
+            },
             extensions: [
                 SearchHighlight,
                 CommentMark.configure({
@@ -254,7 +257,7 @@ const TiptapEditor = ({
                 }),
             ],
         },
-        [handleCommentClick],
+        [handleCommentClick, isMobile],
     );
     // The body's editor is built anew with its comment handler, and an upload settles into whichever holds the doc then.
     const editorRef = useRef<Editor | null>(null);

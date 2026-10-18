@@ -24,7 +24,7 @@ declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         equation: {
             insertEquation: () => ReturnType;
-            updateEquation: (attributes: { mathml?: string; display?: boolean }) => ReturnType;
+            updateEquation: (attributes: { display: boolean }) => ReturnType;
         };
     }
 }
@@ -184,22 +184,32 @@ export const EquationNode = Node.create({
                     }
                     return true;
                 },
-            // Every equation the selection holds, as a node or as text, or the one it selects. Attribute steps move no
-            // position, so the selection stays and the panel open.
+            // Every equation the selection holds, as a node or as text, or the one it selects, as updateFigure. Attribute
+            // steps move no position, so the selection stays and the panel open.
             updateEquation:
-                (attributes) =>
+                ({ display }) =>
                 ({ tr, dispatch }: CommandProps) => {
                     const { from, to } = tr.selection;
                     const positions: number[] = [];
                     tr.doc.nodesBetween(from, to, (node, pos) => {
                         if (node.type.name === this.name && pos >= from) positions.push(pos);
                     });
-                    if (dispatch) {
-                        for (const pos of positions)
-                            for (const [key, value] of Object.entries(attributes)) tr.setNodeAttribute(pos, key, value);
-                    }
+                    if (dispatch) for (const pos of positions) tr.setNodeAttribute(pos, 'display', display);
                     return positions.length > 0;
                 },
         };
     },
 });
+
+// A light editor's paste, which has no equation node: each <math>, from Docs or a drawing on the web, reads as its
+// linear text, where ProseMirror would keep the text of its tokens and of its LaTeX annotation.
+export function mathAsText(html: string): string {
+    if (!html.includes('<math')) return html;
+    const { body } = new DOMParser().parseFromString(html, 'text/html');
+    unwrapRenderedMath(body);
+    const serializer = new XMLSerializer();
+    for (const math of body.querySelectorAll('math')) {
+        math.replaceWith(readEquation({ mathml: serializer.serializeToString(math) }).text);
+    }
+    return body.innerHTML;
+}
