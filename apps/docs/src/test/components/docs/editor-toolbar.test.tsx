@@ -600,6 +600,7 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
         'Unmerge cells',
         '—',
         'Toggle header row',
+        'Cell background color',
     ]);
     // A caret merges nothing and splits only a merged cell.
     expect(submenuDisabled('Merge cells')).toBe(true);
@@ -607,6 +608,26 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
 
     await clickItem('Insert row below');
     expect(editor.state.doc.child(1).childCount).toBe(3);
+});
+
+test('Format › Table › Cell background color fills the cell the caret is in, and None takes it away', async () => {
+    editor.commands.setContent(TABLE_AND_FIGURE);
+    editor.commands.setTextSelection(7);
+    const fill = () => editor.state.doc.child(1).child(0).child(0).attrs['backgroundColor'];
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Table');
+    await openSubmenu('Cell background color');
+    const swatch = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][title^="#"]')].at(-1);
+    if (!swatch) throw new Error('no swatch');
+    await act(async () => swatch.click());
+    expect(fill()).toBe(swatch.title.toLowerCase());
+
+    await openMenu('Format');
+    await openSubmenu('Table');
+    await openSubmenu('Cell background color');
+    await clickItem('None');
+    expect(fill()).toBeNull();
 });
 
 test('Format › Image › Replace image opens the picker the image panel opens', async () => {
@@ -862,9 +883,10 @@ test('Numbered list › i. ii. iii. makes a paragraph a list numbered in small r
     expect(editor.getJSON().content?.[0]).toMatchObject({ type: 'orderedList', attrs: { start: 1, type: 'i' } });
 });
 
+// Decimal is stored as '1', so a nested list set to it keeps it over the letters an untyped one draws by depth.
 test.each([
     ['A. B. C.', 'A'],
-    ['1. 2. 3.', null],
+    ['1. 2. 3.', '1'],
 ])("Numbered list › %s sets a list's style and keeps its items and start", async (preset, type) => {
     editor.commands.setContent(orderedList({ start: 4, type: 'a' }));
     editor.commands.setTextSelection(8);

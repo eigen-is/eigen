@@ -27,7 +27,7 @@ export {
     setFigureAttributes,
 } from './nodes/figure-frame';
 export { selectionFontSizes } from './nodes/font-size';
-export { LIST_STYLE_TYPES } from './nodes/ordered-list';
+export { listTypeOfStyle } from './nodes/ordered-list';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_KINDS, PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';

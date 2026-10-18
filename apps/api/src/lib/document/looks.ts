@@ -1,5 +1,5 @@
 import { EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
-import { LIST_STYLE_TYPES, type TitleType } from '@workspace/lib/docs/eigendoc';
+import { listTypeOfStyle, type TitleType } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
 import { LIST_FORMATS, LIST_LEVELS } from './wordml';
@@ -166,8 +166,6 @@ export const TABLE_MARGIN = twips(cssPt(boxSide(proseValue('.eigen-prose table',
 
 export const LINK_LOOK = { color: proseColor('.eigen-prose a', 'color') };
 
-const LIST_TYPE_BY_STYLE = new Map([...LIST_STYLE_TYPES].map(([type, style]) => [style, type]));
-
 // eigen-prose.css numbers a list that stores no type by the numbered lists it sits in: `ol`, `ol ol` and on.
 const UNTYPED_LIST_FORMATS = Array.from({ length: LIST_LEVELS }, (_, depth) => {
     const style = proseValue(
@@ -176,7 +174,7 @@ const UNTYPED_LIST_FORMATS = Array.from({ length: LIST_LEVELS }, (_, depth) => {
             .join(' ')}`,
         'list-style-type',
     );
-    const format = LIST_FORMATS.get(LIST_TYPE_BY_STYLE.get(style) ?? '');
+    const format = LIST_FORMATS.get(listTypeOfStyle(style) ?? '');
     if (!format) throw new Error(`eigen-prose.css numbers a list in ${style}, which Word has no format for`);
     return format;
 });

@@ -1,7 +1,7 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
-import type { BandEdge } from '@workspace/lib/docs/eigendoc';
+import { type BandEdge, readCellBackground } from '@workspace/lib/docs/eigendoc';
 import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { ToolbarMenu } from '@workspace/ui';
 import {
@@ -43,6 +43,7 @@ import {
     ListOrdered,
     ListRestart,
     type LucideIcon,
+    PaintBucket,
     PanelTop,
     Pilcrow,
     Quote,
@@ -418,6 +419,15 @@ export const FormatMenu = ({
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
                     <TABLE_ACTION_ICONS.toggleHeaderRow className="h-4 w-4 mr-2" /> Toggle header row
                 </DropdownMenuItem>
+                <ColorPickerMenuItem
+                    icon={PaintBucket}
+                    label="Cell background color"
+                    value={active.cellBackground}
+                    resetLabel="None"
+                    onChange={(color) =>
+                        editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
+                    }
+                />
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>

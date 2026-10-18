@@ -1,5 +1,6 @@
 import type { Node as PMNode, ResolvedPos } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
+import { listTypeOfStyle } from '@workspace/lib/docs/eigendoc';
 
 // The depth of the innermost list around a position when that list is numbered, as Google's numbering acts on the
 // list the caret is in: a bulleted list nested in a numbered one is no numbered list.
@@ -11,9 +12,11 @@ export function orderedListDepth($pos: ResolvedPos): number | undefined {
     return undefined;
 }
 
-// Decimal is the schema's default, which a list stores as no type.
-export function numberedListType(list: PMNode): string {
-    return list.attrs['type'] ?? '1';
+// A list with no type draws its depth's, from eigen-prose.css; one not drawn yet reads as decimal.
+export function numberedListType(list: PMNode, dom: Node | null | undefined): string {
+    const type = list.attrs['type'];
+    if (type) return type;
+    return (dom instanceof Element && listTypeOfStyle(getComputedStyle(dom).listStyleType)) || '1';
 }
 
 export function setNumberedListType(editor: Editor, type: string): void {
@@ -30,7 +33,7 @@ export function setNumberedListType(editor: Editor, type: string): void {
             if (depth === undefined) return false;
             tr.setNodeMarkup($from.before(depth), undefined, {
                 ...$from.node(depth).attrs,
-                type: type === '1' ? null : type,
+                type,
             });
             return true;
         })
