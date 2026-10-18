@@ -158,7 +158,7 @@ On the canvas Escape goes to the innermost active mode: rich-text editing, then 
 
 `ObjectTransform` (`packages/ui/src/components/transform/`) is the resize and rotate chrome for the canvas, docs figures and sheets images. Its `snapBox` applies on resize only. `snap.ts` takes its threshold in the box's units, so a zoomable host passes `SNAP_SCREEN_THRESHOLD / zoom` to keep the radius constant on screen. A rotated box's axis-aligned edges don't match what the user sees, so it snaps by center only. The aspect lock (`useAspectLock`) starts on for images and remembers a toggle per element while the editor is mounted.
 
-Every panel row is a `PropertyRow` over the shared controls in `packages/ui/src/components/properties-panel/`, never a bespoke control. With nothing selected a host may add its own rows (`emptySection`), because only it knows those words.
+Every panel row is a `PropertyRow` over the shared controls in `packages/ui/src/components/properties-panel/`, never a bespoke control. A checkbox is a `PropertyCheckbox` instead, its label beside the box across the row, because a box's label says what it turns on and outruns the label column. With nothing selected a host may add its own rows (`emptySection`), because only it knows those words.
 
 ## See also
 

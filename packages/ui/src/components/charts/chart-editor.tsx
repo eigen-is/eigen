@@ -5,11 +5,11 @@
 
 import { chartColor, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';
 import { type ChartSpec, type ChartStacking, LEGEND_POSITIONS, type LegendPosition } from '@workspace/lib/types/chart';
-import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
     ColorRow,
     FontRow,
     MergedSelect,
+    PropertyCheckbox,
     PropertyNumberInput,
     PropertyRow,
     PropertySection,
@@ -88,14 +88,13 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
 
     // An axis's rows take their section's name, since a bar chart swaps which section holds which axis.
     type AxisName = 'Horizontal axis' | 'Vertical axis';
-    const visibleRow = (axis: AxisName, visible: boolean, onVisible: (visible: boolean) => void) => (
-        <PropertyRow label="Visible">
-            <Checkbox
-                aria-label={`${axis} visible`}
-                checked={visible}
-                onCheckedChange={(checked) => onVisible(checked === true)}
-            />
-        </PropertyRow>
+    const showAxisRow = (axis: AxisName, visible: boolean, onVisible: (visible: boolean) => void) => (
+        <PropertyCheckbox
+            label="Show axis"
+            aria-label={`${axis}: Show axis`}
+            checked={visible}
+            onCheckedChange={onVisible}
+        />
     );
     const setCategoryAxis = (patch: Partial<ChartSpec['categoryAxis']>) =>
         onChange({ ...spec, categoryAxis: { ...categoryAxis, ...patch } });
@@ -110,14 +109,13 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                     onChange={(title) => setCategoryAxis({ title })}
                 />
             </PropertyRow>
-            {visibleRow(axis, categoryAxis.visible, (visible) => setCategoryAxis({ visible }))}
-            <PropertyRow label="Reversed">
-                <Checkbox
-                    aria-label={`${axis} reversed`}
-                    checked={categoryAxis.reversed}
-                    onCheckedChange={(checked) => setCategoryAxis({ reversed: checked === true })}
-                />
-            </PropertyRow>
+            {showAxisRow(axis, categoryAxis.visible, (visible) => setCategoryAxis({ visible }))}
+            <PropertyCheckbox
+                label="Reverse axis order"
+                aria-label={`${axis}: Reverse axis order`}
+                checked={categoryAxis.reversed}
+                onCheckedChange={(reversed) => setCategoryAxis({ reversed })}
+            />
         </>
     );
 
@@ -131,7 +129,7 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                     onChange={(title) => setValueAxis({ title })}
                 />
             </PropertyRow>
-            {visibleRow(axis, valueAxis.visible, (visible) => setValueAxis({ visible }))}
+            {showAxisRow(axis, valueAxis.visible, (visible) => setValueAxis({ visible }))}
             <PropertyRow label="Min">
                 <PropertyNumberInput
                     value={shownBound(valueAxis.min)}
@@ -148,13 +146,12 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                     onClear={() => setValueAxis({ max: null })}
                 />
             </PropertyRow>
-            <PropertyRow label="Gridlines">
-                <Checkbox
-                    aria-label="Gridlines"
-                    checked={valueAxis.gridlines}
-                    onCheckedChange={(checked) => setValueAxis({ gridlines: checked === true })}
-                />
-            </PropertyRow>
+            <PropertyCheckbox
+                label="Gridlines"
+                aria-label={`${axis}: Gridlines`}
+                checked={valueAxis.gridlines}
+                onCheckedChange={(gridlines) => setValueAxis({ gridlines })}
+            />
         </>
     );
 
