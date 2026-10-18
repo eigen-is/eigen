@@ -1144,18 +1144,21 @@ test.each([
 // Where Google's Insert › Symbols › Equation sits relative to the chart and the line. The equation goes in once the menu
 // has closed, so Radix hands the focus to no trigger after the new equation's field has taken it.
 test('Insert › Equation follows Chart and inserts once the menu has closed', async () => {
-    const onInsertEquation = mock(() => {});
+    // Whether a menu was still in the page when the equation went in: Radix calls onCloseAutoFocus in a timeout its
+    // unmount sets, which may run inside the click's own act under load, so the order is read at the call.
+    const menuOpenAtInsert: boolean[] = [];
+    const onInsertEquation = mock(() => {
+        menuOpenAtInsert.push(document.querySelector('[role="menu"]') !== null);
+    });
     await render(1920, true, { onInsertEquation });
     await openMenu('Insert');
     expect(openMenuEntries().slice(0, 5)).toEqual(['Link', 'Image', 'Chart', 'Equation', 'Horizontal rule']);
 
     await clickItem('Equation');
-    expect(onInsertEquation).not.toHaveBeenCalled();
-    // Radix calls onCloseAutoFocus in a timeout its unmount sets, which under load a single tick can precede.
     for (let tick = 0; tick < 50 && onInsertEquation.mock.calls.length === 0; tick++) {
         await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
     }
-    expect(onInsertEquation).toHaveBeenCalledTimes(1);
+    expect(menuOpenAtInsert).toEqual([false]);
 });
 
 // A phone has no panel to edit one in, and a band being edited none that follows it.
