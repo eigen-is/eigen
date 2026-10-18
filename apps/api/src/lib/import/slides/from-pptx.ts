@@ -33,8 +33,8 @@ export type PptxOptions = { frame?: Frame; maxMediaBytes: number };
 export const MAX_MEDIA_PARTS = 1000;
 
 // The read's work, charged through lookup.ts: children scanned where a lookup or a colour isn't known yet, colour
-// transforms applied, paragraph and run nodes and characters read, shapes walked, a chart part's elements for each
-// colour map it is painted with. Whatever a file repeats, or makes each cache key anew, the read does no more than
+// transforms applied, paragraph and run nodes and characters read, shapes walked, a chart part's elements and points
+// for each colour map it is painted with. Whatever a file repeats, or makes each cache key anew, the read does no more than
 // this. Over ten times the corpus's most, 260,005 in a 369-slide deck.
 export const MAX_PPTX_WORK = 3_000_000;
 

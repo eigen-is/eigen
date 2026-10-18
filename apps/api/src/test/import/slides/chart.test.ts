@@ -319,6 +319,30 @@ describe('bounds', () => {
         expect(deck.slides[399].elements[0]).toMatchObject({ type: 'richtext', html: '<p>Chart not imported</p>' });
     });
 
+    test('a chart is charged the points its caches declare, not only its elements', () => {
+        // A few hundred elements declaring 32 series of 2,000 points each, past what a spec holds only once all 64,000
+        // values are built: charged its elements alone, the part was built again for every one of 60 colour maps.
+        const series = Array.from(
+            { length: 32 },
+            (_, i) =>
+                `<c:ser><c:idx val="${i}"/><c:order val="${i}"/><c:val><c:numLit><c:ptCount val="2000"/></c:numLit></c:val></c:ser>`,
+        ).join('');
+        const part = chartSpace(`<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>${series}</c:barChart>`);
+        const slots = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
+        const pptx = buildPptx({
+            slides: Array.from({ length: 60 }, (_, i) => ({
+                shapes: frame(),
+                rels: rel('rId5', 'chart', '../charts/chart1.xml'),
+                after: `<p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="${i < 36 ? 'lt2' : 'dk2'}" tx2="dk2" accent1="${slots[i % 6]}" accent2="${slots[Math.floor(i / 6) % 6]}" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr>`,
+            })),
+            types: chartType('ppt/charts/chart1.xml'),
+            files: { 'ppt/charts/chart1.xml': part },
+        });
+        const deck = readPptx(pptx, OPTIONS);
+        expect(deck.slides[0].elements[0]?.html).toBe('<p>Column chart not imported</p>');
+        expect(deck.slides[59].elements[0]?.html).toBe('<p>Chart not imported</p>');
+    });
+
     test("a chart the read's work left can't cover is left as its box, and the rest of the deck reads", () => {
         // A master's run read again for each of ten colour maps spends all but 200,000 of the budget.
         const master = sp({
