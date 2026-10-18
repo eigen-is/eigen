@@ -1,14 +1,21 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
 // One MediaQueryList per query string, so subscribe/getSnapshot never re-allocate
-// (an inline subscribe would make useSyncExternalStore re-subscribe every render).
-const mediaQueryLists = new Map<string, MediaQueryList>();
+// (an inline subscribe would make useSyncExternalStore re-subscribe every render). Kept per window: each
+// component test file installs a window of its own in one process, and a list from the last one never
+// sees this one's viewport.
+const mediaQueryLists = new WeakMap<Window, Map<string, MediaQueryList>>();
 
 function getMediaQueryList(query: string): MediaQueryList {
-    let media = mediaQueryLists.get(query);
+    let lists = mediaQueryLists.get(window);
+    if (!lists) {
+        lists = new Map();
+        mediaQueryLists.set(window, lists);
+    }
+    let media = lists.get(query);
     if (!media) {
         media = window.matchMedia(query);
-        mediaQueryLists.set(query, media);
+        lists.set(query, media);
     }
     return media;
 }

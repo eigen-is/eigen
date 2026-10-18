@@ -39,6 +39,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
+import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
 import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
 import { EditorToolbar } from './editor-toolbar';
 import {
@@ -167,6 +168,9 @@ const TiptapEditor = ({
     const [docHeight, setDocHeight] = useState(0);
     // The image panel's button and Format › Image › Replace image open the same picker.
     const [replacePickerOpen, setReplacePickerOpen] = useState(false);
+    // The chart panel's Edit data and a double-click on a chart open one dialog, for the selected chart.
+    const [chartDataOpen, setChartDataOpen] = useState(false);
+    const closeChartData = useCallback(() => setChartDataOpen(false), []);
     const needsScaleRef = useRef(false);
     const documentRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -234,6 +238,11 @@ const TiptapEditor = ({
                 onOpenComment: handleCommentClick,
                 onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
             },
+            chart: {
+                onOpenComment: handleCommentClick,
+                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
+                onEditData: () => setChartDataOpen(true),
+            },
             extensions: [
                 SearchHighlight,
                 CommentMark.configure({
@@ -296,8 +305,8 @@ const TiptapEditor = ({
         if (panel || !bandsAllowed) setBandRequest(null);
     }, [panel, bandsAllowed]);
 
-    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
-    const lastPanelRef = useRef<'figure' | 'table'>('figure');
+    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'chart' | 'table'>('document');
+    const lastPanelRef = useRef<'figure' | 'chart' | 'table'>('figure');
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
 
     const activeComments = useActiveComments(editor);
@@ -375,6 +384,7 @@ const TiptapEditor = ({
         if (!editor) return;
         const onUpdate = () => {
             if (editor.isActive('figure')) setSidebarContext('figure');
+            else if (editor.isActive('chart')) setSidebarContext('chart');
             else if (editor.isActive('table')) setSidebarContext('table');
             else setSidebarContext('document');
         };
@@ -586,6 +596,12 @@ const TiptapEditor = ({
                                                     editor={editor}
                                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                                 />
+                                            ) : lastPanelRef.current === 'chart' ? (
+                                                <ChartPropertiesPanel
+                                                    editor={editor}
+                                                    undoManager={undoManager}
+                                                    onEditData={() => setChartDataOpen(true)}
+                                                />
                                             ) : (
                                                 <TablePropertiesPanel editor={editor} />
                                             )}
@@ -609,6 +625,8 @@ const TiptapEditor = ({
                 onPickFromDevice={(files) => files[0] && media.replaceImage(() => editorRef.current, files[0])}
                 accept="image/*"
             />
+
+            {chartDataOpen && <ChartDataEditor editor={editor} undoManager={undoManager} onClose={closeChartData} />}
 
             <CardFormDialog
                 open={addOpen}

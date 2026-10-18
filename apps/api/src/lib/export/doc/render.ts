@@ -1,8 +1,17 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import { parseChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import { type FigureAttrs, PROSE_TEXTBLOCKS, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import {
+    type ChartAttrs,
+    chartSvg,
+    type FigureAttrs,
+    type FigureFrameAttrs,
+    PROSE_TEXTBLOCKS,
+    readChartAttrs,
+    readFigureAttrs,
+} from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
@@ -71,8 +80,14 @@ function renderTaskItemNode(
     return `<li data-type="taskItem" data-checked="${dataChecked}"><label><input type="checkbox"${checkedAttr} disabled /></label><div>${content}</div></li>`;
 }
 
-// `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview. Spans, which
-// a paragraph can hold, drawn by eigen-prose.css's .figure rules as the editor's node view is.
+// The box a figure and a chart share: spans, which a paragraph can hold, drawn by eigen-prose.css's .figure rules as the
+// editor's node view is.
+function renderFigureFrame(attrs: FigureFrameAttrs, content: string): string {
+    const cap = attrs.caption ? `<span class="figcaption">${escapeHtml(attrs.caption)}</span>` : '';
+    return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}">${content}${cap}</span>`;
+}
+
+// `resolveImgSrc` decides what a media reference becomes: a data URI for export, an embed URL for preview.
 function renderFigureNode(
     attrs: FigureAttrs,
     resolveImgSrc: FigureImgSrcResolver,
@@ -86,8 +101,12 @@ function renderFigureNode(
     const img = imgSrc
         ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}"${lazy} style="${imgStyle}max-width: 100%" />`
         : '';
-    const cap = attrs.caption ? `<span class="figcaption">${escapeHtml(attrs.caption)}</span>` : '';
-    return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}">${img}${cap}</span>`;
+    return renderFigureFrame(attrs, img);
+}
+
+// Inline, so its labels draw in the page's fonts; an <img> of an SVG can't reach the page's @font-face.
+function renderChartNode(attrs: ChartAttrs): string {
+    return renderFigureFrame(attrs, chartSvg(parseChartSpec(attrs.spec ?? ''), attrs));
 }
 
 // ProseMirror's addTextblockHacks: the editor ends a textblock that is empty, or ends in a non-text node or a newline,
@@ -162,6 +181,7 @@ export function renderDocHtml(
                 codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
+                chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
                 // Without the annotation, which no screen draws and the sanitizer would keep as text.
                 equation: ({ node }) => {
                     const { row, display } = readStoredEquation(node.attrs);

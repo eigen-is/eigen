@@ -1,9 +1,9 @@
 import { bundledFontOfStack, DOCUMENT_FONT, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
 import { ITALIC_HEADING_SELECTOR } from '@workspace/lib/docs/eigendoc';
 
-// Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, no size the doc draws already, images
-// and tables no wider than the column, no anchor for a comment card this document lacks, and in an italic heading an
-// upright run as the mark.
+// Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, no size the doc draws already, images,
+// charts and tables no wider than the column, no anchor for a comment card this document lacks, and in an italic
+// heading an upright run as the mark.
 export function cleanPastedHTML(html: string, maxWidth: number, cardIds: ReadonlySet<string>): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
@@ -51,6 +51,16 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
         if (width > maxWidth) {
             el.setAttribute('width', String(Math.round(maxWidth)));
             el.style.width = `${Math.round(maxWidth)}px`;
+        }
+    }
+
+    // A chart keeps its shape, as it has no aspect ratio of its own to restore it from.
+    for (const el of doc.querySelectorAll<HTMLElement>('span.chart')) {
+        const width = Number(el.getAttribute('data-width'));
+        const height = Number(el.getAttribute('data-height'));
+        if (width > maxWidth) {
+            el.setAttribute('data-width', String(Math.round(maxWidth)));
+            el.setAttribute('data-height', String(Math.round((height * maxWidth) / width)));
         }
     }
 

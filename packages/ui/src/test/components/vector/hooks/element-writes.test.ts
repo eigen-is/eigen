@@ -8,9 +8,9 @@ import {
     type VectorElement,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
+import { sealed } from '../../../../components/properties-panel/property-gesture';
 import { duplicateElementsInDoc, replaceElementInDoc } from '../../../../components/vector/hooks/element-writes';
 import { addFrameInDoc } from '../../../../components/vector/hooks/frame-writes';
-import { sealed } from '../../../../components/vector/hooks/use-canvas-doc';
 
 function docWith(elements: Record<string, unknown>[], doc = new Y.Doc()): Y.Doc {
     doc.transact(() => {

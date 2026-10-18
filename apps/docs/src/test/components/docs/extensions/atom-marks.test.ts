@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Editor } from '@tiptap/core';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -63,6 +64,15 @@ test('bold over a range containing a page number marks the text, and one inserte
     const editor = editorWith([{ type: 'text', text: 'a ' }, pageNumber, { type: 'text', text: ' b' }]);
     editor.chain().selectAll().setBold().run();
     editor.commands.insertContentAt(3, { ...pageNumber, marks: [{ type: 'italic' }] });
+    expect(markedNodes(editor)).toEqual(['text', 'text']);
+    editor.destroy();
+});
+
+test('bold and a comment over a range containing a chart mark the text, and one inserted with a mark loses it', () => {
+    const chart = { type: 'chart', attrs: { spec: JSON.stringify(sampleChartSpec('bar')) } };
+    const editor = editorWith([{ type: 'text', text: 'a ' }, chart, { type: 'text', text: ' b' }]);
+    editor.chain().selectAll().setBold().setComment('card-1').run();
+    editor.commands.insertContentAt(3, { ...chart, marks: [{ type: 'italic' }] });
     expect(markedNodes(editor)).toEqual(['text', 'text']);
     editor.destroy();
 });

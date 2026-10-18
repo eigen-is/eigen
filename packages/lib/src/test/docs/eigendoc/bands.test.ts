@@ -36,7 +36,7 @@ describe('the header and footer bands', () => {
     // A mark missing from a band's schema would delete the text that carries it, so only nodes are left out.
     test("a band's schema leaves out the excluded nodes and keeps every mark", () => {
         const band = getSchema(getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }));
-        expect([...BAND_EXCLUDED_NODES].sort()).toEqual(['codeBlock', 'pageBreak', 'subtitle', 'title']);
+        expect([...BAND_EXCLUDED_NODES].sort()).toEqual(['chart', 'codeBlock', 'pageBreak', 'subtitle', 'title']);
         // The code block exists only with lowlight, so the band leaves it out of the schema that has one.
         const withCode = getSchema(getDocExtensions({ lowlight: {}, exclude: [...BAND_EXCLUDED_NODES] }));
         for (const name of BAND_EXCLUDED_NODES) {

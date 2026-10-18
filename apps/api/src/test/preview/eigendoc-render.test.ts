@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_PAGE_SETUP, PAGE_ROOT } from '@workspace/lib/docs/eigendoc';
 import { type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
@@ -48,6 +49,16 @@ describe('renderEigendocPreviewBody', () => {
     test('an external image reference never reaches a viewer', () => {
         const body = previewOf(docWithFigure({ src: 'https://evil.example/pixel.png', alt: '' }));
         expect(body).not.toContain('evil.example');
+    });
+
+    test('a chart draws as inline SVG in the figure box, its labels as text', () => {
+        const spec = JSON.stringify(sampleChartSpec('column'));
+        const body = previewOf({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { spec, width: 480, height: 300 } }] }],
+        });
+        expect(body).toContain('<span class="figure" data-layout="block" data-alignment="center"><svg');
+        expect(body).toMatch(/<text[^>]*>Team 1<\/text>/);
     });
 
     test('the golden document keeps its media and its hyperlink', () => {

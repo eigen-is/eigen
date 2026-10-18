@@ -29,7 +29,7 @@ You do not need to open the document to export it. In Drive, right-click the doc
 
 ## What is included
 
-The exported file contains the document text and all formatting: headings, lists, tables, images, code blocks, and other content. Comment threads, the header, and the footer are not included in the exported file.
+The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Comment threads, the header, and the footer are not included in the exported file. The Word file leaves charts out for now and keeps their captions.
 
 A page break starts a new page in the PDF and the Word file. In all three formats, links to other files in Eigen point to your Eigen server, and a numbered list keeps the number it starts at and its style (1, a, A, i, or I).
 

@@ -28,8 +28,9 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
 // column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
-// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) A page number is its cached 1, before the
-// schema joins the text (cachedPageNumbers). (9) Small is written as its look and comes back as that size.
+// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out. (9) A
+// page number is its cached 1, before the schema joins the text (cachedPageNumbers). (10) Small is written as its look
+// and comes back as that size.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -56,7 +57,9 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         }
         return [mark];
     });
-    const kept = source.content?.filter((_, index, siblings) => !blankBeforeBreak(siblings, index));
+    const kept = source.content?.filter(
+        (child, index, siblings) => child.type !== 'chart' && !blankBeforeBreak(siblings, index),
+    );
     const content = kept?.map((child, index) => expected(child, imported?.content?.[index]));
     return {
         ...source,

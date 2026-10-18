@@ -9,6 +9,7 @@ import { Color, TextStyle } from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
 import StarterKit from '@tiptap/starter-kit';
 import { TextCaps } from './nodes/caps';
+import { ChartNode } from './nodes/chart';
 import { CommentMarkSchema } from './nodes/comment-mark';
 import { EquationNode } from './nodes/equation';
 import { FigureNode } from './nodes/figure';
@@ -53,6 +54,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         SubtitleNode,
         TextAlign.configure({ types: PROSE_TEXTBLOCKS }),
         FigureNode,
+        ChartNode,
         EquationNode,
         PageBreakNode,
         PageNumberNode,

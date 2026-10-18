@@ -35,7 +35,9 @@ import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { insertEigenItems, writeDocsClipboard } from './clipboard';
 import { AtomMarks } from './extensions/atom-marks';
-import { Figure, type FigureOptions } from './extensions/figure';
+import { Chart, type ChartOptions } from './extensions/chart';
+import { Figure } from './extensions/figure';
+import type { FigureFrameOptions } from './extensions/figure-frame';
 import { PageNumber } from './extensions/page-number';
 import { EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
@@ -192,7 +194,8 @@ type DocEditorOptions = {
     // A column's border drags with a mouse only: prosemirror-tables reads mouse events, so a finger
     // drags nothing, and a tap beside a border would start a drag that swallows the caret.
     coarsePointer: boolean;
-    figure?: Partial<FigureOptions>;
+    figure?: Partial<FigureFrameOptions>;
+    chart?: Partial<ChartOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
     media: () => DocMedia;
@@ -208,6 +211,7 @@ export function docEditorOptions({
     caret,
     coarsePointer,
     figure,
+    chart,
     extensions = [],
     media,
     editor,
@@ -228,6 +232,7 @@ export function docEditorOptions({
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
                     'figure',
+                    'chart',
                     'table',
                     'pageNumber',
                     ...extensions.map((extension) => extension.name),
@@ -235,6 +240,7 @@ export function docEditorOptions({
             }),
             EditorTable.configure({ resizable: !coarsePointer }),
             Figure.configure(figure),
+            ...(band ? [] : [Chart.configure(chart)]),
             PageNumber,
             TableWidthClamp.configure({ textColumnWidth }),
             AtomMarks,
