@@ -1,7 +1,7 @@
 import type { InlineStringSegment } from '../../engine/types';
 import type { Freezen } from '..';
 import { type Context, getFlowdata } from '../context';
-import { cancelActiveImgItem, israngeseleciton } from '../modules';
+import { deselectFloatingObject, israngeseleciton } from '../modules';
 import { isInlineStringCell } from '../modules/inline-string';
 import { colLocation, rowLocation } from '../modules/location';
 import { getFontSet } from '../modules/text';
@@ -44,7 +44,7 @@ export function handleColSizeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx, globalCache);
 
     ctx.editingCellPosition = [];
 
@@ -83,7 +83,7 @@ export function handleRowSizeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx, globalCache);
 
     if (
         ctx.formulaCache.rangestart ||
@@ -129,7 +129,7 @@ export function handleColFreezeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx, globalCache);
 
     ctx.editingCellPosition = [];
 
@@ -173,7 +173,7 @@ export function handleRowFreezeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx, globalCache);
 
     ctx.editingCellPosition = [];
 

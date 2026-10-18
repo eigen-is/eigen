@@ -8,9 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 ### Added
 
 - **Page setup** — File → **Page setup…** or Format → **Page orientation** sets a document's paper size, orientation and margins, with Google's eleven paper sizes. The editor, printing, quick look, thumbnails and the PDF, HTML and Word downloads follow it, and importing a Word file brings its page size and margins
-- **Charts in Vector and Slides** — Insert → **Chart** → Bar, Column, Line or Pie places a chart with sample data. The Chart panel sets its type, stacking, titles, legend, axis range, gridlines and colors, and **Edit data** (or a double-click) edits its numbers in a grid you can paste spreadsheet cells into
 - **Headers, footers and page numbers** — Insert → **Page elements** or Format → **Headers and footers** opens a panel to edit a document's header and footer, with a different first page and Google's page-number presets; the page shows them in its margins. They don't print or download yet
 - **Font size** — the toolbar's **− 11 +** sets the size of text, and Format → Text → **Size** steps it (⌘⇧. and ⌘⇧,). Word files keep their sizes both ways, and **Small** leaves the Format menu
+- **Slide size** — File → **Page setup…** in Slides switches a presentation between Widescreen 16:9 and Standard 4:3. Content keeps its position, so after a switch to 16:9 what sat near the bottom of a 4:3 slide is hidden until you undo or switch back. A 4:3 presentation downloads on 4:3 pages
+- **Charts in Vector, Slides and Sheets** — Insert → **Chart** → Bar, Column, Line or Pie places a chart with sample data. The Chart panel sets its type, stacking (None, Standard or 100%), titles, legend, font, axis range, gridlines and colors, each color Automatic until you pick one, and **Edit data** (or a double-click) edits its numbers in a small spreadsheet with the keys of Sheets, which grows as you type past the data and takes cells pasted from a spreadsheet. In Sheets, Insert → **Chart** charts the selected cells and follows them as they change: the **Chart editor** sets its data range and its look, its ⋮ menu downloads it as SVG, and the PDF and web page downloads and the Drive preview show it
+
+### Fixed
+
+- **Sheets copy and Tab** — copied cells paste into other apps as rows and columns, not one run of text, and Tab while typing in a cell confirms it and moves right (Shift+Tab left)
 
 ### Changed
 

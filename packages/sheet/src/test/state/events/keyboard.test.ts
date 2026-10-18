@@ -211,3 +211,30 @@ describe('handleGlobalKeyDown — Ctrl+D / Ctrl+R fill', () => {
         expect(values.map((_, i) => column[formulas.length + i])).toEqual(values);
     });
 });
+
+// Tab while editing commits the cell and moves right, Shift+Tab left, as Enter commits and moves
+// down: Google's behavior. The keydown returned early and the edit stayed open.
+describe('handleGlobalKeyDown — Tab while editing', () => {
+    function editing(text: string) {
+        const ctx = listContext(null);
+        ctx.editingCellPosition = [1, 1];
+        const cellInput = win.document.createElement('div');
+        cellInput.textContent = text;
+        return { ctx, cellInput: cellInput as unknown as HTMLDivElement };
+    }
+
+    test('Tab commits the edit and moves right', () => {
+        const { ctx, cellInput } = editing('42');
+        expect(keyDown(ctx, 'Tab', { cellInput })).toBe(true);
+        expect(ctx.sheets[0].data?.[1][1]?.v).toBe(42);
+        expect(ctx.editingCellPosition).toEqual([]);
+        expect(ctx.selections?.[0]).toMatchObject({ row_focus: 1, column_focus: 2 });
+    });
+
+    test('Shift+Tab commits the edit and moves left', () => {
+        const { ctx, cellInput } = editing('north');
+        keyDown(ctx, 'Tab', { cellInput, shiftKey: true });
+        expect(ctx.sheets[0].data?.[1][1]?.v).toBe('north');
+        expect(ctx.selections?.[0]).toMatchObject({ row_focus: 1, column_focus: 0 });
+    });
+});

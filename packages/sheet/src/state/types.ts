@@ -281,6 +281,7 @@ export type History = {
     patches: ImmerPatch[];
     inversePatches: ImmerPatch[];
     options?: PatchOptions;
+    gesture?: object;
 };
 
 // Pre-computed offsets the freeze line uses to redraw above/below the frozen
@@ -308,6 +309,8 @@ export type GlobalCache = {
     recentBackgroundColor?: string;
     undoList: History[];
     redoList: History[];
+    // An open panel edit (a typed title): its writes merge into one undo entry.
+    undoGesture?: object;
     freezen?: Record<string, Freezen>;
 
     // Scroll state stored outside React/immer to avoid triggering full

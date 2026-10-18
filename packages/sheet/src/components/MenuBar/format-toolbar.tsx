@@ -1,5 +1,4 @@
 import { nextFontSize } from '@workspace/lib/constants/fonts';
-import { useMediaQuery } from '@workspace/lib/media';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
 import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
@@ -18,21 +17,17 @@ import {
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
 
-// Width seam below which this toolbar hides — MenuBar keys its grid on the same seam.
-export const formatToolbarQuery = '(min-width: 1360px)';
-
 // Quick-format controls mirrored from the docs toolbar, driving the exact same
 // handlers as the Format menu — an extra surface, not a replacement. The menu bar's
-// 1fr·auto·1fr grid centers this on the bar; the min-width gate hides it (with
-// read-only) below the width where the side blocks still leave room to sit centered.
+// 1fr·auto·1fr grid centers this on the bar; the bar's 1360px container query hides it
+// (as read-only does) below the width where the side blocks still leave room to sit centered.
 export function FormatToolbar() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
-    const hasSpace = useMediaQuery(formatToolbarQuery);
     // Reflect the anchor cell so the swatches + active alignment track the selection,
     // the way the docs toolbar follows the caret.
     const cell = useAnchorCell();
 
-    if (!hasSpace || !context.allowEdit) return null;
+    if (!context.allowEdit) return null;
 
     // `ht` is stored as '1'/'0'/'2' by the align handler but as a number on
     // defaults/imports — coerce before comparing.
@@ -50,7 +45,7 @@ export function FormatToolbar() {
     };
 
     return (
-        <div className="flex items-center gap-0.5">
+        <div className="hidden @[1360px]:flex items-center gap-0.5">
             <FontPicker
                 value={fontName}
                 onChange={(name) => {

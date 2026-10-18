@@ -107,8 +107,9 @@ function getImagePosition() {
     return { left, top, width, height };
 }
 
-export function cancelActiveImgItem(ctx: Context, globalCache: GlobalCache) {
+export function deselectFloatingObject(ctx: Context, globalCache: GlobalCache) {
     ctx.activeImg = undefined;
+    ctx.activeChart = undefined;
     globalCache.image = undefined;
 }
 

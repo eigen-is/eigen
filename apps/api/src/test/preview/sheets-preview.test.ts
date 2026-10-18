@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -231,11 +232,11 @@ describe('eigensheets preview (floating images)', () => {
         doc.destroy();
     });
 
-    // A sheet with nothing but a chart takes the blank-grid branch, which renders its own overlay.
-    function seedChartOnlySheet(x: number): Y.Doc {
+    // A sheet with nothing but an image takes the blank-grid branch, which renders its own overlay.
+    function seedImageOnlySheet(x: number): Y.Doc {
         const sheet: Sheet = {
-            id: 'chart',
-            name: 'Chart',
+            id: 'image',
+            name: 'Image',
             celldata: [],
             data: [],
             config: {},
@@ -246,12 +247,12 @@ describe('eigensheets preview (floating images)', () => {
         return doc;
     }
 
-    test('a chart-only sheet clips its overlay to the budget window as well', () => {
-        const far = seedChartOnlySheet(20_000);
+    test('an image-only sheet clips its overlay to the budget window as well', () => {
+        const far = seedImageOnlySheet(20_000);
         expect(renderEigensheetsPreviewBody(far, new Map([['chart.png', IMAGE_URL]])).body).not.toContain('<img');
         far.destroy();
 
-        const origin = seedChartOnlySheet(0);
+        const origin = seedImageOnlySheet(0);
         expect(renderEigensheetsPreviewBody(origin, new Map([['chart.png', IMAGE_URL]])).body).toContain(
             `src="${IMAGE_URL}"`,
         );
@@ -264,6 +265,100 @@ describe('eigensheets preview (floating images)', () => {
         expect(body).toContain('Grid');
         expect(body).not.toContain('<img');
         doc.destroy();
+    });
+});
+
+// A chart draws from the stored values: the preview never recalcs, so a formula cell without one is a gap.
+describe('eigensheets preview (charts)', () => {
+    test("the chart reaches the body as SVG with its cells' labels and values", () => {
+        const cell = (v: string | number) => ({
+            v,
+            m: String(v),
+            ct: { fa: 'General', t: typeof v === 'number' ? 'n' : 'g' },
+        });
+        const ref = (row: [number, number], column: [number, number]) => ({ sheetId: 'data', row, column });
+        const sheet: Sheet = {
+            id: 'data',
+            name: 'Data',
+            celldata: [
+                { r: 0, c: 0, v: cell('Team') },
+                { r: 0, c: 1, v: cell('Points') },
+                { r: 1, c: 0, v: cell('Ajax') },
+                { r: 1, c: 1, v: cell(42) },
+                { r: 2, c: 0, v: cell('PSV') },
+                { r: 2, c: 1, v: { f: '=B2*2' } },
+            ],
+            config: {},
+            charts: {
+                c1: {
+                    id: 'c1',
+                    index: 'a0',
+                    x: 200,
+                    y: 0,
+                    width: 400,
+                    height: 300,
+                    spec: JSON.stringify({
+                        ...sampleChartSpec('column'),
+                        title: 'Scores',
+                        data: {
+                            source: 'range',
+                            categories: ref([1, 2], [0, 0]),
+                            series: [
+                                {
+                                    name: ref([0, 0], [1, 1]),
+                                    values: ref([1, 2], [1, 1]),
+                                    color: '#2a78d6',
+                                    markers: false,
+                                    smooth: false,
+                                },
+                            ],
+                        },
+                    }),
+                },
+            },
+        };
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, [sheet], []);
+        const { body } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
+        const svg = body.slice(body.indexOf('<svg'), body.indexOf('</svg>'));
+        expect(body).toContain('left:200px;top:0px;width:400px;height:300px');
+        for (const label of ['>Scores<', '>Ajax<', '>PSV<', '>Points<']) expect(svg).toContain(label);
+        // PSV's formula has no stored value and the preview computes none, so the axis stops near Ajax's 42.
+        expect(svg).toContain('>40<');
+        expect(svg).not.toContain('>80<');
+        doc.destroy();
+    });
+
+    // The truncated notice follows the overlay's box in the flow, so the box reaches the lowest chart, cut at
+    // the budget window, whose edge clips a chart that crosses it.
+    const chartBelow = (y: number): Sheet => ({
+        id: 'below',
+        name: 'Below',
+        celldata: [{ r: 0, c: 0, v: { v: 'Grid', m: 'Grid', ct: { fa: 'General', t: 'g' } } }],
+        config: {},
+        charts: {
+            c1: {
+                id: 'c1',
+                index: 'a0',
+                x: 0,
+                y,
+                width: 400,
+                height: 300,
+                spec: JSON.stringify(sampleChartSpec('column')),
+            },
+        },
+    });
+
+    test('the overlay box is as tall as the chart below the table, so the truncated notice starts under it', () => {
+        const { html, truncated } = renderSheetsPreviewHtml([chartBelow(40), chartBelow(40)], NO_MEDIA);
+        expect(truncated).toBe(true);
+        expect(html).toContain('position:relative;width:400px;min-height:340px;overflow:hidden');
+    });
+
+    test('a chart crossing the budget window is clipped at its edge', () => {
+        const bottom = PREVIEW_SHEET_BUDGET.maxRows * SHEET_DEFAULT_ROW_HEIGHT;
+        const { html } = renderSheetsPreviewHtml([chartBelow(bottom - 100)], NO_MEDIA);
+        expect(html).toContain(`min-height:${bottom}px;overflow:hidden`);
     });
 });
 
