@@ -240,12 +240,7 @@ describe('docx writer — schema coverage', () => {
         schema.nodeFromJSON(json).check();
         const { nodes, marks } = typesIn(json);
 
-        // The footnote joins the doc with Word's footnotes part (U9); until then the writer puts its text in place.
-        expect([...nodes].sort()).toEqual(
-            Object.keys(schema.nodes)
-                .filter((name) => name !== 'footnote')
-                .sort(),
-        );
+        expect([...nodes].sort()).toEqual(Object.keys(schema.nodes).sort());
         expect([...marks].sort()).toEqual(Object.keys(schema.marks).sort());
     });
 
@@ -266,6 +261,8 @@ describe('docx writer — package', () => {
         'docProps/core.xml',
         'word/document.xml',
         'word/_rels/document.xml.rels',
+        'word/footnotes.xml',
+        'word/_rels/footnotes.xml.rels',
         'word/styles.xml',
         'word/numbering.xml',
         'word/settings.xml',
@@ -299,6 +296,7 @@ describe('docx writer — package', () => {
         expect(Object.fromEntries(overrides)).toEqual({
             '/docProps/core.xml': 'application/vnd.openxmlformats-package.core-properties+xml',
             '/word/document.xml': `${wml}.document.main+xml`,
+            '/word/footnotes.xml': `${wml}.footnotes+xml`,
             '/word/styles.xml': `${wml}.styles+xml`,
             '/word/numbering.xml': `${wml}.numbering+xml`,
             '/word/settings.xml': `${wml}.settings+xml`,
@@ -326,13 +324,16 @@ describe('docx writer — package', () => {
     test('every style, numbering and drawing id the document uses is defined once', async () => {
         const zip = await unzip(buildAllFeaturesDocJson());
         const document = await part(zip, 'word/document.xml');
+        const notes = await part(zip, 'word/footnotes.xml');
         const stylesRoot = await part(zip, 'word/styles.xml');
         const styleIds = xmlChildren(stylesRoot, W, 'style').map((s) => w(s, 'styleId'));
         expect(new Set(styleIds).size).toBe(styleIds.length);
 
         const referenced = [
-            ...descendants(document, W, 'pStyle'),
-            ...descendants(document, W, 'rStyle'),
+            ...[document, notes].flatMap((root) => [
+                ...descendants(root, W, 'pStyle'),
+                ...descendants(root, W, 'rStyle'),
+            ]),
             ...descendants(stylesRoot, W, 'basedOn'),
             ...descendants(stylesRoot, W, 'next'),
         ].map((e) => w(e, 'val'));
@@ -392,6 +393,8 @@ describe('docx writer — package', () => {
             ],
             ['word/document.xml', 'w:document', document],
             ['word/_rels/document.xml.rels', 'Relationships', { xmlns: RELS }],
+            ['word/footnotes.xml', 'w:footnotes', document],
+            ['word/_rels/footnotes.xml.rels', 'Relationships', { xmlns: RELS }],
             ['word/styles.xml', 'w:styles', wml],
             ['word/numbering.xml', 'w:numbering', wml],
             ['word/settings.xml', 'w:settings', wml],
@@ -485,7 +488,7 @@ describe('docx writer — footnotes', () => {
     const REFERENCE = (id: number) =>
         `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
     // Word's number at the note, then a space.
-    const NUMBER = '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>' + run(' ');
+    const NUMBER = `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>${run(' ')}`;
     const TEXT = '<w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>';
 
     async function notesOf(json: JSONContent): Promise<string[]> {

@@ -236,25 +236,157 @@ describe('a checkbox opening a task', () => {
     });
 });
 
-// Word sets a note's text off its number with a space or a tab; Eigen's list numbers the note.
+// Word's notes are footnote nodes at their references, holding the note's paragraphs; endnotes too (S9).
 describe('notes', () => {
-    test("a note's text starts at its first character", async () => {
-        const note = (id: number, inner: string) =>
-            `<w:footnote w:id="${id}">${paragraph(`<w:r><w:footnoteRef/></w:r>${inner}`)}</w:footnote>`;
-        const { json } = await importDocxBody(
-            paragraph(
-                `${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r><w:r><w:footnoteReference w:id="2"/></w:r>`,
-            ),
-            { footnotes: `${note(1, run(' Note text'))}${note(2, `<w:r><w:tab/></w:r>${run(' Other')}`)}` },
-        );
-        const notes = json.content?.at(-1);
-        expect(
-            (notes?.content ?? []).map((item) =>
-                nodesOfType(item, 'text')
-                    .map((node) => node.text)
+    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const reference = (id: number, kind = 'footnote', attrs = '') =>
+        `<w:r><w:${kind}Reference${attrs} w:id="${id}"/></w:r>`;
+    // As Word writes a note: its number, then a space, then the text.
+    const note = (id: number, inner: string, kind = 'footnote') =>
+        `<w:${kind} w:id="${id}">${paragraph(`<w:r><w:${kind}Ref/></w:r>${inner}`)}</w:${kind}>`;
+    const separators =
+        '<w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>';
+    // Each footnote node as its paragraphs' text.
+    const notesOf = (json: JSONContent) =>
+        nodesOfType(json, 'footnote').map((footnote) =>
+            (footnote.content ?? []).map((child) =>
+                nodesOfType(child, 'text')
+                    .map((text) => text.text)
                     .join(''),
             ),
-        ).toEqual(['Note text ↑', 'Other ↑']);
+        );
+    const encode = (text: string) => new TextEncoder().encode(text);
+
+    test("a reference is a footnote node holding its note's paragraphs, Word's number and the space after it gone", async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Text')}${reference(1)}${run('.')}`), {
+            footnotes: `${separators}<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' See ')}${run('Smith', '<w:b/>')}`)}${paragraph(run('Two'))}</w:footnote>`,
+        });
+        expect(json.content).toEqual([
+            {
+                type: 'paragraph',
+                attrs: { textAlign: null, ...UNFORMATTED },
+                content: [
+                    { type: 'text', text: 'Text' },
+                    {
+                        type: 'footnote',
+                        content: [
+                            {
+                                type: 'paragraph',
+                                attrs: { textAlign: null, ...UNFORMATTED },
+                                content: [
+                                    { type: 'text', text: 'See ' },
+                                    { type: 'text', text: 'Smith', marks: [{ type: 'bold' }] },
+                                ],
+                            },
+                            {
+                                type: 'paragraph',
+                                attrs: { textAlign: null, ...UNFORMATTED },
+                                content: [{ type: 'text', text: 'Two' }],
+                            },
+                        ],
+                    },
+                    { type: 'text', text: '.' },
+                ],
+            },
+        ]);
+    });
+
+    test("a note's text starts at its first character after a space or a tab", async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Text')}${reference(1)}${reference(2)}`), {
+            footnotes: `${note(1, run(' Note text'))}${note(2, `<w:r><w:tab/></w:r>${run(' Other')}`)}`,
+        });
+        expect(notesOf(json)).toEqual([['Note text'], ['Other']]);
+    });
+
+    // S9: Google Docs has no endnotes; Word's come in where they're referenced, numbered with the footnotes.
+    test('an endnote is a footnote, in document order among the footnotes', async () => {
+        const endnotes = `<w:endnotes xmlns:w="${W_NS}">${note(1, run(' End'), 'endnote')}</w:endnotes>`;
+        const { json } = await importDocxBody(
+            paragraph(`${run('A')}${reference(1)}${run('B')}${reference(1, 'endnote')}${run('C')}${reference(2)}`),
+            {
+                footnotes: `${note(1, run(' First'))}${note(2, run(' Last'))}`,
+                rels: `<Relationship Id="rIdEnd" Type="${REL}/endnotes" Target="endnotes.xml"/>`,
+                media: { 'word/endnotes.xml': encode(endnotes) },
+            },
+        );
+        expect(notesOf(json)).toEqual([['First'], ['End'], ['Last']]);
+    });
+
+    // A Word custom mark: the reference shows the run's own text, which stays as text beside the numbered note.
+    test("a custom mark's text stays beside the note", async () => {
+        const { json } = await importDocxBody(
+            paragraph(`${run('Claim')}<w:r><w:footnoteReference w:customMarkFollows="1" w:id="1"/><w:t>*</w:t></w:r>`),
+            { footnotes: note(1, run(' Starred')) },
+        );
+        expect(
+            (json.content?.[0]?.content ?? []).map((node) => (node.type === 'text' ? node.text : node.type)),
+        ).toEqual(['Claim', 'footnote', '*']);
+        expect(notesOf(json)).toEqual([['Starred']]);
+    });
+
+    test('a note inside a note is its text there, each paragraph after a space', async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}`), {
+            footnotes: `${note(1, `${run(' Outer')}${reference(2)}`)}${note(2, run(' Inner'))}`,
+        });
+        expect(notesOf(json)).toEqual([['Outer Inner']]);
+        expect(nodesOfType(nodesOfType(json, 'footnote')[0] ?? {}, 'footnote')).toHaveLength(1);
+    });
+
+    test('a separator, a missing note and a note with no reference are no notes', async () => {
+        const { json } = await importDocxBody(
+            paragraph(`${run('Body')}${reference(-1)}${reference(0)}${reference(7)}`),
+            {
+                footnotes: `${separators}${note(3, run(' Orphan'))}`,
+            },
+        );
+        expect(nodesOfType(json, 'footnote')).toEqual([]);
+        expect(nodesOfType(json, 'text').map((text) => text.text)).toEqual(['Body']);
+    });
+
+    // A note holds paragraphs: a heading's text, a list's and a table's paragraphs are its own.
+    test("a note's heading, list and table come in as its paragraphs, their marks kept", async () => {
+        const inner = [
+            paragraph(run('Heading', '<w:i/>'), '<w:pStyle w:val="Heading1"/>'),
+            paragraph(run('Item'), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr>'),
+            `<w:tbl><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>${paragraph(run('Cell'))}</w:tc></w:tr></w:tbl>`,
+        ].join('');
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}`), {
+            footnotes: `<w:footnote w:id="1">${inner}</w:footnote>`,
+        });
+        expect(notesOf(json)).toEqual([['Heading', 'Item', 'Cell']]);
+        const [footnote] = nodesOfType(json, 'footnote');
+        expect((footnote?.content ?? []).map((child) => child.type)).toEqual(['paragraph', 'paragraph', 'paragraph']);
+        expect(marksOfType(footnote ?? {}, 'italic').map(({ text }) => text)).toEqual(['Heading']);
+    });
+
+    // Word's and the writer's FootnoteText: 10 pt, single spaced, no space after, which the note draws as its own.
+    test("a note's paragraph in its style's look has no size mark and no format of its own", async () => {
+        const styles =
+            '<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style>';
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}`), {
+            styles,
+            footnotes: `<w:footnote w:id="1">${paragraph(`${run('Plain')}${run('Big', '<w:sz w:val="28"/>')}`, '<w:pStyle w:val="FootnoteText"/>')}</w:footnote>`,
+        });
+        const [footnote] = nodesOfType(json, 'footnote');
+        expect(footnote?.content?.[0]?.attrs).toEqual({ textAlign: null, ...UNFORMATTED });
+        expect(marksOfType(footnote ?? {}, 'textStyle')).toEqual([
+            { text: 'Big', attrs: { color: null, fontFamily: null, fontSize: 14, caps: null } },
+        ]);
+    });
+
+    test("a note's link resolves through the notes part's own relationships", async () => {
+        const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}`), {
+            footnotes: note(1, `<w:hyperlink r:id="rIdNote" xmlns:r="${REL}">${run('site')}</w:hyperlink>`),
+            media: {
+                'word/_rels/footnotes.xml.rels': encode(
+                    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdNote" Type="${REL}/hyperlink" Target="https://acme.example" TargetMode="External"/></Relationships>`,
+                ),
+            },
+        });
+        expect(marksOfType(json, 'link').map(({ text, attrs }) => [text, attrs['href']])).toEqual([
+            ['site', 'https://acme.example'],
+        ]);
     });
 });
 

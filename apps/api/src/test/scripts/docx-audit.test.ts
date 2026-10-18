@@ -220,7 +220,7 @@ describe('source side', () => {
         const tally = await source(
             `<w:p>${run('Ouch')}<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>${run('.')}</w:p>`,
         );
-        // As the reader writes it.
+        // As the reader writes it: the node, holding the note's paragraphs.
         const imported = auditImported({
             type: 'doc',
             content: [
@@ -228,11 +228,7 @@ describe('source side', () => {
                     type: 'paragraph',
                     content: [
                         { type: 'text', text: 'Ouch' },
-                        {
-                            type: 'text',
-                            text: '[1]',
-                            marks: [{ type: 'superscript' }, { type: 'link', attrs: { href: '#footnote-1' } }],
-                        },
+                        { type: 'footnote', content: [{ type: 'paragraph' }] },
                         { type: 'text', text: '.' },
                     ],
                 },
