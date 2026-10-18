@@ -33,6 +33,7 @@ An **Importing slides** dialog shows while the file imports. Pictures from the f
 - Every slide, hidden slides included, in the same order. A slide takes its name from its title.
 - Text keeps its bold, italic, underline, color, size, and alignment. Fonts become Eigen's own: a sans-serif font such as Calibri or Arial shows in Inter, a serif font such as Times New Roman in Source Serif 4, and a monospace font such as Courier New in JetBrains Mono.
 - Rectangles, rounded rectangles, ovals, diamonds, pie shapes, lines, and arrows, with their fill and outline.
+- Every other shape, such as a star, a block arrow, a flowchart shape, a map outline, or a freeform drawing, with its fill and outline. You can move, resize, and recolor it like any other shape.
 - PNG, JPEG, GIF, and SVG pictures.
 - Column, bar, line, and pie charts, with their data, colors, and title. They become Slides charts, so you can [edit their data](/support/slides/insert-content) like any other chart. A 3-D chart comes in flat.
 - Slide backgrounds: a color, a gradient, or a picture.
@@ -46,7 +47,7 @@ When you use **Import slides…**, a message afterwards counts what didn't come 
 
 - A table, SmartArt graphic, or embedded object becomes a box that says what was there, so you can see the gap and rebuild it. The box is see-through, so a title behind it stays readable.
 - A chart Slides can't draw the way PowerPoint does, such as an area, scatter, doughnut, or combo chart, becomes a box that names the kind of chart and its title, for example **Scatter chart not imported**.
-- A shape Slides has no shape for, such as a star or a block arrow, keeps its text but loses its outline.
+- A bent or curved connector comes in without its arrowheads. Shadows, glows, and 3-D effects are left out.
 - Pictures come in uncropped and unflipped. A TIFF, EMF, or WMF picture becomes a box that says **Picture not imported**.
 - A pattern fill becomes a plain color, a gradient keeps its first and last color, and a picture used to fill a shape is left out.
 - Within one text box, every line takes the font, size, and color used most in that box.
