@@ -123,7 +123,9 @@ export type TransformWarning =
     | { code: 'blocks-flattened'; count: number }
     | { code: 'images-unshown'; count: number }
     | { code: 'graphics-dropped'; count: number }
-    | { code: 'section-pages-dropped'; count: number };
+    | { code: 'section-pages-dropped'; count: number }
+    | { code: 'even-bands-dropped'; count: number }
+    | { code: 'band-images-unanchored'; count: number };
 
 // Small stable codes; `status` carries an HTTP status for controlled document
 // errors. Never ApiError/Error instances across the boundary. `out-of-memory`: the

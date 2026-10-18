@@ -78,7 +78,10 @@ function widthPx(px: number, columnPx: number): number {
 export function readDrawing(reader: Reader, drawing: XmlElement, context: RunContext): void {
     for (const frame of xmlElements(drawing)) {
         if (frame.ns !== WP_NS) continue;
-        const layout = frame.local === 'anchor' ? anchorLayout(frame, reader.columnTwips * EMU_PER_TWIP) : {};
+        const anchored = frame.local === 'anchor';
+        // A band holds no floating picture: a header's logo would cover the page's body.
+        const inBand = context.scope.story === 'band';
+        const layout = anchored ? anchorLayout(frame, reader.columnTwips * EMU_PER_TWIP, inBand) : {};
         const docPr = xmlChild(frame, WP_NS, 'docPr');
         const alt = docPr?.attributes['descr'] || docPr?.attributes['title'] || null;
         const extent = xmlChild(frame, WP_NS, 'extent');
@@ -99,6 +102,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const cx = int(ext?.attributes['cx']);
             const width = cx ? widthPx(cx / EMU_PER_PX, reader.columnPx) : null;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, width, ...layout } });
+            if (anchored && inBand) reader.bandAnchors++;
         }
         // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
         const boxed = descendants(frame, W_NS, 'txbxContent').flatMap((box) =>
@@ -212,8 +216,9 @@ function onShape(scope: Scope): Scope {
     return { ...scope, onFill: true };
 }
 
-// Wrapped beside the text, on the side its alignment or its offset puts it; otherwise a block, aligned if Word aligns it.
-function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, string> {
+// Wrapped beside the text, on the side its alignment or its offset puts it; otherwise, or as a block, aligned if Word
+// aligns it.
+function anchorLayout(anchor: XmlElement, columnEmu: number, block: boolean): Record<string, string> {
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
@@ -224,7 +229,7 @@ function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, str
         : offset && (int(xmlText(offset)) ?? 0) + cx / 2 > columnEmu / 2
           ? 'right'
           : 'left';
-    if (wrapped) return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
+    if (wrapped && !block) return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
     return side === 'left' || side === 'right' || side === 'center' ? { alignment: side } : {};
 }
 

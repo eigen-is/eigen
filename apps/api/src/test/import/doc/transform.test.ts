@@ -9,7 +9,7 @@ import * as Y from 'yjs';
 import { ApiError } from '../../../lib/core/errors';
 import { docExtensions, docSchema } from '../../../lib/document/doc-schema';
 import { asOpened, importDocxToEigendocUpdate, MAX_TABLE_REPAIRS } from '../../../lib/import/doc/transform';
-import { buildDocxWithBody, nodesOfType } from '../../fixtures/golden-docx';
+import { buildDocxWithBands, buildDocxWithBody, nodesOfType } from '../../fixtures/golden-docx';
 
 // An imported doc is stored as the editor leaves it on open: a first open that pads a table or appends a paragraph
 // writes Yjs updates nobody typed, and two people opening it together write them twice.
@@ -37,6 +37,19 @@ const table = (rows: string[]) => `<w:tbl>${grid}${rows.map((cells) => `<w:tr>${
 const bullet = (text: string) => paragraph(run(text), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>');
 
 describe('an imported doc is stored as the editor leaves it on open', () => {
+    // A band's editor runs the same plugins, and the commit clears every band's root before it applies the update.
+    test('a header rides in the update in its own root, ending as its editor leaves it', async () => {
+        const data = await buildDocxWithBands([
+            { id: 'h1', kind: 'header', xml: table([cell('A') + cell('B') + cell('C')]) },
+        ]);
+        const ydoc = new Y.Doc();
+        Y.applyUpdate(ydoc, new Uint8Array(importDocxToEigendocUpdate(data, undefined).update));
+        const header = yXmlFragmentToProseMirrorRootNode(ydoc.getXmlFragment('header'), editor.schema).toJSON();
+        expect((header.content ?? []).map((node: JSONContent) => node.type)).toEqual(['table', 'paragraph']);
+        expect(opened(header)).toEqual(header);
+        expect(ydoc.getXmlFragment('footer').length).toBe(0);
+    });
+
     test('a row Word draws short of the grid ends in a cell over the columns it misses, with their widths', async () => {
         const json = stored(
             await buildDocxWithBody(

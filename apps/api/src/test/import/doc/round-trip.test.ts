@@ -28,9 +28,8 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
 // column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
-// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out. (9) A
-// page number is its cached 1, before the schema joins the text (cachedPageNumbers). (10) Small is written as its look
-// and comes back as that size.
+// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out. (9) Small
+// is written as its look and comes back as that size.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -87,21 +86,12 @@ function withSourceNames(node: JSONContent, names: Map<string, string>): JSONCon
     };
 }
 
-// The reader doesn't read a PAGE or NUMPAGES field yet, so a page number is its cached 1, run into the text beside it
-// once the schema joins them.
-function cachedPageNumbers(node: JSONContent): JSONContent {
-    if (node.type === 'pageNumber') return { type: 'text', text: '1' };
-    return node.content ? { ...node, content: node.content.map(cachedPageNumbers) } : node;
-}
-
 // JSON round trips drop undefined keys, so both sides compare as stored.
 const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(json));
 
 describe('the all-features doc', () => {
     test('comes back as it was written, but for the named differences', async () => {
-        const source = docSchema()
-            .nodeFromJSON(cachedPageNumbers(withoutEquations(buildAllFeaturesDocJson())))
-            .toJSON();
+        const source = docSchema().nodeFromJSON(withoutEquations(buildAllFeaturesDocJson())).toJSON();
         const docx = await eigendocToDocx(
             withoutEquations(buildAllFeaturesDocJson()),
             {},
@@ -132,6 +122,42 @@ describe('the page', () => {
         expect(read.height).toBe(215.9);
         for (const side of ['top', 'right', 'bottom', 'left'] as const) expect(read.margin[side]).toBeCloseTo(10, 2);
         expect(read.differentFirstPage).toBe(false);
+    });
+
+    // Each band comes back where it was, page numbers as fields; page 1's footer is the empty part the writer stands in.
+    test("the header, the footer and page 1's own header come back as they were written", async () => {
+        const number = (kind: string) => ({ type: 'pageNumber', attrs: { kind } });
+        const bands = {
+            header: { type: 'doc', content: [p('Acme')] },
+            footer: {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            { type: 'text', text: 'Page ' },
+                            number('page'),
+                            { type: 'text', text: ' of ' },
+                            number('pages'),
+                        ],
+                    },
+                ],
+            },
+            headerFirst: { type: 'doc', content: [p('Letterhead')] },
+        };
+        const docx = await eigendocToDocx(
+            { type: 'doc', content: [p('Body')] },
+            bands,
+            { ...DEFAULT_PAGE_SETUP, differentFirstPage: true },
+            [],
+            'Bands',
+            undefined,
+        );
+        const { bands: read, page } = docxToPmJson(Buffer.from(docx));
+        expect(page.differentFirstPage).toBe(true);
+        expect(Object.keys(read)).toEqual(['header', 'footer', 'headerFirst']);
+        for (const root of ['header', 'footer', 'headerFirst'] as const)
+            expect(stored(read[root] ?? {})).toEqual(stored(docSchema().nodeFromJSON(bands[root]).toJSON()));
     });
 });
 

@@ -1,7 +1,7 @@
 import { mergeAttributes, Node } from '@tiptap/core';
 
 const NAME = 'pageNumber';
-const PAGE_NUMBER_KINDS = ['page', 'pages'] as const;
+export const PAGE_NUMBER_KINDS = ['page', 'pages'] as const;
 // page: the number of the page it prints on; pages: how many pages the doc has.
 export type PageNumberKind = (typeof PAGE_NUMBER_KINDS)[number];
 

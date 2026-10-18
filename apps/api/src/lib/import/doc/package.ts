@@ -1,5 +1,6 @@
+import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
-import { alternativeFor, isOn, W_NS } from '../../core/ooxml';
+import { alternativeFor, isOn, R_NS, W_NS } from '../../core/ooxml';
 import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../core/opc';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import type { ZipReader } from '../../core/zip';
@@ -23,6 +24,10 @@ export type DocxPackage = {
     fontTable?: XmlElement;
     footnotes?: Part;
     endnotes?: Part;
+    // The final section's headers and footers, a first-page one only with w:titlePg.
+    bands: Partial<Record<BandRoot, Part>>;
+    // Even pages' bands the final section names, which Word draws only with evenAndOddHeaders.
+    evenBands: number;
     contentTypeOf: OoxmlPackage['contentTypeOf'];
     // A part a drawing names, read when met; a damaged one is no part.
     readPart(path: string): XmlElement | undefined;
@@ -48,6 +53,29 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
             const root = pkg.part(path);
             return root && { path, root, rels: pkg.relationships(path) };
         });
+    // Word takes a reference a section leaves out from the section before it, so the last one of each type is the final
+    // section's. A first-page band shows only where the final section has w:titlePg, an even one only with the setting.
+    const references = new Map<string, string>();
+    for (const section of descendants(document, W_NS, 'sectPr'))
+        for (const reference of xmlElements(section)) {
+            const id = xmlAttr(reference, R_NS, 'id');
+            const kind = BAND_REFERENCES.get(reference.local);
+            if (reference.ns === W_NS && kind && id) references.set(`${kind}:${w(reference, 'type') ?? 'default'}`, id);
+        }
+    const titlePg = onOff(wChild(wChild(wChild(document, 'body'), 'sectPr'), 'titlePg')) === true;
+    const bands: Partial<Record<BandRoot, Part>> = {};
+    for (const [root, key] of BAND_PARTS) {
+        const id = references.get(key);
+        const rel = id ? documentRels.get(id) : undefined;
+        if (!rel || rel.external || (key.endsWith(':first') && !titlePg)) continue;
+        const band = optional((): Part | undefined => {
+            const tree = pkg.part(rel.target);
+            return tree && { path: rel.target, root: tree, rels: pkg.relationships(rel.target) };
+        });
+        if (band) bands[root] = band;
+    }
+    const even = ['header:even', 'footer:even'].filter((key) => references.has(key)).length;
+    const evenAndOdd = even > 0 && !!wChild(xml('settings'), 'evenAndOddHeaders');
     return {
         zip: pkg.zip,
         document: { path: documentPath, root: document, rels: documentRels },
@@ -57,6 +85,8 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         fontTable: xml('fontTable'),
         footnotes: part('footnotes'),
         endnotes: part('endnotes'),
+        bands,
+        evenBands: evenAndOdd ? even : 0,
         contentTypeOf: pkg.contentTypeOf,
         readPart: (path) => optional(() => pkg.part(path)),
         readMedia: (path) => optional(() => pkg.zip.read(path)),
@@ -66,6 +96,19 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         },
     };
 }
+
+const BAND_REFERENCES = new Map([
+    ['headerReference', 'header'],
+    ['footerReference', 'footer'],
+]);
+
+// Each band by the reference Word draws it from, w:type and all.
+const BAND_PARTS: [BandRoot, string][] = [
+    ['header', 'header:default'],
+    ['footer', 'footer:default'],
+    ['headerFirst', 'header:first'],
+    ['footerFirst', 'footer:first'],
+];
 
 // Requires names prefixes, not namespaces: Word's spellings of the namespaces this reader reads.
 const WORD_PREFIXES = new Set([
