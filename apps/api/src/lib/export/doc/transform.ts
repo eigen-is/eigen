@@ -1,7 +1,15 @@
 import type { JSONContent } from '@tiptap/core';
-import { PAGE_BREAK_CLASS, type PageSetup, pageStylesheet, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_DISTANCE_MM,
+    BAND_ROOTS,
+    type BandRoot,
+    PAGE_BREAK_CLASS,
+    type PageSetup,
+    pageStylesheet,
+    readFigureAttrs,
+} from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
-import { readEigendocFromDoc, readEigendocPage } from '../../document/doc';
+import { readEigendocBands, readEigendocFromDoc, readEigendocPage } from '../../document/doc';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
@@ -45,15 +53,27 @@ export async function renderEigendocExport(
         };
     }
     const dataUriMap = toDataUriMap(media);
-    const body = renderDocHtml(
-        withAbsoluteLinks(json, publicOrigin),
-        (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-        { synthesizeSmallCaps: htmlExportMode(format) === 'pdf' },
-    );
+    const pdf = htmlExportMode(format) === 'pdf';
+    const prose = (content: JSONContent) =>
+        `<article class="eigen-prose tiptap">${renderDocHtml(
+            withAbsoluteLinks(content, publicOrigin),
+            (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
+            { synthesizeSmallCaps: pdf, pageCounters: pdf },
+        )}</article>`;
+    const bands = readEigendocBands(doc);
+    const band = (root: BandRoot) => {
+        const content = bands[root];
+        return content ? `<div class="band-${root}">${prose(content)}</div>` : '';
+    };
+    // Browsers ignore running(), so the download shows each band where the long page does: page 1's header on top, the
+    // other pages' footer at the end.
+    const body = pdf
+        ? `${BAND_ROOTS.map(band).join('')}${prose(json)}`
+        : `${band(page.differentFirstPage ? 'headerFirst' : 'header')}${prose(json)}${band('footer')}`;
     const html = exportHtmlDocument({
         title,
-        css: `${PROSE_CSS}${printExtras(page)}`,
-        body: `<div class="page"><article class="eigen-prose tiptap">${body}</article></div>`,
+        css: `${PROSE_CSS}${printExtras(page)}${pdf ? bandsCss(page) : ''}`,
+        body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings: [] };
 }
@@ -131,6 +151,25 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
     const x = scale(root.match(/\swidth="([^"]*)"/)?.[1]);
     const y = scale(root.match(/\sheight="([^"]*)"/)?.[1]);
     return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
+}
+
+// The bands are running elements placed before the body, as element() takes the one placed on the page or the last one
+// before it, and print in the margin boxes over the text column, 1.27 cm from the edge or at a narrower margin's. A band
+// taller than its margin overprints the body: a margin box pushes nothing. In the head, which the sanitizer never sees:
+// it strips element( from a body's CSS.
+function bandsCss(page: PageSetup): string {
+    const top = Math.min(BAND_DISTANCE_MM, page.margin.top);
+    const bottom = Math.min(BAND_DISTANCE_MM, page.margin.bottom);
+    return `
+${BAND_ROOTS.map((root) => `.band-${root} { position: running(${root}); }`).join('\n')}
+@page {
+    @top-center { content: element(header); vertical-align: top; padding-top: ${top}mm; width: 100%; }
+    @bottom-center { content: element(footer); vertical-align: bottom; padding-bottom: ${bottom}mm; width: 100%; }
+}
+${page.differentFirstPage ? '@page :first { @top-center { content: element(headerFirst); } @bottom-center { content: element(footerFirst); } }' : ''}
+[data-type="page-number"][data-kind="page"]::after { content: counter(page); }
+[data-type="page-number"][data-kind="pages"]::after { content: counter(pages); }
+`;
 }
 
 function printExtras(page: PageSetup): string {

@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import { PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
+import { PAGE_NUMBER_TEXT, PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
 import { JSDOM } from 'jsdom';
@@ -17,7 +17,7 @@ import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
-import { seedEigendoc } from '../fixtures/golden-documents';
+import { seedBand, seedEigendoc } from '../fixtures/golden-documents';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
     const doc = new Y.Doc();
@@ -864,5 +864,125 @@ async function markers(html: string): Promise<string[]> {
             orderedList({ type: 'I' }, listItem('f')),
         );
         expect(await markers(html)).toEqual(['3.', 'v.', '4.', 'b.', 'c.', 'I.']);
+    }, 60_000);
+});
+
+// A doc with a header and a footer holding page numbers, page 1's own header when it differs, and `pages` pages.
+function bandedDoc(pages: number, differentFirstPage: boolean): Y.Doc {
+    const body = Array.from({ length: pages }, (_, index) => [
+        ...(index > 0 ? [{ type: 'pageBreak' }] : []),
+        paragraph(`Body ${index + 1}`),
+    ]).flat();
+    const doc = seededDoc({ type: 'doc', content: body });
+    const number = (kind: 'page' | 'pages') => ({ type: 'pageNumber', attrs: { kind } });
+    seedBand(doc, 'header', paragraph('Acme header'));
+    seedBand(doc, 'footer', {
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Page ' }, number('page'), { type: 'text', text: ' of ' }, number('pages')],
+    });
+    seedBand(doc, 'headerFirst', paragraph('Letterhead'));
+    doc.getMap(PAGE_ROOT).set('differentFirstPage', differentFirstPage);
+    return doc;
+}
+
+async function exported(format: 'html' | 'pdf-html', doc: Y.Doc): Promise<string> {
+    const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+    return new TextDecoder().decode(data);
+}
+
+describe('doc export — headers and footers', () => {
+    // element() takes the running element placed on the page or the last one before it, so a footer placed after the
+    // body would print on the last page only.
+    test('the PDF places the bands before the body as running elements, shown in the margin boxes', async () => {
+        const html = await exported('pdf-html', bandedDoc(2, false));
+        const body = html.slice(html.indexOf('<body>'));
+        expect(body.indexOf('Acme header')).toBeLessThan(body.indexOf('Body 1'));
+        expect(body.indexOf('Page ')).toBeLessThan(body.indexOf('Body 1'));
+        expect(body).not.toContain('Letterhead');
+        expect(body).not.toContain('element(');
+
+        const css = await exportStyle('pdf-html', bandedDoc(2, false));
+        expect(css).toContain('.band-header { position: running(header); }');
+        expect(css).toContain('.band-footer { position: running(footer); }');
+        expect(css).toMatch(/@top-center \{ content: element\(header\);[^}]*padding-top: 12\.7mm;/);
+        expect(css).toMatch(/@bottom-center \{ content: element\(footer\);[^}]*padding-bottom: 12\.7mm;/);
+        expect(css).not.toContain('@page :first');
+    });
+
+    test("with page 1 different, the PDF's first page takes the first-page bands", async () => {
+        const html = await exported('pdf-html', bandedDoc(2, true));
+        expect(html.indexOf('Letterhead')).toBeLessThan(html.indexOf('Body 1'));
+        const css = await exportStyle('pdf-html', bandedDoc(2, true));
+        expect(css).toContain(
+            '@page :first { @top-center { content: element(headerFirst); } @bottom-center { content: element(footerFirst); } }',
+        );
+    });
+
+    // A margin narrower than 1.27 cm holds the band at its edge.
+    test('a band sits 1.27 cm from the edge, or at the margin when that is narrower', async () => {
+        const doc = bandedDoc(1, false);
+        doc.getMap(PAGE_ROOT).set('marginTop', 10);
+        const css = await exportStyle('pdf-html', doc);
+        expect(css).toMatch(/@top-center \{[^}]*padding-top: 10mm;/);
+        expect(css).toMatch(/@bottom-center \{[^}]*padding-bottom: 12\.7mm;/);
+    });
+
+    // Browsers ignore running(), so the download places each band where the long page shows it.
+    test('the HTML download shows the header first and the footer last, a page number as its #', async () => {
+        const html = await exported('html', bandedDoc(2, false));
+        const body = html.slice(html.indexOf('<body>'));
+        expect(body.indexOf('Acme header')).toBeLessThan(body.indexOf('Body 1'));
+        expect(body.indexOf('Page ')).toBeGreaterThan(body.indexOf('Body 2'));
+        expect(body).toContain(`>${PAGE_NUMBER_TEXT}</span>`);
+        const css = await exportStyle('html', bandedDoc(2, false));
+        expect(css).not.toContain('running(');
+        expect(css).not.toContain('@top-center');
+    });
+
+    test("the HTML download's header is page 1's when page 1 differs", async () => {
+        const html = await exported('html', bandedDoc(2, true));
+        expect(html).toContain('Letterhead');
+        expect(html).not.toContain('Acme header');
+    });
+});
+
+// Each page's text from the boxes WeasyPrint lays out: the body's, then the margin boxes'.
+const PAGE_TEXT_SCRIPT = `
+import sys, weasyprint
+def walk(box):
+    yield box
+    for child in getattr(box, 'children', None) or []:
+        yield from walk(child)
+for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
+    print(''.join(box.text for box in walk(page._page_box) if hasattr(box, 'text')).strip())
+`;
+
+async function pageTexts(html: string): Promise<string[]> {
+    if (python === null) throw new Error('no python behind the weasyprint launcher');
+    const proc = Bun.spawn([python, '-I', '-c', PAGE_TEXT_SCRIPT], {
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'inherit',
+    });
+    proc.stdin.write(html);
+    await proc.stdin.end();
+    return (await new Response(proc.stdout).text()).trim().split('\n');
+}
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — headers and footers (WeasyPrint)', () => {
+    test('every page prints the header and the footer with its number and the count', async () => {
+        expect(await pageTexts(await exported('pdf-html', bandedDoc(3, false)))).toEqual([
+            'Body 1Acme headerPage 1 of 3',
+            'Body 2Acme headerPage 2 of 3',
+            'Body 3Acme headerPage 3 of 3',
+        ]);
+    }, 60_000);
+
+    // No first-page footer: page 1 prints none.
+    test('page 1 prints its own header and no footer when it differs', async () => {
+        expect(await pageTexts(await exported('pdf-html', bandedDoc(2, true)))).toEqual([
+            'Body 1Letterhead',
+            'Body 2Acme headerPage 2 of 2',
+        ]);
     }, 60_000);
 });

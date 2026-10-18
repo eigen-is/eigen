@@ -11,6 +11,7 @@ import {
     PROSE_TEXTBLOCKS,
     readChartAttrs,
     readFigureAttrs,
+    readPageNumberKind,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { writeMathml } from '@workspace/math';
@@ -165,12 +166,12 @@ function smaller(capitals: string): string {
     return capitals && `<span style="font-size: ${SYNTHESIZED_SMALL_CAPS_SIZE}">${escapeHtml(capitals)}</span>`;
 }
 
-// The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds, but for the PDF's
-// small caps.
+// The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds, but for the
+// PDF's small caps and page numbers, which its stylesheet's counter() fills in.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean },
+    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean; pageCounters?: boolean },
 ): string {
     const content = inEditorMarkOrder(withTrailingBreaks(json));
     return renderToHTMLString({
@@ -189,6 +190,10 @@ export function renderDocHtml(
                     return display ? math.replace('<math', '<math display="block"') : math;
                 },
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
+                ...(options?.pageCounters && {
+                    pageNumber: ({ node }) =>
+                        `<span data-type="page-number" data-kind="${readPageNumberKind(node.attrs['kind'])}"></span>`,
+                }),
             },
         },
     });
