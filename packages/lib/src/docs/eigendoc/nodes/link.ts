@@ -21,7 +21,7 @@ function textWithPositions(block: Node, start: number, to: number): { text: stri
     return { text, positions };
 }
 
-// TipTap's own: a link alone, or one in brackets.
+// Adapted from @tiptap/extension-link's autolink (MIT): a link alone, or one in brackets.
 function isLinkStructure(tokens: { isLink: boolean; value: string }[]): boolean {
     if (tokens.length === 1) return tokens[0]?.isLink ?? false;
     return (
@@ -29,9 +29,10 @@ function isLinkStructure(tokens: { isLink: boolean; value: string }[]): boolean 
     );
 }
 
-// TipTap's autolink, which links the word a space or a new paragraph ends, read through its own text walk. TipTap's
-// reads the paragraph with textBetween, which reads a footnote's note in its reference's place, so past a reference its
-// offsets miss the doc's positions and it linked "hen example" for a typed "then example.com".
+// Adapted from @tiptap/extension-link's autolink (MIT): it links the word a space or a new paragraph ends, read
+// through its own text walk. TipTap's reads the paragraph with textBetween, which reads a footnote's note in its
+// reference's place, so past a reference its offsets miss the doc's positions: it linked "hen example" for a typed
+// "then example.com".
 function autolink(type: MarkType, options: LinkOptions): Plugin {
     const { protocols, defaultProtocol } = options;
     const allowed = (url: string) =>

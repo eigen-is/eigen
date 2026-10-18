@@ -32,17 +32,13 @@ function noteDiff(a: Fragment, b: Fragment): { start: number; endA: number; endB
     return { start, endA: end.a + overlap, endB: end.b + overlap };
 }
 
-// findNote, the anchor following the note to where it stands now, the Yjs position taken again there.
+// findNote, the anchor following the note to where it stands now and the element that holds it there.
 function followNote(body: Editor, anchor: NoteAnchor, transactions: readonly Transaction[] = []) {
     const found = findNote(body, anchor, transactions);
-    const next = found && noteAnchor(body, found.pos);
-    if (next) Object.assign(anchor, next);
+    if (found) Object.assign(anchor, { pos: found.pos, element: found.element });
     return found;
 }
 
-// The body's note into the note's editor, the range that differs only, so the caret maps through a peer's edit and an
-// undo, with the body's decorations inside the note, the find bar's matches. The reference's position, or null once
-// the note is gone.
 export function pullNote(
     body: Editor,
     note: Editor,
@@ -91,12 +87,15 @@ export function useOpenNote(body: Editor, note: Editor, allowed: boolean) {
     if (opening && !allowed) setOpening(null);
     const anchor = opening?.anchor ?? null;
 
+    // The note goes into its editor here, before React mounts the editor in the list: a node view React draws, an
+    // image's, would otherwise mount inside a layout effect, where React refuses its flushSync.
     const open = useCallback(
         (pos: number, how: Omit<NoteOpening, 'anchor'>) => {
             const anchor = noteAnchor(body, pos);
-            if (anchor) setOpening({ anchor, ...how });
+            if (!anchor || pullNote(body, note, anchor) === null) return;
+            setOpening({ anchor, ...how });
         },
-        [body],
+        [body, note],
     );
 
     useLayoutEffect(() => {

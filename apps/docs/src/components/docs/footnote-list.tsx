@@ -3,7 +3,7 @@ import { type Editor, EditorContent, useEditorState } from '@tiptap/react';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useLayoutEffect, useRef } from 'react';
-import { footnotesInDoc, type NoteAnchor } from './extensions/footnote';
+import { footnotesInDoc, type NoteAnchor, noteKey } from './extensions/footnote';
 
 type FootnoteListProps = {
     body: Editor;
@@ -41,7 +41,7 @@ export function FootnoteList({ body, note, open, onOpen }: FootnoteListProps) {
         <section data-footnotes className="footnote-list row-start-3">
             <ol>
                 {notes.map(({ pos, node }, index) => (
-                    <li key={index}>
+                    <li key={noteKey(body, { pos, node })}>
                         <sup className="footnote-number">{index + 1}</sup>
                         {pos === open?.pos ? (
                             <EditorContent editor={note} />

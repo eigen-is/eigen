@@ -3,14 +3,9 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import type { MapResult } from '@tiptap/pm/transform';
 import { Decoration, DecorationSet, type DecorationSource, type NodeView } from '@tiptap/pm/view';
-import {
-    absolutePositionToRelativePosition,
-    type ProsemirrorBinding,
-    relativePositionToAbsolutePosition,
-    ySyncPluginKey,
-} from '@tiptap/y-tiptap';
+import { type ProsemirrorBinding, relativePositionToAbsolutePosition, ySyncPluginKey } from '@tiptap/y-tiptap';
 import { FootnoteNode, footnoteNumbers, insertFootnote } from '@workspace/lib/docs/eigendoc';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 
 // A body transaction that edits a note on purpose, which NoteFormatting lets through: the open note's own edit,
 // forwarded, or an upload's name landing in a note's image. And a note transaction the body made, which the note's
@@ -18,11 +13,12 @@ import type * as Y from 'yjs';
 export const NOTE_EDIT = 'noteEdit';
 export const NOTE_PULL = 'notePull';
 
-// The open note is its reference's position, kept two ways: mapped through this editor's own changes, and as a Yjs
-// relative position for a peer's change or an undo, which y-prosemirror applies as a replace of the whole doc that no
-// mapped position survives. Never a node: y-tiptap builds every node anew on a peer's update, ProseMirror keeps the view
-// of a node equal to the one it drew, and a mark or attribute step maps no position, so a node held on to goes stale.
-export type NoteAnchor = { pos: number; relative: Y.RelativePosition };
+// The open note is its footnote's Yjs element, with the reference's position. This editor's own changes map the position,
+// and a split here can give the note a new element, which the node at the mapped position names. A peer's change or an
+// undo, which y-prosemirror applies as a replace of the whole doc that no mapped position survives, reads the position
+// back from the element, and a deleted element is a note gone, never the neighbour its place now holds. Never a node:
+// y-tiptap builds every node anew on a peer's update, and a mark or attribute step maps no position yet makes a new one.
+export type NoteAnchor = { pos: number; element: Y.AbstractType<unknown> };
 
 export type FootnoteOptions = {
     // A press on a reference; the body's editor only.
@@ -31,7 +27,8 @@ export type FootnoteOptions = {
     onInsert: () => boolean;
 };
 
-type FootnoteStorage = { views: Set<FootnoteView> };
+// Each reference's view by its DOM, which ProseMirror's nodeDOM gives at a position.
+type FootnoteStorage = { views: WeakMap<globalThis.Node, FootnoteView> };
 
 declare module '@tiptap/core' {
     interface Storage {
@@ -71,7 +68,7 @@ class FootnoteView implements NodeView {
         readonly getPos: () => number | undefined,
         decorations: readonly Decoration[],
         public innerDecorations: DecorationSource,
-        private readonly views: Set<FootnoteView>,
+        views: WeakMap<globalThis.Node, FootnoteView>,
         onOpen: (pos: number) => void,
     ) {
         this.dom = document.createElement('sup');
@@ -83,7 +80,7 @@ class FootnoteView implements NodeView {
             const pos = getPos();
             if (pos !== undefined) onOpen(pos);
         });
-        views.add(this);
+        views.set(this.dom, this);
     }
 
     update(node: PMNode, decorations: readonly Decoration[], innerDecorations: DecorationSource) {
@@ -103,41 +100,85 @@ class FootnoteView implements NodeView {
     ignoreMutation() {
         return true;
     }
-
-    destroy() {
-        this.views.delete(this);
-    }
 }
 
 const bindingOf = (editor: Editor): ProsemirrorBinding | undefined => ySyncPluginKey.getState(editor.state)?.binding;
 
+// The element that holds a node, through the binding's mapping, which runs from element to node: a footnote's is kept
+// beside its node, as only a note's own edit gives it a new one.
+const elements = new WeakMap<PMNode, Y.AbstractType<unknown>>();
+function elementOf(binding: ProsemirrorBinding, node: PMNode): Y.AbstractType<unknown> | null {
+    const kept = elements.get(node);
+    if (kept && binding.mapping.get(kept) === node) return kept;
+    for (const [element, mapped] of binding.mapping) {
+        if (mapped !== node) continue;
+        elements.set(node, element);
+        return element;
+    }
+    return null;
+}
+
+// Where an element stands in the doc: before the child it is of its parent.
+function positionOf(binding: ProsemirrorBinding, element: Y.AbstractType<unknown>): number | null {
+    const parent = element.parent;
+    if (
+        !(element instanceof Y.XmlElement) ||
+        element._item?.deleted ||
+        !(parent instanceof Y.XmlElement || parent instanceof Y.XmlFragment)
+    )
+        return null;
+    const index = parent.toArray().indexOf(element);
+    if (index < 0) return null;
+    const relative = Y.createRelativePositionFromTypeIndex(parent, index, 0);
+    return relativePositionToAbsolutePosition(binding.doc, binding.type, relative, binding.mapping);
+}
+
 // The anchor of the note whose reference is at `pos`; none in an editor without the binding.
 export function noteAnchor(editor: Editor, pos: number): NoteAnchor | null {
     const binding = bindingOf(editor);
-    return binding ? { pos, relative: absolutePositionToRelativePosition(pos, binding.type, binding.mapping) } : null;
+    const node = editor.state.doc.nodeAt(pos);
+    const element = binding && node?.type.name === 'footnote' ? elementOf(binding, node) : null;
+    return element && { pos, element };
 }
 
-// Where an open note stands after `transactions`, or now with none; null once its reference is gone, deleted, moved by a
-// cut and a paste, or split into a new element in another tab. Its reference's view comes along for the decorations.
+// A stable key for a note's place in the list, by its element, so the open note's editor never remounts when a note
+// goes in or out before it. Its position without the binding.
+const keys = new WeakMap<Y.AbstractType<unknown>, number>();
+let lastKey = 0;
+export function noteKey(editor: Editor, { pos, node }: NumberedNote): string {
+    const binding = bindingOf(editor);
+    const element = binding && elementOf(binding, node);
+    if (!element) return `at-${pos}`;
+    const key = keys.get(element) ?? ++lastKey;
+    keys.set(element, key);
+    return `note-${key}`;
+}
+
+// Where an open note stands after `transactions`, or now with none, and its element then; null once its reference is
+// gone, deleted, moved by a cut and a paste, or split into a new element in another tab. Its reference's view comes
+// along for the decorations.
 export function findNote(
     editor: Editor,
     anchor: NoteAnchor,
     transactions: readonly Transaction[] = [],
-): { pos: number; node: PMNode; view: FootnoteView } | null {
+): { pos: number; node: PMNode; view: FootnoteView; element: Y.AbstractType<unknown> } | null {
     const binding = bindingOf(editor);
-    let pos: number | null = anchor.pos;
-    if (transactions.some((tr) => tr.getMeta(ySyncPluginKey)))
-        pos = binding
-            ? relativePositionToAbsolutePosition(binding.doc, binding.type, anchor.relative, binding.mapping)
-            : null;
-    else
+    if (!binding) return null;
+    const remote = transactions.some((tr) => tr.getMeta(ySyncPluginKey));
+    let pos: number | null = remote ? positionOf(binding, anchor.element) : anchor.pos;
+    if (!remote)
         for (const tr of transactions) {
             const result: MapResult | null = pos === null ? null : tr.mapping.mapResult(pos, 1);
             pos = result && !result.deleted ? result.pos : null;
         }
     const node = pos === null ? null : editor.state.doc.nodeAt(pos);
-    const view = [...editor.storage.footnote.views].find((v) => v.getPos() === pos);
-    return pos !== null && node?.type.name === 'footnote' && view ? { pos, node, view } : null;
+    if (pos === null || node?.type.name !== 'footnote') return null;
+    // A peer's change keeps the element; only a split here gives the note a new one.
+    const element =
+        binding.mapping.get(anchor.element) === node ? anchor.element : remote ? null : elementOf(binding, node);
+    const dom = editor.view.nodeDOM(pos);
+    const view = dom && editor.storage.footnote.views.get(dom);
+    return element && view ? { pos, node, view, element } : null;
 }
 
 // ProseMirror's textBetween reads a note's text in its reference's place, run on from the words around it. A word count
@@ -207,7 +248,7 @@ export const Footnote = FootnoteNode.extend<FootnoteOptions, FootnoteStorage>({
     },
 
     addStorage() {
-        return { views: new Set<FootnoteView>() };
+        return { views: new WeakMap<globalThis.Node, FootnoteView>() };
     },
 
     // Google's ⌘⌥F.

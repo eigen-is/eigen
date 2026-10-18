@@ -1,6 +1,6 @@
 // The notes under the text: numbered in document order, each drawn as the schema writes it, and the one open drawn by
 // the note's live editor in its place.
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -56,7 +56,7 @@ const text = (t: string): JSONContent => ({ type: 'text', text: t });
 const paragraph = (...content: JSONContent[]): JSONContent => ({ type: 'paragraph', content });
 const footnote = (...content: JSONContent[]): JSONContent => ({ type: 'footnote', content });
 
-async function setup() {
+async function setup(second: JSONContent = paragraph(text('Second note'))) {
     const doc = new Y.Doc();
     const body = mount(doc, { undoManager: createDocUndoManager(doc), cardIds: () => new Set() });
     body.commands.setContent({
@@ -66,7 +66,7 @@ async function setup() {
                 text('One'),
                 footnote(paragraph(text('First note')), paragraph(text('its second paragraph'))),
                 text(' two'),
-                footnote(paragraph(text('Second note'))),
+                footnote(second),
             ),
         ],
     });
@@ -129,4 +129,46 @@ test('after Bold across the references a press on a note still opens it', async 
     });
     expect(items()[1]?.contains(note.view.dom)).toBe(true);
     expect(note.state.doc.textContent).toBe('Second note');
+});
+
+// A note is keyed by its Yjs element, so a note put in or taken out before the open one leaves its editor mounted.
+test('a note put in and taken out before the open one keeps its editor, its focus and its typing', async () => {
+    const { body, note, items } = await setup();
+    const second = items()[1]?.querySelector('.eigen-prose')?.parentElement;
+    await act(async () => {
+        second?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    });
+    const live = items()[1];
+    expect(live?.contains(note.view.dom)).toBe(true);
+    expect(note.view.hasFocus()).toBe(true);
+    const earlier = body.schema.nodeFromJSON(footnote(paragraph(text('Earlier'))));
+    await act(async () => {
+        body.view.dispatch(body.state.tr.insert(1, earlier));
+    });
+    expect(items()[2]).toBe(live);
+    expect(note.view.hasFocus()).toBe(true);
+    await act(async () => {
+        body.view.dispatch(body.state.tr.delete(1, 1 + earlier.nodeSize));
+    });
+    expect(items()[1]).toBe(live);
+    expect(note.view.hasFocus()).toBe(true);
+    note.commands.insertContentAt(note.state.doc.content.size - 1, '!');
+    expect(body.state.doc.textContent).toContain('Second note!');
+});
+
+// React draws an image's node view; mounted inside a layout effect, its flushSync draws a warning, and here it mounts
+// as the note opens.
+test('a note holding an image opens with no flushSync from a layout effect', async () => {
+    const { items, note } = await setup(paragraph(text('See'), { type: 'figure', attrs: { mediaName: 'logo.png' } }));
+    const errors = spyOn(console, 'error');
+    try {
+        const second = items()[1]?.querySelector('.eigen-prose')?.parentElement;
+        await act(async () => {
+            second?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        });
+        expect(items()[1]?.contains(note.view.dom)).toBe(true);
+        expect(errors.mock.calls.filter((call) => String(call[0]).includes('flushSync'))).toEqual([]);
+    } finally {
+        errors.mockRestore();
+    }
 });

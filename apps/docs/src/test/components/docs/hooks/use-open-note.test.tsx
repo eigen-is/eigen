@@ -473,3 +473,50 @@ test('undo in a note that removes the note leaves the caret in the body, where r
     });
     expect(noteOf(a)).toBe('');
 });
+
+// The anchor is the note's own Yjs element: never the text before the reference, nor a neighbour once the note is gone.
+test('a peer typing right before the reference keeps the note open', async () => {
+    const { b, note, session, open } = await setup();
+    await open(6);
+    await act(async () => {
+        b.view.dispatch(b.state.tr.insertText('ed', 6));
+    });
+    expect(session.current?.anchor).not.toBeNull();
+    note.commands.setTextSelection(12);
+    typeInto(note, '!');
+    expect(noteOf(b)).toBe('Hello world!');
+});
+
+test("a peer's delete of the open first of two adjacent notes closes it, and never opens the second", async () => {
+    const { a, b, note, session, open } = await setup([
+        paragraph(text('Claim'), footnote(paragraph(text('First'))), footnote(paragraph(text('Second')))),
+    ]);
+    await open(6);
+    await act(async () => {
+        b.view.dispatch(b.state.tr.delete(6, 6 + (b.state.doc.nodeAt(6)?.nodeSize ?? 0)));
+    });
+    expect(session.current?.anchor).toBeNull();
+    expect(a.view.hasFocus()).toBe(true);
+    typeInto(note, 'X');
+    expect(noteOf(a)).toBe('Second');
+});
+
+test('⌘Z of a note inserted right before another reference closes it, and never opens the other', async () => {
+    const { a, note, session, undoManager } = await setup([paragraph(text('Claim'), footnote(paragraph(text('Old'))))]);
+    const { insertNote } = await import('../../../../components/docs/extensions/footnote');
+    a.commands.setTextSelection(6);
+    let pos: number | null = null;
+    await act(async () => {
+        pos = insertNote(a);
+    });
+    const inserted = pos;
+    if (inserted === null) throw new Error('no note');
+    await act(async () => session.current?.open(inserted, { focus: true, at: null, selection: null }));
+    undoManager.stopCapturing();
+    await act(async () => {
+        press(note, 'z');
+    });
+    expect(session.current?.anchor).toBeNull();
+    expect(noteOf(a)).toBe('Old');
+    expect(noteOf(a, 1)).toBeUndefined();
+});
