@@ -37,7 +37,7 @@ const CSS_OTHER_FETCHES = new RegExp(`${CSS_FETCH_FUNCTIONS.source}|attr\\(`, 'i
 const NO_REFS: ReadonlySet<string> = new Set();
 
 // The element hook types its node as a bare Node.
-const isElement = (node: Node): node is Element => node.nodeType === 1;
+export const isElement = (node: Node): node is Element => node.nodeType === 1;
 
 // Fetched without a click, on any element DOMPurify keeps: `src` (img, video, audio, source,
 // input type=image), `poster`, and the legacy `background`. `srcset` is handled separately.

@@ -5,7 +5,7 @@
 // Adding a kind = one entry here and one in lib; TypeScript forces both.
 
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
-import type { VectorElement, VectorElementType } from '@workspace/lib/vector';
+import type { NewVectorElement, VectorElement, VectorElementPatch, VectorElementType } from '@workspace/lib/vector';
 import {
     ChartColumn,
     ChartPie,
@@ -20,7 +20,6 @@ import {
     Type,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
-import type { NewVectorElement, VectorElementPatch } from '../hooks/use-canvas-doc';
 import { ArrowPanelSection } from './arrow';
 import { ChartEditDialog, ChartPanelSection } from './chart';
 import { ImagePanelSection } from './image';

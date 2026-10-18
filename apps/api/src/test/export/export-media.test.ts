@@ -151,7 +151,10 @@ describe('collectExportMedia', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
-    async function collect(format: 'docx' | 'html' | 'pdf-html', signal?: AbortSignal): Promise<ExportMedia[]> {
+    async function collect(
+        format: 'docx' | 'pptx' | 'html' | 'pdf-html',
+        signal?: AbortSignal,
+    ): Promise<ExportMedia[]> {
         const container = await mount.getPath(containerId);
         if (!container) throw new Error('no container');
         return collectExportMedia(mount, container, format, signal);
@@ -208,6 +211,12 @@ describe('collectExportMedia', () => {
         expect(kinds('lossy.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         expect(kinds('tagged.webp')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
         expect(kinds('photo.avif')).toEqual(['image/jpeg', JPEG_SIGNATURE, 320, 200]);
+    }, 60_000);
+
+    test('a pptx takes what a docx takes: each image from its source, with the Worker size', async () => {
+        const summary = (media: ExportMedia[]) =>
+            media.map(({ name, contentType, width, height }) => [name, contentType, width, height]);
+        expect(summary(await collect('pptx'))).toEqual(summary(await collect('docx')));
     }, 60_000);
 
     test('the WebP sources are what the format rule reads: VP8L lossless, VP8 lossy, VP8X with ICC, EXIF or alpha', () => {

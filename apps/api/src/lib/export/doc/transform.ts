@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { PAGE_BREAK_CLASS, type PageSetup, pageStylesheet, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { PAGE_BREAK_CLASS, type PageSetup, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc, readEigendocPage } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
@@ -14,11 +14,9 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { splitDataUri } from '../../shared/data-uri';
-import { THUMBNAIL_TIMEOUT_SECONDS } from '../../shared/thumbnail-timeout';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_SVG_EQUATIONS, mathmlToSvg, SVG_LIMIT } from '../math-svg';
-import { DOCX_IMAGE_MAX_SIZE, encodeDocxImage, figureMediaKey } from './docx-image';
+import { withSvgFallbacks } from '../office-image';
 import {
     type EquationDrawing,
     equationBudget,
@@ -28,7 +26,6 @@ import {
     renderDocHtml,
     withAbsoluteLinks,
 } from './render';
-import type { DocxMedia } from './to-docx';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform process
 // (child.ts owns execution; the main-thread orchestration lives in export-document.ts).
@@ -48,7 +45,7 @@ export async function renderEigendocExport(
     const json = readEigendocFromDoc(doc);
     const page = readEigendocPage(doc);
     if (format === 'docx') {
-        const { eigendocToDocx } = await import('./to-docx');
+        const { eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
         const docxMedia = await withSvgFallbacks([...media, ...(await pastedFigureMedia(json))]);
         return {
             data: toTransferableBuffer(await eigendocToDocx(json, page, docxMedia, title, publicOrigin)),
@@ -93,81 +90,6 @@ async function svgEquations(json: JSONContent): Promise<Map<string, EquationDraw
 function* equationAttrs(node: JSONContent): Generator<Record<string, unknown>> {
     if (node.type === 'equation') yield node.attrs ?? {};
     for (const child of node.content ?? []) yield* equationAttrs(child);
-}
-
-// A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
-// here, once, through the encode a media file takes; an SVG through the sanitizer the main thread's media took.
-async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
-    const pasted = new Map<string, { mediaType: string | null; base64: string }>();
-    const visit = (node: JSONContent) => {
-        if (node.type === 'figure') {
-            const attrs = readFigureAttrs(node.attrs ?? {});
-            const key = figureMediaKey(attrs);
-            if (key && key === attrs.src) {
-                const split = splitDataUri(key);
-                if (split) pasted.set(key, split);
-            }
-        }
-        for (const child of node.content ?? []) visit(child);
-    };
-    visit(json);
-    if (pasted.size === 0) return [];
-    const { sharpResize } = await import('../../shared/sharp-resize');
-    const media: ExportMedia[] = [];
-    for (const [src, { mediaType, base64 }] of pasted) {
-        const data = Buffer.from(base64, 'base64');
-        if (mediaType === 'image/svg+xml') {
-            media.push({ name: src, contentType: mediaType, data: toTransferableBuffer(data) });
-            continue;
-        }
-        const item = await encodeDocxImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
-        if (item) media.push(item);
-    }
-    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
-    const { sanitizeExportMedia } = await import('../sanitize');
-    return sanitizeExportMedia(media);
-}
-
-// The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
-// time, for one decode's memory; sharp loads only for an SVG.
-async function withSvgFallbacks(media: ExportMedia[]): Promise<DocxMedia[]> {
-    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
-    const { default: sharp } = await import('sharp');
-    const prepared: DocxMedia[] = [];
-    for (const item of media) {
-        if (item.contentType !== 'image/svg+xml') {
-            prepared.push(item);
-            continue;
-        }
-        try {
-            const svg = Buffer.from(item.data);
-            const image = sharp(svg);
-            const { width = 0, height = 0 } = await image.metadata();
-            const png = await image
-                .resize(DOCX_IMAGE_MAX_SIZE, DOCX_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
-                .png()
-                .timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS })
-                .toBuffer();
-            prepared.push({ ...item, png: toTransferableBuffer(png), ...cssSize(svg, width, height) });
-        } catch {
-            // One librsvg can't read, or not in time, leaves the docx; its caption stays.
-        }
-    }
-    return prepared;
-}
-
-const PHYSICAL_LENGTH = /^\s*[\d.e+-]+\s*(in|cm|mm|pt|pc)\s*$/i;
-
-// sharp reads an SVG's physical units at 72 dpi and CSS at 96, so a 4in drawing is 288 px to it and 384 in the HTML
-// export. Scaled per side, read off the root's start tag; a side the root leaves out follows the other, as sharp
-// derives it from the viewBox.
-function cssSize(svg: Buffer, width: number, height: number): { width: number; height: number } {
-    const root = svg.toString('utf8', 0, svg.indexOf('>') + 1);
-    const scale = (value: string | undefined) =>
-        value === undefined ? undefined : PHYSICAL_LENGTH.test(value) ? 96 / 72 : 1;
-    const x = scale(root.match(/\swidth="([^"]*)"/)?.[1]);
-    const y = scale(root.match(/\sheight="([^"]*)"/)?.[1]);
-    return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
 }
 
 function printExtras(page: PageSetup): string {

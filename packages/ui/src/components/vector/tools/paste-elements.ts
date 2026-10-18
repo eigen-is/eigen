@@ -6,8 +6,7 @@ import { needsReUpload } from '@workspace/lib/clipboard';
 import { PENDING_PREFIX } from '@workspace/lib/drive';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import type { VectorElement } from '@workspace/lib/vector';
-import type { NewVectorElement } from '../hooks/use-canvas-doc';
+import type { NewVectorElement, VectorElement } from '@workspace/lib/vector';
 import type { PastedArrow } from './binding';
 
 export type PastePlan = {

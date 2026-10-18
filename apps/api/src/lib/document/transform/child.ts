@@ -64,7 +64,7 @@ async function renderExport(
             return renderEigendocExport(doc, request.format, request.title, media, request.publicOrigin);
         }
         case 'eigenslides': {
-            const { renderEigenslidesExport } = await import('../../export/canvas/transform');
+            const { renderEigenslidesExport } = await import('../../export/slides/transform');
             return renderEigenslidesExport(doc, request.format, request.title, media);
         }
         case 'eigenvector': {

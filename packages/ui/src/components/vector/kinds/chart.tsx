@@ -4,12 +4,17 @@
 
 import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { ChartSpec, ChartType } from '@workspace/lib/types/chart';
-import { convertToShapes, type Point, type StyleDefaults, type VectorElement } from '@workspace/lib/vector';
+import {
+    convertToShapes,
+    type NewVectorElement,
+    type Point,
+    type StyleDefaults,
+    type VectorElement,
+} from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
 import { Shapes, Table } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { NewVectorElement } from '../hooks/use-canvas-doc';
 import type { KindEditDialogProps, KindPanelSectionProps } from './index';
 
 // Google's defaults: a drawing's chart, and a chart filling most of a 16:9 slide (1920 × 1080).

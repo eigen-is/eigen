@@ -1,23 +1,25 @@
-// Builds the site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN
-// spec (content.ts) — the stickies-board approach without a fixture. Every element carries the same
-// full field set an editor-authored element would (use-canvas-doc's addElement), so the doc reads
-// back through read-vector unchanged. Text is sized with measureLabel because the seeder has no DOM
-// to measure with. Deterministic ids + seeds: a reseed renders identical jitter.
+// Builds the site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN spec (content.ts) —
+// the stickies-board approach without a fixture. Every element is built typed, because the docking math runs on the
+// shapes before anything is written, then goes through the editor's own writer (write-vector.ts), so the doc reads back
+// through read-vector unchanged. Text is sized with measureLabel because the seeder has no DOM to measure with.
+// Deterministic ids + seeds: a reseed renders identical jitter.
 
 import { basename } from 'node:path';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import {
+    baseDefaultsFor,
     bindingAnchor,
     DEFAULT_ARROW_PROPS,
     DEFAULT_CORNERS,
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
-    ELEMENT_FIELDS,
     elbowBindPoint,
+    followBindings,
     generateNKeysBetween,
     getFontMetrics,
     getLineHeightPx,
+    kindDefaults,
     measureLabel,
     normalizeLinear,
     type Point,
@@ -29,24 +31,17 @@ import {
     VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElement,
+    type VectorElementBase,
+    type VectorElementType,
     type VectorImageElement,
     type VectorLinearElement,
     type VectorRichTextElement,
     type VectorShapeElement,
+    writeElementInDoc,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import {
-    baseElement,
-    type CanvasSide,
-    imageElement,
-    mulberry32,
-    richTextElement,
-    SIDE_INDEX,
-    settleEndpoints,
-    toYMap,
-    ZERO_BOX,
-} from './canvas-build';
 import type {
+    CanvasSide,
     SITE_PLAN,
     SitePlanArrow,
     SitePlanEnd,
@@ -81,6 +76,12 @@ function measureRichTextBox(text: string, fontSize: number): { width: number; he
     const { width, height } = measureExcalifont(text, fontSize);
     return { width: width * RICH_TEXT_SLACK, height };
 }
+
+// Side-midpoint order matches shapeAnchorPoints (right, bottom, left, top).
+const SIDE_INDEX: Record<CanvasSide, number> = { right: 0, bottom: 1, left: 2, top: 3 };
+
+// normalizeLinear rebases a route onto its own bounds, so the box it starts from is empty.
+const ZERO_BOX = { x: 0, y: 0, width: 0, height: 0, angle: 0 } as const;
 
 export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const shapes: VectorShapeElement[] = plan.shapes.map(buildShape);
@@ -121,8 +122,7 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     }
 
     doc.transact(() => {
-        const map = doc.getMap('elements');
-        for (const el of ordered) map.set(el.id, toYMap(el, ELEMENT_FIELDS));
+        for (const el of ordered) writeElementInDoc(doc, el, el.index, SITE_PLAN_STYLE, el.id);
         doc.getMap('meta').set('background', plan.background);
     });
 }
@@ -170,14 +170,18 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
 }
 
 function buildImage(im: SitePlanImage, i: number): VectorImageElement {
-    return imageElement(`el-image-${i}`, SITE_PLAN_STYLE, {
+    return {
+        ...kindDefaults('image', SITE_PLAN_STYLE),
+        id: `el-image-${i}`,
+        index: '',
+        type: 'image',
         x: im.x,
         y: im.y,
         width: im.width,
         height: im.height,
         angle: 0,
         mediaName: basename(im.file),
-    });
+    };
 }
 
 function buildArrow(
@@ -214,7 +218,15 @@ function buildArrow(
         fontFamily: FONT,
         labelWidth: label ? measureExcalifont(label, fontSize).width : 0,
     };
-    settleEndpoints(arrow, byId);
+    // Settle a bound arrow's endpoints exactly where the editor would leave them at rest.
+    const patch = followBindings(arrow, byId);
+    if (!patch) return arrow;
+    arrow.x = patch.x;
+    arrow.y = patch.y;
+    arrow.width = patch.width;
+    arrow.height = patch.height;
+    arrow.points = patch.points;
+    arrow.fixedSegments = patch.fixedSegments;
     return arrow;
 }
 
@@ -283,13 +295,39 @@ type RichTextSpec = Pick<
     'x' | 'y' | 'width' | 'height' | 'angle' | 'fontSize' | 'color' | 'textAlign' | 'verticalAlign'
 >;
 
-// Both text builders go through one place: the box the seeder measured plus the typography the drawing
-// is authored in, over the shared rich-text factory.
+// Both text builders go through one place: the kind's defaults under the drawing's style table, the box
+// the seeder measured and the typography the drawing is authored in. Typed rather than partial, because
+// sceneBounds measures it before the write.
 function buildRichText(id: string, text: string, box: RichTextSpec): VectorRichTextElement {
-    return richTextElement(id, SITE_PLAN_STYLE, {
+    return {
+        ...kindDefaults('richtext', SITE_PLAN_STYLE),
+        id,
+        index: '',
+        type: 'richtext',
         ...box,
         html: textToParagraphHtml(text),
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
         lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
-    });
+    };
+}
+
+// The base a seeded shape, line or arrow shares, from the same table the apps create with; the builder
+// adds the kind's own fields.
+function baseElement(
+    type: VectorElementType,
+    id: string,
+    style: StyleDefaults,
+): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
+    return { ...baseDefaultsFor(type, style), id, index: '' };
+}
+
+// mulberry32 — a tiny deterministic PRNG, one draw per element (matches randomSeed's range).
+function mulberry32(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+        a = (a + 0x6d2b_79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+    };
 }

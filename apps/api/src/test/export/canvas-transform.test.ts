@@ -4,7 +4,7 @@ import type { SlideSize } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import type { DocumentExportFormat } from '../../lib/document/transform/protocol';
 import type { CanvasPage } from '../../lib/export/canvas/render';
-import { canvasHtmlDocument, renderEigenslidesExport } from '../../lib/export/canvas/transform';
+import { canvasHtmlDocument, renderEigenslidesHtml } from '../../lib/export/canvas/transform';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { buildGoldenDeckScene, seedDeckDoc } from '../fixtures/golden-documents';
 
@@ -70,10 +70,10 @@ function deckExportHtml(format: DocumentExportFormat, html: string, slideSize: S
         elements: scene.elements.map((el) => ('html' in el ? { ...el, html } : el)),
         meta: { ...scene.meta, slideSize },
     });
-    return new TextDecoder().decode(renderEigenslidesExport(doc, format, 'Deck', []).data);
+    return new TextDecoder().decode(renderEigenslidesHtml(doc, format, 'Deck', []).data);
 }
 
-describe('renderEigenslidesExport', () => {
+describe('renderEigenslidesHtml', () => {
     test.each(['html', 'pdf-html'] as const)('drops a <style> block a rich-text box carries (%s)', (format) => {
         const html = deckExportHtml(format, '<style>*{display:none}</style><p>hi</p>');
         expect(html).not.toContain('display:none');
@@ -125,7 +125,7 @@ const weasyprint = (await isWeasyPrintAvailable()) ? describe : describe.skip;
 
 // The editor shows an empty paragraph one line tall because ProseMirror gives it a trailing <br>; the
 // stored html has none, so the print must lay out `<p></p>` as the editor lays out `<p><br></p>`.
-weasyprint('renderEigenslidesExport — an empty paragraph prints a line (WeasyPrint)', () => {
+weasyprint('renderEigenslidesHtml — an empty paragraph prints a line (WeasyPrint)', () => {
     const printed = (html: string) => htmlToPdf(deckExportHtml('pdf-html', html)).then(textOrigins);
 
     test.each([

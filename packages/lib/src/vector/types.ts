@@ -227,6 +227,21 @@ export type VectorElement =
 type OfType<T, K> = T extends { type: infer U } ? (K extends U ? T : never) : never;
 export type ElementOfType<K extends VectorElementType> = OfType<VectorElement, K>;
 
+// A partial patch over the write/read allow-list — every field optional, so a caller sets any
+// subset of any element variant's fields (the union members share the geometry base). id/type
+// are never patched; z-order changes rewrite `index`.
+export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
+    Partial<Omit<VectorPieElement, 'id' | 'type'>> &
+    Partial<Omit<VectorChartElement, 'id' | 'type'>> &
+    Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
+    Partial<Omit<VectorImageElement, 'id' | 'type'>> &
+    Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
+    Partial<Omit<VectorArrowElement, 'id' | 'type'>>;
+
+// A new element: the caller names a `type` and overrides whatever it likes; the writer fills the
+// rest from the kind defaults and generates id/seed.
+export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
+
 // A forward binding: an anchor as a proportion (fixedPoint) of the target shape's local w/h, so the
 // anchor follows the shape by construction. Not clamped on write; consumers clamp to [0,1] on read.
 type Binding = { elementId: string; fixedPoint: [number, number] };

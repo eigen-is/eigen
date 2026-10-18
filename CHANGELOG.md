@@ -15,6 +15,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 - **Equations in Docs** — Insert → **Equation** opens the Equation panel: type LaTeX (or paste MathML) with a live preview, or pick from Google's five symbol menus. **Display** puts an equation on a line of its own. Equations take comments, count in word count and search, and download to Word as Word equations
 - **Word import and PDF** — a Word file's equations come in as equations you can edit, and the PDF draws equations
 - **Paste equations** — an equation copied from Word for the web or a web page that shows math pastes into Docs as an equation you can edit
+- **PowerPoint export** — File → Download → **Microsoft PowerPoint (.pptx)** saves a presentation as a .pptx, also from Drive and ⌘K. Text, shapes, arrows, images and backgrounds carry over; a chart arrives as its shapes
 
 ### Changed
 

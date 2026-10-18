@@ -16,9 +16,11 @@ export const DGM_NS = 'http://schemas.openxmlformats.org/drawingml/2006/diagram'
 // Word's drawing of a SmartArt, the shapes and their text as laid out.
 export const DSP_NS = 'http://schemas.microsoft.com/office/drawing/2008/diagram';
 export const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+export const P_NS = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 export const W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
 export const MC_NS = MARKUP_COMPATIBILITY_NAMESPACE;
 export const ASVG_NS = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main';
+export const AHYP_NS = 'http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor';
 export const V_NS = 'urn:schemas-microsoft-com:vml';
 export const O_NS = 'urn:schemas-microsoft-com:office:office';
 export const W10_NS = 'urn:schemas-microsoft-com:office:word';
@@ -41,6 +43,7 @@ const STRICT_NAMESPACES = new Map([
     [`${STRICT}/drawingml/diagram`, DGM_NS],
     [`${STRICT}/officeDocument/math`, M_NS],
     [`${STRICT}/spreadsheetml/main`, SML_NS],
+    [`${STRICT}/presentationml/main`, P_NS],
 ]);
 
 // A part read with Strict's namespaces as their transitional twins, wherever it declares them.

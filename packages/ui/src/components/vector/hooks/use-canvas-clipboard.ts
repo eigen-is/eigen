@@ -25,6 +25,7 @@ import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     IMAGE_CASCADE_OFFSET,
+    type NewVectorElement,
     num,
     type Point,
     pasteAnchorOffset,
@@ -34,6 +35,7 @@ import {
     type StyleDefaults,
     type TextAlign,
     type VectorElement,
+    type VectorElementPatch,
     type VectorMeta,
 } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
@@ -46,7 +48,6 @@ import { remapPastedArrows } from '../tools/binding';
 import { buildSelectionData, selectionPlainText } from '../tools/clipboard';
 import { type PastePlan, planElementsPaste } from '../tools/paste-elements';
 import { deleteSelection } from './selection-ops';
-import type { NewVectorElement, VectorElementPatch } from './use-canvas-doc';
 
 // How many cross-mount images re-upload at once. The wire is forgeable, so a paste must not turn into
 // hundreds of parallel fetch + upload round-trips; a handful keeps a normal multi-image paste quick.

@@ -56,8 +56,8 @@ export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
     });
 }
 
-// Materialized doc + prepared media → export bytes for a deck: one page per frame.
-export function renderEigenslidesExport(
+// Materialized doc + prepared media → a deck's HTML or PDF document: one page per frame.
+export function renderEigenslidesHtml(
     doc: Y.Doc,
     format: DocumentExportFormat,
     title: string,

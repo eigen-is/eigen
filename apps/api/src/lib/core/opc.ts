@@ -37,6 +37,12 @@ export function relOfType(rels: ReadonlyMap<string, Relationship>, type: string)
     return undefined;
 }
 
+// A relationship target percent-encodes what a URI reference can't hold; `%` stays, so an encoded href encodes no
+// further.
+export function uriReference(href: string): string {
+    return href.replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) => encodeURIComponent(character));
+}
+
 // An absolute target climbs from the package root, so neither kind keeps a '..' a format's prefix check would miss.
 function resolveTarget(base: string, target: string): string {
     const parts = target.startsWith('/') ? [] : base.split('/').slice(0, -1);

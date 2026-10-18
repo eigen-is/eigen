@@ -59,7 +59,7 @@ export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
 
 // Every download format the export route can produce. A type's own list is below and keeps this order,
 // so ⌘K's per-format rows read like that type's Download menu.
-export const EXPORT_FORMATS = ['docx', 'xlsx', 'svg', 'pdf', 'html'] as const;
+export const EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'svg', 'pdf', 'html'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 // What the convert route turns an office file into.
@@ -138,7 +138,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         softColorVar: '--app-slides-color-soft',
         appName: 'slides',
         yjsRoots: { elements: 'map', frames: 'map', meta: 'map' },
-        exportFormats: ['pdf', 'html'],
+        exportFormats: ['pptx', 'pdf', 'html'],
     },
     sheets: {
         type: DRIVE_TYPE_SHEETS,
@@ -198,6 +198,7 @@ export function exportFormatsFor(type: DrivePathType): readonly ExportFormat[] {
 export const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
     docx: 'Microsoft Word (.docx)',
     xlsx: 'Microsoft Excel (.xlsx)',
+    pptx: 'Microsoft PowerPoint (.pptx)',
     svg: 'SVG image (.svg)',
     pdf: 'PDF (.pdf)',
     html: 'Web Page (.html)',

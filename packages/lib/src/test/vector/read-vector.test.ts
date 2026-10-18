@@ -981,6 +981,20 @@ describe('readVectorFromDoc — the canvas model', () => {
         });
     });
 
+    test('caps a hostile frame name at MAX_ARROW_LABEL_BYTES, like a label', () => {
+        const doc = new Y.Doc();
+        doc.transact(() => {
+            const f = new Y.Map();
+            f.set('id', 'f1');
+            f.set('index', 'a0');
+            f.set('name', '☃'.repeat(100_000));
+            doc.getMap('frames').set('f1', f);
+        });
+        const [frame] = readVectorFromDoc(doc).frames;
+        expect(new TextEncoder().encode(frame.name).length).toBeLessThanOrEqual(MAX_ARROW_LABEL_BYTES);
+        expect(frame.name).toBe('☃'.repeat(Math.floor(MAX_ARROW_LABEL_BYTES / 3)));
+    });
+
     test('a frameId whose frame is gone re-homes to the lowest-index frame', () => {
         const doc = new Y.Doc();
         doc.transact(() => {

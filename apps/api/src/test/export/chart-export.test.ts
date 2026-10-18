@@ -17,7 +17,7 @@ import {
 } from '@workspace/lib/vector';
 import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
-import { renderEigenslidesExport } from '../../lib/export/canvas/transform';
+import { renderEigenslidesHtml } from '../../lib/export/canvas/transform';
 import { toXmlDocument } from '../../lib/export/sanitize';
 import { renderEigenvectorExport } from '../../lib/export/vector/transform';
 import { seedVectorDoc } from '../fixtures/golden-documents';
@@ -109,7 +109,7 @@ describe('a chart in the canvas exports', () => {
             frames: [{ id: 'frame-1', index: 'a0', name: '', background: '', ...SLIDE_SIZES['16:9'] }],
             meta: DEFAULT_SCENE_META,
         };
-        const html = decode(renderEigenslidesExport(docOf(deck), 'html', 'Deck', []).data);
+        const html = decode(renderEigenslidesHtml(docOf(deck), 'html', 'Deck', []).data);
         const layer = elementLayer(slide);
         if (!layer) throw new Error('a chart always draws');
         expect(layerBodies(html, '.canvas-page > div > div')).toEqual([asParsed(layerInnerHtml(layer.content))]);

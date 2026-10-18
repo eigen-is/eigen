@@ -7,15 +7,16 @@ import { ApiError, isOutOfMemory } from '../../core/errors';
 // Only serializable primitives, ArrayBuffers and Maps of primitives ride here — never
 // Mount, database, Y.Doc, or other class instances, and never module/function names
 // user input could influence. Every eigensheets/eigendoc/eigenslides/eigenvector preview,
-// every vCard, message and calendar preview, every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports
+// every vCard, message and calendar preview, every HTML/PDF/XLSX/DOCX/PPTX export, the xlsx and docx imports
 // and the search content extraction ride these unions.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
 // subprocess, so the transform returns the document it renders from.
 export type SheetExportFormat = 'html' | 'xlsx' | 'pdf-html';
 export type DocumentExportFormat = 'html' | 'pdf-html';
-// Only eigendoc exports to docx; the slides route rejects the format.
+// Only eigendoc exports to docx and only eigenslides to pptx; the other routes reject them.
 export type EigendocExportFormat = DocumentExportFormat | 'docx';
+export type SlidesExportFormat = DocumentExportFormat | 'pptx';
 // Vector exports the drawing's own SVG, or that SVG on a page WeasyPrint renders to PDF.
 export type VectorExportFormat = 'svg' | 'pdf-html';
 
@@ -31,8 +32,8 @@ export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
 // (Mount I/O + screen previews), extracted from the upload by a docx import.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
-// An export's media; only a docx's raster carries the thumbnail Worker's width and height. The docx arm adds an SVG's
-// size inside the transform process.
+// An export's media; only a docx's or pptx's raster carries the thumbnail Worker's width and height. Their arms add an
+// SVG's size inside the transform process.
 export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 
 // A job is everything a caller decides; the shared main-thread orchestration
@@ -75,7 +76,7 @@ export type ExportTransformJob =
     | {
           kind: 'export';
           documentType: 'eigenslides';
-          format: DocumentExportFormat;
+          format: SlidesExportFormat;
           title: string;
           media: ExportMedia[];
       }
