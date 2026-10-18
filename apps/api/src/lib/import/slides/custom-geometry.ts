@@ -4,9 +4,7 @@ import {
     MAX_PATH_COMMANDS,
     PATH_COORD_MAX,
     PATH_COORD_MIN,
-    parsePathCommands,
     round4,
-    serializePath,
 } from '@workspace/lib/vector';
 import { A_NS, isOn } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
@@ -19,7 +17,7 @@ import {
     guideValue,
     RADIANS_PER_UNIT,
 } from './guides';
-import { affords, charge, childOf } from './lookup';
+import { affords, charge, childOf, spend } from './lookup';
 import { emu } from './package';
 
 // A shape's a:custGeom → what a canvas path element stores: absolute M/L/C/Q/Z in the shape's unit box, nonzero.
@@ -30,6 +28,11 @@ export const MAX_GEOMETRY_NODES = 32_768;
 
 // A subpath is a move and a segment at least, so a filled path of more can never fit: its nesting is never worked out.
 const MAX_SUBPATHS = MAX_PATH_COMMANDS / 2;
+
+// A curve's outline is its chords, as many as Wang's formula says keep within this fraction of the box of it, so a
+// contour that close inside another still nests: ends and middles alone make an octagon 7.6% inside a circle.
+const OUTLINE_TOLERANCE = 0.001;
+const MAX_CURVE_CHORDS = 16;
 
 // Past the caps, a point within a tolerance of the line its neighbours draw goes, as does a curve that bulges no more:
 // the least of these, in fractions of the box, that fits. The corpus's largest, a 2,222-point map outline, fits at the
@@ -58,14 +61,18 @@ type Point = { x: number; y: number };
 type Segment = { op: 'L' | 'C' | 'Q'; points: Point[] };
 type Subpath = { start: Point; segments: Segment[]; closed: boolean };
 
-// One geometry for each way the paths paint, the paths painting alike concatenated, in the order they first draw but the
-// filled before the lines, as LibreOffice and Apache POI stroke over every fill; each becomes its own element at the
-// shape's box. Undefined when nothing is drawn, or past a cap: the shape keeps its text.
-// `width` and `height` are the shape's extents in EMU, its guides' w and h; `adjustments` a preset's, after its avLst.
+type Painted = Omit<CustomGeometry, 'path' | 'closed'> & { subpaths: Subpath[] };
+
+// One geometry for each way the paths paint, the paths painting alike concatenated, in the order they first draw but
+// the filled before the lines, as LibreOffice and Apache POI stroke over every fill; each becomes its own element
+// at the shape's box. Undefined when nothing is drawn, or past a cap or the read's budget: the shape keeps its text.
+// `width` and `height` are the shape's extents in EMU, its guides' w and h; `mirrored` flips it across its box, as
+// DrawingML flips a shape before it turns it; `adjustments` are a preset's, after its avLst.
 export function customGeometry(
     custGeom: XmlElement,
     width: number,
     height: number,
+    mirrored = false,
     adjustments: GuideList = [],
 ): CustomGeometry[] | undefined {
     const [avLst, gdLst, pathLst] = ['avLst', 'gdLst', 'pathLst'].map((local) => childOf(custGeom, A_NS, local));
@@ -75,16 +82,18 @@ export function customGeometry(
     if (!guides) return undefined;
     const paths = pathLst ? xmlElements(pathLst).filter((path) => path.ns === A_NS && path.local === 'path') : [];
     charge(nodes - (avLst?.children.length ?? 0) - (gdLst?.children.length ?? 0));
-    const painted = new Map<string, Omit<CustomGeometry, 'path' | 'closed'> & { subpaths: Subpath[] }>();
+    const painted = new Map<string, Painted>();
     for (const path of paths) {
         const fill = xmlAttr(path, '', 'fill');
         const filled = fill !== 'none';
         const shade = PATH_SHADES.get(fill ?? 'norm');
         const stroked = isOn(xmlAttr(path, '', 'stroke')) ?? true;
         if (!filled && !stroked) continue;
-        const drawn = subpathsOf(path, guides, width, height);
-        if (filled && drawn.length > MAX_SUBPATHS) return undefined;
+        const drawn = subpathsOf(path, guides, { width, height, mirrored });
+        if (!drawn || (filled && drawn.length > MAX_SUBPATHS)) return undefined;
+        if (drawn.length === 0) continue;
         const subpaths = filled ? nested(drawn) : drawn;
+        if (!subpaths) return undefined;
         const key = `${filled} ${stroked} ${shade}`;
         const known = painted.get(key);
         if (known) known.subpaths.push(...subpaths);
@@ -92,11 +101,12 @@ export function customGeometry(
     }
     const geometries: CustomGeometry[] = [];
     for (const { filled, stroked, shade, subpaths } of painted.values()) {
-        if (subpaths.length === 0) continue;
         let path = fitted(subpaths, filled);
         const segments = subpaths.reduce((count, subpath) => count + subpath.segments.length, 0);
         for (const tolerance of SIMPLIFY_TOLERANCES) {
             if (path !== undefined) break;
+            // The pass's own scan of the segments, then reduced's of each run's points at each depth it splits to.
+            if (!affords(segments * (MAX_SIMPLIFY_DEPTH + 2))) return undefined;
             charge(segments);
             path = fitted(
                 subpaths.map((subpath) => simplified(subpath, tolerance)),
@@ -124,14 +134,22 @@ function nodesOf(lists: (XmlElement | undefined)[], pathLst: XmlElement | undefi
     return nodes;
 }
 
-// A path's w and h span the box; 0 or none spans the shape's EMU.
-function subpathsOf(path: XmlElement, guides: Guides, width: number, height: number): Subpath[] {
+// A path's w and h span the box; 0 or none spans the shape's EMU. Mirrored here, so the caps measure the path stored.
+// Undefined where the read's budget can't cover its arcs.
+function subpathsOf(
+    path: XmlElement,
+    guides: Guides,
+    { width, height, mirrored }: { width: number; height: number; mirrored: boolean },
+): Subpath[] | undefined {
     const span = (local: string, extent: number) => {
         const stated = emu(xmlAttr(path, '', local));
         return stated !== undefined && stated > 0 ? stated : extent;
     };
     const [w, h] = [span('w', width), span('h', height)];
-    const boxed = (p: Point): Point => ({ x: inBox(p.x, w), y: inBox(p.y, h) });
+    const boxed = (p: Point): Point => {
+        const x = inBox(p.x, w);
+        return { x: mirrored ? round4(1 - x) : x, y: inBox(p.y, h) };
+    };
     const value = (command: XmlElement, local: string) => guideValue(guides, xmlAttr(command, '', local));
     const subpaths: Subpath[] = [];
     let open: Subpath | undefined;
@@ -148,7 +166,10 @@ function subpathsOf(path: XmlElement, guides: Guides, width: number, height: num
         open?.segments.push({ op, points: points.map(boxed) });
         pen = points[points.length - 1];
     };
-    for (const command of xmlElements(path)) {
+    const commands = xmlElements(path);
+    // One node, but up to four curves each pass scans.
+    if (!spend(4 * commands.filter((command) => command.local === 'arcTo').length)) return undefined;
+    for (const command of commands) {
         if (command.ns !== A_NS) continue;
         const points = xmlElements(command)
             .filter((pt) => pt.ns === A_NS && pt.local === 'pt')
@@ -159,10 +180,8 @@ function subpathsOf(path: XmlElement, guides: Guides, width: number, height: num
         else if (command.local === 'quadBezTo' && points.length >= 2) draw('Q', points.slice(0, 2));
         else if (command.local === 'arcTo') {
             const radii = { x: value(command, 'wR'), y: value(command, 'hR') };
-            const curves = arcCurves(pen, radii, value(command, 'stAng'), value(command, 'swAng'));
-            // One node, but up to four segments each pass scans.
-            charge(curves.length);
-            for (const curve of curves) draw('C', curve);
+            for (const curve of arcCurves(pen, radii, value(command, 'stAng'), value(command, 'swAng')))
+                draw('C', curve);
         } else if (command.local === 'close' && open && !open.closed && open.segments.length > 0) {
             open.closed = true;
             pen = start;
@@ -173,57 +192,94 @@ function subpathsOf(path: XmlElement, guides: Guides, width: number, height: num
 
 // PowerPoint fills each path on its own and LibreOffice even-odd, while the canvas fills nonzero: each subpath winds by
 // how deep it lies among its path's others, the outermost clockwise, a hole in one the other way, an island in that
-// clockwise again. A contour inside another of its path is then a hole however the file wound it, roughjs's even-odd
-// hatch agrees, and paths concatenated, each outermost clockwise, fill as their union: a firewall's bricks on its wall.
-function nested(subpaths: Subpath[]): Subpath[] {
+// clockwise again. A contour inside another of its path is then a hole however the file wound it, and roughjs's even-odd
+// hatch agrees. Undefined where the read's budget can't cover the work, before it begins.
+function nested(subpaths: Subpath[]): Subpath[] | undefined {
+    // Each subpath's probe against each other's bounds; then the outlines and the tests the probes take, before either.
+    if (!spend(subpaths.length * (subpaths.length - 1))) return undefined;
+    const bounds = subpaths.map((subpath) => boundsOf(pointsOf(subpath)));
+    // The middle of the first segment, on the curve, where a chord's middle would lie inside it: as far inside the
+    // contour around as the subpath is, and off a vertex it may share with it.
+    const probes = subpaths.map(({ start, segments }) => pointOn(start, segments[0], 0.5));
+    const around = probes.map((probe, i) =>
+        bounds.flatMap(([min, max], j) =>
+            j !== i && probe.x >= min.x && probe.x <= max.x && probe.y >= min.y && probe.y <= max.y ? [j] : [],
+        ),
+    );
+    const lengths = subpaths.map(outlineLengthOf);
+    const tests = around.flat().reduce((count, j) => count + lengths[j], 0);
+    if (!spend(lengths.reduce((count, length) => count + length, tests))) return undefined;
     const outlines = subpaths.map(outlineOf);
-    const bounds = outlines.map(boundsOf);
-    // Each against each other's bounds.
-    charge(subpaths.length * (subpaths.length - 1));
     return subpaths.map((subpath, i) => {
-        // The middle of its first chord: on the contour, and off a vertex it may share with the one around it.
-        const end = subpath.segments[0].points[subpath.segments[0].points.length - 1];
-        const probe = { x: (subpath.start.x + end.x) / 2, y: (subpath.start.y + end.y) / 2 };
-        let depth = 0;
-        for (const [j, outline] of outlines.entries()) {
-            const [min, max] = bounds[j];
-            if (j === i || probe.x < min.x || probe.x > max.x || probe.y < min.y || probe.y > max.y) continue;
-            charge(outline.length);
-            if (encloses(outline, probe)) depth++;
-        }
+        const depth = around[i].filter((j) => encloses(outlines[j], probes[i])).length;
         const area = areaOf(outlines[i]);
         return area !== 0 && area < 0 === (depth % 2 === 0) ? reversed(subpath) : subpath;
     });
 }
 
-// A subpath as a polygon: each segment's end, and a curve's middle besides.
+// Its start and every point its segments name: a curve lies within their bounds.
+function pointsOf({ start, segments }: Subpath): Point[] {
+    return [start, ...segments.flatMap((segment) => segment.points)];
+}
+
+function outlineLengthOf({ start, segments }: Subpath): number {
+    let [length, from] = [1, start];
+    for (const segment of segments) {
+        length += chordsOf(from, segment);
+        from = segment.points[segment.points.length - 1];
+    }
+    return length;
+}
+
+// A subpath as a polygon: each line's end, each curve's chords' ends.
 function outlineOf({ start, segments }: Subpath): Point[] {
     const outline = [start];
     let from = start;
-    for (const { op, points } of segments) {
-        const to = points[points.length - 1];
-        if (op === 'Q') outline.push(mix(mix(from, points[0]), mix(points[0], to)));
-        if (op === 'C') {
-            const [a, b, c] = [mix(from, points[0]), mix(points[0], points[1]), mix(points[1], to)];
-            outline.push(mix(mix(a, b), mix(b, c)));
-        }
-        outline.push(to);
-        from = to;
+    for (const segment of segments) {
+        const chords = chordsOf(from, segment);
+        for (let i = 1; i <= chords; i++) outline.push(pointOn(from, segment, i / chords));
+        from = outline[outline.length - 1];
     }
     return outline;
 }
 
-function mix(a: Point, b: Point): Point {
-    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+// Wang's formula: a curve of degree d lies within the tolerance of √(d(d−1)/8 · m / tolerance) chords, m the largest
+// second difference of its control points.
+function chordsOf(from: Point, { op, points }: Segment): number {
+    if (op === 'L') return 1;
+    const controls = [from, ...points];
+    let most = 0;
+    for (let i = 2; i < controls.length; i++) {
+        const [a, b, c] = [controls[i - 2], controls[i - 1], controls[i]];
+        most = Math.max(most, Math.hypot(a.x - 2 * b.x + c.x, a.y - 2 * b.y + c.y));
+    }
+    const degree = points.length;
+    const chords = Math.ceil(Math.sqrt((degree * (degree - 1) * most) / (8 * OUTLINE_TOLERANCE)));
+    return clamp(chords, 1, MAX_CURVE_CHORDS);
 }
 
-function boundsOf(outline: Point[]): [min: Point, max: Point] {
-    const xs = outline.map((p) => p.x);
-    const ys = outline.map((p) => p.y);
-    return [
-        { x: Math.min(...xs), y: Math.min(...ys) },
-        { x: Math.max(...xs), y: Math.max(...ys) },
-    ];
+// De Casteljau's: the segment's point at t, its end exactly at 1.
+function pointOn(from: Point, { points }: Segment, t: number): Point {
+    let controls = [from, ...points];
+    while (controls.length > 1) {
+        const previous = controls;
+        controls = previous.slice(1).map((p, i) => ({
+            x: previous[i].x * (1 - t) + p.x * t,
+            y: previous[i].y * (1 - t) + p.y * t,
+        }));
+    }
+    return controls[0];
+}
+
+type Bounds = [min: Point, max: Point];
+
+function boundsOf(points: Point[]): Bounds {
+    const [min, max] = [{ ...points[0] }, { ...points[0] }];
+    for (const { x, y } of points) {
+        [min.x, min.y] = [Math.min(min.x, x), Math.min(min.y, y)];
+        [max.x, max.y] = [Math.max(max.x, x), Math.max(max.y, y)];
+    }
+    return [min, max];
 }
 
 // Twice the signed area, positive for a clockwise outline (y down).
@@ -308,14 +364,6 @@ function fitted(subpaths: Subpath[], filled: boolean): string | undefined {
     }
     const path = parts.join(' ');
     return path.length + ' Z'.length * closes <= MAX_PATH_BYTES ? path : undefined;
-}
-
-// A path drawn flipped across its box: DrawingML flips a shape before it turns it.
-export function mirroredPath(path: string): string {
-    const commands = parsePathCommands(path) ?? [];
-    return serializePath(
-        commands.map(({ op, points }) => ({ op, points: points.map(({ x, y }) => ({ x: round4(1 - x), y })) })),
-    );
 }
 
 // A filled path as the fill draws it, each subpath closed.

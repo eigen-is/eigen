@@ -9,6 +9,7 @@ import {
     childrenOf,
     firstChildOf,
     prefixedAttrOf,
+    spend,
     withWorkBudget,
 } from '../../../lib/import/slides/lookup';
 import { countVisits, NS } from '../../fixtures/pptx';
@@ -81,6 +82,15 @@ describe('a lookup', () => {
             expect(affords(6)).toBe(true);
             expect(affords(7)).toBe(false);
             charge(6);
+        });
+    });
+
+    test('spends an amount the work left covers, and none of one it does not', () => {
+        withWorkBudget(10, () => {
+            expect(spend(11)).toBe(false);
+            expect(spend(4)).toBe(true);
+            expect(affords(6)).toBe(true);
+            expect(affords(7)).toBe(false);
         });
     });
 

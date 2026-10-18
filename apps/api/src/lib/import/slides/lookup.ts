@@ -34,6 +34,13 @@ export function affords(units: number): boolean {
     return workLeft >= units;
 }
 
+// Charges this much only when the read can still do it: work that may be left out asks before it begins.
+export function spend(units: number): boolean {
+    if (!affords(units)) return false;
+    charge(units);
+    return true;
+}
+
 // A value derived from an element once for each key.
 export function cachedBy<K, V>(): (element: XmlElement, key: K, derive: () => V) => V {
     const cache = new WeakMap<XmlElement, Map<K, { value: V }>>();

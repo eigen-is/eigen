@@ -47,13 +47,15 @@ const OVERRIDES: ReadonlyMap<string, string> = new Map([
 // Read on the first preset a deck draws, once for the process.
 let presets: ReadonlyMap<string, XmlElement> | undefined;
 
-// The preset's paths in its box, `width` × `height` EMU, for its adjust values: the shape's avLst (untrusted) over the
-// preset's defaults, by name, a name the preset doesn't define ignored. Undefined for an unknown preset, or past a cap.
+// The preset's paths in its box, `width` × `height` EMU, mirrored across it if `mirrored`, for its adjust values: the
+// shape's avLst (untrusted) over the preset's defaults, by name, a name the preset doesn't define ignored. Undefined for
+// an unknown preset, or past a cap.
 export function presetGeometry(
     preset: string,
     avLst: XmlElement | undefined,
     width: number,
     height: number,
+    mirrored = false,
 ): CustomGeometry[] | undefined {
     if (!presets) {
         const root = parseXml(readFileSync(PRESETS_FILE));
@@ -66,7 +68,7 @@ export function presetGeometry(
     }
     const definition = presets.get(preset);
     if (!definition) return undefined;
-    return customGeometry(definition, width, height, avLst ? adjustmentsOf(avLst, definition) : []);
+    return customGeometry(definition, width, height, mirrored, avLst ? adjustmentsOf(avLst, definition) : []);
 }
 
 const adjustments = cachedBy<XmlElement, GuideList>();

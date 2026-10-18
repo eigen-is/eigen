@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_PATH_BYTES, MAX_PATH_COMMANDS } from '@workspace/lib/vector';
+import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parsePathCommands } from '@workspace/lib/vector';
 import { parseOoxml } from '../../../lib/core/ooxml';
 import type { XmlElement } from '../../../lib/core/xml';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../../../lib/import/slides/custom-geometry';
 import { MAX_GUIDES } from '../../../lib/import/slides/guides';
 import { affords, withWorkBudget } from '../../../lib/import/slides/lookup';
+import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
 import { NS } from '../../fixtures/pptx';
 
 // A shape's a:custGeom → the path a canvas path element stores, normalized to the shape's box.
@@ -40,6 +41,53 @@ const only = (paths: string, guides = ''): CustomGeometry | undefined => {
     return found?.[0];
 };
 const pathOf = (paths: string, guides = '') => only(paths, guides)?.path;
+
+// How much of the read's budget a call leaves unspent.
+const leftAfter = (budget: number, read: () => unknown) =>
+    withWorkBudget(budget, () => {
+        read();
+        let [low, high] = [0, budget];
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (affords(middle)) low = middle;
+            else high = middle - 1;
+        }
+        return low;
+    });
+
+// The way each subpath winds, by the sign of its control points' polygon's area: 1 clockwise (y down), -1 the other.
+const windings = (found: string | undefined) => {
+    const subpaths: { x: number; y: number }[][] = [];
+    for (const { op, points } of parsePathCommands(found ?? '') ?? []) {
+        if (op === 'M') subpaths.push([...points]);
+        else subpaths[subpaths.length - 1]?.push(...points);
+    }
+    return subpaths.map((points) =>
+        Math.sign(
+            points.reduce((area, p, i) => {
+                const q = points[(i + 1) % points.length];
+                return area + p.x * q.y - q.x * p.y;
+            }, 0),
+        ),
+    );
+};
+
+// A clockwise circle about (50000, 50000) as four cubics, the first from `phase` degrees: a path of w="100000".
+const circle = (radius: number, phase: number) => {
+    const at = (degrees: number, k = 0) => {
+        const r = (degrees * Math.PI) / 180;
+        const x = 50_000 + radius * Math.cos(r) - k * radius * Math.sin(r);
+        const y = 50_000 + radius * Math.sin(r) + k * radius * Math.cos(r);
+        return pt(Math.round(x), Math.round(y));
+    };
+    const k = (4 / 3) * Math.tan(Math.PI / 8);
+    let body = `<a:moveTo>${at(phase)}</a:moveTo>`;
+    for (let quarter = 0; quarter < 4; quarter++) {
+        const [from, to] = [phase + quarter * 90, phase + (quarter + 1) * 90];
+        body += `<a:cubicBezTo>${at(from, k)}${at(to, -k)}${at(to)}</a:cubicBezTo>`;
+    }
+    return body + CLOSE;
+};
 
 describe('the commands', () => {
     test('moveTo, lnTo, cubicBezTo, quadBezTo and close are M, L, C, Q and Z in the unit box', () => {
@@ -235,16 +283,14 @@ describe('fill and stroke', () => {
         ]);
     });
 
-    test('a filled path winding the other way is reversed, so paths concatenated fill as their union', () => {
+    test('a filled path winding the other way is reversed, so each outermost contour winds clockwise', () => {
         const backwards =
             moveTo(25, 25) +
             `<a:cubicBezTo>${pt(25, 50)}${pt(25, 60)}${pt(25, 75)}</a:cubicBezTo>` +
             lnTo(75, 75) +
             lnTo(75, 25) +
             CLOSE;
-        expect(pathOf(path(SQUARE) + path(backwards))).toBe(
-            'M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.75 0.25 L 0.75 0.75 L 0.25 0.75 C 0.25 0.6 0.25 0.5 0.25 0.25 Z',
-        );
+        expect(pathOf(path(backwards))).toBe('M 0.75 0.25 L 0.75 0.75 L 0.25 0.75 C 0.25 0.6 0.25 0.5 0.25 0.25 Z');
         expect(pathOf(path(backwards, 'w="100" h="100" fill="none"'))).toBe(
             'M 0.25 0.25 C 0.25 0.5 0.25 0.6 0.25 0.75 L 0.75 0.75 L 0.75 0.25 Z',
         );
@@ -283,6 +329,21 @@ describe('fill and stroke', () => {
         expect(pathOf(path(square(0, 100)) + path(square(20, 80)))).toBe(
             'M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.2 0.2 L 0.8 0.2 L 0.8 0.8 L 0.2 0.8 Z',
         );
+    });
+
+    test('a thin ring is a hole in its disc: each contour is probed on its curve, against the curves of the others', () => {
+        // 4% inside the disc, its first curve's middle at 22.5°, where an octagon of ends and middles lies 7.6% inside.
+        const ring = path(circle(50_000, 0) + circle(48_000, -22.5), 'w="100000" h="100000"');
+        expect(windings(pathOf(ring))).toEqual([1, -1]);
+        // Three circles about one centre: a disc, a hole, a disc.
+        const circles = [500, 400, 300].map((r) => moveTo(500 + r, 500) + arcTo(r, r, 0, 360) + CLOSE);
+        expect(windings(pathOf(path(circles.join(''), 'w="1000" h="1000"')))).toEqual([1, -1, 1]);
+        // A donut whose ring is 10% and 5% of its box.
+        for (const adj of [10_000, 5000]) {
+            const avLst = parseOoxml(`<a:avLst ${NS}><a:gd name="adj" fmla="val ${adj}"/></a:avLst>`) ?? undefined;
+            const [donut] = presetGeometry('donut', avLst, 1000, 1000) ?? [];
+            expect(windings(donut?.path)).toEqual([1, -1]);
+        }
     });
 
     test('a filled path of more subpaths than can fit is undrawn before their nesting is worked out', () => {
@@ -341,17 +402,7 @@ describe('caps', () => {
 
     test("charge the read's work budget each curve an arc draws and each point a simplifying pass scans", () => {
         const circles = (count: number) => path(moveTo(100, 50) + arcTo(50, 50, 0, 360).repeat(count));
-        const charged = (paths: string) =>
-            withWorkBudget(100_000, () => {
-                geometry(paths);
-                let [low, high] = [0, 100_000];
-                while (low < high) {
-                    const middle = Math.ceil((low + high) / 2);
-                    if (affords(middle)) low = middle;
-                    else high = middle - 1;
-                }
-                return 100_000 - low;
-            });
+        const charged = (paths: string) => 100_000 - leftAfter(100_000, () => geometry(paths));
         // 4 curves an arc; 200 arcs' 800 curves are past MAX_PATH_COMMANDS, scanned by each of 3 passes that can't fit them.
         expect(charged(circles(10))).toBeGreaterThanOrEqual(40);
         expect(charged(circles(200))).toBeGreaterThanOrEqual(200 * 4 * 4);
@@ -428,12 +479,47 @@ describe('caps', () => {
         expect(waves(400)).toBeUndefined();
     });
 
-    test("charges the read's work budget for its guides and commands, and is undrawn where the budget can't cover it", () => {
+    test('a mirrored path is mirrored before the caps measure it, so the path that fits is the one stored', () => {
+        // Each x at the range's far end: mirrored, each takes a sign, past MAX_PATH_BYTES unless simplified.
+        let body = moveTo(0, 0);
+        for (let i = 0; i < 370; i++) body += `<a:cubicBezTo>${pt(2999.9, 123.4).repeat(3)}</a:cubicBezTo>`;
+        const drawn = (mirrored: boolean) =>
+            customGeometry(custGeom(path(body, 'w="1000" h="1000" fill="none"')), 1000, 1000, mirrored)?.[0].path;
+        expect(drawn(false)?.length).toBeGreaterThan(MAX_PATH_BYTES - 2000);
+        expect(drawn(false)?.length).toBeLessThanOrEqual(MAX_PATH_BYTES);
+        expect(drawn(true)).toBe('M 1 0 L -1.9999 0.1234');
+    });
+
+    test("work the read's budget can't cover is never begun: the shape is undrawn and the budget left for the rest", () => {
+        // 100 circles about one centre, each of 36 arcs: each one's probe is tested against every circle around it.
+        const rings = Array.from({ length: 100 }, (_, i) => {
+            const r = 100 + i * 4;
+            return moveTo(500 + r, 500) + arcTo(r, r, 0, 10).repeat(36) + CLOSE;
+        });
+        const nesting = path(rings.join(''), 'w="1000" h="1000"');
+        expect(leftAfter(120_000, () => expect(geometry(nesting)).toBeUndefined())).toBeGreaterThan(30_000);
+        // 500 curves in one filled subpath, whose chords the budget can't cover.
+        let waves = moveTo(0, 50);
+        for (let i = 0; i < 500; i++)
+            waves += `<a:cubicBezTo>${pt(i / 5, 0)}${pt(i / 5, 100)}${pt((i + 1) / 5, 50)}</a:cubicBezTo>`;
+        expect(leftAfter(8000, () => expect(geometry(path(waves))).toBeUndefined())).toBeGreaterThan(5000);
+        // 1000 arcs, whose curves the budget can't cover.
+        const turns = path(moveTo(100, 50) + arcTo(50, 50, 0, 360).repeat(1000));
+        expect(leftAfter(3000, () => expect(geometry(turns)).toBeUndefined())).toBeGreaterThan(1500);
+        // A zigzag past MAX_PATH_COMMANDS, whose simplifying pass the budget can't cover.
+        let zigzag = moveTo(0, 0);
+        for (let i = 1; i <= 1000; i++) zigzag += lnTo(i / 10, i % 2 === 0 ? 0 : 100);
+        const unfilled = path(zigzag, 'w="100" h="100" fill="none"');
+        expect(leftAfter(5000, () => expect(geometry(unfilled)).toBeUndefined())).toBeGreaterThan(2000);
+    });
+
+    test("charges the read's work budget for its guides, commands and outline, and is undrawn where it can't cover them", () => {
         const geometryOf = custGeom(path(SQUARE), '<a:gd name="g" fmla="val 1"/>');
         withWorkBudget(1000, () => {
             customGeometry(geometryOf, 1000, 1000);
-            expect(affords(1000 - 11)).toBe(true);
-            expect(affords(1000 - 10)).toBe(false);
+            // 11 nodes, and the 4 points of the outline that finds the square outermost.
+            expect(affords(1000 - 15)).toBe(true);
+            expect(affords(1000 - 14)).toBe(false);
         });
         expect(withWorkBudget(3, () => customGeometry(geometryOf, 1000, 1000))).toBeUndefined();
     });

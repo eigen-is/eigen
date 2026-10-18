@@ -19,7 +19,7 @@ import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
-import { type CustomGeometry, closedPath, customGeometry, mirroredPath } from './custom-geometry';
+import { type CustomGeometry, closedPath, customGeometry } from './custom-geometry';
 import { DEGREE, evaluateGuides, type Guides, guideListOf } from './guides';
 import {
     decorationsOf,
@@ -400,13 +400,11 @@ function outlineOf(
     { xfrm, mirrored }: Placed,
 ): CustomGeometry[] | undefined {
     if (!geom) return undefined;
-    return outlines(geom, `${xfrm.cx} ${xfrm.cy} ${mirrored}`, () => {
-        const found =
-            geometry === 'custGeom'
-                ? customGeometry(geom, xfrm.cx, xfrm.cy)
-                : presetGeometry(geometry, childOf(geom, A_NS, 'avLst'), xfrm.cx, xfrm.cy);
-        return mirrored ? found?.map((g) => ({ ...g, path: mirroredPath(g.path) })) : found;
-    });
+    return outlines(geom, `${xfrm.cx} ${xfrm.cy} ${mirrored}`, () =>
+        geometry === 'custGeom'
+            ? customGeometry(geom, xfrm.cx, xfrm.cy, mirrored)
+            : presetGeometry(geometry, childOf(geom, A_NS, 'avLst'), xfrm.cx, xfrm.cy, mirrored),
+    );
 }
 
 // Each geometry a path at the shape's box: a filled one in the shape's fill, shaded where it says, a stroked one in its

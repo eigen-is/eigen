@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { type NewVectorElement, SLIDE_SIZES } from '@workspace/lib/vector';
+import { MAX_PATH_BYTES, type NewVectorElement, SLIDE_SIZES } from '@workspace/lib/vector';
 import * as customGeometryModule from '../../../lib/import/slides/custom-geometry';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
@@ -411,11 +411,51 @@ describe('kinds', () => {
             const [found] = flipped(attributes).slides[0].elements;
             return [found.path, found.angle];
         };
+        // Mirrored, it winds the other way, so it is wound clockwise again as the outermost contour.
         expect(pathAndAngle('')).toEqual(['M 0 0 L 1 0 L 0 1 Z', 0]);
-        expect(pathAndAngle(' flipH="1"')).toEqual(['M 1 0 L 0 0 L 1 1 Z', 0]);
-        expect(pathAndAngle(' flipV="1"')).toEqual(['M 1 0 L 0 0 L 1 1 Z', 180]);
+        expect(pathAndAngle(' flipH="1"')).toEqual(['M 1 1 L 0 0 L 1 0 Z', 0]);
+        expect(pathAndAngle(' flipV="1"')).toEqual(['M 1 1 L 0 0 L 1 0 Z', 180]);
         expect(pathAndAngle(' flipH="1" flipV="1"')).toEqual(['M 0 0 L 1 0 L 0 1 Z', 180]);
         expect(flipped(' flipH="1"').warnings).toEqual([]);
+    });
+
+    test('a flipped path is mirrored before the caps measure it, so the path stored is one the canvas keeps', () => {
+        // Its 370 curves fit as drawn; mirrored, each x takes a sign and the path no longer fits unsimplified.
+        let commands = '<a:moveTo><a:pt x="0" y="0"/></a:moveTo>';
+        const far = '<a:pt x="2999.9" y="123.4"/>';
+        for (let i = 0; i < 370; i++) commands += `<a:cubicBezTo>${far}${far}${far}</a:cubicBezTo>`;
+        const curves = custGeom(`<a:path w="1000" h="1000" fill="none">${commands}</a:path>`);
+        const line = `<a:ln w="12700">${solid('FF0000')}</a:ln>`;
+        for (const attributes of ['', ' flipH="1"']) {
+            const [found] = elementsOf(sp({ xfrm: box(10, 10, 100, 100, attributes), spPr: `${curves}${line}` }));
+            expect(found.type).toBe('path');
+            expect(String(found.path).length).toBeLessThanOrEqual(MAX_PATH_BYTES);
+        }
+    });
+
+    test("a geometry the read's budget can't cover keeps its text and counts as simplified, the deck imported", () => {
+        // 250 circles about one centre, each 127 full turns: every turn's curves outline it, every circle around another.
+        let rings = '';
+        for (let ring = 0; ring < 250; ring++) {
+            const r = 100 + ring * 3;
+            const turn = `<a:arcTo wR="${r}" hR="${r}" stAng="0" swAng="21600000"/>`;
+            rings += `<a:moveTo><a:pt x="${1000 + r}" y="1000"/></a:moveTo>${turn.repeat(127)}<a:close/>`;
+        }
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes: sp({
+                        xfrm: box(10, 10, 100, 100),
+                        spPr: `${custGeom(`<a:path w="2000" h="2000">${rings}</a:path>`)}${FILLED}`,
+                        text: para('keep me'),
+                    }),
+                },
+            ],
+        });
+        expect(deck.slides[0].elements.map((found) => [found.type, found.html])).toEqual([
+            ['richtext', '<p>keep me</p>'],
+        ]);
+        expect(deck.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
     });
 
     test('a bent or curved connector is its path, its arrowheads lost and counted', () => {
