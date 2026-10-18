@@ -1039,7 +1039,7 @@ describe('doc export — ordered lists', () => {
         const html = await pdfHtml(
             orderedList({ type: '1' }, listItem('a')),
             orderedList({ type: 'x' }, listItem('b')),
-            orderedList({ type: null }, listItem('c')),
+            orderedList({}, listItem('c')),
         );
         expect(html).toContain('<ol type="1" style="list-style-type: decimal">');
         expect(html.match(/<ol>/g)).toHaveLength(2);

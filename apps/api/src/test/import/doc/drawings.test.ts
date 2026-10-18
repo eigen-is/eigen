@@ -96,6 +96,34 @@ describe('placement', () => {
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['layout'])).toEqual(['wrap-right']);
     });
 
+    // Word's offset is from the area relativeFrom names. A4 with a 4000 twip left margin and a 720 right one: the column
+    // starts 2,540,000 EMU in and is 4,563,110 wide, so the 381,000 EMU picture at 3,000,000 sits in its left half from
+    // the paper's edge and in its right half from the column's.
+    test.each([
+        ['page', 3_000_000, 'wrap-left'],
+        ['leftMargin', 3_000_000, 'wrap-left'],
+        ['insideMargin', 3_000_000, 'wrap-left'],
+        ['margin', 3_000_000, 'wrap-right'],
+        ['column', 3_000_000, 'wrap-right'],
+        ['character', 3_000_000, 'wrap-right'],
+        ['rightMargin', 0, 'wrap-right'],
+        ['outsideMargin', 0, 'wrap-right'],
+        ['margin', 100_000, 'wrap-left'],
+        ['page', -1e12, 'wrap-left'],
+        ['page', 1e12, 'wrap-right'],
+        ['rightMargin', -1e12, 'wrap-left'],
+    ])('an anchor %s-relative at %d EMU is a figure %s', async (relativeFrom, offset, layout) => {
+        const { json } = await importDocxBody(
+            paragraph(
+                anchored(
+                    `<wp:positionH relativeFrom="${relativeFrom}"><wp:posOffset>${offset}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapSquare wrapText="bothSides"/>`,
+                ),
+            ) +
+                '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="720" w:bottom="1440" w:left="4000"/></w:sectPr>',
+        );
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['layout'])).toEqual([layout]);
+    });
+
     // The store keeps marks on text only, so a figure's link would not survive saving.
     test('a picture keeps its alt text and its width in pixels, not its click link or the link around it', async () => {
         const linked = GOLDEN_DOCX_IMAGE_RUN.replace(
