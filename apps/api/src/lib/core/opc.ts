@@ -1,12 +1,14 @@
+import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from './errors';
-import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml } from './ooxml';
+import { CONTENT_TYPES_NS, CORE_PROPERTIES_NS, DC_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS } from './ooxml';
 import { hasXmlName, type XmlElement, XmlError, xmlElements } from './xml';
-import { openZip, ZipError, type ZipReader } from './zip';
+import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from './zip';
 
 // The Open Packaging Conventions every OOXML format shares: the package, a part's relationships and the part names they
-// resolve to.
+// resolve to, read and written.
 
-export type Relationship = { type: string; target: string; external: boolean };
+// Read, an internal target is the part name it resolves to; written, it is the target as the source part names it.
+export type Relationship = { type: string; target: string; external?: boolean };
 
 // '' is the package itself, whose relationships are _rels/.rels.
 export function relsPathOf(partPath: string): string {
@@ -152,4 +154,69 @@ export function optional<T>(read: () => T): T | undefined {
         if (error instanceof XmlError || (error instanceof ZipError && error.status === 400)) return undefined;
         throw error;
     }
+}
+
+// Each relationship's Id is rId and its place, from 1.
+export function relationshipsXml(relationships: Relationship[]): string {
+    const items = relationships.map(
+        ({ type, target, external }, index) =>
+            `<Relationship Id="rId${index + 1}" Type="${type}" Target="${escapeXml(target)}"${external ? ' TargetMode="External"' : ''}/>`,
+    );
+    return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
+}
+
+// A format's XML part: its path, its XML and, unless an extension's Default covers it, its content type.
+export type PackagePart = [path: string, xml: string, contentType?: string];
+
+const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+
+// A format's parts in a package: [Content_Types].xml (the relationships and XML Defaults, the format's own after them,
+// then an Override for each typed part in order), the package relationships to the main part and the core properties,
+// which hold the title, then the parts, then the files as given.
+export function writePackage({
+    main,
+    title,
+    defaults,
+    parts,
+    files,
+}: {
+    main: string;
+    title: string;
+    defaults: Record<string, string>;
+    parts: PackagePart[];
+    files: ZipWriteEntry[];
+}): Uint8Array {
+    const all: PackagePart[] = [
+        [
+            '_rels/.rels',
+            relationshipsXml([
+                { type: `${R_NS}/officeDocument`, target: main },
+                { type: `${PACKAGE_RELATIONSHIPS_NS}/metadata/core-properties`, target: 'docProps/core.xml' },
+            ]),
+        ],
+        [
+            'docProps/core.xml',
+            `<cp:coreProperties xmlns:cp="${CORE_PROPERTIES_NS}" xmlns:dc="${DC_NS}"><dc:title>${escapeXml(title)}</dc:title></cp:coreProperties>`,
+            'application/vnd.openxmlformats-package.core-properties+xml',
+        ],
+        ...parts,
+    ];
+    const types = [
+        ...Object.entries({
+            rels: 'application/vnd.openxmlformats-package.relationships+xml',
+            xml: 'application/xml',
+            ...defaults,
+        }).map(([extension, contentType]) => `<Default Extension="${extension}" ContentType="${contentType}"/>`),
+        ...all.map(([path, , contentType]) =>
+            contentType ? `<Override PartName="/${path}" ContentType="${contentType}"/>` : '',
+        ),
+    ];
+    return writeZip([
+        {
+            name: '[Content_Types].xml',
+            data: `${XML_DECLARATION}<Types xmlns="${CONTENT_TYPES_NS}">${types.join('')}</Types>`,
+        },
+        ...all.map(([name, xml]) => ({ name, data: `${XML_DECLARATION}${xml}` })),
+        ...files,
+    ]);
 }

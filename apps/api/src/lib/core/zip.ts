@@ -130,10 +130,15 @@ export function openZip(bytes: Uint8Array): ZipReader {
     let directoryEnd = end;
     if (end >= 20 && u32(end - 20) === END64_LOCATOR) {
         const end64 = u64(end - 12);
-        if (u32(end - 16) !== 0 || u32(end - 4) > 1) throw new ZipError('multi-disk');
+        // Info-ZIP reads the plain record instead when its disk is neither the sentinel nor the locator's last.
+        const plainDisk = (at: number) => u16(at) === 0 || u16(at) === MAX16;
+        if (u32(end - 16) !== 0 || u32(end - 4) !== 1 || !plainDisk(end + 4) || !plainDisk(end + 6)) {
+            throw new ZipError('multi-disk');
+        }
         if (!inside(end64, 56, end - 20) || u32(end64) !== END64) throw new ZipError('corrupt');
-        // The record runs up to its locator, so no bytes hide between them.
-        if (end64 + 12 + u64(end64 + 4) !== end - 20) throw new ZipError('misplaced');
+        // The record holds no extensible data and runs up to its locator, so no bytes hide between them: Python reads
+        // the 56 bytes before the locator.
+        if (u64(end64 + 4) !== 44 || end64 + 56 !== end - 20) throw new ZipError('misplaced');
         if (u32(end64 + 16) !== 0 || u32(end64 + 20) !== 0 || u64(end64 + 24) !== u64(end64 + 32)) {
             throw new ZipError('multi-disk');
         }
@@ -141,6 +146,16 @@ export function openZip(bytes: Uint8Array): ZipReader {
         directorySize = u64(end64 + 40);
         directoryStart = u64(end64 + 48);
         directoryEnd = end64;
+        // Info-ZIP, Java and Go read a plain field that is neither its sentinel nor the ZIP64 value, so it must agree.
+        const agrees = (plain: number, value: number, sentinel: number) => plain === value || plain === sentinel;
+        if (
+            !agrees(u16(end + 8), count, MAX16) ||
+            !agrees(u16(end + 10), count, MAX16) ||
+            !agrees(u32(end + 12), directorySize, MAX32) ||
+            !agrees(u32(end + 16), directoryStart, MAX32)
+        ) {
+            throw new ZipError('ambiguous-end');
+        }
     } else {
         if (u16(end + 4) !== 0 || u16(end + 6) !== 0 || u16(end + 8) !== count) throw new ZipError('multi-disk');
         if (count === MAX16 || directorySize === MAX32 || directoryStart === MAX32) throw new ZipError('missing-zip64');
@@ -212,22 +227,31 @@ export function openZip(bytes: Uint8Array): ZipReader {
     return new ZipReader(bytes, entries);
 }
 
-// The end record is the one whose comment reaches the end of the file. A comment can hold a second such
-// record, which another reader would take for the archive, so two are refused.
+// The end record is the last in the file's final 22 + 65,535 bytes, and its comment reaches the end of the file. As
+// Info-ZIP, Office and java.util.zip read some real files, one without ZIP64 may leave bytes after it when its own
+// fields put the directory right before it and the first entry at the start. Another reader may take any such record
+// for the archive, or the last signature whatever follows it, so a second end, or an end-record signature after the end, is
+// refused.
 function findEnd(bytes: Uint8Array, view: DataView): number {
     const found: number[] = [];
-    const last = bytes.length - 22;
-    for (let at = last; at >= Math.max(0, last - MAX16); at--) {
-        if (
-            bytes[at] === 0x50 &&
-            view.getUint32(at, true) === END &&
-            at + 22 + view.getUint16(at + 20, true) === bytes.length
-        ) {
-            found.push(at);
-        }
+    let last: number | undefined;
+    for (let at = bytes.length - 4; at >= Math.max(0, bytes.length - 22 - MAX16); at--) {
+        if (bytes[at] !== 0x50 || view.getUint32(at, true) !== END) continue;
+        last ??= at;
+        if (at + 22 > bytes.length) continue;
+        const commentEnd = at + 22 + view.getUint16(at + 20, true);
+        const directoryStart = view.getUint32(at + 16, true);
+        // java.util.zip's check, which it makes on these fields alone, so a ZIP64 archive gets no leeway.
+        const trailed =
+            commentEnd < bytes.length &&
+            directoryStart + view.getUint32(at + 12, true) === at &&
+            view.getUint32(directoryStart, true) === CENTRAL &&
+            view.getUint32(0, true) === LOCAL &&
+            (at < 20 || view.getUint32(at - 20, true) !== END64_LOCATOR);
+        if (commentEnd === bytes.length || trailed) found.push(at);
     }
     if (found.length === 0) throw new ZipError('no-end');
-    if (found.length > 1) throw new ZipError('ambiguous-end');
+    if (found.length > 1 || found[0] !== last) throw new ZipError('ambiguous-end');
     return found[0];
 }
 
