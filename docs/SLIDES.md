@@ -9,6 +9,7 @@ So the shell adds only what the engine has no word for: a deck as an ordered lis
 - The first writer to open an empty deck seeds it, under fixed ids ([§ The first writer seeds an empty deck](#the-first-writer-seeds-an-empty-deck)).
 - A reorder rewrites one key ([§ A reorder rewrites one key](#a-reorder-rewrites-one-key)).
 - A background reaches other slides only through an explicit Apply ([§ A background reaches other slides only through Apply](#a-background-reaches-other-slides-only-through-apply)).
+- The deck writer, which a pptx Convert and Import slides… write through, appends an update under fresh ids and never rewrites what the deck holds ([§ The deck writer appends and never rewrites the deck](#the-deck-writer-appends-and-never-rewrites-the-deck)).
 - A slide size change moves no element, so a 4:3 deck switched to 16:9 hides what sits below the new edge ([§ A deck has one slide size, and a change moves nothing](#a-deck-has-one-slide-size-and-a-change-moves-nothing)).
 
 ## A slide is a frame, and the shell adds only the deck's words
@@ -27,7 +28,7 @@ The size arrives as a new frame extent with the same frame id, whether this tab 
 
 ## The first writer seeds an empty deck
 
-Nothing server-side writes a container's initial Yjs content, so the first writer to open an empty deck adds a title slide (`seed-deck.ts`). It writes in one transaction under its own origin, so ⌘Z can't empty the deck. It tests the live Y.Doc, not React state, so a second effect pass adds nothing. The frame and the title box use fixed ids, so two people opening the same empty deck at once converge on one title slide instead of two.
+Creating a deck writes no Yjs content, so the first writer to open an empty deck adds a title slide (`seed-deck.ts`). It writes in one transaction under its own origin, so ⌘Z can't empty the deck. It tests the live Y.Doc, not React state, so a second effect pass adds nothing. The frame and the title box use fixed ids, so two people opening the same empty deck at once converge on one title slide instead of two.
 
 The reader reads only `elements`, `frames` and `meta`. A deck with no frames is empty whatever other roots it holds, so a deck stored in an older format opens as a new one and gets seeded. That follows the pre-1.0 rule of no backward compatibility for stored formats ([ROADMAP.md](ROADMAP.md)).
 
@@ -55,9 +56,17 @@ The background panel (`slide-background-panel.tsx`) mounts in the engine panel's
 
 A background is a `BackgroundFill` (`packages/lib/src/types/background.ts`): solid, a two-stop linear gradient, or an image sized `cover` or `contain`. `getBackgroundStyle` renders it on the canvas, the rail and in present mode, and `backgroundCss` renders it on the server, so a gradient prints the way it looks. An image is copied into the container's `media/` folder and stored by name ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)).
 
+## The deck writer appends and never rewrites the deck
+
+The server has a deck writer for the pptx import, `apps/api/src/lib/document/slides.ts`, which appends a Yjs update into a deck: Convert to Slides on a `.pptx` in Drive, and File → Import slides… in an open deck ([EXPORT.md](EXPORT.md#a-pptx-import-adds-slides-and-leaves-a-box-where-it-cant-draw)). The update is untrusted, so the writer first reads it back through the reader in a scratch doc: a record the reader would heal or drop for a hostile peer is healed or dropped here, and only the clean scene is written ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). The caller bounds the update's size and record count, and hands it media names that are already free in the deck's `media/` folder, since the writer stores them as given.
+
+The write appends in one transaction. Every slide and element gets a fresh id and an index after the deck's topmost, in the update's own order. Element frame ids and arrow bindings are remapped to the new ids, and an imported element starts with no comment cards. Nothing already in the deck is cleared or rewritten, because an open tab's undo stack and its comments point at those Y.Maps. The work is linear in the update's records.
+
+`writeSlidesUpdateToYjs` fills a brand-new deck (Convert), so it also writes the update's `meta`, whose `slideSize` is the one nearest the file's. A file with no slides leaves that deck with none, and the first writer to open it seeds it like a new one, so there is one empty-deck path. `appendSlidesUpdateToYjs` adds slides to a deck someone works in, so it leaves that deck's `meta` alone, and answers how many slides it added: none means the file had none, which Import slides… says instead of adding nothing silently.
+
 ## Export and preview render the pages the canvas draws
 
-The server compositor (`apps/api/src/lib/export/canvas/`) turns each frame into one page of positioned layers, the boxes the live canvas gives each element. The HTML and PDF export print those pages at half scale ([EXPORT.md](EXPORT.md#a-deck-prints-each-frame-at-half-scale)), and the drive preview renders the first slides of the same pages ([PREVIEWS.md](PREVIEWS.md#an-eigen-document-previews-a-slice-off-the-event-loop)). Search indexes a deck through the canvas collector ([SEARCH.md](SEARCH.md)).
+The server compositor (`apps/api/src/lib/export/canvas/`) turns each frame into one page of positioned layers, the boxes the live canvas gives each element. The HTML and PDF export print those pages at half scale ([EXPORT.md](EXPORT.md#a-deck-prints-each-frame-at-half-scale)), and the drive preview renders the first slides of the same pages ([PREVIEWS.md](PREVIEWS.md#an-eigen-document-previews-a-slice-off-the-event-loop)). The pptx export writes each frame as a slide of DrawingML shapes from the scene itself, because PowerPoint needs shapes it can edit, not positioned HTML ([EXPORT.md](EXPORT.md#a-decks-pptx-is-written-from-the-scene-one-drawingml-shape-per-element)). Search indexes a deck through the canvas collector ([SEARCH.md](SEARCH.md)).
 
 ## See also
 

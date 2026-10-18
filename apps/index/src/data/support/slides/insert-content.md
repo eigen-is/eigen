@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, text, images, charts, objects, canvas]
 related: [slides/get-started, slides/add-slides, slides/style-objects, slides/draw-shapes-and-arrows]
 order: 40
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 You build slides by placing text boxes, images, and charts on the canvas. They work the same way: add one from the toolbar, then move, resize, and adjust it from the properties panel on the right.
@@ -37,7 +37,7 @@ When an image is selected, the properties panel shows an **Image** section. Use 
 1. Open the **Insert** menu and choose **Chart**, then **Bar**, **Column**, **Line**, or **Pie**. A bar chart has horizontal bars, a column chart vertical ones.
 2. The chart appears on the slide with sample data, and stays selected.
 
-With the chart selected, the properties panel shows its options. The **Chart** section sets the **Type**, the **Stacking** of a bar or column chart (**None**, **Standard** or **100%**), the **Title**, where the **Legend** goes, and the **Font** of all the chart's text. The **Horizontal axis** and **Vertical axis** sections hold each axis's **Title**. The axis with the numbers also has **Min** and **Max**, which pick their own values while they're empty and are percents on a **100%** stack, and **Gridlines**. Switching **Stacking** to or from **100%** empties **Min** and **Max**. **Series** sets the color of each series. A pie chart has **Slices** instead, with a color for each slice. A color reads **Automatic** until you pick one; **Automatic** in a picked color's list puts it back.
+With the chart selected, the properties panel shows its options. The **Chart** section sets the **Type**, the **Stacking** of a bar or column chart (**None**, **Standard** or **100%**), the **Title**, where the **Legend** goes, and the **Font** of all the chart's text. The **Horizontal axis** and **Vertical axis** sections hold each axis's **Title** and a **Show axis** box, which hides the axis's labels and line when you clear it. The axis with the categories also has **Reverse axis order**, which runs it the other way. The axis with the numbers also has **Min** and **Max**, which pick their own values while they're empty and are percents on a **100%** stack, and **Gridlines**. Switching **Stacking** to or from **100%** empties **Min** and **Max**. **Series** sets the color of each series. A pie chart has **Slices** instead, with a color for each slice. A color reads **Automatic** until you pick one; **Automatic** in a picked color's list puts it back.
 
 ### Edit the numbers
 

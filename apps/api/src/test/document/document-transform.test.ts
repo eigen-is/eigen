@@ -7,8 +7,10 @@ import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspa
 import {
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SHEETS,
+    DRIVE_TYPE_SLIDES,
     type DrivePath,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
@@ -23,7 +25,13 @@ import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
 import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/core/zip';
-import { commitEigendocImport, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../lib/document/doc';
+import {
+    commitEigendocImport,
+    readEigendocBands,
+    readEigendocFromDoc,
+    readEigendocPage,
+    readEigendocStyle,
+} from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
@@ -45,7 +53,7 @@ import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
 import { type DocxImage, docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
-import { DOCUMENT_TOO_LARGE, SPREADSHEET_TOO_LARGE } from '../../lib/import/messages';
+import { DOCUMENT_TOO_LARGE, PRESENTATION_TOO_LARGE, SPREADSHEET_TOO_LARGE } from '../../lib/import/messages';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
@@ -831,13 +839,17 @@ describe('document transform (xlsx import)', () => {
 // The deck html and pdf-html hashes moved when canvas-text.css gave an empty paragraph its line: that rule and its comment, and nothing else.
 // Both doc HTML hashes moved again when the PDF drew equations as SVG, scaled down to the column: the three .math-svg rules in the print extras and their comment, and nothing else.
 // Both doc HTML hashes moved again when a displayed equation took its line in the exports as in the editor: the .math-svg[data-display] rule and its comment in the print extras, the + br rule gone, and eigen-prose.css's .equation[data-display] rule scoped to .eigen-prose with its comment, and nothing else.
+// Both doc HTML hashes moved again when a header's or footer's last block lost its space after: the .page-band rule, and nothing else (a doc without bands prints no band stylesheet).
+// Both doc HTML hashes moved again when equations met headers and footers: the .math-svg rules and the .page-band rule together, and nothing else.
 // Both doc HTML hashes moved again when a paragraph took its line spacing as a multiple of Inter's line: .eigen-prose p's line-height 1.7 to 1.694, and nothing else. The docx hash moved with it: Normal's w:line 337 to 336, and the lines familyLine rescales from it, and nothing else.
 // Both doc HTML hashes moved again when one paragraph followed another at the space after the first alone and a list, quote or cell kept the spacing of the paragraphs it holds: the .eigen-prose > p + p and :is(li, blockquote, td, th) p rules, and nothing else.
-// Both doc HTML hashes moved again when the body text came to draw from the doc's Normal: eigen-prose.css's body and paragraph values as var(--doc-*) with Eigen's own as the fallback, .eigen-prose p's padding-top and margin-bottom 1em as 11pt, and the title's and subtitle's padding-top 0, and nothing else (the old hashes come back with each var() replaced by its fallback and those three lines reverted). A doc without the style map declares no --doc-* property, so the preview and docx hashes stayed.
+// Both doc HTML hashes moved when the body text came to draw from the doc's Normal: eigen-prose.css's body and paragraph values as var(--doc-*) with Eigen's own as the fallback, .eigen-prose p's padding-top and margin-bottom 1em as 11pt, and the title's and subtitle's padding-top 0, and nothing else (the old hashes come back with each var() replaced by its fallback and those three lines reverted). A doc without the style map declares no --doc-* property, so the preview and docx hashes stayed.
+// All four moved again when headers and footers met paragraph format: the two sides' changes together, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'f4187c09af716b3200107dfdbf69d7905e62310599b230dd6e17e3b07ab52182';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f4187c09af716b3200107dfdbf69d7905e62310599b230dd6e17e3b07ab52182';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'be1ab4dc81102c890a62b041ce1434879806cba9fd76e018f165d67c1ff19674';
+// Both doc HTML hashes moved again when headers and footers on paper met the doc's Normal: the two sides' changes together, and nothing else; the preview and docx hashes are headers and footers' alone.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '593ba19708023ffee34bf8db29d47cc4d9072a9c40650601b971a56a80d05a90';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '593ba19708023ffee34bf8db29d47cc4d9072a9c40650601b971a56a80d05a90';
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'cbccd0e8bdcc6ca7cd54810e9c1e11fce1e89389744868b4dbec86e04cbb0dea';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
@@ -1129,6 +1141,7 @@ describe('document transform (eigendoc)', () => {
         const media = await collectExportMedia(mount, path, 'docx');
         const direct = await eigendocToDocx(
             readEigendocFromDoc(persisted),
+            readEigendocBands(persisted),
             readEigendocPage(persisted),
             readEigendocStyle(persisted),
             media,
@@ -1530,16 +1543,26 @@ describe('document transform (docx import)', () => {
 
 // openZip refuses an archive past the byte cap anyway, so a file that large is refused before it is read or copied
 // to the transform process, in its format's words.
+// A convert checks write on the destination folder before anything else it pays for.
+const WRITABLE_DRIVE = { canWrite: async () => true } as unknown as Drive;
+// Import slides… opens the deck for its frame, which a refused import must not pay for either.
+const UNOPENED_DRIVE = {
+    getCollabDocument: () => {
+        throw new Error('a refused import opened the document');
+    },
+} as unknown as Drive;
+
 describe('document transform (input bound)', () => {
     test.each([
         [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, SPREADSHEET_TOO_LARGE],
         [DRIVE_TYPE_DOC, DRIVE_MIME_DOC, DOCUMENT_TOO_LARGE],
+        [DRIVE_TYPE_SLIDES, DRIVE_MIME_SLIDES, PRESENTATION_TOO_LARGE],
     ])('an import past the byte cap into a %s is 413 and never runs', async (type, mimeType, message) => {
         const runSpy = spyOn(documentTransformRunner, 'run');
         try {
             const upload = Buffer.allocUnsafe(MAX_DECOMPRESSED_BYTES + 1);
             const path = { id: 'too-large', type, mimeType } as DrivePath;
-            const error = await importIntoDocument({} as unknown as Drive, path, upload, {} as unknown as User).catch(
+            const error = await importIntoDocument(UNOPENED_DRIVE, path, upload, {} as unknown as User).catch(
                 (reason: unknown) => reason,
             );
             expect(error).toMatchObject({ status: 413, message });
@@ -1561,13 +1584,9 @@ describe('document transform (input bound)', () => {
                 },
             } as unknown as Mount;
             const path = { id: 'too-large', parentId: 'parent', name, size: MAX_DECOMPRESSED_BYTES + 1 } as DrivePath;
-            const error = await convertToDocument(
-                {} as unknown as Drive,
-                mount,
-                path,
-                target,
-                {} as unknown as User,
-            ).catch((reason: unknown) => reason);
+            const error = await convertToDocument(WRITABLE_DRIVE, mount, path, target, {} as unknown as User).catch(
+                (reason: unknown) => reason,
+            );
             expect(error).toMatchObject({ status: 413, message });
         },
     );
@@ -1586,7 +1605,7 @@ describe('document transform (input bound)', () => {
             'eigensheets',
             {} as unknown as User,
         ).catch((reason: unknown) => reason);
-        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to sheets' });
+        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to Sheets' });
     });
 });
 
@@ -1649,17 +1668,17 @@ describe('document transform (admission)', () => {
                 throw new Error('a refused import copied the upload');
             },
         });
-        const drive = {} as unknown as Drive;
         const user = {} as unknown as User;
 
         for (const target of [
             { type: DRIVE_TYPE_SHEETS, mimeType: DRIVE_MIME_SHEETS },
             { type: DRIVE_TYPE_DOC, mimeType: DRIVE_MIME_DOC },
+            { type: DRIVE_TYPE_SLIDES, mimeType: DRIVE_MIME_SLIDES },
         ]) {
             const refuse = refuseAdmissionOnce();
             let error: unknown;
             try {
-                await importIntoDocument(drive, { id: 'refused', ...target } as DrivePath, upload, user);
+                await importIntoDocument(UNOPENED_DRIVE, { id: 'refused', ...target } as DrivePath, upload, user);
             } catch (err) {
                 error = err;
             } finally {
@@ -1682,7 +1701,7 @@ describe('document transform (admission)', () => {
         const refuse = refuseAdmissionOnce();
         let error: unknown;
         try {
-            await convertToDocument({} as unknown as Drive, mount, path, 'eigensheets', user);
+            await convertToDocument(WRITABLE_DRIVE, mount, path, 'eigensheets', user);
         } catch (err) {
             error = err;
         } finally {

@@ -1,18 +1,18 @@
 // Materialize a vector container's Y.Doc into a plain VectorScene — the one reader for every canvas
-// document (a drawing and a deck alike). Worker-safe (yjs only). Every field is a scalar or string, so
-// primitive reads suffice even when the server hydrates values via Y.applyUpdate.
+// document (a drawing and a deck alike). React-free, so the API's transform process runs it. Every field
+// is a scalar or string, so primitive reads suffice even when the server hydrates values via Y.applyUpdate.
 // Per-kind field validation lives in the registry (kinds/); this module owns the scene-level passes.
 
 import type * as Y from 'yjs';
 import { parseBackgroundFill, serializeBackgroundFill } from './fill';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
-import { SLIDE_SIZE_KEYS, SLIDE_SIZES, type VectorFrame } from './frames';
+import { SLIDE_SIZE_KEYS, SLIDE_SIZES, type SlideSize, type VectorFrame } from './frames';
 import { ELEMENT_KINDS, isBindable, isVectorElementType } from './kinds';
 import {
-    cleanStr,
     color,
     coord,
     isYMapLike,
+    labelText,
     num,
     oneOf,
     roughness,
@@ -42,7 +42,7 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const framesMap = doc.getMap('frames');
     const metaMap = doc.getMap('meta');
 
-    const slideSize = oneOf(metaMap.get('slideSize'), SLIDE_SIZE_KEYS, DEFAULT_SCENE_META.slideSize);
+    const slideSize = readSlideSize(doc);
     const frames = readFrames(framesMap, SLIDE_SIZES[slideSize]);
     const elements: VectorElement[] = [];
     for (const value of elementsMap.values()) {
@@ -61,6 +61,11 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     return { elements: ordered, frames, meta: { background, slideSize } };
 }
 
+// The deck's slide size alone, for a writer that fits what it adds to the deck's frames.
+export function readSlideSize(doc: Y.Doc): SlideSize {
+    return oneOf(doc.getMap('meta').get('slideSize'), SLIDE_SIZE_KEYS, DEFAULT_SCENE_META.slideSize);
+}
+
 // Frames are ordered by fractional index like elements, and heal the same way. Every frame takes the
 // deck's slide size, never a stored field of its own.
 function readFrames(framesMap: Y.Map<unknown>, size: Extent): VectorFrame[] {
@@ -72,7 +77,7 @@ function readFrames(framesMap: Y.Map<unknown>, size: Extent): VectorFrame[] {
         frames.push({
             id,
             index: str(value.get('index'), ''),
-            name: cleanStr(value.get('name'), ''),
+            name: labelText(value.get('name')),
             width: size.width,
             height: size.height,
             background: serializeBackgroundFill(parseBackgroundFill(str(value.get('background'), ''))),

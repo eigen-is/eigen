@@ -6,6 +6,7 @@ import {
     DGM_NS,
     DSP_NS,
     EMU_PER_PX,
+    isOn,
     O_NS,
     PIC_NS,
     R_NS,
@@ -15,32 +16,19 @@ import {
 } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { EMU_PER_TWIP, FLOATING_WRAPS, TWIPS_PER_PX } from '../../document/wordml';
+import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
 import { descendants, int, POINTS_PER_UNIT } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
 import { pushText, type RunContext } from './runs';
 
-// The image types a part may be stored as, each under its own extension. WMF and EMF are kept though no browser or
-// sharp draws them: the figure shows its alt text in a broken image, and an export leaves it out.
-const IMAGE_EXTENSION_BY_MIME = new Map([
-    ['image/png', 'png'],
-    ['image/jpeg', 'jpeg'],
-    ['image/gif', 'gif'],
-    ['image/webp', 'webp'],
-    ['image/svg+xml', 'svg'],
-    ['image/tiff', 'tiff'],
-    ['image/bmp', 'bmp'],
-    ['image/x-wmf', 'wmf'],
-    ['image/x-emf', 'emf'],
-]);
-
-// A part the package gives no type takes its extension's, and image/jpg is a common misspelling; both only through
-// the allowlist, so a part declared as anything else is still never stored.
+// A part the package gives no type takes its extension's, and a misspelt type its alias; both only through the
+// allowlist, so a part declared as anything else is still never stored. A WMF or EMF figure shows its alt text in a
+// broken image, and an export leaves it out.
 const MIME_BY_EXTENSION = new Map([
     ...[...IMAGE_EXTENSION_BY_MIME].map(([mime, extension]): [string, string] => [extension, mime]),
     ['jpg', 'image/jpeg'],
 ]);
-const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
 
 function imageType(reader: Reader, path: string): string | undefined {
     const declared = reader.pkg.contentTypeOf(path);
@@ -78,7 +66,15 @@ function widthPx(px: number, columnPx: number): number {
 export function readDrawing(reader: Reader, drawing: XmlElement, context: RunContext): void {
     for (const frame of xmlElements(drawing)) {
         if (frame.ns !== WP_NS) continue;
-        const layout = frame.local === 'anchor' ? anchorLayout(frame, reader.columnTwips * EMU_PER_TWIP) : {};
+        const anchored = frame.local === 'anchor';
+        // A band holds no floating picture: a header's logo would cover the page's body. One behind the text, a full-page
+        // letterhead or a watermark, it drops, as a block it would push the body off the page.
+        const inBand = context.scope.story === 'band';
+        if (anchored && inBand && isOn(frame.attributes['behindDoc'])) {
+            reader.bandDropped++;
+            continue;
+        }
+        const layout = anchored ? anchorLayout(frame, reader.columnTwips * EMU_PER_TWIP, inBand) : {};
         const docPr = xmlChild(frame, WP_NS, 'docPr');
         const alt = docPr?.attributes['descr'] || docPr?.attributes['title'] || null;
         const extent = xmlChild(frame, WP_NS, 'extent');
@@ -99,6 +95,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const cx = int(ext?.attributes['cx']);
             const width = cx ? widthPx(cx / EMU_PER_PX, reader.columnPx) : null;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, width, ...layout } });
+            if (anchored && inBand) reader.bandAnchors++;
         }
         // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
         const boxed = descendants(frame, W_NS, 'txbxContent').flatMap((box) =>
@@ -195,6 +192,11 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             continue;
         }
         for (const data of descendants(shape, V_NS, 'imagedata')) {
+            // A band's VML picture is Word's picture watermark, laid over the page.
+            if (context.scope.story === 'band') {
+                reader.bandDropped++;
+                continue;
+            }
             const path = partPath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);
             const name = path && mediaName(reader, path);
             if (!name) continue;
@@ -212,8 +214,9 @@ function onShape(scope: Scope): Scope {
     return { ...scope, onFill: true };
 }
 
-// Wrapped beside the text, on the side its alignment or its offset puts it; otherwise a block, aligned if Word aligns it.
-function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, string> {
+// Wrapped beside the text, on the side its alignment or its offset puts it; otherwise, or as a block, aligned if Word
+// aligns it.
+function anchorLayout(anchor: XmlElement, columnEmu: number, block: boolean): Record<string, string> {
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
@@ -224,7 +227,7 @@ function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, str
         : offset && (int(xmlText(offset)) ?? 0) + cx / 2 > columnEmu / 2
           ? 'right'
           : 'left';
-    if (wrapped) return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
+    if (wrapped && !block) return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
     return side === 'left' || side === 'right' || side === 'center' ? { alignment: side } : {};
 }
 

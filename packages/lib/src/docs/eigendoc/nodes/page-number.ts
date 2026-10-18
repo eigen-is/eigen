@@ -1,7 +1,7 @@
 import { mergeAttributes, Node } from '@tiptap/core';
 
 const NAME = 'pageNumber';
-const PAGE_NUMBER_KINDS = ['page', 'pages'] as const;
+export const PAGE_NUMBER_KINDS = ['page', 'pages'] as const;
 // page: the number of the page it prints on; pages: how many pages the doc has.
 export type PageNumberKind = (typeof PAGE_NUMBER_KINDS)[number];
 
@@ -43,13 +43,9 @@ export const PageNumberNode = Node.create({
         return ['span', mergeAttributes({ 'data-type': 'page-number' }, HTMLAttributes), PAGE_NUMBER_TEXT];
     },
 
+    // Never the node's leafText: Tiptap's input rules read the text before the caret through it, so a field opening a
+    // paragraph would read as a heading's # to a space typed after it, and the heading would drop the field.
     renderText() {
         return PAGE_NUMBER_TEXT;
-    },
-
-    // TipTap passes no leafText of its own, and ProseMirror's textBetween reads a leaf through it. This runs for every
-    // node of the schema, with `this` the node being built.
-    extendNodeSchema(extension) {
-        return extension.name === NAME ? { leafText: () => PAGE_NUMBER_TEXT } : {};
     },
 });

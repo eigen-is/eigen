@@ -8,6 +8,7 @@ import {
     isClosedLinear,
     isClosedPath,
     linearLocalToScene,
+    type Point,
     parsePoints,
     parsePressures,
     serializePoints,
@@ -82,22 +83,27 @@ export const freedrawKind = defineKind<VectorLinearElement>({
             fill = `${fillDefs(el)}${drawableToSvg(new RoughGenerator().polygon(coords, options))}`;
         }
 
-        // Real per-point pressure iff the element opts out of simulation and carries an array — the reader
-        // is what guarantees it is index-aligned with `points` ('' + simulate otherwise), so this reads the
-        // pair as given. Absent/'' + simulate ⇒ the 2-tuple coords, byte-identical to legacy.
-        const pressures = !el.simulatePressure && el.pressures !== '' ? parsePressures(el.pressures) : [];
-        const realPressure = pressures.length === coords.length && pressures.length > 0;
-        const outline = getStroke(realPressure ? coords.map(([x, y], i): number[] => [x, y, pressures[i]]) : coords, {
-            simulatePressure: !realPressure,
-            size: el.strokeWidth * FREEDRAW_SIZE_FACTOR,
-            thinning: 0.6,
-            smoothing: 0.5,
-            streamline: 0.5,
-            easing: (t) => Math.sin((t * Math.PI) / 2),
-            last: true,
-        });
-        const d = getSvgPathFromStroke(outline);
+        const d = getSvgPathFromStroke(freedrawOutline(el, points));
         const stroke = d ? `<path d="${d}" fill="${escapeXml(el.strokeColor)}" stroke="none"/>` : '';
         return { svg: `${fill}${stroke}` };
     },
 });
+
+// The stroke's ink: perfect-freehand's outline polygon in the local frame, which render fills with the stroke color.
+export function freedrawOutline(el: VectorLinearElement, points: Point[]): number[][] {
+    const coords = points.map((p): [number, number] => [p.x, p.y]);
+    // Real per-point pressure iff the element opts out of simulation and carries an array — the reader
+    // is what guarantees it is index-aligned with `points` ('' + simulate otherwise), so this reads the
+    // pair as given. Absent/'' + simulate ⇒ the 2-tuple coords.
+    const pressures = !el.simulatePressure && el.pressures !== '' ? parsePressures(el.pressures) : [];
+    const realPressure = pressures.length === coords.length && pressures.length > 0;
+    return getStroke(realPressure ? coords.map(([x, y], i): number[] => [x, y, pressures[i]]) : coords, {
+        simulatePressure: !realPressure,
+        size: el.strokeWidth * FREEDRAW_SIZE_FACTOR,
+        thinning: 0.6,
+        smoothing: 0.5,
+        streamline: 0.5,
+        easing: (t) => Math.sin((t * Math.PI) / 2),
+        last: true,
+    });
+}

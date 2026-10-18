@@ -2,7 +2,12 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, type FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import {
+    type BandRoot,
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    type FigureAttrs,
+} from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -28,7 +33,7 @@ import { parseOoxml } from '../../lib/core/ooxml';
 import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import type { DocxMedia } from '../../lib/export/doc/to-docx';
+import type { OfficeMedia } from '../../lib/export/office-image';
 import type { Mount } from '../../lib/mount';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
@@ -554,7 +559,7 @@ function figure(attrs: FigureAttrs): JSONContent {
 
 // The all-features doc's media as the docx prep hands it over: sizes from the thumbnail Worker, an SVG beside its PNG.
 // The writer never decodes a raster, so marker bytes stand in for the PNG and the JPEG.
-export function buildAllFeaturesDocMedia(): DocxMedia[] {
+export function buildAllFeaturesDocMedia(): OfficeMedia[] {
     return [
         { name: 'chart.png', contentType: 'image/png', data: toTransferableText('chart png'), width: 800, height: 500 },
         {
@@ -585,6 +590,13 @@ export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
         style: DEFAULT_NORMAL_STYLE,
     });
     tempDoc.destroy();
+}
+
+// A band as a peer writes it, through the server's whole schema, so a test can write a node a band's schema lacks.
+export function seedBand(doc: Y.Doc, root: BandRoot, ...content: JSONContent[]): void {
+    const band = prosemirrorJSONToYDoc(docSchema(), { type: 'doc', content }, root);
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(band));
+    band.destroy();
 }
 
 // A deck is a canvas of frames: one frame per slide, its elements storing frame-relative
@@ -934,7 +946,7 @@ export function buildGoldenVectorScene(): VectorScene {
     return { elements, frames: [], meta: DEFAULT_SCENE_META };
 }
 
-// Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element Y.Map under
+// Write a VectorScene into a Y.Doc the way lib's write-vector.ts persists one: a per-element Y.Map under
 // `elements`, a per-frame Y.Map under `frames`, and the `meta` root. read-vector reads only the
 // whitelisted keys, so setting every own field is safe.
 export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {

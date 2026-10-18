@@ -40,6 +40,7 @@ import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/g
 const zip = openZip(
     await eigendocToDocx(
         buildAllFeaturesDocJson(),
+        {},
         DEFAULT_PAGE_SETUP,
         DEFAULT_NORMAL_STYLE,
         buildAllFeaturesDocMedia(),

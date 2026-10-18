@@ -56,6 +56,7 @@ const file = path({ name: 'holiday.jpg', type: 'file', mimeType: 'image/jpeg' })
 const folder = path({ name: 'Photos', type: 'folder', mimeType: 'folder' });
 const doc = path({ name: 'Notes.eigendoc', type: 'doc', mimeType: 'application/eigendoc' });
 const sheet = path({ name: 'Budget.eigensheets', type: 'sheets', mimeType: 'application/eigensheets' });
+const deck = path({ name: 'Pitch.eigenslides', type: 'slides', mimeType: 'application/eigenslides' });
 
 function downloadAsFormats(items: DrivePath[], selectionActions: PaletteSelectionActions): string[] {
     const ctx = context(items, true, selectionActions);
@@ -101,6 +102,7 @@ describe('download as', () => {
     test('offers the formats of the item type, in menu order', () => {
         expect(downloadAsFormats([doc], { onExport })).toEqual(['docx', 'pdf', 'html']);
         expect(downloadAsFormats([sheet], { onExport })).toEqual(['xlsx', 'pdf', 'html']);
+        expect(downloadAsFormats([deck], { onExport })).toEqual(['pptx', 'pdf', 'html']);
     });
 
     test('offers nothing for a plain file, a multi-selection or without a published onExport', () => {

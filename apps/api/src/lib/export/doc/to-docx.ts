@@ -10,6 +10,9 @@ import {
     readFontSize,
 } from '@workspace/lib/constants/fonts';
 import {
+    BAND_DISTANCE_MM,
+    FIRST_PAGE_BAND,
+    type FigureAttrs,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     type NormalStyle,
@@ -39,8 +42,10 @@ import {
     W14_NS,
     WP_NS,
 } from '../../core/ooxml';
+import { relsPathOf, uriReference } from '../../core/opc';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
+import type { EigendocBands } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
 import {
     BODY,
@@ -68,7 +73,7 @@ import {
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
-import type { ExportMedia } from '../../document/transform/protocol';
+import { type ExportMedia, toTransferableBuffer } from '../../document/transform/protocol';
 import {
     BORDER_SIDES,
     CHECKBOX_GLYPHS,
@@ -86,29 +91,32 @@ import {
     TWIPS_PER_PX,
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
+import { splitDataUri } from '../../shared/data-uri';
 import { DOCX_FONT_FILES, type DocxFontFiles, fontLineHeight, sfntTables } from '../fonts';
-import { figureMediaKey } from './docx-image';
+import { encodeOfficeImage, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
-
-// An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
-export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,
+    bands: EigendocBands,
     setup: PageSetup,
     normal: NormalStyle,
-    media: DocxMedia[],
+    media: OfficeMedia[],
     title: string,
     publicOrigin: string | undefined,
 ): Promise<Uint8Array> {
-    const pkg: Package = {
+    const document: PartRelationships = {
         relationships: ['styles', 'numbering', 'settings', 'fontTable'].map((type) => ({
             type: `${R_NS}/${type}`,
             target: `${type}.xml`,
         })),
         hyperlinks: new Map(),
+        images: new Map(),
+    };
+    const pkg: Package = {
+        part: document,
         publicOrigin,
         lists: [],
         nums: [],
@@ -116,7 +124,7 @@ export async function eigendocToDocx(
         checkboxes: false,
         languages: new Set(),
         media: new Map(media.map((item) => [item.name, item])),
-        images: new Map(),
+        imageFiles: new Map(),
         files: [],
         drawings: 0,
         // A Spacer's and a figure's mark draw in the Normal's Regular.
@@ -128,6 +136,33 @@ export async function eigendocToDocx(
     const column = page.width - page.margin.left - page.margin.right;
     const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false), pkg.styles);
+
+    // Each band is a part of its own, in the body's column, its images and links related through its own rels. With page 1
+    // different, a page-1 band the doc lacks is an empty part, as Word writes one.
+    const bandParts: [path: string, xml: string, contentType?: string][] = [];
+    const references: string[] = [];
+    for (const edge of ['header', 'footer'] as const) {
+        const own = bands[edge];
+        const pageOne = bands[FIRST_PAGE_BAND[edge]];
+        const written: [type: 'default' | 'first', band: JSONContent | undefined][] = own ? [['default', own]] : [];
+        if (setup.differentFirstPage && (own || pageOne)) written.push(['first', pageOne]);
+        for (const [index, [type, band]] of written.entries()) {
+            pkg.part = { relationships: [], hyperlinks: new Map(), images: new Map() };
+            const path = `word/${edge}${index + 1}.xml`;
+            const content = band
+                ? blocksXml(withoutAfter(blocksOf(band.content ?? [], {}, flow, false)), pkg.styles)
+                : '<w:p/>';
+            bandParts.push([
+                path,
+                `<${BAND_TAGS[edge]} ${DOCUMENT_NAMESPACES}>${content}</${BAND_TAGS[edge]}>`,
+                `${WML}.${edge}+xml`,
+            ]);
+            if (pkg.part.relationships.length > 0)
+                bandParts.push([relsPathOf(path), relationshipsXml(pkg.part.relationships)]);
+            const rId = document.relationships.push({ type: `${R_NS}/${edge}`, target: path.slice('word/'.length) });
+            references.push(`<w:${edge}Reference w:type="${type}" r:id="rId${rId}"/>`);
+        }
+    }
     const fonts = embeddedFonts(pkg.faces);
 
     const parts: [path: string, xml: string, contentType?: string][] = [
@@ -139,10 +174,11 @@ export async function eigendocToDocx(
         ],
         [
             'word/document.xml',
-            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page)}</w:body></w:document>`,
+            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page, references.join(''))}</w:body></w:document>`,
             `${WML}.document.main+xml`,
         ],
-        ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
+        ['word/_rels/document.xml.rels', relationshipsXml(document.relationships)],
+        ...bandParts,
         ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
         ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
         ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
@@ -164,6 +200,45 @@ export async function eigendocToDocx(
     ]);
 }
 
+// The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
+// under that src. A media name holds no `/`, so the two never meet.
+function figureMediaKey({ mediaName, src }: FigureAttrs): string | null {
+    return mediaName ?? (src && splitDataUri(src) ? src : null);
+}
+
+// A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
+// here, once, through the encode a media file takes; an SVG through the sanitizer the main thread's media took.
+export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMedia[]> {
+    const pasted = new Map<string, { mediaType: string | null; base64: string }>();
+    const visit = (node: JSONContent) => {
+        if (node.type === 'figure') {
+            const attrs = readFigureAttrs(node.attrs ?? {});
+            const key = figureMediaKey(attrs);
+            if (key && key === attrs.src) {
+                const split = splitDataUri(key);
+                if (split) pasted.set(key, split);
+            }
+        }
+        for (const child of node.content ?? []) visit(child);
+    };
+    for (const root of roots) visit(root);
+    if (pasted.size === 0) return [];
+    const { sharpResize } = await import('../../shared/sharp-resize');
+    const media: ExportMedia[] = [];
+    for (const [src, { mediaType, base64 }] of pasted) {
+        const data = Buffer.from(base64, 'base64');
+        if (mediaType === 'image/svg+xml') {
+            media.push({ name: src, contentType: mediaType, data: toTransferableBuffer(data) });
+            continue;
+        }
+        const item = await encodeOfficeImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
+        if (item) media.push(item);
+    }
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { sanitizeExportMedia } = await import('../sanitize');
+    return sanitizeExportMedia(media);
+}
+
 const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
@@ -178,6 +253,8 @@ const DOCUMENT_NAMESPACES = [
     `xmlns:m="${M_NS}"`,
     'mc:Ignorable="w14"',
 ].join(' ');
+
+const BAND_TAGS = { header: 'w:hdr', footer: 'w:ftr' } as const;
 
 const DEFAULT_CONTENT_TYPES = [
     '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
@@ -206,10 +283,12 @@ function relationshipsXml(relationships: Relationship[]): string {
     return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
 }
 
-// What one export accumulates as it walks, each hyperlink target, image, shared bullet numbering and face once.
+// The relationships of the part being written, the document's or a band's, each hyperlink target and image once.
+type PartRelationships = { relationships: Relationship[]; hyperlinks: Map<string, string>; images: Map<string, Image> };
+
+// What one export accumulates as it walks, each image file, shared bullet numbering and face once.
 type Package = {
-    relationships: Relationship[];
-    hyperlinks: Map<string, string>;
+    part: PartRelationships;
     publicOrigin: string | undefined;
     lists: List[];
     // Each w:num's abstractNum, by index.
@@ -217,8 +296,8 @@ type Package = {
     bullets: Map<number, number>;
     checkboxes: boolean;
     languages: Set<string>;
-    media: Map<string, DocxMedia>;
-    images: Map<string, Image>;
+    media: Map<string, OfficeMedia>;
+    imageFiles: Map<string, ImageFile>;
     files: [path: string, data: ArrayBuffer][];
     drawings: number;
     faces: Map<string, Set<FontSlot>>;
@@ -249,13 +328,14 @@ type Context = {
     upright?: boolean;
 };
 
-// Word's default 1.25 cm from the page edge, inside a smaller margin.
-const HEADER_DISTANCE = 709;
+// The bands' distance from the page edge, inside a smaller margin.
+const BAND_DISTANCE = Math.round((BAND_DISTANCE_MM * 1440) / 25.4);
 
-function sectionXml({ width, height, margin }: PageSetup): string {
+function sectionXml({ width, height, margin, differentFirstPage }: PageSetup, references: string): string {
     const orient = width > height ? ' w:orient="landscape"' : '';
-    const bands = `w:header="${Math.min(HEADER_DISTANCE, margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, margin.bottom)}"`;
-    return `<w:sectPr><w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" ${bands} w:gutter="0"/></w:sectPr>`;
+    const bands = `w:header="${Math.min(BAND_DISTANCE, margin.top)}" w:footer="${Math.min(BAND_DISTANCE, margin.bottom)}"`;
+    const titlePg = differentFirstPage ? '<w:titlePg/>' : '';
+    return `<w:sectPr>${references}<w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" ${bands} w:gutter="0"/>${titlePg}</w:sectPr>`;
 }
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
@@ -852,6 +932,18 @@ function withAfter(blocks: Block[], after: number, styles: Styles): Block[] {
     return [...blocks.slice(0, -1), { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after } } }];
 }
 
+// A band's last block has no space after, as the editor and the PDF draw it (PAGE_BAND_CLASS) and as Word's Header and
+// Footer styles have none.
+function withoutAfter(blocks: Block[]): Block[] {
+    const last = blocks.at(-1);
+    if (!last || ('table' in last && last.float)) return blocks;
+    if ('table' in last) return [...blocks.slice(0, -1), { ...last, after: 0 }];
+    return [
+        ...blocks.slice(0, -1),
+        { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after: 0 } } },
+    ];
+}
+
 function withBefore(paragraph: Paragraph, before: number, styles: Styles): Paragraph {
     const { props } = paragraph;
     if (before <= (props.spacing?.before ?? styleSpacing(styles, props.style, 'before'))) return paragraph;
@@ -1135,13 +1227,11 @@ const TABLE_LOOK = {
 
 // ── Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback ─────────────────────────────────
 
-// One image part and relationship per media name; an SVG's PNG is its blip, the SVG its extension.
-type Image = { rId: string; svgRId?: string; part: string; width: number; height: number };
+// One image file per media name, and one relationship per part that shows it; an SVG's PNG is its blip, the SVG its
+// extension.
+type ImageFile = { part: string; svg?: string; width: number; height: number };
 
-const RASTER_EXTENSIONS = new Map([
-    ['image/png', 'png'],
-    ['image/jpeg', 'jpeg'],
-]);
+type Image = ImageFile & { rId: string; svgRId?: string };
 
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
@@ -1230,25 +1320,30 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     ];
 }
 
-// The first figure to show a media name adds its parts; no positive size, an SVG without PNG or another type adds none.
+// The first figure to show a media name adds its files, and the first in each part that part's relationships; no
+// positive size, an SVG without PNG or another type adds none.
 function imageOf(name: string, pkg: Package): Image | undefined {
-    const known = pkg.images.get(name);
+    const known = pkg.part.images.get(name);
     if (known) return known;
-    const media = pkg.media.get(name);
-    const { width, height } = media ?? {};
-    if (!media || !isPositive(width) || !isPositive(height)) return undefined;
-    const raster = media.contentType === 'image/svg+xml' ? media.png : media.data;
-    const extension = media.contentType === 'image/svg+xml' ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
-    if (!raster || !extension) return undefined;
-    const n = pkg.images.size + 1;
-    const add = (file: string, data: ArrayBuffer) => {
-        pkg.files.push([`word/media/${file}`, data]);
-        return `rId${pkg.relationships.push({ type: `${R_NS}/image`, target: `media/${file}` })}`;
-    };
-    const part = `image${n}.${extension}`;
-    const image: Image = { rId: add(part, raster), part, width, height };
-    if (media.contentType === 'image/svg+xml') image.svgRId = add(`image${n}.svg`, media.data);
-    pkg.images.set(name, image);
+    let file = pkg.imageFiles.get(name);
+    if (!file) {
+        const media = pkg.media.get(name);
+        const { width, height } = media ?? {};
+        if (!media || !isPositive(width) || !isPositive(height)) return undefined;
+        const svg = media.contentType === 'image/svg+xml';
+        const raster = svg ? media.png : media.data;
+        const extension = svg ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
+        if (!raster || !extension) return undefined;
+        const n = pkg.imageFiles.size + 1;
+        file = { part: `image${n}.${extension}`, ...(svg && { svg: `image${n}.svg` }), width, height };
+        pkg.files.push([`word/media/${file.part}`, raster]);
+        if (file.svg) pkg.files.push([`word/media/${file.svg}`, media.data]);
+        pkg.imageFiles.set(name, file);
+    }
+    const relate = (target: string) =>
+        `rId${pkg.part.relationships.push({ type: `${R_NS}/image`, target: `media/${target}` })}`;
+    const image: Image = { ...file, rId: relate(file.part), ...(file.svg && { svgRId: relate(file.svg) }) };
+    pkg.part.images.set(name, image);
     return image;
 }
 
@@ -1386,10 +1481,11 @@ function runsXml(nodes: JSONContent[], context: Context, style: StyleId | undefi
             xml += runs;
             continue;
         }
-        let id = context.pkg.hyperlinks.get(link.target);
+        const { part } = context.pkg;
+        let id = part.hyperlinks.get(link.target);
         if (!id) {
-            id = `rId${context.pkg.relationships.push({ type: `${R_NS}/hyperlink`, target: link.target, external: true })}`;
-            context.pkg.hyperlinks.set(link.target, id);
+            id = `rId${part.relationships.push({ type: `${R_NS}/hyperlink`, target: link.target, external: true })}`;
+            part.hyperlinks.set(link.target, id);
         }
         const tooltip = link.tooltip ? ` w:tooltip="${escapeXml(link.tooltip)}"` : '';
         xml += `<w:hyperlink r:id="${id}"${tooltip} w:history="1">${runs}</w:hyperlink>`;
@@ -1484,10 +1580,7 @@ function hyperlinkOf(node: JSONContent, publicOrigin: string | undefined): Hyper
     // Gated after the strip, or a character XML can't hold could hide a scheme; trimmed as a URL parser trims.
     const kept = stripNonXmlChars(href).replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, '');
     if (!kept || !isAllowedUri(kept)) return undefined;
-    // What a URI reference can't hold; `%` stays, so an encoded href encodes no further.
-    const target = absoluteHref(kept, publicOrigin).replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) =>
-        encodeURIComponent(character),
-    );
+    const target = uriReference(absoluteHref(kept, publicOrigin));
     const title = attrs?.['title'];
     return { target, tooltip: typeof title === 'string' && title ? title : undefined };
 }

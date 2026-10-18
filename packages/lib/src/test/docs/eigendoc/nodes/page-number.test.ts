@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { createDocument, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
+import {
+    createDocument,
+    Editor,
+    generateHTML,
+    getSchema,
+    getText,
+    getTextSerializersFromSchema,
+    type JSONContent,
+} from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
 import { getDocExtensions } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
@@ -71,13 +79,43 @@ describe('the pageNumber node', () => {
         expect(() => doc.check()).not.toThrow();
     });
 
-    // What the chip shows: a search or a quoted anchor reads "Page # of #", and no digit a page never had.
-    test('its text is the chip’s #', () => {
+    // What the chip shows: a copy or a quoted anchor reads "Page # of #", and no digit a page never had.
+    test('its plain text is the chip’s #', () => {
         const doc = Node.fromJSON(
             schema,
             inParagraph({ type: 'text', text: 'Page ' }, field('page'), { type: 'text', text: ' of ' }, field('pages')),
         );
-        expect(doc.textBetween(0, doc.content.size)).toBe('Page # of #');
-        expect(doc.textContent).toBe('Page # of #');
+        expect(getText(doc, { textSerializers: getTextSerializersFromSchema(schema) })).toBe('Page # of #');
+    });
+
+    // An input rule reads the text before the caret through the leaf's leafText, so a # there would read as a heading.
+    describe('typing after a field never replaces it', () => {
+        // A paragraph opening with a field, the caret after it; then `typed`, one key at a time, as ProseMirror hands
+        // each to the input rules before inserting it.
+        function typeAfter(typed: string) {
+            const editor = new Editor({ extensions, content: inParagraph(field('page')) });
+            editor.commands.setTextSelection(2);
+            for (const key of typed) {
+                const { view } = editor;
+                const { from, to } = view.state.selection;
+                const insert = () => view.state.tr.insertText(key, from, to);
+                if (!view.someProp('handleTextInput', (handle) => handle(view, from, to, key, insert))) {
+                    view.dispatch(insert());
+                }
+            }
+            const { doc } = editor.state;
+            editor.destroy();
+            return doc;
+        }
+
+        test.each([' ', '# ', '* ', '- ', '1. ', '> ', '``` ', '[ ] '])(
+            '"%s" stays a paragraph with its field',
+            (typed) => {
+                const doc = typeAfter(typed);
+                expect(doc.childCount).toBe(1);
+                expect(doc.firstChild?.type.name).toBe('paragraph');
+                expect(doc.firstChild?.toJSON().content).toEqual([field('page'), { type: 'text', text: typed }]);
+            },
+        );
     });
 });

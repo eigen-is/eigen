@@ -13,6 +13,7 @@ import JSZip from 'jszip';
 import { parseOoxml } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip, type ZipReader } from '../../lib/core/zip';
+import type { EigendocBands } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { cssPt, QUOTE_LOOK, twips } from '../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
@@ -45,9 +46,10 @@ function docx(
     publicOrigin?: string,
     media = buildAllFeaturesDocMedia(),
     page: PageSetup = DEFAULT_PAGE_SETUP,
+    bands: EigendocBands = {},
     normal: NormalStyle = DEFAULT_NORMAL_STYLE,
 ): Promise<Uint8Array> {
-    return eigendocToDocx(json, page, normal, media, 'Report.eigendoc', publicOrigin);
+    return eigendocToDocx(json, bands, page, normal, media, 'Report.eigendoc', publicOrigin);
 }
 
 async function unzip(
@@ -55,8 +57,9 @@ async function unzip(
     publicOrigin?: string,
     media?: ExportMedia[],
     page?: PageSetup,
+    bands?: EigendocBands,
 ): Promise<ZipReader> {
-    return openZip(await docx(json, publicOrigin, media, page));
+    return openZip(await docx(json, publicOrigin, media, page, bands));
 }
 
 function entryText(zip: ZipReader, path: string): string | undefined {
@@ -2476,6 +2479,7 @@ const SEQUENCES: Record<string, string[]> = {
         ...['alwaysMergeEmptyNamespace', 'updateFields', 'hdrShapeDefaults', 'footnotePr', 'endnotePr', 'compat'],
     ],
     sectPr: [
+        ...['headerReference', 'footerReference'],
         ...['footnotePr', 'endnotePr', 'type', 'pgSz', 'pgMar', 'paperSrc', 'pgBorders', 'lnNumType', 'pgNumType'],
         ...['cols', 'formProt', 'vAlign', 'noEndnote', 'titlePg', 'textDirection', 'bidi', 'rtlGutter', 'docGrid'],
     ],
@@ -2539,6 +2543,7 @@ const QUALIFIED_SEQUENCES = { ...DRAWING_SEQUENCES, ...MATH_SEQUENCES };
 
 // The children a sequence may repeat in a row.
 const REPEATED = new Set([
+    ...['headerReference', 'footerReference'],
     ...['abstractNum', 'num', 'lvl', 'numPicBullet', 'lvlOverride', 'tr', 'tc', 'gridCol', 'a:ext'],
     ...['m:e', 'm:mr'],
 ]);
@@ -2586,12 +2591,151 @@ describe('docx writer — the page', () => {
         const pgSz = child(sectPr, 'pgSz');
         expect([w(pgSz, 'w'), w(pgSz, 'h'), w(pgSz, 'orient')]).toEqual(['11906', '16838', undefined]);
         const pgMar = child(sectPr, 'pgMar');
+        // The bands' 1.27 cm from the edge.
         expect(['top', 'right', 'bottom', 'left', 'header', 'footer', 'gutter'].map((side) => w(pgMar, side))).toEqual([
             ...Array(4).fill('1134'),
-            '709',
-            '709',
+            '720',
+            '720',
             '0',
         ]);
+    });
+});
+
+describe('docx writer — headers and footers', () => {
+    const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
+    const page = (value: string) => ({ type: 'pageNumber', attrs: { kind: value } });
+    const BANDS: EigendocBands = {
+        header: doc(
+            p(text('Acme'), {
+                type: 'text',
+                text: ' site',
+                marks: [{ type: 'link', attrs: { href: 'https://acme.example' } }],
+            }),
+        ),
+        footer: doc(p(text('Page '), page('page'), text(' of '), page('pages'))),
+    };
+
+    async function relationships(zip: ZipReader, path: string) {
+        return xmlChildren(await part(zip, path), RELS, 'Relationship').map((rel) => [
+            xmlAttr(rel, '', 'Id'),
+            xmlAttr(rel, '', 'Type'),
+            xmlAttr(rel, '', 'Target'),
+            xmlAttr(rel, '', 'TargetMode'),
+        ]);
+    }
+
+    function sectPrOf(document: XmlElement): XmlElement {
+        const sectPr = xmlElements(child(document, 'body') ?? document).at(-1);
+        if (sectPr?.local !== 'sectPr') throw new Error('no sectPr');
+        return sectPr;
+    }
+
+    test('each band is a part of its own, with its content type, referenced from the section', async () => {
+        const zip = await unzip(doc(p(text('Body'))), undefined, undefined, undefined, BANDS);
+        const types = await part(zip, '[Content_Types].xml');
+        const overrides = new Map(
+            xmlChildren(types, CONTENT_TYPES, 'Override').map((o) => [
+                xmlAttr(o, '', 'PartName'),
+                xmlAttr(o, '', 'ContentType'),
+            ]),
+        );
+        expect(overrides.get('/word/header1.xml')).toBe(`${WML}.header+xml`);
+        expect(overrides.get('/word/footer1.xml')).toBe(`${WML}.footer+xml`);
+
+        const documentRels = await relationships(zip, 'word/_rels/document.xml.rels');
+        expect(documentRels.slice(4)).toEqual([
+            ['rId5', `${R}/header`, 'header1.xml', undefined],
+            ['rId6', `${R}/footer`, 'footer1.xml', undefined],
+        ]);
+        const sectPr = sectPrOf(await part(zip, 'word/document.xml'));
+        expect(
+            xmlElements(sectPr).map((element) => [element.local, w(element, 'type'), xmlAttr(element, R, 'id')]),
+        ).toEqual([
+            ['headerReference', 'default', 'rId5'],
+            ['footerReference', 'default', 'rId6'],
+            ['pgSz', undefined, undefined],
+            ['pgMar', undefined, undefined],
+        ]);
+
+        const header = await part(zip, 'word/header1.xml');
+        expect(header.name).toBe('w:hdr');
+        // The document's namespaces, m: included, as a band may hold an equation.
+        expect(header.attributes).toEqual((await part(zip, 'word/document.xml')).attributes);
+        expect(texts(header)).toBe('Acme site');
+        expect(await relationships(zip, 'word/_rels/header1.xml.rels')).toEqual([
+            ['rId1', `${R}/hyperlink`, 'https://acme.example', 'External'],
+        ]);
+        expect(only(descendants(header, W, 'hyperlink')).attributes['r:id']).toBe('rId1');
+
+        const footer = await part(zip, 'word/footer1.xml');
+        expect(footer.name).toBe('w:ftr');
+        expect(descendants(footer, W, 'instrText').map(xmlText)).toEqual([' PAGE ', ' NUMPAGES ']);
+        expect(zip.entry('word/_rels/footer1.xml.rels')).toBeUndefined();
+    });
+
+    // An image the body shows too is one media file, which each part relates to through its own rels.
+    test("a header's image resolves through the header's own relationships", async () => {
+        const chart = { type: 'figure', attrs: { mediaName: 'chart.png', width: 100 } };
+        const zip = await unzip(doc(p(chart)), undefined, undefined, undefined, { header: doc(p(chart)) });
+        expect(zip.names().filter((path) => path.startsWith('word/media/'))).toEqual(['word/media/image1.png']);
+        expect(await relationships(zip, 'word/_rels/header1.xml.rels')).toEqual([
+            ['rId1', `${R}/image`, 'media/image1.png', undefined],
+        ]);
+        const header = await part(zip, 'word/header1.xml');
+        const blip = only(descendants(header, 'http://schemas.openxmlformats.org/drawingml/2006/main', 'blip'));
+        expect(xmlAttr(blip, R, 'embed')).toBe('rId1');
+        // Drawing ids are the package's: the body's 1, the header's 2.
+        expect(descendants(header, WP, 'docPr').map((docPr) => xmlAttr(docPr, '', 'id'))).toEqual(['2']);
+    });
+
+    // Word draws page 1 with no header when the section names none of type first, so an empty one stands in.
+    test('a different first page writes titlePg and its own parts, an empty one where page 1 has none', async () => {
+        const first = { ...DEFAULT_PAGE_SETUP, differentFirstPage: true };
+        const zip = await unzip(doc(p(text('Body'))), undefined, undefined, first, {
+            ...BANDS,
+            headerFirst: doc(p(text('Letterhead'))),
+        });
+        const sectPr = sectPrOf(await part(zip, 'word/document.xml'));
+        const references = xmlElements(sectPr)
+            .filter((element) => element.local.endsWith('Reference'))
+            .map((element) => [element.local, w(element, 'type'), xmlAttr(element, R, 'id')]);
+        expect(references).toEqual([
+            ['headerReference', 'default', 'rId5'],
+            ['headerReference', 'first', 'rId6'],
+            ['footerReference', 'default', 'rId7'],
+            ['footerReference', 'first', 'rId8'],
+        ]);
+        expect(child(sectPr, 'titlePg')).toBeDefined();
+        expect(
+            (await relationships(zip, 'word/_rels/document.xml.rels')).slice(4).map(([, , target]) => target),
+        ).toEqual(['header1.xml', 'header2.xml', 'footer1.xml', 'footer2.xml']);
+        expect(texts(await part(zip, 'word/header2.xml'))).toBe('Letterhead');
+        expect(xmlElements(await part(zip, 'word/footer2.xml')).map(xmlOf)).toEqual(['<w:p/>']);
+    });
+
+    // As the editor and the PDF draw it (PAGE_BAND_CLASS), and as Word's Header and Footer styles have none.
+    test("a band's last block has no space after", async () => {
+        const zip = await unzip(doc(p(text('Body'))), undefined, undefined, undefined, {
+            header: doc(p(text('Acme')), p(text('Site'))),
+            footer: doc(table(tr(td({}, p(text('x')))))),
+        });
+        expect(xmlElements(await part(zip, 'word/header1.xml')).map(xmlOf)).toEqual([
+            `<w:p>${run('Acme')}</w:p>`,
+            `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${run('Site')}</w:p>`,
+        ]);
+        expect(xmlOf(xmlElements(await part(zip, 'word/footer1.xml')).at(-1))).toBe(
+            '<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:before="0"/></w:pPr></w:p>',
+        );
+    });
+
+    test('a doc with no bands writes no band parts and no titlePg', async () => {
+        const zip = await unzip(doc(p(text('Body'))), undefined, undefined, {
+            ...DEFAULT_PAGE_SETUP,
+            differentFirstPage: true,
+        });
+        expect(zip.names().filter((path) => /header|footer/.test(path))).toEqual([]);
+        const sectPr = sectPrOf(await part(zip, 'word/document.xml'));
+        expect(xmlElements(sectPr).map((element) => element.local)).toEqual(['pgSz', 'pgMar', 'titlePg']);
     });
 });
 

@@ -697,6 +697,14 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
 
     const rect = base({ id: 'rect1', type: 'rectangle', ...paint, ...sketch, corners: 'round' });
     const pie = base({ id: 'pie1', type: 'pie', ...paint, ...sketch, startAngle: 120, sweepAngle: 45 });
+    const path = base({
+        id: 'path1',
+        type: 'path',
+        ...paint,
+        ...sketch,
+        path: 'M 0 1 Q 0.5 -0.25 1 1 Z',
+        closed: true,
+    });
     const chart = base({
         id: 'chart1',
         type: 'chart',
@@ -771,6 +779,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
     const cases = [
         { record: rect, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'corners'] },
         { record: pie, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'startAngle', 'sweepAngle'] },
+        { record: path, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'path', 'closed'] },
         { record: chart, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'chart', 'color'] },
         {
             record: richtext,
@@ -979,6 +988,20 @@ describe('readVectorFromDoc — the canvas model', () => {
             corners: 'round',
             verticalAlign: 'center',
         });
+    });
+
+    test('caps a hostile frame name at MAX_ARROW_LABEL_BYTES, like a label', () => {
+        const doc = new Y.Doc();
+        doc.transact(() => {
+            const f = new Y.Map();
+            f.set('id', 'f1');
+            f.set('index', 'a0');
+            f.set('name', '☃'.repeat(100_000));
+            doc.getMap('frames').set('f1', f);
+        });
+        const [frame] = readVectorFromDoc(doc).frames;
+        expect(new TextEncoder().encode(frame.name).length).toBeLessThanOrEqual(MAX_ARROW_LABEL_BYTES);
+        expect(frame.name).toBe('☃'.repeat(Math.floor(MAX_ARROW_LABEL_BYTES / 3)));
     });
 
     test('a frameId whose frame is gone re-homes to the lowest-index frame', () => {

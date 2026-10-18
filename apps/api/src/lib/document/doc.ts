@@ -1,7 +1,11 @@
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import {
+    BAND_EXCLUDED_NODES,
     BAND_ROOTS,
+    type BandRoot,
+    bandHasContent,
+    FIRST_PAGE_BAND,
     type NormalStyle,
     PAGE_ROOT,
     type PageSetup,
@@ -11,6 +15,8 @@ import {
     STYLE_ROOT,
 } from '@workspace/lib/docs/eigendoc';
 import * as Y from 'yjs';
+import { docSchema } from './doc-schema';
+import { readStoredEquation } from './equation';
 
 // Materialized Yjs doc → ProseMirror JSON. Media-free, so it runs identically on the
 // main thread and inside the document-transform Worker (which has no Mount). Every
@@ -26,6 +32,30 @@ export function readEigendocPage(doc: Y.Doc): PageSetup {
 
 export function readEigendocStyle(doc: Y.Doc): NormalStyle {
     return readNormalStyle(doc.getMap(STYLE_ROOT).toJSON());
+}
+
+// The bands that print, each as the body's JSON: one with content only, a first-page one only when page 1 differs.
+export type EigendocBands = Partial<Record<BandRoot, JSONContent>>;
+
+// A band's schema holds none of BAND_EXCLUDED_NODES, so only a forged peer writes one, and no render or writer sees it.
+export function readEigendocBands(doc: Y.Doc): EigendocBands {
+    const firstPage: readonly BandRoot[] = readEigendocPage(doc).differentFirstPage
+        ? []
+        : Object.values(FIRST_PAGE_BAND);
+    const without = (node: JSONContent): JSONContent =>
+        node.content
+            ? {
+                  ...node,
+                  content: node.content.filter((child) => !BAND_EXCLUDED_NODES.has(child.type ?? '')).map(without),
+              }
+            : node;
+    const bands: EigendocBands = {};
+    for (const root of BAND_ROOTS) {
+        if (firstPage.includes(root)) continue;
+        const json = without(yXmlFragmentToProsemirrorJSON(doc.getXmlFragment(root)));
+        if (bandHasContent(docSchema().nodeFromJSON(json), readStoredEquation)) bands[root] = json;
+    }
+    return bands;
 }
 
 // The import commit: a Yjs update prepared elsewhere (the transform process) replaces the body and the bands, and the

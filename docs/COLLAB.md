@@ -68,6 +68,8 @@ A revoked read would otherwise keep receiving broadcasts until the socket drops.
 
 `CollabDocument.scheduleClose` waits `CLOSE_LINGER_MS` (60 s) after the last connection drops before tearing the document down, so a reload or a brief disconnect reattaches to the loaded document instead of re-paying the load. A new subscribe cancels the timer.
 
+So a server-side writer opens the document right before it writes, never before an await that can outlast the linger, such as a transform. A write into a closed document's Y.Doc throws nothing and is neither saved nor broadcast. An import reads what it needs early as a value and opens the document again for the commit (`importIntoDocument`).
+
 ## A drive that is shutting down refuses a new open
 
 Once `Drive.destruct` starts its sweep of the open documents, the registry (`apps/api/src/lib/drive/collab-registry.ts`) answers every open with a 503. A document that registered after that sweep would never be destructed, and the mount teardown that follows would close its database under it.

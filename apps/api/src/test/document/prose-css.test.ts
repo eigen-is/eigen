@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { PROSE_CSS, proseValue } from '../../lib/document/prose-css';
+import { canvasTextValue, PROSE_CSS, proseValue } from '../../lib/document/prose-css';
 
 describe('prose css — the lookup', () => {
     test('a rule answers with its value', () => {
@@ -35,6 +35,20 @@ describe('prose css — the lookup', () => {
 
     test('a missing property throws', () => {
         expect(() => proseValue('.eigen-prose h5', 'font-size')).toThrow();
+    });
+});
+
+describe('canvas text css — the lookup', () => {
+    test('the first rule, under the header comment, answers', () => {
+        expect(canvasTextValue('.eigen-canvas-text p', 'margin')).toBe('0');
+    });
+
+    test('a sibling selector answers', () => {
+        expect(canvasTextValue('.eigen-canvas-text p + p', 'margin-top')).toBe('0.5em');
+    });
+
+    test('a missing property throws', () => {
+        expect(() => canvasTextValue('.eigen-canvas-text blockquote', 'margin-top')).toThrow();
     });
 });
 

@@ -13,6 +13,7 @@ import {
     type LucideIcon,
     Presentation,
 } from 'lucide-react';
+import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '../constants/mime';
 import {
     DRIVE_TYPE_FOLDER,
     type DrivePathType,
@@ -48,22 +49,18 @@ const CODE_MIMES = new Set([
 
 const SPREADSHEET_MIMES = new Set([
     'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    XLSX_MIME,
     'application/vnd.oasis.opendocument.spreadsheet',
     'text/csv',
 ]);
 
 const PRESENTATION_MIMES = new Set([
     'application/vnd.ms-powerpoint',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    PPTX_MIME,
     'application/vnd.oasis.opendocument.presentation',
 ]);
 
-const WORD_MIMES = new Set([
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.oasis.opendocument.text',
-]);
+const WORD_MIMES = new Set(['application/msword', DOCX_MIME, 'application/vnd.oasis.opendocument.text']);
 
 const EXECUTABLE_MIMES = new Set(['application/x-msdownload', 'application/x-executable']);
 const DB_MIMES = new Set(['application/vnd.sqlite3', 'application/x-sqlite3', 'application/vnd.ms-access']);

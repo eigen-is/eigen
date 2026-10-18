@@ -21,6 +21,7 @@ import {
     BAND_EXCLUDED_NODES,
     BAND_ROOTS,
     getDocExtensions,
+    PAGE_BAND_CLASS,
     PAGE_ROOT,
     pagePx,
     readNormalStyle,
@@ -293,7 +294,7 @@ export function docEditorOptions({
         ],
         editorProps: {
             attributes: {
-                class: 'eigen-prose',
+                class: band ? `eigen-prose ${PAGE_BAND_CLASS}` : 'eigen-prose',
             },
             handleDOMEvents: {
                 copy: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),

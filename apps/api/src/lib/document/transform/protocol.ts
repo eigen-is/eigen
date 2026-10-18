@@ -7,15 +7,16 @@ import { ApiError, isOutOfMemory } from '../../core/errors';
 // Only serializable primitives, ArrayBuffers and Maps of primitives ride here — never
 // Mount, database, Y.Doc, or other class instances, and never module/function names
 // user input could influence. Every eigensheets/eigendoc/eigenslides/eigenvector preview,
-// every vCard, message and calendar preview, every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports
+// every vCard, message and calendar preview, every HTML/PDF/XLSX/DOCX/PPTX export, the xlsx, docx and pptx imports
 // and the search content extraction ride these unions.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
 // subprocess, so the transform returns the document it renders from.
 export type SheetExportFormat = 'html' | 'xlsx' | 'pdf-html';
 export type DocumentExportFormat = 'html' | 'pdf-html';
-// Only eigendoc exports to docx; the slides route rejects the format.
+// Only eigendoc exports to docx and only eigenslides to pptx; the other routes reject them.
 export type EigendocExportFormat = DocumentExportFormat | 'docx';
+export type SlidesExportFormat = DocumentExportFormat | 'pptx';
 // Vector exports the drawing's own SVG, or that SVG on a page WeasyPrint renders to PDF.
 export type VectorExportFormat = 'svg' | 'pdf-html';
 
@@ -31,8 +32,8 @@ export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
 // (Mount I/O + screen previews), extracted from the upload by a docx import.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
-// An export's media; only a docx's raster carries the thumbnail Worker's width and height. The docx arm adds an SVG's
-// size inside the transform process.
+// An export's media; only a docx's or pptx's raster carries the thumbnail Worker's width and height. Their arms add an
+// SVG's size inside the transform process.
 export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 
 // A job is everything a caller decides; the shared main-thread orchestration
@@ -75,7 +76,7 @@ export type ExportTransformJob =
     | {
           kind: 'export';
           documentType: 'eigenslides';
-          format: DocumentExportFormat;
+          format: SlidesExportFormat;
           title: string;
           media: ExportMedia[];
       }
@@ -105,7 +106,17 @@ export type DocImportJob = {
     // Links into this instance come back root-relative with it; the transform reads no config.
     publicOrigin: string | undefined;
 };
-export type ImportTransformJob = SheetsImportJob | DocImportJob;
+export type SlidesImportJob = {
+    kind: 'import';
+    sourceFormat: 'pptx';
+    targetType: 'eigenslides';
+    // The open deck's frame, which Import slides… fits a file of another size into, letterboxed. A Convert passes none:
+    // its new deck takes the slide size nearest the file's.
+    frame?: { width: number; height: number };
+    // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
+    maxMediaBytes: number;
+};
+export type ImportTransformJob = SheetsImportJob | DocImportJob | SlidesImportJob;
 
 // Preview, export and search extraction read the persisted collaborative document; the
 // bytes-sourced jobs (the vCard, message and calendar previews, both imports) carry their own input instead.
@@ -116,14 +127,30 @@ export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
     | (BytesTransformJob & { data: ArrayBuffer });
 
+// The warnings that count what a read skipped or an import left out.
+export type CountedWarningCode =
+    | 'corrupt-blobs-skipped'
+    | 'blocks-flattened'
+    | 'images-unshown'
+    | 'images-dropped'
+    | 'mirrors-dropped'
+    | 'graphics-dropped'
+    | 'tables-dropped'
+    | 'charts-dropped'
+    | 'diagrams-dropped'
+    | 'objects-dropped'
+    | 'shapes-simplified'
+    | 'fills-simplified'
+    | 'text-simplified'
+    | 'section-pages-dropped'
+    | 'even-bands-dropped'
+    | 'band-images-unanchored'
+    | 'band-content-dropped';
+
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }
-    | { code: 'corrupt-blobs-skipped'; count: number }
     | { code: 'byte-guard-truncated'; bytes: number }
-    | { code: 'blocks-flattened'; count: number }
-    | { code: 'images-unshown'; count: number }
-    | { code: 'graphics-dropped'; count: number }
-    | { code: 'section-pages-dropped'; count: number };
+    | { code: CountedWarningCode; count: number };
 
 // Small stable codes; `status` carries an HTTP status for controlled document
 // errors. Never ApiError/Error instances across the boundary. `out-of-memory`: the
@@ -162,13 +189,16 @@ export type DocImportWorkerResult = {
     style: NormalStyle;
     images: TransformMedia[];
 };
+// A pptx's update plus its pictures: the main thread only applies the update and writes the media through Mount.
+export type SlidesImportWorkerResult = { update: ArrayBuffer; images: TransformMedia[] };
 
 export type TransformResult =
     | PreviewResult
     | ExtractTextResult
     | ExportWorkerResult
     | SheetsImportWorkerResult
-    | DocImportWorkerResult;
+    | DocImportWorkerResult
+    | SlidesImportWorkerResult;
 
 // Which result a job kind produces. The runner proves the pairing at runtime with
 // resultMatchesRequest; run-transform.ts narrows to this once so no caller re-checks.
@@ -184,7 +214,9 @@ export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob>
           ? SheetsImportWorkerResult
           : R extends { targetType: 'eigendoc' }
             ? DocImportWorkerResult
-            : never;
+            : R extends { targetType: 'eigenslides' }
+              ? SlidesImportWorkerResult
+              : never;
 
 export type DocumentTransformResponse =
     | { ok: true; result: TransformResult; warnings: TransformWarning[] }
@@ -257,6 +289,10 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
                         r.style !== null &&
                         Array.isArray(r.images) &&
                         r.images.every(isTransformMedia)
+                    );
+                case 'eigenslides':
+                    return (
+                        r?.update instanceof ArrayBuffer && Array.isArray(r.images) && r.images.every(isTransformMedia)
                     );
                 case 'eigensheets':
                     return r?.snapshotJson instanceof ArrayBuffer;

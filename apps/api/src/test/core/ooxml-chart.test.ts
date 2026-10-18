@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
 import { chartColor, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
 import { type DrawingTheme, IDENTITY_COLOR_MAP } from '../../lib/core/drawingml';
@@ -82,8 +83,8 @@ describe('a bar chart', () => {
             title: '',
             legend: 'right',
             blanks: 'gap',
-            categoryAxis: { title: '' },
-            valueAxis: { title: '', min: null, max: null, gridlines: true, format: null },
+            categoryAxis: { title: '', visible: true, reversed: false },
+            valueAxis: { title: '', min: null, max: null, gridlines: true, format: null, visible: true },
             sliceColors: [],
             fontFamily: 'Inter',
             data: {
@@ -109,34 +110,50 @@ describe('a bar chart', () => {
         expect(flat).toEqual(spec(space(bar() + AXES)));
     });
 
-    // Excel's minMax category axis runs up from the origin; a spec's bar chart lists its categories down from the top.
-    test('a horizontal bar chart lists its categories top down, as Excel draws them', () => {
-        const flipped = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES));
-        expect(flipped.data).toMatchObject({
-            categories: ['East', 'South', 'North'],
-            series: [{ values: [3, 2, 1] }, { values: [6, 5, 4.5] }],
-        });
-        const noAxes = spec(space(bar(TWO_SERIES, { dir: 'bar' })));
-        expect(noAxes.data).toMatchObject({ categories: ['East', 'South', 'North'] });
-        const reversed = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES.replace('minMax', 'maxMin')));
-        expect(reversed.data).toMatchObject({
+    // Excel's minMax category axis runs up from the origin, a bar chart's from the bottom, where Google's runs down.
+    test("a horizontal bar chart's category axis is reversed, its data in the file's order", () => {
+        const minMax = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES));
+        expect(minMax.categoryAxis.reversed).toBe(true);
+        expect(minMax.data).toMatchObject({
             categories: CATEGORIES,
             series: [{ values: [1, 2, 3] }, { values: [4.5, 5, 6] }],
         });
+        expect(spec(space(bar(TWO_SERIES, { dir: 'bar' }))).categoryAxis.reversed).toBe(true);
+        const maxMin = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES.replace('minMax', 'maxMin')));
+        expect(maxMin.categoryAxis.reversed).toBe(false);
+        expect(maxMin.data).toMatchObject({ categories: CATEGORIES });
     });
 
-    test('a reversed category axis on a column chart reverses its categories', () => {
-        expect(spec(space(bar() + AXES.replace('minMax', 'maxMin'))).data).toMatchObject({
-            categories: ['East', 'South', 'North'],
-            series: [{ values: [3, 2, 1] }, { values: [6, 5, 4.5] }],
+    test('a reversed category axis on a column or line chart is reversed, its data in order', () => {
+        const column = spec(space(bar() + AXES.replace('minMax', 'maxMin')));
+        expect(column.categoryAxis.reversed).toBe(true);
+        expect(column.data).toMatchObject({
+            categories: CATEGORIES,
+            series: [{ values: [1, 2, 3] }, { values: [4.5, 5, 6] }],
         });
+        expect(spec(space(bar() + AXES)).categoryAxis.reversed).toBe(false);
+        const line = `<c:lineChart><c:grouping val="standard"/>${ser({ idx: 0, name: 'L', values: [1, 2, 3] })}</c:lineChart>`;
+        const reversed = spec(space(line + AXES.replace('minMax', 'maxMin')));
+        expect(reversed).toMatchObject({ type: 'line', categoryAxis: { reversed: true } });
+        expect(reversed.data).toMatchObject({ categories: CATEGORIES, series: [{ values: [1, 2, 3] }] });
+        expect(spec(space(line + AXES)).categoryAxis.reversed).toBe(false);
     });
 
-    test('a short series stays under its own categories when they turn', () => {
-        const short = [{ idx: 0, name: 'A', values: [1, 2] }];
-        expect(spec(space(bar(short, { dir: 'bar' }) + AXES)).data).toMatchObject({
-            categories: ['East', 'South', 'North'],
-            series: [{ values: [null, 2, 1] }],
+    // python-pptx's sample (fixtures/charts/SOURCES.md): Office draws Category 1 at the bottom and, in each band,
+    // Series 1 lowest. A reversed axis turns the bands with it; turning the data turned only the categories.
+    test('a real clustered bar chart reads reversed, with its series and categories in order', async () => {
+        const xml = await Bun.file(
+            join(import.meta.dir, '../fixtures/charts/python-pptx-cht-chart-type-chart7.xml'),
+        ).text();
+        const read = spec(xml);
+        expect(read).toMatchObject({ type: 'bar', categoryAxis: { reversed: true, visible: false } });
+        expect(read.data).toMatchObject({
+            categories: ['Category 1', 'Category 2', 'Category 3', 'Category 4'],
+            series: [
+                { name: 'Series 1', values: [4.3, 2.5, 3.5, 4.5] },
+                { name: 'Series 2', values: [2.4, 4.4, 1.8, 2.8] },
+                { name: 'Series 3', values: [2, 2, 3, 5] },
+            ],
         });
     });
 
@@ -145,7 +162,7 @@ describe('a bar chart', () => {
             '<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>',
             '<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="maxMin"/>',
         );
-        expect(read(space(bar() + axes))).toEqual({ unsupported: { title: '', type: 'barChart' } });
+        expect(read(space(bar() + axes))).toEqual({ unsupported: { title: '', name: 'Clustered Column' } });
     });
 
     test("the chart's text font is its bundled stand-in; a theme font is Inter", () => {
@@ -199,7 +216,9 @@ describe('a line chart', () => {
 
     test('a 3D line chart is flattened; a stacked line is no spec', () => {
         expect(spec(space(line('standard', '').replaceAll('lineChart', 'line3DChart') + AXES)).type).toBe('line');
-        expect(read(space(line('stacked', '') + AXES))).toEqual({ unsupported: { title: 'Trend', type: 'lineChart' } });
+        expect(read(space(line('stacked', '') + AXES))).toEqual({
+            unsupported: { title: 'Trend', name: 'Stacked Line with Markers' },
+        });
     });
 });
 
@@ -226,8 +245,8 @@ describe('a pie chart', () => {
 
     test('a 3D pie is flattened; a doughnut or a pie of pie is no spec', () => {
         expect(spec(space(pie('pie3DChart'))).type).toBe('pie');
-        expect(read(space(pie('doughnutChart')))).toEqual({ unsupported: { title: '', type: 'doughnutChart' } });
-        expect(read(space(pie('ofPieChart')))).toEqual({ unsupported: { title: '', type: 'ofPieChart' } });
+        expect(read(space(pie('doughnutChart')))).toEqual({ unsupported: { title: '', name: 'Doughnut' } });
+        expect(read(space(pie('ofPieChart')))).toEqual({ unsupported: { title: '', name: 'Pie of Pie' } });
     });
 });
 
@@ -235,30 +254,129 @@ describe('a chart with no spec', () => {
     test('another chart type keeps its title', () => {
         const scatter = `<c:scatterChart>${ser({ idx: 0, name: 'S', values: [1] })}</c:scatterChart>`;
         expect(read(space(scatter, { head: title('Spread') }))).toEqual({
-            unsupported: { title: 'Spread', type: 'scatterChart' },
+            unsupported: { title: 'Spread', name: 'Scatter' },
         });
     });
 
     test('two chart groups, secondary axes or a log scale are no spec', () => {
         const line = `<c:lineChart><c:grouping val="standard"/>${ser({ idx: 2, name: 'L', values: [1] })}</c:lineChart>`;
-        expect(read(space(bar() + line + AXES))).toEqual({ unsupported: { title: '', type: 'barChart' } });
+        expect(read(space(bar() + line + AXES))).toEqual({ unsupported: { title: '', name: 'Combo' } });
         const secondary = AXES.replace('</c:valAx>', '</c:valAx><c:valAx><c:axId val="3"/></c:valAx>');
-        expect(read(space(bar() + secondary))).toEqual({ unsupported: { title: '', type: 'barChart' } });
+        expect(read(space(bar() + secondary))).toEqual({ unsupported: { title: '', name: 'Clustered Column' } });
         const log = AXES.replace(
             '<c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>',
             '<c:logBase val="10"/><c:orientation val="minMax"/></c:scaling><c:axPos val="l"/>',
         );
-        expect(read(space(bar() + log))).toEqual({ unsupported: { title: '', type: 'barChart' } });
+        expect(read(space(bar() + log))).toEqual({ unsupported: { title: '', name: 'Clustered Column' } });
     });
 
-    test("the type is the first group's name, cut to the label limit", () => {
-        const name = `${'x'.repeat(300)}Chart`;
-        expect(read(space(`<c:${name}/>`))).toEqual({ unsupported: { title: '', type: name.slice(0, 200) } });
+    test('a group of a type PowerPoint has no name for is no name', () => {
+        expect(read(space(`<c:${'x'.repeat(300)}Chart/>`))).toEqual({ unsupported: { title: '', name: '' } });
     });
 
     test('a plot area with no chart group is no spec', () => {
-        expect(read(space(''))).toEqual({ unsupported: { title: '', type: '' } });
-        expect(read(`<c:chartSpace xmlns:c="${C_NS}"/>`)).toEqual({ unsupported: { title: '', type: '' } });
+        expect(read(space(''))).toEqual({ unsupported: { title: '', name: '' } });
+        expect(read(`<c:chartSpace xmlns:c="${C_NS}"/>`)).toEqual({ unsupported: { title: '', name: '' } });
+    });
+});
+
+describe("the name of a chart with no spec, as PowerPoint's Insert Chart lists it", () => {
+    // A cache past the point limit makes any chart no spec, so a kind the reader draws can be named too.
+    const huge = `<c:val><c:numLit><c:ptCount val="1000000000"/></c:numLit></c:val>`;
+    const series = (extra = '') => `<c:ser><c:idx val="0"/><c:order val="0"/>${extra}${huge}</c:ser>`;
+    const group = (local: string, options = '', extra = '', count = 1) =>
+        `<c:${local}>${options}${Array.from({ length: count }, () => series(extra)).join('')}</c:${local}>`;
+    const name = (plot: string) => {
+        const result = read(space(plot));
+        if ('spec' in result) throw new Error('a spec');
+        return result.unsupported.name;
+    };
+    const opt = (local: string, value: string) => `<c:${local} val="${value}"/>`;
+    const noMarker = '<c:marker><c:symbol val="none"/></c:marker>';
+    const noLine = '<c:spPr><a:ln w="19050"><a:noFill/></a:ln></c:spPr>';
+
+    test('a bar group by its direction, grouping and depth', () => {
+        const bar = (dir: string, grouping: string, local = 'barChart') =>
+            name(group(local, opt('barDir', dir) + opt('grouping', grouping)));
+        expect(bar('col', 'clustered')).toBe('Clustered Column');
+        expect(bar('bar', 'stacked')).toBe('Stacked Bar');
+        expect(bar('col', 'percentStacked')).toBe('100% Stacked Column');
+        expect(bar('col', 'standard', 'bar3DChart')).toBe('3-D Column');
+        expect(bar('bar', 'clustered', 'bar3DChart')).toBe('3-D Clustered Bar');
+        expect(bar('col', 'percentStacked', 'bar3DChart')).toBe('3-D 100% Stacked Column');
+    });
+
+    test('a line group by its grouping and markers', () => {
+        const line = opt('grouping', 'standard') + opt('marker', '1');
+        expect(name(group('lineChart', line, noMarker))).toBe('Line');
+        expect(name(group('lineChart', line))).toBe('Line with Markers');
+        expect(name(group('lineChart', opt('grouping', 'standard') + opt('marker', '0')))).toBe('Line');
+        expect(name(group('lineChart', opt('grouping', 'stacked')))).toBe('Stacked Line with Markers');
+        expect(name(group('lineChart', opt('grouping', 'percentStacked'), noMarker))).toBe('100% Stacked Line');
+        expect(name(group('line3DChart', opt('grouping', 'standard')))).toBe('3-D Line');
+    });
+
+    test('an area group by its grouping and depth', () => {
+        expect(name(group('areaChart', opt('grouping', 'standard')))).toBe('Area');
+        expect(name(group('areaChart', opt('grouping', 'stacked')))).toBe('Stacked Area');
+        expect(name(group('area3DChart', opt('grouping', 'percentStacked')))).toBe('3-D 100% Stacked Area');
+    });
+
+    test('the pies, a doughnut and the of-pie charts by their second plot', () => {
+        expect(name(group('pieChart', opt('varyColors', '1')))).toBe('Pie');
+        expect(name(group('pie3DChart'))).toBe('3-D Pie');
+        expect(name(group('doughnutChart'))).toBe('Doughnut');
+        expect(name(group('ofPieChart', opt('ofPieType', 'pie')))).toBe('Pie of Pie');
+        expect(name(group('ofPieChart', opt('ofPieType', 'bar')))).toBe('Bar of Pie');
+    });
+
+    // Excel writes lineMarker for every scatter it makes; its series' lines, smoothing and markers tell them apart.
+    test("a scatter group by its series' lines, smoothing and markers", () => {
+        const scatter = (style: string, extra: string) =>
+            name(group('scatterChart', opt('scatterStyle', style), extra));
+        expect(scatter('lineMarker', noLine)).toBe('Scatter');
+        expect(scatter('marker', '')).toBe('Scatter');
+        expect(scatter('lineMarker', opt('smooth', '1'))).toBe('Scatter with Smooth Lines and Markers');
+        expect(scatter('lineMarker', noMarker + opt('smooth', '1'))).toBe('Scatter with Smooth Lines');
+        expect(scatter('smoothMarker', '')).toBe('Scatter with Smooth Lines and Markers');
+        expect(scatter('lineMarker', opt('smooth', '0'))).toBe('Scatter with Straight Lines and Markers');
+        expect(scatter('line', '')).toBe('Scatter with Straight Lines');
+    });
+
+    test('bubbles, radars and surfaces by their depth, style and wireframe', () => {
+        expect(name(group('bubbleChart'))).toBe('Bubble');
+        expect(name(group('bubbleChart', opt('bubble3D', '1')))).toBe('3-D Bubble');
+        expect(name(group('radarChart', opt('radarStyle', 'marker'), noMarker))).toBe('Radar');
+        expect(name(group('radarChart', opt('radarStyle', 'marker')))).toBe('Radar with Markers');
+        expect(name(group('radarChart', opt('radarStyle', 'filled')))).toBe('Filled Radar');
+        expect(name(group('surfaceChart'))).toBe('Contour');
+        expect(name(group('surfaceChart', opt('wireframe', '1')))).toBe('Wireframe Contour');
+        expect(name(group('surface3DChart', opt('wireframe', '0')))).toBe('3-D Surface');
+        expect(name(group('surface3DChart', opt('wireframe', '1')))).toBe('Wireframe 3-D Surface');
+    });
+
+    test('a stock chart by its series, a volume bar group with it one chart', () => {
+        const stock = (count: number) => group('stockChart', '', '', count);
+        const volume = group('barChart', opt('barDir', 'col'));
+        expect(name(stock(3))).toBe('High-Low-Close');
+        expect(name(stock(4))).toBe('Open-High-Low-Close');
+        expect(name(volume + stock(3))).toBe('Volume-High-Low-Close');
+        expect(name(volume + stock(4))).toBe('Volume-Open-High-Low-Close');
+    });
+
+    test('two groups are a combo', () => {
+        expect(name(group('barChart', opt('barDir', 'col')) + group('lineChart'))).toBe('Combo');
+    });
+
+    test('a group inside mc:AlternateContent is named as its choice or fallback, and counted once', () => {
+        const alternate = (choice: string, fallback: string) =>
+            `<mc:AlternateContent><mc:Choice Requires="c99" xmlns:c99="urn:x">${choice}</mc:Choice><mc:Fallback>${fallback}</mc:Fallback></mc:AlternateContent>`;
+        const doughnut = group('doughnutChart');
+        expect(name(alternate(doughnut, doughnut))).toBe('Doughnut');
+        expect(name(alternate('<c99:sankeyChart/>', doughnut))).toBe('Doughnut');
+        const understood = alternate(doughnut, doughnut).replace('Requires="c99"', 'Requires="c"');
+        expect(name(understood)).toBe('Doughnut');
+        expect(name(group('barChart', opt('barDir', 'col')) + alternate(doughnut, doughnut))).toBe('Combo');
     });
 });
 
@@ -319,11 +437,11 @@ describe('the data from the caches', () => {
         const huge = `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numLit><c:ptCount val="1000000000"/><c:pt idx="999999999"><c:v>1</c:v></c:pt></c:numLit></c:val></c:ser></c:barChart>`;
         const started = performance.now();
         expect(read(space(huge + AXES, { head: title('Big') }))).toEqual({
-            unsupported: { title: 'Big', type: 'barChart' },
+            unsupported: { title: 'Big', name: 'Clustered Column' },
         });
         expect(performance.now() - started).toBeLessThan(100);
         const noCount = huge.replace('<c:ptCount val="1000000000"/>', '');
-        expect(read(space(noCount + AXES))).toEqual({ unsupported: { title: '', type: 'barChart' } });
+        expect(read(space(noCount + AXES))).toEqual({ unsupported: { title: '', name: 'Clustered Column' } });
     });
 
     test('more points in all than the limit, or more series than the limit, is no spec', () => {
@@ -419,6 +537,24 @@ describe('the axes, legend and blanks', () => {
         expect(legend('<c:legendPos val="tr"/>')).toBe('right');
         expect(legend('')).toBe('right');
         expect(spec(space(bar() + AXES, { tail: '' })).legend).toBe('none');
+    });
+
+    test('an axis the file deletes, or whose tick labels are none, is hidden', () => {
+        const hide = (axis: string, element: string) =>
+            AXES.replace(
+                new RegExp(
+                    `(<c:${axis}><c:axId val="\\d"/><c:scaling><c:orientation val="minMax"/></c:scaling>)<c:delete val="0"/>`,
+                ),
+                `$1${element}`,
+            );
+        const shown = spec(space(bar() + AXES));
+        expect([shown.categoryAxis.visible, shown.valueAxis.visible]).toEqual([true, true]);
+        const deleted = spec(space(bar() + hide('catAx', '<c:delete val="1"/>')));
+        expect([deleted.categoryAxis.visible, deleted.valueAxis.visible]).toEqual([false, true]);
+        expect(spec(space(bar() + hide('valAx', '<c:delete/>'))).valueAxis.visible).toBe(false);
+        const none = AXES.replace('<c:axPos val="l"/>', '<c:axPos val="l"/><c:tickLblPos val="none"/>');
+        expect(spec(space(bar() + none)).valueAxis.visible).toBe(false);
+        expect(spec(space(bar())).valueAxis.visible).toBe(true);
     });
 
     test('dispBlanksAs reads as blanks', () => {
@@ -519,11 +655,10 @@ describe('range data for a workbook', () => {
         expect('unsupported' in read(space(literal + AXES), ranges)).toBe(true);
     });
 
-    test('a horizontal bar chart over ranges is no spec unless its categories already run top down', () => {
-        expect('unsupported' in read(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES), ranges)).toBe(true);
-        expect('unsupported' in read(space(bar() + AXES.replace('minMax', 'maxMin')), ranges)).toBe(true);
-        const reversed = byRange(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES.replace('minMax', 'maxMin')));
-        expect(reversed.data.categories).toEqual({ sheetId: 's1', row: [1, 3], column: [0, 0] });
+    test('a horizontal bar chart over ranges reads, its axis reversed', () => {
+        const flipped = byRange(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES));
+        expect(flipped.categoryAxis.reversed).toBe(true);
+        expect(flipped.data.categories).toEqual({ sheetId: 's1', row: [1, 3], column: [0, 0] });
     });
 
     test('an empty c:cat or c:val names no cells', () => {

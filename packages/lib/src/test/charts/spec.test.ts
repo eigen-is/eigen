@@ -151,6 +151,18 @@ describe('parseChartSpec', () => {
         expect(parseChartSpec(stored({ valueAxis: { min: 'Infinity', gridlines: 1, format: 3 } }))?.valueAxis).toEqual(
             valueAxis,
         );
+        expect(
+            parseChartSpec(stored({ categoryAxis: { title: 'T', visible: 0, reversed: 'yes' } }))?.categoryAxis,
+        ).toEqual({ title: 'T', visible: true, reversed: false });
+        expect(parseChartSpec(stored({ valueAxis: { visible: null } }))?.valueAxis.visible).toBe(true);
+    });
+
+    test('a hidden or reversed axis reads back as stored', () => {
+        const spec = chart({
+            categoryAxis: { title: '', visible: false, reversed: true },
+            valueAxis: { ...chart().valueAxis, visible: false },
+        });
+        expect(parseChartSpec(JSON.stringify(spec))).toEqual(spec);
     });
 
     test('the font is one of the Eigen fonts, and reads Inter when missing or anything else', () => {
@@ -233,7 +245,7 @@ describe('parseChartSpec', () => {
             JSON.stringify(
                 chart({
                     title: long,
-                    categoryAxis: { title: long },
+                    categoryAxis: { ...chart().categoryAxis, title: long },
                     data: { source: 'inline', categories: [long], series: [{ ...style, name: long, values: [1] }] },
                 }),
             ),

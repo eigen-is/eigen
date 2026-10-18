@@ -140,8 +140,8 @@ describe('layoutChart invariants', () => {
             const spec: Partial<ChartSpec> = {
                 legend,
                 stacking,
-                categoryAxis: { title: 'Teams' },
-                valueAxis: { title: 'Points', min: null, max: null, gridlines: true, format: null },
+                categoryAxis: { ...sampleChartSpec('column').categoryAxis, title: 'Teams' },
+                valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
             };
             const out = layout(type, spec, { width, height });
 
@@ -400,7 +400,7 @@ describe('column and bar', () => {
         const out = layout(
             'column',
             {
-                valueAxis: { title: '', min: 10, max: 30, gridlines: true, format: null },
+                valueAxis: { ...sampleChartSpec('column').valueAxis, min: 10, max: 30 },
             },
             { data },
         );
@@ -539,8 +539,8 @@ describe('category labels', () => {
 
     test('axis titles: the category title below, the value title turned -90', () => {
         const out = layout('column', {
-            categoryAxis: { title: 'Teams' },
-            valueAxis: { title: 'Points', min: null, max: null, gridlines: true, format: null },
+            categoryAxis: { ...sampleChartSpec('column').categoryAxis, title: 'Teams' },
+            valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
         });
         const teams = out.labels.find((label) => label.text === 'Teams');
         const points = out.labels.find((label) => label.text === 'Points');
@@ -548,6 +548,171 @@ describe('category labels', () => {
         expect(points?.rotate).toBe(-90);
         const team1 = out.labels.find((label) => label.text === 'Team 1');
         expect(teams && team1 && teams.y > team1.y).toBe(true);
+    });
+    // Thin bands put a centered name's half line past the plot's ends.
+    test("a bar chart's crowded names stay below the title or legend and above the value labels", () => {
+        const many = Array.from({ length: 1000 }, (_, i) => `C${i}`);
+        const data = {
+            categories: many,
+            series: [
+                series(
+                    'S',
+                    many.map((_, i) => i),
+                ),
+            ],
+        };
+        for (const legend of ['none', 'top'] as const) {
+            const out = layout('bar', { legend }, { data });
+            const above = out.labels.filter((label) => label.bold || label.anchor === 'start').map(labelBounds);
+            const ticks = out.labels.filter((label) => label.anchor === 'middle' && !label.bold).map(labelBounds);
+            const names = out.labels.filter((label) => label.anchor === 'end').map(labelBounds);
+            expect(names.length).toBeGreaterThan(1);
+            const ceiling = Math.max(...above.map((bounds) => bounds.bottom));
+            const floor = Math.min(...ticks.map((bounds) => bounds.top));
+            for (const name of names) {
+                expect(name.top).toBeGreaterThanOrEqual(ceiling);
+                expect(name.bottom).toBeLessThanOrEqual(floor);
+            }
+        }
+    });
+});
+
+describe('axes', () => {
+    const data: ChartData = {
+        categories: ['A', 'B', 'C', 'D'],
+        series: [series('S1', [10, 20, 30, 40], '#2a78d6'), series('S2', [5, 15, 25, 35], '#eb6834')],
+    };
+    type AxesPatch = { category?: Partial<ChartSpec['categoryAxis']>; value?: Partial<ChartSpec['valueAxis']> };
+    function axes(type: ChartType, { category = {}, value = {} }: AxesPatch): Partial<ChartSpec> {
+        const spec = sampleChartSpec(type);
+        return {
+            categoryAxis: { ...spec.categoryAxis, ...category },
+            valueAxis: { ...spec.valueAxis, ...value },
+        };
+    }
+    const bar = (out: ChartLayout, s: number, c: number) => {
+        const found = rects(out, 'bar').find((shape) => shape.id === `c1:bar:${s}:${c}`);
+        if (!found) throw new Error(`no bar ${s}:${c}`);
+        return found;
+    };
+    const texts = (out: ChartLayout) => out.labels.map((label) => label.text);
+    const isTick = (text: string) => /^-?[\d,.]+$/.test(text);
+
+    test('a hidden category axis draws no names and no baseline, and the plot takes its room', () => {
+        for (const type of ['column', 'bar'] as const) {
+            const shown = layout(type, {}, { data });
+            const hidden = layout(type, axes(type, { category: { visible: false } }), { data });
+            expect(texts(shown)).toContain('A');
+            expect(texts(hidden)).not.toContain('A');
+            expect(lines(hidden, 'baseline')).toEqual([]);
+            expect(lines(hidden, 'gridline').length).toBeGreaterThan(0);
+            if (type === 'column')
+                expect(bar(hidden, 0, 0).y + bar(hidden, 0, 0).height).toBeGreaterThan(
+                    bar(shown, 0, 0).y + bar(shown, 0, 0).height + 1,
+                );
+            else expect(bar(hidden, 0, 0).x).toBeLessThan(bar(shown, 0, 0).x - 1);
+        }
+    });
+
+    test('a hidden category axis keeps the gridline at zero, as Office keeps its 0 line, and gridlines off draw none', () => {
+        const signed = { ...data, series: [series('S1', [-10, 20, 30, 40]), series('S2', [5, 15, 25, 35])] };
+        for (const type of ['column', 'bar'] as const) {
+            const zero = (out: ChartLayout) => {
+                const positive = bar(out, 0, 1);
+                return type === 'column' ? positive.y + positive.height : positive.x;
+            };
+            const at = (shape: VectorLinearElement) => (type === 'column' ? shape.y : shape.x);
+            const hidden = layout(type, axes(type, { category: { visible: false } }), { data: signed });
+            expect(lines(hidden, 'baseline')).toEqual([]);
+            expect(lines(hidden, 'gridline').some((shape) => Math.abs(at(shape) - zero(hidden)) < 0.01)).toBe(true);
+            const bare = layout(type, axes(type, { category: { visible: false }, value: { gridlines: false } }), {
+                data: signed,
+            });
+            expect(bare.shapes.filter((shape) => shape.type === 'line')).toEqual([]);
+        }
+    });
+
+    test('a hidden category axis keeps half a line below the plot for the lowest tick label, off the title and legend', () => {
+        for (const type of ['column', 'line'] as const) {
+            for (const patch of [
+                axes(type, { category: { visible: false, title: 'Teams' } }),
+                { ...axes(type, { category: { visible: false } }), legend: 'bottom' as const },
+            ]) {
+                const out = layout(type, patch, { data });
+                const ticks = out.labels.filter((label) => isTick(label.text));
+                const lowest = ticks.reduce((a, b) => (a.y > b.y ? a : b));
+                const below = out.labels.filter((label) => !isTick(label.text) && label.y > lowest.y);
+                expect(below.length).toBeGreaterThan(0);
+                for (const label of below)
+                    expect(labelBounds(lowest).bottom).toBeLessThanOrEqual(labelBounds(label).top + 0.01);
+            }
+        }
+    });
+
+    test('a hidden value axis draws no tick labels, keeps its gridlines, and the plot takes its room', () => {
+        for (const type of ['column', 'bar'] as const) {
+            const shown = layout(type, {}, { data });
+            const hidden = layout(type, axes(type, { value: { visible: false } }), { data });
+            expect(texts(shown).some(isTick)).toBe(true);
+            expect(texts(hidden).some(isTick)).toBe(false);
+            expect(lines(hidden, 'gridline').length).toBeGreaterThan(0);
+            expect(lines(hidden, 'baseline')).toHaveLength(1);
+            if (type === 'column') expect(bar(hidden, 0, 0).x).toBeLessThan(bar(shown, 0, 0).x - 1);
+            else
+                expect(bar(hidden, 0, 3).y + bar(hidden, 0, 3).height).toBeGreaterThan(
+                    bar(shown, 0, 3).y + bar(shown, 0, 3).height + 1,
+                );
+        }
+    });
+
+    test('a hidden axis keeps its title', () => {
+        const out = layout(
+            'column',
+            axes('column', {
+                category: { visible: false, title: 'Teams' },
+                value: { visible: false, title: 'Points' },
+            }),
+            { data },
+        );
+        expect(texts(out)).toContain('Teams');
+        expect(texts(out)).toContain('Points');
+    });
+
+    test("a bar chart runs Google's way by default: the first category on top, its first series topmost", () => {
+        const out = layout('bar', {}, { data });
+        expect(bar(out, 0, 0).y).toBeLessThan(bar(out, 0, 3).y);
+        expect(bar(out, 0, 0).y).toBeLessThan(bar(out, 1, 0).y);
+    });
+
+    test('a reversed bar chart runs up from the bottom, each first series lowest in its band, as Excel draws one', () => {
+        const out = layout('bar', axes('bar', { category: { reversed: true } }), { data });
+        expect(bar(out, 0, 0).y).toBeGreaterThan(bar(out, 0, 3).y);
+        expect(bar(out, 0, 0).y).toBeGreaterThan(bar(out, 1, 0).y);
+        const name = (text: string) => out.labels.find((label) => label.text === text)?.y ?? Number.NaN;
+        expect(name('A')).toBeGreaterThan(name('D'));
+    });
+
+    test('a reversed column or line chart runs right to left', () => {
+        const column = layout('column', axes('column', { category: { reversed: true } }), { data });
+        expect(bar(column, 0, 0).x).toBeGreaterThan(bar(column, 0, 3).x);
+        expect(bar(column, 0, 0).x).toBeGreaterThan(bar(column, 1, 0).x);
+        const marked = { ...data, series: data.series.map((s) => ({ ...s, markers: true })) };
+        const line = layout('line', axes('line', { category: { reversed: true } }), { data: marked });
+        const marker = (c: number) =>
+            ofPart(line, 'marker').find((shape) => shape.id === `c1:marker:0:${c}`)?.x ?? Number.NaN;
+        expect(marker(0)).toBeGreaterThan(marker(3));
+    });
+
+    test('hidden and reversed axes stay inside the box at every size', () => {
+        for (const type of CHART_TYPES) {
+            for (const [width, height] of SIZES) {
+                const spec = axes(type, { category: { visible: false, reversed: true }, value: { visible: false } });
+                const out = layout(type, spec, { width, height });
+                for (const n of numbersIn(out)) expect(Number.isFinite(n)).toBe(true);
+                for (const shape of out.shapes) expect(within(shapeBounds(shape), width, height)).toBe(true);
+                for (const label of out.labels) expect(within(labelBounds(label), width, height)).toBe(true);
+            }
+        }
     });
 });
 
@@ -809,7 +974,7 @@ describe('edge cases', () => {
         const column = layout('column', { title: '', legend: 'none' }, { data: one([61]), width: 400, height: 2000 });
         expect(valueTicks(column).length).toBeGreaterThan(10);
         expect(valueTicks(column).length).toBeLessThanOrEqual(20);
-        const pinned = { title: '', min: 10, max: 30, gridlines: true, format: null };
+        const pinned = { ...sampleChartSpec('column').valueAxis, min: 10, max: 30 };
         const fixed = layout('column', { valueAxis: pinned }, { data: one([20]), width: 400, height: 2000 });
         expect(valueTicks(fixed).length).toBeLessThanOrEqual(20);
     });
@@ -878,7 +1043,7 @@ describe('edge cases', () => {
     });
 
     test('pinned bounds: exact decimal labels, and a min past the data draws a finite empty plot', () => {
-        const axis = { title: '', min: 0.1, max: 0.7, gridlines: true, format: null };
+        const axis = { ...sampleChartSpec('column').valueAxis, min: 0.1, max: 0.7 };
         expect(valueTicks(layout('column', { valueAxis: axis }, { data: one([0.3, 0.5]) }))).toEqual([
             '0.1',
             '0.2',

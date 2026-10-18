@@ -619,6 +619,7 @@ describe('both sides', () => {
         const json = buildAllFeaturesDocJson();
         const docx = await eigendocToDocx(
             json,
+            {},
             DEFAULT_PAGE_SETUP,
             DEFAULT_NORMAL_STYLE,
             buildAllFeaturesDocMedia(),

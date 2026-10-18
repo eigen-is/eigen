@@ -1,25 +1,21 @@
-// The frame-writing primitives over a canvas Y.Doc: fresh ids, the fractional index, the
-// delete/duplicate passes that must also move the frame's ELEMENTS, and the meta keys that size them. Plain functions over the doc, the
-// way element-writes.ts is, so the hook stays the thin React surface.
+// The editor's frame ops over a canvas Y.Doc: the fractional index arithmetic, the delete/duplicate
+// passes that must also move the frame's ELEMENTS, over the shared writer (write-vector.ts), and the
+// meta keys that size them. Plain functions over the doc, the way element-writes.ts is, so the hook
+// stays the thin React surface.
 
 import {
-    DEFAULT_FRAME_BACKGROUND,
     elementsInFrame,
     FRAME_FIELDS,
     generateKeyBetween,
     isValidFractionalIndex,
+    newFrameId,
     readVectorFromDoc,
-    storedFields,
     type VectorFrame,
     type VectorMeta,
+    writeFrameInDoc,
 } from '@workspace/lib/vector';
-import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
 import { duplicateElementsInDoc } from './element-writes';
-
-export function newFrameId(): string {
-    return `fr-${nanoid(10)}`;
-}
 
 function strField(map: Y.Map<unknown>, key: string): string {
     const value = map.get(key);
@@ -52,29 +48,9 @@ function keyAfter(framesMap: Y.Map<unknown>, afterId: string | null, excludeId?:
     return generateKeyBetween(order[at].index, order[at + 1]?.index ?? null);
 }
 
-// One writer for the whole frame record, through the FRAME_FIELDS allow-list — width/height are
-// constants, so a stored size can never become a second source of truth for it. An unstated background
-// is the shared DEFAULT_FRAME_BACKGROUND; a caller copying an existing frame passes its own.
-function writeFrame(framesMap: Y.Map<unknown>, frame: Partial<VectorFrame> & { id: string }): void {
-    const map = new Y.Map();
-    const record = { name: '', background: DEFAULT_FRAME_BACKGROUND, ...frame };
-    for (const [field, value] of storedFields(record, FRAME_FIELDS)) map.set(field, value);
-    framesMap.set(frame.id, map);
-}
-
-// The same writer for a caller holding the doc rather than the frames map — the deck seeder, which
-// composes it with its own element write. Nested in a live transact it joins that one, so the
-// seeder's origin and its single-atom guarantee both survive.
-export function writeFrameInDoc(doc: Y.Doc, frame: Partial<VectorFrame> & { id: string }): void {
-    doc.transact(() => writeFrame(doc.getMap('frames'), frame));
-}
-
 export function addFrameInDoc(doc: Y.Doc, afterId: string | null): string {
     const id = newFrameId();
-    doc.transact(() => {
-        const framesMap = doc.getMap('frames');
-        writeFrame(framesMap, { id, index: keyAfter(framesMap, afterId) });
-    });
+    writeFrameInDoc(doc, { id, index: keyAfter(doc.getMap('frames'), afterId) });
     return id;
 }
 
@@ -99,7 +75,7 @@ export function duplicateFrameInDoc(doc: Y.Doc, id: string): string {
     doc.transact(() => {
         const name = strField(source, 'name');
         const background = strField(source, 'background');
-        writeFrame(framesMap, { id: copyId, index: keyAfter(framesMap, id), name, background });
+        writeFrameInDoc(doc, { id: copyId, index: keyAfter(framesMap, id), name, background });
 
         const sourceIds = elementsInFrame(readVectorFromDoc(doc).elements, id).map((el) => el.id);
         // Frame-relative coordinates, so the copies keep their positions inside the new frame.

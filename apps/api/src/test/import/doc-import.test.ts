@@ -258,7 +258,7 @@ describe('Eigendoc docx import/convert', () => {
         const uploaded = await upload('not a document', 'notes.txt', 'text/plain');
         const res = await convertRequest(uploaded.id);
         expect(res.status).toBe(400);
-        expect(await res.text()).toBe('Only .docx files can be converted to documents');
+        expect(await res.text()).toBe('Only .docx files can be converted to Docs');
     }, 60_000);
 
     test('convert of a garbage .docx returns 400 Not a valid docx file', async () => {
