@@ -64,6 +64,29 @@ function hiding(): RawPart {
     return stored('docProps/custom.bin', Buffer.concat([Buffer.alloc(16, 0x20), build([TYPES, EVIL])]));
 }
 
+// A ZIP64 archive whose plain end record fields name a central directory of EVIL's stored in an entry, up to the record.
+function hiddenDirectory(): Buffer {
+    const inner = build([EVIL]);
+    const innerEnd = inner.length - 22;
+    const local = inner.subarray(0, inner.readUInt32LE(innerEnd + 16));
+    const central = Buffer.from(inner.subarray(local.length, local.length + inner.readUInt32LE(innerEnd + 12)));
+    const make = () =>
+        build([TYPES, REAL, stored('docProps/custom.bin', Buffer.concat([local, central]))], { zip64End: true });
+    const sized = make();
+    const localAt = sized.indexOf(local);
+    const centralAt = localAt + local.length;
+    const end = sized.length - 22;
+    central.writeUInt32LE(localAt, 42);
+    // The header's comment runs up to the end record.
+    central.writeUInt16LE(end - (centralAt + 46 + central.readUInt16LE(28)), 32);
+    const zip = make();
+    zip.writeUInt16LE(1, end + 8);
+    zip.writeUInt16LE(1, end + 10);
+    zip.writeUInt32LE(end - centralAt, end + 12);
+    zip.writeUInt32LE(centralAt, end + 16);
+    return zip;
+}
+
 const bombs: Record<string, () => Uint8Array> = {
     'an honest 1 GiB bomb': () => build([TYPES, bomb('word/document.xml', GiB, GiB)]),
     'a 1 GiB bomb declaring 1 KB': () => build([TYPES, bomb('word/document.xml', GiB, 1000)]),
@@ -174,6 +197,28 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         },
         'no-end',
     ],
+    // Only java.util.zip's check on the plain fields would take this record: they name a directory up to it.
+    [
+        'a ZIP64 archive with a byte after its end record, whose plain fields name a directory up to it',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            const end = zip.length - 22;
+            const directoryStart = zip.indexOf(CENTRAL_HEADER);
+            const plain = patched(patched(patched(zip, end + 8, 2, 2), end + 10, 2, 2), end + 16, directoryStart, 4);
+            return Buffer.concat([patched(plain, end + 12, end - directoryStart, 4), Buffer.from([0])]);
+        },
+        'no-end',
+    ],
+    [
+        'a byte after an end record whose directory starts on no central header',
+        () => {
+            const zip = build([TYPES, REAL]);
+            const end = zip.length - 22;
+            const shifted = patched(zip, end + 16, zip.readUInt32LE(end + 16) + 4, 4);
+            return Buffer.concat([patched(shifted, end + 12, zip.readUInt32LE(end + 12) - 4, 4), Buffer.from([0])]);
+        },
+        'no-end',
+    ],
     // Python reads the last signature and refuses the record it can't read whole.
     [
         'part of a record in the last 21 bytes',
@@ -210,6 +255,16 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         () => Buffer.concat([build([TYPES, REAL]), build([TYPES, EVIL]).subarray(-22), Buffer.from([0])]),
         'ambiguous-end',
     ],
+    [
+        'plain end record fields that differ from the ZIP64 ones',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            return patched(zip, zip.length - 22 + 10, 1, 2);
+        },
+        'ambiguous-end',
+    ],
+    // Info-ZIP, Java and Go read the plain fields, which name a directory hidden in an entry.
+    ['plain end record fields naming a hidden directory', hiddenDirectory, 'ambiguous-end'],
     [
         'a second disk',
         () => {

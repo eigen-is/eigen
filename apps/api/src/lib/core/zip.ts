@@ -141,6 +141,16 @@ export function openZip(bytes: Uint8Array): ZipReader {
         directorySize = u64(end64 + 40);
         directoryStart = u64(end64 + 48);
         directoryEnd = end64;
+        // Info-ZIP, Java and Go read a plain field that is neither its sentinel nor the ZIP64 value, so it must agree.
+        const agrees = (plain: number, value: number, sentinel: number) => plain === value || plain === sentinel;
+        if (
+            !agrees(u16(end + 8), count, MAX16) ||
+            !agrees(u16(end + 10), count, MAX16) ||
+            !agrees(u32(end + 12), directorySize, MAX32) ||
+            !agrees(u32(end + 16), directoryStart, MAX32)
+        ) {
+            throw new ZipError('ambiguous-end');
+        }
     } else {
         if (u16(end + 4) !== 0 || u16(end + 6) !== 0 || u16(end + 8) !== count) throw new ZipError('multi-disk');
         if (count === MAX16 || directorySize === MAX32 || directoryStart === MAX32) throw new ZipError('missing-zip64');
@@ -215,7 +225,8 @@ export function openZip(bytes: Uint8Array): ZipReader {
 // The end record is the last in the file's final 22 + 65,535 bytes, and its comment reaches the end of the file. As
 // Info-ZIP, Office and java.util.zip read some real files, one without ZIP64 may leave bytes after it when its own
 // fields put the directory right before it and the first entry at the start. Another reader may take any such record
-// for the archive, or the last signature whatever follows it, so a second end, or a signature after the end, is refused.
+// for the archive, or the last signature whatever follows it, so a second end, or an end-record signature after the end, is
+// refused.
 function findEnd(bytes: Uint8Array, view: DataView): number {
     const found: number[] = [];
     let last: number | undefined;
