@@ -1,5 +1,6 @@
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { cloneDeep, omit, set } from 'es-toolkit/compat';
+import { cellValue, dropRuns, richText } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import { type Context, getFlowdata } from '../context';
 import { getSheetIndex, isAllowEdit } from '../utils';
@@ -57,8 +58,13 @@ export function saveHyperlink(
         });
         cell.fc = 'rgb(0, 0, 255)';
         cell.un = 1;
-        cell.v = linkText || linkAddress;
-        cell.m = linkText || linkAddress;
+        // The link's text written plain replaces a rich cell's runs; its own text left as it was keeps them.
+        const text = linkText || linkAddress;
+        if (richText(cell) !== text) {
+            dropRuns(cell);
+            cell.v = text;
+            cell.m = text;
+        }
         cell.hl = { r, c, id: ctx.currentSheetId };
         flowdata[r][c] = cell;
         ctx.linkCard = undefined;
@@ -75,7 +81,8 @@ export function removeHyperlink(ctx: Context, r: number, c: number) {
         set(ctx.sheets[sheetIndex], 'hyperlink', hyperlink);
         const cell = flowdata[r][c];
         if (cell != null) {
-            flowdata[r][c] = { v: cell.v, m: cell.m };
+            const { fc: _fc, un: _un, hl: _hl, ...rest } = cell;
+            flowdata[r][c] = rest;
         }
     }
     ctx.linkCard = undefined;
@@ -106,7 +113,7 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
             r,
             c,
             rc: `${r}_${c}`,
-            originText: cell?.v == null ? '' : `${cell.v}`,
+            originText: `${cellValue(cell) ?? ''}`,
             originType: link?.linkType || 'webpage',
             originAddress: link?.linkAddress || '',
             position: {

@@ -5,6 +5,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import { cellValue } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
 import { getDataArr, getFlowdata, getRegStr, updateMoreCell } from '../../state';
 
@@ -44,7 +45,7 @@ export function SplitColumn() {
         for (let i = 0; i < dataArr.length; i += 1) {
             for (let j = 1; j < dataArr[0].length; j += 1) {
                 const cell = data![r + i][c + j];
-                if (cell != null && cell.v != null) {
+                if (cellValue(cell) != null) {
                     dataCover = true;
                     break;
                 }

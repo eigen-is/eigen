@@ -1,4 +1,5 @@
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
+import { cellValue } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
 import { hideCRCount } from '..';
 import { type Context, getFlowdata } from '../context';
@@ -73,8 +74,9 @@ function moveToEdge(
 
     while (r >= 0 && c >= 0 && (colDelta === 0 ? r : c) < maxRowCol - 1) {
         if (
-            !isNil(sheetData?.[r]?.[c]?.v) &&
-            (isNil(sheetData?.[r - rowDelta]?.[c - colDelta]?.v) || isNil(sheetData?.[r + rowDelta]?.[c + colDelta]?.v))
+            !isNil(cellValue(sheetData[r]?.[c])) &&
+            (isNil(cellValue(sheetData[r - rowDelta]?.[c - colDelta])) ||
+                isNil(cellValue(sheetData[r + rowDelta]?.[c + colDelta])))
         ) {
             break;
         }

@@ -17,13 +17,25 @@ export function cellWrapsText(cell: Cell): boolean {
 }
 
 // A rich-text cell keeps its text in its runs; neither `v` nor `m` holds it.
-export function inlineStringText(ct: CellType): string {
+function inlineStringText(ct: CellType): string {
     return (ct.s ?? []).map((run) => run.v ?? '').join('');
 }
 
 // A cell's text when it is rich text, so every reader of a value or a display reads one source; undefined otherwise.
 export function richText(cell: Cell): string | undefined {
     return cell.ct?.t === 'inlineStr' && cell.ct.s?.length ? inlineStringText(cell.ct) : undefined;
+}
+
+// The value a reader compares, sorts or counts: a rich cell's text, any other cell's `v`.
+export function cellValue(cell: Cell | null | undefined): Cell['v'] {
+    return cell ? (richText(cell) ?? cell.v) : undefined;
+}
+
+// A plain write over a rich cell drops its runs, which would otherwise outrank the value written.
+export function dropRuns(cell: Cell) {
+    if (cell.ct?.t !== 'inlineStr') return;
+    delete cell.ct.s;
+    cell.ct.t = 'g';
 }
 
 export function parseCellInput(value: string | number | boolean): [string, CellType, string | number | boolean] {

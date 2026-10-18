@@ -1,8 +1,7 @@
-import type { InlineStringSegment } from '../../engine/types';
+import { richText } from '../../engine/format';
 import type { Freezen } from '..';
 import { type Context, getFlowdata } from '../context';
 import { deselectFloatingObject, israngeseleciton } from '../modules';
-import { isInlineStringCell } from '../modules/inline-string';
 import { colLocation, rowLocation } from '../modules/location';
 import { getFontSet } from '../modules/text';
 import type { GlobalCache } from '../types';
@@ -228,14 +227,9 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
             if (cell.mc.c !== colIndex) continue;
         }
 
-        let text: string;
-        if (isInlineStringCell(cell)) {
-            text = cell.ct!.s.map((seg: InlineStringSegment) => seg.v ?? '').join('');
-        } else {
-            const display = cell.m ?? cell.v;
-            if (display == null) continue;
-            text = String(display);
-        }
+        const display = richText(cell) ?? cell.m ?? cell.v;
+        if (display == null) continue;
+        const text = String(display);
         if (!text) continue;
 
         const fontset = getFontSet(cell, ctx.defaultFontSize);

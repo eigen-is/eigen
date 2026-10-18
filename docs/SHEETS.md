@@ -55,7 +55,7 @@ Only the canvas border pass skips hidden rows and columns. Every carry path (cut
 
 ## Position-bound properties live beside the cell
 
-Everything that is the cell (value, formula, number format, colors, font, rotation, rich-text runs) lives on the `Cell` in the matrix, and overwriting the cell overwrites all of it in one op. A rich-text cell keeps its text in its runs alone, with no `v` or `m`, and every reader takes it from there through `richText` (`engine/format.ts`). What is bound to the grid position lives in a map beside the matrix:
+Everything that is the cell (value, formula, number format, colors, font, rotation, rich-text runs) lives on the `Cell` in the matrix, and overwriting the cell overwrites all of it in one op. A rich-text cell keeps its text in its runs alone, with no `v` or `m`, and every reader takes it from there through `richText`, or `cellValue` for a value that is the runs' text or `v` (`engine/format.ts`). A writer that writes plain text over a rich cell drops its runs with `dropRuns`: they would otherwise outrank the value it wrote. What is bound to the grid position lives in a map beside the matrix:
 
 | Property | Home | Why not on the cell |
 |---|---|---|

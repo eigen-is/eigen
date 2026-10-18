@@ -1,5 +1,5 @@
 import { isNil } from 'es-toolkit/compat';
-import { parseCellInput, richText } from './format';
+import { cellValue, parseCellInput } from './format';
 import type { FormulaEngine } from './formula-engine';
 import { functionCopy } from './formula-shift';
 import type { CellMatrix, CellResolver, CompiledFormula, ConditionalFormatRule, SingleRange } from './types';
@@ -55,8 +55,7 @@ export function createCfFormulaEvaluator(
 // Returns the cell's display value at (r, c). Mirrors the "v" attribute path of
 // state-side getCellValue, simplified for the conditional-format evaluator.
 function cellValueAt(data: CellMatrix, r: number, c: number) {
-    const cell = data[r]?.[c];
-    return (cell && richText(cell)) ?? cell?.v ?? null;
+    return cellValue(data[r]?.[c]) ?? null;
 }
 
 // Merge a partial cell style into the map, creating the entry if absent. The CF evaluator
@@ -275,34 +274,33 @@ export function evaluateConditionalFormat(
                     // Matches Excel/Google, mirroring the `between` branch below.
                     const threshold = Number(conditionValue0);
                     forEachCellInRanges(data, [range], (r, c) => {
-                        const cell = data[r]?.[c];
-                        if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v)) {
+                        const v = cellValue(data[r]?.[c]);
+                        if (isNil(v) || isRealNull(v)) {
                             return;
                         }
                         let matches = false;
                         if (conditionName === 'greaterThan') {
-                            matches = typeof cell.v === 'number' && cell.v > threshold;
+                            matches = typeof v === 'number' && v > threshold;
                         } else if (conditionName === 'greaterThanOrEqual') {
-                            matches = typeof cell.v === 'number' && cell.v >= threshold;
+                            matches = typeof v === 'number' && v >= threshold;
                         } else if (conditionName === 'lessThan') {
-                            matches = typeof cell.v === 'number' && cell.v < threshold;
+                            matches = typeof v === 'number' && v < threshold;
                         } else if (conditionName === 'lessThanOrEqual') {
-                            matches = typeof cell.v === 'number' && cell.v <= threshold;
+                            matches = typeof v === 'number' && v <= threshold;
                         } else if (conditionName === 'equal') {
                             matches =
-                                typeof cell.v === 'number' && !Number.isNaN(threshold)
-                                    ? cell.v === threshold
-                                    : cell.v.toString() === conditionValue0;
+                                typeof v === 'number' && !Number.isNaN(threshold)
+                                    ? v === threshold
+                                    : v.toString() === conditionValue0;
                         } else if (conditionName === 'notEqual') {
                             matches =
-                                typeof cell.v === 'number' && !Number.isNaN(threshold)
-                                    ? cell.v !== threshold
-                                    : cell.v.toString() !== conditionValue0;
+                                typeof v === 'number' && !Number.isNaN(threshold)
+                                    ? v !== threshold
+                                    : v.toString() !== conditionValue0;
                         } else if (conditionName === 'textContains') {
                             // Excel's "Text that contains" ignores case, and the xlsx importer
                             // maps containsText onto this rule.
-                            matches =
-                                cell.v.toString().toLowerCase().indexOf(String(conditionValue0).toLowerCase()) !== -1;
+                            matches = v.toString().toLowerCase().indexOf(String(conditionValue0).toLowerCase()) !== -1;
                         }
                         if (matches) {
                             applyCellStyle(computeMap, r, c, { textColor, cellColor });

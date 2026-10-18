@@ -1,5 +1,6 @@
 import { clone, findIndex } from 'es-toolkit/compat';
 import numeral from 'numeral';
+import { cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
 import { createContextResolver, execfunction, functionCopy, numberDisplay } from '.';
@@ -10,8 +11,8 @@ export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[]
         isAsc = true;
     }
     const a = (x: (Cell | null)[], y: (Cell | null)[]) => {
-        const x1: Cell['v'] = x[index] != null ? x[index]?.v : undefined;
-        const y1: Cell['v'] = y[index] != null ? y[index]?.v : undefined;
+        const x1 = cellValue(x[index]);
+        const y1 = cellValue(y[index]);
         if (isRealNull(x1)) {
             return isAsc ? 1 : -1;
         }
@@ -113,7 +114,7 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0
         if (d[r] != null && d[r][c1] != null) {
             const cell = d[r][c1];
             if (cell == null) return; //
-            if (cell.mc != null || isRealNull(cell.v)) {
+            if (cell.mc != null || isRealNull(cellValue(cell))) {
                 continue;
             }
 
