@@ -56,6 +56,11 @@ async function mount(
 
     const sectionTitles = () => [...container.querySelectorAll('h4')].map((h) => h.textContent);
     const rowLabels = () => [...container.querySelectorAll('span.w-14')].map((span) => span.textContent?.trim() ?? '');
+    // A box's label sits beside it, outside the row label column.
+    const boxLabels = () =>
+        [...container.querySelectorAll('label')]
+            .filter((label) => label.querySelector('button[role="checkbox"]'))
+            .map((label) => label.textContent?.trim() ?? '');
     const input = (placeholder: string) => {
         const found = container.querySelector<HTMLInputElement>(`input[placeholder="${placeholder}"]`);
         if (!found) throw new Error(`no "${placeholder}" field; saw ${rowLabels().join(', ')}`);
@@ -135,12 +140,32 @@ async function mount(
         }
         return found;
     };
+    const click = async (name: string) => {
+        const box = container.querySelector(`button[role="checkbox"][aria-label="${name}"]`);
+        if (!box) throw new Error(`no "${name}" checkbox`);
+        await act(async () => box.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    };
     const last = () => {
         const change = changes.at(-1);
         if (!change) throw new Error('the editor wrote nothing');
         return change;
     };
-    return { changes, last, sectionTitles, rowLabels, input, type, blur, row, choose, options, fonts, automatic };
+    return {
+        changes,
+        last,
+        sectionTitles,
+        rowLabels,
+        boxLabels,
+        input,
+        type,
+        blur,
+        row,
+        choose,
+        options,
+        fonts,
+        automatic,
+        click,
+    };
 }
 
 const sample = (type: ChartType) => sampleChartSpec(type);
@@ -157,6 +182,24 @@ describe('ChartEditor', () => {
         const editor = await mount(sample('column'));
         await editor.choose('Type', 'Pie');
         expect(editor.changes).toEqual([{ ...sample('column'), type: 'pie' }]);
+    });
+
+    test("a switch between bar and any other type sets the category axis back to Google's direction, in the same change", async () => {
+        const reversed = (type: ChartType): ChartSpec => {
+            const spec = sample(type);
+            return { ...spec, categoryAxis: { ...spec.categoryAxis, reversed: true } };
+        };
+        const bar = await mount(reversed('bar'));
+        await bar.choose('Type', 'Column');
+        expect(bar.changes).toEqual([
+            { ...reversed('bar'), type: 'column', categoryAxis: { ...reversed('bar').categoryAxis, reversed: false } },
+        ]);
+        const column = await mount(reversed('column'));
+        await column.choose('Type', 'Bar');
+        expect(column.last().categoryAxis.reversed).toBe(false);
+        const line = await mount(reversed('column'));
+        await line.choose('Type', 'Line');
+        expect(line.changes).toEqual([{ ...reversed('column'), type: 'line' }]);
     });
 
     test('stacking shows for column and bar, writes the grouping, and is gone for line and pie', async () => {
@@ -212,7 +255,8 @@ describe('ChartEditor', () => {
     test('min and max sit with the value axis, and an emptied one is auto again', async () => {
         const column = await mount(sample('column'));
         // Vertical for a column chart, so the vertical section holds them.
-        expect(column.rowLabels()).toEqual(expect.arrayContaining(['Min', 'Max', 'Gridlines']));
+        expect(column.rowLabels()).toEqual(expect.arrayContaining(['Min', 'Max']));
+        expect(column.boxLabels()).toContain('Gridlines');
         await column.type('Auto', '10');
         expect(column.last().valueAxis.min).toBe(10);
         await column.type('Auto', '');
@@ -292,10 +336,40 @@ describe('ChartEditor', () => {
 
     test('the gridlines box turns the value gridlines off', async () => {
         const editor = await mount(sample('column'));
-        const box = editor.row('Gridlines').querySelector('button[role="checkbox"]');
-        if (!box) throw new Error('no Gridlines checkbox');
-        await act(async () => box.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        await editor.click('Vertical axis: Gridlines');
         expect(editor.last().valueAxis.gridlines).toBe(false);
+    });
+
+    test('each axis section shows or hides its axis, one write a click', async () => {
+        const column = await mount(sample('column'));
+        await column.click('Horizontal axis: Show axis');
+        expect(column.changes).toEqual([
+            { ...sample('column'), categoryAxis: { ...sample('column').categoryAxis, visible: false } },
+        ]);
+        await column.click('Vertical axis: Show axis');
+        expect(column.last().valueAxis.visible).toBe(false);
+        expect(column.changes).toHaveLength(2);
+
+        // A bar chart lies on its side, so its vertical section holds the category axis.
+        const bar = await mount(sample('bar'));
+        await bar.click('Vertical axis: Show axis');
+        expect(bar.last().categoryAxis.visible).toBe(false);
+        await bar.click('Horizontal axis: Show axis');
+        expect(bar.last().valueAxis.visible).toBe(false);
+    });
+
+    test("the category axis's section reverses its order, one write a click", async () => {
+        const column = await mount(sample('column'));
+        // Google's words, each beside its box, the category axis's section first.
+        expect(column.boxLabels()).toEqual(['Show axis', 'Reverse axis order', 'Show axis', 'Gridlines']);
+        await column.click('Horizontal axis: Reverse axis order');
+        expect(column.changes).toEqual([
+            { ...sample('column'), categoryAxis: { ...sample('column').categoryAxis, reversed: true } },
+        ]);
+        const bar = await mount(sample('bar'));
+        await bar.click('Vertical axis: Reverse axis order');
+        expect(bar.last().categoryAxis.reversed).toBe(true);
+        expect(bar.boxLabels().filter((label) => label === 'Reverse axis order')).toHaveLength(1);
     });
 
     test('a pie has no axes; it colors its slices by category instead of its series', async () => {

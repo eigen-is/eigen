@@ -3,10 +3,10 @@ import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
 import { Button } from '@workspace/ui/components/button';
 import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
-import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Input } from '@workspace/ui/components/input';
 import {
     PropertiesPanel,
+    PropertyCheckbox,
     PropertyGestureContext,
     PropertyRow,
     PropertySection,
@@ -150,14 +150,13 @@ function SetupSection({ editor, spec, data, workbook, onChange }: SetupSectionPr
             </PropertyRow>
             {error && <p className="text-xs text-destructive">{error}</p>}
             {toggles.map(({ label, checked, patch }) => (
-                <label key={label} className="flex items-center gap-2 text-xs">
-                    <Checkbox
-                        checked={checked}
-                        disabled={!range}
-                        onCheckedChange={(next) => setup(patch(next === true))}
-                    />
-                    {label}
-                </label>
+                <PropertyCheckbox
+                    key={label}
+                    label={label}
+                    checked={checked}
+                    disabled={!range}
+                    onCheckedChange={(next) => setup(patch(next))}
+                />
             ))}
         </PropertySection>
     );
