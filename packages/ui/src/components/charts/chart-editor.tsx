@@ -86,27 +86,52 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
         });
     };
 
-    const categoryTitle = (placeholder: string) => (
-        <PropertyRow label="Title">
-            <PropertyTextInput
-                value={categoryAxis.title}
-                placeholder={placeholder}
-                maxLength={MAX_CHART_LABEL_LENGTH}
-                onChange={(title) => onChange({ ...spec, categoryAxis: { ...categoryAxis, title } })}
+    // An axis's rows take their section's name, since a bar chart swaps which section holds which axis.
+    type AxisName = 'Horizontal axis' | 'Vertical axis';
+    const visibleRow = (axis: AxisName, visible: boolean, onVisible: (visible: boolean) => void) => (
+        <PropertyRow label="Visible">
+            <Checkbox
+                aria-label={`${axis} visible`}
+                checked={visible}
+                onCheckedChange={(checked) => onVisible(checked === true)}
             />
         </PropertyRow>
     );
+    const setCategoryAxis = (patch: Partial<ChartSpec['categoryAxis']>) =>
+        onChange({ ...spec, categoryAxis: { ...categoryAxis, ...patch } });
 
-    const valueRows = (placeholder: string) => (
+    const categoryRows = (axis: AxisName) => (
+        <>
+            <PropertyRow label="Title">
+                <PropertyTextInput
+                    value={categoryAxis.title}
+                    placeholder={`${axis} title`}
+                    maxLength={MAX_CHART_LABEL_LENGTH}
+                    onChange={(title) => setCategoryAxis({ title })}
+                />
+            </PropertyRow>
+            {visibleRow(axis, categoryAxis.visible, (visible) => setCategoryAxis({ visible }))}
+            <PropertyRow label="Reversed">
+                <Checkbox
+                    aria-label={`${axis} reversed`}
+                    checked={categoryAxis.reversed}
+                    onCheckedChange={(checked) => setCategoryAxis({ reversed: checked === true })}
+                />
+            </PropertyRow>
+        </>
+    );
+
+    const valueRows = (axis: AxisName) => (
         <>
             <PropertyRow label="Title">
                 <PropertyTextInput
                     value={valueAxis.title}
-                    placeholder={placeholder}
+                    placeholder={`${axis} title`}
                     maxLength={MAX_CHART_LABEL_LENGTH}
                     onChange={(title) => setValueAxis({ title })}
                 />
             </PropertyRow>
+            {visibleRow(axis, valueAxis.visible, (visible) => setValueAxis({ visible }))}
             <PropertyRow label="Min">
                 <PropertyNumberInput
                     value={shownBound(valueAxis.min)}
@@ -188,12 +213,12 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
 
             {!pie && (
                 <PropertySection title="Horizontal axis">
-                    {valueHorizontal ? valueRows('Horizontal axis title') : categoryTitle('Horizontal axis title')}
+                    {valueHorizontal ? valueRows('Horizontal axis') : categoryRows('Horizontal axis')}
                 </PropertySection>
             )}
             {!pie && (
                 <PropertySection title="Vertical axis">
-                    {valueHorizontal ? categoryTitle('Vertical axis title') : valueRows('Vertical axis title')}
+                    {valueHorizontal ? categoryRows('Vertical axis') : valueRows('Vertical axis')}
                 </PropertySection>
             )}
 

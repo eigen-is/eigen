@@ -135,12 +135,31 @@ async function mount(
         }
         return found;
     };
+    const click = async (name: string) => {
+        const box = container.querySelector(`button[role="checkbox"][aria-label="${name}"]`);
+        if (!box) throw new Error(`no "${name}" checkbox`);
+        await act(async () => box.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    };
     const last = () => {
         const change = changes.at(-1);
         if (!change) throw new Error('the editor wrote nothing');
         return change;
     };
-    return { changes, last, sectionTitles, rowLabels, input, type, blur, row, choose, options, fonts, automatic };
+    return {
+        changes,
+        last,
+        sectionTitles,
+        rowLabels,
+        input,
+        type,
+        blur,
+        row,
+        choose,
+        options,
+        fonts,
+        automatic,
+        click,
+    };
 }
 
 const sample = (type: ChartType) => sampleChartSpec(type);
@@ -314,6 +333,36 @@ describe('ChartEditor', () => {
         if (!box) throw new Error('no Gridlines checkbox');
         await act(async () => box.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         expect(editor.last().valueAxis.gridlines).toBe(false);
+    });
+
+    test('each axis section shows or hides its axis, one write a click', async () => {
+        const column = await mount(sample('column'));
+        await column.click('Horizontal axis visible');
+        expect(column.changes).toEqual([
+            { ...sample('column'), categoryAxis: { ...sample('column').categoryAxis, visible: false } },
+        ]);
+        await column.click('Vertical axis visible');
+        expect(column.last().valueAxis.visible).toBe(false);
+        expect(column.changes).toHaveLength(2);
+
+        // A bar chart lies on its side, so its vertical section holds the category axis.
+        const bar = await mount(sample('bar'));
+        await bar.click('Vertical axis visible');
+        expect(bar.last().categoryAxis.visible).toBe(false);
+        await bar.click('Horizontal axis visible');
+        expect(bar.last().valueAxis.visible).toBe(false);
+    });
+
+    test("the category axis's section reverses its order, one write a click", async () => {
+        const column = await mount(sample('column'));
+        await column.click('Horizontal axis reversed');
+        expect(column.changes).toEqual([
+            { ...sample('column'), categoryAxis: { ...sample('column').categoryAxis, reversed: true } },
+        ]);
+        const bar = await mount(sample('bar'));
+        await bar.click('Vertical axis reversed');
+        expect(bar.last().categoryAxis.reversed).toBe(true);
+        expect(bar.rowLabels().filter((label) => label === 'Reversed')).toHaveLength(1);
     });
 
     test('a pie has no axes; it colors its slices by category instead of its series', async () => {
