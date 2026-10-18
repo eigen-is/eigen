@@ -6,7 +6,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import './index.css';
 import { debounce } from 'es-toolkit/compat';
 import { type SetContextOptions, WorkbookContext } from '../../context';
-import { richText } from '../../engine/format';
+import { cellDisplay } from '../../engine/format';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -368,7 +368,7 @@ export const SheetOverlay: React.FC = () => {
             const rowFocus = selection.row_focus ?? 0;
             const columnFocus = selection.column_focus ?? 0;
             const cell = context.sheets[sheetIndex]?.data?.[rowFocus]?.[columnFocus];
-            return (cell && richText(cell)) || cell?.m || '';
+            return cellDisplay(cell) ?? '';
         }
         return '';
     };

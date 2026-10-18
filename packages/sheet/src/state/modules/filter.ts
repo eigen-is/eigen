@@ -1,5 +1,5 @@
 import { cloneDeep, find, flatten, reduce, size } from 'es-toolkit/compat';
-import { cellValue, parseCellInput, richText, update } from '../../engine/format';
+import { cellDisplay, cellValue, parseCellInput, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { FilterCondition, FilterConditionName, Selection } from '../types';
@@ -301,7 +301,7 @@ export type FilterDate = {
 export type FilterValue = {
     key: string;
     value: Cell['v'] | null;
-    mask: Cell['m'] | null;
+    mask: Cell['v'] | null;
     text: string;
     rows: number[];
 };
@@ -400,7 +400,7 @@ export function buildFilterConditionMatcher(condition: FilterCondition): (cell: 
     return (cell) => {
         const value = cellValue(cell);
         const blank = cell == null || isRealNull(value);
-        const display = blank ? '' : `${richText(cell) ?? cell.m ?? value}`.toLowerCase();
+        const display = blank ? '' : `${cellDisplay(cell)}`.toLowerCase();
         const raw = blank ? '' : `${value}`;
 
         switch (conditionName) {
@@ -579,13 +579,13 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
             }
         } else {
             let v: Cell['v'] | null;
-            let m: Cell['m'] | null;
+            let m: Cell['v'] | null;
             if (cell == null || isRealNull(cellValue(cell))) {
                 v = null;
                 m = null;
             } else {
                 v = cellValue(cell);
-                m = richText(cell) ?? cell.m;
+                m = cellDisplay(cell);
             }
 
             const data = valuesMap.get(`${v}`);

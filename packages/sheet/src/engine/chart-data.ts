@@ -8,7 +8,7 @@ import type {
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
 import { renderChartSpecSvg } from '@workspace/lib/vector';
-import { numberDisplay, richText } from './format';
+import { cellDisplay, numberDisplay } from './format';
 import type { Cell, CellResolver } from './types';
 
 // Reads a range chart's cells: values from the computed `v`, labels and names from the display
@@ -88,7 +88,7 @@ function size(ref: CellRangeRef): number {
 
 // The text a chart reads from a cell: the string the grid shows, or a rich-text cell's runs.
 export function cellLabel(cell: Cell | null): string {
-    return chartLabel(String((cell && richText(cell)) ?? cell?.m ?? cell?.v ?? ''));
+    return chartLabel(String(cellDisplay(cell) ?? ''));
 }
 
 // Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or

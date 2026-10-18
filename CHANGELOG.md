@@ -29,7 +29,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 - **Sheets copy and Tab** — copied cells paste into other apps as rows and columns, not one run of text, and Tab while typing in a cell confirms it and moves right (Shift+Tab left)
 - **Copy and paste in Sheets** — a pasted cell keeps its font, mapped to the bundled one: Times New Roman becomes Source Serif 4, where every font became Inter
-- **Rich text in Sheets** — a cell that mixes bold, italic, colors or fonts counts in sorting, filtering, conditional formats, dropdown checks, formulas and the status bar, where it read as empty, imported or typed in the editor
+- **Rich text in Sheets** — a cell that mixes bold, italic, colors or fonts counts in sorting, filtering, conditional formats, dropdown checks, formulas and the status bar, where it read as empty, imported or typed in the editor. A number, which counted as empty too, anchors a merge and stops text overflowing into its cell, as in Google Sheets
 - **Server** — a file too large for the server's memory to import, export, preview or index is refused instead of taking the server down. An import says Document too large or Spreadsheet too large
 
 ## [0.3.3] - 2026-10-13

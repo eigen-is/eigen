@@ -22,13 +22,18 @@ function inlineStringText(ct: CellType): string {
 }
 
 // A cell's text when it is rich text, so every reader of a value or a display reads one source; undefined otherwise.
-export function richText(cell: Cell): string | undefined {
-    return cell.ct?.t === 'inlineStr' && cell.ct.s?.length ? inlineStringText(cell.ct) : undefined;
+export function richText(cell: Cell | null | undefined): string | undefined {
+    return cell?.ct?.t === 'inlineStr' && cell.ct.s?.length ? inlineStringText(cell.ct) : undefined;
 }
 
 // The value a reader compares, sorts or counts: a rich cell's text, any other cell's `v`.
 export function cellValue(cell: Cell | null | undefined): Cell['v'] {
     return cell ? (richText(cell) ?? cell.v) : undefined;
+}
+
+// The text the grid shows: a rich cell's runs, else `m`, else `v`.
+export function cellDisplay(cell: Cell | null | undefined): Cell['v'] {
+    return cell ? (richText(cell) ?? cell.m ?? cell.v) : undefined;
 }
 
 // A plain write over a rich cell drops its runs, which would otherwise outrank the value written.

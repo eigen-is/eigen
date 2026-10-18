@@ -1,6 +1,6 @@
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { cloneDeep, omit, set } from 'es-toolkit/compat';
-import { cellValue, dropRuns, richText } from '../../engine/format';
+import { cellValue, dropRuns } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import { type Context, getFlowdata } from '../context';
 import { getSheetIndex, isAllowEdit } from '../utils';
@@ -58,9 +58,10 @@ export function saveHyperlink(
         });
         cell.fc = 'rgb(0, 0, 255)';
         cell.un = 1;
-        // The link's text written plain replaces a rich cell's runs; its own text left as it was keeps them.
+        // The link's text written plain replaces the cell's value and a rich cell's runs; the text the card showed,
+        // left as it was, keeps the cell as it was, a number or runs included.
         const text = linkText || linkAddress;
-        if (richText(cell) !== text) {
+        if (`${cellValue(cell) ?? ''}` !== text) {
             dropRuns(cell);
             cell.v = text;
             cell.m = text;

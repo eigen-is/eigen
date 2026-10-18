@@ -1058,7 +1058,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         v = '';
                     }
 
-                    const rich = isNil(v) ? richText(d[r]?.[c] ?? {}) : undefined;
+                    const rich = isNil(v) ? richText(d[r]?.[c]) : undefined;
                     if (rich !== undefined) {
                         v = rich;
                         isInlineStr = true;

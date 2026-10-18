@@ -1,6 +1,11 @@
 import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
-import { cellWrapsText, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT, richText } from '@workspace/sheet/engine';
+import {
+    cellDisplay,
+    cellWrapsText,
+    DEFAULT_SHEET_COLUMN_COUNT,
+    DEFAULT_SHEET_ROW_COUNT,
+} from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import { optional } from '../../core/opc';
 import { DEFAULT_ROW_HEIGHT_PT } from '../../document/spreadsheetml';
@@ -155,7 +160,7 @@ function estimateCellHeight(
         return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + 6 : 0;
     }
 
-    const text = String(richText(converted) ?? converted.m ?? '');
+    const text = String(cellDisplay(converted) ?? '');
     if (!text) return lineHeightPx + 6;
 
     let cellWidth = colWidthPx[c] ?? SHEET_DEFAULT_COL_WIDTH;

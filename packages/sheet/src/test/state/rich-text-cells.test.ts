@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { evaluateConditionalFormat } from '../../engine/conditional-format';
-import { cellValue } from '../../engine/format';
+import { cellDisplay, cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { setCellValue as apiSetCellValue } from '../../state/api/cell';
 import type { Context } from '../../state/context';
@@ -41,6 +41,16 @@ describe('cellValue', () => {
     });
 });
 
+describe('cellDisplay', () => {
+    test('reads the runs, else m, else v; an empty m is the display', () => {
+        expect(cellDisplay(rich('Hello'))).toBe('Hello');
+        expect(cellDisplay({ v: 5, m: '5.00' })).toBe('5.00');
+        expect(cellDisplay({ v: 5 })).toBe(5);
+        expect(cellDisplay({ v: 5, m: '' })).toBe('');
+        expect(cellDisplay(null)).toBeUndefined();
+    });
+});
+
 describe('readers of a rich cell', () => {
     test('getCellValue and getRealCellValue read the text, so a dropdown over it validates', () => {
         const data = [[rich('Red')]];
@@ -57,6 +67,11 @@ describe('readers of a rich cell', () => {
     test('a dropdown sourced from a range lists the rich cells', () => {
         const ctx = sheetContext([[rich('Alpha')], [plain('Beta')]]);
         expect(getDropdownList(ctx, 'Sheet1!A1:A2')).toEqual(['Alpha', 'Beta']);
+    });
+
+    test('a dropdown lists a cell whose display is empty by its value', () => {
+        const ctx = sheetContext([[{ v: 5, m: '', ct: { fa: ';;;', t: 'n' } }], [plain('Beta')]]);
+        expect(getDropdownList(ctx, 'Sheet1!A1:A2')).toEqual([5, 'Beta']);
     });
 
     test('conditional formats compare the text', () => {
@@ -108,6 +123,9 @@ describe('readers of a rich cell', () => {
         ctx.filter = {};
         const { values } = getFilterColumnValues(ctx, 0, 0, 2, 0);
         expect(values.map((value) => value.text)).toEqual(['Hello', 'x']);
+        expect(
+            buildFilterConditionMatcher({ conditionName: 'textContains', values: ['5.0'] })({ v: 5, m: '5.00' }),
+        ).toBe(true);
     });
 
     test('the status bar counts rich cells', () => {
@@ -184,6 +202,15 @@ describe('writers over a rich cell', () => {
         const kept = ctx.sheets[0].data![0][1];
         expect(kept?.ct?.s?.length).toBe(2);
         expect(kept?.v).toBeUndefined();
+    });
+
+    test('a link saved over a number with its text unchanged keeps the number', () => {
+        const ctx = sheetContext([[plain(5)]]);
+        saveHyperlink(ctx, 0, 0, '5', 'webpage', 'https://eigen.is');
+        const cell = ctx.sheets[0].data![0][0];
+        expect(cell?.v).toBe(5);
+        expect(cell?.ct?.t).toBe('n');
+        expect(cell?.hl).toBeDefined();
     });
 
     test('removing a link keeps the rich text', () => {

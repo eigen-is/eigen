@@ -1,4 +1,4 @@
-import { richText } from '../../engine/format';
+import { cellDisplay } from '../../engine/format';
 import type { Freezen } from '..';
 import { type Context, getFlowdata } from '../context';
 import { deselectFloatingObject, israngeseleciton } from '../modules';
@@ -227,7 +227,7 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
             if (cell.mc.c !== colIndex) continue;
         }
 
-        const display = richText(cell) ?? cell.m ?? cell.v;
+        const display = cellDisplay(cell);
         if (display == null) continue;
         const text = String(display);
         if (!text) continue;

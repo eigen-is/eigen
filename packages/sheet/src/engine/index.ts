@@ -27,6 +27,7 @@ export { createCfFormulaEvaluator, evaluateConditionalFormat, withCfRanges } fro
 export { createDefaultSheets, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
 export {
     booleanDisplay,
+    cellDisplay,
     cellValue,
     cellWrapsText,
     is_date,

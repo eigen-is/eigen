@@ -1,5 +1,5 @@
 import { isNil } from 'es-toolkit/compat';
-import { booleanDisplay, cellValue, richText } from '../../engine/format';
+import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import {
     type CellMatrix,
@@ -105,7 +105,7 @@ export function getDropdownList(ctx: Context, txt: string) {
                     continue;
                 }
 
-                const v = richText(cell) ?? (cell.m || value);
+                const v = cellDisplay(cell) || value;
 
                 if (!list.includes(v)) {
                     list.push(v);

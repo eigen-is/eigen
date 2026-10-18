@@ -10,7 +10,7 @@ import {
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
-import { numberDisplay, richText } from '../../engine/format';
+import { cellDisplay, numberDisplay } from '../../engine/format';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
@@ -1576,11 +1576,11 @@ export function calcSelectionInfo(ctx: Context) {
                 if (r >= data.length || c >= data[0].length) break;
                 const cell = data![r][c];
                 const ct = cell?.ct?.t as string;
-                const value = (cell && richText(cell)) ?? (cell?.m as string);
+                const value = cellDisplay(cell);
                 // Numeric cells keep the raw number in v; m is the formatted display
                 // string (currency symbols, separators) that parseFloat cannot read.
                 // A nil v (empty cell formatted as numeric) must not become Number(null) = 0
-                const valueNumber = ct === 'n' ? Number(cell?.v ?? Number.NaN) : parseFloat(value);
+                const valueNumber = ct === 'n' ? Number(cell?.v ?? Number.NaN) : parseFloat(String(value));
                 if ((ct === 'n' || ct === 'g') && !Number.isNaN(valueNumber)) {
                     count += 1;
                     sum += valueNumber;
