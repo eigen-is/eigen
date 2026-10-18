@@ -9,7 +9,7 @@ import { openZip } from '../../lib/core/zip';
 import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import { MAX_MATHML_ELEMENTS } from '../../lib/export/doc/render';
+import { MATHML_LIMIT } from '../../lib/export/doc/render';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
 import * as mathSvg from '../../lib/export/math-svg';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
@@ -329,6 +329,12 @@ describe('doc export — page breaks', () => {
     });
 });
 
+// The declarations of a rule in an export's stylesheet.
+function proseCssRule(html: string, selector: string): string {
+    const at = html.indexOf(`${selector} {`);
+    return at < 0 ? '' : html.slice(at, html.indexOf('}', at));
+}
+
 describe('doc export — equations', () => {
     const MATH = `<math xmlns="${MATHML_NAMESPACE}">`;
     const x: MathRow = [{ kind: 'identifier', text: 'x' }];
@@ -352,16 +358,18 @@ describe('doc export — equations', () => {
         return new TextDecoder().decode(data);
     }
 
-    // No screen draws the annotation, and an HTML sanitizer that drops it keeps its LaTeX as text.
-    test('an equation is its MathML without the LaTeX, display="block" when it is displayed', async () => {
+    // No screen draws the annotation, and an HTML sanitizer that drops it keeps its LaTeX as text. The editor's span,
+    // so a displayed one takes its line as the editor's does, ending on the line the trailing <br> holds.
+    test('an equation is its MathML without the LaTeX in the editor\'s span, display="block" when it is displayed', async () => {
         const html = await exportEquations(
             'html',
             { mathml: writeMathml(x, 'x') },
             { mathml: writeMathml(x, 'x'), display: true },
         );
         expect(html).toContain(
-            `<p>${MATH}<mi>x</mi></math><math display="block" xmlns="${MATHML_NAMESPACE}"><mi>x</mi></math>`,
+            `<p><span class="equation">${MATH}<mi>x</mi></math></span><span class="equation" data-display="block"><math display="block" xmlns="${MATHML_NAMESPACE}"><mi>x</mi></math></span><br></p>`,
         );
+        expect(proseCssRule(html, '.eigen-prose .equation[data-display]')).toContain('width: 100%');
         expect(html).not.toContain('x-tex');
         expect(html).not.toContain('<svg');
     });
@@ -378,6 +386,31 @@ describe('doc export — equations', () => {
         );
         expect(html.match(/<svg/g)).toHaveLength(2);
         expect(html).not.toMatch(/<math|x-tex/);
+    });
+
+    // CSS's + skips text, so a rule hiding the <br> after a displayed equation would hide a user's break after text
+    // that follows it. The drawing takes its line as the editor's does instead, ending on the trailing <br>'s line.
+    test("the PDF keeps a user's break after a displayed equation", async () => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'equation', attrs: { mathml: writeMathml(y, 'y'), display: true } },
+                        { type: 'text', text: 'AFTER' },
+                        { type: 'hardBreak' },
+                        { type: 'text', text: 'MORE' },
+                    ],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+        const html = new TextDecoder().decode(data);
+
+        expect(html).toMatch(/<\/svg><\/span>AFTER<br>MORE<\/p>/);
+        expect(html).not.toMatch(/\+\s*br\s*\{/);
+        expect(proseCssRule(html, '.math-svg[data-display]')).toMatch(/display: inline-block;[^}]*width: 100%/);
     });
 
     // MathJax draws each string once. Past its last drawing a repeat of a drawn one is text too, so the text is a tail.
@@ -404,7 +437,7 @@ describe('doc export — equations', () => {
 
     // A row of 1,997 ⨌, about all MATH_LIMITS.size admits: 24 KB of MathML, about 4.1 MB of SVG. Each copy counts, as
     // the sanitizer and WeasyPrint read each, and MathJax stops at the one that does not fit.
-    test(`the PDF draws at most ${mathSvg.MAX_SVG_BYTES} bytes of SVG, and the rest as their text`, async () => {
+    test(`the PDF draws at most ${mathSvg.SVG_LIMIT.bytes} bytes of SVG, and the rest as their text`, async () => {
         const row = (i: number): MathRow => [
             { kind: 'number', text: `${i}` },
             ...Array.from({ length: 1997 }, () => integral),
@@ -427,10 +460,10 @@ describe('doc export — equations', () => {
             );
 
             expect(drawn.reduce((bytes, svg) => bytes + Buffer.byteLength(svg), 0)).toBeLessThanOrEqual(
-                mathSvg.MAX_SVG_BYTES,
+                mathSvg.SVG_LIMIT.bytes,
             );
             expect(built.slice(0, -1).reduce((sum, bytes) => sum + bytes, 0)).toBeLessThanOrEqual(
-                mathSvg.MAX_SVG_BYTES,
+                mathSvg.SVG_LIMIT.bytes,
             );
             expect(drawn).toHaveLength(2);
             expect(mathmlToSvg).toHaveBeenCalledTimes(2);
@@ -442,7 +475,7 @@ describe('doc export — equations', () => {
 
     // Each fences() draws 0.15 MB, where bytes alone would admit 68 copies. A copy past the budget is text, as WeasyPrint
     // would draw it again.
-    test(`the PDF draws at most ${mathSvg.MAX_SVG_ELEMENTS} elements of SVG, and the rest as their text`, async () => {
+    test(`the PDF draws at most ${mathSvg.SVG_LIMIT.elements} elements of SVG, and the rest as their text`, async () => {
         const equations = [fences(0), ...fenceRun(0, 11), fences(0), ...fenceRun(11, 16)];
         const mathmlToSvg = spyOn(mathSvg, 'mathmlToSvg');
         try {
@@ -453,7 +486,7 @@ describe('doc export — equations', () => {
                 html.indexOf('<br></p>'),
             );
 
-            expect(drawn.reduce((sum, svg) => sum + elements(svg), 0)).toBeLessThanOrEqual(mathSvg.MAX_SVG_ELEMENTS);
+            expect(drawn.reduce((sum, svg) => sum + elements(svg), 0)).toBeLessThanOrEqual(mathSvg.SVG_LIMIT.elements);
             expect(drawn).toHaveLength(12);
             expect(mathmlToSvg).toHaveBeenCalledTimes(11);
             expect(texts).toBe(`0${fenceTexts(11, 16)}`);
@@ -464,7 +497,7 @@ describe('doc export — equations', () => {
 
     // The HTML download and the preview write MathML, which jsdom pays for by the element, every copy. Past the budget
     // an equation is its linear text, whether it carries LaTeX or not.
-    test(`the HTML writes at most ${MAX_MATHML_ELEMENTS} elements of MathML, and the rest as their text`, async () => {
+    test(`the HTML writes at most ${MATHML_LIMIT.elements} elements of MathML, and the rest as their text`, async () => {
         const half: MathRow = [
             { kind: 'fraction', numerator: x, denominator: [{ kind: 'number', text: '2' }], line: 'bar' },
         ];
@@ -475,11 +508,11 @@ describe('doc export — equations', () => {
             });
             const drawn = html.match(/<math[\s\S]*?<\/math>/g) ?? [];
 
-            expect(drawn.reduce((sum, math) => sum + elements(math), 0)).toBeLessThanOrEqual(MAX_MATHML_ELEMENTS);
+            expect(drawn.reduce((sum, math) => sum + elements(math), 0)).toBeLessThanOrEqual(MATHML_LIMIT.elements);
             expect(drawn).toHaveLength(12);
             // Each distinct equation is read once to draw, and each past the budget once more for its text.
             expect(readStoredEquation).toHaveBeenCalledTimes(12 + 4);
-            expect(html).toContain('</math>11012x/2<br></p>');
+            expect(html).toContain('</math></span>11012x/2<br></p>');
         } finally {
             readStoredEquation.mockRestore();
         }
@@ -541,7 +574,9 @@ describe('doc export — equations', () => {
             { mathml: `${MATH}<mi onclick="alert(1)">x</mi><script>alert(2)</script></math>` },
             { mathml: `${MATH}<mi>x</mi>` },
         );
-        expect(html).toContain(`<p>${MATH}<mi>x</mi></math>${MATH}</math><br></p>`);
+        expect(html).toContain(
+            `<p><span class="equation">${MATH}<mi>x</mi></math></span><span class="equation">${MATH}</math></span><br></p>`,
+        );
         expect(html).not.toContain('alert');
     });
 });

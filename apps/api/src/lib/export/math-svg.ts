@@ -1,5 +1,4 @@
-// WeasyPrint draws no MathML, so a PDF draws each equation as the SVG MathJax makes of it. Outside export/doc/, as the
-// canvas exporters will draw theirs through it too.
+// WeasyPrint draws no MathML, so a PDF draws each equation as the SVG MathJax makes of it.
 let converter: ReturnType<typeof loadConverter> | undefined;
 
 // Loaded on the first equation, once per Worker. Every glyph is a path of its own (fontCache 'none'): a cache would
@@ -24,21 +23,11 @@ async function loadConverter() {
     return { adaptor, document };
 }
 
-// The PDF's SVG costs per element, every copy: the sanitizer's jsdom, in the Worker, which shares the API's address
-// space, and WeasyPrint, at 0.2 to 0.4 ms an element. 44,000 elements of empty fences, 1.2 MB, take the Worker 0.56 GB
-// above the doc and WeasyPrint 9 s and 0.7 GB; under a byte budget alone, 6 times as many took 1.9 GB and 51 s. The 108 corpus equations draw 21 elements each on average (the largest 195), so a 1,000-equation paper draws
-// about 21,700, in 8 s of WeasyPrint.
-export const MAX_SVG_ELEMENTS = 50_000;
+// The sanitizer's jsdom, in the Worker beside the API, and WeasyPrint pay per SVG element; glyph paths make bytes bind
+// first.
+export const SVG_LIMIT = { elements: 50_000, bytes: 10_000_000 };
 
-// Glyph paths run about 390 bytes an element, so there bytes bind first. The corpus equations draw 4.2 KB each on
-// average (median 2.1 KB, the largest 42 KB): 4.2 MB for a 1,000-equation paper. One equation at the math bounds
-// draws up to 4.1 MB, a row of 1,999 ⨌, so the budget holds two.
-export const MAX_SVG_BYTES = 10_000_000;
-
-export const SVG_LIMIT = { elements: MAX_SVG_ELEMENTS, bytes: MAX_SVG_BYTES };
-
-// MathJax takes 1 to 2 ms an equation over the corpus, after 0.4 s loading itself, and up to 0.6 s for a tree at the
-// math bounds.
+// MathJax takes 1 to 2 ms an equation, after about 0.1 s loading itself.
 export const MAX_SVG_EQUATIONS = 1000;
 
 // The <math>'s own display="block" makes it a display equation. The promise API waits for the font ranges it loads.

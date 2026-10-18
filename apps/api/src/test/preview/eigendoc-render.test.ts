@@ -3,7 +3,7 @@ import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP, PAGE_ROOT } from '@workspace/lib/docs/eigendoc';
 import { type MathNode, type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
-import { MAX_MATHML_ELEMENTS } from '../../lib/export/doc/render';
+import { MATHML_LIMIT } from '../../lib/export/doc/render';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedEigendoc } from '../fixtures/golden-documents';
 
@@ -70,7 +70,7 @@ describe('renderEigendocPreviewBody', () => {
     });
 
     // A viewer's open runs it, and the block cap leaves a paragraph any number of equations: jsdom pays per element.
-    test(`a paragraph's equations write at most ${MAX_MATHML_ELEMENTS} elements of MathML, the rest as their text`, () => {
+    test(`a paragraph's equations write at most ${MATHML_LIMIT.elements} elements of MathML, the rest as their text`, () => {
         const fence: MathNode = { kind: 'fenced', open: '', close: '', separator: '', parts: [[]] };
         // 1,332 empty fences, about all MATH_LIMITS.size admits: about 4,000 elements, so 12 fit. No LaTeX, as the docx
         // import stores an equation; the fences write no text, so i is its linear form.
@@ -84,10 +84,10 @@ describe('renderEigendocPreviewBody', () => {
         const drawn = body.match(/<math[\s\S]*?<\/math>/g) ?? [];
 
         expect(drawn.reduce((sum, math) => sum + (math.match(/<[a-z]/g)?.length ?? 0), 0)).toBeLessThanOrEqual(
-            MAX_MATHML_ELEMENTS,
+            MATHML_LIMIT.elements,
         );
         expect(drawn).toHaveLength(12);
-        expect(body).toContain(`</math>${Array.from({ length: 8 }, (_, i) => `${i + 12}`).join('')}<br></p>`);
+        expect(body).toContain(`</math></span>${Array.from({ length: 8 }, (_, i) => `${i + 12}`).join('')}<br></p>`);
     });
 
     test('an ordered list keeps its start and its type, as the export draws them', () => {

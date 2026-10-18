@@ -91,8 +91,7 @@ function renderFigureNode(
     return `<span class="figure" data-layout="${attrs.layout ?? 'block'}" data-alignment="${attrs.alignment ?? 'center'}">${img}${cap}</span>`;
 }
 
-// Without the annotation, which no screen draws and the sanitizer would keep as text. The PDF has MathJax draw this
-// string.
+// Without the annotation, which no screen draws and the sanitizer would keep as text; the PDF's MathJax draws it too.
 export function equationMathml(row: MathRow, display: boolean): string {
     const math = writeMathml(row);
     return display ? math.replace('<math', '<math display="block"') : math;
@@ -123,24 +122,14 @@ export function equationBudget(limit: EquationCost): (drawing: EquationCost) => 
     };
 }
 
-// The screen's MathML costs the sanitizer's jsdom 3 to 5 KB an element, in the Worker, which shares the API's address
-// space, for the HTML download and for the preview a viewer's open runs: one paragraph of 294,000 elements took the
-// preview 1.6 GB, and 4.9 million took the download 16 GB. The 108 corpus equations write 11 elements each on average (the largest 122), so a 1,000-equation
-// paper writes about 10,900. Its bytes cost no more than the doc's own text.
-export const MAX_MATHML_ELEMENTS = 50_000;
-
-const MATHML_LIMIT = { elements: MAX_MATHML_ELEMENTS, bytes: Number.POSITIVE_INFINITY };
-
-function drawScreenEquation(attrs: Record<string, unknown>): EquationDrawing {
-    const { row, display } = readStoredEquation(attrs);
-    return equationDrawing(equationMathml(row, display));
-}
+// The sanitizer's jsdom pays 3 to 5 KB a MathML element in the Worker, beside the API; the bytes cost no more than text.
+export const MATHML_LIMIT = { elements: 50_000, bytes: Number.POSITIVE_INFINITY };
 
 // The render meets the equations in document order, each copy spending the budget and each distinct one drawn once,
 // so a subtree it skips, which the schema refuses but a Yjs update can hold, moves no drawing onto another equation.
 // From the first that does not fit, the rest print as their linear text, which costs no element.
 function renderBudgetedEquations(
-    draw: (attrs: Record<string, unknown>) => EquationDrawing | undefined,
+    draw: (attrs: Record<string, unknown>, key: string) => EquationDrawing | undefined,
     limit: EquationCost,
 ): ({ node }: { node: Node }) => string {
     const fits = equationBudget(limit);
@@ -150,7 +139,7 @@ function renderBudgetedEquations(
     return ({ node }) => {
         const key = equationKey(node.attrs);
         if (!tail) {
-            if (!drawings.has(key)) drawings.set(key, draw(node.attrs));
+            if (!drawings.has(key)) drawings.set(key, draw(node.attrs, key));
             const drawing = drawings.get(key);
             if (drawing && fits(drawing)) return drawing.html;
             tail = true;
@@ -237,9 +226,16 @@ export function renderDocHtml(
                 codeBlock: ({ node }) => renderCodeBlockNode(node),
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
+                // In the editor's span, whose rule lays a displayed one out on its line as the editor does.
                 equation: svgs
-                    ? renderBudgetedEquations((attrs) => svgs.get(equationKey(attrs)), SVG_LIMIT)
-                    : renderBudgetedEquations(drawScreenEquation, MATHML_LIMIT),
+                    ? renderBudgetedEquations((_attrs, key) => svgs.get(key), SVG_LIMIT)
+                    : renderBudgetedEquations((attrs) => {
+                          const { row, display } = readStoredEquation(attrs);
+                          const data = display ? ' data-display="block"' : '';
+                          return equationDrawing(
+                              `<span class="equation"${data}>${equationMathml(row, display)}</span>`,
+                          );
+                      }, MATHML_LIMIT),
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
             },
         },

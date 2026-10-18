@@ -683,9 +683,9 @@ mtable[columnalign="left"] > mtr > mtd {
     position: relative;
 }
 
-/* A displayed equation takes its line, centred; as the figure, a full-width box on the bottom of its line keeps
-   ProseMirror's trailing break on that line. */
-.tiptap .equation[data-display] {
+/* A displayed equation takes its line, centred, in the editor and the HTML exports; as the figure, a full-width box on
+   the bottom of its line keeps ProseMirror's trailing break on that line. */
+.eigen-prose .equation[data-display] {
     display: inline-flex;
     justify-content: center;
     width: 100%;

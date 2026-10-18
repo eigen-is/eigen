@@ -197,11 +197,10 @@ table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-bre
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 
 /* The PDF's equations: MathJax's vertical-align sets an inline one on the baseline, and breaks no line, so one wider
-   than the column scales down to it; a displayed one is centred, and the trailing <br> that holds a paragraph's last
-   line would add an empty one under it */
+   than the column scales down to it; a displayed one takes its line as in the editor, a full-width box on the bottom
+   of the line that keeps the trailing <br> */
 .math-svg > svg { display: inline; max-width: 100%; }
-.math-svg[data-display] { display: block; text-align: center; }
-.math-svg[data-display] + br { display: none; }
+.math-svg[data-display] { display: inline-block; width: 100%; text-align: center; vertical-align: bottom; }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */
 ul[data-type="taskList"] li > label input[type="checkbox"] {
