@@ -63,7 +63,7 @@ The same menu has **Add comment**, to comment on the image itself. See [Comment 
 2. Click **Insert** in the toolbar, choose **Chart**, then **Bar**, **Column**, **Line**, or **Pie**. A bar chart has horizontal bars, a column chart vertical ones.
 3. The chart appears at the cursor with sample data, and stays selected.
 
-Drag a handle to resize the chart. Its width and height change on their own, so you can make it wider without making it taller.
+Drag a handle to resize the chart. Its width and height change on their own, so you can make it wider without making it taller. While you drag, the size shows in centimeters.
 
 On a wide screen, selecting a chart opens the **Chart** panel on the right side of the editor. It sets the **Type**, the **Stacking** of a bar or column chart (**None**, **Standard** or **100%**), the **Title**, where the **Legend** goes, the **Font** of all the chart's text, each axis's **Title**, the **Min**, **Max**, and **Gridlines** of the axis with the numbers, and the color of each series, or of each slice of a pie chart. **Min** and **Max** pick their own values while they're empty and are percents on a **100%** stack; switching **Stacking** to or from **100%** empties them. A color reads **Automatic** until you pick one; **Automatic** in a picked color's list puts it back. Below them, **Style** and **Align** place the chart as they place an image, and **Caption** adds a caption beneath it.
 

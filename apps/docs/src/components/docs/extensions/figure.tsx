@@ -2,7 +2,7 @@ import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
-import { cmText, FigureNode, pxToMm, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
+import { FigureNode, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
@@ -26,9 +26,6 @@ const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
     .join(' ');
 
 const fitFigureWidth = (next: Box, maxWidth: number) => clampFigureWidth(next.width, maxWidth);
-
-// A grip's readout, in cm as the Image panel's Width field shows a width.
-const figureSize = ({ width, height }: Box) => `${cmText(pxToMm(width), 1)} × ${cmText(pxToMm(height), 1)} cm`;
 
 function FigureView(props: NodeViewProps) {
     const { node, selected, editor, getPos } = props;
@@ -130,7 +127,6 @@ function FigureView(props: NodeViewProps) {
             containerRef={containerRef}
             box={box}
             resizeMode="aspect"
-            formatSize={figureSize}
             onTransform={resize.onTransform}
             onCommit={resize.onCommit}
             label="Resize image"

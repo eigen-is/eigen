@@ -4,6 +4,7 @@ import { Mapping } from '@tiptap/pm/transform';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper } from '@tiptap/react';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
+import { cmText, pxToMm } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
@@ -25,6 +26,9 @@ export function figureMaxWidth(figure: Node | null, layout: FigureLayout | null)
 export function clampFigureWidth(width: number, maxWidth: number) {
     return Math.round(Math.max(FIGURE_MIN_SIZE, Math.min(maxWidth, width)));
 }
+
+// A grip's readout, in cm as Docs' fields show a size.
+const figureSize = ({ width, height }: Box) => `${cmText(pxToMm(width), 1)} × ${cmText(pxToMm(height), 1)} cm`;
 
 export type FigureFrameOptions = {
     // The host decides whether a menu opens, so a figure with no rows keeps the browser's own.
@@ -97,7 +101,6 @@ type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'ex
     // The box the transform chrome resizes; none shows the plain ring on a selected figure.
     box: Box | null;
     resizeMode: 'aspect' | 'free';
-    formatSize?: (box: Box) => string;
     onTransform: (next: Box) => void;
     onCommit: (next: Box) => void;
     label: string;
@@ -118,7 +121,6 @@ export function FigureFrame({
     containerRef,
     box,
     resizeMode,
-    formatSize,
     onTransform,
     onCommit,
     label,
@@ -169,7 +171,7 @@ export function FigureFrame({
                         screenDeltaToScene={screenDeltaToScene}
                         showRotate={false}
                         resizeMode={resizeMode}
-                        formatSize={formatSize}
+                        formatSize={figureSize}
                         // Default minSize (1): in aspect mode the component floors BOTH dims, which would inflate
                         // wide images (a 100 floor on a 4:1 banner's height forces width 400). The host's fit clamps.
                         onTransform={onTransform}

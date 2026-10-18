@@ -18,7 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Changed
 
-- **Image sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag a handle are in cm, as in Page setup
+- **Image and chart sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag an image's or a chart's handle are in cm, as in Page setup
 
 ## [0.3.3] - 2026-10-13
 

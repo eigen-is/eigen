@@ -1,5 +1,5 @@
-// A chart draws the painter's SVG in the figure's frame. A grip resizes it freely and writes both sides, a
-// double-click opens Edit data, and a comment on it alone quotes "Chart".
+// A chart draws the painter's SVG in the figure's frame. A grip resizes it freely and writes both sides, showing the
+// size in cm while it is held, a double-click opens Edit data, and a comment on it alone quotes "Chart".
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -96,6 +96,23 @@ test('a corner grip resizes a selected chart freely and writes its width and hei
     // The column caps the width, and each side keeps the floor.
     await drag(box, '-bottom-2.5 -right-2.5', 400, -400);
     expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ width: 600, height: 100 });
+});
+
+test('a grip held on a selected chart shows its size in cm, as the image grips do', async () => {
+    const { editor, box } = await mount();
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+    const grip = box.querySelector<HTMLElement>('.eigen-selection-handle');
+    if (!grip) throw new Error('no grip');
+    grip.setPointerCapture = () => {};
+    await act(async () => {
+        grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0 }));
+    });
+    expect(box.querySelector('.top-full')?.textContent).toBe('10.6 × 6.6 cm');
+    await act(async () => {
+        document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 }));
+    });
 });
 
 test("a double-click selects the chart and opens Edit data, but not a viewer's or one that can't be drawn", async () => {
