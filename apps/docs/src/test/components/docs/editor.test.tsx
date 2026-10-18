@@ -609,6 +609,35 @@ test("Update 'Normal text' to match writes the doc's Normal, the page draws it, 
     expect(page()?.style.getPropertyValue('--doc-font-size')).toBe('');
 });
 
+const updateNormal = () =>
+    [...document.querySelectorAll('[role="menuitem"]')].find(
+        (item) => item.textContent?.trim() === "Update 'Normal text' to match",
+    );
+
+// A heading's or a title's look is its own, and a band's undo is its own, so neither updates the body's Normal.
+test("Update 'Normal text' to match is offered in a paragraph of the body only", async () => {
+    const heading = new Y.XmlElement('heading');
+    heading.setAttribute('level', '2');
+    const run = new Y.XmlText();
+    run.insert(0, 'Title');
+    heading.insert(0, [run]);
+    doc.getXmlFragment('default').insert(0, [heading]);
+    write('default', 'Hello');
+    await render(WRITER);
+    const normalTextMenu = async () => {
+        await openMenu('Format');
+        await openSubmenu('Paragraph styles');
+        await openSubmenu('Normal text');
+    };
+    await normalTextMenu();
+    expect(updateNormal()?.getAttribute('aria-disabled')).toBe('true');
+    await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+
+    await doubleClick('header');
+    await normalTextMenu();
+    expect(updateNormal()?.getAttribute('aria-disabled')).toBe('true');
+});
+
 test('a viewer sees the Normal the doc stores', async () => {
     doc.getMap(STYLE_ROOT).set('size', 12);
     await render({ canWrite: false, isMobile: false });

@@ -549,8 +549,10 @@ const TiptapEditor = ({
                                     pageSetup={pageSetup}
                                     onPageSetupChange={writeSetup}
                                     normalStyle={normalStyle}
-                                    onUpdateNormalStyle={() =>
-                                        updateNormalStyle(yDoc, undoManager, activeEditor, normalStyle)
+                                    onUpdateNormalStyle={
+                                        editingBand
+                                            ? undefined
+                                            : () => updateNormalStyle(yDoc, undoManager, editor, normalStyle)
                                     }
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     // Always offered: desktop draws the side panel, mobile the Column.

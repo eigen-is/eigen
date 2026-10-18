@@ -1718,7 +1718,7 @@ function styleDefinitions(normal: NormalStyle): StyleDef[] {
             pPr: {
                 keepNext: true,
                 keepLines: true,
-                spacing: { before, after, line: autoLine(line, sizePt, BODY.font) },
+                spacing: { before, after, line: autoLine(line, sizePt, normal.font) },
             },
             rPr: { spacing: tracking, size: halfPoints(sizePt), ...TITLE_LOOKS[type] },
         };
@@ -1737,7 +1737,7 @@ function styleDefinitions(normal: NormalStyle): StyleDef[] {
             pPr: {
                 keepNext: true,
                 keepLines: true,
-                spacing: { before, after, line: autoLine(line, sizePt, BODY.font) },
+                spacing: { before, after, line: autoLine(line, sizePt, normal.font) },
                 outlineLvl: level - 1,
             },
             rPr: { spacing: tracking, size: halfPoints(sizePt), ...look },

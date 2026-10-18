@@ -154,6 +154,11 @@ describe('doc export — the Normal', () => {
         expect(styles).toContain(
             '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4" w:eastAsia="Source Serif 4" w:cs="Source Serif 4"/><w:color w:val="000000"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault>',
         );
+        // A heading and the title draw in the Normal's font, so their line is the editor's 1.2 in Source Serif 4's own.
+        for (const id of ['Heading1', 'Title'])
+            expect(styles).toMatch(
+                new RegExp(`w:styleId="${id}">(?:(?!</w:style>).)*<w:spacing [^>]*w:line="210" w:lineRule="auto"/>`),
+            );
         // Single in Inter's line is Source Serif 4's 1.21 / 1.371 of its own.
         expect(styles).toMatch(
             /w:styleId="Normal"><w:name w:val="Normal"\/><w:qFormat\/><w:pPr><w:spacing w:before="120" w:after="0" w:line="212" w:lineRule="auto"\/>/,

@@ -13,6 +13,8 @@ export type ToolbarState = {
     // The paragraph style's name, none for Normal text.
     paragraphStyle: string | undefined;
     mixedStyles: boolean;
+    // Whether the selection starts in a plain paragraph, the one block Update 'Normal text' to match reads.
+    inParagraph: boolean;
     fontName: string;
     // In pt, none for a range of mixed sizes.
     fontSize: number | undefined;
@@ -100,6 +102,7 @@ export function useToolbarState(editor: Editor, normal: NormalStyle): ToolbarSta
                 // A range of mixed styles, or of styled and Normal text, reads as none.
                 paragraphStyle: styles.size === 1 ? [...styles][0] : undefined,
                 mixedStyles: styles.size > 1,
+                inParagraph: selection.$from.parent.type.name === 'paragraph',
                 // getFontName also collapses the full stack a not-yet-normalized doc still carries.
                 fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || normal.font,
                 fontSize: fontSizes.size === 1 ? [...fontSizes][0] : undefined,

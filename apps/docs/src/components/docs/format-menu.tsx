@@ -102,7 +102,8 @@ type FormatMenuProps = {
     clearFormatting: () => void;
     onRestartNumbering: () => void;
     onCustomSpacing: () => void;
-    onUpdateNormalStyle: () => void;
+    // None while a band is edited: the body's undo holds the Normal, so a band's ⌘Z could not take it back.
+    onUpdateNormalStyle?: () => void;
     onIndentationOptions: () => void;
     onPageSetup: () => void;
     onReplaceImage: () => void;
@@ -222,7 +223,12 @@ export const FormatMenu = ({
                         <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
                             Apply 'Normal text'
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={onUpdateNormalStyle}>Update 'Normal text' to match</DropdownMenuItem>
+                        <DropdownMenuItem
+                            disabled={!onUpdateNormalStyle || !active.inParagraph}
+                            onClick={onUpdateNormalStyle}
+                        >
+                            Update 'Normal text' to match
+                        </DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 {paragraphStylesIn(editor.schema).map(({ name, type, attrs, icon: Icon }) => (

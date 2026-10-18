@@ -92,9 +92,9 @@ type EditorToolbarProps = {
     canRedo: boolean;
     pageSetup: PageSetup;
     onPageSetupChange: (from: PageSetup, to: PageSetup) => void;
-    // The doc's Normal, which unformatted text draws, and Update 'Normal text' to match.
+    // The doc's Normal, which unformatted text draws, and Update 'Normal text' to match, the body's only.
     normalStyle: NormalStyle;
-    onUpdateNormalStyle: () => void;
+    onUpdateNormalStyle?: () => void;
     onAccessDialogOpen: () => void;
     path: DrivePath;
     onToggleCommentPanel?: () => void;

@@ -100,3 +100,41 @@ test("in a list item the Normal keeps its spacing and takes the item's text and 
     });
     editor.destroy();
 });
+
+// getAttributes reads the first textStyle anywhere in a range; the Normal is the first text's look, whole.
+test("a range takes its first text's font, size and colour, not a later run's", () => {
+    const { doc, undoManager, editor, normal } = mount({
+        type: 'paragraph',
+        content: [
+            { type: 'text', text: 'plain ' },
+            {
+                type: 'text',
+                text: 'marked',
+                marks: [{ type: 'textStyle', attrs: { fontFamily: 'JetBrains Mono', fontSize: 14, color: '#ff0000' } }],
+            },
+        ],
+    });
+    editor.commands.setTextSelection({ from: 2, to: 12 });
+    updateNormalStyle(doc, undoManager, editor, normal());
+    expect(normal()).toEqual(DEFAULT_NORMAL_STYLE);
+    editor.destroy();
+});
+
+test("a colour or font the Normal can't hold keeps the Normal's own", () => {
+    const { doc, undoManager, editor, normal } = mount({
+        type: 'paragraph',
+        content: [
+            {
+                type: 'text',
+                text: 'Pasted',
+                marks: [{ type: 'textStyle', attrs: { fontFamily: 'Comic Neue', color: 'rgb(255, 0, 0)' } }],
+            },
+        ],
+    });
+    doc.getMap(STYLE_ROOT).set('color', '#333333');
+    doc.getMap(STYLE_ROOT).set('font', 'Source Serif 4');
+    editor.commands.setTextSelection(2);
+    updateNormalStyle(doc, undoManager, editor, normal());
+    expect(normal()).toMatchObject({ color: '#333333', font: 'Source Serif 4' });
+    editor.destroy();
+});
