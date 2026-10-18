@@ -32,7 +32,7 @@ The count inside the **Find** box tells you where you are. **1 of 12** means you
 - Or click the down and up arrows beside the box (**Next match** and **Previous match**).
 - **⌘G** and **⌘⇧G** (**Ctrl+G** and **Ctrl+Shift+G**) step forwards and backwards too. They work even when the bar is closed, using your last term.
 
-Every match stays highlighted, and the editor scrolls the current one to the middle of the screen so the bar can't cover it. The search covers the whole document, not the part you're looking at: in Sheets it runs across every tab, and in Slides across every slide, so stepping on can move you somewhere else in the file. In Docs, the find bar doesn't look inside equations.
+Every match stays highlighted, and the editor scrolls the current one to the middle of the screen so the bar can't cover it. The search covers the whole document, not the part you're looking at: in Sheets it runs across every tab, and in Slides across every slide, so stepping on can move you somewhere else in the file. In Docs, the find bar looks inside footnotes and opens the one the current match is in, but it doesn't look inside equations.
 
 ## Narrow what counts as a match
 

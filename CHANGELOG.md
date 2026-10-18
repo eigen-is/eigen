@@ -19,9 +19,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 - **Paste equations** — an equation copied from Word for the web or a web page that shows math pastes into Docs as an equation you can edit
 - **PowerPoint export** — File → Download → **Microsoft PowerPoint (.pptx)** saves a presentation as a .pptx, also from Drive and ⌘K. Text, shapes, arrows, images and backgrounds carry over; a chart arrives as its shapes
 - **PowerPoint import** — **Convert to Slides** on a .pptx in Drive makes a presentation from it, and File → **Import slides…** adds a .pptx's slides after the open presentation's own. Text, shapes, pictures, charts and backgrounds carry over, and a star, a block arrow, a flowchart shape or a freeform drawing comes in as a shape you can move, resize and recolor. A table, a SmartArt graphic or a chart Slides can't draw leaves a box saying what was there, and Import slides… ends with a message counting what did not come over. A 4:3 file converts to a 4:3 presentation, and slides imported into a presentation of another size are fitted inside its slides
+- **Footnotes in Docs** — Insert → **Page elements** → **Footnote** (⌘⌥F) puts a numbered note at the cursor, and the notes appear at the end of the page under a short rule, as in Google Docs' pageless view. Click a note or its number to edit it, with bold, italic, underline, links and undo; Esc goes back to the text. Bold, a color, a comment or Clear formatting across a number leaves the note alone, find looks inside notes and opens the one a match is in, and word count leaves them out, as Google's does. On a phone notes are read-only
 
 ### Changed
 
+- **Find and replace** — opens on ⇧⌘H (Ctrl+Shift+H, and Ctrl+H on Windows and Linux) in every editor, as in Google Docs, where ⌘⌥F inserts a footnote
 - **Print in Docs** — File → **Print** and ⌘P open the document as a PDF in a new tab to print from, so headers, footers and page numbers print. Offline, before your latest edits are saved, or when the PDF can't be made, Docs prints from the browser without them and says so
 - **Image sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag an image's handle are in cm, as in Page setup
 - **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid
