@@ -327,6 +327,30 @@ describe('Import slides…', () => {
         expect(await readDeck(deck.id)).toEqual(before);
     }, 60_000);
 
+    test('a deck closed while the file is transformed still gets its slides, saved', async () => {
+        const deck = await seededDeck('import-closed-meanwhile');
+        const alice = await getUserById(ctx.alice.user.id);
+        if (!alice) throw new Error('alice missing');
+        const drive = await getSharedDrive(ctx.alice.user.id, alice);
+        const { path } = await drive.resolveFile(mountId, deck.id);
+        const home = await getHome(ctx.alice.user.id);
+
+        // The last tab leaving during a long queue and transform: the linger closes the deck before the commit.
+        const realRun = documentTransformRunner.run.bind(documentTransformRunner);
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async (request, opts) => {
+            const response = await realRun(request, opts);
+            if (request.kind === 'import') await home.drive.closeCollabDocument(mountId, deck.id);
+            return response;
+        });
+        try {
+            expect(await importIntoDocument(drive, path, Buffer.from(PPTX), alice)).toBe('1 table was not imported.');
+        } finally {
+            runSpy.mockRestore();
+        }
+        await home.drive.closeCollabDocument(mountId, deck.id);
+        expect((await readDeck(deck.id)).frames.map((frame) => frame.name)).toEqual(['Own slide', 'Welcome', '']);
+    }, 60_000);
+
     test('write revoked while the pictures are saved blocks the slides', async () => {
         const deck = await seededDeck('import-acl-race-media');
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${deck.id}/acl`, {
