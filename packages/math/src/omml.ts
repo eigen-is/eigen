@@ -233,6 +233,12 @@ function unwrapped(element: MathXmlElement): MathXmlElement[] | undefined {
     return element.ns === WORDML_NAMESPACE && DELETED.has(element.local) ? [] : elementsOf(element);
 }
 
+// ECMA-376 §22.1.2.23: a tracked deletion of an object's control character deletes the object.
+function isDeleted(object: MathXmlElement): boolean {
+    const control = childOf(childOf(object, OMML_NAMESPACE, `${object.local}Pr`), OMML_NAMESPACE, 'ctrlPr');
+    return !!control && elementsOf(control).some((part) => part.ns === WORDML_NAMESPACE && DELETED.has(part.local));
+}
+
 // An equation's parts with their depths, its wrappers opened as readInto reads them: Word shows a run in a tracked
 // insertion as part of the equation, so its # starts the number there too.
 function* equationParts(
@@ -257,12 +263,10 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
         readThrough(row, inner, depth + 1);
         return;
     }
+    if (isDeleted(element)) return;
     const { budget } = row;
     const own = childOf(element, OMML_NAMESPACE, `${element.local}Pr`);
     const property = (local: string) => childOf(own, OMML_NAMESPACE, local);
-    // ECMA-376 §22.1.2.23: a tracked deletion of its control character deletes the object.
-    const control = property('ctrlPr');
-    if (control && elementsOf(control).some((part) => part.ns === WORDML_NAMESPACE && DELETED.has(part.local))) return;
     const content = (local: string) => {
         const slot = childOf(element, OMML_NAMESPACE, local);
         return slot ? elementsOf(slot) : [];
@@ -417,6 +421,42 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number): void
 
 export function readOmml(oMath: MathXmlElement): MathRow {
     return readRow(elementsOf(oMath), { size: 0 }, 1);
+}
+
+// The text of an equation readOmml refuses, as it shows. Word cuts runs by style, not by word, so runs side by side
+// are one word and each object is a word of its own: x²+1 reads "x2 +1". A loop, not recursion, since such an
+// equation may nest as deep as its XML.
+export function readOmmlText(oMath: MathXmlElement): string {
+    const words = [''];
+    // null marks where an object of the row ends.
+    const stack: (MathXmlElement | null)[] = [];
+    const walk = (elements: MathXmlElement[]) => {
+        for (let index = elements.length - 1; index >= 0; index--) stack.push(elements[index]);
+    };
+    walk(elementsOf(oMath));
+    let inObject = false;
+    for (let element = stack.pop(); element !== undefined; element = stack.pop()) {
+        const inner = element && unwrapped(element);
+        if (element === null) {
+            inObject = false;
+            words.push('');
+        } else if (is(element, WORDML_NAMESPACE, 'sym')) words[words.length - 1] += symbolOf(element);
+        else if (inner) walk(inner);
+        else if (element.local === 't') words[words.length - 1] += textOf(element);
+        // Properties hold no text and start no word.
+        else if (!element.local.endsWith('Pr') && !isDeleted(element)) {
+            if (!inObject && element.local !== 'r') {
+                inObject = true;
+                words.push('');
+                stack.push(null);
+            }
+            walk(elementsOf(element));
+        }
+    }
+    return words
+        .map((word) => word.trim())
+        .filter(Boolean)
+        .join(' ');
 }
 
 // ── Writer ─────────────────────────────────────────────────────────────────────────────────────────────────────
