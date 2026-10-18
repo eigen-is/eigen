@@ -447,5 +447,7 @@ describe('engine/formula-shift — functionCopy functions in a range and structu
     test('a structured reference is no ref, and its escape quote opens no sheet name', () => {
         expect(functionCopy("Table1[[#This Row],[Item '#]]*B1", 1, 0)).toBe("Table1[[#This Row],[Item '#]]*B2");
         expect(functionCopy('Table1[[#This Row],[A1]]+A1', 1, 0)).toBe('Table1[[#This Row],[A1]]+A2');
+        expect(functionCopy("Table1[a'[b]*B1", 1, 0)).toBe("Table1[a'[b]*B2");
+        expect(functionCopy("Table1[[#This Row],[a']b]]*B1", 1, 0)).toBe("Table1[[#This Row],[a']b]]*B2");
     });
 });

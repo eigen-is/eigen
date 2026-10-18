@@ -64,16 +64,21 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     let dquote = 0;
     // A quoted sheet name is one token, its delimiters and doubled quotes included.
     let squote = false;
-    // A structured reference's brackets hold names, and a `'` escaping one of their characters.
+    // A structured reference's brackets hold names, and a `'` escapes the character after it, a bracket too.
     let brackets = 0;
 
     while (i < chars.length) {
         const s = chars[i];
 
         if (brackets > 0 || (s === '[' && dquote === 0 && !squote)) {
-            if (s === '[') brackets += 1;
-            else if (s === ']') brackets -= 1;
-            str += s;
+            if (s === "'" && i + 1 < chars.length) {
+                i += 1;
+                str += s + chars[i];
+            } else {
+                if (s === '[') brackets += 1;
+                else if (s === ']') brackets -= 1;
+                str += s;
+            }
         } else if (squote || (s === "'" && dquote === 0)) {
             if (s === "'") squote = !squote;
             str += s;
