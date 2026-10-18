@@ -21,6 +21,13 @@ describe("Excel's future functions", () => {
         expect(withFuturePrefixes(bare)).toBe(bare);
     });
 
+    test('an escaped bracket inside a structured reference closes nothing and opens nothing', () => {
+        expect(withFuturePrefixes("SUM(Table1[a'[b])+IFNA(A1,0)")).toBe("SUM(Table1[a'[b])+_xlfn.IFNA(A1,0)");
+        expect(withFuturePrefixes("Table1[[#This Row],[a']b]]&IFNA(A1,0)")).toBe(
+            "Table1[[#This Row],[a']b]]&_xlfn.IFNA(A1,0)",
+        );
+    });
+
     test('round trip', () => {
         const formula = 'IFS(A1>1,CONCAT("a","b"),TRUE,_xlpm.x)';
         expect(withoutFuturePrefixes(withFuturePrefixes(formula))).toBe(formula);

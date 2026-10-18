@@ -198,10 +198,12 @@ function renameFunctions(formula: string, rename: (name: string) => string): str
             out += formula.slice(at, end + 1);
             at = end + 1;
         } else if (char === '[') {
+            // Inside the brackets a `'` escapes the character after it, a bracket too.
             let depth = 0;
             let end = at;
             for (; end < formula.length; end++) {
-                if (formula[end] === '[') depth++;
+                if (formula[end] === "'") end++;
+                else if (formula[end] === '[') depth++;
                 else if (formula[end] === ']' && --depth === 0) break;
             }
             out += formula.slice(at, end + 1);
