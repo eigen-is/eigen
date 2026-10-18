@@ -339,8 +339,8 @@ function corePath(core: Point[], r: number): string {
 // each command takes; Z returns to the subpath's start.
 const PATH_COMMAND_POINTS = { M: 1, L: 1, C: 3, Q: 2, Z: 0 } as const;
 // Control points may overshoot the box a little; a 1e15 would reach roughjs and every viewBox.
-const PATH_COORD_MIN = -2;
-const PATH_COORD_MAX = 3;
+export const PATH_COORD_MIN = -2;
+export const PATH_COORD_MAX = 3;
 // ASCII separators only, so a valid path's length is its bytes, which MAX_PATH_BYTES caps.
 const PATH_SPACE = ' \t\r\n';
 const PATH_TOKEN = /[ \t\r\n,]*(?:([A-Za-z])|([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?))/y;

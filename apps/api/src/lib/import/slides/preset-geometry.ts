@@ -3,8 +3,8 @@ import type { Corners } from '@workspace/lib/vector';
 import { A_NS } from '../../core/ooxml';
 import { parseXml, type XmlElement, xmlElements } from '../../core/xml';
 import { type CustomGeometry, customGeometry } from './custom-geometry';
-import { guideListOf } from './guides';
-import { childOf } from './lookup';
+import { type GuideList, guideListOf } from './guides';
+import { cachedBy, childOf } from './lookup';
 
 // A shape's a:prstGeom: one of the few presets a canvas kind draws, else the paths ECMA-376's preset definitions draw.
 // The file is Ecma's, unchanged (NOTICE beside it): each preset is its avLst's defaults, gdLst and pathLst, as custGeom
@@ -12,7 +12,7 @@ import { childOf } from './lookup';
 
 export type PresetKind = { type: 'ellipse' } | { type: 'rectangle' | 'diamond'; corners: Corners };
 
-const PRESET_KINDS: ReadonlyMap<string, PresetKind> = new Map<string, PresetKind>([
+export const PRESET_KINDS: ReadonlyMap<string, PresetKind> = new Map<string, PresetKind>([
     ['rect', { type: 'rectangle', corners: 'straight' }],
     ['flowChartProcess', { type: 'rectangle', corners: 'straight' }],
     ['roundRect', { type: 'rectangle', corners: 'curved' }],
@@ -21,10 +21,6 @@ const PRESET_KINDS: ReadonlyMap<string, PresetKind> = new Map<string, PresetKind
     ['diamond', { type: 'diamond', corners: 'straight' }],
     ['flowChartDecision', { type: 'diamond', corners: 'straight' }],
 ]);
-
-export function presetKind(preset: string): PresetKind | undefined {
-    return PRESET_KINDS.get(preset);
-}
 
 const PRESETS_FILE = new URL('./presetShapeDefinitions.xml', import.meta.url);
 
@@ -70,7 +66,15 @@ export function presetGeometry(
     }
     const definition = presets.get(preset);
     if (!definition) return undefined;
-    const defaults = new Set(guideListOf(childOf(definition, A_NS, 'avLst')).map(([name]) => name));
-    const adjustments = new Map(guideListOf(avLst).filter(([name]) => defaults.has(name)));
-    return customGeometry(definition, width, height, [...adjustments]);
+    return customGeometry(definition, width, height, avLst ? adjustmentsOf(avLst, definition) : []);
+}
+
+const adjustments = cachedBy<XmlElement, GuideList>();
+
+// The shape's adjust values the preset defines, the last of each name, read once for the shape's avLst.
+function adjustmentsOf(avLst: XmlElement, definition: XmlElement): GuideList {
+    return adjustments(avLst, definition, () => {
+        const defaults = new Set(guideListOf(childOf(definition, A_NS, 'avLst')).map(([name]) => name));
+        return [...new Map(guideListOf(avLst).filter(([name]) => defaults.has(name)))];
+    });
 }

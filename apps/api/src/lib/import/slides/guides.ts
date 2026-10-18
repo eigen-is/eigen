@@ -1,6 +1,6 @@
 import { A_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr } from '../../core/xml';
-import { charge, childrenOf } from './lookup';
+import { cachedBy, charge, childrenOf } from './lookup';
 import { emu } from './package';
 
 // DrawingML's shape guides (ECMA-376 §20.1.9.11), as a custGeom and the presets compute their points: lengths in EMU,
@@ -13,6 +13,9 @@ export type GuideList = readonly (readonly [name: string, formula: string])[];
 // A guide reads only the guides before it, so evaluation never recurses and no cycle can form: a name not yet defined,
 // itself included, reads 0. The corpus's most is 1,905 in one custGeom, an export spelling every coordinate as a guide.
 export const MAX_GUIDES = 4096;
+
+// An operator and three arguments, each a number emu() reads or a name: past this a formula is junk, read as 0 unread.
+const MAX_FORMULA_CHARS = 256;
 
 export const DEGREE = 60_000;
 export const RADIANS_PER_UNIT = Math.PI / (180 * DEGREE);
@@ -38,10 +41,14 @@ const OPERATORS = new Map<string, (x: number, y: number, z: number) => number>([
     ['val', (x) => x],
 ]);
 
-// An a:avLst's or a:gdLst's a:gd, in order.
+const guideLists = cachedBy<null, GuideList>();
+
+// An a:avLst's or a:gdLst's a:gd, in order, read once for the list however many shapes it draws.
 export function guideListOf(list: XmlElement | undefined): GuideList {
     if (!list) return [];
-    return childrenOf(list, A_NS, 'gd').map((gd) => [xmlAttr(gd, '', 'name') ?? '', xmlAttr(gd, '', 'fmla') ?? '']);
+    return guideLists(list, null, () =>
+        childrenOf(list, A_NS, 'gd').map((gd) => [xmlAttr(gd, '', 'name') ?? '', xmlAttr(gd, '', 'fmla') ?? '']),
+    );
 }
 
 // The shape's own guides for its extents, then each list's in order, a later guide replacing an earlier one of its name
@@ -65,6 +72,7 @@ export function guideValue(guides: Guides, value: string | undefined): number {
 }
 
 function formulaValue(formula: string, guides: Guides): number {
+    if (formula.length > MAX_FORMULA_CHARS) return 0;
     const [operator = '', ...args] = formula.trim().split(/\s+/, 4);
     const [x = 0, y = 0, z = 0] = args.map((arg) => guideValue(guides, arg));
     const value = OPERATORS.get(operator)?.(x, y, z) ?? 0;

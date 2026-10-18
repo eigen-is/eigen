@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import { MAX_PATH_BYTES, MAX_PATH_COMMANDS } from '@workspace/lib/vector';
 import { parseOoxml } from '../../../lib/core/ooxml';
 import type { XmlElement } from '../../../lib/core/xml';
 import {
     type CustomGeometry,
+    closedPath,
     customGeometry,
     MAX_GEOMETRY_NODES,
-    MAX_PATH_BYTES,
-    MAX_PATH_COMMANDS,
 } from '../../../lib/import/slides/custom-geometry';
 import { MAX_GUIDES } from '../../../lib/import/slides/guides';
 import { affords, withWorkBudget } from '../../../lib/import/slides/lookup';
@@ -250,9 +250,50 @@ describe('fill and stroke', () => {
         );
     });
 
-    test('a geometry is closed only when every subpath ends in close; an open one still fills', () => {
-        expect(only(path(SQUARE + moveTo(0, 0) + lnTo(50, 50)))).toMatchObject({ closed: false, filled: true });
+    test('a geometry is closed only when every subpath ends in close; an open one still fills, each subpath closed', () => {
+        const open = only(path(SQUARE + moveTo(0, 0) + lnTo(50, 50)));
+        expect(open).toMatchObject({ closed: false, filled: true });
         expect(only(path(SQUARE + moveTo(0, 0) + lnTo(50, 50) + CLOSE))).toMatchObject({ closed: true });
+        expect(closedPath(open?.path ?? '')).toBe('M 0 0 L 1 0 L 1 1 L 0 1 Z M 0 0 L 0.5 0.5 Z');
+        expect(closedPath('M 0 0 L 1 1 M 0.5 0 L 0 0.5 Z')).toBe('M 0 0 L 1 1 Z M 0.5 0 L 0 0.5 Z');
+    });
+
+    test("a contour inside another of its path winds the other way, a hole, and one inside that the first's way", () => {
+        const square = (from: number, to: number, clockwise = true) =>
+            clockwise
+                ? moveTo(from, from) + lnTo(to, from) + lnTo(to, to) + lnTo(from, to) + CLOSE
+                : moveTo(from, from) + lnTo(from, to) + lnTo(to, to) + lnTo(to, from) + CLOSE;
+        expect(pathOf(path(square(0, 100) + square(20, 80) + square(40, 60)))).toBe(
+            'M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.2 0.8 L 0.8 0.8 L 0.8 0.2 L 0.2 0.2 Z M 0.4 0.4 L 0.6 0.4 L 0.6 0.6 L 0.4 0.6 Z',
+        );
+        // Wound the other way round, each comes out the same way: only how deep it lies counts.
+        expect(pathOf(path(square(0, 100, false) + square(20, 80, false) + square(40, 60, false)))).toBe(
+            'M 1 0 L 1 1 L 0 1 L 0 0 Z M 0.2 0.2 L 0.2 0.8 L 0.8 0.8 L 0.8 0.2 Z M 0.6 0.4 L 0.6 0.6 L 0.4 0.6 L 0.4 0.4 Z',
+        );
+        // Side by side, both are outermost; a contour sharing its first corner with the one around it is still in it.
+        expect(pathOf(path(square(0, 40, false) + square(60, 100)))).toBe(
+            'M 0.4 0 L 0.4 0.4 L 0 0.4 L 0 0 Z M 0.6 0.6 L 1 0.6 L 1 1 L 0.6 1 Z',
+        );
+        expect(pathOf(path(square(0, 100) + moveTo(0, 0) + lnTo(50, 0) + lnTo(50, 50) + CLOSE))).toBe(
+            'M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.5 0.5 L 0.5 0 L 0 0 Z',
+        );
+        // A path that only strokes keeps its contours as drawn; another path's contours are not this one's holes.
+        const lines = path(square(0, 100) + square(20, 80), 'w="100" h="100" fill="none"');
+        expect(pathOf(lines)).toBe('M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.2 0.2 L 0.8 0.2 L 0.8 0.8 L 0.2 0.8 Z');
+        expect(pathOf(path(square(0, 100)) + path(square(20, 80)))).toBe(
+            'M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.2 0.2 L 0.8 0.2 L 0.8 0.8 L 0.2 0.8 Z',
+        );
+    });
+
+    test('a filled path of more subpaths than can fit is undrawn before their nesting is worked out', () => {
+        const triangles = (count: number) => path((moveTo(0, 0) + lnTo(1, 0) + lnTo(0, 1) + CLOSE).repeat(count));
+        expect(geometry(triangles(MAX_PATH_COMMANDS / 4))).toBeDefined();
+        const many = MAX_PATH_COMMANDS / 2 + 1;
+        withWorkBudget(100_000, () => {
+            expect(geometry(triangles(many))).toBeUndefined();
+            // Its nodes, never the square of its subpaths.
+            expect(affords(100_000 - 10 * many)).toBe(true);
+        });
     });
 
     test('a custGeom with no pathLst, no path, or only empty ones draws nothing', () => {
@@ -362,7 +403,15 @@ describe('caps', () => {
         for (let i = 1; i <= MAX_PATH_COMMANDS; i++) zigzag += lnTo(i / 10, i % 2 === 0 ? 0 : 100);
         expect(geometry(path(zigzag, 'w="100" h="100"'))).toBeUndefined();
         const within = moveTo(0, 0) + lnTo(0, 100).repeat(MAX_PATH_COMMANDS - 1);
-        expect(only(path(within))?.path.split('L').length).toBe(MAX_PATH_COMMANDS);
+        expect(only(path(within, 'w="100" h="100" fill="none"'))?.path.split('L').length).toBe(MAX_PATH_COMMANDS);
+        // A filled one keeps room to close each subpath it leaves open.
+        expect(only(path(within))?.path).toBe('M 0 0 L 0 1');
+        const closing = moveTo(0, 0) + lnTo(0, 100).repeat(MAX_PATH_COMMANDS - 2);
+        expect(
+            closedPath(only(path(closing))?.path ?? '')
+                .split(' ')
+                .filter((token) => /[MLZ]/.test(token)),
+        ).toHaveLength(MAX_PATH_COMMANDS);
     });
 
     test('a path of fewer commands but past MAX_PATH_BYTES is undrawn', () => {

@@ -1,11 +1,11 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { join } from 'node:path';
+import { MAX_PATH_BYTES, MAX_PATH_COMMANDS } from '@workspace/lib/vector';
 import { parseOoxml } from '../../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlElements } from '../../../lib/core/xml';
-import { MAX_PATH_BYTES, MAX_PATH_COMMANDS } from '../../../lib/import/slides/custom-geometry';
 import { affords, withWorkBudget } from '../../../lib/import/slides/lookup';
-import { presetGeometry, presetKind } from '../../../lib/import/slides/preset-geometry';
+import { PRESET_KINDS, presetGeometry } from '../../../lib/import/slides/preset-geometry';
 import { NS } from '../../fixtures/pptx';
 
 // A shape's a:prstGeom → the native kind it is, or the paths Ecma's preset definitions draw for its adjust values.
@@ -130,6 +130,10 @@ describe('every preset', () => {
         expect(new Set(inFile).size).toBe(186);
         expect(inFile.filter((name) => name === 'upDownArrow').length).toBe(2);
         expect(inFile).not.toContain('upArrow');
+        // Alike to the byte, so whichever is read draws the same.
+        const copies = fs.readFileSync(PRESETS_FILE, 'utf8').match(/<upDownArrow>[\s\S]*?<\/upDownArrow>/g) ?? [];
+        expect(copies).toHaveLength(2);
+        expect(copies[0]).toBe(copies[1]);
     });
 
     test('draws for its default adjust values at any aspect', () => {
@@ -173,17 +177,17 @@ describe('the overrides', () => {
 
 describe('the native kinds', () => {
     test('are the presets a canvas kind draws as PowerPoint does', () => {
-        expect(presetKind('rect')).toEqual({ type: 'rectangle', corners: 'straight' });
-        expect(presetKind('flowChartProcess')).toEqual({ type: 'rectangle', corners: 'straight' });
-        expect(presetKind('roundRect')).toEqual({ type: 'rectangle', corners: 'curved' });
-        expect(presetKind('ellipse')).toEqual({ type: 'ellipse' });
-        expect(presetKind('flowChartConnector')).toEqual({ type: 'ellipse' });
-        expect(presetKind('diamond')).toEqual({ type: 'diamond', corners: 'straight' });
-        expect(presetKind('flowChartDecision')).toEqual({ type: 'diamond', corners: 'straight' });
+        expect(PRESET_KINDS.get('rect')).toEqual({ type: 'rectangle', corners: 'straight' });
+        expect(PRESET_KINDS.get('flowChartProcess')).toEqual({ type: 'rectangle', corners: 'straight' });
+        expect(PRESET_KINDS.get('roundRect')).toEqual({ type: 'rectangle', corners: 'curved' });
+        expect(PRESET_KINDS.get('ellipse')).toEqual({ type: 'ellipse' });
+        expect(PRESET_KINDS.get('flowChartConnector')).toEqual({ type: 'ellipse' });
+        expect(PRESET_KINDS.get('diamond')).toEqual({ type: 'diamond', corners: 'straight' });
+        expect(PRESET_KINDS.get('flowChartDecision')).toEqual({ type: 'diamond', corners: 'straight' });
     });
 
     test('leave every other preset to its path', () => {
         for (const name of ['star5', 'triangle', 'pie', 'flowChartAlternateProcess', 'snipRoundRect', 'nope'])
-            expect(presetKind(name)).toBeUndefined();
+            expect(PRESET_KINDS.get(name)).toBeUndefined();
     });
 });

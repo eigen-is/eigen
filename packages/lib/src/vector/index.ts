@@ -17,8 +17,17 @@ export { freedrawOutline } from './kinds/freedraw';
 // The paste ladder reads a foreign app's font size and dominant text align as bare values; `oneOf` and
 // `num` are the same coercions the document reader clamps a stored field with, so a pasted value can't be
 // anything a peer write couldn't be. `labelText` travels with them so the in-canvas textarea commits
-// exactly what the reader keeps, and MAX_HTML_BYTES so an importer cuts a body where it chooses.
-export { labelText, MAX_ARROW_LABEL_BYTES, MAX_HTML_BYTES, num, oneOf } from './kinds/read-fields';
+// exactly what the reader keeps, MAX_HTML_BYTES so an importer cuts a body where it chooses, and the path caps so
+// an importer writes a path the reader keeps.
+export {
+    labelText,
+    MAX_ARROW_LABEL_BYTES,
+    MAX_HTML_BYTES,
+    MAX_PATH_BYTES,
+    MAX_PATH_COMMANDS,
+    num,
+    oneOf,
+} from './kinds/read-fields';
 export { isBordered, SVG_NS } from './kinds/render-utils';
 export * from './media-refs';
 export * from './outline';

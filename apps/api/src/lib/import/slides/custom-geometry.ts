@@ -1,4 +1,13 @@
-import { clamp, round4 } from '@workspace/lib/vector';
+import {
+    clamp,
+    MAX_PATH_BYTES,
+    MAX_PATH_COMMANDS,
+    PATH_COORD_MAX,
+    PATH_COORD_MIN,
+    parsePathCommands,
+    round4,
+    serializePath,
+} from '@workspace/lib/vector';
 import { A_NS, isOn } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import {
@@ -15,16 +24,12 @@ import { emu } from './package';
 
 // A shape's a:custGeom → what a canvas path element stores: absolute M/L/C/Q/Z in the shape's unit box, nonzero.
 
-// The canvas reader's caps and coordinate range for a path (read-fields.ts and outline.ts own them once the path kind
-// lands), so what the converter writes reads back unchanged.
-export const MAX_PATH_BYTES = 16 * 1024;
-export const MAX_PATH_COMMANDS = 512;
-const PATH_COORD_MIN = -2;
-const PATH_COORD_MAX = 3;
-
 // The nodes of a custGeom's guide and path lists, its paths' and their commands' children, counted before any is read:
 // the corpus's most is 4,636.
 export const MAX_GEOMETRY_NODES = 32_768;
+
+// A subpath is a move and a segment at least, so a filled path of more can never fit: its nesting is never worked out.
+const MAX_SUBPATHS = MAX_PATH_COMMANDS / 2;
 
 // Past the caps, a point within a tolerance of the line its neighbours draw goes, as does a curve that bulges no more:
 // the least of these, in fractions of the box, that fits. The corpus's largest, a 2,222-point map outline, fits at the
@@ -36,12 +41,13 @@ const MAX_SIMPLIFY_DEPTH = 16;
 const FULL_TURN = 360 * DEGREE;
 
 // `filled` follows the path's fill flag: PowerPoint fills an unclosed subpath as if closed, as SVG does, so the element
-// writer fills it, or leaves it open where the shape has no fill. `shade` is a PATH_SHADES value, for a shaded fill.
+// writer fills closedPath(path) and strokes the path as drawn; a filled path leaves room for those closes. `shade` is a
+// PATH_SHADES value, for a shaded fill.
 export type CustomGeometry = { path: string; closed: boolean; filled: boolean; stroked: boolean; shade?: number };
 
 // A path's fill drawn as the shape's fill shaded, as LibreOffice draws it (EnhancedCustomShape2d.cxx): each sRGB channel
 // blended toward white by a positive fraction, toward black by a negative one. ECMA-376 states no amounts.
-export const PATH_SHADES: ReadonlyMap<string, number> = new Map([
+const PATH_SHADES: ReadonlyMap<string, number> = new Map([
     ['darken', -0.4],
     ['darkenLess', -0.2],
     ['lighten', 0.4],
@@ -77,7 +83,8 @@ export function customGeometry(
         const stroked = isOn(xmlAttr(path, '', 'stroke')) ?? true;
         if (!filled && !stroked) continue;
         const drawn = subpathsOf(path, guides, width, height);
-        const subpaths = filled ? clockwise(drawn) : drawn;
+        if (filled && drawn.length > MAX_SUBPATHS) return undefined;
+        const subpaths = filled ? nested(drawn) : drawn;
         const key = `${filled} ${stroked} ${shade}`;
         const known = painted.get(key);
         if (known) known.subpaths.push(...subpaths);
@@ -86,12 +93,15 @@ export function customGeometry(
     const geometries: CustomGeometry[] = [];
     for (const { filled, stroked, shade, subpaths } of painted.values()) {
         if (subpaths.length === 0) continue;
-        let path = fitted(subpaths);
+        let path = fitted(subpaths, filled);
         const segments = subpaths.reduce((count, subpath) => count + subpath.segments.length, 0);
         for (const tolerance of SIMPLIFY_TOLERANCES) {
             if (path !== undefined) break;
             charge(segments);
-            path = fitted(subpaths.map((subpath) => simplified(subpath, tolerance)));
+            path = fitted(
+                subpaths.map((subpath) => simplified(subpath, tolerance)),
+                filled,
+            );
         }
         if (path === undefined) return undefined;
         const closed = subpaths.every((subpath) => subpath.closed);
@@ -161,19 +171,79 @@ function subpathsOf(path: XmlElement, guides: Guides, width: number, height: num
     return subpaths.filter((subpath) => subpath.segments.length > 0);
 }
 
-// PowerPoint fills each path on its own, so paths concatenated must fill as their union, which nonzero gives only where
-// each winds the same way: a filled path winding anticlockwise overall (its points' shoelace sum, controls included) is
-// reversed. A firewall's bricks, drawn the other way round from the wall behind them, would otherwise be holes in it.
-function clockwise(subpaths: Subpath[]): Subpath[] {
-    let area = 0;
-    for (const { start, segments } of subpaths) {
-        let previous = start;
-        for (const point of [...segments.flatMap((segment) => segment.points), start]) {
-            area += previous.x * point.y - point.x * previous.y;
-            previous = point;
+// PowerPoint fills each path on its own and LibreOffice even-odd, while the canvas fills nonzero: each subpath winds by
+// how deep it lies among its path's others, the outermost clockwise, a hole in one the other way, an island in that
+// clockwise again. A contour inside another of its path is then a hole however the file wound it, roughjs's even-odd
+// hatch agrees, and paths concatenated, each outermost clockwise, fill as their union: a firewall's bricks on its wall.
+function nested(subpaths: Subpath[]): Subpath[] {
+    const outlines = subpaths.map(outlineOf);
+    const bounds = outlines.map(boundsOf);
+    // Each against each other's bounds.
+    charge(subpaths.length * (subpaths.length - 1));
+    return subpaths.map((subpath, i) => {
+        // The middle of its first chord: on the contour, and off a vertex it may share with the one around it.
+        const end = subpath.segments[0].points[subpath.segments[0].points.length - 1];
+        const probe = { x: (subpath.start.x + end.x) / 2, y: (subpath.start.y + end.y) / 2 };
+        let depth = 0;
+        for (const [j, outline] of outlines.entries()) {
+            const [min, max] = bounds[j];
+            if (j === i || probe.x < min.x || probe.x > max.x || probe.y < min.y || probe.y > max.y) continue;
+            charge(outline.length);
+            if (encloses(outline, probe)) depth++;
         }
+        const area = areaOf(outlines[i]);
+        return area !== 0 && area < 0 === (depth % 2 === 0) ? reversed(subpath) : subpath;
+    });
+}
+
+// A subpath as a polygon: each segment's end, and a curve's middle besides.
+function outlineOf({ start, segments }: Subpath): Point[] {
+    const outline = [start];
+    let from = start;
+    for (const { op, points } of segments) {
+        const to = points[points.length - 1];
+        if (op === 'Q') outline.push(mix(mix(from, points[0]), mix(points[0], to)));
+        if (op === 'C') {
+            const [a, b, c] = [mix(from, points[0]), mix(points[0], points[1]), mix(points[1], to)];
+            outline.push(mix(mix(a, b), mix(b, c)));
+        }
+        outline.push(to);
+        from = to;
     }
-    return area < 0 ? subpaths.map(reversed) : subpaths;
+    return outline;
+}
+
+function mix(a: Point, b: Point): Point {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function boundsOf(outline: Point[]): [min: Point, max: Point] {
+    const xs = outline.map((p) => p.x);
+    const ys = outline.map((p) => p.y);
+    return [
+        { x: Math.min(...xs), y: Math.min(...ys) },
+        { x: Math.max(...xs), y: Math.max(...ys) },
+    ];
+}
+
+// Twice the signed area, positive for a clockwise outline (y down).
+function areaOf(outline: Point[]): number {
+    let area = 0;
+    for (const [i, p] of outline.entries()) {
+        const q = outline[(i + 1) % outline.length];
+        area += p.x * q.y - q.x * p.y;
+    }
+    return area;
+}
+
+// Even-odd: a ray to the right crosses the outline an odd number of times.
+function encloses(outline: Point[], p: Point): boolean {
+    let inside = false;
+    for (const [i, a] of outline.entries()) {
+        const b = outline[(i + 1) % outline.length];
+        if (a.y > p.y !== b.y > p.y && p.x < a.x + ((p.y - a.y) * (b.x - a.x)) / (b.y - a.y)) inside = !inside;
+    }
+    return inside;
 }
 
 function reversed({ start, segments, closed }: Subpath): Subpath {
@@ -222,11 +292,12 @@ function arcCurves(from: Point, radii: Point, startAngle: number, sweepAngle: nu
     return curves;
 }
 
-// The canonical spelling the canvas reader keeps, or undefined past its caps.
-function fitted(subpaths: Subpath[]): string | undefined {
+// The canonical spelling the canvas reader keeps, or undefined past its caps; a filled path's within them closed.
+function fitted(subpaths: Subpath[], filled: boolean): string | undefined {
+    const closes = filled ? subpaths.filter((subpath) => !subpath.closed).length : 0;
     const commands = subpaths.reduce(
         (count, { segments, closed }) => count + 1 + segments.length + (closed ? 1 : 0),
-        0,
+        closes,
     );
     if (commands > MAX_PATH_COMMANDS) return undefined;
     const parts: string[] = [];
@@ -236,7 +307,23 @@ function fitted(subpaths: Subpath[]): string | undefined {
         if (closed) parts.push('Z');
     }
     const path = parts.join(' ');
-    return path.length <= MAX_PATH_BYTES ? path : undefined;
+    return path.length + ' Z'.length * closes <= MAX_PATH_BYTES ? path : undefined;
+}
+
+// A path drawn flipped across its box: DrawingML flips a shape before it turns it.
+export function mirroredPath(path: string): string {
+    const commands = parsePathCommands(path) ?? [];
+    return serializePath(
+        commands.map(({ op, points }) => ({ op, points: points.map(({ x, y }) => ({ x: round4(1 - x), y })) })),
+    );
+}
+
+// A filled path as the fill draws it, each subpath closed.
+export function closedPath(path: string): string {
+    return path
+        .split(/ (?=M)/)
+        .map((subpath) => (subpath.endsWith('Z') ? subpath : `${subpath} Z`))
+        .join(' ');
 }
 
 // A curve that bulges less than the tolerance is its chord; each run of lines keeps only the points that turn it more,

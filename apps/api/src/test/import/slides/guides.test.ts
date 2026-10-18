@@ -154,6 +154,13 @@ describe('a formula', () => {
         expect([guides?.get('p'), guides?.get('q')]).toEqual([0, 5]);
     });
 
+    test('past 256 characters is 0 unread: no operator and three arguments need more', () => {
+        const padded = (length: number) => `+- 5${' '.repeat(length - '+- 57 0'.length)}7 0`;
+        expect([padded(256).length, formula(padded(256))]).toEqual([256, 12]);
+        expect(formula(padded(257))).toBe(0);
+        expect(formula(`val 1${' '.repeat(4_000_000)}`)).toBe(0);
+    });
+
     test('a guide that names itself or a cycle reads only what came before it', () => {
         const guides = evaluateGuides(1000, 500, [
             ['a', '+- a 1 0'],
@@ -194,6 +201,17 @@ describe('the guides of a shape', () => {
         expect(guideListOf(undefined)).toEqual([]);
         const custGeom = parseOoxml(`<a:custGeom ${NS}><a:gdLst/></a:custGeom>`);
         expect(guideListOf(custGeom ? xmlChild(custGeom, A_NS, 'gdLst') : undefined)).toEqual([]);
+    });
+
+    test('are read once for their list, however many shapes it draws', () => {
+        const list = parseOoxml(`<a:avLst ${NS}>${'<a:gd name="a" fmla="val 5"/>'.repeat(100)}</a:avLst>`);
+        if (!list) throw new Error('not XML');
+        withWorkBudget(1000, () => {
+            const first = guideListOf(list);
+            expect(guideListOf(list)).toBe(first);
+            // Its 100 children scanned once.
+            expect([affords(900), affords(901)]).toEqual([true, false]);
+        });
     });
 
     test('are refused past MAX_GUIDES across the lists', () => {
