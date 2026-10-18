@@ -1,8 +1,8 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
-import { MathError, readOmml, writeMathml } from '@workspace/math';
-import { isAlternateContent, isOn, M_NS, MC_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
+import { MathError, readOmml, readOmmlText, writeMathml } from '@workspace/math';
+import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import {
     trimXmlSpace,
     XML_NAMESPACE,
@@ -36,8 +36,9 @@ import {
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
 // italic is whether Word draws a run italic: whether that is the mark waits for the paragraph's node.
+// equation is the text of an equation past a bound, which the text beside it is set off from.
 export type Piece =
-    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean }
+    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean; equation?: true }
     | { kind: 'break' }
     | { kind: 'clear' }
     | { kind: 'checkbox'; checked: boolean }
@@ -62,8 +63,7 @@ export type RunContext = {
 
 // Content that doesn't show: a tracked deletion, and properties. Markers such as bookmarks and comment ranges hold
 // nothing, so they walk to nothing; a comment's text lives in comments.xml, which is never read.
-const DELETED = ['del', 'moveFrom'];
-const SKIPPED_INLINE = new Set([...DELETED, 'pPr', 'rPr', 'sdtPr', 'sdtEndPr']);
+const SKIPPED_INLINE = new Set(['del', 'moveFrom', 'pPr', 'rPr', 'sdtPr', 'sdtEndPr']);
 
 export function walkInline(reader: Reader, elements: XmlElement[], context: RunContext): void {
     for (const element of elements) {
@@ -130,51 +130,8 @@ function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, conte
         context.pieces.push({ kind: 'node', node: { type: 'equation', attrs: { mathml, display } } });
     } catch (error) {
         if (!(error instanceof MathError)) throw error;
-        pushText(reader, ommlText(oMath), {}, context);
+        pushText(reader, readOmmlText(oMath), {}, context, true);
     }
-}
-
-// Word cuts runs by style, not by word, so runs side by side are one word and each object is a word of its own:
-// x²+1 reads "x2 +1". What shows as the package reads it: an alternative's fallback, and no object whose control
-// character is a tracked deletion. A loop, not recursion: the package refuses an equation nested past its bound, which
-// may nest as deep as the XML does.
-function ommlText(oMath: XmlElement): string {
-    const words = [''];
-    // null marks where an object of the row ends.
-    const stack: (XmlElement | null)[] = xmlElements(oMath).reverse();
-    let inObject = false;
-    while (stack.length > 0) {
-        const element = stack.pop();
-        if (!element) {
-            inObject = false;
-            words.push('');
-        } else if (element.ns === M_NS && element.local === 't') words[words.length - 1] += xmlText(element);
-        // Properties (a run's m:rPr, an m:argPr, an object's) hold no text and start no word.
-        else if (element.ns === M_NS && element.local.endsWith('Pr')) continue;
-        else if (isAlternateContent(element)) {
-            const fallback = xmlChild(element, MC_NS, 'Fallback');
-            if (fallback) stack.push(fallback);
-        } else if (element.ns === W_NS ? !SKIPPED_INLINE.has(element.local) : !isDeletedObject(element)) {
-            if (!inObject && element.ns === M_NS && element.local !== 'r') {
-                inObject = true;
-                words.push('');
-                stack.push(null);
-            }
-            const children = xmlElements(element);
-            for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
-        }
-    }
-    return words
-        .map((word) => word.trim())
-        .filter(Boolean)
-        .join(' ');
-}
-
-// ECMA-376 §22.1.2.23: a tracked deletion of an object's control character deletes the object.
-function isDeletedObject(element: XmlElement): boolean {
-    const props = element.ns === M_NS ? xmlChild(element, M_NS, `${element.local}Pr`) : undefined;
-    const control = props && xmlChild(props, M_NS, 'ctrlPr');
-    return !!control && xmlElements(control).some((part) => part.ns === W_NS && DELETED.includes(part.local));
 }
 
 function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunProps, context: RunContext): void {
@@ -342,11 +299,22 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
     return linkTo(reader, anchor ? `${target}#${anchor}` : target, tooltip);
 }
 
-export function pushText(reader: Reader, text: string, direct: DocxRunProps, context: RunContext): void {
+// An equation's text is set off from the text beside it by a space where none is, as inlineText sets off an equation.
+export function pushText(
+    reader: Reader,
+    text: string,
+    direct: DocxRunProps,
+    context: RunContext,
+    equation?: true,
+): void {
     if (!text) return;
-    for (const { text: part, marks, small, font, italic } of marksOf(reader, text, direct, context)) {
+    const last = context.pieces.at(-1);
+    const before = last?.kind === 'node' && last.node.type === 'text' ? last : undefined;
+    const joins = before && !/\s$/.test(before.node.text ?? '') && !/^\s/.test(text);
+    const spaced = joins && (equation || before.equation) ? ` ${text}` : text;
+    for (const { text: part, marks, small, font, italic } of marksOf(reader, spaced, direct, context)) {
         const node = marks.length > 0 ? { type: 'text', text: part, marks } : { type: 'text', text: part };
-        context.pieces.push({ kind: 'node', node, small, font, italic });
+        context.pieces.push({ kind: 'node', node, small, font, italic, ...(equation && { equation }) });
     }
 }
 

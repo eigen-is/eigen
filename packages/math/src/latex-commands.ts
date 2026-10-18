@@ -434,13 +434,19 @@ export const LATEX_COMMANDS: ReadonlyMap<string, LatexCommand> = new Map(
 
 type LatexEnvironment = { layout: 'matrix' | 'equations'; open: string; close: string };
 
+// The environment of each layout without fences.
+export const BARE_ENVIRONMENTS: Readonly<Record<LatexEnvironment['layout'], string>> = {
+    matrix: 'matrix',
+    equations: 'aligned',
+};
+
 export const LATEX_ENVIRONMENTS: ReadonlyMap<string, LatexEnvironment> = new Map<string, LatexEnvironment>([
-    ['matrix', { layout: 'matrix', open: '', close: '' }],
+    [BARE_ENVIRONMENTS.matrix, { layout: 'matrix', open: '', close: '' }],
     ['pmatrix', { layout: 'matrix', open: '(', close: ')' }],
     ['bmatrix', { layout: 'matrix', open: '[', close: ']' }],
     ['Bmatrix', { layout: 'matrix', open: '{', close: '}' }],
     ['vmatrix', { layout: 'matrix', open: '|', close: '|' }],
     ['Vmatrix', { layout: 'matrix', open: '‖', close: '‖' }],
     ['cases', { layout: 'matrix', ...CASES }],
-    ['aligned', { layout: 'equations', open: '', close: '' }],
+    [BARE_ENVIRONMENTS.equations, { layout: 'equations', open: '', close: '' }],
 ]);

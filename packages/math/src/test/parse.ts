@@ -28,7 +28,7 @@ export const parseWritten = (omml: string) =>
     elementsOf(el(`<root xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}">${omml}</root>`))[0];
 
 export const viaOmml = (row: MathRow) => readOmml(parseWritten(writeOmml(row)));
-export const viaMathml = (row: MathRow) => readMathml(el(writeMathml(row))).row;
+export const viaMathml = (row: MathRow) => readMathml(el(writeMathml(row)));
 export const viaLatex = (row: MathRow) => readLatex(writeLatex(row));
 
 export const letter = (text: string): MathRow => [{ kind: 'identifier', text }];

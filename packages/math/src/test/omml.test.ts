@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
-import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
+import { OMML_NAMESPACE, readOmml, readOmmlText, WORDML_NAMESPACE, writeOmml } from '../omml';
 import type { MathNode, MathRow } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
@@ -419,6 +419,44 @@ describe('readOmml', () => {
 });
 
 // ── Writer ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// The text of an equation a reader refuses, which may nest as deep as the XML does.
+describe('readOmmlText', () => {
+    test('runs side by side are one word and each object is a word of its own', () => {
+        const square = `<m:sSup><m:e>${run('x')}</m:e><m:sup>${run('2')}</m:sup></m:sSup>${run('+')}${run('1')}`;
+        expect(readOmmlText(oMath(square))).toBe('x2 +1');
+        expect(readOmmlText(oMath('<m:r><w:sym w:font="Symbol" w:char="F0B9"/></m:r>'))).toBe('≠');
+    });
+
+    test('it shows what readOmml shows: insertions, a fallback, no deletion, no deleted object, no properties', () => {
+        const equation = oMath(
+            `${run('a')}<w:ins w:id="1" w:author="a">${run('b')}</w:ins>` +
+                `<m:r><w:del w:id="2" w:author="a"><m:t>y</m:t></w:del></m:r>` +
+                `<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="w14">${run('c')}</mc:Choice>` +
+                `<mc:Fallback>${run('f')}</mc:Fallback></mc:AlternateContent>` +
+                `<m:sSup><m:sSupPr><m:ctrlPr><w:del w:id="3" w:author="a"><w:rPr/></w:del></m:ctrlPr></m:sSupPr>` +
+                `<m:e>${run('z')}</m:e><m:sup>${run('3')}</m:sup></m:sSup>` +
+                `${run('w', '<m:rPr><m:sty m:val="p"/></m:rPr>')}`,
+        );
+        expect(readOmmlText(equation)).toBe('abfw');
+        expect(read(`${run('a')}${run('b')}${run('f')}${run('w', '<m:rPr><m:sty m:val="p"/></m:rPr>')}`)).toEqual(
+            readOmml(equation),
+        );
+    });
+
+    test('a loop, so nesting past the depth bound reads', () => {
+        const element = (local: string, children: (string | MathXmlElement)[]): MathXmlElement => ({
+            ns: OMML_NAMESPACE,
+            local,
+            attributes: {},
+            children,
+        });
+        let deep = element('r', [element('t', ['x'])]);
+        for (let level = 0; level < 100_000; level++) deep = element('d', [element('e', [deep])]);
+        expect(() => readOmml(element('oMath', [deep]))).toThrow(MathError);
+        expect(readOmmlText(element('oMath', [deep]))).toBe('x');
+    });
+});
 
 describe('writeOmml', () => {
     test('writes one m:oMath and merges neighbours of one style into one run', () => {

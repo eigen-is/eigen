@@ -28,7 +28,7 @@ export function attribute(element: MathXmlElement, local: string): string | unde
     return undefined;
 }
 
-// Lib's core/xml.ts keeps its own: lib takes no dependency for an escape, and math throws where lib strips.
+// XML 1.0 § 2.2 Char, negated: the package throws on one, where lib's core/xml.ts strips it.
 export const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
 
 export function checkedXml(text: string): string {

@@ -139,13 +139,10 @@ function spaceOf(width = ''): MathSpace | undefined {
     return MATH_SPACES.find((space) => Math.abs(Number.parseFloat(SPACES[space].width) - em) < 0.01);
 }
 
-// The first child of a script element.
 const baseOf = (element: MathXmlElement | undefined) =>
     element && SCRIPT_SLOTS.has(nameOf(element) ?? '') ? elementsOf(element)[0] : undefined;
 
-// An accent, line or brace an mover or munder draws over its base, or undefined for a limit. An accent says so on the
-// element or its mo, a brace that it stretches; MathJax and Temml leave both to MathML's operator dictionary. Eigen
-// writes a limit's lone operator in an mrow, so it is neither.
+// MathJax and Temml leave accent and stretchy to the operator dictionary; Eigen wraps a limit's lone operator.
 function decorationOf(element: MathXmlElement | undefined): ((body: MathRow) => MathNode) | undefined {
     const position = is(element, 'mover') ? 'over' : is(element, 'munder') ? 'under' : undefined;
     const script = element && elementsOf(element)[1];
@@ -241,9 +238,10 @@ function readArgument(element: MathXmlElement | undefined, scope: Scope, depth: 
     return readRow(elements, inner, depth, slot);
 }
 
-// Content that reads as if it stood in the row itself: a level deeper, so deep wrappers meet the bound.
+// Content that reads as if it stood in the row itself: a level deeper and a part, so deep or many wrappers meet the
+// bounds.
 function readThrough(row: RowBuilder, elements: MathXmlElement[], depth: number, scope: Scope): Waiting[] {
-    bound(scope.budget, depth, 0);
+    bound(scope.budget, depth, 1);
     return readElements(row, elements, depth, scope);
 }
 
@@ -324,6 +322,35 @@ function readScripts(
     return scripts;
 }
 
+const PAIR: readonly ('sub' | 'sup')[] = ['sub', 'sup'];
+
+// A script element's base and its scripts, then each further pair of mmultiscripts' on an empty base. Without scripts
+// the element reads as its base.
+function readPostscripts(
+    row: RowBuilder,
+    children: MathXmlElement[],
+    slots: readonly ('sub' | 'sup')[],
+    scope: Scope,
+    depth: number,
+): Waiting[] | undefined {
+    const [base, ...scripts] = children;
+    let waiting: Waiting[] | undefined;
+    let index = 0;
+    do {
+        const { sub, sup } = readScripts(scripts.slice(index, index + slots.length), slots, scope, depth + 1);
+        if (sub || sup) {
+            settle(row, waiting);
+            waiting = undefined;
+            const on = index === 0 ? readArgument(base, scope, depth + 1) : readRow([], scope, depth + 1);
+            row.node({ kind: 'scripts', base: on, ...(sub && { sub }), ...(sup && { sup }) });
+        } else if (index === 0) waiting = readThrough(row, base ? [base] : [], depth + 1, scope);
+        // An empty pair after the first makes nothing, and counts as a part all the same.
+        else bound(scope.budget, depth, 1);
+        index += slots.length;
+    } while (slots.length > 0 && index < scripts.length);
+    return waiting;
+}
+
 function readNary(scripted: MathXmlElement, outer: Scope, depth: number, body: MathRow): MathNode {
     const scope = scopeOf(scripted, outer);
     const name = nameOf(scripted) ?? '';
@@ -373,8 +400,7 @@ function readPattern(mrow: MathXmlElement, scope: Scope, depth: number): MathNod
     }
 }
 
-function readToken(row: RowBuilder, element: MathXmlElement, name: string, scope: Scope): void {
-    const text = trimXmlSpace(textOf(element));
+function readToken(row: RowBuilder, text: string, name: string, scope: Scope): void {
     const { variant, color } = scope;
     // MathML draws a lone letter in an mi italic and anything else upright.
     const lone = name === 'mi' && isCluster(text);
@@ -389,22 +415,31 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer
     const children = elementsOf(element);
     const argument = (index: number) => readArgument(children[index], scope, depth + 1);
     const name = nameOf(element);
+    // An element that makes nothing counts as a part, so no number of them goes unbounded.
+    const empty = () => bound(budget, depth, 1);
     if (baseOf(element) && isLargeOperator(element)) return [{ kind: 'nary', element, scope: outer, depth }];
     switch (name) {
         case 'mi':
         case 'mn':
-        case 'mo':
-            readToken(row, element, name, scope);
+        case 'mo': {
+            const text = trimXmlSpace(textOf(element));
+            if (text === '') empty();
+            else readToken(row, text, name, scope);
             return;
+        }
         // MathML Core draws a string literal without the quotes MathML 3 put around it.
         case 'ms':
-        case 'mtext':
-            row.text(trimXmlSpace(textOf(element)), scope.color);
+        case 'mtext': {
+            const text = trimXmlSpace(textOf(element));
+            if (text === '') empty();
+            else row.text(text, scope.color);
             return;
+        }
         case 'mspace': {
             const space = spaceOf(attribute(element, 'width'));
             // As characters, so two quads pair as they do in text.
             if (space) row.chars(SPACES[space].text, 'normal', 'normal', undefined);
+            else empty();
             return;
         }
         case 'math':
@@ -451,16 +486,24 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer
         }
         case 'msub':
         case 'msup':
-        case 'msubsup':
+        case 'msubsup': {
+            const slots = SCRIPT_SLOTS.get(name) ?? [];
+            return readPostscripts(row, children.slice(0, 1 + slots.length), slots, scope, depth);
+        }
+        // The prescripts' base is the base with its postscripts.
         case 'mmultiscripts': {
-            const prescripts = children.findIndex((child) => is(child, 'mprescripts'));
-            const first = prescripts < 0 ? 1 : prescripts + 1;
-            const slots = SCRIPT_SLOTS.get(name) ?? ['sub', 'sup'];
-            const { sub, sup } = readScripts(children.slice(first), slots, scope, depth + 1);
-            if (!sub && !sup) return readThrough(row, children.slice(0, 1), depth + 1, scope);
-            const scripts: MathNode = { kind: 'scripts', base: argument(0), ...(sub && { sub }), ...(sup && { sup }) };
-            if (prescripts >= 0) scripts.pre = true;
-            row.node(scripts);
+            const at = children.findIndex((child) => is(child, 'mprescripts'));
+            if (at < 0) return readPostscripts(row, children, PAIR, scope, depth);
+            const postscripts = children.slice(0, at);
+            const { sub, sup } = readScripts(children.slice(at + 1), PAIR, scope, depth + 1);
+            if (!sub && !sup) return readPostscripts(row, postscripts, PAIR, scope, depth);
+            let base: MathRow;
+            if (postscripts.length > 1) {
+                const builder = new RowBuilder(budget, depth + 1);
+                settle(builder, readPostscripts(builder, postscripts, PAIR, scope, depth + 1));
+                base = builder.done();
+            } else base = readArgument(postscripts[0], scope, depth + 1);
+            row.node({ kind: 'scripts', base, ...(sub && { sub }), ...(sup && { sup }), pre: true });
             return;
         }
         case 'mover':
@@ -522,6 +565,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer
         case 'annotation-xml':
         case 'none':
         case 'mprescripts':
+            empty();
             return;
         // mstyle, mpadded, mphantom (the tree has no phantom: it shows) and anything unknown.
         default:
@@ -546,11 +590,11 @@ export function readMathmlLatex(math: MathXmlElement): string | undefined {
     return tex && checkedXml(textOf(tex));
 }
 
-export function readMathml(math: MathXmlElement): { row: MathRow; latex: string | undefined } {
+// The tree alone: readMathmlLatex reads the annotation, so one it refuses never costs the tree.
+export function readMathml(math: MathXmlElement): MathRow {
     const semantics = semanticsOf(math);
     const scope = scopeOf(math, { budget: { size: 0 } });
-    const row = readArgument(semantics ? elementsOf(semantics)[0] : math, scope, 1);
-    return { row, latex: readMathmlLatex(math) };
+    return readArgument(semantics ? elementsOf(semantics)[0] : math, scope, 1);
 }
 
 // ── Writer ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -697,6 +741,9 @@ export function writeMathml(row: MathRow, latex?: string): string {
     const mathml = checkedXml(`<math xmlns="${MATHML_NAMESPACE}">${content}</math>`);
     if (mathml.length > MATH_LIMITS.mathmlLength) {
         throw new MathError(`An equation's MathML is at most ${MATH_LIMITS.mathmlLength} characters`);
+    }
+    if (mathml.split('<').length - 1 > MATH_LIMITS.mathmlTags) {
+        throw new MathError(`An equation's MathML holds at most ${MATH_LIMITS.mathmlTags} tags`);
     }
     return mathml;
 }

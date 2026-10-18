@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { readLatex, writeLatex } from '../latex';
 import { LATEX_COMMANDS, type LatexCommand } from '../latex-commands';
-import { readMathml, writeMathml } from '../mathml';
+import { readMathml, readMathmlLatex, writeMathml } from '../mathml';
 import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
 import { readOmml } from '../omml';
 import { MATH_ENCLOSURES, MATH_LIMITS, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
@@ -204,6 +204,17 @@ describe('tree → LaTeX → tree is the identity, but for the listed losses', (
             expect(writeLatex(viaLatex(read))).toBe(writeLatex(read));
         }
     });
+
+    // A fenced row with fences no command draws reads back as its characters, two parts more each.
+    test('a lossy tree may read back larger, so at the size bound its LaTeX is past it', () => {
+        const units = Math.floor((MATH_LIMITS.size - 1) / 2);
+        const fences = Array.from(
+            { length: units },
+            (): MathNode => ({ kind: 'fenced', open: '"', close: '"', separator: '', parts: [[]] }),
+        );
+        expect(viaMathml(fences)).toStrictEqual(fences);
+        expect(() => viaLatex(fences)).toThrow(MathError);
+    });
 });
 
 describe('the 45 formulas of the storage study', () => {
@@ -212,7 +223,9 @@ describe('the 45 formulas of the storage study', () => {
             const tree = readLatex(latex);
             expect(canonicalIssue(tree)).toBeUndefined();
             expect(viaLatex(tree)).toStrictEqual(tree);
-            expect(readMathml(el(writeMathml(tree, latex)))).toStrictEqual({ row: tree, latex });
+            const written = el(writeMathml(tree, latex));
+            expect(readMathml(written)).toStrictEqual(tree);
+            expect(readMathmlLatex(written)).toBe(latex);
         });
     }
 });
@@ -661,6 +674,8 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '≠\u0338' }], '\\not\\ne'],
         [[{ kind: 'operator', text: '{\u0338' }], '\\not\\{'],
         [[{ kind: 'operator', text: '′\u0338' }], '\\not\\prime'],
+        // U+2ADC has a slash in its decomposition, which NFC never composes back: \not would read as U+2ADD and U+0338.
+        [[{ kind: 'operator', text: '\u2ADC' }], '\u2ADC'],
         // \not puts its slash last, after the symbol's marks; it slashes twice as \not\not.
         [[{ kind: 'identifier', text: 'x\u0338\u0338' }], '\\not\\not x'],
         [[{ kind: 'identifier', text: 'Γ\u0338\u0338' }], '\\not\\not\\Gamma'],
@@ -772,6 +787,7 @@ describe('writeLatex', () => {
         [[{ kind: 'operator', text: '^' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
         [[{ kind: 'operator', text: '^\u0338' }], '\\text{\\textasciicircum{}}', [{ kind: 'text', text: '^' }]],
         [[{ kind: 'operator', text: '~\u0338' }], '\\text{\\textasciitilde{}}', [{ kind: 'text', text: '~' }]],
+        [[{ kind: 'operator', text: "'" }], "'", [{ kind: 'operator', text: '′' }]],
         [[{ kind: 'operator', text: "'\u0338" }], '\\not\\prime', [{ kind: 'operator', text: '′\u0338' }]],
         [
             [{ kind: 'fenced', open: '\u0302', close: ')', separator: '\u0302', parts: [x, x] }],
@@ -813,7 +829,9 @@ describe('writeLatex', () => {
 describe('typed LaTeX rides along as the annotation', () => {
     test.each(['a<b', 'x \\& y', '\\text{]]>}', '\\text{non-BMP 😀} 𝟘', '\\mathbb{R}^n % "quoted"'])('%p', (latex) => {
         const row = readLatex(latex);
-        expect(readMathml(el(writeMathml(row, latex)))).toStrictEqual({ row, latex });
+        const written = el(writeMathml(row, latex));
+        expect(readMathml(written)).toStrictEqual(row);
+        expect(readMathmlLatex(written)).toBe(latex);
     });
 
     test('the longest LaTeX with the largest tree fits the MathML cap', () => {

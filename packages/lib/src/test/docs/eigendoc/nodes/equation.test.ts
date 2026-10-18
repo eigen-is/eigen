@@ -148,6 +148,12 @@ describe('equation parseHTML', () => {
         const html = `<p><math><semantics><mi>x</mi><annotation encoding="application/x-tex">\\mymacro{x}</annotation></semantics></math></p>`;
         expect(parsed(html)).toEqual([{ mathml: writeMathml(x), display: false, commentCardId: null }]);
     });
+
+    // An HTML parser keeps the control character a reference names, which XML can't hold.
+    test('an annotation holding a control character goes, and the tree stays', () => {
+        const html = `<p><math><semantics><mi>x</mi><annotation encoding="application/x-tex">x&#1;</annotation></semantics></math></p>`;
+        expect(parsed(html)).toEqual([{ mathml: writeMathml(x), display: false, commentCardId: null }]);
+    });
 });
 
 // A page that draws its math pastes each equation twice, as its <math> and as the glyphs or image drawn from it, and
@@ -356,6 +362,20 @@ describe('readEquation', () => {
         expect(readEquation({ mathml: `${MATH}<mi>x</mi></math>` }).row).toEqual(x);
     });
 
+    // Each < the writer writes is a tag, so a string holding more than it writes is no writer's.
+    test('a string with more tags than the writer writes is refused before it is parsed', () => {
+        const parsedStrings: string[] = [];
+        const parse = (mathml: string) => {
+            parsedStrings.push(mathml);
+            return null;
+        };
+        const tagged = (tags: number) => `${MATH}${'<a/>'.repeat(tags - 2)}</math>`;
+        readEquation({ mathml: tagged(MATH_LIMITS.mathmlTags + 1) }, parse);
+        expect(parsedStrings).toEqual([]);
+        readEquation({ mathml: tagged(MATH_LIMITS.mathmlTags) }, parse);
+        expect(parsedStrings).toEqual([tagged(MATH_LIMITS.mathmlTags)]);
+    });
+
     test('a tree past a bound shows its LaTeX as text', () => {
         const mathml = `${MATH}<semantics><mrow>${tooDeep}</mrow><annotation encoding="application/x-tex">x^2</annotation></semantics></math>`;
         const row: MathRow = [{ kind: 'text', text: 'x^2' }];
@@ -375,6 +395,17 @@ describe('readEquation', () => {
         const { row, latex: kept } = readEquation({ mathml });
         expect(row).toEqual([{ kind: 'text', text: 'a b c' }]);
         expect(kept).toBe(latex);
+    });
+
+    // A text node of the LaTeX is the root row, the node and a part a character, so it reads back as a tree.
+    test('LaTeX shown as text is at most the size bound less its row and node', () => {
+        const shown = (latex: string) =>
+            readEquation({
+                mathml: `${MATH}<semantics><mrow>${tooDeep}</mrow><annotation encoding="application/x-tex">${latex}</annotation></semantics></math>`,
+            }).row;
+        const longest = 'x'.repeat(MATH_LIMITS.size - 2);
+        expect(shown(longest)).toEqual([{ kind: 'text', text: longest }]);
+        expect(shown(`${longest}x`)).toEqual([]);
     });
 
     test('an annotation the writer refuses goes, and the tree stays', () => {

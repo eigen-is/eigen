@@ -462,6 +462,18 @@ describe('math', () => {
         expect(contents(json)).toEqual([[{ type: 'text', text: 'So x2+1 x2 +1' }]]);
     });
 
+    // As inlineText sets an equation off from the text beside it.
+    test('the text of an equation past the bound is set off from its neighbours by a space where none is', async () => {
+        const deep = (text: string) =>
+            oMath(`${'<m:d><m:e>'.repeat(MATH_LIMITS.depth)}${r(text)}${'</m:e></m:d>'.repeat(MATH_LIMITS.depth)}`);
+        const sentence = paragraph(`${run('see')}${deep('A')}${run('and')}${deep('B')}${run(' too')}`);
+        const display = paragraph(`<m:oMathPara xmlns:m="${M}">${deep('A')}${deep('B')}</m:oMathPara>`);
+        expect(contents(await imported(`${sentence}${display}`))).toEqual([
+            [{ type: 'text', text: 'see A and B too' }],
+            [{ type: 'text', text: 'A B' }],
+        ]);
+    });
+
     test("an equation's text joins neighbouring runs into one word and breaks at an object", async () => {
         const runs = `${r('x')}${r('+1')}`;
         const deep = `${'<m:d><m:e>'.repeat(MATH_LIMITS.depth)}${runs}${'</m:e></m:d>'.repeat(MATH_LIMITS.depth)}`;

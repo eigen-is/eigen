@@ -50,33 +50,41 @@ function unlessRefused<T>(read: () => T): T | undefined {
 }
 
 // The annotation counts toward no bound, so only the writer weighs it, and one it refuses goes while the tree stays.
-// Past a bound an equation shows its LaTeX as text, which below the size bound writes well within the MathML cap;
-// else it reads as nothing.
+// Past a bound an equation shows its LaTeX as text, which within the size bound (the root row, the node and a part a
+// character) writes well within the MathML caps; else it reads as nothing.
 function readMath(math: MathXmlElement): Read | undefined {
     const latex = unlessRefused(() => readMathmlLatex(math));
-    const row = unlessRefused(() => readMathml(math).row);
+    const row = unlessRefused(() => readMathml(math));
     if (row) {
         const annotated = latex === undefined ? undefined : unlessRefused(() => writeMathml(row, latex));
         return annotated ? { row, latex, mathml: annotated } : { row, latex: undefined, mathml: writeMathml(row) };
     }
-    if (latex === undefined || latex.length >= MATH_LIMITS.size) return undefined;
+    if (latex === undefined || latex.length > MATH_LIMITS.size - 2) return undefined;
     const text: MathRow = [{ kind: 'text', text: mathText(latex) }];
     return { row: text, latex, mathml: writeMathml(text, latex) };
 }
 
+// Whether a string could be the writer's: it starts at the root, and is no longer and holds no more tags than its
+// output. Each < the writer writes is a tag, as it escapes the rest.
+function isWritable(mathml: string): boolean {
+    if (!mathml.startsWith('<math') || mathml.length > MATH_LIMITS.mathmlLength) return false;
+    let tags = 0;
+    for (let index = mathml.indexOf('<'); index >= 0; index = mathml.indexOf('<', index + 1)) {
+        if (++tags > MATH_LIMITS.mathmlTags) return false;
+    }
+    return true;
+}
+
 // Every consumer's read of the attrs: the stored string is never mounted as is, and any string reads as an equation
 // the writers can write. Only a string the writer could have written is parsed, so no prolog, DOCTYPE or entity
-// reaches either parser. The server passes Bun's parser.
+// reaches either parser, and neither builds more elements than the writer writes. The server passes Bun's parser.
 export function readEquation(
     attrs: Record<string, unknown>,
     parse: (mathml: string) => MathXmlElement | null = parseInBrowser,
 ): Equation {
     const display = attrs['display'] === true;
     const mathml = attrs['mathml'];
-    const math =
-        typeof mathml === 'string' && mathml.startsWith('<math') && mathml.length <= MATH_LIMITS.mathmlLength
-            ? parse(mathml)
-            : null;
+    const math = typeof mathml === 'string' && isWritable(mathml) ? parse(mathml) : null;
     const read = (math && readMath(math)) || EMPTY;
     return { ...read, text: writeText(read.row), display };
 }

@@ -286,8 +286,8 @@ function pasted(element: MathXmlElement, index = 0): MathXmlElement {
 describe('every reader ends in a tree or a MathError, within its time budget', () => {
     test.each<[string, Grammar, (root: MathXmlElement) => MathRow]>([
         ['readOmml', OMML, readOmml],
-        ['readMathml', MATHML, (root) => readMathml(root).row],
-        ['readMathml through an HTML DOM', MATHML, (root) => readMathml(pasted(root)).row],
+        ['readMathml', MATHML, readMathml],
+        ['readMathml through an HTML DOM', MATHML, (root) => readMathml(pasted(root))],
     ])('%s on 1,500 seeded element trees, one in five a damaged writer output', (name, grammar, read) => {
         const start = performance.now();
         let trees = 0;
@@ -360,6 +360,26 @@ describe('every reader ends in a tree or a MathError, within its time budget', (
         expect(() => viaMathml(enclosures(units + 1))).toThrow(MathError);
         expect(() => viaOmml(enclosures(units + 1))).toThrow(MathError);
         expect(() => viaLatex(enclosures(units + 1))).toThrow(MathError);
+    });
+
+    // The writer escapes every other <, so each opens or closes a tag. Its densest units, an accent, line or brace over
+    // an empty row and a fence pair around one, write three tags each.
+    test('the densest MathML at the size bound fits the tag cap; one unit more is an error', () => {
+        const units = Math.floor((MATH_LIMITS.size - 1) / 2);
+        const tagsOf = (mathml: string) => mathml.split('<').length - 1;
+        const dense: MathNode[] = [
+            { kind: 'accent', accent: '\u0302', body: [] },
+            { kind: 'line', position: 'over', body: [] },
+            { kind: 'brace', char: '⏞', position: 'over', body: [] },
+            { kind: 'fenced', open: '(', close: ')', separator: '', parts: [[]] },
+        ];
+        for (const node of dense) {
+            const tree = Array.from({ length: units }, () => node);
+            const mathml = writeMathml(tree, writeLatex(tree));
+            expect(tagsOf(mathml)).toBeLessThanOrEqual(MATH_LIMITS.mathmlTags);
+            expect(readMathml(el(mathml))).toStrictEqual(tree);
+            expect(() => writeMathml([...tree, node], writeLatex(tree))).toThrow(MathError);
+        }
     });
 });
 

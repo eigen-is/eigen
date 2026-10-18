@@ -1739,6 +1739,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readMathml` | `@workspace/math` | packages/math/src/mathml.ts |
 | `readMathmlLatex` | `@workspace/math` | packages/math/src/mathml.ts |
 | `readOmml` | `@workspace/math` | packages/math/src/omml.ts |
+| `readOmmlText` | `@workspace/math` | packages/math/src/omml.ts |
 | `WORDML_NAMESPACE` | `@workspace/math` | packages/math/src/omml.ts |
 | `writeLatex` | `@workspace/math` | packages/math/src/latex.ts |
 | `writeMathml` | `@workspace/math` | packages/math/src/mathml.ts |

@@ -61,6 +61,38 @@ describe('MATH_LIMITS', () => {
         expect(() => readOmml(el(ins))).toThrow(MathError);
     });
 
+    // A stored string or a paste may hold any number of elements that make nothing.
+    test.each([
+        '<a/>',
+        '<mstyle/>',
+        '<mrow/>',
+        '<semantics/>',
+        '<mi/>',
+        '<mo> </mo>',
+        '<mtext/>',
+        '<mspace/>',
+        '<none/>',
+        '<annotation>x</annotation>',
+    ])('each %s the MathML reader passes through or finds empty counts one toward the size bound', (empty) => {
+        const read = (count: number) =>
+            readMathml(el(`<math xmlns="${MATHML_NAMESPACE}">${empty.repeat(count)}</math>`));
+        expect(read(MATH_LIMITS.size - 1)).toEqual([]);
+        expect(() => read(MATH_LIMITS.size)).toThrow(MathError);
+    });
+
+    // Each reader drops them as they arrive, so they cost a pass, as the characters it keeps do.
+    test('dropped marks and invisible characters count toward the size bound', () => {
+        for (const dropped of ['\u0301', '\u200B']) {
+            const text = `x${dropped.repeat(2 * MATH_LIMITS.size)}`;
+            for (const read of [
+                () => readOmml(el(`<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:t>${text}</m:t></m:r></m:oMath>`)),
+                () => readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi>${text}</mi></math>`)),
+                () => readLatex(text),
+            ])
+                expect(read).toThrow(MathError);
+        }
+    });
+
     test('whitespace costs linear time, so a forged run of spaces near the string cap reads at once', () => {
         const spaces = ' '.repeat(40_000);
         const omml = el(
@@ -81,7 +113,7 @@ describe('MATH_LIMITS', () => {
 function readEach(text: string, mathml: string): MathRow[] {
     return [
         readOmml(el(`<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:t>${text}</m:t></m:r></m:oMath>`)),
-        readMathml(el(`<math xmlns="${MATHML_NAMESPACE}">${mathml}</math>`)).row,
+        readMathml(el(`<math xmlns="${MATHML_NAMESPACE}">${mathml}</math>`)),
         readLatex(text),
     ];
 }
@@ -207,7 +239,7 @@ describe('RowBuilder', () => {
         const accented: MathRow = [{ kind: 'accent', accent: '\u0301', body: letter('e') }];
         const deepest = (levels: number): MathRow =>
             levels === 1 ? accented : [{ kind: 'radical', body: deepest(levels - 1) }];
-        expect(readMathml(el(writeMathml(nested(MATH_LIMITS.depth - 1, 'e\u0301')))).row).toStrictEqual(
+        expect(readMathml(el(writeMathml(nested(MATH_LIMITS.depth - 1, 'e\u0301'))))).toStrictEqual(
             deepest(MATH_LIMITS.depth - 1),
         );
         expect(() => readMathml(el(writeMathml(nested(MATH_LIMITS.depth, 'e\u0301'))))).toThrow(MathError);
@@ -275,7 +307,7 @@ describe('the minus sign', () => {
                 el(`<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:rPr><m:nor/></m:rPr><m:t>a-b</m:t></m:r></m:oMath>`),
             ),
         ).toStrictEqual(text);
-        expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mtext>a-b</mtext></math>`)).row).toStrictEqual(text);
+        expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mtext>a-b</mtext></math>`))).toStrictEqual(text);
         expect(readLatex('\\text{a-b}')).toStrictEqual(text);
         expect(canonicalIssue([{ kind: 'operator', text: '-' }])).toBeDefined();
     });
@@ -285,7 +317,7 @@ describe('the minus sign', () => {
         const word: MathRow = [{ kind: 'identifier', text: 'arg-max' }];
         const upright = (text: string): MathNode => ({ kind: 'identifier', text, variant: 'normal' });
         expect(readLatex('\\operatorname{arg-max}')).toStrictEqual(word);
-        expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi>arg-max</mi></math>`)).row).toStrictEqual(word);
+        expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi>arg-max</mi></math>`))).toStrictEqual(word);
         // In OMML a hyphen-minus is the minus, upright or not; the writer's U+2010 is the hyphen of a word.
         const ommlRun = (text: string) =>
             readOmml(
@@ -318,7 +350,7 @@ describe('the minus sign', () => {
                 el(
                     `<math xmlns="${MATHML_NAMESPACE}"><mi mathvariant="normal">a</mi><mo>-</mo><mi mathvariant="normal">b</mi></math>`,
                 ),
-            ).row,
+            ),
         ).toStrictEqual(minusBetween(upright('a'), upright('b')));
         expect(readLatex('\\operatorname{a-\\not-b}')).toStrictEqual([
             upright('a'),
@@ -347,10 +379,10 @@ describe('a capital Greek letter', () => {
         expect(readLatex('\\mathrm{\\Gamma}')).toStrictEqual(upright);
         expect(readLatex('\\mathit{\\Gamma}')).toStrictEqual(italic);
         expect(
-            readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi mathvariant="normal">Γ</mi></math>`)).row,
+            readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi mathvariant="normal">Γ</mi></math>`)),
         ).toStrictEqual(upright);
         // MathML and Word draw a lone letter italic when nothing says otherwise.
-        expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi>Γ</mi></math>`)).row).toStrictEqual(italic);
+        expect(readMathml(el(`<math xmlns="${MATHML_NAMESPACE}"><mi>Γ</mi></math>`))).toStrictEqual(italic);
         expect(readOmml(el(`<m:oMath xmlns:m="${OMML_NAMESPACE}"><m:r><m:t>Γ</m:t></m:r></m:oMath>`))).toStrictEqual(
             italic,
         );
