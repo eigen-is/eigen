@@ -213,8 +213,12 @@ const LESS_THAN = 0x3c;
 export const EMU_PER_POINT = 12_700;
 
 // ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
+// Past 64 characters it is none unread: no coordinate needs more, and a file's 4 MB one would be parsed at each use.
+const MAX_COORDINATE_CHARS = 64;
+
 export function emu(value: string | undefined): number | undefined {
-    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
+    if (value === undefined || value.length > MAX_COORDINATE_CHARS) return undefined;
+    const [, number, unit = ''] = value.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
     const points = POINTS_PER_UNIT.get(unit);
     const result =
         unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;
