@@ -6,6 +6,7 @@ import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_TAGS, stripTagsServer, textToParagraphHtml } from '../../core/html';
 import { stripNonXmlChars } from '../../core/xml';
 import { isColorToken, parseFill, serializeFill } from '../fill';
+import { parsePathCommands, serializePath } from '../outline';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_RICHTEXT_PROPS } from '../types';
 
 // Sanity bound on spatial fields. Without a cap one client's corrupt write (say 1e15 from a math bug)
@@ -22,7 +23,7 @@ const MAX_FONT_SIZE = 400;
 // sanitize the markup — the DOM allowlist needs a DOM, and this module runs in the API Worker too. The
 // mount seam does it instead: ElementLayer (every live/preview/present surface) and the paste planner
 // both run sanitizeToLightEditorHtml.
-const MAX_HTML_BYTES = 64 * 1024;
+export const MAX_HTML_BYTES = 64 * 1024;
 
 // Rich text is kept as stored only when it is editor-shaped (isEditorShaped); anything else is flattened
 // to plain paragraphs. jsdom walks every ancestor of each node it inserts, so the export sanitizer's parse
@@ -47,6 +48,11 @@ const HTML_TOKEN =
 // commits through labelText, so what a user types and what the reader keeps are the same string.
 export const MAX_ARROW_LABEL_BYTES = 4 * 1024;
 export const MAX_ARROW_LABEL_LINES = 64;
+
+// A path's work (render, hit test, docking, export) scales with its commands. A valid path is ASCII, so its
+// length is its bytes; the canonical spelling is capped too, so what the reader stores reads back.
+export const MAX_PATH_BYTES = 16 * 1024;
+export const MAX_PATH_COMMANDS = 512;
 
 export type YMapLike = { get(key: string): unknown };
 
@@ -185,6 +191,15 @@ function capHtmlBytes(html: string): string {
     if (capped === html) return html;
     const lt = capped.lastIndexOf('<');
     return lt > capped.lastIndexOf('>') ? capped.slice(0, lt) : capped;
+}
+
+// The canonical `path`, or null for a malformed or oversized one, which the kind drops.
+export function parseNormalizedPath(v: unknown): string | null {
+    if (typeof v !== 'string' || v.length > MAX_PATH_BYTES) return null;
+    const commands = parsePathCommands(v);
+    if (commands === null || commands.length === 0 || commands.length > MAX_PATH_COMMANDS) return null;
+    const path = serializePath(commands);
+    return path.length <= MAX_PATH_BYTES ? path : null;
 }
 
 // Newlines normalize here, not at the consumers, so the line cap and the label's height math count

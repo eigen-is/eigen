@@ -93,6 +93,11 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
             const { warnings, ...result } = importDocxToEigendocUpdate(request.data, request.publicOrigin);
             return { ok: true, result, warnings };
         }
+        case 'pptx': {
+            const { importPptxToSlidesUpdate } = await import('../../import/slides/transform');
+            const { warnings, ...result } = importPptxToSlidesUpdate(request.data, request);
+            return { ok: true, result, warnings };
+        }
     }
 }
 

@@ -45,6 +45,7 @@ export type FileActionId =
     | 'save-to-drive'
     | 'convert-to-sheet'
     | 'convert-to-document'
+    | 'convert-to-slides'
     | 'import-contacts'
     | 'import-mail'
     | 'import-calendar';

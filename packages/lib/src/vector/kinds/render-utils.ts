@@ -9,7 +9,14 @@ import { escapeXml } from '../../core/xml';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
 import { type Box, DEG_TO_RAD, isClosedPath, type Point, round } from '../geometry';
-import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
+import {
+    cornerRadius,
+    diamondOutline,
+    outlinePath,
+    rectOutline,
+    scaleNormalizedPath,
+    sharpDiamondOffset,
+} from '../outline';
 import {
     type FillStyle,
     isLinearElement,
@@ -18,6 +25,7 @@ import {
     type VectorElement,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorPathElement,
     type VectorPieElement,
     type VectorRichTextElement,
     type VectorShapeElement,
@@ -33,15 +41,22 @@ const ARC_PIECE = 45;
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
 
-// What the one rough box drawable serves: the closed shapes and the pie slice, plus the two DOM boxes
-// whose border it is.
-type RoughBoxElement = VectorShapeElement | VectorPieElement | VectorImageElement | VectorRichTextElement;
+// What the one rough box drawable serves: the closed shapes, the pie slice and the path, plus the two DOM
+// boxes whose border it is.
+type RoughBoxElement =
+    | VectorShapeElement
+    | VectorPieElement
+    | VectorPathElement
+    | VectorImageElement
+    | VectorRichTextElement;
 
 // A closed box's rough drawing. The generator is per-call: seeded roughjs output depends only on
 // el.seed. The linecap rides the paths (the caller owns the placing <g>).
 export function renderRoughShape(el: RoughBoxElement): string {
-    const paths = drawableToSvg(shapeDrawable(new RoughGenerator(), el));
-    return `${'fill' in el ? fillDefs(el) : ''}<g stroke-linecap="round">${paths}</g>`;
+    const drawable = shapeDrawable(new RoughGenerator(), el);
+    // A gradient's defs ride along only when the fill paints.
+    const defs = 'fill' in el && drawable.options.fill !== undefined ? fillDefs(el) : '';
+    return `${defs}<g stroke-linecap="round">${drawableToSvg(drawable)}</g>`;
 }
 
 // The dashed box an element draws where its content can't be shown: a picture with no file, a chart that
@@ -111,6 +126,10 @@ function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
         }
         return gen.path(`${d} Z`, roughOptions(el, true));
     }
+    // A path is its own SVG path, scaled from the unit box.
+    if (el.type === 'path') {
+        return gen.path(scaleNormalizedPath(el.path, el.width, el.height), roughOptions(el, el.closed));
+    }
     const box = { x: 0, y: 0, width: el.width, height: el.height };
     const radius = cornerRadius(el, el.type === 'diamond' ? 'diamond' : 'rectangle');
     const rounded = radius > 0;
@@ -160,8 +179,9 @@ function roughOptions(el: RoughBoxElement, continuousPath: boolean): Options {
     // A shape with its border switched off (capabilities.strokeOptional): roughjs's own 'none' skips
     // the outline sets entirely, so the fill still paints and no invisible path is serialized.
     if (isTransparentColor(el.strokeColor)) options.stroke = 'none';
-    // An image carries no Fill at all, and roughjs then draws the outline alone — its border.
-    if ('fill' in el) {
+    // An image carries no Fill at all and an open path has nothing to fill: roughjs then draws the
+    // outline alone.
+    if ('fill' in el && (el.type !== 'path' || el.closed)) {
         const { fill, fillStyle } = fillOptions(el);
         options.fill = fill;
         options.fillStyle = fillStyle;

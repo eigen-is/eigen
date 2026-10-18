@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1821 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1835 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -528,7 +528,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (416)
+## Types (419)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -695,6 +695,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ImipMethod` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ImportCountsResult` | `@workspace/lib/types` | packages/lib/src/types/transfer.ts |
 | `ImportMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
+| `ImportResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `InheritedAccessItem` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `InviteResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `Label` | `@workspace/lib/types` | packages/lib/src/types/label.ts |
@@ -853,6 +854,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NewVectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `ObjectFit` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `OutlineShape` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `PathCommand` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `PinPatch` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `PinRoutingContext` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -878,6 +880,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorImageElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorMeta` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorPathElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorPieElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorRectangleElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorRichTextElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -949,7 +952,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (908)
+## Utilities & constants (919)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1428,7 +1431,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `CONVERT_TARGETS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `CONVERT_SOURCES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `DRIVE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1466,6 +1469,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isClientFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `isCollabType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `isConvertSource` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isConvertTarget` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isDocumentType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isEmailDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -1676,6 +1680,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `marqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `materializeFirstPin` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `MAX_ARROW_LABEL_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
+| `MAX_HTML_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
+| `MAX_PATH_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
+| `MAX_PATH_COMMANDS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
 | `measureLabel` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
 | `moveEndpoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
@@ -1707,9 +1714,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `parseFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parseIdList` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `parsePathCommands` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `pasteAnchorOffset` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `PATH_COORD_MAX` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `PATH_COORD_MIN` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `placeLayer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `PLACEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `pointInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -1722,6 +1732,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readClipboardTypography` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `readElementFromFields` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `readElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `readSlideSize` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `reanchorElements` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `rectOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
@@ -1741,6 +1752,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `round` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `round4` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `scaledPathCommands` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `scaleNormalizedPath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `sceneBounds` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
 | `sceneFontFamilies` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `sceneLayers` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
@@ -1754,6 +1767,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `serializeFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `serializeFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `serializeIdList` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `serializePath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `serializePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `shapeAnchorPoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |

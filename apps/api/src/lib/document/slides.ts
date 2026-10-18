@@ -12,9 +12,9 @@ import {
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 
-// The deck writer for the pptx import, which is not built yet, so nothing calls it. The caller bounds the update's
-// size and record count, and its media names must already be free in the deck's media folder: the writer copies
-// `mediaName` and background image names as given.
+// The deck writers for the pptx import (import/import-document.ts). The caller bounds the update's size and record
+// count, and its media names must already be free in the deck's media folder: the writer copies `mediaName` and
+// background image names as given.
 
 // The update is built from an untrusted pptx, so it goes through the reader: a record a hostile peer
 // write would be healed or dropped to is healed or dropped here too, and only the clean scene is written.
@@ -71,8 +71,10 @@ export function writeSlidesUpdateToYjs(doc: Y.Doc, update: Uint8Array): void {
     });
 }
 
-// For importing slides into a deck someone works in: appended after its last slide, its meta left alone.
-export function appendSlidesUpdateToYjs(doc: Y.Doc, update: Uint8Array): void {
+// For importing slides into a deck someone works in: appended after its last slide, its meta left alone. Answers how
+// many slides it appended.
+export function appendSlidesUpdateToYjs(doc: Y.Doc, update: Uint8Array): number {
     const scene = readSlidesUpdate(update);
     doc.transact(() => appendScene(doc, scene));
+    return scene.frames.length;
 }

@@ -15,7 +15,8 @@ export type VectorElementType =
     | 'freedraw'
     | 'line'
     | 'arrow'
-    | 'chart';
+    | 'chart'
+    | 'path';
 
 // The runtime value lists are the single source; the union types derive from them, so a grown
 // list and its type can never drift. read-vector's validators consume the same arrays.
@@ -103,6 +104,17 @@ export type VectorPieElement = VectorElementBase &
         sweepAngle: number; // (0, 360]
     };
 
+// A free contour of lines and Bézier curves (a pptx custGeom). `path` is absolute M/L/C/Q/Z in the unit
+// box, the canonical string parseNormalizedPath writes, so a resize changes width/height and never the path.
+// A hole is a subpath wound the other way, where SVG's nonzero fill and roughjs's even-odd hatching agree.
+export type VectorPathElement = VectorElementBase &
+    Fillable & {
+        type: 'path';
+        path: string;
+        // Whether the path fills; it reads false for a path without a Z. An open path only strokes.
+        closed: boolean;
+    };
+
 export type VectorImageElement = VectorElementBase & {
     type: 'image';
     mediaName: string; // filename in the container's media/ folder, NEVER a dataURL
@@ -155,13 +167,14 @@ export type VectorChartElement = VectorElementBase &
         color: string;
     };
 
-// What an arrow endpoint may dock to: the closed shapes, the pie slice, the chart and the two DOM boxes,
-// whose outline is the rounded rect their `corners` describes. The RUNTIME answer is the registry's
+// What an arrow endpoint may dock to: the closed shapes, the pie slice, a closed path, the chart and the two
+// DOM boxes, whose outline is the rounded rect their `corners` describes. The RUNTIME answer is the registry's
 // `bindable` capability (isBindable in kinds/index.ts) — this union is its type-level face, and the
 // registry test pins the two against each other so neither can grow without the other.
 export type VectorBindableElement =
     | VectorShapeElement
     | VectorPieElement
+    | VectorPathElement
     | VectorChartElement
     | VectorRichTextElement
     | VectorImageElement;
@@ -215,6 +228,7 @@ export type VectorArrowElement = VectorElementBase & {
 export type VectorElement =
     | VectorShapeElement
     | VectorPieElement
+    | VectorPathElement
     | VectorChartElement
     | VectorImageElement
     | VectorRichTextElement
@@ -232,6 +246,7 @@ export type ElementOfType<K extends VectorElementType> = OfType<VectorElement, K
 // are never patched; z-order changes rewrite `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
     Partial<Omit<VectorPieElement, 'id' | 'type'>> &
+    Partial<Omit<VectorPathElement, 'id' | 'type'>> &
     Partial<Omit<VectorChartElement, 'id' | 'type'>> &
     Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
     Partial<Omit<VectorImageElement, 'id' | 'type'>> &

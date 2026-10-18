@@ -157,7 +157,7 @@ An assignee who is not a member of the new document stays the assignee, as histo
 | An attachment in chat, a card or a mail draft | Stays a file |
 | Drive's own Copy of a package file | Stays a file |
 
-A package that stays a file gets a file action, **Open as document**, beside Convert to Document. It runs the convert route, whose job is exactly this: a new document from a file next to it. `CONVERT_TARGETS` and the convert route learn the package as a source, and the route takes an optional target folder for the Save to Drive picker. That changes an existing route; it adds none.
+A package that stays a file gets a file action, **Open as document**, beside Convert to Document. It runs the convert route, whose job is exactly this: a new document from a file next to it. `CONVERT_SOURCES` and the convert route learn the package as a source, and the route takes an optional target folder for the Save to Drive picker. That changes an existing route; it adds none.
 
 A package stored as a file is stored as `application/zip`, never as the container's MIME. That is the broken window above: `finalizeUpload` replaces any `DRIVE_MIME_*` the client sends for a plain file, for every upload, so no file wears a document's MIME and shows up in an app's list.
 

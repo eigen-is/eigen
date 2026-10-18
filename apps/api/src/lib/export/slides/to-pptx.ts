@@ -24,6 +24,7 @@ import {
     isTransparentFill,
     linearLocalToScene,
     normalizeAngle,
+    type PathCommand,
     type Point,
     parseBackgroundFill,
     parseFill,
@@ -32,12 +33,14 @@ import {
     rectOutline,
     type SlideSize,
     type StrokeStyle,
+    scaledPathCommands,
     type TextAlign,
     type VectorArrowElement,
     type VectorElement,
     type VectorFrame,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorPathElement,
     type VectorScene,
     type VerticalAlign,
 } from '@workspace/lib/vector';
@@ -399,6 +402,12 @@ function elementXml(el: VectorElement, slide: Slide): string {
             return freedrawXml(el, slide, opacity);
         case 'arrow':
             return arrowXml(el, slide, opacity);
+        case 'path': {
+            // An open path only strokes, as on the canvas.
+            const fill = el.closed ? fillXml(parseFill(el.fill), opacity, el) : '<a:noFill/>';
+            const geometry = customXml(slide, el, pathXml(el, slide), el.closed);
+            return spXml(slide, 'Freeform', el, geometry, fill, lineXml(slide, el, opacity));
+        }
         case 'chart':
             return convertToShapes(el)
                 .map((shape) => elementXml(shape, slide))
@@ -522,6 +531,26 @@ function lineXml(
         dash ? `<a:prstDash val="${dash}"/>` : '',
         `<a:round/>${end('headEnd', ends[0])}${end('tailEnd', ends[1])}</a:ln>`,
     ].join('');
+}
+
+const PATH_COMMANDS: Record<PathCommand['op'], string> = {
+    M: 'moveTo',
+    L: 'lnTo',
+    C: 'cubicBezTo',
+    Q: 'quadBezTo',
+    Z: 'close',
+};
+
+// A path's commands at its box size, in the EMU of the custGeom's path, which spans the box.
+function pathXml(el: VectorPathElement, slide: Slide): string {
+    return scaledPathCommands(el.path, el.width, el.height)
+        .map(({ op, points }) => {
+            const tag = PATH_COMMANDS[op];
+            if (points.length === 0) return `<a:${tag}/>`;
+            const pts = points.map((p) => `<a:pt x="${emu(slide, p.x)}" y="${emu(slide, p.y)}"/>`);
+            return `<a:${tag}>${pts.join('')}</a:${tag}>`;
+        })
+        .join('');
 }
 
 // A two-point line is a connector the way PowerPoint draws one, from corner to corner of the box it spans and flipped

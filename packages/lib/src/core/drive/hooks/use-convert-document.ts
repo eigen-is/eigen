@@ -1,13 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
-import { type ConvertTarget, DRIVE_MIME_DOC, DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
+import { CONVERT_SOURCES, type ConvertTarget, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateItemCreated } from './keys';
-
-const TARGET_MIME: Record<ConvertTarget, string> = {
-    eigensheets: DRIVE_MIME_SHEETS,
-    eigendoc: DRIVE_MIME_DOC,
-};
 
 type ConvertVariables = {
     ownerId: string;
@@ -33,7 +28,7 @@ export function useConvertDocument() {
                 variables.ownerId,
                 variables.mountId,
                 variables.parentId,
-                TARGET_MIME[variables.targetType],
+                EIGEN_DOC_TYPE_INFO[CONVERT_SOURCES[variables.targetType].type].mime,
             ),
         onError: onMutationError,
     });

@@ -3,3 +3,6 @@
 
 # Mail parser corpus: byte-exact RFC 5322 fixtures, CRLF and bare CR are the test subject.
 apps/api/src/test/fixtures/mail-corpus/*.eml -text
+
+# Ecma's preset shape definitions, reproduced byte for byte (CRLF and BOM included): NOTICE pins its sha256.
+apps/api/src/lib/import/slides/presetShapeDefinitions.xml -text

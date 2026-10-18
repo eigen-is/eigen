@@ -15,32 +15,19 @@ import {
 } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { EMU_PER_TWIP, FLOATING_WRAPS, TWIPS_PER_PX } from '../../document/wordml';
+import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
 import { descendants, int, POINTS_PER_UNIT } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
 import { pushText, type RunContext } from './runs';
 
-// The image types a part may be stored as, each under its own extension. WMF and EMF are kept though no browser or
-// sharp draws them: the figure shows its alt text in a broken image, and an export leaves it out.
-const IMAGE_EXTENSION_BY_MIME = new Map([
-    ['image/png', 'png'],
-    ['image/jpeg', 'jpeg'],
-    ['image/gif', 'gif'],
-    ['image/webp', 'webp'],
-    ['image/svg+xml', 'svg'],
-    ['image/tiff', 'tiff'],
-    ['image/bmp', 'bmp'],
-    ['image/x-wmf', 'wmf'],
-    ['image/x-emf', 'emf'],
-]);
-
-// A part the package gives no type takes its extension's, and image/jpg is a common misspelling; both only through
-// the allowlist, so a part declared as anything else is still never stored.
+// A part the package gives no type takes its extension's, and a misspelt type its alias; both only through the
+// allowlist, so a part declared as anything else is still never stored. A WMF or EMF figure shows its alt text in a
+// broken image, and an export leaves it out.
 const MIME_BY_EXTENSION = new Map([
     ...[...IMAGE_EXTENSION_BY_MIME].map(([mime, extension]): [string, string] => [extension, mime]),
     ['jpg', 'image/jpeg'],
 ]);
-const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
 
 function imageType(reader: Reader, path: string): string | undefined {
     const declared = reader.pkg.contentTypeOf(path);
