@@ -5,8 +5,8 @@ type: how-to
 category: Basics
 tags: [docs, equations, math, latex, editor]
 related: [docs/images-and-tables, docs/export, docs/comments]
-order: 55
-updated: 2026-10-14
+order: 56
+updated: 2026-10-18
 ---
 
 You can put math in a document, from a quick x² in a sentence to a formula on a line of its own. You write each equation in LaTeX, the notation most math tools use, and a preview shows how it will look as you type.
@@ -27,9 +27,9 @@ Leaving the field, for example by clicking back in the document, saves the equat
 
 Eigen reads the common LaTeX math commands: `\frac{a}{b}` for a fraction, `\sqrt{x}` for a root, `x_i` and `x^2` for scripts, `\sum`, `\int`, Greek letters such as `\alpha`, and environments such as `cases` and `pmatrix`.
 
-Type a command's name and a space, and Eigen adds the braces it needs. `\frac` and a space becomes `\frac{}{}`, with the cursor in the first pair. An empty pair shows as a dotted box in the preview, so you can see what's left to fill in.
+Type a command's name and a space, and Eigen adds the braces it needs. `\frac` and a space becomes `\frac{}{}`, with the cursor in the first pair. An empty part of a fraction, a root, or another template shows as a dotted box in the preview, so you can see what's left to fill in.
 
-If the LaTeX has a mistake, the field turns red and a message under it says what's wrong, with the spot underlined. The equation isn't saved until you fix it, and the preview keeps showing the last version that worked.
+If the LaTeX has a mistake, the field turns red and a message under it says what's wrong, with the spot underlined. The equation isn't saved until you fix it, and the preview shows the equation as it was last saved.
 
 ## Pick symbols from the menus
 
@@ -49,7 +49,7 @@ An equation sits in the line of text by default. To give it a line of its own, c
 
 ## Change or remove an equation
 
-Click an equation to select it and open its panel, then edit its LaTeX. You can also move onto it with the arrow keys and press **Enter**. To remove an equation, select it and press Backspace or Delete.
+Click an equation to select it and open its panel, then edit its LaTeX. To open the panel with the cursor in its **LaTeX** field, move onto the equation with the arrow keys and press **Enter**, or click the selected equation again. To remove an equation, select it and press Backspace or Delete.
 
 Other people see your changes once you save them, not while you type. If two people change the same equation, the last one saved wins.
 
@@ -57,20 +57,14 @@ Other people see your changes once you save them, not while you type. If two peo
 
 Copy an equation from Word for the web, or from a web page that shows math, and paste it into a document. It comes in as an equation you can edit, in the line or on its own line as it was. When the page includes the equation's LaTeX, the **LaTeX** field shows it.
 
-An equation copied from one Eigen document to another stays an equation, with its LaTeX. An equation copied from Google Docs pastes as plain text. So does one from a web page that draws its math without keeping a copy of it, as pages made with MathJax 4 do unless they change its settings. To bring in the equations of a Word file, [import the file](/support/docs/import-word).
+An equation copied from one Eigen document to another stays an equation, with its LaTeX. An equation copied from Google Docs pastes as plain text. So does one from some web pages, which draw their math without keeping a copy of it. Pasted into a comment, an email, or a text box on a slide, an equation comes in as one-line text, such as `(a+b)/2`. To bring in the equations of a Word file, [import the file](/support/docs/import-word).
 
 ## Comment on an equation
 
 Click the equation, then press Cmd+Option+M (Mac) or Ctrl+Alt+M (Windows), or choose **Comment** from the **Insert** menu. The comment's **Title** starts as the equation's text. A commented equation shows a small triangle in the comment's color at its top-right corner. Click the triangle to open the comment. See [Comment and discuss](/support/docs/comments).
 
-## Equations in Word files and downloads
+## Equations in downloads and search
 
-When you download a document as a Word file, each equation becomes a Word equation that you can edit in Word, and a displayed one stays on its own line. When you [import a Word file](/support/docs/import-word), its equations come in as equations you can edit here, with their LaTeX written out for you.
+A Word download turns each equation into a Word equation, and a PDF or web page download draws it. See [Export to Word, PDF, or HTML](/support/docs/export) for what each format keeps.
 
-Word has no place for LaTeX, so a Word file keeps the equation but not what you typed. If you download a document to Word and import it again, each equation looks the same, but its **LaTeX** field shows Eigen's way of writing it, which may differ from yours.
-
-The PDF and the web page download show equations too. A PDF draws up to 1,000 different equations. Past that, or when the equations are very large, the rest print as one-line text, such as `(a+b)/2`, the same form word count reads. The web page download and the preview in Drive have a similar limit, which only far larger documents reach.
-
-## Word count, search, and copying as text
-
-Word count, search, and a copy pasted as plain text read an equation in a one-line text form, such as `x^2`, `(a+b)/2`, or `√(x+1)`. The find bar doesn't look inside equations.
+Word count, searching your files, and a copy pasted as plain text read an equation in a one-line text form, such as `x^2`, `(a+b)/2`, or `√(x+1)`. The find bar inside a document doesn't look inside equations.
