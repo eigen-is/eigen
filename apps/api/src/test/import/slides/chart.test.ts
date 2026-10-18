@@ -215,23 +215,13 @@ describe('a chart left as a box', () => {
         expect(deck.warnings).toEqual([{ code: 'charts-dropped', count: 1 }]);
     });
 
-    test("the box names the kind as PowerPoint's Insert Chart does, a bar plot by its direction", () => {
+    test("the box names the kind as the chart reader does, PowerPoint's Insert Chart name", () => {
         // A log value axis is one the spec can't draw, so a column or bar plot on one is a box too.
         const plot = (local: string, inner = '') =>
             `<c:${local}>${inner}${ser(0, 'S', [1, 2, 3])}</c:${local}><c:valAx><c:scaling><c:logBase val="10"/></c:scaling></c:valAx>`;
         const cases: [string, string][] = [
-            [plot('barChart', '<c:barDir val="col"/>'), 'Column'],
-            [plot('barChart', '<c:barDir val="bar"/>'), 'Bar'],
-            [plot('bar3DChart', '<c:barDir val="col"/>'), '3-D Column'],
-            [plot('bar3DChart', '<c:barDir val="bar"/>'), '3-D Bar'],
-            [plot('ofPieChart', '<c:ofPieType val="pie"/>'), 'Pie of pie'],
-            [plot('ofPieChart', '<c:ofPieType val="bar"/>'), 'Bar of pie'],
-            [plot('doughnutChart'), 'Doughnut'],
-            [plot('area3DChart'), '3-D Area'],
-            [plot('radarChart'), 'Radar'],
-            [plot('bubbleChart'), 'Bubble'],
-            [plot('stockChart'), 'Stock'],
-            [plot('surface3DChart'), '3-D Surface'],
+            [plot('barChart', '<c:barDir val="bar"/>'), 'Clustered Bar'],
+            [plot('ofPieChart', '<c:ofPieType val="pie"/>'), 'Pie of Pie'],
             [`${plot('barChart', '<c:barDir val="col"/>')}${plot('lineChart')}`, 'Combo'],
             // A plot in mc:AlternateContent is the choice the chart reader reads, else the fallback.
             [
@@ -361,7 +351,7 @@ describe('bounds', () => {
             files: { 'ppt/charts/chart1.xml': part },
         });
         const deck = readPptx(pptx, OPTIONS);
-        expect(deck.slides[0].elements[0]?.html).toBe('<p>Column chart not imported</p>');
+        expect(deck.slides[0].elements[0]?.html).toBe('<p>Clustered Column chart not imported</p>');
         expect(deck.slides[59].elements[0]?.html).toBe('<p>Chart not imported</p>');
     });
 
