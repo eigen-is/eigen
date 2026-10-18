@@ -38,7 +38,7 @@ An **Importing slides** dialog shows while the file imports. Pictures from the f
 - Slide backgrounds: a color, a gradient, or a picture.
 - The shapes and pictures of the slide master and layout, such as a logo or a border, on every slide that shows them.
 
-A widescreen (16:9) slide fills the slide in Slides. A standard (4:3) slide is fitted in the middle, with a margin on the left and right.
+A converted presentation takes the slide size closest to the file's: a widescreen file becomes a **Widescreen 16:9** presentation and a standard file a **Standard 4:3** one, so its slides fill the page. A size in between, such as 16:10 or A4, takes the closer of the two and is fitted inside it. When you import slides into a presentation of another size, they are fitted inside its slides, centered, with a margin at the sides or at the top and bottom. The presentation keeps its own size.
 
 ## What doesn't come across
 

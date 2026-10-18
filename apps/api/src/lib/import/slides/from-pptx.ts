@@ -1,5 +1,5 @@
 import type { BackgroundFill } from '@workspace/lib/types/background';
-import { type NewVectorElement, SLIDE_SIZES } from '@workspace/lib/vector';
+import { type NewVectorElement, nearestSlideSize, SLIDE_SIZES, type SlideSize } from '@workspace/lib/vector';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { P_NS } from '../../core/ooxml';
 import { type XmlElement, XmlError, xmlAttr } from '../../core/xml';
@@ -21,13 +21,11 @@ export type PptxDeck = {
     slides: PptxSlide[];
     media: PptxMedia[];
     warnings: TransformWarning[];
-    // The file's p:sldSz in EMU, which Convert picks the deck's size from.
+    // The deck size nearest the file's p:sldSz, which a Convert's new deck takes.
     slideSize: SlideSize;
 };
 
-type SlideSize = { cx: number; cy: number };
-
-// The frame is the deck's on an Import slides…, and none on a Convert.
+// The frame is the deck's on an Import slides…, and none on a Convert, whose deck takes the file's nearest size.
 export type PptxOptions = { frame?: Frame; maxMediaBytes: number };
 
 export const MAX_MEDIA_PARTS = 1000;
@@ -58,11 +56,12 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         const value = Number(sldSz && xmlAttr(sldSz, '', name));
         return Number.isFinite(value) && value > 0 ? Math.min(MAX_SLIDE_EMU, Math.max(MIN_SLIDE_EMU, value)) : fallback;
     };
-    const slideSize = { cx: side('cx', DEFAULT_SLIDE_SIZE.cx), cy: side('cy', DEFAULT_SLIDE_SIZE.cy) };
-    // A Convert's new deck takes Eigen's frame: every deck frame is 16:9 at 1920×1080.
-    const frame = options.frame ?? SLIDE_SIZES['16:9'];
+    const cx = side('cx', DEFAULT_SLIDE_SIZE.cx);
+    const cy = side('cy', DEFAULT_SLIDE_SIZE.cy);
+    const slideSize = nearestSlideSize(cx, cy);
+    const frame = options.frame ?? SLIDE_SIZES[slideSize];
     // Letterboxed: the whole slide fits the frame, centred.
-    const scale = Math.min(frame.width / slideSize.cx, frame.height / slideSize.cy);
+    const scale = Math.min(frame.width / cx, frame.height / cy);
 
     // A random prefix per import, so an Import into a deck that holds an earlier one's pictures overwrites none.
     const prefix = `pptx-${crypto.randomUUID()}`;
@@ -73,8 +72,8 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     const deck: DeckWalk = {
         pkg,
         scale,
-        offset: { x: (frame.width - slideSize.cx * scale) / 2, y: (frame.height - slideSize.cy * scale) / 2 },
-        slide: { width: slideSize.cx * scale, height: slideSize.cy * scale },
+        offset: { x: (frame.width - cx * scale) / 2, y: (frame.height - cy * scale) / 2 },
+        slide: { width: cx * scale, height: cy * scale },
         shapes: 0,
         elements: 0,
         weight: 0,

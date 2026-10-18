@@ -23,14 +23,22 @@ describe('a deck read', () => {
             OPTIONS,
         );
         expect(deck.slides.map((slide) => slide.name)).toEqual(['Intro', '']);
-        expect(deck.slideSize).toEqual({ cx: 9144000, cy: 6858000 });
+        expect(deck.slideSize).toBe('4:3');
+    });
+
+    test("the deck's slide size is the one nearest the file's: 16:10 is 16:9, A4 is 4:3", () => {
+        const size = (sldSz: string) => readPptx(buildPptx({ sldSz, slides: [{}] }), OPTIONS).slideSize;
+        expect(size('<p:sldSz cx="12192000" cy="6858000"/>')).toBe('16:9');
+        expect(size('<p:sldSz cx="9144000" cy="5715000"/>')).toBe('16:9');
+        expect(size('<p:sldSz cx="9906000" cy="6858000"/>')).toBe('4:3');
     });
 
     test('a slide size outside what PowerPoint allows is held to its range, a missing one is 4:3', () => {
         const size = (sldSz: string) => readPptx(buildPptx({ sldSz, slides: [{}] }), OPTIONS).slideSize;
-        expect(size('<p:sldSz cx="99999999999999" cy="0"/>')).toEqual({ cx: 51206400, cy: 6858000 });
-        expect(size('<p:sldSz cx="12" cy="-5"/>')).toEqual({ cx: 914400, cy: 6858000 });
-        expect(size('')).toEqual({ cx: 9144000, cy: 6858000 });
+        // 56 in by 7.5 in, and 1 in by 7.5 in.
+        expect(size('<p:sldSz cx="99999999999999" cy="0"/>')).toBe('16:9');
+        expect(size('<p:sldSz cx="12" cy="-5"/>')).toBe('4:3');
+        expect(size('')).toBe('4:3');
     });
 
     test('names its pictures under a prefix of its own, so a second import into the deck overwrites none', () => {

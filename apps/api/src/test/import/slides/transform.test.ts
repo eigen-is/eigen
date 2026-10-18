@@ -3,6 +3,7 @@ import {
     DEFAULT_SCENE_META,
     parseBackgroundFill,
     readVectorFromDoc,
+    SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
     type VectorElement,
     writeElementInDoc,
@@ -104,18 +105,48 @@ describe('a pptx converted to a deck', () => {
         expect(warnings).toEqual([{ code: 'tables-dropped', count: 1 }]);
     });
 
-    test("given no frame, fits the slides to the frame the file's slide size picks, and the deck takes the scene's meta", () => {
-        const fourThree = buildPptx({
-            sldSz: '<p:sldSz cx="9144000" cy="6858000"/>',
-            slides: [{ shapes: sp({ xfrm: xfrm(0, 0, 9144000, 6858000), spPr: solid('FF0000') }) }],
-        });
-        const { update } = importPptxToSlidesUpdate(toTransferableBuffer(fourThree), {
-            maxMediaBytes: JOB.maxMediaBytes,
-        });
+    test("given no frame, makes the deck in the slide size nearest the file's, its slides filling it", () => {
+        const convert = (cx: number, cy: number) => {
+            const pptx = buildPptx({
+                sldSz: `<p:sldSz cx="${cx}" cy="${cy}"/>`,
+                slides: [{ shapes: sp({ xfrm: xfrm(0, 0, cx, cy), spPr: solid('FF0000') }) }],
+            });
+            const { update } = importPptxToSlidesUpdate(toTransferableBuffer(pptx), {
+                maxMediaBytes: JOB.maxMediaBytes,
+            });
+            const doc = new Y.Doc();
+            writeSlidesUpdateToYjs(doc, new Uint8Array(update));
+            expect(doc.getMap('meta').get('background')).toBe(DEFAULT_SCENE_META.background);
+            const { meta, frames, elements } = readVectorFromDoc(doc);
+            return { slideSize: meta.slideSize, frame: [frames[0].width, frames[0].height], slide: elements[0] };
+        };
+        // 4:3 comes in as 4:3, no letterbox.
+        const fourThree = convert(9144000, 6858000);
+        expect(fourThree).toMatchObject({ slideSize: '4:3', frame: [1920, 1440] });
+        expect(fourThree.slide).toMatchObject({ x: 0, y: 0, width: 1920, height: 1440 });
+        // 16:10 is nearest 16:9, letterboxed into it.
+        const sixteenTen = convert(9144000, 5715000);
+        expect(sixteenTen).toMatchObject({ slideSize: '16:9', frame: [1920, 1080] });
+        expect(sixteenTen.slide).toMatchObject({ x: 96, y: 0, width: 1728, height: 1080 });
+        // A4 is nearest 4:3.
+        const a4 = convert(9906000, 6858000);
+        expect(a4).toMatchObject({ slideSize: '4:3', frame: [1920, 1440] });
+        expect(a4.slide.width).toBeCloseTo(1920, 6);
+        expect(a4.slide.y).toBeCloseTo((1440 - (6858000 * 1920) / 9906000) / 2, 6);
+    });
+
+    test("given the deck's frame, a file of another size is letterboxed into it and the deck keeps its meta", () => {
         const doc = new Y.Doc();
-        writeSlidesUpdateToYjs(doc, new Uint8Array(update));
-        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ x: 240, y: 0, width: 1440, height: 1080 });
-        expect(doc.getMap('meta').get('background')).toBe(DEFAULT_SCENE_META.background);
+        doc.getMap('meta').set('slideSize', '4:3');
+        writeFrameInDoc(doc, { id: 'mine', index: 'a0', name: 'Mine' });
+        const wide = buildPptx({
+            slides: [{ shapes: sp({ xfrm: xfrm(0, 0, 12192000, 6858000), spPr: solid('FF0000') }) }],
+        });
+        const { update } = importPptxToSlidesUpdate(toTransferableBuffer(wide), { ...JOB, frame: SLIDE_SIZES['4:3'] });
+        appendSlidesUpdateToYjs(doc, new Uint8Array(update));
+        const scene = readVectorFromDoc(doc);
+        expect(scene.meta.slideSize).toBe('4:3');
+        expect(scene.elements[0]).toMatchObject({ x: 0, y: 180, width: 1920, height: 1080 });
     });
 
     test('appended to a deck, it lands after its slides and leaves them as they were', () => {

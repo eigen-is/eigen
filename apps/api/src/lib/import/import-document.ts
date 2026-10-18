@@ -10,7 +10,7 @@ import {
     isCollabType,
     isConvertSource,
 } from '@workspace/lib/types/drive';
-import { SLIDE_SIZES } from '@workspace/lib/vector';
+import { readSlideSize, SLIDE_SIZES } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { enforceMountQuota } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
@@ -184,8 +184,7 @@ export async function convertToDocument(
     }
 
     if (targetType === 'eigenslides') {
-        // Every deck is 1920×1080 today, the reader's frame when none is passed, so a Convert fits the slides into the
-        // same frame Import slides… passes, a 4:3 file letterboxed.
+        // No frame: the new deck takes the slide size nearest the file's, so a 4:3 file makes a 4:3 deck.
         const { update, images } = await importPptxUpdate(buffer, undefined);
         // Refused before the create, so a file whose pictures can't fit makes no document; saveDocImages charges again.
         await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
@@ -241,12 +240,12 @@ export async function importIntoDocument(
     }
 
     if (containerMime === DRIVE_MIME_SLIDES) {
-        // The deck's own frame, which every deck shares today: the slides are fitted into it, letterboxed. The importer
+        // Opened first for the deck's frame: a file of another size is fitted into it, letterboxed. The importer
         // prefixes its picture names per import, so they land beside the deck's media, never over it.
-        const frame = SLIDE_SIZES['16:9'];
+        const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
+        const frame = SLIDE_SIZES[readSlideSize(collabDoc.doc)];
         const { update, images, warnings } = await importPptxUpdate(buffer, frame, signal);
         // As the docx branch: media before the update that names it, the write check last.
-        const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         signal?.throwIfAborted();
         await requireWritePermission(drive, path, user);
         await saveDocImages(drive, path, images, user);

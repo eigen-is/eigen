@@ -62,7 +62,7 @@ The server has a deck writer for the pptx import, `apps/api/src/lib/document/sli
 
 The write appends in one transaction. Every slide and element gets a fresh id and an index after the deck's topmost, in the update's own order. Element frame ids and arrow bindings are remapped to the new ids, and an imported element starts with no comment cards. Nothing already in the deck is cleared or rewritten, because an open tab's undo stack and its comments point at those Y.Maps. The work is linear in the update's records.
 
-`writeSlidesUpdateToYjs` fills a brand-new deck (Convert), so it also writes the update's `meta`. A file with no slides leaves that deck with none, and the first writer to open it seeds it like a new one, so there is one empty-deck path. `appendSlidesUpdateToYjs` adds slides to a deck someone works in, so it leaves that deck's `meta` alone, and answers how many slides it added: none means the file had none, which Import slides… says instead of adding nothing silently.
+`writeSlidesUpdateToYjs` fills a brand-new deck (Convert), so it also writes the update's `meta`, whose `slideSize` is the one nearest the file's. A file with no slides leaves that deck with none, and the first writer to open it seeds it like a new one, so there is one empty-deck path. `appendSlidesUpdateToYjs` adds slides to a deck someone works in, so it leaves that deck's `meta` alone, and answers how many slides it added: none means the file had none, which Import slides… says instead of adding nothing silently.
 
 ## Export and preview render the pages the canvas draws
 

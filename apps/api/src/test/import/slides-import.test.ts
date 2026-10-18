@@ -15,7 +15,7 @@ import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
 import { getUserById } from '../../lib/user';
-import { box, buildPptx, graphicFrame, PIXEL_PNG, para, pic, rel, solid, sp } from '../fixtures/pptx';
+import { box, buildPptx, graphicFrame, PIXEL_PNG, para, pic, rel, solid, sp, xfrm } from '../fixtures/pptx';
 import {
     assertJson,
     authedRequest,
@@ -52,6 +52,17 @@ const PPTX = toTransferableBuffer(
 );
 
 const EMPTY_PPTX = toTransferableBuffer(buildPptx({ slides: [] }));
+
+// One slide covered by one box, 4:3 or 16:9.
+const filled = (cx: number, cy: number) =>
+    toTransferableBuffer(
+        buildPptx({
+            sldSz: `<p:sldSz cx="${cx}" cy="${cy}"/>`,
+            slides: [{ shapes: sp({ xfrm: xfrm(0, 0, cx, cy), spPr: solid('FF0000') }) }],
+        }),
+    );
+const STANDARD_PPTX = filled(9144000, 6858000);
+const WIDE_PPTX = filled(12192000, 6858000);
 
 // No pictures, so no media write of its own stands between a revoked writer and the deck.
 const TEXT_PPTX = toTransferableBuffer(
@@ -131,7 +142,7 @@ async function listing(parentId: string): Promise<string[]> {
 }
 
 // A deck someone works in: one slide holding one box, and a meta key of its own.
-async function seededDeck(fileName: string): Promise<DrivePath> {
+async function seededDeck(fileName: string, meta: Record<string, string> = { own: 'kept' }): Promise<DrivePath> {
     const deck = await createDeck(fileName);
     const home = await getHome(ctx.alice.user.id);
     const { doc } = await home.drive.getCollabDocument(mountId, deck.id);
@@ -144,7 +155,7 @@ async function seededDeck(fileName: string): Promise<DrivePath> {
             SLIDES_STYLE_DEFAULTS,
             'el-own',
         );
-        doc.getMap('meta').set('own', 'kept');
+        for (const [key, value] of Object.entries(meta)) doc.getMap('meta').set(key, value);
     });
     return deck;
 }
@@ -169,6 +180,15 @@ describe('Convert to Slides', () => {
         const [image] = on(second?.id);
         if (image?.type !== 'image') throw new Error('picture missing');
         expect(await mediaNames(result.id)).toEqual([image.mediaName]);
+    }, 60_000);
+
+    test('a 4:3 .pptx makes a 4:3 deck, its slides filling the frame', async () => {
+        const uploaded = await upload(STANDARD_PPTX, 'standard.pptx');
+        const result = await assertJson<DrivePath>(await convertRequest(uploaded.id));
+        const deck = await readDeck(result.id);
+        expect(deck.meta.slideSize).toBe('4:3');
+        expect(deck.frames.map((frame) => [frame.width, frame.height])).toEqual([[1920, 1440]]);
+        expect(deck.elements[0]).toMatchObject({ x: 0, y: 0, width: 1920, height: 1440 });
     }, 60_000);
 
     test('a .pptx with no slides makes a deck with no slides, which the editor seeds as it does a new one', async () => {
@@ -251,6 +271,35 @@ describe('Import slides…', () => {
         const { doc } = await home.drive.getCollabDocument(mountId, deck.id);
         expect(doc.getMap('meta').toJSON()).toEqual({ own: 'kept' });
         expect(await mediaNames(deck.id)).toHaveLength(1);
+    }, 60_000);
+
+    test("a 4:3 file is letterboxed into a 16:9 deck's frame, the deck's meta left alone", async () => {
+        const deck = await seededDeck('import-standard');
+        await assertJson<ImportResult>(await importRequest(deck.id, STANDARD_PPTX));
+        const scene = await readDeck(deck.id);
+        expect(scene.meta.slideSize).toBe('16:9');
+        expect(scene.elements.find((el) => el.frameId === scene.frames[1]?.id)).toMatchObject({
+            x: 240,
+            y: 0,
+            width: 1440,
+            height: 1080,
+        });
+        const home = await getHome(ctx.alice.user.id);
+        const { doc } = await home.drive.getCollabDocument(mountId, deck.id);
+        expect(doc.getMap('meta').toJSON()).toEqual({ own: 'kept' });
+    }, 60_000);
+
+    test("a 16:9 file is letterboxed into a 4:3 deck's frame, the deck staying 4:3", async () => {
+        const deck = await seededDeck('import-into-standard', { slideSize: '4:3' });
+        await assertJson<ImportResult>(await importRequest(deck.id, WIDE_PPTX));
+        const scene = await readDeck(deck.id);
+        expect(scene.meta.slideSize).toBe('4:3');
+        expect(scene.elements.find((el) => el.frameId === scene.frames[1]?.id)).toMatchObject({
+            x: 0,
+            y: 180,
+            width: 1920,
+            height: 1080,
+        });
     }, 60_000);
 
     test('a second import of the same file appends again, its pictures under names of their own', async () => {

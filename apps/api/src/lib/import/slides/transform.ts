@@ -21,11 +21,13 @@ export function importPptxToSlidesUpdate(
     data: ArrayBuffer,
     job: Pick<SlidesImportJob, 'frame' | 'maxMediaBytes'>,
 ): SlidesImportWorkerResult & { warnings: TransformWarning[] } {
-    const { slides, media, warnings } = readPptx(Buffer.from(data), job);
+    const { slides, media, warnings, slideSize } = readPptx(Buffer.from(data), job);
     let update: Uint8Array;
     try {
         const doc = new Y.Doc();
         doc.transact(() => {
+            // A Convert's deck takes it; Import slides… leaves the open deck's meta alone.
+            doc.getMap('meta').set('slideSize', slideSize);
             const frameKeys = generateNKeysBetween(null, null, slides.length);
             const elementKeys = generateNKeysBetween(
                 null,

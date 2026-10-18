@@ -6,7 +6,7 @@
 import type * as Y from 'yjs';
 import { parseBackgroundFill, serializeBackgroundFill } from './fill';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
-import { SLIDE_SIZE_KEYS, SLIDE_SIZES, type VectorFrame } from './frames';
+import { SLIDE_SIZE_KEYS, SLIDE_SIZES, type SlideSize, type VectorFrame } from './frames';
 import { ELEMENT_KINDS, isBindable, isVectorElementType } from './kinds';
 import {
     color,
@@ -42,7 +42,7 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const framesMap = doc.getMap('frames');
     const metaMap = doc.getMap('meta');
 
-    const slideSize = oneOf(metaMap.get('slideSize'), SLIDE_SIZE_KEYS, DEFAULT_SCENE_META.slideSize);
+    const slideSize = readSlideSize(doc);
     const frames = readFrames(framesMap, SLIDE_SIZES[slideSize]);
     const elements: VectorElement[] = [];
     for (const value of elementsMap.values()) {
@@ -59,6 +59,11 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
 
     const background = color(metaMap.get('background'), DEFAULT_SCENE_META.background);
     return { elements: ordered, frames, meta: { background, slideSize } };
+}
+
+// The deck's slide size alone, for a writer that fits what it adds to the deck's frames.
+export function readSlideSize(doc: Y.Doc): SlideSize {
+    return oneOf(doc.getMap('meta').get('slideSize'), SLIDE_SIZE_KEYS, DEFAULT_SCENE_META.slideSize);
 }
 
 // Frames are ordered by fractional index like elements, and heal the same way. Every frame takes the
