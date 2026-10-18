@@ -91,6 +91,25 @@ test('Custom spacing writes every selected paragraph, from what the first one dr
     expect(formats()).toEqual([{ lineSpacing: 2, spaceAfter: 4 }, { lineSpacing: 2 }]);
 });
 
+// A list, a quote and a table cell own the spacing of what they hold.
+test("in a list item Custom spacing sets the line spacing, and Before and After are the list's", async () => {
+    const paragraph = { type: 'paragraph', content: [{ type: 'text', text: 'ab' }] };
+    await open(
+        CustomSpacingDialog,
+        { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [paragraph] }] }] },
+        3,
+    );
+    expect(['Before', 'After'].map((label) => control(label)?.hasAttribute('disabled'))).toEqual([true, true]);
+    expect(['Before', 'After'].map(value)).toEqual(['0', '0']);
+    await type('Line spacing', '2');
+    await apply();
+    expect(editor.state.doc.firstChild?.firstChild?.firstChild?.attrs).toMatchObject({
+        lineSpacing: 2,
+        spaceBefore: null,
+        spaceAfter: null,
+    });
+});
+
 test('Custom spacing refuses a line spacing or a spacing out of range', async () => {
     await open(CustomSpacingDialog, paragraphs({}));
     await type('Line spacing', '9');
@@ -105,26 +124,29 @@ test('Custom spacing refuses a line spacing or a spacing out of range', async ()
     expect(button('Apply')?.disabled).toBe(true);
 });
 
-test('Indentation options opens on no indent in centimetres, and a hanging indent keeps its first line at Left', async () => {
+// Google's and Word's Left is where the body lines stand, and a hanging first line starts left of it.
+test('Indentation options opens on no indent in centimetres, and Left with a hanging indent sets the body lines', async () => {
     await open(IndentationOptionsDialog, paragraphs({}));
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Indentation options');
     expect(['Left', 'Right', 'Special indent'].map(value)).toEqual(['0', '0', 'None']);
     const by = control('By');
     expect(by instanceof HTMLInputElement && by.disabled).toBe(true);
+    await type('Left', '2');
     await click(control('Special indent'));
     await click([...document.querySelectorAll('[role="option"]')].find((o) => o.textContent === 'Hanging'));
-    await type('By', '1.27');
+    await type('By', '1');
     await apply();
-    expect(formats()).toEqual([{ indentLeft: 36, indentFirstLine: -36 }]);
+    // The body lines at 2 cm, the first line 1 cm left of them: w:left 1134 and w:hanging 567 in the docx.
+    expect(formats()).toEqual([{ indentLeft: 56.7, indentFirstLine: -28.35 }]);
 });
 
 test('Indentation options shows a stored indent as Google does, and writes only what changed', async () => {
     await open(IndentationOptionsDialog, paragraphs({ indentLeft: 72, indentFirstLine: -36, indentRight: 18.05 }));
-    expect(['Left', 'Right', 'Special indent', 'By'].map(value)).toEqual(['1.27', '0.64', 'Hanging', '1.27']);
+    expect(['Left', 'Right', 'Special indent', 'By'].map(value)).toEqual(['2.54', '0.64', 'Hanging', '1.27']);
     await type('By', '2.54');
     await apply();
-    // Left stays where the first line starts, so the body lines move with the hanging indent.
-    expect(formats()).toEqual([{ indentLeft: 108, indentFirstLine: -72, indentRight: 18.05 }]);
+    // Left stays where the body lines are, so only the first line moves.
+    expect(formats()).toEqual([{ indentLeft: 72, indentFirstLine: -72, indentRight: 18.05 }]);
 });
 
 test('Indentation options: a first line indent, and None takes it away', async () => {

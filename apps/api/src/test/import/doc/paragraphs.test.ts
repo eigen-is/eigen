@@ -829,6 +829,18 @@ describe('paragraph format', () => {
         ]);
     });
 
+    // Word draws the space before above the paragraph's first line and the space after below its last.
+    test('a paragraph a page break splits keeps its space before on the first half and its space after on the last', async () => {
+        expect(
+            await formats(
+                paragraph(
+                    `${run('Top')}${PAGE_BREAK}${run('Middle')}${PAGE_BREAK}${run('Bottom')}`,
+                    '<w:spacing w:before="240" w:after="0" w:line="360" w:lineRule="auto"/>',
+                ),
+            ),
+        ).toEqual([{ lineSpacing: 1.5, spaceBefore: 12 }, { lineSpacing: 1.5 }, { lineSpacing: 1.5, spaceAfter: 0 }]);
+    });
+
     test('an indent outside any list or quote is kept: left, right, first line and hanging', async () => {
         expect(
             await formats(

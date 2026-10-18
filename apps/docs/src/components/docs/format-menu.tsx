@@ -277,6 +277,7 @@ export const FormatMenu = ({
                 </DropdownMenuRadioGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
+                    disabled={!active.paragraphSpacing}
                     onClick={() =>
                         editor
                             .chain()
@@ -289,6 +290,7 @@ export const FormatMenu = ({
                     before paragraph
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                    disabled={!active.paragraphSpacing}
                     onClick={() =>
                         editor
                             .chain()

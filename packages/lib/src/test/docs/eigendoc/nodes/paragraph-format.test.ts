@@ -23,8 +23,33 @@ const p = (value: string, attrs?: Record<string, unknown>): JSONContent => ({
 });
 const docOf = (...content: JSONContent[]): JSONContent => ({ type: 'doc', content });
 
-const mount = (content: JSONContent): Editor =>
-    new Editor({ element: document.createElement('div'), extensions, content });
+const mount = (content: JSONContent, editorExtensions = extensions): Editor =>
+    new Editor({ element: document.createElement('div'), extensions: editorExtensions, content });
+
+// A list item, a quote and a table cell, each holding one paragraph.
+const item = (block: JSONContent): JSONContent => ({
+    type: 'bulletList',
+    content: [{ type: 'listItem', content: [block] }],
+});
+const quote = (block: JSONContent): JSONContent => ({ type: 'blockquote', content: [block] });
+const cell = (block: JSONContent): JSONContent => ({
+    type: 'table',
+    content: [{ type: 'tableRow', content: [{ type: 'tableCell', content: [block] }] }],
+});
+
+// Every prose textblock's stored format in document order, unset keys left out.
+const allFormatsOf = (editor: Editor) => {
+    const formats: Record<string, unknown>[] = [];
+    editor.state.doc.descendants((node) => {
+        if (!node.isTextblock) return;
+        formats.push(
+            Object.fromEntries(
+                Object.entries(node.attrs).filter(([key, value]) => key !== 'textAlign' && value !== null),
+            ),
+        );
+    });
+    return formats;
+};
 
 // Each top-level block's stored format, unset keys left out.
 const formatsOf = (editor: Editor) =>
@@ -42,7 +67,9 @@ describe('paragraph format HTML', () => {
         [{ lineSpacing: 1.15 }, 'line-height: 1.3915', 'data-line-spacing="1.15"'],
         [{ lineSpacing: 1.5 }, 'line-height: 1.815', 'data-line-spacing="1.5"'],
         [{ lineSpacing: 2 }, 'line-height: 2.42', 'data-line-spacing="2"'],
-        [{ spaceBefore: 12 }, 'margin-top: 12pt', 'data-space-before="12"'],
+        // Padding, so it adds to the space after the block above as Word and Google add the two; margins collapse. It
+        // replaces a heading's own space above.
+        [{ spaceBefore: 12 }, 'margin-top: 0pt; padding-top: 12pt', 'data-space-before="12"'],
         [{ spaceAfter: 0 }, 'margin-bottom: 0pt', 'data-space-after="0"'],
         [{ indentLeft: 36 }, 'margin-left: 36pt', 'data-indent-left="36"'],
         [{ indentRight: 18 }, 'margin-right: 18pt', 'data-indent-right="18"'],
@@ -80,7 +107,7 @@ describe('paragraph format HTML', () => {
         [{ lineSpacing: 1e6 }, '<p style="line-height: 6.05;" data-line-spacing="5">x</p>'],
         [{ lineSpacing: 0.1 }, '<p style="line-height: 0.605;" data-line-spacing="0.5">x</p>'],
         [{ spaceAfter: -3 }, '<p style="margin-bottom: 0pt;" data-space-after="0">x</p>'],
-        [{ spaceBefore: 9999 }, '<p style="margin-top: 400pt;" data-space-before="400">x</p>'],
+        [{ spaceBefore: 9999 }, '<p style="margin-top: 0pt; padding-top: 400pt;" data-space-before="400">x</p>'],
         [{ indentLeft: 1e9 }, '<p style="margin-left: 1584pt;" data-indent-left="1584">x</p>'],
         [{ indentFirstLine: -1e9 }, '<p style="text-indent: -1584pt;" data-indent-first-line="-1584">x</p>'],
     ])('a stored %p renders as %s', (attrs, html) => {
@@ -140,6 +167,51 @@ describe('paragraph format commands', () => {
         expect(editor.getJSON().content?.[1]?.attrs?.['level']).toBe(2);
         editor.commands.setParagraphFormat({ lineSpacing: null, spaceBefore: 1e6 });
         expect(formatsOf(editor)).toEqual([{ spaceAfter: 4, spaceBefore: 400 }, { spaceBefore: 400 }, {}]);
+        editor.destroy();
+    });
+
+    // A container draws no space around the paragraphs it holds, and the docx reader and writer leave it to the container.
+    test.each([
+        ['a list item', item],
+        ['a quote', quote],
+        ['a table cell', cell],
+    ])('in %s it sets line spacing and indents, and no space before or after', (_, wrap) => {
+        const editor = mount(docOf(wrap(p('a', { spaceAfter: 4 })), p('b')));
+        editor.commands.selectAll();
+        editor.commands.setParagraphFormat({ lineSpacing: 2, spaceBefore: 12, spaceAfter: 6, indentLeft: 36 });
+        expect(allFormatsOf(editor)).toEqual([
+            { lineSpacing: 2, spaceAfter: 4, indentLeft: 36 },
+            { lineSpacing: 2, spaceBefore: 12, spaceAfter: 6, indentLeft: 36 },
+        ]);
+        // Clearing a space there still clears it.
+        editor.commands.setParagraphFormat({ spaceAfter: null });
+        expect(allFormatsOf(editor)).toEqual([
+            { lineSpacing: 2, indentLeft: 36 },
+            { lineSpacing: 2, spaceBefore: 12, indentLeft: 36 },
+        ]);
+        editor.destroy();
+    });
+
+    // 400 px is 300 pt of text column.
+    const narrow = getDocExtensions({ textColumnWidth: () => 400 });
+
+    test('an indent is clamped to the text column', () => {
+        const editor = mount(docOf(p('a')), narrow);
+        editor.commands.setTextSelection(2);
+        editor.commands.setParagraphFormat({ indentLeft: 500, indentRight: 400, indentFirstLine: -500 });
+        expect(formatsOf(editor)).toEqual([{ indentLeft: 300, indentRight: 300, indentFirstLine: -300 }]);
+        editor.destroy();
+    });
+
+    test('Increase indent stops at the text column', () => {
+        const editor = mount(docOf(p('a', { indentLeft: 288 })), narrow);
+        editor.commands.setTextSelection(2);
+        editor.commands.stepIndent(1);
+        expect(formatsOf(editor)).toEqual([{ indentLeft: 300 }]);
+        editor.commands.stepIndent(1);
+        expect(formatsOf(editor)).toEqual([{ indentLeft: 300 }]);
+        editor.commands.stepIndent(-1);
+        expect(formatsOf(editor)).toEqual([{ indentLeft: 288 }]);
         editor.destroy();
     });
 
@@ -214,13 +286,32 @@ describe('selectionParagraphFormat', () => {
     };
 
     test("an unset paragraph draws Eigen's look and stores no line spacing", () => {
-        expect(formatAt(docOf(p('a')), 1)).toEqual({ lineSpacing: undefined, drawn: DOCUMENT_PARAGRAPH_FORMAT });
+        expect(formatAt(docOf(p('a')), 1)).toEqual({
+            lineSpacing: undefined,
+            spacing: true,
+            drawn: DOCUMENT_PARAGRAPH_FORMAT,
+        });
+    });
+
+    // At the start of the paragraph each container holds.
+    test.each([
+        ['a list item', item, 3],
+        ['a quote', quote, 2],
+        ['a table cell', cell, 4],
+    ])('in %s no space is drawn before or after, and none is offered', (_, wrap, at) => {
+        const doc = docOf(wrap(p('a', { lineSpacing: 2 })), p('b'));
+        const inside = formatAt(doc, at);
+        expect(inside.spacing).toBe(false);
+        expect(inside.drawn).toEqual({ ...DOCUMENT_PARAGRAPH_FORMAT, lineSpacing: 2, spaceAfter: 0 });
+        // A selection that reaches a paragraph of the doc's own offers it; the selection clamps to the doc's end.
+        expect(formatAt(doc, at, 1000).spacing).toBe(true);
     });
 
     test('a shared line spacing reads as it, a mix or an unset one as none; the first block is what draws', () => {
         const doc = docOf(p('a', { lineSpacing: 1.15, spaceBefore: 6 }), p('b', { lineSpacing: 1.15 }), p('c'));
         expect(formatAt(doc, 1, 4)).toEqual({
             lineSpacing: 1.15,
+            spacing: true,
             drawn: { ...DOCUMENT_PARAGRAPH_FORMAT, lineSpacing: 1.15, spaceBefore: 6 },
         });
         expect(formatAt(doc, 1, 7).lineSpacing).toBeUndefined();

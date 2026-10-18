@@ -48,13 +48,13 @@ export function IndentationOptionsDialog({ editor, open, onOpenChange }: Indenta
 }
 
 // Mounted with the dialog, so each opening starts from the selection's first paragraph. As in Google and Word, Left is
-// where the first line starts under a hanging indent, while the paragraph stores where its other lines start.
+// where the body lines stand, and a first line or hanging indent moves the first line right or left of it.
 function IndentationOptionsForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
     const [initial] = useState(() => {
         const { indentLeft, indentRight, indentFirstLine } = selectionParagraphFormat(editor.state, editor.view).drawn;
         const special: SpecialIndent = indentFirstLine > 0 ? 'firstLine' : indentFirstLine < 0 ? 'hanging' : 'none';
         return {
-            left: indentFirstLine < 0 ? indentLeft + indentFirstLine : indentLeft,
+            left: indentLeft,
             right: indentRight,
             by: Math.abs(indentFirstLine),
             special,
@@ -70,7 +70,7 @@ function IndentationOptionsForm({ editor, onDone }: { editor: Editor; onDone: ()
     const by = special === 'none' ? 0 : length('by');
     const valid = [left, length('right'), by].every((value) => value >= 0);
     const candidate = readParagraphFormat({
-        indentLeft: special === 'hanging' ? left + by : left,
+        indentLeft: left,
         indentRight: length('right'),
         indentFirstLine: special === 'hanging' ? -by : by,
     });

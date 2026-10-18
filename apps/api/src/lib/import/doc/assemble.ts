@@ -553,8 +553,11 @@ function buildFlow(items: Item[]): JSONContent[] {
             }
         }
         closeLists();
-        const previous = blocks.at(-1);
-        blocks.push(textblockOf(item, 0, previous ? (previous.type === 'table' ? TABLE_MARGIN : undefined) : 0));
+        // The space Eigen draws above it anyway: none at the top, as the writer writes a first heading, a table's margin.
+        let above: number | undefined;
+        if (blocks.length === 0) above = 0;
+        else if (blocks.at(-1)?.type === 'table') above = TABLE_MARGIN;
+        blocks.push(textblockOf(item, 0, above));
     }
     flushCode();
     closeLists();
@@ -589,7 +592,7 @@ function nestsUnder(para: Para, text: number, inTask: boolean): boolean {
 // Its format where Eigen draws no container around it: an item's, a quote's or a paragraph's in an item take their
 // spacing from it, as the writer writes it, and list and quote nesting is the indent's structure. Only an indent past
 // the text of the item it lands in is its own. A space above no larger than the one Eigen draws there anyway, in twips,
-// is the writer's: none above the first block, a table's margin below it.
+// is the writer's.
 function formatOf(para: Para, edge: number | undefined, above?: number): Record<string, number> {
     const { indent, format } = para;
     const past = indent && edge !== undefined && para.quote === 0 ? indent.left - edge : undefined;

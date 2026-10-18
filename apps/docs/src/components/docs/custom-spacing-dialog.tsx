@@ -42,9 +42,10 @@ export function CustomSpacingDialog({ editor, open, onOpenChange }: CustomSpacin
     );
 }
 
-// Mounted with the dialog, so each opening starts from what the selection's first paragraph draws.
+// Mounted with the dialog, so each opening starts from what the selection's first paragraph draws. A list, a quote and a
+// table cell own the space around what they hold, so there only the line spacing is the paragraph's.
 function CustomSpacingForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
-    const [initial] = useState(() => selectionParagraphFormat(editor.state, editor.view).drawn);
+    const [{ drawn: initial, spacing }] = useState(() => selectionParagraphFormat(editor.state, editor.view));
     const [text, setText] = useState<Record<SpacingKey, string>>(() => ({
         lineSpacing: fieldText(initial.lineSpacing),
         spaceBefore: fieldText(initial.spaceBefore),
@@ -67,6 +68,7 @@ function CustomSpacingForm({ editor, onDone }: { editor: Editor; onDone: () => v
                 step="any"
                 className="w-24"
                 autoFocus={autoFocus}
+                disabled={key !== 'lineSpacing' && !spacing}
                 value={text[key]}
                 onChange={(e) => setText({ ...text, [key]: e.target.value })}
             />

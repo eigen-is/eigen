@@ -723,12 +723,15 @@ describe('docx writer — paragraph format', () => {
                 formatted({ spaceBefore: 12, spaceAfter: 0 }),
                 formatted({ indentLeft: 36, indentRight: 18, indentFirstLine: 18 }),
                 formatted({ indentLeft: 36, indentFirstLine: -36 }),
+                // Google's Left 2 cm with a hanging 1 cm: the body lines at 2 cm, the first line at 1 cm.
+                formatted({ indentLeft: 56.7, indentFirstLine: -28.35 }),
                 formatted({ indentRight: 9 }),
             ),
         ).toEqual([
             '<w:pPr><w:spacing w:before="240" w:after="0"/></w:pPr>',
             '<w:pPr><w:ind w:left="720" w:right="360" w:firstLine="360"/></w:pPr>',
             '<w:pPr><w:ind w:left="720" w:hanging="720"/></w:pPr>',
+            '<w:pPr><w:ind w:left="1134" w:hanging="567"/></w:pPr>',
             '<w:pPr><w:ind w:left="0" w:right="180"/></w:pPr>',
         ]);
     });
@@ -745,6 +748,23 @@ describe('docx writer — paragraph format', () => {
             `<w:pPr><w:pStyle w:val="Quote"/><w:spacing w:after="${twips(cssPt(proseValue('.eigen-prose blockquote', 'margin-bottom'), 11))}"/><w:ind w:left="${QUOTE_LOOK.indent + 720}"/></w:pPr>`,
         ]);
     });
+
+    // A container owns the spacing of what it holds, as the editor draws it and the reader reads it.
+    test.each([
+        ['a list item', (block: JSONContent) => ul(li(block))],
+        ['a quote', (block: JSONContent) => quote(block)],
+        ['a table cell', (block: JSONContent) => table(tr(td({}, block)))],
+    ])(
+        "in %s a paragraph's space before and after is the container's, its line spacing and indent its own",
+        async (_, wrap) => {
+            const pPrs = async (block: JSONContent) =>
+                descendants(await bodyOf(doc(wrap(block))), W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')));
+            const own = { lineSpacing: 2, indentLeft: 36 };
+            const written = await pPrs(formatted({ ...own, spaceBefore: 12, spaceAfter: 6 }));
+            expect(written).toEqual(await pPrs(formatted(own)));
+            expect(written.join('')).toContain('w:line="480"');
+        },
+    );
 
     // The writer scales a paragraph all in one other family by that family's line, as it does the style's.
     test('a line spacing in another family is scaled by its line height', async () => {

@@ -355,7 +355,7 @@ const formats = () =>
         ),
     );
 
-async function openSpacing(content: ReturnType<typeof formatted>, from = 1, to = from) {
+async function openSpacing(content: Parameters<typeof editor.commands.setContent>[0], from = 1, to = from) {
     editor.commands.setContent(content);
     editor.commands.setTextSelection({ from, to });
     await render(1920, true);
@@ -403,6 +403,52 @@ test('Add and Remove space before and after toggle as Google does, 12 pt added',
     expect(openMenuEntries()).toContain('Add space after paragraph');
     await clickItem('Remove space before paragraph');
     expect(formats()).toEqual([{ spaceBefore: 0, spaceAfter: 0 }]);
+});
+
+// A list, a quote and a table cell own the spacing of what they hold, as the docx reader and writer take it.
+test('in a list item Add space before and after are disabled, and line spacing still applies', async () => {
+    const paragraph = { type: 'paragraph', content: [{ type: 'text', text: 'ab' }] };
+    await openSpacing(
+        { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [paragraph] }] }] },
+        3,
+    );
+    const disabled = [
+        ...([...document.querySelectorAll('[role="menu"]')].at(-1)?.querySelectorAll('[data-disabled]') ?? []),
+    ];
+    expect(disabled.map((item) => item.textContent?.trim())).toEqual([
+        'Add space before paragraph',
+        'Add space after paragraph',
+    ]);
+    await pickPreset('Double');
+    expect(editor.state.doc.firstChild?.firstChild?.firstChild?.attrs['lineSpacing']).toBe(2);
+});
+
+// As Google's does: the paragraphs go back to the doc's own alignment, spacing and indents too.
+test('Clear formatting takes away every paragraph format in the selection', async () => {
+    const format = {
+        lineSpacing: 2,
+        spaceBefore: 12,
+        spaceAfter: 0,
+        indentLeft: 36,
+        indentRight: 18,
+        indentFirstLine: -18,
+    };
+    const text = [{ type: 'text', text: 'ab' }];
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            { type: 'heading', attrs: { level: 2, ...format }, content: text },
+            { type: 'paragraph', attrs: { ...format, textAlign: 'center' }, content: text },
+            { type: 'blockquote', content: [{ type: 'paragraph', attrs: format, content: text }] },
+            { type: 'paragraph', attrs: format, content: text },
+        ],
+    });
+    editor.commands.setTextSelection({ from: 1, to: 12 });
+    await render(1920, true);
+    await openMenu('Format');
+    await clickItem('Clear formatting');
+    expect(formats()).toEqual([{}, {}, {}, format]);
+    expect(editor.getJSON().content?.[1]?.attrs?.['textAlign']).toBeNull();
 });
 
 test('Custom spacing… and Indentation options… open their dialogs', async () => {

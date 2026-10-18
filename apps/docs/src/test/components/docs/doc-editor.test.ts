@@ -256,6 +256,21 @@ test('a table wider than a narrower page shrinks to its text column at the next 
     expect(colwidths(editor)).toEqual([[204], [204]]);
 });
 
+// A5's 108 mm column is 306.15 pt to Word's twentieth; a band prints in the body's column.
+test('an indent stops at the text column of the page the doc holds, in the body and a band', () => {
+    const doc = new Y.Doc();
+    setPage(doc, A5);
+    for (const editor of [body(doc), mount(doc, HEADER)]) {
+        editor.commands.setContent({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x' }] }],
+        });
+        editor.commands.setTextSelection(1);
+        editor.commands.setParagraphFormat({ indentLeft: 1000, indentFirstLine: -1000 });
+        expect(editor.state.doc.firstChild?.attrs).toMatchObject({ indentLeft: 306.15, indentFirstLine: -306.15 });
+    }
+});
+
 // The uploads below land through the real media resolver; the upload answers when the test lets it.
 const { renderInDocument } = await import('@workspace/ui/test/render-in-document');
 const { act, createElement, useState } = await import('react');

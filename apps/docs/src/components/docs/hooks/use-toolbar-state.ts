@@ -24,6 +24,8 @@ export type ToolbarState = {
     alignment: TextAlign | undefined;
     // The line spacing every selected paragraph stores, none for a mix or an unset one.
     lineSpacing: number | undefined;
+    // Whether a selected paragraph takes a space before or after: a list, a quote or a cell owns its own.
+    paragraphSpacing: boolean;
     // Whether the selection's first paragraph draws space there, which Add or Remove space toggles.
     spaceBefore: boolean;
     spaceAfter: boolean;
@@ -109,6 +111,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 // An unaligned paragraph's textAlign is null and reads as left; a range of mixed alignments reads as none.
                 alignment: alignments.size === 1 ? [...alignments][0] : undefined,
                 lineSpacing: format.lineSpacing,
+                paragraphSpacing: format.spacing,
                 spaceBefore: format.drawn.spaceBefore > 0,
                 spaceAfter: format.drawn.spaceAfter > 0,
                 bulletList: active('bulletList'),

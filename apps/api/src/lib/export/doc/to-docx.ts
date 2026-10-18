@@ -788,13 +788,16 @@ function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>, contex
 }
 
 // A prose textblock's own format over what its style and container give it: its indent counts from the container's text.
+// An item, a quote and a cell own the spacing of what they hold, as the editor draws it.
 function formatted(node: JSONContent, props: ParagraphProps, context: Context): ParagraphProps {
     const format = readParagraphFormat(node.attrs ?? {});
     const spacing: Spacing = { ...props.spacing };
     if (format.lineSpacing !== undefined)
         spacing.line = autoLine(format.lineSpacing * DOCUMENT_LINE_RATIO * BODY.sizePt, BODY.sizePt, BODY.font);
-    if (format.spaceBefore !== undefined) spacing.before = twips(format.spaceBefore);
-    if (format.spaceAfter !== undefined) spacing.after = twips(format.spaceAfter);
+    if (context.quotes === 0 && context.after === undefined) {
+        if (format.spaceBefore !== undefined) spacing.before = twips(format.spaceBefore);
+        if (format.spaceAfter !== undefined) spacing.after = twips(format.spaceAfter);
+    }
     const { indentLeft, indentRight, indentFirstLine } = format;
     const indented = indentLeft !== undefined || indentRight !== undefined || indentFirstLine !== undefined;
     return {

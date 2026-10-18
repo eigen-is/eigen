@@ -403,7 +403,12 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                         ),
                 ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
-            format,
+            // Word spaces a split paragraph above its first line and below its last.
+            format: {
+                lineSpacing: format.lineSpacing,
+                spaceBefore: index === 0 ? format.spaceBefore : undefined,
+                spaceAfter: index === halves.length - 1 ? format.spaceAfter : undefined,
+            },
             indent,
         };
         if (!numbered && list && !SIZED.has(role.kind)) para.list = { ...list, ilvl };
