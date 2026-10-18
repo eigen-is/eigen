@@ -218,7 +218,8 @@ describe('handleGlobalKeyDown — Ctrl+Arrow over rich text', () => {
         const rich: Cell = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Note' }] } };
         const data: (Cell | null)[][] = [[{ v: 'a', m: 'a' }], [null], [rich], [null], [null]];
         const ctx = contextFactory({
-            sheets: [{ name: 'Sheet1', id: 'id_1', order: 0, data, row: 5, column: 1 }],
+            // No `row` or `column`: a loaded sheet has neither until a row or column is inserted.
+            sheets: [{ name: 'Sheet1', id: 'id_1', order: 0, data }],
             selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
         }) as Context;
         ctx.sheetFocused = true;

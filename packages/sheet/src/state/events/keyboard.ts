@@ -92,10 +92,11 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
     if (isNil(idx)) return;
 
-    const file = ctx.sheets[idx];
-    if (!file?.row || !file.column) return;
-    const maxRow = file.row;
-    const maxCol = file.column;
+    // The grid's own size: a sheet's `row` and `column` are set only once a row or column is inserted.
+    const sheetData = ctx.sheets[idx]?.data;
+    if (!sheetData?.length) return;
+    const maxRow = sheetData.length;
+    const maxCol = sheetData[0]?.length ?? 0;
     const last: Selection | undefined =
         ctx.selections && ctx.selections.length > 0 ? ctx.selections[ctx.selections.length - 1] : undefined;
     if (!last) return;
@@ -112,8 +113,6 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     const horizontalOffset = currC - endC !== 0 ? currC - endC : currC - startC;
     const verticalOffset = currR - endR !== 0 ? currR - endR : currR - startR;
 
-    const sheetData = file.data;
-    if (!sheetData) return;
     let selectedLimit: number;
 
     switch (e.key) {
