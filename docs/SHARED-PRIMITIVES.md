@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1752 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1767 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -523,7 +523,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (408)
+## Types (410)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -778,6 +778,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChartShape` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpec` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpecSvgInput` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartStacking` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `InlineChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `InlineChartSeries` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -847,6 +848,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `RenderOutput` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `SlideSize` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `SnapLine` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `SnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `StrokeStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -936,7 +938,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (852)
+## Utilities & constants (865)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1068,9 +1070,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `viewerTimeZone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `CHART_MESSAGES` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
-| `CHART_PALETTE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartColor` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartLabel` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `DEFAULT_CHART_FONT` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `DEFAULT_CHART_SERIES_STYLE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsChartSpecBytes` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsInlineGridLimits` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `fitsInlineGrid` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
@@ -1101,6 +1104,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EMOTE_COMMANDS` | `@workspace/lib/chat/emotes` | packages/lib/src/core/chat/emotes.ts |
 | `buildImageClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `buildTextClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `cellsToHtmlTable` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/table.ts |
+| `cellsToTsv` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/table.ts |
 | `classifyPaste` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `CLIPBOARD_SVG_MAX_BYTES` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `CLIPBOARD_SVG_MAX_ELEMENTS` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -1110,9 +1115,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `embedClipboardSvgMetadata` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `extractClipboardSvgMetadata` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `hasRichHtmlBeyondMarker` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `htmlTableCells` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/table.ts |
 | `inlineClipboardSvgMedia` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `materializeClipboardSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `needsReUpload` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `parseTsv` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/table.ts |
 | `readClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -1310,6 +1317,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LIGHT_EDITOR_HREF` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `LIGHT_EDITOR_MARK_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `LIGHT_EDITOR_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `RAW_TEXT_DROP_TAGS` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `stripTagsServer` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `textToParagraphHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `unescapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
@@ -1353,6 +1361,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `borderSidesToCss` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `cellFontName` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `cloneSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
+| `columnIndexToLabel` | `@workspace/lib/sheets` | packages/lib/src/sheets/labels.ts |
+| `columnLabelToIndex` | `@workspace/lib/sheets` | packages/lib/src/sheets/labels.ts |
 | `decodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `encodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `forEachInRect` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
@@ -1362,11 +1372,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `REFERENCE_COLUMN_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `REFERENCE_ROW_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `SHEET_COLUMN_HEADER_HEIGHT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_COL_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_DIGIT_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `SHEET_DEFAULT_FONT` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
-| `SHEET_DEFAULT_FONT_SIZE` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
+| `SHEET_DEFAULT_FONT_SIZE` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_ROW_HEIGHT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `SHEET_ROW_HEADER_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `fetchImportBlob` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `postImportBytes` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `previewCountLines` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
@@ -1452,6 +1464,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_KINDS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_VERIFY_STATUSES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `CHART_BLANKS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `CHART_STACKINGS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_TYPES` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
@@ -1574,11 +1587,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `followBindings` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `FONT_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FONT_WEIGHTS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `FRAME_ASPECT_RATIO` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FRAME_CARD_BORDER` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FRAME_CARD_RADIUS` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `FRAME_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
-| `FRAME_HEIGHT` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `FRAME_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `frameClipRadius` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `framesFrom` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -1614,6 +1625,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `layerBoxCss` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `layerContent` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `layerInnerHtml` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `layerPrintCss` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `LINEAR_HIT_SCREEN_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `linearLocalToScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `linearSceneToLocal` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1627,6 +1639,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `nearestFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `nearestPoint` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `nearestSlideSize` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `NEW_TEXT_BOX_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `normalizeFixedPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1700,6 +1713,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `serializePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `shapeAnchorPoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `sharpDiamondOffset` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `SLIDE_SIZE_KEYS` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `SLIDE_SIZES` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `SLIDES_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |

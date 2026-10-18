@@ -8,6 +8,7 @@
 // funnel when the column has an active filter.
 
 import { FILTER_BUTTON_HEIGHT, FILTER_BUTTON_WIDTH } from '../modules/filter';
+import { canvasColors } from './colors';
 import { HALF_PIXEL, sheetToCanvasX, sheetToCanvasY } from './geometry';
 import type { RenderPass } from './types';
 
@@ -24,31 +25,12 @@ function getFilterGlyphs() {
     return filterGlyphs;
 }
 
-// Theme colors resolved once per synchronous draw burst (a redraw is at most
-// four freeze-region passes); the microtask flush makes a theme switch
-// re-resolve on the next redraw, exactly as per-pass resolution did.
-let cachedColors:
-    | { appColor: string; mutedForeground: string; background: string; selectionHandle: string }
-    | undefined;
-
 export function drawFilterUI(pass: RenderPass) {
     const { sheetCtx, renderCtx, scrollWidth, scrollHeight, drawWidth, drawHeight, offsetLeft, offsetTop } = pass;
     const options = sheetCtx.filterOptions;
     if (options == null) return;
 
-    if (cachedColors == null) {
-        const style = getComputedStyle(renderCtx.canvas);
-        cachedColors = {
-            appColor: style.getPropertyValue('--app-sheets-color').trim(),
-            mutedForeground: style.getPropertyValue('--muted-foreground').trim(),
-            background: style.getPropertyValue('--background').trim(),
-            selectionHandle: style.getPropertyValue('--selection-handle').trim(),
-        };
-        queueMicrotask(() => {
-            cachedColors = undefined;
-        });
-    }
-    const { appColor, mutedForeground, background, selectionHandle } = cachedColors;
+    const { appColor, mutedForeground, background, selectionHandle } = canvasColors(renderCtx.canvas);
     const glyphs = getFilterGlyphs();
 
     renderCtx.save();

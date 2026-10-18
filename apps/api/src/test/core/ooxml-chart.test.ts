@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { CHART_PALETTE, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
+import { chartColor, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
 import { type DrawingTheme, IDENTITY_COLOR_MAP } from '../../lib/core/drawingml';
 import { A_NS, C_NS, MC_NS, parseOoxml } from '../../lib/core/ooxml';
@@ -78,13 +78,14 @@ describe('a bar chart', () => {
     test('a clustered column chart reads as a column spec with inline data', () => {
         expect(spec(space(bar() + AXES))).toEqual({
             type: 'column',
-            stacked: false,
+            stacking: 'none',
             title: '',
             legend: 'right',
             blanks: 'gap',
             categoryAxis: { title: '' },
             valueAxis: { title: '', min: null, max: null, gridlines: true, format: null },
             sliceColors: [],
+            fontFamily: 'Inter',
             data: {
                 source: 'inline',
                 categories: CATEGORIES,
@@ -99,7 +100,7 @@ describe('a bar chart', () => {
     test('barDir bar is a bar chart, stacked grouping stacks', () => {
         expect(spec(space(bar(TWO_SERIES, { dir: 'bar', grouping: 'stacked' }) + AXES))).toMatchObject({
             type: 'bar',
-            stacked: true,
+            stacking: 'stacked',
         });
     });
 
@@ -147,9 +148,19 @@ describe('a bar chart', () => {
         expect(read(space(bar() + axes))).toEqual({ unsupported: { title: '', type: 'barChart' } });
     });
 
-    test('percent stacked is no spec, its title kept', () => {
-        expect(read(space(bar(TWO_SERIES, { grouping: 'percentStacked' }) + AXES, { head: title('Mix') }))).toEqual({
-            unsupported: { title: 'Mix', type: 'barChart' },
+    test("the chart's text font is its bundled stand-in; a theme font is Inter", () => {
+        const font = (typeface: string) =>
+            space(bar() + AXES).replace(
+                '</c:chartSpace>',
+                `<c:txPr><a:bodyPr/><a:p><a:pPr><a:defRPr><a:latin typeface="${typeface}"/></a:defRPr></a:pPr></a:p></c:txPr></c:chartSpace>`,
+            );
+        expect(spec(font('Georgia')).fontFamily).not.toBe('Inter');
+        expect(spec(font('+mn-lt')).fontFamily).toBe('Inter');
+    });
+
+    test('percent stacked stacks to 100%', () => {
+        expect(spec(space(bar(TWO_SERIES, { grouping: 'percentStacked' }) + AXES))).toMatchObject({
+            stacking: 'percent',
         });
     });
 
@@ -162,7 +173,7 @@ describe('a bar chart', () => {
             { idx: 7, name: 'C', values: [3] },
         ];
         const read = spec(space(bar(series) + AXES));
-        expect(read.data.series.map((s) => s.color)).toEqual(['#70ad4780', ACCENTS[1], CHART_PALETTE[7]]);
+        expect(read.data.series.map((s) => s.color)).toEqual(['#70ad4780', ACCENTS[1], chartColor(7)]);
     });
 
     test('series draw in their c:order, and one without a name is named as Excel names it', () => {

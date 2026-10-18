@@ -17,7 +17,7 @@ import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handlePaste } from '../../../state/events/paste';
-import { copy, rangeValueToHtml, selectionCache } from '../../../state/modules/selection';
+import { copy, rangeValueToClipboard, selectionCache } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
 import { pastedHtmlFactory } from '../factories/pasted-html';
 
@@ -426,7 +426,7 @@ describe('Copy HTML — numeric cells carry their full value', () => {
     function copiedHtml(cell: Cell): string {
         const ctx = makeCtx();
         ctx.sheets[0].data![0][0] = cell;
-        return rangeValueToHtml(ctx, 'id_1', [{ row: [0, 0], column: [0, 0] }]) ?? '';
+        return rangeValueToClipboard(ctx, 'id_1', [{ row: [0, 0], column: [0, 0] }])?.html ?? '';
     }
 
     it('a General number too long for General pastes back whole', () => {
@@ -451,7 +451,7 @@ describe('Copy HTML — numeric cells carry their full value', () => {
         ctx.sheets[0].data![0][0] = { v: 123456789012, m: '1.23457E+11', f: '=A2', ct: { fa: 'General', t: 'n' } };
         ctx.selections = single(0, 0);
         copy(ctx);
-        const html = rangeValueToHtml(ctx, 'id_1', ctx.selections) ?? '';
+        const html = rangeValueToClipboard(ctx, 'id_1', ctx.selections)?.html ?? '';
         ctx.selections = single(0, 1);
         pasteHtml(ctx, html);
         expect(ctx.sheets[0].data![0][1]?.f).toBe('=B2');
