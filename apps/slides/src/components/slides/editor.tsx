@@ -1,5 +1,4 @@
 import { useAuth } from '@workspace/lib/auth';
-import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -473,8 +472,7 @@ function SlideEditorInner({
                 onOpenChange={setImportPickerOpen}
                 title="Import slides"
                 progressTitle="Importing slides"
-                mime={PPTX_MIME}
-                accept=".pptx"
+                target="eigenslides"
             />
         </CanvasDocumentShell>
     );

@@ -1,4 +1,3 @@
-import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FileMenu } from '@workspace/ui';
 import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
@@ -36,8 +35,7 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: Toolbar
                 onOpenChange={setImportPickerOpen}
                 title="Import xlsx file"
                 progressTitle="Importing xlsx file"
-                mime={XLSX_MIME}
-                accept=".xlsx"
+                target="eigensheets"
             />
         </>
     );
