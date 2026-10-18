@@ -111,7 +111,8 @@ function normalizeFontFamilyMarks(editor: Editor) {
         for (const { from, to, attrs } of targets) {
             tr.addMark(from, to, markType.create(attrs));
         }
-        tr.setMeta('addToHistory', false);
+        // A note's text takes its name too, a change to a note the body otherwise never makes.
+        tr.setMeta('addToHistory', false).setMeta(NOTE_EDIT, true);
         if (dispatch) dispatch(tr);
         return true;
     });

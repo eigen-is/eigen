@@ -32,11 +32,20 @@ function noteDiff(a: Fragment, b: Fragment): { start: number; endA: number; endB
     return { start, endA: end.a + overlap, endB: end.b + overlap };
 }
 
-// The body's note into the note's editor, the range that differs only, so the caret maps through a peer's edit and an
-// undo, with the body's decorations inside the note, the find bar's matches. False once the note is gone.
-export function pullNote(body: Editor, note: Editor, anchor: NoteAnchor): boolean {
+// findNote, the anchor following the note to the node and the element that hold it now. Only here, as an edit lands,
+// never in a render.
+function followNote(body: Editor, anchor: NoteAnchor) {
     const found = findNote(body, anchor);
-    if (!found) return false;
+    if (found) Object.assign(anchor, { element: found.element, node: found.node });
+    return found;
+}
+
+// The body's note into the note's editor, the range that differs only, so the caret maps through a peer's edit and an
+// undo, with the body's decorations inside the note, the find bar's matches. The reference's position, or null once
+// the note is gone.
+export function pullNote(body: Editor, note: Editor, anchor: NoteAnchor): number | null {
+    const found = followNote(body, anchor);
+    if (!found) return null;
     // Two schema instances: the note crosses as JSON.
     const next = note.schema.nodeFromJSON({ type: 'doc', content: found.node.content.toJSON() });
     const { tr } = note.state;
@@ -47,13 +56,13 @@ export function pullNote(body: Editor, note: Editor, anchor: NoteAnchor): boolea
     note.view.dispatch(
         tr.setMeta(NOTE_PULL, true).setMeta(noteDecorationsKey, DecorationSet.create(tr.doc, decorations)),
     );
-    return true;
+    return found.pos;
 }
 
 // The note's edit into the body, by diff rather than by step: TipTap replays a captured transaction without its meta,
 // and a diff that finds nothing to change forwards nothing twice.
 export function forwardNote(body: Editor, note: Editor, anchor: NoteAnchor): void {
-    const found = findNote(body, anchor);
+    const found = followNote(body, anchor);
     if (!found) return;
     const { pos, node } = found;
     const next = node.copy(Fragment.fromJSON(body.schema, note.state.doc.content.toJSON()));
@@ -62,7 +71,10 @@ export function forwardNote(body: Editor, note: Editor, anchor: NoteAnchor): voi
     body.view.dispatch(
         body.state.tr
             .replace(pos + 1 + diff.start, pos + 1 + diff.endA, next.slice(diff.start, diff.endB))
-            .setMeta(NOTE_EDIT, true),
+            .setMeta(NOTE_EDIT, true)
+            // The note's editor made its own links. The body's autolink reads the reference's paragraph as text, where
+            // the note's runs on from the words before the reference: "gamma." and a note's "Se" link as gamma.Se.
+            .setMeta('preventAutolink', true),
     );
 }
 
@@ -84,8 +96,17 @@ export function useOpenNote(body: Editor, note: Editor, allowed: boolean) {
 
     useLayoutEffect(() => {
         if (!anchor) return;
+        // A note that goes while the caret is in it, its reference deleted by a peer or by undo, hands the caret to the
+        // body where the reference stood, or typing and ⇧⌘Z would reach nothing.
+        let stood = 0;
         const pull = () => {
-            if (!pullNote(body, note, anchor)) setOpening(null);
+            const pos = pullNote(body, note, anchor);
+            if (pos !== null) {
+                stood = pos;
+                return;
+            }
+            setOpening(null);
+            if (note.view.hasFocus()) body.commands.focus(stood);
         };
         const forward = ({ transaction }: { transaction: Transaction }) => {
             if (transaction.docChanged && !transaction.getMeta(NOTE_PULL)) forwardNote(body, note, anchor);
@@ -140,7 +161,7 @@ export function useOpenNote(body: Editor, note: Editor, allowed: boolean) {
 
     // Esc puts the caret right after the reference.
     const leave = () => {
-        const found = anchor && findNote(body, anchor);
+        const found = anchor && followNote(body, anchor);
         setOpening(null);
         if (found) body.commands.focus(found.pos + found.node.nodeSize);
     };

@@ -25,7 +25,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Changed
 
-- **Find and replace** — opens on ⇧⌘H (Ctrl+Shift+H, and Ctrl+H on Windows and Linux) in every editor, as in Google Docs, where ⌘⌥F inserts a footnote
+- **Find and replace** — opens on ⇧⌘H (Ctrl+Shift+H, and Ctrl+H on Windows and Linux) in every editor, as in Google Docs, where ⌘⌥F inserts a footnote. In Docs, ⇧⌘H no longer highlights text
 - **Print in Docs** — File → **Print** and ⌘P open the document as a PDF in a new tab to print from, so headers, footers and page numbers print. Offline, before your latest edits are saved, or when the PDF can't be made, Docs prints from the browser without them and says so
 - **Nested numbered lists** — a numbered list inside another numbers 1. a. i. by depth, as in Google Docs. A list set to 1. 2. 3. from now on stays decimal at any depth. In existing documents, a nested list that showed 1. 2. 3., whether set so or imported from Word, now shows a. or i.: choose Format → Bullets and numbering → Numbered list → **1. 2. 3.** in it again
 - **Image sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag an image's handle are in cm, as in Page setup

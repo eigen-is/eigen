@@ -1,6 +1,7 @@
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import { isFigureFrameNode, readEquation, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
+import { textOutsideNotes } from './extensions/footnote';
 
 export type TextCounts = { words: number; characters: number; charactersExcludingSpaces: number };
 
@@ -33,18 +34,7 @@ function countText(text: string): TextCounts {
 // The whole doc, and the selection when it holds any range (a table's cells are several). A footnote's note counts
 // nothing, as in Google Docs, and its reference ends the word before it.
 export function countWords({ doc, selection }: EditorState): { document: TextCounts; selection: TextCounts | null } {
-    const textOf = (from: number, to: number) => {
-        const runs: string[] = [];
-        let start = from;
-        doc.nodesBetween(from, to, (node, pos) => {
-            if (node.type.name !== 'footnote') return true;
-            runs.push(doc.textBetween(start, Math.max(start, pos), '\n', leafText));
-            start = Math.max(start, pos + node.nodeSize);
-            return false;
-        });
-        runs.push(doc.textBetween(start, Math.max(start, to), '\n', leafText));
-        return runs.join('\n');
-    };
+    const textOf = (from: number, to: number) => textOutsideNotes(doc, from, to, '\n', '\n', leafText);
     return {
         document: countText(textOf(0, doc.content.size)),
         selection: selection.empty

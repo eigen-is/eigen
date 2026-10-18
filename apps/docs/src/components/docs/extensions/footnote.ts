@@ -21,6 +21,8 @@ export type NoteAnchor = { element: Y.AbstractType<unknown>; node: PMNode };
 export type FootnoteOptions = {
     // A press on a reference; the body's editor only.
     onOpen: (pos: number) => void;
+    // ⌘⌥F, which inserts as Insert › Footnote does where that is offered; whether it did.
+    onInsert: () => boolean;
 };
 
 type FootnoteStorage = { views: Set<FootnoteView> };
@@ -120,22 +122,52 @@ export function noteAnchor(editor: Editor, node: PMNode): NoteAnchor | null {
     return element && { element, node };
 }
 
-// Where a note stands now, and its reference's view, the anchor following it; none once it was deleted, moved by a cut
-// and a paste, or split into a new element in another tab.
-export function findNote(editor: Editor, anchor: NoteAnchor): { pos: number; node: PMNode; view: FootnoteView } | null {
+// Where a note stands now, its reference's view and its element: none once it was deleted, moved by a cut and a paste,
+// or split into a new element in another tab. A view's own node is no guide: y-tiptap builds every node anew on a
+// peer's update, and ProseMirror keeps the view of a node equal to the one it drew without handing it the new one, so
+// the doc's node at the view's position is the note.
+export function findNote(
+    editor: Editor,
+    anchor: NoteAnchor,
+): { pos: number; node: PMNode; view: FootnoteView; element: Y.AbstractType<unknown> } | null {
     const binding = bindingOf(editor);
     const mapped = binding?.mapping.get(anchor.element);
-    const views = [...editor.storage.footnote.views];
-    const view = views.find((v) => v.node === mapped) ?? views.find((v) => v.node === anchor.node);
-    const pos = view?.getPos();
-    if (!view || pos === undefined) return null;
-    if (view.node !== mapped) {
-        const element = elementOf(binding, view.node);
-        if (!element) return null;
-        anchor.element = element;
-    }
-    anchor.node = view.node;
-    return { pos, node: view.node, view };
+    const { doc } = editor.state;
+    const at = (target: unknown) => {
+        for (const view of editor.storage.footnote.views) {
+            const pos = view.getPos();
+            const node = pos === undefined ? null : doc.nodeAt(pos);
+            if (pos !== undefined && node && node === target) return { pos, node, view };
+        }
+        return null;
+    };
+    const found = at(mapped);
+    if (found) return { ...found, element: anchor.element };
+    const kept = at(anchor.node);
+    const element = kept && elementOf(binding, kept.node);
+    return kept && element ? { ...kept, element } : null;
+}
+
+// ProseMirror's textBetween reads a note's text in its reference's place, run on from the words around it. A word count
+// and a comment's quote read the body's text alone, with `reference` where a reference stands.
+export function textOutsideNotes(
+    doc: PMNode,
+    from: number,
+    to: number,
+    separator: string,
+    reference: string,
+    leafText: (leaf: PMNode) => string,
+): string {
+    const runs: string[] = [];
+    let start = from;
+    doc.nodesBetween(from, to, (node, pos) => {
+        if (node.type.name !== 'footnote') return true;
+        runs.push(doc.textBetween(start, Math.max(start, pos), separator, leafText));
+        start = Math.max(start, pos + node.nodeSize);
+        return false;
+    });
+    runs.push(doc.textBetween(start, Math.max(start, to), separator, leafText));
+    return runs.join(reference);
 }
 
 // A reference after the selection with the caret after it, as insertFootnote puts it. Its position, or null where no
@@ -179,21 +211,17 @@ function keepNoteFormatting(transactions: readonly Transaction[], oldDoc: PMNode
 
 export const Footnote = FootnoteNode.extend<FootnoteOptions, FootnoteStorage>({
     addOptions() {
-        return { onOpen: () => {} };
+        return { onOpen: () => {}, onInsert: () => false };
     },
 
     addStorage() {
         return { views: new Set<FootnoteView>() };
     },
 
-    // Google's ⌘⌥F, which opens the new note as Insert › Footnote does.
+    // Google's ⌘⌥F.
     addKeyboardShortcuts() {
         return {
-            'Mod-Alt-f': () => {
-                const pos = insertNote(this.editor);
-                if (pos !== null) this.options.onOpen(pos);
-                return pos !== null;
-            },
+            'Mod-Alt-f': () => this.options.onInsert(),
         };
     },
 

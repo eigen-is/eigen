@@ -10,6 +10,7 @@ import {
     useCommentLifecycle,
     useDocumentPanels,
 } from '@workspace/lib/comments';
+import { FOOTNOTE_FONT_SIZE } from '@workspace/lib/constants/fonts';
 import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
@@ -199,6 +200,7 @@ const TiptapEditor = ({
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
     const editEquationRef = useRef(() => {});
     const openNoteRef = useRef((_pos: number) => {});
+    const insertFootnoteRef = useRef((): boolean => false);
     const leaveNoteRef = useRef(() => {});
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
     const pageSetup = usePageSetup(yDoc);
@@ -270,7 +272,7 @@ const TiptapEditor = ({
                 onOpenComment: handleCommentClick,
                 onEdit: isMobile ? undefined : () => editEquationRef.current(),
             },
-            footnote: { onOpen: (pos) => openNoteRef.current(pos) },
+            footnote: { onOpen: (pos) => openNoteRef.current(pos), onInsert: () => insertFootnoteRef.current() },
             extensions: [
                 SearchHighlight,
                 CommentMark.configure({
@@ -334,11 +336,14 @@ const TiptapEditor = ({
         const node = editor.state.doc.nodeAt(pos);
         if (node && bandsAllowed) openNote(node, null);
     };
-    // Google's Insert › Footnote: the reference after the selection, and its note open with the caret in it.
+    // Google's Insert › Footnote: the reference after the selection, and its note open with the caret in it. Where no
+    // note opens, a viewer's and a phone's, none goes in: ⌘⌥F from a phone's keyboard would leave one nobody can edit.
     const insertFootnote = () => {
-        const pos = insertNote(editor);
+        const pos = bandsAllowed ? insertNote(editor) : null;
         if (pos !== null) openNoteRef.current(pos);
+        return pos !== null;
     };
+    insertFootnoteRef.current = insertFootnote;
     const activeEditor = editingBand ? bands[editingBand] : notes.anchor ? noteEditor : editor;
     // A double-click puts the caret where it was, a menu at the band's end.
     const enterBand = (root: BandRoot, at?: { left: number; top: number }) => {
@@ -586,7 +591,10 @@ const TiptapEditor = ({
                                     canRedo={canRedo}
                                     pageSetup={pageSetup}
                                     onPageSetupChange={writeSetup}
-                                    normalStyle={normalStyle}
+                                    // A note's paragraphs draw at the footnote size, the toolbar's size box included.
+                                    normalStyle={
+                                        notes.anchor ? { ...normalStyle, size: FOOTNOTE_FONT_SIZE } : normalStyle
+                                    }
                                     onUpdateNormalStyle={
                                         editingBand || notes.anchor
                                             ? undefined

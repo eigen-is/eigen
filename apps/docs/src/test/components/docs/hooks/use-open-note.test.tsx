@@ -210,6 +210,53 @@ test("a peer's edit to the open note moves the caret with the text, and one afte
     expect(noteOf(b)).toBe('Oh, Hello Xworld!');
 });
 
+// y-tiptap builds every node anew on a peer's update, and ProseMirror keeps the view of a node equal to the one it drew,
+// so a reference's view can hold a node the doc no longer does.
+test("a peer's edit elsewhere keeps the note open", async () => {
+    const { b, note, session, open } = await setup();
+    await open(6);
+    await act(async () => {
+        b.view.dispatch(b.state.tr.insertText('Big ', 1));
+    });
+    expect(session.current?.anchor).not.toBeNull();
+    note.commands.setTextSelection(12);
+    typeInto(note, '!');
+    expect(noteOf(b)).toBe('Hello world!');
+});
+
+test.each([
+    ["a peer's edit", ({ b }: Awaited<ReturnType<typeof setup>>) => b.view.dispatch(b.state.tr.insertText('Big ', 1))],
+    [
+        'Bold across its reference',
+        ({ a }: Awaited<ReturnType<typeof setup>>) => {
+            a.commands.selectAll();
+            a.commands.toggleBold();
+        },
+    ],
+    [
+        "⌘Z of the body's edit",
+        ({ a, undoManager }: Awaited<ReturnType<typeof setup>>) => {
+            a.commands.setTextSelection(1);
+            a.commands.insertContent('X');
+            undoManager.stopCapturing();
+            a.commands.undo();
+        },
+    ],
+])('a note opens after %s', async (_, change) => {
+    const context = await setup();
+    const { a, b, note, session, open } = context;
+    await act(async () => change(context));
+    let pos = -1;
+    a.state.doc.descendants((node, at) => {
+        if (node.type.name === 'footnote') pos = at;
+    });
+    await open(pos);
+    expect(session.current?.anchor).not.toBeNull();
+    note.commands.setTextSelection(12);
+    typeInto(note, '!');
+    expect(noteOf(b)).toBe('Hello world!');
+});
+
 test('Enter before the reference, here and in the other tab, keeps the note open on its Yjs element', async () => {
     const { a, b, note, session, open } = await setup();
     await open(6);
@@ -336,4 +383,75 @@ test('a note pasted into a note leaves its text in its place', async () => {
         if (node.type.name === 'footnote') notes++;
     });
     expect(notes).toBe(1);
+});
+
+// The body's text before a reference and a note's first word read as one in ProseMirror's text: "gamma." and "Se" made
+// gamma.Se, a link, in the body. The note's editor makes its own links.
+test("typing in a note makes no link of the body's text before its reference", async () => {
+    const { a, b, note, open } = await setup([paragraph(text('Alpha gamma.'), footnote(paragraph()))]);
+    await open(13);
+    typeInto(note, 'See ');
+    typeInto(note, 'more');
+    expect(noteOf(b)).toBe('See more');
+    const links: string[] = [];
+    a.state.doc.descendants((node) => {
+        if (node.marks.some((mark) => mark.type.name === 'link')) links.push(node.text ?? node.type.name);
+    });
+    expect(links).toEqual([]);
+});
+
+test("text typed after a reference never joins its note's text in a link or a rule", async () => {
+    const { a } = await setup([paragraph(text('See'), footnote(paragraph(text('example (c'))))]);
+    const end = a.state.doc.firstChild?.nodeSize ?? 0;
+    a.commands.setTextSelection(end - 1);
+    // As a keystroke: the input rules first, else the text.
+    for (const char of ').com ') {
+        const { from, to } = a.state.selection;
+        const ruled = a.view.someProp('handleTextInput', (f) =>
+            f(a.view, from, to, char, () => a.state.tr.insertText(char)),
+        );
+        if (!ruled) a.view.dispatch(a.state.tr.insertText(char));
+    }
+    expect(a.state.doc.textContent).toBe('Seeexample (c).com ');
+    let links = 0;
+    a.state.doc.descendants((node) => {
+        if (node.marks.some((mark) => mark.type.name === 'link')) links++;
+    });
+    expect(links).toBe(0);
+});
+
+test("a peer's delete of the open note's reference hands the caret to the body where it stood", async () => {
+    const { a, b, note, session, open } = await setup();
+    await open(6);
+    expect(note.view.hasFocus()).toBe(true);
+    await act(async () => {
+        b.view.dispatch(b.state.tr.delete(6, 6 + (b.state.doc.nodeAt(6)?.nodeSize ?? 0)));
+    });
+    expect(session.current?.anchor).toBeNull();
+    expect(a.view.hasFocus()).toBe(true);
+    expect(a.state.selection.from).toBe(6);
+});
+
+// ⌘Z in a note that undoes the note's own insert closes it; the body takes the caret, so ⇧⌘Z brings the note back.
+test('undo in a note that removes the note leaves the caret in the body, where redo works', async () => {
+    const { a, note, session, undoManager } = await setup([paragraph(text('Claim'))]);
+    const { insertNote } = await import('../../../../components/docs/extensions/footnote');
+    a.commands.setTextSelection(6);
+    let pos: number | null = null;
+    await act(async () => {
+        pos = insertNote(a);
+    });
+    const node = pos === null ? null : a.state.doc.nodeAt(pos);
+    if (!node) throw new Error('no note');
+    await act(async () => session.current?.open(node, { focus: true, at: null, selection: null }));
+    undoManager.stopCapturing();
+    await act(async () => {
+        press(note, 'z');
+    });
+    expect(session.current?.anchor).toBeNull();
+    expect(a.view.hasFocus()).toBe(true);
+    await act(async () => {
+        press(a, 'z', true);
+    });
+    expect(noteOf(a)).toBe('');
 });

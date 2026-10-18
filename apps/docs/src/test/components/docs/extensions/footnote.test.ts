@@ -10,7 +10,7 @@ const Y = await import('yjs');
 const { Editor } = await import('@tiptap/react');
 const { docEditorOptions } = await import('../../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../../components/docs/page-setup');
-const { canAnchorComment } = await import('../../../../components/docs/extensions/comment-mark');
+const { canAnchorComment, commentAnchorText } = await import('../../../../components/docs/extensions/comment-mark');
 const { insertNote } = await import('../../../../components/docs/extensions/footnote');
 
 const media = {
@@ -30,6 +30,7 @@ afterEach(() => {
 });
 
 const opened: number[] = [];
+let inserting = false;
 
 function body(content: JSONContent[]) {
     const doc = new Y.Doc();
@@ -41,7 +42,7 @@ function body(content: JSONContent[]) {
             target: { undoManager: createDocUndoManager(doc), cardIds: () => new Set(['c1']) },
             caret: null,
             coarsePointer: false,
-            footnote: { onOpen: (pos) => opened.push(pos) },
+            footnote: { onOpen: (pos) => opened.push(pos), onInsert: () => inserting && insertNote(editor) !== null },
             media: () => media,
             editor: () => editor,
         }),
@@ -118,6 +119,11 @@ test('bold, a colour and a comment across a reference leave the note as it was',
     const firstText = editor.state.doc.firstChild?.firstChild;
     expect(firstText?.marks.map((mark) => mark.type.name).sort()).toEqual(['bold', 'comment', 'textStyle']);
 
+    // The selection stays where it was.
+    editor.commands.setTextSelection({ from: 3, to: 25 });
+    editor.commands.toggleBold();
+    expect([editor.state.selection.from, editor.state.selection.to]).toEqual([3, 25]);
+
     // Bold off across it keeps the note's own bold.
     editor.commands.selectAll();
     editor.commands.toggleBold();
@@ -153,4 +159,36 @@ test('a reference selected alone takes no comment; text beside it does', () => {
     expect(canAnchorComment(editor.state)).toBe(false);
     editor.commands.setTextSelection({ from: 5, to: 22 });
     expect(canAnchorComment(editor.state)).toBe(true);
+});
+
+// Where Insert › Footnote is offered: a phone's keyboard would insert a note nobody can open.
+test('⌘⌥F inserts only through the host', () => {
+    const editor = body(DOC);
+    editor.commands.setTextSelection(3);
+    // prosemirror-keymap reads the platform once, maybe before happy-dom's, so ⌘ or Ctrl, whichever it takes as Mod.
+    const press = () =>
+        [true, false].some((meta) => {
+            const event = new KeyboardEvent('keydown', {
+                key: 'f',
+                altKey: true,
+                metaKey: meta,
+                ctrlKey: !meta,
+                bubbles: true,
+                cancelable: true,
+            });
+            editor.view.dom.dispatchEvent(event);
+            return event.defaultPrevented;
+        });
+    press();
+    expect(numbers(editor)).toEqual(['1']);
+    inserting = true;
+    press();
+    inserting = false;
+    expect(numbers(editor)).toEqual(['1', '2']);
+});
+
+// Insert › Comment's title: the body's words, as the reference takes no comment.
+test("a comment's quote across a reference leaves the note out", () => {
+    const editor = body(DOC);
+    expect(commentAnchorText(editor.state.doc, 1, editor.state.doc.content.size - 1)).toBe('Claim. More');
 });
