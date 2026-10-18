@@ -112,6 +112,7 @@ const FEATURES = [
     ['alignRight', 'Right-aligned paragraphs'],
     ['alignJustify', 'Justified paragraphs'],
     ['footnotes', 'Footnote and endnote references'],
+    ['equations', 'Equations'],
 ] as const;
 
 export type Feature = (typeof FEATURES)[number][0];
@@ -934,12 +935,25 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             blocks(box, { ...context.scope, chain: newChain(), fields: [] });
     };
 
+    // An equation is no text: a word boundary, as on the imported side. An m:oMathPara holds its equations directly.
+    const isMath = (node: XmlElement) => node.ns === M_NS && (node.local === 'oMath' || node.local === 'oMathPara');
+    const equations = (node: XmlElement, context: Inline) => {
+        const count = node.local === 'oMath' ? 1 : xmlChildren(node, M_NS, 'oMath').length;
+        if (visible(context.scope)) add(tally, 'equations', count);
+        space(context);
+    };
+
     const runContent = (container: XmlElement, look: RunLook, context: Inline) => {
         const { fields } = context.scope;
         for (const node of xmlElements(container)) {
             if (node.ns === MC_NS && node.local === 'AlternateContent') {
                 const choice = alternative(node);
                 if (choice) runContent(choice, look, context);
+                continue;
+            }
+            // CT_R holds no math, but the reader reads it there.
+            if (isMath(node)) {
+                equations(node, context);
                 continue;
             }
             if (node.ns !== W_NS) continue;
@@ -1012,16 +1026,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 if (choice) inline(choice, context);
                 continue;
             }
-            if (node.ns === M_NS && node.local === 't') {
-                if (visible(context.scope)) text(xmlText(node), context, undefined);
-                continue;
-            }
-            // An equation's objects and runs are words of their own, as the reader reads math as text.
-            if (node.ns === M_NS && node.local === 'oMath') {
-                for (const part of xmlElements(node)) {
-                    inline(part, context);
-                    space(context);
-                }
+            if (isMath(node)) {
+                equations(node, context);
                 continue;
             }
             if (node.ns !== W_NS) {
@@ -1313,6 +1319,7 @@ export function auditImported(json: JSONContent): Tally {
                 else figure = true;
                 continue;
             }
+            if (inline.type === 'equation') add(tally, 'equations');
             if (inline.type !== 'text') {
                 space();
                 continue;

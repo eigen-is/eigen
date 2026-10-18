@@ -7,7 +7,7 @@ export type { ChartAttrs } from './nodes/chart';
 export { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, ChartNode, chartSvg, readChartAttrs } from './nodes/chart';
 export { CommentMarkSchema } from './nodes/comment-mark';
 export type { Equation } from './nodes/equation';
-export { EquationNode, equationText, readEquation } from './nodes/equation';
+export { EquationNode, equationMath, mathAsText, readEquation, unwrapRenderedMath } from './nodes/equation';
 export type { FigureAttrs } from './nodes/figure';
 export { FigureNode, readFigureAttrs } from './nodes/figure';
 export type { FigureAlignment, FigureFrameAttrs, FigureFrameNode, FigureLayout } from './nodes/figure-frame';

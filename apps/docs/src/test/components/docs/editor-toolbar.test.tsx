@@ -30,12 +30,17 @@ const onReplaceImage = mock(() => {});
 const onEnterBand = mock((_band: unknown) => {});
 const onPageNumbers = mock((_preset: unknown) => {});
 
-async function render(width: number, canWrite: boolean, active = editor) {
+async function render(
+    width: number,
+    canWrite: boolean,
+    { active = editor, onInsertEquation }: { active?: typeof editor; onInsertEquation?: () => void } = {},
+) {
     window.happyDOM.setViewport({ width, height: 1000 });
     const toolbar = createElement(EditorToolbar, {
         editor: active,
         body: editor,
         canWrite,
+        onInsertEquation,
         offline: false,
         storageUnavailable: false,
         canUndo: false,
@@ -527,7 +532,7 @@ test('a page number preset goes to the editor, and Page count goes in at the car
 // A command the schema lacks is a TypeError, so the menus ask the editor they act on what it holds.
 test("in a band, Insert, Format and the style picker offer only what the band's schema holds", async () => {
     const band = new Editor({ extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }) });
-    await render(1920, true, band);
+    await render(1920, true, { active: band });
     await openMenu('Insert');
     expect(menuItems().filter((item) => item?.startsWith('Page break') || item === 'Code block')).toEqual([]);
     expect(menuItems()).toContain('Table');
@@ -927,4 +932,28 @@ test.each([
     await pickInBrowserFrames(() => clickItem(`${label}${formatForDisplay(shortcut)}`));
     expect(execCommand.mock.calls).toEqual([[command]]);
     expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+// Where Google's Insert › Symbols › Equation sits relative to the chart and the line. The equation goes in once the menu
+// has closed, so Radix hands the focus to no trigger after the new equation's field has taken it.
+test('Insert › Equation follows Chart and inserts once the menu has closed', async () => {
+    const onInsertEquation = mock(() => {});
+    await render(1920, true, { onInsertEquation });
+    await openMenu('Insert');
+    expect(openMenuEntries().slice(0, 5)).toEqual(['Link', 'Image', 'Chart', 'Equation', 'Horizontal rule']);
+
+    await clickItem('Equation');
+    expect(onInsertEquation).not.toHaveBeenCalled();
+    // Radix calls onCloseAutoFocus in a timeout its unmount sets, which under load a single tick can precede.
+    for (let tick = 0; tick < 50 && onInsertEquation.mock.calls.length === 0; tick++) {
+        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
+    expect(onInsertEquation).toHaveBeenCalledTimes(1);
+});
+
+// A phone has no panel to edit one in, and a band being edited none that follows it.
+test('Insert has no Equation without a way to edit it', async () => {
+    await render(1920, true);
+    await openMenu('Insert');
+    expect(openMenuEntries()).not.toContain('Equation');
 });

@@ -55,9 +55,8 @@ function collectProseMirrorText(
     const walk = (n: JSONContent): boolean => {
         if (typeof n.text === 'string' && !appendCapped(out, n.text, cap)) return false;
         for (const text of attributeText(n)) if (!appendCapped(out, text, cap)) return false;
-        // Until the package writes an equation's linear text, its LaTeX stands in.
-        const latex = n.type === 'equation' && readEquation(n.attrs ?? {}).latex;
-        if (latex && !appendCapped(out, latex, cap)) return false;
+        const equation = n.type === 'equation' && readEquation(n.attrs ?? {}).text;
+        if (equation && !appendCapped(out, equation, cap)) return false;
         if (Array.isArray(n.content)) {
             for (const child of n.content) {
                 if (!walk(child)) return false;

@@ -24,7 +24,7 @@ Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook
 
 - No `as any`: fix the type at the source (route handler return type, schema definition), never by casting in hooks
 - No `as Type` on Eden Treaty responses: add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
-- Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it
+- Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it. The exception is `@workspace/math`, a leaf package with no dependencies, which owns its own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
 - Infer locally, annotate publicly: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
 - `import type` for type-only imports, separate from value imports
@@ -61,7 +61,7 @@ Workspace imports resolve through each package's `exports` map, with no tsconfig
 | `@workspace/lib/api` | Eden Treaty API client factories |
 | `@workspace/lib/date` | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) |
 | `@workspace/lib/validation` | Shared FE/BE validation schemas |
-| `@workspace/math` | The math package's one barrel: the equation tree and its OMML and MathML readers and writers ([MATH.md](MATH.md)) |
+| `@workspace/math` | The math package's one barrel: the equation tree, its OMML, MathML and LaTeX readers and writers, and the LaTeX command table ([MATH.md](MATH.md)) |
 
 **User-visible dates are day-month-year**: "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Format through `formatDayMonth` / `formatDate` in `@workspace/lib/date` (they assemble the order from the `'en'` locale's parts; `'en-GB'` spells a short September "Sept" in browsers), and write hand-built shapes as `d MMM yyyy`. Spelling everywhere else stays en-US.
 

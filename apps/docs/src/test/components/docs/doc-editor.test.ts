@@ -121,6 +121,20 @@ test("a band's editor deletes a node a band leaves out and keeps a comment's tex
     expect(doc.getXmlFragment('header').toString()).not.toContain('pageBreak');
 });
 
+// A band has no Equation panel, so Enter on a selected equation does what it does on a selected figure.
+test('Enter on a selected equation in a band does what it does on a selected figure', () => {
+    const enterOn = (leaf: JSONContent) => {
+        const header = mount(new Y.Doc(), HEADER);
+        header.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [leaf] }] });
+        header.commands.setNodeSelection(1);
+        header.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        return header.getJSON().content?.map((block) => block.content?.map((node) => node.type === leaf.type));
+    };
+    // A paragraph opens before the leaf, which stays.
+    expect(enterOn({ type: 'equation', attrs: { mathml: '' } })).toEqual([undefined, [true]]);
+    expect(enterOn({ type: 'figure', attrs: { mediaName: 'logo.png' } })).toEqual([undefined, [true]]);
+});
+
 // Comments don't reach a band, so a pasted anchor would mark text no card points at.
 test('a paste into a band drops comment anchors; the body keeps those of its own cards', () => {
     const html = '<p><span data-comment-id="c1">Noted</span></p>';

@@ -100,6 +100,7 @@ type EditorToolbarProps = {
     onReplaceImage: () => void;
     // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
     onAddComment?: () => void;
+    onInsertEquation?: () => void;
     // Puts the caret in a band, and writes a page-number preset there; a writer's on a desktop or a tablet only.
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
@@ -126,6 +127,7 @@ export const EditorToolbar = ({
     onImagePickFromDrive,
     onReplaceImage,
     onAddComment,
+    onInsertEquation,
     onEnterBand,
     onPageNumbers,
 }: EditorToolbarProps) => {
@@ -300,6 +302,7 @@ export const EditorToolbar = ({
                                     onLink={handleLinkOperation}
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}
+                                    onInsertEquation={onInsertEquation}
                                     onEnterBand={onEnterBand}
                                     onPageNumbers={onPageNumbers}
                                 />
