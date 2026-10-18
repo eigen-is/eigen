@@ -21,10 +21,12 @@ function faces(css: string, bytesOf: (src: string) => Buffer): string[] {
 }
 
 // An export inlines the faces the apps load from fonts.css; a face added or changed on one side only
-// renders an export in a fallback font.
+// renders an export in a fallback font. The math face is no font a user picks, so no export embeds it with the rest.
 test('the export fonts are the faces the apps load', () => {
     const appCSS = fs.readFileSync(path.join(UI_STYLES_DIR, 'fonts.css'), 'utf8');
-    const appFaces = faces(appCSS, (src) => fs.readFileSync(path.join(UI_STYLES_DIR, src)));
+    const appFaces = faces(appCSS, (src) => fs.readFileSync(path.join(UI_STYLES_DIR, src))).filter(
+        (face) => !face.startsWith('"STIX Two Math"'),
+    );
     const exportFaces = faces(getFontCSS(), (src) => Buffer.from(src.slice(src.indexOf(',') + 1), 'base64'));
     expect(appFaces).toHaveLength(6);
     expect(exportFaces).toEqual(appFaces);

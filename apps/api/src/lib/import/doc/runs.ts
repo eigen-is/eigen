@@ -2,14 +2,24 @@ import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { readFontSize } from '@workspace/lib/constants/fonts';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
+import { MathError, readOmml, readOmmlText, writeMathml } from '@workspace/math';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
-import { trimXmlSpace, XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
+import {
+    trimXmlSpace,
+    XML_NAMESPACE,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+} from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
 import { DEFAULT_HIGHLIGHT } from '../../document/wordml';
 import type { Item } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
-import { alternative, descendants, onOff, w, wChild } from './package';
+import { alternative, onOff, w, wChild } from './package';
 import type { Reader, Scope } from './paragraphs';
 import {
     ABSORBED,
@@ -27,8 +37,9 @@ import {
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
 // italic is whether Word draws a run italic: whether that is the mark waits for the paragraph's node.
+// equation is the text of an equation past a bound, which the text beside it is set off from.
 export type Piece =
-    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean }
+    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean; equation?: true }
     | { kind: 'break' }
     | { kind: 'clear' }
     | { kind: 'checkbox'; checked: boolean }
@@ -62,8 +73,12 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
             continue;
         }
         if (element.ns === M_NS && (element.local === 'oMath' || element.local === 'oMathPara')) {
-            const text = mathText(element);
-            if (text) pushText(reader, text, {}, context);
+            // Word shows no field's code.
+            if (reader.fields.at(-1)?.inCode) continue;
+            // CT_OMathPara holds its equations directly: none in a tracked deletion or an alternative.
+            const display = element.local === 'oMathPara';
+            for (const oMath of display ? xmlChildren(element, M_NS, 'oMath') : [element])
+                pushEquation(reader, oMath, display, context);
             continue;
         }
         if (element.ns !== W_NS) {
@@ -108,13 +123,16 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
     }
 }
 
-// Math as text until the schema holds math; each object and run of an equation is a word of its own.
-function mathText(element: XmlElement): string {
-    const equations = element.local === 'oMath' ? [element] : descendants(element, M_NS, 'oMath');
-    return equations
-        .flatMap((equation) => xmlElements(equation).map((part) => descendants(part, M_NS, 't').map(xmlText).join('')))
-        .filter(Boolean)
-        .join(' ');
+// An equation past a bound of the package is its text.
+function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, context: RunContext): void {
+    try {
+        const mathml = writeMathml(readOmml(oMath));
+        reader.pkg.chargeMathml(mathml.length);
+        context.pieces.push({ kind: 'node', node: { type: 'equation', attrs: { mathml, display } } });
+    } catch (error) {
+        if (!(error instanceof MathError)) throw error;
+        pushText(reader, readOmmlText(oMath), {}, context, true);
+    }
 }
 
 function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunProps, context: RunContext): void {
@@ -282,11 +300,22 @@ function hyperlinkField(reader: Reader, code: string): Link | undefined {
     return linkTo(reader, anchor ? `${target}#${anchor}` : target, tooltip);
 }
 
-export function pushText(reader: Reader, text: string, direct: DocxRunProps, context: RunContext): void {
+// An equation's text is set off from the text beside it by a space where none is, as inlineText sets off an equation.
+export function pushText(
+    reader: Reader,
+    text: string,
+    direct: DocxRunProps,
+    context: RunContext,
+    equation?: true,
+): void {
     if (!text) return;
-    for (const { text: part, marks, small, font, italic } of marksOf(reader, text, direct, context)) {
+    const last = context.pieces.at(-1);
+    const before = last?.kind === 'node' && last.node.type === 'text' ? last : undefined;
+    const joins = before && !/\s$/.test(before.node.text ?? '') && !/^\s/.test(text);
+    const spaced = joins && (equation || before.equation) ? ` ${text}` : text;
+    for (const { text: part, marks, small, font, italic } of marksOf(reader, spaced, direct, context)) {
         const node = marks.length > 0 ? { type: 'text', text: part, marks } : { type: 'text', text: part };
-        context.pieces.push({ kind: 'node', node, small, font, italic });
+        context.pieces.push({ kind: 'node', node, small, font, italic, ...(equation && { equation }) });
     }
 }
 

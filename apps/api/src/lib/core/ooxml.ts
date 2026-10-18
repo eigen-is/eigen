@@ -1,4 +1,4 @@
-import { OMML_NAMESPACE, WORDML_NAMESPACE } from '@workspace/math';
+import { MARKUP_COMPATIBILITY_NAMESPACE, OMML_NAMESPACE, WORDML_NAMESPACE } from '@workspace/math';
 import { hasXmlName, parseXml, type XmlElement, xmlElements } from './xml';
 
 // The OOXML every format's reader and writer share: namespaces, Strict read as transitional, markup compatibility and
@@ -17,7 +17,7 @@ export const DGM_NS = 'http://schemas.openxmlformats.org/drawingml/2006/diagram'
 export const DSP_NS = 'http://schemas.microsoft.com/office/drawing/2008/diagram';
 export const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 export const W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
-export const MC_NS = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+export const MC_NS = MARKUP_COMPATIBILITY_NAMESPACE;
 export const ASVG_NS = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main';
 export const V_NS = 'urn:schemas-microsoft-com:vml';
 export const O_NS = 'urn:schemas-microsoft-com:office:office';

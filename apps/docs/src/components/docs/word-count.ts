@@ -1,6 +1,6 @@
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
-import { equationText, isFigureFrameNode, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
+import { isFigureFrameNode, readEquation, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 
 export type TextCounts = { words: number; characters: number; charactersExcludingSpaces: number };
 
@@ -10,7 +10,7 @@ const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' });
 // and an equation its text.
 function leafText(node: Node): string {
     if (isFigureFrameNode(node.type.name)) return `\n${readFigureFrameAttrs(node.attrs).caption ?? ''}\n`;
-    if (node.type.name === 'equation') return `\n${equationText(node)}\n`;
+    if (node.type.name === 'equation') return `\n${readEquation(node.attrs).text}\n`;
     return '\n\n';
 }
 

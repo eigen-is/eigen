@@ -16,6 +16,7 @@ import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,
+    corpusEquations,
     equation,
     GOLDEN_FRACTION,
     GOLDEN_SUM,
@@ -2198,20 +2199,6 @@ describe('docx writer — figures', () => {
 });
 
 // The package's Word equations, each stored as the import will store it.
-function corpusEquations(): { row: MathRow; display: boolean }[] {
-    const corpus: { omml: string; display: boolean }[] = JSON.parse(
-        fs.readFileSync(
-            new URL('../../../../../packages/math/src/test/fixtures/omml-corpus.json', import.meta.url),
-            'utf8',
-        ),
-    );
-    return corpus.map(({ omml, display }) => {
-        const oMath = parseOoxml(omml);
-        if (!oMath) throw new Error('a corpus equation does not parse');
-        return { row: readOmml(oMath), display };
-    });
-}
-
 const corpusDoc = (equations: { row: MathRow; display: boolean }[]) =>
     doc(...equations.map(({ row, display }) => p(equation(writeMathml(row), display))));
 

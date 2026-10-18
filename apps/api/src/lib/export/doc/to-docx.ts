@@ -6,7 +6,6 @@ import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName, readFontSize } from '@works
 import {
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
-    type PageNumberKind,
     type PageSetup,
     pageTwips,
     readFigureAttrs,
@@ -630,7 +629,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
             continue;
         }
         // In Word a display equation is a paragraph of its own: it splits its textblock as a block figure does.
-        if (node.type === 'equation' && readStoredEquation(node.attrs ?? {}).display) {
+        if (node.type === 'equation' && node.attrs?.['display'] === true) {
             if (inline.length > 0) flush();
             inline.push(node);
             flush();
@@ -1264,13 +1263,21 @@ const INLINES = new Map<
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
-    // The runs take no marks: the Yjs binding stores none on an atom, so a reloaded doc holds none.
+    // A complex field, as Word writes it: Google Docs leaves a w:fldSimple PAGE in the body blank. Word lays out the
+    // page and updates the field; 1 is what a reader without fields shows. Every run of the field gets the result's
+    // look, and none takes marks: the Yjs binding stores none on an atom, so a reloaded doc holds none.
     [
         'pageNumber',
         (node, linked, context, style, faces) =>
-            pageFieldXml(readPageNumberKind(node.attrs?.['kind']), (content) =>
-                runXml(content, {}, linked, context, style, faces),
-            ),
+            [
+                '<w:fldChar w:fldCharType="begin"/>',
+                `<w:instrText xml:space="preserve"> ${PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])]} </w:instrText>`,
+                '<w:fldChar w:fldCharType="separate"/>',
+                textXml('1'),
+                '<w:fldChar w:fldCharType="end"/>',
+            ]
+                .map((content) => runXml(content, {}, linked, context, style, faces))
+                .join(''),
     ],
     // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
     // math zone, as the editor draws an empty box.
@@ -1283,20 +1290,6 @@ const INLINES = new Map<
         },
     ],
 ]);
-
-// A complex field, as Word writes it: Google Docs leaves a w:fldSimple PAGE in the body blank. Word lays out the page
-// and updates the field; 1 is what a reader without fields shows. Every run of the field gets the result's look.
-function pageFieldXml(kind: PageNumberKind, run: (content: string) => string): string {
-    return [
-        '<w:fldChar w:fldCharType="begin"/>',
-        `<w:instrText xml:space="preserve"> ${PAGE_NUMBER_FIELDS[kind]} </w:instrText>`,
-        '<w:fldChar w:fldCharType="separate"/>',
-        textXml('1'),
-        '<w:fldChar w:fldCharType="end"/>',
-    ]
-        .map(run)
-        .join('');
-}
 
 // A run in the node's marks.
 function runXml(

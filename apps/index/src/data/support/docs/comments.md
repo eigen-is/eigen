@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-09-29
+updated: 2026-10-13
 ---
 
 Comments let you leave a note on any piece of text or image in a document. Each comment has its own thread, so collaborators can reply, discuss, and resolve it without touching the document itself.
@@ -25,6 +25,8 @@ The selected text is highlighted in the document with the comment's color, so it
 You can also use the keyboard shortcut Cmd+Option+M (Mac) or Ctrl+Alt+M (Windows) when you have text selected.
 
 To comment on an image, right-click it and choose **Add comment**. The **Title** starts as "Image". A commented image shows a small triangle in the comment's color in its top-right corner instead of a highlight. Click the triangle to open the comment, or right-click the image for the same options as a comment highlight. Cut an image and paste it elsewhere in the same document, and its comment moves with it.
+
+To comment on an equation, click it and press the shortcut. The **Title** starts as the equation's text, and the equation gets the same triangle. See [Insert and edit equations](/support/docs/equations).
 
 ## Open the comments sidebar
 

@@ -84,9 +84,15 @@ mock.module('@workspace/lib/calendar', () => ({
     }),
 }));
 
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => ({ user: { id: 'owner-1' } }) }));
+const session = { user: { id: 'owner-1' } };
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
 // useCalendarOptions resolves a team's name through this; there is no query client under this render.
-mock.module('@workspace/lib/public', () => ({ usePublicUsers: () => ({ [TEAM]: { name: 'Marketing' } }) }));
+const realPublic = await import('@workspace/lib/public');
+mock.module('@workspace/lib/public', () => ({
+    ...realPublic,
+    usePublicUsers: () => ({ [TEAM]: { name: 'Marketing' } }),
+}));
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');

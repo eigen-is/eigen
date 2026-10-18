@@ -9,8 +9,10 @@ installHappyDom();
 
 const guest = { is: false };
 const mail = { enabled: true };
-mock.module('@workspace/lib/auth', () => ({ useIsGuest: () => guest.is }));
-mock.module('@workspace/lib/public', () => ({ useMailEnabled: () => mail.enabled }));
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useIsGuest: () => guest.is }));
+const realPublic = await import('@workspace/lib/public');
+mock.module('@workspace/lib/public', () => ({ ...realPublic, useMailEnabled: () => mail.enabled }));
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
