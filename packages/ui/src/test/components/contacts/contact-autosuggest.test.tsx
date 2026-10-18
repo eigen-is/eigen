@@ -7,7 +7,8 @@ import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => ({ user: null }), useIsGuest: () => false }));
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => ({ user: null }), useIsGuest: () => false }));
 const ada = { kind: 'personal', id: 'ada@example.com', displayName: 'Ada', email: 'ada@example.com' };
 const realContacts = await import('@workspace/lib/contacts');
 mock.module('@workspace/lib/contacts', () => ({
