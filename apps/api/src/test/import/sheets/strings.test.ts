@@ -40,6 +40,15 @@ describe('a shared string', () => {
         expect(textOf(rich)).toBe('Bold and plain');
     });
 
+    test("keeps a run without properties, and text beside the runs, as plain text, in its cell's font", () => {
+        const [rich] = readSharedStrings(
+            sst(['<t xml:space="preserve">Lead </t><r><t>plain</t></r><r><rPr><b/></rPr><t>bold</t></r>']),
+            PALETTE,
+            readBudget(),
+        );
+        expect(rich).toEqual({ text: 'Lead plainbold', runs: ['Lead ', 'plain', { v: 'bold', bl: 1 }] });
+    });
+
     test('reads past its phonetic runs, which annotate the text', () => {
         expect(
             readSharedStrings(

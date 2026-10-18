@@ -5,8 +5,8 @@ import { build, deflated } from '../../fixtures/raw-zip';
 
 // The bounds an untrusted xlsx meets. The zip refuses an archive past its caps before anything inflates; past that the
 // reader parses only what it charges against the read budget (package.ts), and emits only what it charges against one
-// output budget (from-xlsx.ts), so a range a file declares costs what it emits, never what it spans. The probes are the hostile files the ExcelJS import's review rounds built, each read
-// in a process of its own so its peak and its time are the import's alone.
+// output budget (from-xlsx.ts), so a range a file declares costs what it emits, never what it spans. Each probe is a
+// hostile file, read in a process of its own so its peak and its time are the import's alone.
 
 const SML = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -252,6 +252,18 @@ describe('each cap', () => {
         expect(result).toMatchObject(TOO_LARGE);
         expect(result.rssGrowth).toBeLessThan(256 * MB);
         expect(result.cpuMs).toBeLessThan(2_000);
+    }, 30_000);
+
+    // A rich string's runs are a copy per cell: 300,000 runs in 20 cells would be 6 million objects.
+    test("a rich string's runs count as cells", () => {
+        const result = measuredImport(
+            xlsx({ data: rowsOf(20, (r) => `<c r="A${r}" t="s"><v>0</v></c>`) }, [
+                sst(`<si>${'<r><t>a</t></r>'.repeat(300_000)}</si>`),
+            ]),
+        );
+        expect(result).toMatchObject(TOO_MANY_CELLS);
+        expect(result.rssGrowth).toBeLessThan(1024 * MB);
+        expect(result.cpuMs).toBeLessThan(5_000);
     }, 30_000);
 
     test('emitted text may reach its cap across the workbook', () => {

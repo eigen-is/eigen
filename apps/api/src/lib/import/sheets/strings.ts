@@ -4,8 +4,9 @@ import { hasXmlName, type XmlElement, xmlChild, xmlElements, xmlText } from '../
 import { type ReadBudget, readInBatches } from './package';
 import { fontLook, type ThemePalette } from './styles';
 
-// Shared and inline strings. A rich string keeps its runs, each with its font's look, beside the text a cell shows.
-export type SharedString = string | { text: string; runs: InlineStringSegment[] };
+// Shared and inline strings. A rich string keeps its runs beside the text a cell shows: a run with properties in its own
+// font, and one without, or text beside the runs, as a plain string, in its cell's.
+export type SharedString = string | { text: string; runs: (string | InlineStringSegment)[] };
 
 export function readSharedStrings(
     part: Uint8Array | undefined,
@@ -20,19 +21,18 @@ export function readSharedStrings(
 
 // An <si> or an <is>: its text and runs, never a phonetic run's reading of them.
 export function stringOf(element: XmlElement, palette: ThemePalette): SharedString {
-    const runs: InlineStringSegment[] = [];
+    const runs: (string | InlineStringSegment)[] = [];
     let rich = false;
     for (const child of xmlElements(element)) {
         const run = hasXmlName(child, SML_NS, 'r');
         const t = run ? xmlChild(child, SML_NS, 't') : hasXmlName(child, SML_NS, 't') ? child : undefined;
         if (run) rich = true;
-        if (run || t)
-            runs.push({
-                v: t ? decoded(xmlText(t)) : '',
-                ...(run && fontLook(xmlChild(child, SML_NS, 'rPr'), palette)),
-            });
+        if (!run && !t) continue;
+        const text = t ? decoded(xmlText(t)) : '';
+        const properties = run ? xmlChild(child, SML_NS, 'rPr') : undefined;
+        runs.push(properties ? { v: text, ...fontLook(properties, palette) } : text);
     }
-    const text = runs.map((run) => run.v).join('');
+    const text = runs.map((run) => (typeof run === 'string' ? run : run.v)).join('');
     return rich ? { text, runs } : text;
 }
 

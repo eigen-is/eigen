@@ -1130,10 +1130,17 @@ describe('Sheets xlsx export — inline rich text', () => {
             color: { argb: 'FF0080FF' },
         });
 
-        // Minimum bar: the concatenated text must survive a full round-trip.
+        // The runs come back with their looks, the text beside them.
         const rt = await roundTrip(sheets);
         const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
         expect(a1?.v?.v).toBe('Hello world');
+        expect(a1?.v?.ct).toMatchObject({
+            t: 'inlineStr',
+            s: [
+                { v: 'Hello ', bl: 1, fc: '#FF0000' },
+                { v: 'world', it: 1, un: 1, cl: 1, fs: 14, fc: '#0080FF' },
+            ],
+        });
     });
 
     test('falls back to plain value when segments are empty or text-less', async () => {

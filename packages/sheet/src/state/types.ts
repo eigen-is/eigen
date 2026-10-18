@@ -171,14 +171,13 @@ export type AlternateFormatEntry = {
 // Editor-runtime Sheet: lib's canonical fields plus state-only extras (selection
 // state, calc chain, filter criteria, dynamic-array spill ranges, …) that never
 // reach the wire shape. `config` is widened to state's SheetConfig. Frozen panes,
-// the autofilter range, data-validation rules, hyperlinks and floating images live
-// on the lib Sheet — they persist, and preview and export render them.
+// the autofilter range, data-validation rules, hyperlinks, floating images, the
+// hidden flag and the tab colour live on the lib Sheet — they persist, and the
+// server reads and writes them.
 export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
-    color?: string;
     addRows?: number;
     status?: number;
-    hide?: number;
     selections?: Selection[];
     calcChain?: CalcChainEntry[];
     defaultRowHeight?: number;

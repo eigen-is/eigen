@@ -9,9 +9,10 @@ import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
 import { isOn, R_NS, SML_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import { colorOf, resolveColor, type ThemePalette } from './styles';
 
-// A worksheet past its grid: the column widths and hidden columns, the merges, the frozen panes and gridlines, the
-// filter's span and the hyperlinks. A merge's cells and a link's cell are placed before the grid is read, so the grid's
+// A worksheet past its grid: the tab colour, the column widths and hidden columns, the merges, the frozen panes and
+// gridlines, the filter's span and the hyperlinks. A merge's cells and a link's cell are placed before the grid is read, so the grid's
 // cell there takes them, and a place the grid holds no cell for still gets one. Only what the file holds is walked: a
 // merge's cells after its area is charged, a column range's columns after they are, and each column once.
 
@@ -31,13 +32,14 @@ export type WorksheetContext = {
     digitWidth: number;
     // The sheet part's own.
     rels: ReadonlyMap<string, Relationship>;
+    palette: ThemePalette;
     // Called with the cells and the characters each part emits; throws past the budget.
     charge(cells: number, text: number): void;
 };
 
 export type Worksheet = {
     config: Pick<SheetConfig, 'merge' | 'columnlen' | 'colhidden'>;
-    sheet: Pick<Sheet, 'hyperlink' | 'frozen' | 'showGridLines' | 'filterRange'>;
+    sheet: Pick<Sheet, 'color' | 'hyperlink' | 'frozen' | 'showGridLines' | 'filterRange'>;
     // By cellKey, already charged.
     placed: Map<number, PlacedCell>;
 };
@@ -49,6 +51,9 @@ export function cellKey(r: number, c: number): number {
 export function readWorksheet(rest: XmlElement | undefined, context: WorksheetContext): Worksheet {
     const worksheet: Worksheet = { config: {}, sheet: {}, placed: new Map() };
     if (!rest) return worksheet;
+    const properties = xmlChild(rest, SML_NS, 'sheetPr');
+    const color = resolveColor(colorOf(properties && xmlChild(properties, SML_NS, 'tabColor')), context.palette);
+    if (color) worksheet.sheet.color = color;
     readColumns(rest, context, worksheet.config);
     // Before the links, so a merge finds only merges placed.
     readMerges(rest, context, worksheet);

@@ -54,16 +54,54 @@ describe('a value', () => {
         expect(cell('B1')).toEqual({ v: 0.25, m: '25.00%', ht: 2, bg: '#FFFF00', ct: { fa: '0.00%', t: 'n' } });
     });
 
-    test('strings shared, inline and formula-made, with a rich one flattened', () => {
+    test('strings shared, inline and formula-made, a rich one with its runs beside its text', () => {
         const { cell } = read(
-            '<row r="1"><c r="A1" t="s"><v>1</v></c><c r="B1" t="inlineStr"><is><r><rPr><b/></rPr><t>in</t></r><r><t>line</t></r></is></c><c r="C1" t="str"><f>"a"&amp;"b"</f><v>ab</v></c><c r="D1" t="s"><v>9</v></c></row>',
+            '<row r="1"><c r="A1" t="s"><v>1</v></c><c r="B1" t="inlineStr"><is><r><rPr><b/></rPr><t>in</t></r><r><t>line</t></r></is></c><c r="C1" t="str"><f>"a"&amp;"b"</f><v>ab</v></c><c r="D1" t="s"><v>9</v></c><c r="E1" t="s"><v>0</v></c></row>',
             { strings: ['<t>zero</t>', '<r><rPr><i/></rPr><t>ri</t></r><r><t>ch</t></r>'] },
         );
-        expect(cell('A1')).toEqual({ v: 'rich', m: 'rich', ct: { fa: 'General', t: 's' } });
-        expect(cell('B1')).toEqual({ v: 'inline', m: 'inline', ct: { fa: 'General', t: 's' } });
+        // The value and display stay, so formulas, search and the HTML export read the text as they read any.
+        expect(cell('A1')).toEqual({
+            v: 'rich',
+            m: 'rich',
+            ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'ri', it: 1 }, { v: 'ch' }] },
+        });
+        expect(cell('B1')).toEqual({
+            v: 'inline',
+            m: 'inline',
+            ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'in', bl: 1 }, { v: 'line' }] },
+        });
+        expect(cell('E1')).toEqual({ v: 'zero', m: 'zero', ct: { fa: 'General', t: 's' } });
         expect(cell('C1')).toEqual({ v: 'ab', m: 'ab', f: '="a"&"b"', ct: { fa: 'General', t: 's' } });
         // An index past the shared strings is no value.
         expect(cell('D1')).toBeUndefined();
+    });
+
+    test("a run without properties is in its cell's font, one with them in its own; an empty run is none", () => {
+        const { cell } = read(
+            `<row r="1"><c r="A1" s="${BOLD_FILLED}" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>`,
+            {
+                strings: [
+                    '<r><t>plain</t></r><r><rPr><i/></rPr><t>it</t></r><r><rPr><b/></rPr><t/></r>',
+                    '<r><t/></r>',
+                ],
+            },
+        );
+        expect(cell('A1')).toEqual({
+            v: 'plainit',
+            m: 'plainit',
+            bl: 1,
+            bg: '#FFFF00',
+            ct: {
+                fa: 'General',
+                t: 'inlineStr',
+                s: [
+                    { v: 'plain', bl: 1 },
+                    { v: 'it', it: 1 },
+                ],
+            },
+        });
+        // Runs with no text are a string with none.
+        expect(cell('B1')).toEqual({ v: '', m: '', ct: { fa: 'General', t: 's' } });
     });
 
     test('booleans and errors', () => {
@@ -201,6 +239,17 @@ describe('the grid', () => {
             [1, 6 + 'General'.length],
             [1, 5 + 'General'.length],
             [1, 0],
+        ]);
+    });
+
+    // The runs are a copy per cell: a shared string of a million runs in a few cells is millions of objects.
+    test("charges a rich string's runs, each as a cell, and their text before it builds them", () => {
+        const { charged } = read('<row r="1"><c r="A1" t="s"><v>0</v></c></row>', {
+            strings: ['<r><rPr><b/></rPr><t>ab</t></r><r><t>c</t></r><r><t/></r>'],
+        });
+        expect(charged).toEqual([
+            [2, 3],
+            [1, 6 + 'General'.length],
         ]);
     });
 

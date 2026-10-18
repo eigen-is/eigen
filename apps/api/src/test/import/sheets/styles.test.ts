@@ -171,12 +171,12 @@ describe('the cell formats', () => {
         const [first] = looks(
             `${font('<b/>')}<fills><fill><patternFill patternType="solid"><fgColor rgb="FF00FF00"/></patternFill></fill></fills>${xfs('<xf fontId="1" fillId="0" numFmtId="9"/>')}`,
         );
-        expect(first).toEqual({ cell: {}, aligned: false, isDate: false });
+        expect(first).toEqual({ cell: {}, font: {}, aligned: false, isDate: false });
     });
 
     test('an index past its list takes nothing from it', () => {
         const [, look] = looks(xfs('<xf/>', '<xf fontId="7" fillId="7" borderId="7"/>'));
-        expect(look).toEqual({ cell: {}, aligned: false, isDate: false });
+        expect(look).toEqual({ cell: {}, font: {}, aligned: false, isDate: false });
     });
 
     test('no styles part is no looks', () => {

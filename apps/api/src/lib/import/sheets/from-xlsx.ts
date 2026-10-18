@@ -19,8 +19,8 @@ import { digitWidthOf, readWorksheet } from './worksheet';
 // walks. The byte cap catches a bomb of few cells.
 export const MAX_CELLS = 4_000_000;
 
-// A cell's text, value and display, is a copy per cell for a rich string and in the snapshot for any; real workbooks
-// emit under 120M characters.
+// The snapshot spells a cell's text out per cell, its value, its display and a rich string's runs; real workbooks emit
+// under 120M characters.
 export const MAX_TEXT = 250_000_000;
 // A shared formula's copy is translated before it is weighed, at about 3M characters a second. The 986 workbooks of
 // the corpus translate at most 3.1M characters (a GOV.UK inspections workbook, 24,706 copies); five times that is
@@ -32,9 +32,9 @@ export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
 export const MAX_GRID_SLOTS = 110_000_000;
 
 // Every worksheet's grid and what lies past it, charged against the output budget as it is read. The cells count what
-// they emit, a value, a border, a row's height or hidden flag, a merged or linked cell, a column's width, a rule's range
-// or a validated cell, and the grids recalc materialises; the text counts every value, display, formula, link and rule
-// text, each shared string and shared formula once per copy.
+// they emit, a value, a rich string's run, a border, a row's height or hidden flag, a merged or linked cell, a column's
+// width, a rule's range or a validated cell, and the grids recalc materialises; the text counts every value, display,
+// run, formula, link and rule text, each shared string and shared formula once per copy.
 export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
     try {
         const book = readPackage(bytes);
@@ -60,7 +60,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
         // and a later one is numbered as Excel numbers a copy, past every name the workbook holds.
         const taken = new Set(book.sheets.map(({ name }) => name.toLowerCase()));
         const named = new Set<string>();
-        for (const { name: written, path } of book.sheets) {
+        for (const { name: written, path, hidden } of book.sheets) {
             const part = book.pkg.zip.read(path);
             if (!part) continue;
             const id = `sheet-${sheets.length}`;
@@ -75,7 +75,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
             const { rest, children } = readInBatches(part, 'sheetData', 'row', budget);
             // A damaged rels part costs the external links, not the workbook.
             const rels = optional(() => book.pkg.relationships(path)) ?? new Map();
-            const worksheet = readWorksheet(rest, { id, digitWidth, rels, charge });
+            const worksheet = readWorksheet(rest, { id, digitWidth, rels, palette, charge });
             const grid = readGrid(children, {
                 looks,
                 strings,
@@ -110,6 +110,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
                 name,
                 id,
                 order: sheets.length,
+                ...(hidden && { hide: 1 }),
                 celldata: grid.celldata,
                 config,
                 ...worksheet.sheet,
@@ -129,6 +130,8 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
         // An import replaces the document's sheets: none read is a file it can't read, never an empty spreadsheet.
         if (sheets.length === 0)
             throw new ApiError(400, book.hasChartSheets ? ONLY_CHART_SHEETS : IMPORT_MESSAGES.xlsx.invalid);
+        // Excel refuses to hide every sheet, and the editor opens on one it shows.
+        if (sheets.every((sheet) => sheet.hide === 1)) delete sheets[0].hide;
         return sheets;
     } catch (error) {
         throw importError(error, 'xlsx');

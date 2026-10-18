@@ -1,4 +1,4 @@
-import type { CellBorderSides, Cell as FortuneCell } from '@workspace/lib/sheets';
+import type { CellBorderSides, CellStyle, Cell as FortuneCell, InlineStringSegment } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
@@ -10,8 +10,8 @@ import { type SharedString, stringOf, textOf } from './strings';
 import { type Look, NO_LOOK, type ThemePalette } from './styles';
 import { cellKey, type PlacedCell } from './worksheet';
 
-// A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula and look, the
-// borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column numbers.
+// A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula, look and rich text,
+// the borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column numbers.
 
 const MAX_FORMULA_LENGTH = 8192;
 
@@ -20,8 +20,8 @@ export type GridContext = {
     strings: SharedString[];
     date1904: boolean;
     palette: ThemePalette;
-    // Called for each cell the grid emits, a value or a border, with the characters it writes, and for each row's height
-    // and hidden flag; a placed cell is charged already. Throws past the budget.
+    // Called for each cell the grid emits, a value or a border, with the characters it writes, for a rich string's runs,
+    // and for each row's height and hidden flag; a placed cell is charged already. Throws past the budget.
     charge(cells: number, text: number): void;
     // Called before a shared formula's copy is translated, with the characters to translate; throws past the budget.
     chargeCopy(chars: number): void;
@@ -123,13 +123,15 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
     const v = xmlChild(element, SML_NS, 'v');
     const raw = v ? xmlText(v) : '';
     let value: string | number | boolean | undefined;
+    let string: SharedString | undefined;
     let date = false;
     if (type === 'inlineStr') {
         const is = xmlChild(element, SML_NS, 'is');
-        value = (is && textOf(stringOf(is, context.palette))) || undefined;
+        string = is && stringOf(is, context.palette);
+        value = (string && textOf(string)) || undefined;
     } else if (raw !== '') {
         if (type === 's') {
-            const string = context.strings[Number(raw)];
+            string = context.strings[Number(raw)];
             value = string === undefined ? undefined : textOf(string);
         } else if (type === 'str' || type === 'e') value = raw;
         else if (type === 'b') value = Number.parseInt(raw, 10) !== 0;
@@ -166,9 +168,21 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
             : typeof value === 'boolean'
               ? 'b'
               : 's';
+    const runs = typeof string === 'object' && value ? runsOf(string.runs, look.font, context) : undefined;
     // Fortune-sheet always pairs `t` with `fa`, General when the cell has no format.
-    if (t || look.fa) cell.ct = { fa: look.fa ?? 'General', ...(t && { t }) };
+    if (runs) cell.ct = { fa: look.fa ?? 'General', t: 'inlineStr', s: runs };
+    else if (t || look.fa) cell.ct = { fa: look.fa ?? 'General', ...(t && { t }) };
     return cell;
+}
+
+// The runs with text, a copy per cell, charged each as a cell before they are built; plain text takes the cell's font.
+function runsOf(runs: (string | InlineStringSegment)[], font: CellStyle, context: GridContext): InlineStringSegment[] {
+    const shown = runs.filter((run) => (typeof run === 'string' ? run : run.v));
+    context.charge(
+        shown.length,
+        shown.reduce((text, run) => text + (typeof run === 'string' ? run : (run.v ?? '')).length, 0),
+    );
+    return shown.map((run) => (typeof run === 'string' ? { ...font, v: run } : run));
 }
 
 // A shared formula's anchor holds its text and range; a copy shifts the anchor's relative references by its offset. A

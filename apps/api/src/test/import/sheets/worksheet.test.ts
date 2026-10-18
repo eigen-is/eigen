@@ -22,6 +22,7 @@ function read(before: string, after = '', options: { digitWidth?: number; budget
         id: 'sheet-0',
         digitWidth: options.digitWidth ?? 8,
         rels: RELS,
+        palette: [],
         charge: (count, text) => {
             charged.push([count, text]);
             cells += count;

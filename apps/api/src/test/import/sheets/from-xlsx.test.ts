@@ -70,7 +70,18 @@ describe('the reader', () => {
         expect(cells).toMatchObject({
             '0_0': text('Name'),
             '0_1': text(' padded '),
-            '0_2': text('Rich text'),
+            '0_2': {
+                v: 'Rich text',
+                m: 'Rich text',
+                ct: {
+                    fa: 'General',
+                    t: 'inlineStr',
+                    s: [
+                        { v: 'Rich', bl: 1, fs: 11 },
+                        { v: ' text', it: 1, fc: '#FF0000' },
+                    ],
+                },
+            },
             '0_3': text('Line\r\nbreak'),
             '0_4': text('東京'),
             '1_0': number(42, '42'),
@@ -94,8 +105,13 @@ describe('the reader', () => {
         });
         expect(cells['2_4']).toEqual({ f: '=NOW()' });
         expect(cells['4_3']?.f).toBeUndefined();
-        // A hidden sheet is imported, visible.
-        expect(hidden).toMatchObject({ name: 'Second sheet', order: 1, celldata: [{ r: 1, c: 1, v: { v: 1 } }] });
+        expect(hidden).toMatchObject({
+            name: 'Second sheet',
+            order: 1,
+            hide: 1,
+            celldata: [{ r: 1, c: 1, v: { v: 1 } }],
+        });
+        expect(sheet.hide).toBeUndefined();
     });
 
     test('number formats and dates', () => {
@@ -308,6 +324,39 @@ describe('the reader', () => {
             '1_0': { linkType: 'sheet', linkAddress: 'Data' },
             '1_1': { linkType: 'sheet', linkAddress: 'Second sheet' },
         });
+    });
+
+    test('hidden sheets import hidden, and tab colours as the editor stores them', () => {
+        const tab = (color: string) => `<sheetPr><tabColor ${color}/></sheetPr>`;
+        const sheets = xlsxToSheets(
+            xlsxFixture({
+                sheets: [
+                    { name: 'Red', before: tab('rgb="FFFF0000"') },
+                    { name: 'Hidden', state: 'hidden', before: tab('theme="4" tint="0.39997558519241921"') },
+                    { name: 'Very hidden', state: 'veryHidden', before: tab('indexed="10"') },
+                ],
+                colors: OFFICE_COLORS,
+            }),
+        );
+        expect(sheets.map(({ name, hide, color }) => ({ name, hide, color }))).toEqual([
+            { name: 'Red', hide: undefined, color: '#FF0000' },
+            { name: 'Hidden', hide: 1, color: '#8FAADC' },
+            // An indexed colour is none.
+            { name: 'Very hidden', hide: 1, color: undefined },
+        ]);
+    });
+
+    // Excel refuses to hide every sheet, and the editor opens on a sheet it shows.
+    test('a workbook that hides every sheet shows its first', () => {
+        const sheets = xlsxToSheets(
+            xlsxFixture({
+                sheets: [
+                    { name: 'One', state: 'hidden' },
+                    { name: 'Two', state: 'veryHidden' },
+                ],
+            }),
+        );
+        expect(sheets.map(({ hide }) => hide)).toEqual([undefined, 1]);
     });
 
     test('a workbook with no styles, theme or shared strings', () => {

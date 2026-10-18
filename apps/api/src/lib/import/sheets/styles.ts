@@ -24,6 +24,8 @@ type XlsxColor = { argb?: string; theme?: number; tint?: number };
 export type Look = {
     // The keys every cell of the format carries.
     cell: FortuneCell;
+    // Its font's, which a rich string's plain text takes.
+    font: CellStyle;
     // What a value displays with, as written; undefined for General and for a format numfmt can't parse, which shows
     // General.
     numFmt?: string;
@@ -90,7 +92,7 @@ const BUILTIN_FORMATS = new Map<number, string>([
     [49, '@'],
 ]);
 
-export const NO_LOOK: Look = { cell: {}, aligned: false, isDate: false };
+export const NO_LOOK: Look = { cell: {}, font: {}, aligned: false, isDate: false };
 
 // Excel's own limits are a format of 255 characters and 250 of the workbook's own. A format's date test and canonical
 // form cost per character, and so does every display through it: a longer one reads as General, and cell formats that
@@ -140,8 +142,10 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
         const id = (name: string) => Number(xmlAttr(xf, '', name));
         const alignment = xmlChild(xf, SML_NS, 'alignment');
         const bg = fills[id('fillId')];
+        const font = fonts[id('fontId')] ?? {};
         return {
-            cell: { ...fonts[id('fontId')], ...(bg && { bg }), ...(alignment && alignmentLook(alignment)) },
+            cell: { ...font, ...(bg && { bg }), ...(alignment && alignmentLook(alignment)) },
+            font,
             ...(resolved.get(id('numFmtId')) ?? resolve(id('numFmtId'))),
             aligned: Boolean(alignment && xmlAttr(alignment, '', 'horizontal')),
             border: borders[id('borderId')],
