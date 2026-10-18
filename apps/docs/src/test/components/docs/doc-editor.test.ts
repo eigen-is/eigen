@@ -10,7 +10,7 @@ installHappyDom();
 const Y = await import('yjs');
 const { Editor } = await import('@tiptap/react');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
-const { prosemirrorJSONToYXmlFragment } = await import('@tiptap/y-tiptap');
+const { prosemirrorJSONToYXmlFragment, yUndoPluginKey } = await import('@tiptap/y-tiptap');
 const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pageRecord } = await import(
     '@workspace/lib/docs/eigendoc'
 );
@@ -175,6 +175,74 @@ test('an image pasted into a band lands in that editor, under the name its re-up
     expect(pastedMediaName).toHaveBeenCalledTimes(1);
     expect(doc.getXmlFragment('header').toString()).toContain('mediaName="logo-copy.png"');
     expect(doc.getXmlFragment('default').toString()).not.toContain('logo');
+});
+
+const withNote: JSONContent = {
+    type: 'paragraph',
+    content: [
+        { type: 'text', text: 'Claim' },
+        {
+            type: 'footnote',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'See ' },
+                        { type: 'text', text: 'Smith', marks: [{ type: 'bold' }] },
+                    ],
+                },
+                { type: 'paragraph', content: [{ type: 'text', text: 'p. 4' }] },
+            ],
+        },
+        { type: 'text', text: ' end.' },
+    ],
+};
+
+// A cut and a copy with no image are ProseMirror's own; the clipboard carries its HTML.
+function cutOrCopy(editor: InstanceType<typeof Editor>, type: 'cut' | 'copy'): string {
+    const event = new ClipboardEvent(type, { clipboardData: new DataTransfer(), bubbles: true, cancelable: true });
+    editor.view.dom.dispatchEvent(event);
+    return event.clipboardData?.getData('text/html') ?? '';
+}
+
+test('a copied paragraph holding a note pastes as one paragraph with the note', () => {
+    const page = body(new Y.Doc());
+    page.commands.setContent({ type: 'doc', content: [withNote] });
+    const copied = page.getJSON().content;
+    page.commands.selectAll();
+    const html = cutOrCopy(page, 'copy');
+
+    const target = body(new Y.Doc());
+    target.view.pasteHTML(html);
+    expect(target.getJSON().content).toEqual(copied);
+});
+
+test('a cut takes the note with its paragraph, and undo brings both back', () => {
+    const doc = new Y.Doc();
+    const page = body(doc);
+    page.commands.setContent({
+        type: 'doc',
+        content: [withNote, { type: 'paragraph', content: [{ type: 'text', text: 'After' }] }],
+    });
+    const undoManager = yUndoPluginKey.getState(page.state)?.undoManager;
+    undoManager?.clear();
+    const cut = page.getJSON().content?.[0];
+    page.commands.setTextSelection({ from: 1, to: (page.state.doc.firstChild?.nodeSize ?? 0) - 1 });
+    cutOrCopy(page, 'cut');
+    expect(page.state.doc.firstChild?.childCount).toBe(0);
+    page.commands.undo();
+    expect(page.getJSON().content?.[0]).toEqual(cut);
+});
+
+// Its note belongs to the body's text, which the band would otherwise take as its own.
+test('a note pasted into a band drops, note and all', () => {
+    const page = body(new Y.Doc());
+    page.commands.setContent({ type: 'doc', content: [withNote] });
+    page.commands.selectAll();
+    const html = cutOrCopy(page, 'copy');
+    const header = mount(new Y.Doc(), HEADER);
+    header.view.pasteHTML(html);
+    expect(header.getText()).toBe('Claim end.');
 });
 
 type PageSetup = typeof DEFAULT_PAGE_SETUP;

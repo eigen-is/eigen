@@ -319,7 +319,7 @@ test("the find bar counts a note's text, paints it in the open note, and its rev
     await act(async () => search.reveal(matches[0].id));
     expect(session.current?.anchor).toBeNull();
     // Replace all reaches the notes' text too.
-    search.replaceAll('world', 'earth', options, false);
+    search.replaceAll?.('world', 'earth', options, false);
     expect(noteOf(a, 0)).toBe('Hello earth');
 });
 

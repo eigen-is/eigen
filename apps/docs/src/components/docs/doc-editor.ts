@@ -431,7 +431,7 @@ type UseDocEditorOptions = Omit<DocEditorOptions, 'caret' | 'coarsePointer' | 'm
     provider: WebsocketProvider | null;
 };
 
-// The body's editor and each band's: docEditorOptions with this tab's user and its pointer, plus the sweep of pending
+// The body's editor, each band's and the open note's: docEditorOptions with this tab's user and its pointer, plus the sweep of pending
 // images a closed tab left and the font-name pass, both in an editable editor only.
 export function useDocEditor({ media, provider, ...options }: UseDocEditorOptions, deps: DependencyList = []): Editor {
     const auth = useAuth();
@@ -454,13 +454,14 @@ export function useDocEditor({ media, provider, ...options }: UseDocEditorOption
         deps,
     );
     editorRef.current = editor;
-    const { editable } = options;
+    // A note's images and fonts are the body's, which sweeps and collapses them.
+    const sweeps = options.editable && !('body' in options.target);
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
     // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
     // A viewer's deletion would be dropped by the server.
     useZombieMediaSweep({
-        ready: !!editor && editable,
+        ready: !!editor && sweeps,
         scan: () => {
             const names: string[] = [];
             editor?.state.doc.descendants((node) => {
@@ -485,9 +486,9 @@ export function useDocEditor({ media, provider, ...options }: UseDocEditorOption
     // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
     // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
     useEffect(() => {
-        if (!editor || !editable) return;
+        if (!editor || !sweeps) return;
         normalizeFontFamilyMarks(editor);
-    }, [editor, editable]);
+    }, [editor, sweeps]);
 
     return editor;
 }
