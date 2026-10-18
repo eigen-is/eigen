@@ -57,6 +57,13 @@ describe('parseNormalizedPath', () => {
             'M 0 0 L 1 0 C 0.5 0.5 0.25 0.25 1 1 Q 0.1235 1 0 0.1 Z',
         );
         expect(parseNormalizedPath('  M 0 0  L 1 1  ')).toBe('M 0 0 L 1 1');
+        expect(parseNormalizedPath('\tM 0\t0\r\nL 1,1\n')).toBe('M 0 0 L 1 1');
+    });
+
+    test('only ASCII space, tab, CR, LF and comma separate, so a valid path is ASCII', () => {
+        for (const d of ['M 0 0 L 1 1', 'M 0 0 L 1 1', 'M 0 0 L 1 1 ', '﻿M 0 0 L 1 1', 'M 0\f0']) {
+            expect([d, parseNormalizedPath(d)]).toEqual([d, null]);
+        }
     });
 
     test('numbers clamp to [-2, 3], so a coordinate bomb stays near the box', () => {

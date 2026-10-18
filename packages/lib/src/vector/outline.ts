@@ -341,7 +341,9 @@ const PATH_COMMAND_POINTS = { M: 1, L: 1, C: 3, Q: 2, Z: 0 } as const;
 // Control points may overshoot the box a little; a 1e15 would reach roughjs and every viewBox.
 const PATH_COORD_MIN = -2;
 const PATH_COORD_MAX = 3;
-const PATH_TOKEN = /[\s,]*(?:([A-Za-z])|([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?))/y;
+// ASCII separators only, so a valid path's length is its bytes, which MAX_PATH_BYTES caps.
+const PATH_SPACE = ' \t\r\n';
+const PATH_TOKEN = /[ \t\r\n,]*(?:([A-Za-z])|([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?))/y;
 
 type PathOp = keyof typeof PATH_COMMAND_POINTS;
 export type PathCommand = { op: PathOp; points: Point[] };
@@ -350,15 +352,17 @@ function isPathOp(v: string): v is PathOp {
     return Object.hasOwn(PATH_COMMAND_POINTS, v);
 }
 
-// Any SVG spelling of the five commands, numbers clamped and rounded to 4 decimals; null for anything
-// else: another command, a relative one, a missing or extra number, or a subpath that doesn't start
-// with M. The reader's parseNormalizedPath caps it; every consumer reads the canonical string it stores.
+// The five commands in SVG syntax, numbers clamped and rounded to 4 decimals; null for anything else:
+// another command, a relative one, a missing or extra number, a subpath that doesn't start with M, or a
+// separator other than ASCII space, tab, CR, LF or comma. The reader's parseNormalizedPath caps it;
+// every consumer reads the canonical string it stores.
 export function parsePathCommands(d: string): PathCommand[] | null {
     const commands: PathCommand[] = [];
     let current: PathCommand | null = null;
     // A point's x, read and waiting for its y.
     let x: number | null = null;
-    const end = d.trimEnd().length;
+    let end = d.length;
+    while (end > 0 && PATH_SPACE.includes(d[end - 1])) end--;
     PATH_TOKEN.lastIndex = 0;
     while (PATH_TOKEN.lastIndex < end) {
         const token = PATH_TOKEN.exec(d);
