@@ -104,6 +104,7 @@ describe('the all-features doc', () => {
             .toJSON();
         const docx = await eigendocToDocx(
             withoutEquations(buildAllFeaturesDocJson()),
+            {},
             DEFAULT_PAGE_SETUP,
             buildAllFeaturesDocMedia(),
             'All features',
@@ -124,7 +125,9 @@ describe('the page', () => {
             differentFirstPage: false,
         };
         const source = buildAllFeaturesDocJson();
-        const { page: read } = docxToPmJson(Buffer.from(await eigendocToDocx(source, page, [], 'Letter', undefined)));
+        const { page: read } = docxToPmJson(
+            Buffer.from(await eigendocToDocx(source, {}, page, [], 'Letter', undefined)),
+        );
         expect(read.width).toBe(279.4);
         expect(read.height).toBe(215.9);
         for (const side of ['top', 'right', 'bottom', 'left'] as const) expect(read.margin[side]).toBeCloseTo(10, 2);
@@ -164,7 +167,7 @@ const tasks = (...items: JSONContent[][]) => ({
 async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent; json: JSONContent }> {
     const source = docSchema().nodeFromJSON({ type: 'doc', content }).toJSON();
     const { json } = docxToPmJson(
-        Buffer.from(await eigendocToDocx(source, DEFAULT_PAGE_SETUP, [], 'Nested', undefined)),
+        Buffer.from(await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, [], 'Nested', undefined)),
     );
     return { source, json };
 }

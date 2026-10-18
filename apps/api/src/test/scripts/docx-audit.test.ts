@@ -601,6 +601,7 @@ describe('both sides', () => {
         const json = withoutEquations(buildAllFeaturesDocJson());
         const docx = await eigendocToDocx(
             json,
+            {},
             DEFAULT_PAGE_SETUP,
             buildAllFeaturesDocMedia(),
             'Report.eigendoc',

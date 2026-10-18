@@ -44,11 +44,13 @@ export async function renderEigendocExport(
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const json = readEigendocFromDoc(doc);
     const page = readEigendocPage(doc);
+    const bands = readEigendocBands(doc);
     if (format === 'docx') {
         const { eigendocToDocx } = await import('./to-docx');
-        const docxMedia = await withSvgFallbacks([...media, ...(await pastedFigureMedia(json))]);
+        const pasted = await pastedFigureMedia([json, ...Object.values(bands)]);
+        const docxMedia = await withSvgFallbacks([...media, ...pasted]);
         return {
-            data: toTransferableBuffer(await eigendocToDocx(json, page, docxMedia, title, publicOrigin)),
+            data: toTransferableBuffer(await eigendocToDocx(json, bands, page, docxMedia, title, publicOrigin)),
             warnings: [],
         };
     }
@@ -60,7 +62,6 @@ export async function renderEigendocExport(
             (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
             { synthesizeSmallCaps: pdf, pageCounters: pdf },
         )}</article>`;
-    const bands = readEigendocBands(doc);
     const band = (root: BandRoot) => {
         const content = bands[root];
         return content ? `<div class="band-${root}">${prose(content)}</div>` : '';
@@ -80,7 +81,7 @@ export async function renderEigendocExport(
 
 // A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
 // here, once, through the encode a media file takes; an SVG through the sanitizer the main thread's media took.
-async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
+async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMedia[]> {
     const pasted = new Map<string, { mediaType: string | null; base64: string }>();
     const visit = (node: JSONContent) => {
         if (node.type === 'figure') {
@@ -93,7 +94,7 @@ async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
         }
         for (const child of node.content ?? []) visit(child);
     };
-    visit(json);
+    for (const root of roots) visit(root);
     if (pasted.size === 0) return [];
     const { sharpResize } = await import('../../shared/sharp-resize');
     const media: ExportMedia[] = [];

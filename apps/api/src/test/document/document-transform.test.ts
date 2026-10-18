@@ -23,7 +23,7 @@ import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
 import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/core/zip';
-import { commitEigendocImport, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
+import { commitEigendocImport, readEigendocBands, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
@@ -832,8 +832,8 @@ describe('document transform (xlsx import)', () => {
 // The deck html and pdf-html hashes moved when canvas-text.css gave an empty paragraph its line: that rule and its comment, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '22224ab3ec35b9d07dffc7e8a50fca8423433d747cffa158faa735916b60dfa4';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '22224ab3ec35b9d07dffc7e8a50fca8423433d747cffa158faa735916b60dfa4';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bb25cd1e2163fb2bb069c5bf414283446fb84eb5fa382cec73af1fd7c32b838f';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8a2617e2aceabe9f5f5ce32fb9e00061b97d5a53218b70c8e89f8de68cb07d32';
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'a2310368cd450f8d94c039e39460d9551214a8d64dbf2b4d16ad2a5035840f92';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
@@ -1125,6 +1125,7 @@ describe('document transform (eigendoc)', () => {
         const media = await collectExportMedia(mount, path, 'docx');
         const direct = await eigendocToDocx(
             readEigendocFromDoc(persisted),
+            readEigendocBands(persisted),
             readEigendocPage(persisted),
             media,
             path.name,
