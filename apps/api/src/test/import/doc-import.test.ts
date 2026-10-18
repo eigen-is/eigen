@@ -684,7 +684,7 @@ describe('docx import — page breaks', () => {
         [
             'a footnote reference',
             FOOTNOTE_REFERENCE,
-            ['orderedList[One + pageBreak + [1] + orderedList[A] / Two]', 'orderedList[Note ↑]'],
+            ['orderedList[One + pageBreak + footnote[Note] + orderedList[A] / Two]'],
         ],
         ['a line break', '<w:r><w:br/></w:r>', ['orderedList[One + pageBreak + ⏎ + orderedList[A] / Two]']],
         [
@@ -725,8 +725,7 @@ describe('docx import — page breaks', () => {
     test('a second break in a split top-level item stays in the item too', async () => {
         const item = `${run('One')}<w:r>${PAGE_BREAK}</w:r>${run('Half')}<w:r>${PAGE_BREAK}</w:r>${FOOTNOTE_REFERENCE}`;
         expect(await importOutline(nestedList(item), FOOTNOTE)).toEqual([
-            'orderedList[One + pageBreak + Half + pageBreak + [1] + orderedList[A] / Two]',
-            'orderedList[Note ↑]',
+            'orderedList[One + pageBreak + Half + pageBreak + footnote[Note] + orderedList[A] / Two]',
         ]);
     });
 
@@ -758,7 +757,7 @@ describe('docx import — page breaks', () => {
     test('a break in a footnote is dropped and leaves its paragraph whole', async () => {
         const body = paragraph(`${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r>`);
         const footnote = `<w:footnote w:id="1">${paragraph(`<w:r><w:t>fa</w:t>${PAGE_BREAK}<w:t>fb</w:t></w:r>`)}</w:footnote>`;
-        expect(await importBlocks(body, footnote)).toEqual(['paragraph(Text[1])', 'orderedList(fafb ↑)']);
+        expect(await importBlocks(body, footnote)).toEqual(['paragraph(Textfafb)']);
     });
 
     test('a bookmark before a break in its own heading leaves no empty heading', async () => {

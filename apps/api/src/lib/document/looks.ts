@@ -1,4 +1,4 @@
-import { EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONT_NAMES, FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
 import { DOC_PROSE_CLASS, listTypeOfStyle, type TitleType } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
@@ -127,6 +127,10 @@ export const CAPTION_LOOK = {
     sizePt: cssPt(proseValue('.eigen-prose figcaption', 'font-size'), BODY.sizePt),
     color: proseColor('.eigen-prose figcaption', 'color'),
 };
+
+// A note's text at Google's and Word's footnote size, which eigen-prose.css can't give: the editor lists its notes off
+// the page's prose.
+export const FOOTNOTE_LOOK = { sizePt: FOOTNOTE_FONT_SIZE };
 
 type TextLook = { color?: string; italic?: true };
 

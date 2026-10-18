@@ -3,7 +3,12 @@ import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
-import { readCellBackground, selectionFontSizes, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
+import {
+    insertFootnote,
+    readCellBackground,
+    selectionFontSizes,
+    selectionParagraphFormat,
+} from '@workspace/lib/docs/eigendoc';
 import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { canAnchorComment } from '../extensions/comment-mark';
 import { numberedListType, orderedListDepth } from '../list-numbering';
@@ -40,6 +45,8 @@ export type ToolbarState = {
     link: boolean;
     selectionEmpty: boolean;
     canComment: boolean;
+    // Whether a note goes at the caret: not in a code block, nor in a band's schema or a note's.
+    canInsertFootnote: boolean;
     table: boolean;
     figure: boolean;
     canMergeCells: boolean;
@@ -144,6 +151,7 @@ export function useToolbarState(editor: Editor, normal: NormalStyle): ToolbarSta
                 link: active('link'),
                 selectionEmpty: selection.empty,
                 canComment: canAnchorComment(editor.state),
+                canInsertFootnote: insertFootnote(editor.state.tr) !== null,
                 table,
                 figure: active('figure'),
                 ...selectCellCommands(editor, table),

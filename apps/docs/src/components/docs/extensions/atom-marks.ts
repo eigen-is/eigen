@@ -4,7 +4,7 @@ import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
 import { FIGURE_FRAME_NODES } from '@workspace/lib/docs/eigendoc';
 
 // The inline atoms the Yjs binding persists no mark on: it keeps a mark only on text.
-const MARKLESS_ATOMS: ReadonlySet<string> = new Set([...FIGURE_FRAME_NODES, 'equation', 'pageNumber']);
+const MARKLESS_ATOMS: ReadonlySet<string> = new Set([...FIGURE_FRAME_NODES, 'equation', 'pageNumber', 'footnote']);
 
 const isMarklessAtom = (node: Node | null | undefined) => !!node && MARKLESS_ATOMS.has(node.type.name);
 
