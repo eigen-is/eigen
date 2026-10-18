@@ -102,6 +102,7 @@ type FormatMenuProps = {
     clearFormatting: () => void;
     onRestartNumbering: () => void;
     onCustomSpacing: () => void;
+    onUpdateNormalStyle: () => void;
     onIndentationOptions: () => void;
     onPageSetup: () => void;
     onReplaceImage: () => void;
@@ -118,6 +119,7 @@ export const FormatMenu = ({
     clearFormatting,
     onRestartNumbering,
     onCustomSpacing,
+    onUpdateNormalStyle,
     onIndentationOptions,
     onPageSetup,
     onReplaceImage,
@@ -211,9 +213,18 @@ export const FormatMenu = ({
                 <Heading2 className="h-4 w-4 mr-2" /> Paragraph styles
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-                <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
-                    <Pilcrow className="mr-2 h-4 w-4" /> Normal text
-                </DropdownMenuItem>
+                {/* Google's own submenu: the doc's Normal is the one style it holds. */}
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                        <Pilcrow className="mr-2 h-4 w-4" /> Normal text
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                        <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
+                            Apply 'Normal text'
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={onUpdateNormalStyle}>Update 'Normal text' to match</DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 {paragraphStylesIn(editor.schema).map(({ name, type, attrs, icon: Icon }) => (
                     <DropdownMenuItem
                         key={name}

@@ -135,14 +135,14 @@ export async function convertToDocument(
         return newPath;
     }
 
-    const { update, page, images } = await importDocxUpdate(buffer);
+    const { update, page, style, images } = await importDocxUpdate(buffer);
     // Refused before the create, so no empty document is left behind; saveDocImages charges again as it writes.
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
     const name = sourcePath.name.replace(/\.docx$/i, '');
     const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
     const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
     await saveDocImages(drive, newPath, images, user);
-    commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page });
+    commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page, style });
     return newPath;
 }
 
@@ -167,7 +167,7 @@ export async function importIntoDocument(
     }
 
     if (containerMime === DRIVE_MIME_DOC) {
-        const { update, page, images } = await importDocxUpdate(buffer, signal);
+        const { update, page, style, images } = await importDocxUpdate(buffer, signal);
         // Media before the update that names it: an open tab looks each name up once, as the update arrives. The open
         // and the abort check come before the write check that guards the save.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
@@ -175,7 +175,7 @@ export async function importIntoDocument(
         await requireWritePermission(drive, path, user);
         await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
-        commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page });
+        commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page, style });
         return;
     }
 

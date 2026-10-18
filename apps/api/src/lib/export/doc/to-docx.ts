@@ -12,6 +12,7 @@ import {
 import {
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
+    type NormalStyle,
     type PageSetup,
     pageTwips,
     readFigureAttrs,
@@ -97,6 +98,7 @@ export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
 export async function eigendocToDocx(
     json: JSONContent,
     setup: PageSetup,
+    normal: NormalStyle,
     media: DocxMedia[],
     title: string,
     publicOrigin: string | undefined,
@@ -117,13 +119,15 @@ export async function eigendocToDocx(
         images: new Map(),
         files: [],
         drawings: 0,
-        // A Spacer's and a figure's mark draw in the body's Regular.
-        faces: new Map([[BODY.font, new Set<FontSlot>(['Regular'])]]),
+        // A Spacer's and a figure's mark draw in the Normal's Regular.
+        faces: new Map([[normal.font, new Set<FontSlot>(['Regular'])]]),
+        normal,
+        styles: new Map(styleDefinitions(normal).map((style) => [style.id, style])),
     };
     const page = pageTwips(setup);
     const column = page.width - page.margin.left - page.margin.right;
     const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, quotes: 0 };
-    const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
+    const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false), pkg.styles);
     const fonts = embeddedFonts(pkg.faces);
 
     const parts: [path: string, xml: string, contentType?: string][] = [
@@ -139,7 +143,7 @@ export async function eigendocToDocx(
             `${WML}.document.main+xml`,
         ],
         ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
-        ['word/styles.xml', stylesXml(pkg.languages), `${WML}.styles+xml`],
+        ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
         ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
         ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
         ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
@@ -218,6 +222,9 @@ type Package = {
     files: [path: string, data: ArrayBuffer][];
     drawings: number;
     faces: Map<string, Set<FontSlot>>;
+    // The doc's Normal, which docDefaults and the Normal style write, and the styles built on it.
+    normal: NormalStyle;
+    styles: Styles;
 };
 
 // The walk's surroundings, so a nested block sizes and indents itself against its parent: column and indent in twips.
@@ -321,10 +328,10 @@ type RunFace = { family: string; size: number };
 
 // As Word resolves a face: the run over its character style over its paragraph style, whose toggles flip each other.
 function useFace(pkg: Package, run: RunProps, paragraphStyle: StyleId | undefined): RunFace {
-    const character = styleFace(run.style);
-    const paragraph = styleFace(paragraphStyle ?? 'Normal');
-    const family = run.font ?? character.font ?? paragraph.font ?? BODY.font;
-    const size = run.size ?? character.size ?? paragraph.size ?? halfPoints(BODY.sizePt);
+    const character = styleFace(pkg.styles, run.style);
+    const paragraph = styleFace(pkg.styles, paragraphStyle ?? 'Normal');
+    const family = run.font ?? character.font ?? paragraph.font ?? pkg.normal.font;
+    const size = run.size ?? character.size ?? paragraph.size ?? halfPoints(pkg.normal.size);
     const files = DOCX_FONT_FILES.get(family);
     if (files) {
         const bold = run.bold ?? character.bold !== paragraph.bold;
@@ -337,10 +344,10 @@ function useFace(pkg: Package, run: RunProps, paragraphStyle: StyleId | undefine
 }
 
 // The nearest definition of each face property along a style's chain.
-function styleFace(style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> {
+function styleFace(styles: Styles, style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> {
     const face: Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> = {};
     for (let id = style; id !== undefined; ) {
-        const definition = STYLES.get(id);
+        const definition = styles.get(id);
         face.font ??= definition?.rPr?.font;
         face.bold ??= definition?.rPr?.bold;
         face.italic ??= definition?.rPr?.italic;
@@ -513,7 +520,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         'heading',
         (node, context) => {
             const level = clampInt(node.attrs?.['level'], 1, 6, 1);
-            const { sizePt } = textMetrics(`.eigen-prose h${level}`);
+            const { sizePt } = textMetrics(`.eigen-prose h${level}`, context.pkg.normal.size);
             const firstMargin = context.first
                 ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
                 : undefined;
@@ -548,7 +555,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
             const indent = context.indent + (context.quotes < LIST_LEVELS ? QUOTE_LOOK.indent : 0);
             const quote: Context = { ...context, indent, quotes: context.quotes + 1, style: 'Quote', after: undefined };
             const blocks = blocksOf(node.content ?? [], textProps({}, quote), quote, false);
-            return withAfter(blocks, proseTwips('.eigen-prose blockquote', 'margin-bottom'));
+            return withAfter(blocks, proseTwips('.eigen-prose blockquote', 'margin-bottom'), context.pkg.styles);
         },
     ],
     [
@@ -607,7 +614,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
 function titleOf(type: TitleType, style: StyleId) {
     return (node: JSONContent, context: Context): Block[] => {
         const props = textProps({ style, jc: justification(node) }, context);
-        const { sizePt } = textMetrics(TITLE_SELECTORS[type]);
+        const { sizePt } = textMetrics(TITLE_SELECTORS[type], context.pkg.normal.size);
         const upright = !!nodeLook(type).italic;
         return blocksOf(
             node.content ?? [],
@@ -628,13 +635,13 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
         const line = familyLine(
-            props.spacing?.line ?? styleSpacing(props.style, 'line'),
+            props.spacing?.line ?? styleSpacing(context.pkg.styles, props.style, 'line'),
             useFace(context.pkg, {}, props.style),
             faces,
         );
         let own = line === undefined ? props : { ...props, spacing: { ...props.spacing, line } };
         // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
-        if (pieces.length > 0 && props.style && STYLES.get(props.style)?.pPr?.outlineLvl !== undefined)
+        if (pieces.length > 0 && props.style && context.pkg.styles.get(props.style)?.pPr?.outlineLvl !== undefined)
             own = { ...own, outlineLvl: 9 };
         pieces.push(blocks.push({ props: own, runs }) - 1);
         inline = [];
@@ -672,20 +679,21 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
             blockPt: undefined,
             upright: undefined,
         });
-        if (BOXED.has(node.type ?? '') && BOXED.has(nodes[index - 1]?.type ?? '')) keepApart(blocks, written);
+        if (BOXED.has(node.type ?? '') && BOXED.has(nodes[index - 1]?.type ?? ''))
+            keepApart(blocks, written, context.pkg.styles);
         // A loop, not a spread: a code block of a million lines is a million arguments.
         for (const block of written) blocks.push(block);
     }
     // A textblock its wrapped figures emptied keeps its line, as the editor's trailing break does.
     if (inline.length > 0 || (textblock && pieces.length === 0)) flush();
-    if (textblock) shareMargins(blocks, pieces, props);
+    if (textblock) shareMargins(blocks, pieces, props, context.pkg.styles);
     return blocks;
 }
 
 // The pieces share their textblock's margins: the first takes the one above, the last the one below, none at a split.
-function shareMargins(blocks: Block[], pieces: number[], props: ParagraphProps): void {
-    const before = props.spacing?.before ?? styleSpacing(props.style, 'before');
-    const after = props.spacing?.after ?? styleSpacing(props.style, 'after');
+function shareMargins(blocks: Block[], pieces: number[], props: ParagraphProps, styles: Styles): void {
+    const before = props.spacing?.before ?? styleSpacing(styles, props.style, 'before');
+    const after = props.spacing?.after ?? styleSpacing(styles, props.style, 'after');
     for (const [order, index] of pieces.entries()) {
         const piece = blocks[index];
         if (!piece || 'table' in piece) continue;
@@ -709,7 +717,7 @@ const BOXED = new Set(['codeBlock', 'blockquote']);
 const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
 
 // Readers draw adjacent boxes or bars as one, so the gap between them becomes a Spacer, its margins collapsed as CSS does.
-function keepApart(blocks: Block[], next: Block[]): void {
+function keepApart(blocks: Block[], next: Block[], styles: Styles): void {
     const last = blocks.at(-1);
     const first = next[0];
     if ((last && 'table' in last && !last.float) || (first && 'table' in first && !first.float)) return;
@@ -717,8 +725,8 @@ function keepApart(blocks: Block[], next: Block[]): void {
         blocks.push(SPACER);
         return;
     }
-    const after = last.props.spacing?.after ?? styleSpacing(last.props.style, 'after');
-    const before = first.props.spacing?.before ?? styleSpacing(first.props.style, 'before');
+    const after = last.props.spacing?.after ?? styleSpacing(styles, last.props.style, 'after');
+    const before = first.props.spacing?.before ?? styleSpacing(styles, first.props.style, 'before');
     if (after > 0)
         blocks[blocks.length - 1] = { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after: 0 } } };
     if (before > 0) next[0] = { ...first, props: { ...first.props, spacing: { ...first.props.spacing, before: 0 } } };
@@ -729,17 +737,18 @@ function keepApart(blocks: Block[], next: Block[]): void {
 }
 
 // Word merges adjacent tables and needs a paragraph after a flow's last one, so a Spacer stands where none does.
-function blocksXml(written: Block[]): string {
+function blocksXml(written: Block[], styles: Styles): string {
     const below = (block: Block | undefined) =>
         block && 'table' in block && !block.float ? (block.after ?? TABLE_LOOK.margin) : undefined;
     const spacer = (before: number | undefined) =>
         paragraphXml(before === undefined ? SPACER : { props: { style: 'Spacer', spacing: { before } }, runs: '' });
-    const blocks = withInsets(written);
+    const blocks = withInsets(written, styles);
     return blocks
         .map((block, index) => {
             const previous = blocks[index - 1];
             const before = below(previous);
-            if (!('table' in block)) return paragraphXml(before === undefined ? block : withBefore(block, before));
+            if (!('table' in block))
+                return paragraphXml(before === undefined ? block : withBefore(block, before, styles));
             const between = previous !== undefined && 'table' in previous ? spacer(before) : '';
             return `${between}${block.table}${index === blocks.length - 1 ? spacer(below(block)) : ''}`;
         })
@@ -748,14 +757,14 @@ function blocksXml(written: Block[]): string {
 
 // Readers collapse adjacent spacing to the larger, so an inset paragraph writes each whole gap on its side: the
 // neighbour's inset, the two collapsed, its own inset. A float is out of the flow.
-function withInsets(blocks: Block[]): Block[] {
+function withInsets(blocks: Block[], styles: Styles): Block[] {
     const flow = blocks.filter((block) => !('table' in block && block.float));
     const outer = (block: Block, side: 'before' | 'after') =>
         'table' in block
             ? side === 'after'
                 ? (block.after ?? TABLE_LOOK.margin)
                 : TABLE_LOOK.margin
-            : (block.props.spacing?.[side] ?? styleSpacing(block.props.style, side));
+            : (block.props.spacing?.[side] ?? styleSpacing(styles, block.props.style, side));
     const inset = (block: Block | undefined, side: keyof Inset) =>
         block && !('table' in block) ? (block.inset?.[side] ?? 0) : 0;
     const spaced = new Map<Block, Block>();
@@ -775,13 +784,18 @@ function withInsets(blocks: Block[]): Block[] {
     return blocks.map((block) => spaced.get(block) ?? block);
 }
 
-// A plain paragraph takes its container's style and spacing; a heading in a quote takes the quote's bar directly.
+// A plain paragraph takes its container's style and spacing, none of the Normal's before; a heading in a quote takes
+// the quote's bar directly.
 function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>, context: Context): ParagraphProps {
     const style = own.style ?? context.style;
     return {
         style,
         pBdr: quoteBar(style, context),
-        spacing: own.spacing ?? (own.style || context.after === undefined ? undefined : { after: context.after }),
+        spacing:
+            own.spacing ??
+            (own.style || context.after === undefined
+                ? undefined
+                : { ...(context.pkg.normal.spaceBefore > 0 && { before: 0 }), after: context.after }),
         ind: indentOf(style, context),
         jc: own.jc ?? context.align,
     };
@@ -792,8 +806,7 @@ function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>, contex
 function formatted(node: JSONContent, props: ParagraphProps, context: Context): ParagraphProps {
     const format = readParagraphFormat(node.attrs ?? {});
     const spacing: Spacing = { ...props.spacing };
-    if (format.lineSpacing !== undefined)
-        spacing.line = autoLine(format.lineSpacing * DOCUMENT_LINE_RATIO * BODY.sizePt, BODY.sizePt, BODY.font);
+    if (format.lineSpacing !== undefined) spacing.line = normalLine(format.lineSpacing, context.pkg.normal);
     if (context.quotes === 0 && context.after === undefined) {
         if (format.spaceBefore !== undefined) spacing.before = twips(format.spaceBefore);
         if (format.spaceAfter !== undefined) spacing.after = twips(format.spaceAfter);
@@ -821,12 +834,12 @@ function quoteBar(style: StyleId | undefined, context: Context): ParagraphProps[
 
 // Direct only where the style's own indent isn't the container's.
 function indentOf(style: StyleId | undefined, context: Context): ParagraphProps['ind'] {
-    const own = (style && STYLES.get(style)?.pPr?.ind?.left) ?? 0;
+    const own = (style && context.pkg.styles.get(style)?.pPr?.ind?.left) ?? 0;
     return context.indent === own ? undefined : { left: context.indent };
 }
 
 // A container's bottom margin on its last block, collapsed with its own; a hairline and a floating figure keep theirs.
-function withAfter(blocks: Block[], after: number): Block[] {
+function withAfter(blocks: Block[], after: number, styles: Styles): Block[] {
     const last = blocks.at(-1);
     if (!last || ('table' in last && last.float)) return blocks;
     if ('table' in last) {
@@ -835,20 +848,20 @@ function withAfter(blocks: Block[], after: number): Block[] {
     }
     if (last.props.style === 'PageBreak' || (last.props.style === 'Spacer' && last.runs !== CLEAR_FLOATS))
         return blocks;
-    if (after <= (last.props.spacing?.after ?? styleSpacing(last.props.style, 'after'))) return blocks;
+    if (after <= (last.props.spacing?.after ?? styleSpacing(styles, last.props.style, 'after'))) return blocks;
     return [...blocks.slice(0, -1), { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after } } }];
 }
 
-function withBefore(paragraph: Paragraph, before: number): Paragraph {
+function withBefore(paragraph: Paragraph, before: number, styles: Styles): Paragraph {
     const { props } = paragraph;
-    if (before <= (props.spacing?.before ?? styleSpacing(props.style, 'before'))) return paragraph;
+    if (before <= (props.spacing?.before ?? styleSpacing(styles, props.style, 'before'))) return paragraph;
     return { ...paragraph, props: { ...props, spacing: { ...props.spacing, before } } };
 }
 
 // What the style chain gives a paragraph: its own style, what that is based on, Normal for none.
-function styleSpacing(style: StyleId | undefined, side: 'before' | 'after' | 'line'): number {
+function styleSpacing(styles: Styles, style: StyleId | undefined, side: 'before' | 'after' | 'line'): number {
     for (let id = style ?? 'Normal'; ; ) {
-        const definition = STYLES.get(id);
+        const definition = styles.get(id);
         const value = definition?.pPr?.spacing?.[side];
         if (value !== undefined) return value;
         if (!definition?.basedOn) return 0;
@@ -887,7 +900,11 @@ function listOf(
     const blocks = blocksOf(content, textProps({}, items), items, false);
     if (context.depth > 0) return blocks;
     const runsOn = tag === 'ol' && context.next === 'orderedList';
-    return withAfter(blocks, proseTwips(runsOn ? '.eigen-prose ol:has(+ ol)' : `.eigen-prose ${tag}`, 'margin-bottom'));
+    return withAfter(
+        blocks,
+        proseTwips(runsOn ? '.eigen-prose ol:has(+ ol)' : `.eigen-prose ${tag}`, 'margin-bottom'),
+        context.pkg.styles,
+    );
 }
 
 // Each list is a w:num of its own, so lists side by side stay apart; a bullet counts nothing, so bullet lists at one
@@ -1102,7 +1119,7 @@ function cellXml({ node, content }: GridCell, column: number, pkg: Package): str
         align: typeof align === 'string' ? JUSTIFICATION.get(align) : undefined,
     };
     const blocks = blocksOf(content, textProps({}, cell), cell, false);
-    return blocks.length > 0 ? blocksXml(blocks) : paragraphXml({ props: textProps({}, cell), runs: '' });
+    return blocks.length > 0 ? blocksXml(blocks, pkg.styles) : paragraphXml({ props: textProps({}, cell), runs: '' });
 }
 
 const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
@@ -1137,7 +1154,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     const margin = proseValue('.eigen-prose .figure', 'margin');
     const top = twips(cssPt(boxSide(margin, 'top'), BODY.sizePt));
     const bottom = twips(cssPt(boxSide(margin, 'bottom'), BODY.sizePt));
-    const captionBefore = styleSpacing('Caption', 'before');
+    const captionBefore = styleSpacing(context.pkg.styles, 'Caption', 'before');
     const captionParagraph = (before: number, inset: Inset): Paragraph => ({
         props: {
             style: 'Caption',
@@ -1197,7 +1214,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
             paragraphXml({
                 props: {
                     style: 'Caption',
-                    spacing: { before: styleSpacing('Caption', 'before'), after: 0 },
+                    spacing: { before: captionBefore, after: 0 },
                     jc: 'center',
                 },
                 runs: `<w:r>${captionRuns}</w:r>`,
@@ -1486,17 +1503,21 @@ function autoLine(linePt: number, sizePt: number, font: string): number {
     return Math.round((240 * linePt) / (sizePt * fontLineHeight(font)));
 }
 
+// A line spacing, which CSS draws in Inter's line, in the Normal's font, as Word draws it.
+function normalLine(lineSpacing: number, normal: NormalStyle): number {
+    return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
+}
+
 // A length an element in the body text takes, in twips.
 function proseTwips(selector: string, property: string): number {
     return twips(cssPt(proseValue(selector, property), BODY.sizePt));
 }
 
-// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do.
-function textMetrics(selector: string) {
-    const sizePt = cssPt(
-        proseValueIfSet(selector, 'font-size') ?? proseValue('.eigen-prose', 'font-size'),
-        BODY.sizePt,
-    );
+// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do: its size the
+// Normal's.
+function textMetrics(selector: string, normalPt: number) {
+    const size = proseValueIfSet(selector, 'font-size');
+    const sizePt = size === undefined ? normalPt : cssPt(size, BODY.sizePt);
     const line = proseValueIfSet(selector, 'line-height') ?? proseValue('.eigen-prose', 'line-height');
     const tracking = proseValueIfSet(selector, 'letter-spacing');
     return {
@@ -1507,6 +1528,8 @@ function textMetrics(selector: string) {
         tracking: tracking === undefined ? undefined : twips(cssPt(tracking, sizePt)),
     };
 }
+
+type Styles = Map<StyleId, StyleDef>;
 
 type StyleDef = {
     type: 'paragraph' | 'character' | 'table' | 'numbering';
@@ -1565,9 +1588,11 @@ const HAIRLINE: Pick<StyleDef, 'pPr' | 'rPr'> = {
     rPr: { size: 2 },
 };
 
-// No w:lang, so Word checks spelling in the reader's own language.
-function stylesXml(languages: Set<string>): string {
-    const defaults = `<w:docDefaults><w:rPrDefault><w:rPr>${rPrXml({ font: BODY.font, color: BODY.color, size: halfPoints(BODY.sizePt) })}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>${pPrXml({ spacing: { before: 0, after: 0 } })}</w:pPr></w:pPrDefault></w:docDefaults>`;
+// No w:lang, so Word checks spelling in the reader's own language. Text without a font, colour or size draws in the
+// Normal's.
+function stylesXml({ normal, styles, languages }: Package): string {
+    const run = { font: normal.font, color: cssColorToHex(normal.color), size: halfPoints(normal.size) };
+    const defaults = `<w:docDefaults><w:rPrDefault><w:rPr>${rPrXml(run)}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>${pPrXml({ spacing: { before: 0, after: 0 } })}</w:pPr></w:pPrDefault></w:docDefaults>`;
     // Without unhideWhenUsed a language's style stays out of the gallery once used.
     const variants = [...languages].map(
         (language): StyleDef => ({
@@ -1577,17 +1602,18 @@ function stylesXml(languages: Set<string>): string {
             semiHidden: true,
         }),
     );
-    return `<w:styles xmlns:w="${W_NS}">${defaults}${[...STYLES.values(), ...variants].map(styleXml).join('')}</w:styles>`;
+    return `<w:styles xmlns:w="${W_NS}">${defaults}${[...styles.values(), ...variants].map(styleXml).join('')}</w:styles>`;
 }
 
-function styleDefinitions(): StyleDef[] {
-    const paragraphLine = lineHeightPt(proseValue('.eigen-prose p', 'line-height'), BODY.sizePt);
+// Built per export on the doc's Normal. A quote's paragraphs take none of its space before, as the editor draws them.
+function styleDefinitions(normal: NormalStyle): StyleDef[] {
+    const before = normal.spaceBefore > 0 ? { before: 0 } : {};
     const codePt = cssPt(proseValue('.eigen-prose pre code', 'font-size'), BODY.sizePt);
     const codeMargin = proseValue('.eigen-prose pre', 'margin');
     const rule = { ...proseBorder('.eigen-prose hr', 'border-top'), space: 1 };
     const ruleMargin = proseValue('.eigen-prose hr', 'margin');
     const titles = TITLE_STYLES.map(({ type, id, uiPriority }): StyleDef => {
-        const { sizePt, before, after, line, tracking } = textMetrics(TITLE_SELECTORS[type]);
+        const { sizePt, before, after, line, tracking } = textMetrics(TITLE_SELECTORS[type], normal.size);
         return {
             type: 'paragraph',
             id,
@@ -1606,7 +1632,7 @@ function styleDefinitions(): StyleDef[] {
     });
     const headings = HEADING_LOOKS.map((look, index): StyleDef => {
         const level = index + 1;
-        const { sizePt, before, after, line, tracking } = textMetrics(`.eigen-prose h${level}`);
+        const { sizePt, before, after, line, tracking } = textMetrics(`.eigen-prose h${level}`, normal.size);
         return {
             type: 'paragraph',
             id: `Heading${level}`,
@@ -1633,8 +1659,9 @@ function styleDefinitions(): StyleDef[] {
             qFormat: true,
             pPr: {
                 spacing: {
-                    after: twips(cssPt(proseValue('.eigen-prose p', 'margin-bottom'), BODY.sizePt)),
-                    line: autoLine(paragraphLine, BODY.sizePt, BODY.font),
+                    before: normal.spaceBefore > 0 ? twips(normal.spaceBefore) : undefined,
+                    after: twips(normal.spaceAfter),
+                    line: normalLine(normal.lineSpacing, normal),
                 },
             },
         },
@@ -1677,6 +1704,7 @@ function styleDefinitions(): StyleDef[] {
             pPr: {
                 pBdr: { left: QUOTE_LOOK.border },
                 spacing: {
+                    ...before,
                     after: twips(
                         cssPt(boxSide(proseValue('.eigen-prose blockquote p', 'margin'), 'bottom'), BODY.sizePt),
                     ),
@@ -1774,5 +1802,3 @@ function styleDefinitions(): StyleDef[] {
         },
     ];
 }
-
-const STYLES = new Map(styleDefinitions().map((style) => [style.id, style]));

@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import { DEFAULT_PAGE_SETUP, type PageSetup } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    type NormalStyle,
+    type PageSetup,
+} from '@workspace/lib/docs/eigendoc';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
 import JSZip from 'jszip';
 import { parseOoxml } from '../../lib/core/ooxml';
@@ -40,8 +45,9 @@ function docx(
     publicOrigin?: string,
     media = buildAllFeaturesDocMedia(),
     page: PageSetup = DEFAULT_PAGE_SETUP,
+    normal: NormalStyle = DEFAULT_NORMAL_STYLE,
 ): Promise<Uint8Array> {
-    return eigendocToDocx(json, page, media, 'Report.eigendoc', publicOrigin);
+    return eigendocToDocx(json, page, normal, media, 'Report.eigendoc', publicOrigin);
 }
 
 async function unzip(

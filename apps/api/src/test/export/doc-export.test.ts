@@ -2,7 +2,7 @@ import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import { PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
+import { type NormalStyle, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { MATHML_NAMESPACE, type MathNode, type MathRow, writeMathml, writeText } from '@workspace/math';
 import { JSDOM } from 'jsdom';
@@ -29,6 +29,23 @@ function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello
 
 function paragraph(text: string): JSONContent {
     return { type: 'paragraph', content: [{ type: 'text', text }] };
+}
+
+// A Word 2003 body: Times at 12 pt, single, 6 pt before, nothing after, black.
+const WORD_NORMAL: NormalStyle = {
+    font: 'Source Serif 4',
+    size: 12,
+    lineSpacing: 1,
+    spaceBefore: 6,
+    spaceAfter: 0,
+    color: '#000000',
+};
+
+function styledDoc(json?: JSONContent): Y.Doc {
+    const doc = seededDoc(json);
+    const map = doc.getMap(STYLE_ROOT);
+    for (const [key, value] of Object.entries(WORD_NORMAL)) map.set(key, value);
+    return doc;
 }
 
 function brokenDoc(): Y.Doc {
@@ -100,12 +117,60 @@ describe('doc export — the page', () => {
     });
 });
 
+describe('doc export — the Normal', () => {
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws the body in the Normal the doc stores, on its page',
+        async (format) => {
+            const css = await exportStyle(format, styledDoc());
+            expect(css).toContain(
+                `.page { --doc-font-family: ${getFontFamily('Source Serif 4')}; --doc-font-size: 12pt; --doc-line-height: 1.21; --doc-space-before: 6pt; --doc-space-after: 0pt; --doc-color: #000000; }`,
+            );
+            // A doc without the map declares none, so it renders as before the map.
+            expect(await exportStyle(format)).not.toMatch(/--doc-[\w-]+:/);
+        },
+    );
+
+    // Upright Source Serif 4 has small caps of its own, so text in a Source Serif Normal keeps them as typed.
+    test("the pdf fakes small caps by the Normal's font where a run has none of its own", async () => {
+        const doc = styledDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Serif', marks: [{ type: 'textStyle', attrs: { caps: 'small' } }] },
+                    ],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+        expect(new TextDecoder().decode(data)).toContain('<span style="font-variant-caps: small-caps">Serif</span>');
+    });
+
+    test("docx writes the Normal as docDefaults and the Normal style, in the Normal's font's own line", async () => {
+        const { data } = await renderEigendocExport(styledDoc(), 'docx', 'Report.eigendoc', [], undefined);
+        const styles = new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/styles.xml'));
+        expect(styles).toContain(
+            '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4" w:eastAsia="Source Serif 4" w:cs="Source Serif 4"/><w:color w:val="000000"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault>',
+        );
+        // Single in Inter's line is Source Serif 4's 1.21 / 1.371 of its own.
+        expect(styles).toMatch(
+            /w:styleId="Normal"><w:name w:val="Normal"\/><w:qFormat\/><w:pPr><w:spacing w:before="120" w:after="0" w:line="212" w:lineRule="auto"\/>/,
+        );
+    });
+});
+
 describe('doc export — the stylesheet', () => {
     // The app's tokens (--font-sans and the like) are not in the export; a property the stylesheet declares itself is.
-    test.each(['html', 'pdf-html'] as const)('%s declares every CSS variable it reads', async (format) => {
-        const css = await exportStyle(format);
-        for (const [, name] of css.matchAll(/var\((--[\w-]+)/g)) expect(css).toContain(`${name}:`);
-    });
+    // A doc's Normal (--doc-*) is declared only where it is the doc's own, so those fall back to Eigen's.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s declares every CSS variable it reads without a fallback',
+        async (format) => {
+            const css = await exportStyle(format);
+            for (const [, name] of css.matchAll(/var\((--[\w-]+)\)/g)) expect(css).toContain(`${name}:`);
+            expect([...css.matchAll(/var\((--[\w-]+),/g)].every(([, name]) => name?.startsWith('--doc-'))).toBe(true);
+        },
+    );
 
     test('headings print at medium and bold at 600', async () => {
         const css = await exportStyle('pdf-html');
@@ -117,7 +182,7 @@ describe('doc export — the stylesheet', () => {
     test('h5 and h6 print at the body size, which only eigen-prose sets', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).toContain('h1, h2, h3, h4, h5, h6 { font-size: inherit; }');
-        expect(css.match(/font-size: 11pt/g)).toHaveLength(1);
+        expect(css.match(/font-size: var\(--doc-font-size, 11pt\)/g)).toHaveLength(1);
     });
 
     // Google Docs' Title and Subtitle, which the docx writer reads too.
@@ -134,7 +199,7 @@ describe('doc export — the stylesheet', () => {
     test('the body text font and color are set once, by eigen-prose', async () => {
         const css = await exportStyle('pdf-html');
         expect(css).not.toMatch(/(^|\n)\s*body \{/);
-        expect(css.match(/color: #1a1a2e/g)).toHaveLength(1);
+        expect(css.match(/#1a1a2e/g)).toHaveLength(1);
     });
 
     test('the dark theme stays out, whole', async () => {
@@ -1107,6 +1172,35 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
             expect(width).toBeCloseTo(column[0], 1);
             expect(width / height).toBeCloseTo(Number(drawn[i][1]) / Number(drawn[i][2]), 0);
         });
+    }, 60_000);
+});
+
+// D16: an unformatted paragraph draws the doc's Normal, and a paragraph's own format still wins.
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — the Normal (WeasyPrint)', () => {
+    test('an unformatted paragraph draws in the Normal: its font, size, line and spacing', async () => {
+        const { data } = await renderEigendocExport(
+            styledDoc({
+                type: 'doc',
+                content: [
+                    paragraph('a'),
+                    paragraph('b'),
+                    { type: 'paragraph', attrs: { spaceBefore: 0 }, content: [{ type: 'text', text: 'c' }] },
+                ],
+            }),
+            'pdf-html',
+            'Report.eigendoc',
+            [],
+            undefined,
+        );
+        const boxes = await laidOut(
+            new TextDecoder().decode(data),
+            "if tag == 'p' and type(box).__name__ == 'BlockBox': print(box.style['font_family'][0], box.style['font_size'], box.style['line_height'][1], float(box.padding_top), float(box.margin_bottom))",
+        );
+        expect(boxes).toEqual([
+            'Source Serif 4 16.0 1.21 8.0 0.0',
+            'Source Serif 4 16.0 1.21 8.0 0.0',
+            'Source Serif 4 16.0 1.21 0.0 0.0',
+        ]);
     }, 60_000);
 });
 

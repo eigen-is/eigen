@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { type PageSetup, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
+import { type NormalStyle, type PageSetup, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { XmlError } from '../../core/xml';
 import { ZipError } from '../../core/zip';
@@ -31,15 +31,15 @@ const SLOTS_PER_UNIT = 64;
 export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): { json: JSONContent; page: PageSetup; images: DocxImage[]; warnings: TransformWarning[] } {
-    const { doc, page, images, warnings } = readDocx(buffer, options);
-    return { json: doc.toJSON(), page, images, warnings };
+): { json: JSONContent; page: PageSetup; style: NormalStyle; images: DocxImage[]; warnings: TransformWarning[] } {
+    const { doc, page, style, images, warnings } = readDocx(buffer, options);
+    return { json: doc.toJSON(), page, style, images, warnings };
 }
 
 export function readDocx(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): { doc: Node; page: PageSetup; images: DocxImage[]; warnings: TransformWarning[] } {
+): { doc: Node; page: PageSetup; style: NormalStyle; images: DocxImage[]; warnings: TransformWarning[] } {
     try {
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
@@ -73,7 +73,7 @@ export function readDocx(
         if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
         if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
-        return { doc, page: reader.page, images, warnings };
+        return { doc, page: reader.page, style: reader.normal, images, warnings };
     } catch (error) {
         throw importError(error);
     }

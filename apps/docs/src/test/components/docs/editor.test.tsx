@@ -18,7 +18,7 @@ const { formatForDisplay } = await import('@tanstack/react-hotkeys');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const realAuth = await import('@workspace/lib/auth');
 const realCollab = await import('@workspace/lib/collab');
-const { BAND_ROOTS, PAGE_ROOT } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_ROOTS, PAGE_ROOT, STYLE_ROOT } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { CommandPaletteProvider } = await import('@workspace/ui');
 const { LayoutContext } = await import('@workspace/ui/components/layout/app/layout-context');
@@ -585,4 +585,34 @@ test.each([
     expect(margin('footer')?.textContent).toBe('');
     await openMenu('Insert');
     expect(menuItems()).not.toContain('Page elements');
+});
+
+// Format › Paragraph styles › Normal text, as Google has it: the doc's Normal is the caret's look, the body and the bands
+// draw it from the page, and ⌘Z takes it back.
+test("Update 'Normal text' to match writes the doc's Normal, the page draws it, and Undo takes it back", async () => {
+    write('default', 'Hello', { textStyle: { fontFamily: 'Source Serif 4', fontSize: 14 } });
+    await render(WRITER);
+    const page = () => document.querySelector<HTMLElement>('[data-document]');
+    expect(page()?.style.getPropertyValue('--doc-font-size')).toBe('');
+
+    await openMenu('Format');
+    await openSubmenu('Paragraph styles');
+    await openSubmenu('Normal text');
+    await pick("Update 'Normal text' to match");
+    expect(doc.getMap(STYLE_ROOT).toJSON()).toEqual({ font: 'Source Serif 4', size: 14 });
+    expect(page()?.style.getPropertyValue('--doc-font-size')).toBe('14pt');
+    expect(page()?.style.getPropertyValue('--doc-font-family')).toBe("'Source Serif 4', serif");
+
+    await openMenu('Edit');
+    await pick(`Undo${formatForDisplay('Mod+Z')}`);
+    expect(doc.getMap(STYLE_ROOT).toJSON()).toEqual({});
+    expect(page()?.style.getPropertyValue('--doc-font-size')).toBe('');
+});
+
+test('a viewer sees the Normal the doc stores', async () => {
+    doc.getMap(STYLE_ROOT).set('size', 12);
+    await render({ canWrite: false, isMobile: false });
+    expect(document.querySelector<HTMLElement>('[data-document]')?.style.getPropertyValue('--doc-font-size')).toBe(
+        '12pt',
+    );
 });

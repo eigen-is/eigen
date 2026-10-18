@@ -23,7 +23,9 @@ import {
     getDocExtensions,
     PAGE_ROOT,
     pagePx,
+    readNormalStyle,
     readPageSetup,
+    STYLE_ROOT,
 } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -239,6 +241,8 @@ export function docEditorOptions({
             ...getDocExtensions({
                 lowlight,
                 textColumnWidth,
+                // The map, as the column: a step right after a peer's update of Normal text steps from the new size.
+                normalStyle: () => readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON()),
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
                     'figure',

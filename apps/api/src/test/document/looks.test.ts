@@ -5,7 +5,13 @@ import {
     DOCUMENT_LINE_RATIO,
     SMALL_FONT_SIZE,
 } from '@workspace/lib/constants/fonts';
-import { DEFAULT_PAGE_SETUP, DOCUMENT_PARAGRAPH_FORMAT, ITALIC_HEADING_LEVELS } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    DOCUMENT_PARAGRAPH_FORMAT,
+    ITALIC_HEADING_LEVELS,
+    normalStyleProperties,
+} from '@workspace/lib/docs/eigendoc';
 import { W_NS } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
@@ -25,7 +31,7 @@ import {
     TASK_DONE_LOOK,
     TITLE_LOOKS,
 } from '../../lib/document/looks';
-import { proseValue } from '../../lib/document/prose-css';
+import { PROSE_CSS, proseValue } from '../../lib/document/prose-css';
 import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../lib/document/wordml';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { fontLineHeight } from '../../lib/export/fonts';
@@ -35,6 +41,7 @@ const zip = openZip(
     await eigendocToDocx(
         buildAllFeaturesDocJson(),
         DEFAULT_PAGE_SETUP,
+        DEFAULT_NORMAL_STYLE,
         buildAllFeaturesDocMedia(),
         'Report.eigendoc',
         undefined,
@@ -177,6 +184,27 @@ describe("the writer draws a paragraph in Eigen's declared look", () => {
             Math.round(lineSpacing * DOCUMENT_LINE_RATIO * 10_000) / 10_000,
         );
         expect(cssPt(proseValue('.eigen-prose p', 'margin-bottom'), BODY.sizePt)).toBe(spaceAfter);
+    });
+
+    test("the default Normal is eigen-prose.css's body, and every property a doc's own sets is one the sheet reads", () => {
+        expect(DEFAULT_NORMAL_STYLE).toEqual({
+            font: BODY.font,
+            size: BODY.sizePt,
+            lineSpacing: DOCUMENT_PARAGRAPH_FORMAT.lineSpacing,
+            spaceBefore: cssPt(proseValue('.eigen-prose p', 'padding-top'), BODY.sizePt),
+            spaceAfter: DOCUMENT_PARAGRAPH_FORMAT.spaceAfter,
+            color: `#${BODY.color.toLowerCase()}`,
+        });
+        const own = normalStyleProperties({
+            font: 'Source Serif 4',
+            size: 12,
+            lineSpacing: 1,
+            spaceBefore: 6,
+            spaceAfter: 0,
+            color: '#000000',
+        });
+        expect(Object.keys(own)).toHaveLength(Object.keys(DEFAULT_NORMAL_STYLE).length);
+        for (const property of Object.keys(own)) expect(PROSE_CSS).toContain(`var(${property},`);
     });
 
     test("Word's Normal is that look: an auto line of 1.4 and 11 pt after", () => {

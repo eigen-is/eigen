@@ -19,7 +19,7 @@ export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     publicOrigin: string | undefined,
 ): DocImportWorkerResult & { warnings: TransformWarning[] } {
-    const { doc, page, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
+    const { doc, page, style, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
     let update: Uint8Array;
     try {
         const tempDoc = prosemirrorToYDoc(asOpened(doc), 'default');
@@ -32,6 +32,7 @@ export function importDocxToEigendocUpdate(
     return {
         update: toTransferableBuffer(update),
         page,
+        style,
         images: images.map((image) => ({
             name: image.name,
             contentType: image.contentType,
