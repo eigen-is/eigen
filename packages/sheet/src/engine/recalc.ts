@@ -19,7 +19,7 @@ import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
-import { DependencyIndex } from './dependency-index';
+import { DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { calPostfixExpression, iscelldata, operatorjson, operatorPriority, resolveCellRange } from './formula-utils';
@@ -527,7 +527,25 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
     return celldataToData(sheet.celldata ?? [], row, column);
 }
 
-export function recalcSheets(sheets: Sheet[]): Sheet[] {
+type Extent = { rows: number; columns: number };
+
+// A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the
+// index, and each lies in its sheet's data, so `SUM(A1:XFD1048576)` costs the blocks the sheet spans, not 16 million.
+function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): FormulaDependency | null {
+    const extent = dep.sheetId == null ? undefined : extents.get(dep.sheetId);
+    if (extent == null) return null;
+    const r0 = Math.max(0, Math.min(dep.row[0], dep.row[1]));
+    const c0 = Math.max(0, Math.min(dep.column[0], dep.column[1]));
+    const r1 = Math.min(extent.rows - 1, Math.max(dep.row[0], dep.row[1]));
+    const c1 = Math.min(extent.columns - 1, Math.max(dep.column[0], dep.column[1]));
+    if (r0 > r1 || c0 > c1) return null;
+    return { row: [r0, r1], column: [c0, c1], sheetId: dep.sheetId };
+}
+
+// `maxDependencyBlocks` bounds what the formulas' ranges cost the dependency index (dependencyBlocks): past it the
+// recalc throws before it evaluates, so many ranges over a large sheet can't cost seconds and gigabytes. The server
+// passes one for an untrusted workbook; without it there is no bound.
+export function recalcSheets(sheets: Sheet[], { maxDependencyBlocks = Number.POSITIVE_INFINITY } = {}): Sheet[] {
     // 1. Materialize a working view: dense data per sheet, id/name index.
     const working: WorkingSheet[] = [];
     const indexById = new Map<string, number>();
@@ -538,11 +556,18 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
     }
 
     const g: GraphCtx = { sheets: working, indexById, cellTextToIndexList: {} };
+    const extents = new Map<string, Extent>();
+    for (const w of working) {
+        let columns = 0;
+        for (const row of w.data) columns = Math.max(columns, row?.length ?? 0);
+        extents.set(w.id, { rows: w.data.length, columns });
+    }
 
     // 2. Discover formula cells by scanning data (never trust calcChain)
     //    and build each cell's dependency ranges via the ported graph builder.
     const infoMap: FormulaCellInfoMap = {};
     const depIndex = new DependencyIndex();
+    let blocks = 0;
     const calcChainBySheet = new Map<string, CalcChainEntry[]>();
     for (const w of working) {
         const chain: CalcChainEntry[] = [];
@@ -574,7 +599,10 @@ export function recalcSheets(sheets: Sheet[]): Sheet[] {
                     children: {},
                     color: 'w',
                 };
-                depIndex.set(key, deps);
+                const indexed = deps.flatMap((dep) => withinSheet(dep, extents) ?? []);
+                blocks += dependencyBlocks(indexed);
+                if (blocks > maxDependencyBlocks) throw new RangeError('Formula ranges past the dependency budget');
+                depIndex.set(key, indexed);
             }
         }
     }

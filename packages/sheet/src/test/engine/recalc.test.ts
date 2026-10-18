@@ -252,6 +252,23 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][2]?.v).toBe(30);
     });
 
+    test('past its dependency budget a recalc throws before it computes', () => {
+        // On a sheet 128 rows deep, A1:A128 meets 2 blocks of 64 × 16, D1:D2 one.
+        const rows = Array.from({ length: 128 }, (): (Cell | null)[] => [null, null, null, null]);
+        rows[0] = [num(1), formula('=SUM(A1:A128)', num(7)), formula('=SUM(D1:D2)'), null];
+        const sheets = [sheet('s1', 'Sheet1', rows)];
+        expect(() => recalcSheets(sheets, { maxDependencyBlocks: 2 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencyBlocks: 3 })[0].data![0][1]?.v).toBe(1);
+    });
+
+    test('a range past the sheets is charged and indexed for the cells they hold', () => {
+        // A1 reads C1 through the whole grid's range, so C1 computes first; the range costs the one block the sheet spans.
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=SUM(B1:XFD1048576)'), num(5), formula('=B1+1')]], { row: 1, column: 3 }),
+        ];
+        expect(recalcSheets(sheets, { maxDependencyBlocks: 1 })[0].data![0][0]?.v).toBe(11);
+    });
+
     test('output carries a populated calcChain for formula cells', () => {
         const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]])]) as SheetWithChain[];
         expect(out[0].calcChain).toEqual([{ r: 0, c: 1, id: 's1' }]);
