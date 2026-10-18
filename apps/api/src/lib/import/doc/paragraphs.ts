@@ -79,7 +79,8 @@ export type Reader = {
 };
 
 // Per part: its relationships, the story it tells (only the body's breaks page, and only the body's pictures float), the
-// tables around it, the table style, the cell's width in px and whether the text sits on a fill the schema drops.
+// tables around it, the table style, the cell's width in px, whether the text sits on a fill the schema drops, and the
+// cell fill drawn behind it.
 export type Scope = {
     part: Part;
     story: 'body' | 'note' | 'band';
@@ -87,6 +88,7 @@ export type Scope = {
     tableRun?: DocxRunProps;
     room?: number;
     onFill?: boolean;
+    fill?: string;
 };
 
 export function createReader(pkg: DocxPackage, publicOrigin: string | undefined): Reader {

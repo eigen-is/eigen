@@ -845,11 +845,14 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved again when one paragraph followed another at the space after the first alone and a list, quote or cell kept the spacing of the paragraphs it holds: the .eigen-prose > p + p and :is(li, blockquote, td, th) p rules, and nothing else.
 // Both doc HTML hashes moved when the body text came to draw from the doc's Normal: eigen-prose.css's body and paragraph values as var(--doc-*) with Eigen's own as the fallback, .eigen-prose p's padding-top and margin-bottom 1em as 11pt, and the title's and subtitle's padding-top 0, and nothing else (the old hashes come back with each var() replaced by its fallback and those three lines reverted). A doc without the style map declares no --doc-* property, so the preview and docx hashes stayed.
 // All four moved again when headers and footers met paragraph format: the two sides' changes together, and nothing else.
+// Both doc HTML hashes moved again when a list became a flow-root and an untyped nested list numbered by depth: the ul, ol and ol ol rules of eigen-prose.css, and nothing else.
+// Both doc HTML hashes moved again when the list rules became Docs' own: the article's eigen-doc class, the .eigen-doc block with its first and last items' margins, and the restarted list's 0.25em, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // Both doc HTML hashes moved again when headers and footers on paper met the doc's Normal: the two sides' changes together, and nothing else; the preview and docx hashes are headers and footers' alone.
-// The docx hash moved when styles.xml gained Word's FootnoteText and FootnoteReference styles, and nothing else (a doc without notes writes no notes part and names no separators).
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '593ba19708023ffee34bf8db29d47cc4d9072a9c40650601b971a56a80d05a90';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '593ba19708023ffee34bf8db29d47cc4d9072a9c40650601b971a56a80d05a90';
+// Both doc HTML hashes moved again when U5's Docs list rules met the doc's Normal: the two sides' changes together, and nothing else.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '237e7e41cdbb9bbc9d6e61bf9a1a996078c194cd85d88b7512e085dcad329af2';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '237e7e41cdbb9bbc9d6e61bf9a1a996078c194cd85d88b7512e085dcad329af2';
+// The docx hash is U9's: styles.xml gained Word's FootnoteText and FootnoteReference styles.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';

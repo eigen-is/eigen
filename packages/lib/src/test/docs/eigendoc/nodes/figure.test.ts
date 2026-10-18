@@ -62,6 +62,19 @@ describe('figure parse', () => {
             ),
         ).toMatchObject([{ src: 'a.png', caption: 'Old', layout: 'wrap-right', alignment: 'left' }]);
     });
+
+    // A paste or a peer's HTML carries any string; the node keeps only a value the renderers know.
+    test('a layout or an alignment it does not know parses as the default', () => {
+        expect(
+            figuresIn(
+                '<p><span class="figure" data-layout="behind" data-alignment="middle"><img src="a.png"></span></p>' +
+                    '<figure data-layout="front"><img src="b.png"></figure>',
+            ),
+        ).toMatchObject([
+            { layout: 'block', alignment: 'center' },
+            { layout: 'block', alignment: 'center' },
+        ]);
+    });
 });
 
 describe('readFigureAttrs', () => {

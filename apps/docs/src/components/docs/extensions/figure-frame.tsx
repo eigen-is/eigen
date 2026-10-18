@@ -27,6 +27,18 @@ export function clampFigureWidth(width: number, maxWidth: number) {
     return Math.round(Math.max(FIGURE_MIN_SIZE, Math.min(maxWidth, width)));
 }
 
+// A wrap halves the cap, so a switch to one shrinks a wider figure to it in the same write, or nothing wraps beside it.
+// The width to write with `layout`, none when the figure fits.
+export function widthWithinLayout(
+    figure: Node | null,
+    layout: FigureLayout | null | undefined,
+    width: number | null | undefined,
+): number | undefined {
+    if (!layout || !width) return undefined;
+    const maxWidth = figureMaxWidth(figure, layout);
+    return width > maxWidth ? clampFigureWidth(width, maxWidth) : undefined;
+}
+
 // A grip's readout, in cm as Docs' fields show a size.
 const figureSize = ({ width, height }: Box) => `${cmText(pxToMm(width), 1)} × ${cmText(pxToMm(height), 1)} cm`;
 
@@ -133,10 +145,19 @@ export function FigureFrame({
     const commentColor: string | undefined = decorations.find((d) => 'commentColor' in d.spec)?.spec.commentColor;
     const caption = node.attrs.caption || '';
     const isEditable = editor.isEditable;
-    // The figure is a DOM box in screen space, so scene units ARE screen px: the ring insets over the content
-    // (shrink-wrapped by the relative wrapper) and the pointer delta is an identity mapping.
+    // The ring insets over the content, shrink-wrapped by the relative wrapper. A figure's size is in the page's pixels,
+    // and the page draws scaled below its width, so a pointer delta divides by the scale, measured as a grip is pressed.
     const boxToStyle = useCallback((): React.CSSProperties => ({ inset: 0 }), []);
-    const screenDeltaToScene = useCallback((dx: number, dy: number) => ({ dx, dy }), []);
+    const pageScale = useRef(1);
+    const screenDeltaToScene = useCallback(
+        (dx: number, dy: number) => ({ dx: dx / pageScale.current, dy: dy / pageScale.current }),
+        [],
+    );
+    const measurePageScale = () => {
+        const figure = containerRef.current;
+        if (figure && figure.offsetWidth > 0)
+            pageScale.current = figure.getBoundingClientRect().width / figure.offsetWidth;
+    };
 
     return (
         <NodeViewWrapper
@@ -159,6 +180,7 @@ export function FigureFrame({
                 focus: the editor's keymap resizes the selected figure, and a press stays free to start a drag. */}
             <div
                 className={cn('relative', className, selected && !box && 'eigen-selection-ring')}
+                onPointerDownCapture={measurePageScale}
                 role={selected && isEditable ? 'group' : undefined}
                 aria-label={selected && isEditable ? label : undefined}
                 aria-keyshortcuts={selected && isEditable ? keyShortcuts : undefined}

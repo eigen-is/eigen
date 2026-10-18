@@ -1,8 +1,8 @@
 import type { JSONContent } from '@tiptap/core';
 import { readParagraphFormat } from '@workspace/lib/docs/eigendoc';
 import { readStoredEquation } from '../../document/equation';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK, TABLE_MARGIN } from '../../document/looks';
-import { LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
+import { CODE_BLOCK_LOOK, QUOTE_LOOK, TABLE_MARGIN, untypedListFormat } from '../../document/looks';
+import { LIST_FORMATS, LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
 
@@ -514,6 +514,7 @@ function buildFlow(items: Item[]): JSONContent[] {
             const host = hostAt(item.indent);
             if (host) {
                 closeLists(stack.indexOf(host) + 1);
+                numberWithin(block, stack.filter((open) => open.kind === 'orderedList').length);
                 host.item.content?.push(block);
                 continue;
             }
@@ -627,6 +628,28 @@ function textblockOf(para: Para, edge: number | undefined, above?: number): JSON
     return { type: 'paragraph', attrs, content };
 }
 
+// A list that draws as an untyped one does at its depth stores no type, so it numbers by depth as Google's 1. a. i.
+// does; any other keeps its own, a nested decimal one '1'. A format Eigen has no type for draws decimal, as Word's would.
+function listType(para: Para, stack: Open[]): string | null {
+    const type = LIST_TYPES.get(para.list?.format ?? '') ?? '1';
+    const numbered = stack.filter((open) => open.kind === 'orderedList').length;
+    return LIST_FORMATS.get(type) === untypedListFormat(numbered) ? null : type;
+}
+
+// A table's cells were read as flows of their own, so a list in one took its type at its depth there; in the list
+// item that holds the table, `numbered` lists more surround it.
+function numberWithin(node: JSONContent, numbered: number, depth = 0): void {
+    if (numbered === 0) return;
+    const ordered = node.type === 'orderedList';
+    if (ordered && node.attrs) {
+        const type = node.attrs['type'];
+        const format = typeof type === 'string' ? LIST_FORMATS.get(type) : untypedListFormat(depth);
+        node.attrs['type'] =
+            format === untypedListFormat(depth + numbered) ? null : (LIST_TYPES.get(format ?? '') ?? null);
+    }
+    for (const child of node.content ?? []) numberWithin(child, numbered, depth + (ordered ? 1 : 0));
+}
+
 // Lists nest by Word's level within one list; across lists by where the number starts, at or right of the open item's
 // text, and tasks by indent. A number that doesn't follow starts a new list.
 function placeItem(para: Para, textblock: JSONContent, stack: Open[], closeLists: (to: number) => void): void {
@@ -676,8 +699,7 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], closeLists
         closeLists(stack.length - 1);
         if (deeper) break;
     }
-    const attrs =
-        kind === 'orderedList' ? { start: number, type: LIST_TYPES.get(para.list?.format ?? '') ?? null } : undefined;
+    const attrs = kind === 'orderedList' ? { start: number, type: listType(para, stack) } : undefined;
     const level: Open = {
         list: { type: kind, ...(attrs && { attrs }), content: [item] },
         item,

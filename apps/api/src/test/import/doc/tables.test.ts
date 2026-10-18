@@ -164,8 +164,9 @@ describe('column widths', () => {
     });
 });
 
-// P3: Word draws light text on a fill the schema drops; on Eigen's paper it would vanish.
-describe('light text on a fill', () => {
+// A cell keeps its fill, so its text keeps the color Word draws it in; only a fill the schema drops, a shaded paragraph's,
+// takes light text's color away, or it would vanish on Eigen's paper.
+describe('cell fill', () => {
     const colored = (text: string, color: string, pPr = '', rPr = '') =>
         paragraph(`<w:r><w:rPr><w:color w:val="${color}"/>${rPr}</w:rPr><w:t>${text}</w:t></w:r>`, pPr);
     const colorsOf = async (body: string, styles = '') =>
@@ -173,67 +174,104 @@ describe('light text on a fill', () => {
             mark.text,
             mark.attrs['color'],
         ]);
+    const fillsOf = async (body: string, styles = '') =>
+        nodesOfType((await importDocxBody(body, { styles })).json, 'tableRow').map((tableRow: JSONContent) =>
+            (tableRow.content ?? []).map((node) => node.attrs?.['backgroundColor'] ?? null),
+        );
     const filledCell = (inner: string, fill: string) =>
         `<w:tc><w:tcPr><w:shd w:val="clear" w:fill="${fill}"/></w:tcPr>${inner}</w:tc>`;
 
-    test('white and light grey text in a teal cell lose their color; grey, dark blue and highlighted keep it', async () => {
-        const inner = [
-            colored('white', 'FFFFFF'),
-            colored('light', 'D9D9D9'),
-            colored('grey', '808080'),
-            colored('blue', '1F4E79'),
-            colored('marked', 'FFFFFF', '', '<w:highlight w:val="darkBlue"/>'),
-        ].join('');
-        expect(await colorsOf(table([row([filledCell(inner, '008080'), cell('b')])]))).toEqual([
-            ['grey', '#808080'],
-            ['blue', '#1f4e79'],
-            ['marked', '#ffffff'],
+    test("a cell's fill is its background, in lowercase; white, auto and the header's grey are none", async () => {
+        const body = table([
+            row([
+                cell('a', '<w:shd w:val="clear" w:fill="CFE2F3"/>'),
+                cell('b', '<w:shd w:val="solid" w:color="00FF00"/>'),
+            ]),
+            row([
+                cell('c', '<w:shd w:val="clear" w:fill="FFFFFF"/>'),
+                cell('d', '<w:shd w:val="clear" w:fill="auto"/>'),
+            ]),
+            row([cell('e', '<w:shd w:val="clear" w:fill="F9FAFB"/>'), cell('f')]),
+        ]);
+        expect(await fillsOf(body)).toEqual([
+            ['#cfe2f3', '#00ff00'],
+            [null, null],
+            [null, null],
         ]);
     });
 
-    test("white text in a nested table's plain cell or a plain paragraph lets the teal cell around it show", async () => {
-        const nested = table([row([`<w:tc>${colored('nested', 'FFFFFF')}</w:tc>`, cell('b')])]);
-        const plain = colored('plain', 'FFFFFF', '<w:shd w:val="clear" w:fill="auto"/>');
-        expect(await colorsOf(table([row([filledCell(`${nested}${plain}`, '008080'), cell('b')])]))).toEqual([]);
+    test('a filled header row keeps its fill beside its header type', async () => {
+        const body = table([row([cell('Region', FILL), cell('Q1', FILL)]), row([cell('North'), cell('4')])]);
+        expect(await fillsOf(body)).toEqual([
+            ['#1f4e79', '#1f4e79'],
+            [null, null],
+        ]);
+        expect(await rowTypes(body)).toEqual([
+            ['tableHeader', 'tableHeader'],
+            ['tableCell', 'tableCell'],
+        ]);
+    });
+
+    test("a table style's first row fill and a table's own fill are the cells'; a cell's explicit none wins", async () => {
+        const styles =
+            '<w:style w:type="table" w:styleId="Dark"><w:name w:val="Dark"/><w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:fill="4472C4"/></w:tcPr></w:tblStylePr></w:style>';
+        const styled = table(
+            [row([cell('head'), cell('b')]), row([cell('body'), cell('d')])],
+            '<w:tblStyle w:val="Dark"/><w:tblLook w:firstRow="1"/>',
+        );
+        expect(await fillsOf(styled, styles)).toEqual([
+            ['#4472c4', '#4472c4'],
+            [null, null],
+        ]);
+        const whole = table(
+            [row([cell('filled'), cell('clear', '<w:shd w:val="clear" w:fill="auto"/>')])],
+            '<w:shd w:val="clear" w:fill="000000"/>',
+        );
+        expect(await fillsOf(whole)).toEqual([['#000000', null]]);
+    });
+
+    // nil is no shading at all, whatever fill it names.
+    test('a w:shd of nil is no fill, and a cell of nil in a filled table is none', async () => {
+        const nil = '<w:shd w:val="nil" w:fill="CFE2F3"/>';
+        expect(await fillsOf(table([row([cell('a', nil), cell('b')])]))).toEqual([[null, null]]);
+        expect(
+            await fillsOf(table([row([cell('a', nil), cell('b')])], '<w:shd w:val="clear" w:fill="000000"/>')),
+        ).toEqual([[null, '#000000']]);
+    });
+
+    test('white and light grey text in a teal cell keep their color', async () => {
+        const inner = [colored('white', 'FFFFFF'), colored('light', 'D9D9D9'), colored('grey', '808080')].join('');
+        expect(await colorsOf(table([row([filledCell(inner, '008080'), cell('b')])]))).toEqual([
+            ['white', '#ffffff'],
+            ['light', '#d9d9d9'],
+            ['grey', '#808080'],
+        ]);
+    });
+
+    // Word draws auto text on a dark fill white, as on a dark highlight.
+    test("auto text in a dark cell, or a nested table's plain cell in one, is white; in a light cell it has no color", async () => {
+        const nested = table([row([`<w:tc>${paragraph(run('nested'))}</w:tc>`, cell('b')])]);
+        const body = table([
+            row([
+                filledCell(`${paragraph(run('dark'))}${nested}`, '1F4E79'),
+                filledCell(paragraph(run('light')), 'CFE2F3'),
+            ]),
+        ]);
+        expect(await colorsOf(body)).toEqual([
+            ['dark', '#ffffff'],
+            ['nested', '#ffffff'],
+            ['b', '#ffffff'],
+        ]);
+    });
+
+    test('white text in a shaded paragraph loses its color, in a cell too', async () => {
+        const shaded = colored('white', 'FFFFFF', '<w:shd w:val="clear" w:fill="1F4E79"/>');
+        expect(await colorsOf(shaded)).toEqual([]);
+        expect(await colorsOf(table([row([filledCell(shaded, '008080'), cell('b')])]))).toEqual([]);
     });
 
     test('white text on no fill keeps its color', async () => {
         expect(await colorsOf(colored('white', 'FFFFFF'))).toEqual([['white', '#ffffff']]);
-    });
-
-    test('white text in a shaded paragraph loses its color', async () => {
-        expect(await colorsOf(colored('white', 'FFFFFF', '<w:shd w:val="clear" w:fill="1F4E79"/>'))).toEqual([]);
-    });
-
-    test("white text on a table style's first row fill loses its color, in the body rows it keeps it", async () => {
-        const styles =
-            '<w:style w:type="table" w:styleId="Dark"><w:name w:val="Dark"/><w:tblStylePr w:type="firstRow"><w:tcPr><w:shd w:val="clear" w:fill="4472C4"/></w:tcPr></w:tblStylePr></w:style>';
-        const body = table(
-            [
-                row([`<w:tc>${colored('head', 'FFFFFF')}</w:tc>`, cell('b')]),
-                row([`<w:tc>${colored('body', 'FFFFFF')}</w:tc>`, cell('d')]),
-            ],
-            '<w:tblStyle w:val="Dark"/><w:tblLook w:firstRow="1"/>',
-        );
-        expect(await colorsOf(body, styles)).toEqual([['body', '#ffffff']]);
-    });
-
-    test("white text in a table whose style's base fills it loses its color", async () => {
-        const styles =
-            '<w:style w:type="table" w:styleId="Dark"><w:name w:val="Dark"/><w:tcPr><w:shd w:val="clear" w:fill="000000"/></w:tcPr></w:style><w:style w:type="table" w:styleId="Child"><w:name w:val="Child"/><w:basedOn w:val="Dark"/></w:style>';
-        const body = table(
-            [row([`<w:tc>${colored('white', 'FFFFFF')}</w:tc>`, cell('b')])],
-            '<w:tblStyle w:val="Child"/>',
-        );
-        expect(await colorsOf(body, styles)).toEqual([]);
-    });
-
-    test("a cell without a fill of its own in a table filled whole loses it; a cell's explicit none keeps it", async () => {
-        const body = table(
-            [row([`<w:tc>${colored('filled', 'FFFFFF')}</w:tc>`, filledCell(colored('clear', 'FFFFFF'), 'auto')])],
-            '<w:shd w:val="clear" w:fill="000000"/>',
-        );
-        expect(await colorsOf(body)).toEqual([['clear', '#ffffff']]);
     });
 });
 

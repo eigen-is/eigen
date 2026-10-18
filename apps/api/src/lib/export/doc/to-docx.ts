@@ -19,6 +19,7 @@ import {
     type NormalStyle,
     type PageSetup,
     pageTwips,
+    readCellBackground,
     readFigureAttrs,
     readPageNumberKind,
     readParagraphFormat,
@@ -72,6 +73,7 @@ import {
     TITLE_LOOKS,
     TITLE_SELECTORS,
     twips,
+    untypedListFormat,
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
@@ -138,7 +140,7 @@ export async function eigendocToDocx(
     };
     const page = pageTwips(setup);
     const column = page.width - page.margin.left - page.margin.right;
-    const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, quotes: 0 };
+    const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, numbered: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false), pkg.styles);
 
     // The notes the body referenced, in Word's notes part after its two separators, each in the body's column through
@@ -342,6 +344,8 @@ type Context = {
     column: number;
     indent: number;
     depth: number;
+    // The numbered lists around the block, by which an untyped one numbers.
+    numbered: number;
     quotes: number;
     style?: StyleId;
     // The style TaskDone replaced, which an open task nested in a done one restores, as the editor strikes no nested task.
@@ -706,7 +710,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         'orderedList',
         (node, context) => {
             const type = node.attrs?.['type'];
-            const format = (typeof type === 'string' && LIST_FORMATS.get(type)) || 'decimal';
+            const format = (typeof type === 'string' && LIST_FORMATS.get(type)) || untypedListFormat(context.numbered);
             return listOf(node, context, 'ol', { format, start: clampInt(node.attrs?.['start'], 0, 32767, 1) });
         },
     ],
@@ -1036,7 +1040,7 @@ function listOf(
                   ilvl,
               }
             : undefined;
-    const items = { ...context, list };
+    const items = { ...context, list, numbered: context.numbered + (tag === 'ol' ? 1 : 0) };
     const blocks = blocksOf(content, textProps({}, items), items, false);
     if (context.depth > 0) return blocks;
     const runsOn = tag === 'ol' && context.next === 'orderedList';
@@ -1185,10 +1189,11 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     const { dxa, fixed } = gridWidths(widths, columnPx);
     const spanWidth = (column: number, colspan: number) =>
         dxa.slice(column, column + colspan).reduce((sum, width) => sum + width, 0);
-    const covered = new Map<string, number>();
+    // The merge each covered position continues.
+    const covered = new Map<string, GridCell>();
     for (const [rowIndex, cells] of grid.entries()) {
-        for (const { column, colspan, rowspan } of cells) {
-            for (let k = 1; k < rowspan; k++) covered.set(`${rowIndex + k}:${column}`, colspan);
+        for (const cell of cells) {
+            for (let k = 1; k < cell.rowspan; k++) covered.set(`${rowIndex + k}:${cell.column}`, cell);
         }
     }
     const rowsXml = grid.map((cells, rowIndex) => {
@@ -1196,17 +1201,22 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
         const tcs: string[] = [];
         for (let column = 0; column < dxa.length; ) {
             const cell = byColumn.get(column);
-            const coveredSpan = covered.get(`${rowIndex}:${column}`);
-            const colspan = cell?.colspan ?? coveredSpan ?? 1;
+            const merged = covered.get(`${rowIndex}:${column}`);
+            const owner = cell ?? merged;
+            const colspan = owner?.colspan ?? 1;
             const width = spanWidth(column, colspan);
+            // Word draws a fill per cell, so a merge's covered cells carry it too; a cell's own wins over a header's grey.
+            const fill =
+                readCellBackground(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
+                (owner?.node.type === 'tableHeader' ? HEADER_CELL_LOOK.fill : undefined);
             const tcPr = (merge: string) =>
-                `<w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${cell?.node.type === 'tableHeader' ? `<w:shd w:val="clear" w:color="auto" w:fill="${HEADER_CELL_LOOK.fill}"/>` : ''}</w:tcPr>`;
+                `<w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}</w:tcPr>`;
             if (cell) {
                 const merge = cell.rowspan > 1 ? '<w:vMerge w:val="restart"/>' : '';
                 tcs.push(
-                    `<w:tc>${tcPr(merge)}${cellXml(cell, width - 2 * TABLE_LOOK.padding.horizontal, context.pkg)}</w:tc>`,
+                    `<w:tc>${tcPr(merge)}${cellXml(cell, width - 2 * TABLE_LOOK.padding.horizontal, context)}</w:tc>`,
                 );
-            } else tcs.push(`<w:tc>${tcPr(coveredSpan === undefined ? '' : '<w:vMerge/>')}<w:p/></w:tc>`);
+            } else tcs.push(`<w:tc>${tcPr(merged === undefined ? '' : '<w:vMerge/>')}<w:p/></w:tc>`);
             column += colspan;
         }
         // Only an all-header row repeats; a reader may take an explicit off as on.
@@ -1245,8 +1255,9 @@ function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: nu
     return { dxa: px.map((width) => Math.round(width * TWIPS_PER_PX)), fixed: unknown === 0 };
 }
 
-// A cell is a flow of its own: no indent or list around it, its paragraphs flush and aligned as the cell is.
-function cellXml({ node, content }: GridCell, column: number, pkg: Package): string {
+// A cell is a flow of its own: no indent or list around it, its paragraphs flush and aligned as the cell is. Only an
+// untyped list in it still numbers by the lists around the table, as eigen-prose.css draws it.
+function cellXml({ node, content }: GridCell, column: number, { pkg, numbered }: Context): string {
     const align = node.attrs?.['align'];
     const cell: Context = {
         pkg,
@@ -1254,6 +1265,7 @@ function cellXml({ node, content }: GridCell, column: number, pkg: Package): str
         column,
         indent: 0,
         depth: 0,
+        numbered,
         quotes: 0,
         after: 0,
         align: typeof align === 'string' ? JUSTIFICATION.get(align) : undefined,

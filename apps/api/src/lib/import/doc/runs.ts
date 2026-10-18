@@ -425,8 +425,9 @@ function marksOf(
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
-    // Explicit black is Word's and Google Docs' default, a mark lost in dark mode; auto on a dark highlight is white.
+    // Explicit black is Word's and Google Docs' default, a mark lost in dark mode; auto on a dark highlight or cell is white.
     const hex = props.color?.hex;
+    const behind = isFill(shade) ? shade : scope.fill;
     const color =
         hex &&
         hex !== reader.baseColor &&
@@ -434,7 +435,7 @@ function marksOf(
         linkLook === undefined &&
         !(scope.onFill && !isFill(shade) && isLight(hex))
             ? hex
-            : !full.color?.hex && !asLink && isFill(shade) && isDark(shade)
+            : !full.color?.hex && !asLink && behind && isDark(behind)
               ? 'FFFFFF'
               : undefined;
     // Word draws capitals over small caps.

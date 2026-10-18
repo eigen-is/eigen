@@ -21,6 +21,7 @@ import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
     BAND_ROOTS,
+    DOC_PROSE_CLASS,
     flattenNestedFootnotes,
     getDocExtensions,
     PAGE_BAND_CLASS,
@@ -351,7 +352,7 @@ export function docEditorOptions({
         ],
         editorProps: {
             attributes: {
-                class: band ? `eigen-prose ${PAGE_BAND_CLASS}` : 'eigen-prose',
+                class: band ? `eigen-prose ${DOC_PROSE_CLASS} ${PAGE_BAND_CLASS}` : `eigen-prose ${DOC_PROSE_CLASS}`,
             },
             handleDOMEvents: {
                 copy: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
