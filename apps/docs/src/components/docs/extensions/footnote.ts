@@ -1,8 +1,14 @@
 import { combineTransactionSteps, type Editor, Extension, getChangedRanges } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
+import type { MapResult } from '@tiptap/pm/transform';
 import { Decoration, DecorationSet, type DecorationSource, type NodeView } from '@tiptap/pm/view';
-import { type ProsemirrorBinding, ySyncPluginKey } from '@tiptap/y-tiptap';
+import {
+    absolutePositionToRelativePosition,
+    type ProsemirrorBinding,
+    relativePositionToAbsolutePosition,
+    ySyncPluginKey,
+} from '@tiptap/y-tiptap';
 import { FootnoteNode, footnoteNumbers, insertFootnote } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 
@@ -12,11 +18,11 @@ import type * as Y from 'yjs';
 export const NOTE_EDIT = 'noteEdit';
 export const NOTE_PULL = 'notePull';
 
-// A note is the footnote's Yjs element: a stored position dies with y-prosemirror's whole-doc replace of a remote
-// change, and the reference's node view with a split of its paragraph, but the binding maps the element to the node
-// that holds it now, after a peer's edit and in a body editor built anew. A split here can give the note a new element
-// (the binding keeps the old one for the half before it), and ProseMirror keeps the node, so the node finds the new one.
-export type NoteAnchor = { element: Y.AbstractType<unknown>; node: PMNode };
+// The open note is its reference's position, kept two ways: mapped through this editor's own changes, and as a Yjs
+// relative position for a peer's change or an undo, which y-prosemirror applies as a replace of the whole doc that no
+// mapped position survives. Never a node: y-tiptap builds every node anew on a peer's update, ProseMirror keeps the view
+// of a node equal to the one it drew, and a mark or attribute step maps no position, so a node held on to goes stale.
+export type NoteAnchor = { pos: number; relative: Y.RelativePosition };
 
 export type FootnoteOptions = {
     // A press on a reference; the body's editor only.
@@ -33,33 +39,27 @@ declare module '@tiptap/core' {
     }
 }
 
-type Numbering = { notes: readonly PMNode[]; decorations: DecorationSet };
+export type NumberedNote = { pos: number; node: PMNode };
+
+type Numbering = { notes: readonly NumberedNote[]; decorations: DecorationSet };
 
 const numberingKey = new PluginKey<Numbering>('footnoteNumbering');
 
 function numbering(doc: PMNode): Numbering {
-    const notes: PMNode[] = [];
+    const notes: NumberedNote[] = [];
     const decorations: Decoration[] = [];
     for (const [pos, number] of footnoteNumbers(doc)) {
         const node = doc.nodeAt(pos);
         if (!node) continue;
-        notes.push(node);
+        notes.push({ pos, node });
         decorations.push(Decoration.node(pos, pos + node.nodeSize, {}, { footnoteNumber: number }));
     }
     return { notes, decorations: DecorationSet.create(doc, decorations) };
 }
 
-const holdsNote = (doc: PMNode, from: number, to: number) => {
-    let found = false;
-    doc.nodesBetween(from, to, (node) => {
-        found ||= node.type.name === 'footnote';
-        return !found;
-    });
-    return found;
-};
-
 // The notes in document order, numbered: what the reference draws and the list under the page shows.
-export const footnotesInDoc = (editor: Editor): readonly PMNode[] => numberingKey.getState(editor.state)?.notes ?? [];
+export const footnotesInDoc = (editor: Editor): readonly NumberedNote[] =>
+    numberingKey.getState(editor.state)?.notes ?? [];
 
 // The reference: a superscript number, its note no DOM of the body's. It keeps the body's decorations inside the note,
 // the find bar's matches, for the note's editor.
@@ -111,41 +111,33 @@ class FootnoteView implements NodeView {
 
 const bindingOf = (editor: Editor): ProsemirrorBinding | undefined => ySyncPluginKey.getState(editor.state)?.binding;
 
-function elementOf(binding: ProsemirrorBinding | undefined, node: PMNode): Y.AbstractType<unknown> | null {
-    for (const [type, mapped] of binding?.mapping ?? []) if (mapped === node) return type;
-    return null;
+// The anchor of the note whose reference is at `pos`; none in an editor without the binding.
+export function noteAnchor(editor: Editor, pos: number): NoteAnchor | null {
+    const binding = bindingOf(editor);
+    return binding ? { pos, relative: absolutePositionToRelativePosition(pos, binding.type, binding.mapping) } : null;
 }
 
-// A note's anchor; none in an editor without the binding.
-export function noteAnchor(editor: Editor, node: PMNode): NoteAnchor | null {
-    const element = elementOf(bindingOf(editor), node);
-    return element && { element, node };
-}
-
-// Where a note stands now, its reference's view and its element: none once it was deleted, moved by a cut and a paste,
-// or split into a new element in another tab. A view's own node is no guide: y-tiptap builds every node anew on a
-// peer's update, and ProseMirror keeps the view of a node equal to the one it drew without handing it the new one, so
-// the doc's node at the view's position is the note.
+// Where an open note stands after `transactions`, or now with none; null once its reference is gone, deleted, moved by a
+// cut and a paste, or split into a new element in another tab. Its reference's view comes along for the decorations.
 export function findNote(
     editor: Editor,
     anchor: NoteAnchor,
-): { pos: number; node: PMNode; view: FootnoteView; element: Y.AbstractType<unknown> } | null {
+    transactions: readonly Transaction[] = [],
+): { pos: number; node: PMNode; view: FootnoteView } | null {
     const binding = bindingOf(editor);
-    const mapped = binding?.mapping.get(anchor.element);
-    const { doc } = editor.state;
-    const at = (target: unknown) => {
-        for (const view of editor.storage.footnote.views) {
-            const pos = view.getPos();
-            const node = pos === undefined ? null : doc.nodeAt(pos);
-            if (pos !== undefined && node && node === target) return { pos, node, view };
+    let pos: number | null = anchor.pos;
+    if (transactions.some((tr) => tr.getMeta(ySyncPluginKey)))
+        pos = binding
+            ? relativePositionToAbsolutePosition(binding.doc, binding.type, anchor.relative, binding.mapping)
+            : null;
+    else
+        for (const tr of transactions) {
+            const result: MapResult | null = pos === null ? null : tr.mapping.mapResult(pos, 1);
+            pos = result && !result.deleted ? result.pos : null;
         }
-        return null;
-    };
-    const found = at(mapped);
-    if (found) return { ...found, element: anchor.element };
-    const kept = at(anchor.node);
-    const element = kept && elementOf(binding, kept.node);
-    return kept && element ? { ...kept, element } : null;
+    const node = pos === null ? null : editor.state.doc.nodeAt(pos);
+    const view = [...editor.storage.footnote.views].find((v) => v.getPos() === pos);
+    return pos !== null && node?.type.name === 'footnote' && view ? { pos, node, view } : null;
 }
 
 // ProseMirror's textBetween reads a note's text in its reference's place, run on from the words around it. A word count
@@ -238,17 +230,8 @@ export const Footnote = FootnoteNode.extend<FootnoteOptions, FootnoteStorage>({
                 key: numberingKey,
                 state: {
                     init: (_, state) => numbering(state.doc),
-                    // Walked again only when a change reaches a note, so typing elsewhere maps the numbers.
-                    apply: (tr, value, oldState, newState) => {
-                        if (!tr.docChanged) return value;
-                        const renumber = getChangedRanges(tr).some(
-                            ({ oldRange, newRange }) =>
-                                holdsNote(oldState.doc, oldRange.from, oldRange.to) ||
-                                holdsNote(newState.doc, newRange.from, newRange.to),
-                        );
-                        if (renumber) return numbering(newState.doc);
-                        return { notes: value.notes, decorations: value.decorations.map(tr.mapping, tr.doc) };
-                    },
+                    // On every change: a mark or attribute step maps no position yet gives its note a new node.
+                    apply: (tr, value, _oldState, newState) => (tr.docChanged ? numbering(newState.doc) : value),
                 },
                 props: { decorations: (state) => numberingKey.getState(state)?.decorations },
             }),

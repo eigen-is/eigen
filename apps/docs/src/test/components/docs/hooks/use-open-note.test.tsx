@@ -1,7 +1,7 @@
 // The open footnote: one live editor on the note, its edits forwarded into the body by diff, the body's changes pulled
 // back, anchored on the note's Yjs element, one history with the body, and the find bar's matches and reveal. Two
 // Y.Docs synced by hand stand in for two tabs.
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -100,9 +100,7 @@ async function setup(content: JSONContent[] = DOC) {
     const rendered = await renderInDocument(createElement(Host));
     cleanups.push(rendered.unmount);
     const open = async (pos: number) => {
-        const node = a.state.doc.nodeAt(pos);
-        if (!node) throw new Error(`no note at ${pos}`);
-        await act(async () => session.current?.open(node, { focus: true, at: null, selection: null }));
+        await act(async () => session.current?.open(pos, { focus: true, at: null, selection: null }));
     };
     return { a, b, note, yA, yB, undoManager, session, open };
 }
@@ -125,19 +123,21 @@ const typeInto = (editor: TestEditor, chars: string) => {
     for (const char of chars) editor.view.dispatch(editor.state.tr.insertText(char));
 };
 
-const MAC = /Mac/.test(navigator.platform);
-const press = (editor: TestEditor, key: string, shift = false) => {
-    const event = new KeyboardEvent('keydown', {
-        key,
-        metaKey: MAC,
-        ctrlKey: !MAC,
-        shiftKey: shift,
-        bubbles: true,
-        cancelable: true,
+// prosemirror-keymap reads the platform once, maybe before happy-dom's, so ⌘ or Ctrl, whichever it takes as Mod; a
+// keydown no keymap takes falls through to the next. True when one was handled.
+const press = (editor: TestEditor, key: string, shift = false) =>
+    [true, false].some((meta) => {
+        const event = new KeyboardEvent('keydown', {
+            key,
+            metaKey: meta,
+            ctrlKey: !meta,
+            shiftKey: shift,
+            bubbles: true,
+            cancelable: true,
+        });
+        editor.view.dom.dispatchEvent(event);
+        return event.defaultPrevented;
     });
-    editor.view.dom.dispatchEvent(event);
-    return event.defaultPrevented;
-};
 
 test("typing and Enter in the open note reach the other tab, and the note's editor holds the note", async () => {
     const { a, b, note, open } = await setup();
@@ -192,7 +192,9 @@ test('a replayed transaction forwards nothing twice', async () => {
     await open(6);
     note.commands.setTextSelection(12);
     typeInto(note, '!');
-    expect(note.commands.keyboardShortcut('Mod-z')).toBe(true);
+    // ⌘ and Ctrl, as press's: the keymap takes one as Mod, and the command returns true either way.
+    note.commands.keyboardShortcut('Meta-z');
+    note.commands.keyboardShortcut('Ctrl-z');
     expect(noteOf(a)).toBe('Hello world');
     expect(note.state.doc.textContent).toBe('Hello world');
 });
@@ -441,15 +443,31 @@ test('undo in a note that removes the note leaves the caret in the body, where r
     await act(async () => {
         pos = insertNote(a);
     });
-    const node = pos === null ? null : a.state.doc.nodeAt(pos);
-    if (!node) throw new Error('no note');
-    await act(async () => session.current?.open(node, { focus: true, at: null, selection: null }));
+    const inserted = pos;
+    if (inserted === null) throw new Error('no note');
+    await act(async () => session.current?.open(inserted, { focus: true, at: null, selection: null }));
     undoManager.stopCapturing();
-    await act(async () => {
-        press(note, 'z');
-    });
-    expect(session.current?.anchor).toBeNull();
+    // The note's ⌘Z is handled, so the browser's own undo never runs, and the body takes the focus only in a frame after
+    // the transaction: Chrome throws drawing a selection inside it, and the keymap would then never return. The test
+    // DOM runs a frame at once, so the frames wait here.
+    const frames: FrameRequestCallback[] = [];
+    const frame = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => frames.push(callback));
+    let handled = false;
+    try {
+        await act(async () => {
+            handled = press(note, 'z');
+        });
+        expect(handled).toBe(true);
+        expect(session.current?.anchor).toBeNull();
+        expect(a.view.hasFocus()).toBe(false);
+        await act(async () => {
+            for (let callback = frames.shift(); callback; callback = frames.shift()) callback(0);
+        });
+    } finally {
+        frame.mockRestore();
+    }
     expect(a.view.hasFocus()).toBe(true);
+    expect(a.state.selection.from).toBe(6);
     await act(async () => {
         press(a, 'z', true);
     });

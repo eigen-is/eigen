@@ -205,8 +205,9 @@ function noteElements(pkg: DocxPackage): Map<string, { part: Part; note: XmlElem
 }
 
 // A note's paragraphs, read through its part's own relationships, once however often it is referenced from the body:
-// each copy past the first is charged as the pieces no tag counts are. A note referenced in a note is its text there; one referenced
-// deeper, or from inside itself, is dropped, so the walk nests at most twice. Undefined for a note the file lacks.
+// each copy past the first is charged as the pieces no tag counts are. A note referenced in a note is its text there;
+// one referenced deeper, or from inside itself, is dropped, so the walk nests at most twice. Undefined for a note the
+// file lacks.
 export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: string): JSONContent[] | undefined {
     const key = `${type}-${id}`;
     const read = reader.notes.get(key);

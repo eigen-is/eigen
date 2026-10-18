@@ -79,10 +79,12 @@
         border-top: 1px solid var(--color-border);
     }
 
+    /* FOOTNOTE_FONT_SIZE (@workspace/lib/constants/fonts), which the toolbar's size box and the exports read. */
     li {
         display: flex;
         gap: 0.25em;
         margin-top: 0.25em;
+        font-size: 10pt;
     }
 
     li > :last-child {
@@ -90,14 +92,15 @@
         min-width: 0;
     }
 
+    /* Raised and smaller, as the reference's number. */
     .footnote-number {
-        font-size: 7.5pt;
+        font-size: 0.75em;
         line-height: 1.6;
     }
 
-    /* FOOTNOTE_FONT_SIZE */
+    /* The note's text at its item's size, not the doc's Normal. */
     .eigen-prose {
-        font-size: 10pt;
+        font-size: 1em;
     }
 
     .eigen-prose p {

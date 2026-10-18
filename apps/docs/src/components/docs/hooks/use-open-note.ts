@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/core';
-import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
-import type { Transaction } from '@tiptap/pm/state';
+import { Fragment } from '@tiptap/pm/model';
+import { TextSelection, type Transaction } from '@tiptap/pm/state';
 import { type Decoration, DecorationSet } from '@tiptap/pm/view';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
@@ -32,19 +32,24 @@ function noteDiff(a: Fragment, b: Fragment): { start: number; endA: number; endB
     return { start, endA: end.a + overlap, endB: end.b + overlap };
 }
 
-// findNote, the anchor following the note to the node and the element that hold it now. Only here, as an edit lands,
-// never in a render.
-function followNote(body: Editor, anchor: NoteAnchor) {
-    const found = findNote(body, anchor);
-    if (found) Object.assign(anchor, { element: found.element, node: found.node });
+// findNote, the anchor following the note to where it stands now, the Yjs position taken again there.
+function followNote(body: Editor, anchor: NoteAnchor, transactions: readonly Transaction[] = []) {
+    const found = findNote(body, anchor, transactions);
+    const next = found && noteAnchor(body, found.pos);
+    if (next) Object.assign(anchor, next);
     return found;
 }
 
 // The body's note into the note's editor, the range that differs only, so the caret maps through a peer's edit and an
 // undo, with the body's decorations inside the note, the find bar's matches. The reference's position, or null once
 // the note is gone.
-export function pullNote(body: Editor, note: Editor, anchor: NoteAnchor): number | null {
-    const found = followNote(body, anchor);
+export function pullNote(
+    body: Editor,
+    note: Editor,
+    anchor: NoteAnchor,
+    transactions: readonly Transaction[] = [],
+): number | null {
+    const found = followNote(body, anchor, transactions);
     if (!found) return null;
     // Two schema instances: the note crosses as JSON.
     const next = note.schema.nodeFromJSON({ type: 'doc', content: found.node.content.toJSON() });
@@ -87,8 +92,8 @@ export function useOpenNote(body: Editor, note: Editor, allowed: boolean) {
     const anchor = opening?.anchor ?? null;
 
     const open = useCallback(
-        (node: PMNode, how: Omit<NoteOpening, 'anchor'>) => {
-            const anchor = noteAnchor(body, node);
+        (pos: number, how: Omit<NoteOpening, 'anchor'>) => {
+            const anchor = noteAnchor(body, pos);
             if (anchor) setOpening({ anchor, ...how });
         },
         [body],
@@ -97,25 +102,43 @@ export function useOpenNote(body: Editor, note: Editor, allowed: boolean) {
     useLayoutEffect(() => {
         if (!anchor) return;
         // A note that goes while the caret is in it, its reference deleted by a peer or by undo, hands the caret to the
-        // body where the reference stood, or typing and ⇧⌘Z would reach nothing.
-        let stood = 0;
-        const pull = () => {
-            const pos = pullNote(body, note, anchor);
+        // body where the reference stood, or typing and ⇧⌘Z would reach nothing. After the transaction, as a focus
+        // inside it draws a selection the DOM doesn't hold yet (Chrome throws, and the note's ⌘Z then falls through to
+        // the browser's own undo), at a text position.
+        let stood = anchor.pos;
+        const pull = (transactions: readonly Transaction[]) => {
+            const pos = pullNote(body, note, anchor, transactions);
             if (pos !== null) {
                 stood = pos;
                 return;
             }
             setOpening(null);
-            if (note.view.hasFocus()) body.commands.focus(stood);
+            if (!note.view.hasFocus()) return;
+            // A peer's or an undo's whole-doc replace maps every position to its edge, so those keep the number.
+            const at = transactions.some((tr) => tr.getMeta(ySyncPluginKey))
+                ? stood
+                : transactions.reduce((pos, tr) => tr.mapping.map(pos, -1), stood);
+            requestAnimationFrame(() => {
+                if (body.isDestroyed) return;
+                const { doc } = body.state;
+                body.commands.focus(TextSelection.near(doc.resolve(Math.min(at, doc.content.size))).from);
+            });
         };
         const forward = ({ transaction }: { transaction: Transaction }) => {
             if (transaction.docChanged && !transaction.getMeta(NOTE_PULL)) forwardNote(body, note, anchor);
         };
-        pull();
-        body.on('transaction', pull);
+        const onBody = ({
+            transaction,
+            appendedTransactions,
+        }: {
+            transaction: Transaction;
+            appendedTransactions: Transaction[];
+        }) => pull([transaction, ...appendedTransactions]);
+        pull([]);
+        body.on('transaction', onBody);
         note.on('transaction', forward);
         return () => {
-            body.off('transaction', pull);
+            body.off('transaction', onBody);
             note.off('transaction', forward);
         };
     }, [body, note, anchor]);
@@ -143,7 +166,7 @@ export function useOpenNote(body: Editor, note: Editor, allowed: boolean) {
                 if ($from.node(depth).type.name !== 'footnote') continue;
                 const start = $from.start(depth);
                 if (to <= $from.end(depth)) {
-                    open($from.node(depth), {
+                    open($from.before(depth), {
                         focus: false,
                         at: null,
                         selection: { from: $from.pos - start, to: to - start },

@@ -77,7 +77,7 @@ async function setup() {
             body,
             note,
             open: session.anchor,
-            onOpen: (node, at) => session.open(node, { focus: true, at, selection: null }),
+            onOpen: (pos, at) => session.open(pos, { focus: true, at, selection: null }),
         });
     }
     const rendered = await renderInDocument(createElement(Host));
@@ -113,4 +113,20 @@ test('a note inserted before the others takes number 1 and the others move up', 
         insertNote(body);
     });
     expect(items().map((li) => li.textContent)).toEqual(['1', '2First noteits second paragraph', '3Second note']);
+});
+
+// Bold across a reference changes its note's marks and gives them back, and AtomMarks takes the reference's, steps that
+// move no position: the list reads the doc as it is, not the nodes it last drew.
+test('after Bold across the references a press on a note still opens it', async () => {
+    const { body, note, items } = await setup();
+    await act(async () => {
+        body.commands.selectAll();
+        body.commands.toggleBold();
+    });
+    const second = items()[1]?.querySelector('.eigen-prose')?.parentElement;
+    await act(async () => {
+        second?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    });
+    expect(items()[1]?.contains(note.view.dom)).toBe(true);
+    expect(note.state.doc.textContent).toBe('Second note');
 });

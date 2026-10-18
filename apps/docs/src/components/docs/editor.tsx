@@ -328,13 +328,12 @@ const TiptapEditor = ({
     });
     const notes = useOpenNote(editor, noteEditor, bandsAllowed);
     leaveNoteRef.current = notes.leave;
-    const openNote = (node: Node, at: { left: number; top: number } | null) => {
+    const openNote = (pos: number, at: { left: number; top: number } | null) => {
         setEditingBand(null);
-        notes.open(node, { focus: true, at, selection: null });
+        notes.open(pos, { focus: true, at, selection: null });
     };
     openNoteRef.current = (pos) => {
-        const node = editor.state.doc.nodeAt(pos);
-        if (node && bandsAllowed) openNote(node, null);
+        if (bandsAllowed) openNote(pos, null);
     };
     // Google's Insert › Footnote: the reference after the selection, and its note open with the caret in it. Where no
     // note opens, a viewer's and a phone's, none goes in: ⌘⌥F from a phone's keyboard would leave one nobody can edit.

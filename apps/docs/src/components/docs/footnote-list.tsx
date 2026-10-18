@@ -3,7 +3,7 @@ import { type Editor, EditorContent, useEditorState } from '@tiptap/react';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useLayoutEffect, useRef } from 'react';
-import { findNote, footnotesInDoc, type NoteAnchor } from './extensions/footnote';
+import { footnotesInDoc, type NoteAnchor } from './extensions/footnote';
 
 type FootnoteListProps = {
     body: Editor;
@@ -11,7 +11,7 @@ type FootnoteListProps = {
     note: Editor;
     open: NoteAnchor | null;
     // A writer's on a desktop or a tablet; a viewer and a phone read the notes.
-    onOpen?: (node: PMNode, at: { left: number; top: number }) => void;
+    onOpen?: (pos: number, at: { left: number; top: number }) => void;
 };
 
 // A note as the schema writes it, so 133 notes are not 133 editors. Its images resolve as the figure's node view's do.
@@ -37,14 +37,13 @@ export function FootnoteList({ body, note, open, onOpen }: FootnoteListProps) {
         equalityFn: Object.is,
     });
     if (notes.length === 0) return null;
-    const live = open && findNote(body, open)?.node;
     return (
         <section data-footnotes className="footnote-list row-start-3">
             <ol>
-                {notes.map((node, index) => (
+                {notes.map(({ pos, node }, index) => (
                     <li key={index}>
                         <sup className="footnote-number">{index + 1}</sup>
-                        {node === live ? (
+                        {pos === open?.pos ? (
                             <EditorContent editor={note} />
                         ) : (
                             <div
@@ -53,7 +52,7 @@ export function FootnoteList({ body, note, open, onOpen }: FootnoteListProps) {
                                     onOpen &&
                                     ((event) => {
                                         event.preventDefault();
-                                        onOpen(node, { left: event.clientX, top: event.clientY });
+                                        onOpen(pos, { left: event.clientX, top: event.clientY });
                                     })
                                 }
                             >

@@ -192,3 +192,27 @@ test("a comment's quote across a reference leaves the note out", () => {
     const editor = body(DOC);
     expect(commentAnchorText(editor.state.doc, 1, editor.state.doc.content.size - 1)).toBe('Claim. More');
 });
+
+// Autolink and the typing rules read the paragraph's text, where a note's text stands in its reference's place.
+test('a URL typed after a reference links itself alone, and a rule never reaches into the note', () => {
+    const editor = body([paragraph(text('Claim'), footnote(paragraph(text('Hello world -'))))]);
+    const end = (editor.state.doc.firstChild?.nodeSize ?? 0) - 1;
+    editor.commands.setTextSelection(end);
+    // As a keystroke: the input rules first, else the text.
+    const type = (chars: string) => {
+        for (const char of chars) {
+            const { from, to } = editor.state.selection;
+            const ruled = editor.view.someProp('handleTextInput', (f) =>
+                f(editor.view, from, to, char, () => editor.state.tr.insertText(char)),
+            );
+            if (!ruled) editor.view.dispatch(editor.state.tr.insertText(char));
+        }
+    };
+    type('> then example.com ');
+    const linked: string[] = [];
+    editor.state.doc.descendants((node) => {
+        if (node.isText && node.marks.some((mark) => mark.type.name === 'link')) linked.push(node.text ?? '');
+    });
+    expect(linked).toEqual(['example.com']);
+    expect(editor.state.doc.textContent).toBe('ClaimHello world -> then example.com ');
+});

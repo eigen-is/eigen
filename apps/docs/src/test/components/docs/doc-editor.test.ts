@@ -468,11 +468,11 @@ const { useOpenNote } = await import('../../../components/docs/hooks/use-open-no
 test('an image pasted into the open note settles in the note', async () => {
     const doc = new Y.Doc();
     const undoManager = createDocUndoManager(doc);
-    const shown: { body: InstanceType<typeof Editor> | null; note: InstanceType<typeof Editor> | null } = {
-        body: null,
-        note: null,
-    };
-    let session: ReturnType<typeof useOpenNote> | null = null;
+    const shown: {
+        body: InstanceType<typeof Editor> | null;
+        note: InstanceType<typeof Editor> | null;
+        session: ReturnType<typeof useOpenNote> | null;
+    } = { body: null, note: null, session: null };
     function Host() {
         const media = useDocMedia(path);
         const body = useDocEditor({
@@ -491,7 +491,7 @@ test('an image pasted into the open note settles in the note', async () => {
         });
         shown.body = body;
         shown.note = note;
-        session = useOpenNote(body, note, true);
+        shown.session = useOpenNote(body, note, true);
         return null;
     }
     ({ unmount } = await render(createElement(Host)));
@@ -511,9 +511,7 @@ test('an image pasted into the open note settles in the note', async () => {
             ],
         });
     });
-    const footnote = body.state.doc.nodeAt(2);
-    if (!footnote) throw new Error('no note');
-    await act(async () => session?.open(footnote, { focus: true, at: null, selection: null }));
+    await act(async () => shown.session?.open(2, { focus: true, at: null, selection: null }));
 
     // Bun's own File, whose bytes the upload's object URL reads, as the clipboard's file.
     const data = new DataTransfer();
@@ -531,6 +529,7 @@ test('an image pasted into the open note settles in the note', async () => {
         if (node.type.name === 'figure') names.push(node.attrs.mediaName);
     });
     expect(names).toEqual(['logo-2.png']);
+    expect(shown.session?.anchor).not.toBeNull();
 });
 
 // A stored stack collapses to its name in a note's text too, which NoteFormatting would otherwise give back.
