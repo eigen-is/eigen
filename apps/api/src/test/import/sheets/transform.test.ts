@@ -1,8 +1,12 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
+import type { Sheet } from '@workspace/lib/sheets';
+import * as engine from '@workspace/sheet/engine';
 import { ZipReader } from '../../../lib/core/zip';
+import { MAX_RECALC_DEPENDENCY_BLOCKS } from '../../../lib/document/sheets';
 import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { importXlsxToSheetsSnapshot } from '../../../lib/import/sheets/transform';
 import { build, stored } from '../../fixtures/raw-zip';
+import { xlsxFixture } from '../../fixtures/xlsx';
 
 // What reading the workbook throws: a slip is a file the reader can't read, an out-of-memory the transform process's.
 describe('a throw reading the xlsx', () => {
@@ -43,6 +47,30 @@ describe('a throw reading the xlsx', () => {
             expect(thrownBy(() => importXlsxToSheetsSnapshot(xlsx))).toBe(outOfMemory);
         } finally {
             read.mockRestore();
+        }
+    });
+});
+
+// The import's recalc is the server's, under its dependency budget: past it the recalc fails, and the import keeps
+// Excel's values uncomputed (document-transform.test.ts).
+describe("the formulas' ranges", () => {
+    test('the recalc runs under the dependency budget', () => {
+        const original = { ...engine };
+        const budgets: (number | undefined)[] = [];
+        mock.module('@workspace/sheet/engine', () => ({
+            ...original,
+            recalcSheets: (sheets: Sheet[], options?: { maxDependencyBlocks?: number }) => {
+                budgets.push(options?.maxDependencyBlocks);
+                return original.recalcSheets(sheets, options);
+            },
+        }));
+        try {
+            importXlsxToSheetsSnapshot(
+                toTransferableBuffer(xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1"><f>1+1</f></c></row>' }] })),
+            );
+            expect(budgets).toEqual([MAX_RECALC_DEPENDENCY_BLOCKS]);
+        } finally {
+            mock.module('@workspace/sheet/engine', () => original);
         }
     });
 });

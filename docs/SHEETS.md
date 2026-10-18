@@ -124,6 +124,8 @@ So `readSheetsFromDoc` recomputes only on the export read. Preview and the searc
 
 Even on export, `recalcSheets` runs only when `sheetsNeedRecalc` finds a sheet with formula cells and an empty `calcChain`. The decoder leaves the chain empty unless the envelope says `computed: true`, which every editor flush writes ([the codec](#the-snapshot-is-interned-and-written-only-through-the-codec)). The xlsx importer runs `recalcSheets` once in its transform and writes `computed: true`, or `false` when its recalc failed, so that export recomputes. Any recalc failure falls back to the replayed values: an export never fails because recalc did.
 
+The server's recalc, at import and at export, runs under a budget, `MAX_RECALC_DEPENDENCY_BLOCKS` (`document/sheets.ts`). The dependency index lists a range in every 64 × 16 block it meets, cut to the cells its sheet holds: only a formula cell is ever looked up, so `SUM(A1:XFD1048576)` on a small sheet costs the few blocks the sheet spans. Past the budget `recalcSheets` throws before it evaluates, a recalc failure like any other. What evaluation reads is not bounded: each formula reads its ranges' cells, about 0.5 µs a cell.
+
 ## Recalc keeps what it can't improve
 
 `recalcSheets` (`engine/recalc.ts`) materializes each sheet's `data`, finds formula cells by scanning it rather than trusting `calcChain`, orders them through the dependency graph and evaluates them with the shared `FormulaEngine`. Its graph builder is a port of the state layer's `setFormulaCellInfo` and `isFunctionRange`, because the engine can't import `state/` ([SHEETS-TODO.md](SHEETS-TODO.md#code-debt) tracks removing the copy).

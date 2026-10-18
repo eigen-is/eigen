@@ -8,6 +8,12 @@ import {
 } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 
+// What the server's recalc lets an untrusted workbook's formula ranges cost, in the dependency index's 64 × 16 blocks
+// (dependencyBlocks), each range cut to its sheet: four times the 1,062-workbook corpus's most (68.8 million, 3.3 s);
+// a 81 KB file of whole-column sums reaches it in 9.9 s at 3.2 GB. Past it the recalc fails like any other, and the
+// sheets keep the values they hold.
+export const MAX_RECALC_DEPENDENCY_BLOCKS = 280_000_000;
+
 // Materialized Yjs doc → Sheet[]. Every consumer of a persisted workbook reads it in
 // the document-transform process, so there is no Mount-side loader here: capture
 // (collab-source.ts) + materialize (yjs-loader.ts) is the only path in. `recalcError`
@@ -42,7 +48,10 @@ export function readSheetsFromDoc(
     // because recalc hiccuped. See docs/SHEETS.md § The editor computes on write.
     if (!recalc || !sheetsNeedRecalc(replayed)) return { sheets: replayed, recalcError: null };
     try {
-        return { sheets: recalcSheets(replayed), recalcError: null };
+        return {
+            sheets: recalcSheets(replayed, { maxDependencyBlocks: MAX_RECALC_DEPENDENCY_BLOCKS }),
+            recalcError: null,
+        };
     } catch (e) {
         return { sheets: replayed, recalcError: e instanceof Error ? e.message : String(e) };
     }

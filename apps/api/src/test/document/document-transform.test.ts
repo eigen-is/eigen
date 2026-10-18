@@ -26,7 +26,7 @@ import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/core/zip';
 import { commitEigendocImport, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
-import { readSheetsFromDoc } from '../../lib/document/sheets';
+import { MAX_RECALC_DEPENDENCY_BLOCKS, readSheetsFromDoc } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import {
     type DocumentTransformRequest,
@@ -291,6 +291,29 @@ describe('document transform (eigensheets preview)', () => {
             const { body, warnings } = renderEigensheetsPreviewBody(doc, NO_MEDIA);
             expect(warnings).toEqual([]);
             expect(body).toContain('replayed-value');
+        } finally {
+            mock.module('@workspace/sheet/engine', () => original);
+        }
+    });
+
+    test("the export's recalc runs under the server's dependency budget", () => {
+        const original = { ...engine };
+        const budgets: (number | undefined)[] = [];
+        mock.module('@workspace/sheet/engine', () => ({
+            ...original,
+            recalcSheets: (sheets: Sheet[], options?: { maxDependencyBlocks?: number }) => {
+                budgets.push(options?.maxDependencyBlocks);
+                return original.recalcSheets(sheets, options);
+            },
+        }));
+        try {
+            const doc = new Y.Doc();
+            const sheets: Sheet[] = [
+                { id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata: [{ r: 0, c: 0, v: { f: '=1+1' } }] },
+            ];
+            doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
+            expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(2);
+            expect(budgets).toEqual([MAX_RECALC_DEPENDENCY_BLOCKS]);
         } finally {
             mock.module('@workspace/sheet/engine', () => original);
         }
