@@ -19,8 +19,8 @@ import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, x
 // docx and pptx draw from the caches, which hold every value; an xlsx's refs name its own sheets, by the importer's ids.
 export type ChartSource = 'cache' | { ranges: (sheetName: string) => string | undefined };
 
-// type is the chart group's element name (barChart, scatterChart), or combinationChart for more than one group.
-export type ChartRead = { spec: ChartSpec } | { unsupported: { title: string; type: string } };
+// name is PowerPoint's for the chart's type, as Insert Chart lists it (Clustered Column, Pie of Pie, Combo), or none.
+export type ChartRead = { spec: ChartSpec } | { unsupported: { title: string; name: string } };
 
 const TYPES = new Map<string, ChartType>([
     ['barChart', 'column'],
@@ -63,8 +63,7 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
     } catch (error) {
         if (error !== UNSUPPORTED) throw error;
     }
-    const type = groups.length > 1 ? 'combinationChart' : groups.length > 0 ? chartLabel(groups[0].local) : '';
-    return { unsupported: { title, type } };
+    return { unsupported: { title, name: chartName(groups) } };
 }
 
 function chartSpec(
@@ -221,6 +220,74 @@ function chartSpec(
             }),
         },
     };
+}
+
+const GROUPINGS = new Map([
+    ['stacked', 'Stacked'],
+    ['percentStacked', '100% Stacked'],
+]);
+
+// PowerPoint's name for a plot's groups: a group's kind with its depth, direction, grouping, markers, lines or
+// wireframe; a volume bar group with a stock group is one stock chart, any other two groups a combo.
+function chartName(groups: XmlElement[]): string {
+    const kinds = groups.map((group) => group.local).join(' ');
+    const stock = (group: XmlElement) =>
+        children(group, 'ser').length === 4 ? 'Open-High-Low-Close' : 'High-Low-Close';
+    if (kinds === 'barChart stockChart') return `Volume-${stock(groups[1])}`;
+    const [group] = groups;
+    if (!group || groups.length > 1) return group ? 'Combo' : '';
+    const words = (...parts: (string | false | undefined)[]) => parts.filter(Boolean).join(' ');
+    const option = (local: string) => val(child(group, local));
+    const grouping = GROUPINGS.get(option('grouping') ?? '');
+    const depth = group.local.includes('3D') && '3-D';
+    const [first] = children(group, 'ser');
+    const symbol = val(child(child(first, 'marker'), 'symbol'));
+    const markers = (auto: boolean) => (symbol ? symbol !== 'none' : auto);
+    const direction = option('barDir') === 'bar' ? 'Bar' : 'Column';
+    switch (group.local) {
+        case 'barChart':
+        case 'bar3DChart':
+            if (depth && option('grouping') === 'standard') return `3-D ${direction}`;
+            return words(depth, grouping ?? 'Clustered', direction);
+        case 'lineChart':
+            return words(grouping, 'Line', flag(child(group, 'marker')) !== false && markers(true) && 'with Markers');
+        case 'line3DChart':
+            return '3-D Line';
+        case 'areaChart':
+        case 'area3DChart':
+            return words(depth, grouping, 'Area');
+        case 'pieChart':
+            return 'Pie';
+        case 'pie3DChart':
+            return '3-D Pie';
+        case 'doughnutChart':
+            return 'Doughnut';
+        case 'ofPieChart':
+            return option('ofPieType') === 'bar' ? 'Bar of Pie' : 'Pie of Pie';
+        case 'scatterChart': {
+            // Excel writes lineMarker for every scatter it makes: its series say which it is.
+            const style = option('scatterStyle') ?? 'marker';
+            const shape = child(first, 'spPr');
+            const line = shape && xmlChild(shape, A_NS, 'ln');
+            const lines = line ? !xmlChild(line, A_NS, 'noFill') : style !== 'marker' && style !== 'none';
+            if (!lines) return 'Scatter';
+            const smooth = flag(child(first, 'smooth')) ?? style.startsWith('smooth');
+            const marked = markers(style === 'lineMarker' || style === 'smoothMarker');
+            return words('Scatter with', smooth ? 'Smooth' : 'Straight', 'Lines', marked && 'and Markers');
+        }
+        case 'bubbleChart':
+            return flag(child(group, 'bubble3D')) ? '3-D Bubble' : 'Bubble';
+        case 'radarChart':
+            if (option('radarStyle') === 'filled') return 'Filled Radar';
+            return words('Radar', markers(option('radarStyle') === 'marker') && 'with Markers');
+        case 'stockChart':
+            return stock(group);
+        case 'surfaceChart':
+        case 'surface3DChart':
+            return words(flag(child(group, 'wireframe')) && 'Wireframe', depth ? '3-D Surface' : 'Contour');
+        default:
+            return '';
+    }
 }
 
 // Excel's: no title of its own shows the only series' name unless the auto title was deleted; a title element with no
