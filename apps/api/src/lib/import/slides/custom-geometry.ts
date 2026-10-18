@@ -29,6 +29,11 @@ export const MAX_GEOMETRY_NODES = 32_768;
 // A subpath is a move and a segment at least, so a filled path of more can never fit: its nesting is never worked out.
 const MAX_SUBPATHS = MAX_PATH_COMMANDS / 2;
 
+// Paths painting alike concatenate only while their boxes overlap none of the others': the canvas fills nonzero, but the
+// pptx export writes the element as one a:path, which LibreOffice fills even-odd, so an overlap would come back a hole.
+// Past this many geometries a shape's alike paths concatenate overlapping or not.
+export const MAX_SHAPE_PATHS = 32;
+
 // A curve's outline is its chords, as many as Wang's formula says keep within this fraction of the box of it, so a
 // contour that close inside another still nests: ends and middles alone make an octagon 7.6% inside a circle.
 const OUTLINE_TOLERANCE = 0.001;
@@ -61,10 +66,10 @@ type Point = { x: number; y: number };
 type Segment = { op: 'L' | 'C' | 'Q'; points: Point[] };
 type Subpath = { start: Point; segments: Segment[]; closed: boolean };
 
-type Painted = Omit<CustomGeometry, 'path' | 'closed'> & { subpaths: Subpath[] };
+type Painted = Omit<CustomGeometry, 'path' | 'closed'> & { subpaths: Subpath[]; boxes: Bounds[] };
 
-// One geometry for each way the paths paint, the paths painting alike concatenated, in the order they first draw but
-// the filled before the lines, as LibreOffice and Apache POI stroke over every fill; each becomes its own element
+// One geometry for each way the paths paint, the paths painting alike and apart concatenated, in the order they first
+// draw but the filled before the lines, as LibreOffice and Apache POI stroke over every fill; each becomes its own element
 // at the shape's box. Undefined when nothing is drawn, or past a cap or the read's budget: the shape keeps its text.
 // `width` and `height` are the shape's extents in EMU, its guides' w and h; `mirrored` flips it across its box, as
 // DrawingML flips a shape before it turns it; `adjustments` are a preset's, after its avLst.
@@ -82,7 +87,10 @@ export function customGeometry(
     if (!guides) return undefined;
     const paths = pathLst ? xmlElements(pathLst).filter((path) => path.ns === A_NS && path.local === 'path') : [];
     charge(nodes - (avLst?.children.length ?? 0) - (gdLst?.children.length ?? 0));
-    const painted = new Map<string, Painted>();
+    // Each path's box against those of the alike paths before it, at most.
+    if (!spend((paths.length * (paths.length - 1)) / 2)) return undefined;
+    const painted: Painted[] = [];
+    const lastPainted = new Map<string, Painted>();
     for (const path of paths) {
         const fill = xmlAttr(path, '', 'fill');
         const filled = fill !== 'none';
@@ -94,13 +102,21 @@ export function customGeometry(
         if (drawn.length === 0) continue;
         const subpaths = filled ? nested(drawn) : drawn;
         if (!subpaths) return undefined;
+        const box = boundsOf(subpaths.flatMap(pointsOf));
         const key = `${filled} ${stroked} ${shade}`;
-        const known = painted.get(key);
-        if (known) known.subpaths.push(...subpaths);
-        else painted.set(key, { filled, stroked, shade, subpaths });
+        const last = lastPainted.get(key);
+        const apart = !filled || painted.length >= MAX_SHAPE_PATHS || !last?.boxes.some((other) => overlap(box, other));
+        if (last && apart) {
+            last.subpaths.push(...subpaths);
+            last.boxes.push(box);
+        } else {
+            const started = { filled, stroked, shade, subpaths, boxes: [box] };
+            painted.push(started);
+            lastPainted.set(key, started);
+        }
     }
     const geometries: CustomGeometry[] = [];
-    for (const { filled, stroked, shade, subpaths } of painted.values()) {
+    for (const { filled, stroked, shade, subpaths } of painted) {
         let path = fitted(subpaths, filled);
         const segments = subpaths.reduce((count, subpath) => count + subpath.segments.length, 0);
         for (const tolerance of SIMPLIFY_TOLERANCES) {
@@ -280,6 +296,11 @@ function boundsOf(points: Point[]): Bounds {
         [max.x, max.y] = [Math.max(max.x, x), Math.max(max.y, y)];
     }
     return [min, max];
+}
+
+// Sharing an edge is no overlap: bricks laid side by side stay one path.
+function overlap([aMin, aMax]: Bounds, [bMin, bMax]: Bounds): boolean {
+    return aMin.x < bMax.x && bMin.x < aMax.x && aMin.y < bMax.y && bMin.y < aMax.y;
 }
 
 // Twice the signed area, positive for a clockwise outline (y down).

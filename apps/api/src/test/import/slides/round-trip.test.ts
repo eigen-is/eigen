@@ -19,7 +19,7 @@ import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { sanitizeSceneHtml } from '../../../lib/export/sanitize';
 import { eigenslidesToPptx } from '../../../lib/export/slides/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
-import { PIXEL_PNG } from '../../fixtures/pptx';
+import { box, buildPptx, PIXEL_PNG, solid as solidFill, sp } from '../../fixtures/pptx';
 
 // A deck exported to .pptx and read back: what the writer states, the reader reads the same.
 
@@ -337,5 +337,24 @@ describe('paths exported and read back', () => {
             expectPx(found.x, Number(element.x));
             expectPx(found.width, Number(element.width));
         }
+    });
+});
+
+describe("a shape's overlapping paths imported, exported and read back", () => {
+    test('are a path element each, so a reader filling each a:path even-odd still fills both', () => {
+        // A wall and a brick on it, painting alike.
+        const rect = (from: number, to: number) =>
+            `<a:path w="10" h="10"><a:moveTo><a:pt x="${from}" y="${from}"/></a:moveTo><a:lnTo><a:pt x="${to}" y="${from}"/></a:lnTo><a:lnTo><a:pt x="${to}" y="${to}"/></a:lnTo><a:lnTo><a:pt x="${from}" y="${to}"/></a:lnTo><a:close/></a:path>`;
+        const geometry = `<a:custGeom><a:avLst/><a:gdLst/><a:pathLst>${rect(0, 10)}${rect(2, 4)}</a:pathLst></a:custGeom>`;
+        const shapes = sp({ xfrm: box(100, 100, 200, 200), spPr: `${geometry}${solidFill('993300')}` });
+        const imported = readPptx(buildPptx({ slides: [{ shapes }] }), { frame: FRAME, maxMediaBytes: 1024 * 1024 });
+        const { deck } = roundTrip(imported.slides[0].elements);
+        const back = deck.slides[0].elements;
+        expect(back.map((found) => [found.type, String(found.path).split('M').length - 1])).toEqual([
+            ['path', 1],
+            ['path', 1],
+        ]);
+        for (const found of back)
+            expect(parseFill(String(found.fill))).toMatchObject({ type: 'solid', color: '#993300' });
     });
 });

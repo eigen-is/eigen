@@ -458,6 +458,20 @@ describe('kinds', () => {
         expect(deck.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
     });
 
+    test('paths painting alike are one path element apart, and one each where they overlap', () => {
+        const rect = (x0: number, x1: number) =>
+            `<a:path w="4" h="4"><a:moveTo><a:pt x="${x0}" y="0"/></a:moveTo><a:lnTo><a:pt x="${x1}" y="0"/></a:lnTo><a:lnTo><a:pt x="${x1}" y="4"/></a:lnTo><a:lnTo><a:pt x="${x0}" y="4"/></a:lnTo><a:close/></a:path>`;
+        const pathsOf = (paths: string) =>
+            elementsOf(sp({ xfrm: box(0, 0, 10, 10), spPr: `${custGeom(paths)}${FILLED}` })).map((found) => found.path);
+        expect(pathsOf(rect(0, 1) + rect(2, 3))).toEqual([
+            'M 0 0 L 0.25 0 L 0.25 1 L 0 1 Z M 0.5 0 L 0.75 0 L 0.75 1 L 0.5 1 Z',
+        ]);
+        expect(pathsOf(rect(0, 3) + rect(1, 2))).toEqual([
+            'M 0 0 L 0.75 0 L 0.75 1 L 0 1 Z',
+            'M 0.25 0 L 0.5 0 L 0.5 1 L 0.25 1 Z',
+        ]);
+    });
+
     test('a bent or curved connector is its path, its arrowheads lost and counted', () => {
         const ln = `<a:ln w="12700">${solid('0000FF')}<a:tailEnd type="triangle"/></a:ln>`;
         const deck = deckOf({

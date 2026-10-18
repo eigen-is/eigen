@@ -7,6 +7,7 @@ import {
     closedPath,
     customGeometry,
     MAX_GEOMETRY_NODES,
+    MAX_SHAPE_PATHS,
 } from '../../../lib/import/slides/custom-geometry';
 import { MAX_GUIDES } from '../../../lib/import/slides/guides';
 import { affords, withWorkBudget } from '../../../lib/import/slides/lookup';
@@ -214,8 +215,8 @@ describe('guides', () => {
 describe('coordinate spaces', () => {
     test("each path's w and h span the box, so paths of different spaces line up", () => {
         const found = pathOf(
-            path(moveTo(0, 0) + lnTo(10, 20), 'w="10" h="20"') +
-                path(moveTo(500, 0) + lnTo(0, 500), 'w="1000" h="500"'),
+            path(moveTo(0, 0) + lnTo(10, 20), 'w="10" h="20" fill="none"') +
+                path(moveTo(500, 0) + lnTo(0, 500), 'w="1000" h="500" fill="none"'),
         );
         expect(found).toBe('M 0 0 L 1 1 M 0.5 0 L 0 1');
     });
@@ -254,6 +255,8 @@ describe('fill and stroke', () => {
             -0.2,
             0.4,
             0.2,
+            -0.4,
+            undefined,
         ]);
         expect(only(shaded('darken'))).toEqual({
             path: 'M 0 0 L 1 0 L 1 1 L 0 1 Z',
@@ -264,14 +267,43 @@ describe('fill and stroke', () => {
         });
     });
 
-    test('paths painting alike concatenate;the others are geometries of their own, in the order they first draw', () => {
-        const filled = path(SQUARE, 'w="100" h="100" stroke="0"');
+    test('paths painting alike and apart concatenate; the others are geometries of their own, in the order they first draw', () => {
+        const filled = path(
+            moveTo(0, 0) + lnTo(40, 0) + lnTo(40, 40) + lnTo(0, 40) + CLOSE,
+            'w="100" h="100" stroke="0"',
+        );
         const outline = path(moveTo(0, 0) + lnTo(100, 100), 'w="100" h="100" fill="none"');
-        const shadow = path(moveTo(0, 0) + lnTo(0, 100) + lnTo(100, 100) + CLOSE, 'w="100" h="100" stroke="0"');
+        const shadow = path(moveTo(60, 60) + lnTo(60, 100) + lnTo(100, 100) + CLOSE, 'w="100" h="100" stroke="0"');
         expect(geometry(filled + outline + shadow)).toEqual([
-            { path: 'M 0 0 L 1 0 L 1 1 L 0 1 Z M 1 1 L 0 1 L 0 0 Z', closed: true, filled: true, stroked: false },
+            {
+                path: 'M 0 0 L 0.4 0 L 0.4 0.4 L 0 0.4 Z M 1 1 L 0.6 1 L 0.6 0.6 Z',
+                closed: true,
+                filled: true,
+                stroked: false,
+            },
             { path: 'M 0 0 L 1 1', closed: false, filled: false, stroked: true },
         ]);
+    });
+
+    test("filled paths painting alike whose boxes overlap stay apart, as the export's a:path fills even-odd", () => {
+        const rect = (x0: number, y0: number, x1: number, y1: number) =>
+            path(moveTo(x0, y0) + lnTo(x1, y0) + lnTo(x1, y1) + lnTo(x0, y1) + CLOSE);
+        // A wall, two bricks on it sharing an edge, and a third brick over the first: each joins the last alike
+        // geometry it overlaps nothing of, so the order they draw in holds.
+        const wall = rect(0, 0, 100, 100);
+        const bricks = rect(10, 10, 30, 30) + rect(30, 10, 50, 30) + rect(20, 20, 40, 40);
+        expect(geometry(wall + bricks)?.map((found) => found.path)).toEqual([
+            'M 0 0 L 1 0 L 1 1 L 0 1 Z',
+            'M 0.1 0.1 L 0.3 0.1 L 0.3 0.3 L 0.1 0.3 Z M 0.3 0.1 L 0.5 0.1 L 0.5 0.3 L 0.3 0.3 Z',
+            'M 0.2 0.2 L 0.4 0.2 L 0.4 0.4 L 0.2 0.4 Z',
+        ]);
+        // Lines fill nothing, so overlapping they concatenate.
+        const crossing = path(moveTo(0, 0) + lnTo(100, 100), 'w="100" h="100" fill="none"');
+        expect(geometry(crossing + crossing.replace('x="0"', 'x="100"'))).toHaveLength(1);
+        // Past MAX_SHAPE_PATHS, alike paths concatenate overlapping or not.
+        const stacked = geometry(wall.repeat(MAX_SHAPE_PATHS + 5));
+        expect(stacked).toHaveLength(MAX_SHAPE_PATHS);
+        expect(stacked?.at(-1)?.path.split('M')).toHaveLength(7);
     });
 
     test('the filled geometries come first, the lines after: LibreOffice and Apache POI stroke over every fill', () => {
@@ -326,9 +358,10 @@ describe('fill and stroke', () => {
         // A path that only strokes keeps its contours as drawn; another path's contours are not this one's holes.
         const lines = path(square(0, 100) + square(20, 80), 'w="100" h="100" fill="none"');
         expect(pathOf(lines)).toBe('M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.2 0.2 L 0.8 0.2 L 0.8 0.8 L 0.2 0.8 Z');
-        expect(pathOf(path(square(0, 100)) + path(square(20, 80)))).toBe(
-            'M 0 0 L 1 0 L 1 1 L 0 1 Z M 0.2 0.2 L 0.8 0.2 L 0.8 0.8 L 0.2 0.8 Z',
-        );
+        expect(geometry(path(square(0, 100)) + path(square(20, 80)))?.map((found) => found.path)).toEqual([
+            'M 0 0 L 1 0 L 1 1 L 0 1 Z',
+            'M 0.2 0.2 L 0.8 0.2 L 0.8 0.8 L 0.2 0.8 Z',
+        ]);
     });
 
     test('a thin ring is a hole in its disc: each contour is probed on its curve, against the curves of the others', () => {
