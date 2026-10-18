@@ -12,9 +12,10 @@ import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml'
 import { colorOf, resolveColor, type ThemePalette } from './styles';
 
 // A worksheet past its grid: the tab colour, the column widths and hidden columns, the merges, the frozen panes and
-// gridlines, the filter's span and the hyperlinks. A merge's cells and a link's cell are placed before the grid is read, so the grid's
-// cell there takes them, and a place the grid holds no cell for still gets one. Only what the file holds is walked: a
-// merge's cells after its area is charged, a column range's columns after they are, and each column once.
+// gridlines, the filter's span and the hyperlinks. A merge's cells and a link's cell are placed before the grid is
+// read, so the grid's cell there takes them, and a place the grid holds no cell for still gets one. Only what the file
+// holds is walked: a merge's cells after its area is charged, a column range's columns after they are, and each column
+// once.
 
 // The pixels of a column width unit in a file whose default font isn't Eigen's: Calibri 11's 7 px digit plus padding,
 // near enough. A width counts the file's own default font, so only Eigen's exports convert through Inter's digit.
