@@ -106,8 +106,7 @@ export type VectorPieElement = VectorElementBase &
 
 // A free contour of lines and Bézier curves (a pptx custGeom). `path` is absolute M/L/C/Q/Z in the unit
 // box, the canonical string parseNormalizedPath writes, so a resize changes width/height and never the path.
-// A hole is a subpath wound the other way, where SVG's and DrawingML's nonzero fill and roughjs's even-odd
-// hatching agree.
+// A hole is a subpath wound the other way, where SVG's nonzero fill and roughjs's even-odd hatching agree.
 export type VectorPathElement = VectorElementBase &
     Fillable & {
         type: 'path';
