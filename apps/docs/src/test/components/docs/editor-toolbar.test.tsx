@@ -832,8 +832,10 @@ test('Insert › Equation follows Image and inserts once the menu has closed', a
 
     await clickItem('Equation');
     expect(onInsertEquation).not.toHaveBeenCalled();
-    // Radix calls onCloseAutoFocus in a timeout its unmount sets, which a later timeout follows.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    // Radix calls onCloseAutoFocus in a timeout its unmount sets, which under load a single tick can precede.
+    for (let tick = 0; tick < 50 && onInsertEquation.mock.calls.length === 0; tick++) {
+        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
     expect(onInsertEquation).toHaveBeenCalledTimes(1);
 });
 

@@ -81,6 +81,8 @@ export const MATH_LIMITS = {
     // Every < the writer writes is a tag, three a unit at most (an accent, line or brace over an empty row, a fence
     // pair around one), and six for math, semantics and annotation.
     mathmlTags: 3 * SIZE + 6,
+    // The writer writes at most three attributes a tag, each double-quoted: two quotes.
+    mathmlQuotes: 6 * (3 * SIZE + 6),
 } as const;
 
 const tooLarge = (budget: MathBudget) =>

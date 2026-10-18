@@ -14,13 +14,11 @@ const previous = {
     window: globalThis.window,
     document: globalThis.document,
     DOMParser: globalThis.DOMParser,
-    XMLSerializer: globalThis.XMLSerializer,
 };
 Object.assign(globalThis, {
     window,
     document: window.document,
     DOMParser: window.DOMParser,
-    XMLSerializer: window.XMLSerializer,
 });
 afterAll(() => {
     Object.assign(globalThis, previous);
@@ -306,6 +304,11 @@ describe('an equation pasted where no equation node is', () => {
         expect(pasted(katex)).toBe(`a ${writeText(xSquared)} b`);
     });
 
+    test('an annotation holding a control character keeps the equation, as the docs editor does', () => {
+        const html = `<p>${MATH}<semantics><mi>x</mi><annotation encoding="application/x-tex">x&#1;</annotation></semantics></math></p>`;
+        expect(pasted(html)).toBe('x');
+    });
+
     test('HTML with no equation passes as it is', () => {
         expect(mathAsText('<p>a <b>b</b></p>')).toBe('<p>a <b>b</b></p>');
     });
@@ -376,6 +379,24 @@ describe('readEquation', () => {
         expect(parsedStrings).toEqual([tagged(MATH_LIMITS.mathmlTags)]);
     });
 
+    // The writer quotes with " alone, at most three attributes a tag, so these are no writer's.
+    test("a ' inside a tag, or more quotes than the writer writes, is refused before it is parsed", () => {
+        const parsedStrings: string[] = [];
+        const parse = (mathml: string) => {
+            parsedStrings.push(mathml);
+            return null;
+        };
+        readEquation({ mathml: `${MATH}<mi a='1'>x</mi></math>` }, parse);
+        const attributes = Array.from({ length: 50 }, (_, index) => ` a${index}=""`).join('');
+        const dense = `${MATH}${`<mi${attributes}>x</mi>`.repeat(Math.floor(MATH_LIMITS.mathmlQuotes / 100) + 1)}</math>`;
+        expect(dense.length).toBeLessThan(MATH_LIMITS.mathmlLength);
+        readEquation({ mathml: dense }, parse);
+        expect(parsedStrings).toEqual([]);
+        const apostrophe = `${MATH}<mtext>it's</mtext></math>`;
+        readEquation({ mathml: apostrophe }, parse);
+        expect(parsedStrings).toEqual([apostrophe]);
+    });
+
     test('a tree past a bound shows its LaTeX as text', () => {
         const mathml = `${MATH}<semantics><mrow>${tooDeep}</mrow><annotation encoding="application/x-tex">x^2</annotation></semantics></math>`;
         const row: MathRow = [{ kind: 'text', text: 'x^2' }];
@@ -409,7 +430,8 @@ describe('readEquation', () => {
     });
 
     test('an annotation the writer refuses goes, and the tree stays', () => {
-        const quotes = '"'.repeat(MATH_LIMITS.mathmlLength / 4);
+        // Five characters read, the six the writer writes: past its cap.
+        const quotes = '&#34;'.repeat(Math.floor(MATH_LIMITS.mathmlLength / 6));
         const mathml = `${MATH}<semantics><mi>x</mi><annotation encoding="application/x-tex">${quotes}</annotation></semantics></math>`;
         expect(mathml.length).toBeLessThan(MATH_LIMITS.mathmlLength);
         expect(readEquation({ mathml })).toEqual({

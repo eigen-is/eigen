@@ -106,7 +106,7 @@ function EquationView({ node, selected, extension, decorations }: NodeViewProps)
                     aria-label="Open comment"
                     title="Open comment"
                 >
-                    <CommentIndicator color={commentColor} className="block" />
+                    <CommentIndicator color={commentColor} className="pointer-events-none block" />
                 </button>
             )}
         </NodeViewWrapper>

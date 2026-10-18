@@ -64,13 +64,22 @@ function readMath(math: MathXmlElement): Read | undefined {
     return { row: text, latex, mathml: writeMathml(text, latex) };
 }
 
-// Whether a string could be the writer's: it starts at the root, and is no longer and holds no more tags than its
-// output. Each < the writer writes is a tag, as it escapes the rest.
+// Whether a string could be the writer's: it starts at the root, and is no longer and holds no more tags or quotes than
+// its output. Each < the writer writes is a tag, as it escapes the rest, and it quotes its attributes with " alone, so a
+// ' inside a tag is no writer's. It escapes the > in text, so the next one ends the tag.
 function isWritable(mathml: string): boolean {
     if (!mathml.startsWith('<math') || mathml.length > MATH_LIMITS.mathmlLength) return false;
     let tags = 0;
+    let apostrophe = mathml.indexOf("'");
     for (let index = mathml.indexOf('<'); index >= 0; index = mathml.indexOf('<', index + 1)) {
         if (++tags > MATH_LIMITS.mathmlTags) return false;
+        if (apostrophe >= 0 && apostrophe < index) apostrophe = mathml.indexOf("'", index);
+        const close = mathml.indexOf('>', index);
+        if (close < 0 || (apostrophe >= 0 && apostrophe < close)) return false;
+    }
+    let quotes = 0;
+    for (let index = mathml.indexOf('"'); index >= 0; index = mathml.indexOf('"', index + 1)) {
+        if (++quotes > MATH_LIMITS.mathmlQuotes) return false;
     }
     return true;
 }
@@ -215,9 +224,9 @@ export function mathAsText(html: string): string {
     if (!html.includes('<math')) return html;
     const { body } = new DOMParser().parseFromString(html, 'text/html');
     unwrapRenderedMath(body);
-    const serializer = new XMLSerializer();
     for (const math of body.querySelectorAll('math')) {
-        math.replaceWith(readEquation({ mathml: serializer.serializeToString(math) }).text);
+        const read = readMath(fromDom(math));
+        math.replaceWith(read ? writeText(read.row) : '');
     }
     return body.innerHTML;
 }
