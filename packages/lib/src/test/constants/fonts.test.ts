@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     bundledFont,
     bundledFontOfCategory,
+    bundledFontOfStack,
     EIGEN_FONT_NAMES,
     MAX_FONT_SIZE,
     MIN_FONT_SIZE,
@@ -89,5 +90,22 @@ describe('font sizes', () => {
         expect(nextFontSize(10.5, -1)).toBe(9.5);
         expect(nextFontSize(MAX_FONT_SIZE, 1)).toBe(MAX_FONT_SIZE);
         expect(nextFontSize(MIN_FONT_SIZE, -1)).toBe(MIN_FONT_SIZE);
+    });
+});
+
+describe('bundledFontOfStack', () => {
+    test.each([
+        ['Georgia,serif', 'Source Serif 4'],
+        ['"Times New Roman", serif', 'Source Serif 4'],
+        ["'Source Serif 4', serif", 'Source Serif 4'],
+        ['Wingdings, "Courier New", monospace', 'JetBrains Mono'],
+        ['Calibri', 'Inter'],
+    ])('%s is drawn in %s', (stack, bundled) => {
+        expect(bundledFontOfStack(stack)).toBe(bundled);
+    });
+
+    test('a stack of unknown and generic families maps to none', () => {
+        expect(bundledFontOfStack('Wingdings, sans-serif')).toBeUndefined();
+        expect(bundledFontOfStack('')).toBeUndefined();
     });
 });

@@ -194,6 +194,24 @@ describe('HTML-table paste — style extraction', () => {
         expect(d[0][0]?.un).toBeUndefined(); // text-decoration:none stays un-set
     });
 
+    it.each([
+        ["'Times New Roman', serif", 'Source Serif 4'],
+        ['"Source Serif 4", serif', 'Source Serif 4'],
+        ['Calibri', 'Inter'],
+        ['Wingdings, "Courier New", monospace', 'JetBrains Mono'],
+    ])('a td in %s pastes in %s', (stack, font) => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, `<table><tr><td style="font-family: ${stack.replaceAll('"', '&quot;')}">x</td></tr></table>`);
+        expect(ctx.sheets[0].data![0][0]?.ff).toBe(font);
+    });
+
+    it('a td in a font the map does not know, or in none, keeps the sheet default', () => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, '<table><tr><td style="font-family: Wingdings">x</td><td>y</td></tr></table>');
+        expect(ctx.sheets[0].data![0][0]?.ff).toBeUndefined();
+        expect(ctx.sheets[0].data![0][1]?.ff).toBeUndefined();
+    });
+
     it('sets cl=1 for a <s> strikethrough inside the td', () => {
         const ctx = makeCtx();
         pasteHtml(ctx, '<table><tr><td><s>x</s></td></tr></table>');

@@ -1,4 +1,4 @@
-import { bundledFont, DOCUMENT_FONT, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
+import { bundledFontOfStack, DOCUMENT_FONT, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
 import { ITALIC_HEADING_SELECTOR } from '@workspace/lib/docs/eigendoc';
 
 // Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, no size the doc draws already, images
@@ -36,12 +36,8 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
     // runs carry, not its body's on every span as Google Docs does, so its sizes are kept.
     const pmCopy = doc.querySelector('[data-pm-slice]') !== null;
     for (const el of doc.querySelectorAll<HTMLElement>('[style]')) {
-        // A stack's first family the map knows: Google Docs and Word write a font before its generic family, and a
-        // copy here writes a bundled font's stack. The document font needs no mark.
-        const font = el.style.fontFamily
-            .split(',')
-            .map((family) => bundledFont(family.replace(/['"]/g, '')))
-            .find((bundled) => bundled !== undefined);
+        // The document font needs no mark.
+        const font = bundledFontOfStack(el.style.fontFamily);
         el.style.fontFamily = font && font !== DOCUMENT_FONT ? getFontFamily(font) : '';
         // Google Docs writes a size on every span: its body's, which is the doc's, and in a heading the heading's,
         // which the doc's heading draws as its own.

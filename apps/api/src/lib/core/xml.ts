@@ -1,5 +1,5 @@
 import { XML } from 'bun';
-import { ApiError } from './errors';
+import { ApiError, isOutOfMemory } from './errors';
 
 // Bun's tree shape keeps document order; namespaces are resolved here, since Bun reports names as written.
 // Callers bound their input: a tree costs about 100× the input in memory when the input is all small elements, and
@@ -39,7 +39,7 @@ export function parseXml(input: string | Uint8Array, aliases?: ReadonlyMap<strin
     try {
         return resolve(XML.parse(input, { compact: false }), aliases);
     } catch (error) {
-        if (error instanceof SyntaxError || error instanceof RangeError) {
+        if (error instanceof SyntaxError || (error instanceof RangeError && !isOutOfMemory(error))) {
             throw new XmlError('Malformed XML', { cause: error });
         }
         throw error;

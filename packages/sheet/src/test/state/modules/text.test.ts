@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
-import { clearMeasureTextCache, getCellTextInfo, getFontSet } from '../../../state/modules/text';
+import { clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet } from '../../../state/modules/text';
 import type { Cell } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
@@ -65,4 +65,18 @@ describe('state/modules/text — getCellTextInfo wrap', () => {
 // The size box takes Google's half points, so a cell draws the 10.5 it shows.
 test('a cell draws at its half-point size', () => {
     expect(getFontSet({ fs: 10.5 }, 10)).toStartWith('normal normal normal 10.5pt ');
+});
+
+describe('state/modules/text — font sets', () => {
+    test('a cell with no font, and the canvas default, draw in Inter', () => {
+        expect(getFontSet({}, 10)).toStartWith('normal normal normal 10pt "Inter",');
+        expect(defaultFont(10)).toStartWith('normal normal normal 10pt "Inter",');
+    });
+
+    test("a cell's font is its first family, an index the bundled font at it", () => {
+        expect(getFontSet({ ff: 2, bl: 1 }, 10)).toStartWith('normal normal bold 10pt "JetBrains Mono",');
+        expect(getFontSet({ ff: "'source serif 4', sans-serif", it: 1, fs: 12 }, 10)).toStartWith(
+            'italic normal normal 12pt "Source Serif 4",',
+        );
+    });
 });

@@ -51,8 +51,11 @@ export class Numbering {
         for (const element of root ? xmlElements(root) : []) {
             if (hasXmlName(element, W_NS, 'abstractNum')) {
                 const levels = new Map<number, Level>();
+                // Word draws nine levels; one past them is never drawn, and every paragraph would look through it.
                 for (const lvl of xmlElements(element)) {
-                    if (hasXmlName(lvl, W_NS, 'lvl')) levels.set(int(w(lvl, 'ilvl')) ?? 0, readLevel(lvl));
+                    const ilvl = int(w(lvl, 'ilvl')) ?? 0;
+                    if (hasXmlName(lvl, W_NS, 'lvl') && ilvl >= 0 && ilvl < LIST_LEVELS)
+                        levels.set(ilvl, readLevel(lvl));
                 }
                 this.abstracts.set(w(element, 'abstractNumId') ?? '', {
                     levels,

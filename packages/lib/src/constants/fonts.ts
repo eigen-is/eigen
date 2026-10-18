@@ -126,3 +126,11 @@ export function bundledFont(name: string): string | undefined {
     const category = FONT_CATEGORY_MAP.get(name.trim().toLowerCase());
     return category && bundledFontOfCategory(category);
 }
+
+// A CSS stack's first family the map knows: Google Docs and Word write a font before its generic family.
+export function bundledFontOfStack(stack: string): string | undefined {
+    return stack
+        .split(',')
+        .map((family) => bundledFont(family.replace(/['"]/g, '')))
+        .find((bundled) => bundled !== undefined);
+}

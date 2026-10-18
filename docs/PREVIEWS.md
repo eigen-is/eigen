@@ -12,7 +12,7 @@ The sections run from the server to the screen: what each kind of file previews 
 
 - A cached preview is keyed by the file's version and a format tag, and the tag is bumped on every change to the output's shape ([§ The cache key](#the-cache-key-is-the-file-version-and-the-format-tag)).
 - A new version serves the old body while it regenerates ([§ A new version serves the old body](#a-new-version-serves-the-old-body-while-it-regenerates)).
-- An Eigen document previews only a slice, rendered in the document-transform Worker, a one-shot Worker that keeps the render off the API's event loop ([§ An Eigen document previews a slice](#an-eigen-document-previews-a-slice-off-the-event-loop), [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)).
+- An Eigen document previews only a slice, rendered in a one-shot document-transform process that keeps the render off the API's event loop ([§ An Eigen document previews a slice](#an-eigen-document-previews-a-slice-off-the-event-loop), [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)).
 - No preview may fetch a URL the file chose ([§ No preview body may fetch a URL](#no-preview-body-may-fetch-a-url-the-file-chose)).
 - The host mounts the action dialogs, because a menu unmounts when it closes ([§ The host mounts the runner's dialogs](#the-host-mounts-the-runners-dialogs)).
 
@@ -58,11 +58,11 @@ Generations are shared per cache name, the first one and the background one alik
 
 Loose bytes render in one of three modes. Markdown goes through markdown-it with raw HTML off. Code goes through lowlight. Plain text becomes `<p>` paragraphs, not `<pre>`, because `eigen-prose` paints every `<pre>` as a dark code block and a `.txt` should read like prose.
 
-One ceiling bounds every loose-bytes preview, Drive and mail alike: `TEXT_PREVIEW_MAX_BYTES` (1 MiB). The decode and the highlighter run on the API event loop, per request. Drive refuses on the row's `size` before it reads a byte. A container is not measured against it, because its size is its databases, not the body the Worker renders. `getPreviewMode` on the client applies the same gate, so the overlay shows the file card rather than a panel the route would 404.
+One ceiling bounds every loose-bytes preview, Drive and mail alike: `TEXT_PREVIEW_MAX_BYTES` (1 MiB). The decode and the highlighter run on the API event loop, per request. Drive refuses on the row's `size` before it reads a byte. A container is not measured against it, because its size is its databases, not the body the transform renders. `getPreviewMode` on the client applies the same gate, so the overlay shows the file card rather than a panel the route would 404.
 
 ## An Eigen document previews a slice, off the event loop
 
-The four collab types render in the one-shot document-transform Worker. The main thread checks access, captures the compressed Yjs state and builds the media URL map (`generateDocumentPreview`, `preview-document.ts`). The Worker renders the body in `preview/eigen{doc,slides,sheets,vector}-render.ts`. Admission, the 30 s deadline, the 503 on overload and the rule that there is never a main-thread fallback are in [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md).
+The four collab types render in the one-shot document-transform process. The main thread checks access, captures the compressed Yjs state and builds the media URL map (`generateDocumentPreview`, `preview-document.ts`). The transform renders the body in `preview/eigen{doc,slides,sheets,vector}-render.ts`. Admission, the 30 s deadline, the 503 on overload and the rule that there is never a main-thread fallback are in [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md).
 
 A preview is a glance, so each type stops at its natural unit and leaves the export renderers whole:
 
@@ -99,7 +99,7 @@ The mail preview routes (`routes/mail.ts`) end in the bytes-in entry points besi
 
 ## A `.vcf`, an `.eml` and an `.ics` preview as what they hold
 
-A `.vcf` is mostly base64 photo, an `.ics` is folded property lines, and an `.eml` is headers, boundaries and base64. None of them reads well as text. So `getBytesTextPreviewMode` answers `null` for all three, and `getPreviewMode` gives each its own mode before it reaches the text rule. That also keeps each path at one cached artifact, which matters because `pruneOldVersions` is not format-scoped. The builders live in `preview/{vcard,eml,ics}-preview.ts` and run in the transform Worker.
+A `.vcf` is mostly base64 photo, an `.ics` is folded property lines, and an `.eml` is headers, boundaries and base64. None of them reads well as text. So `getBytesTextPreviewMode` answers `null` for all three, and `getPreviewMode` gives each its own mode before it reaches the text rule. That also keeps each path at one cached artifact, which matters because `pruneOldVersions` is not format-scoped. The builders live in `preview/{vcard,eml,ics}-preview.ts` and run in the transform process.
 
 | Format | Mode and predicate | Ceiling | Payload | Cache tag |
 |---|---|---|---|---|
@@ -121,7 +121,7 @@ The client reads all six routes through `plainApi` (`packages/lib/src/core/api.t
 
 The mail parser bounds neither the size of a body nor its references, so the builder does both.
 
-**Size.** `EML_PREVIEW_MAX_HTML_BYTES` (2 MiB) is measured on the sanitizer's input, not its output. A 12 MiB `text/html` part costs 4.4 GB of RSS inside `DOMPurify.sanitize`, which the Worker would pay before an output bound applied. A body over the ceiling is measured again without its inlined `data:` images, since one `cid:` named 200 times is 200 copies. Only a body still over it becomes `null`, so a heavier message never shows less than a lighter one.
+**Size.** `EML_PREVIEW_MAX_HTML_BYTES` (2 MiB) is measured on the sanitizer's input, not its output. A 12 MiB `text/html` part costs 4.4 GB of RSS inside `DOMPurify.sanitize`, which the transform would pay before an output bound applied. A body over the ceiling is measured again without its inlined `data:` images, since one `cid:` named 200 times is 200 copies. Only a body still over it becomes `null`, so a heavier message never shows less than a lighter one.
 
 **References.** The preview makes no network request when it renders. The rule is an allowlist inside DOMPurify's own DOM, because a regex over serialized HTML would void the sanitizer's output guarantee. On top of the reader's config it forbids `svg`, `math`, media, `picture` and form controls. It removes every URL attribute that is not an inline raster image, since an SVG or HTML `data:` URI is a document of its own. The per-element rule and the CSS refusal below are the mail reader's (`packages/lib/src/core/mail/remote-content.ts`, [MAIL.md § The reader holds back what a message would fetch until Load images](MAIL.md#the-reader-holds-back-what-a-message-would-fetch-until-load-images)); the preview also removes what only a click or a reader of the source follows (`action`, `ping`, `cite` and their kind). Links keep only `http:`, `https:` and `mailto:`, and open in a new tab.
 
@@ -210,7 +210,7 @@ Space yields when focus is on a control inside the overlay, where it presses tha
 
 ## See also
 
-- [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): the Worker, its admission and its benchmark
+- [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): the transform process, its admission and its benchmark
 - [EXPORT.md](EXPORT.md): the full-document renderers the previews share
 - [LAYOUT.md](LAYOUT.md): Drive's item menu, capabilities and the overlay's z-index
 - [MAIL.md](MAIL.md), [CALENDAR.md](CALENDAR.md), [CONTACTS.md](CONTACTS.md): the parsers and the imports

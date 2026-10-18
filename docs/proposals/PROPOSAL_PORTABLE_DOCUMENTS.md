@@ -121,7 +121,7 @@ The ROADMAP's Frozen-format column flags this row for the same reason.
 
 `driveInfo` gives a container a `downloadUrl`: the export URL with format `eigen`. Download in every Drive menu then works for a document as it does for a file.
 
-The main thread gathers, the Worker packs, as with every export ([EXPORT.md](../EXPORT.md#the-worker-renders-and-the-main-thread-prepares)). The main thread reads the document's state the way the other exports read it, reads every media file, and reads each thread's messages through `ChatRoom` and its index row through `CommentIndex`, without the whispers. Root-relative links in a doc become absolute through `absoluteHref`, as the docx export does, so a link back to the source server still works from another one. The Worker builds the zip with `writeZip`.
+The main thread gathers, the Worker packs, as with every export ([EXPORT.md](../EXPORT.md#the-transform-process-renders-and-the-main-thread-prepares)). The main thread reads the document's state the way the other exports read it, reads every media file, and reads each thread's messages through `ChatRoom` and its index row through `CommentIndex`, without the whispers. Root-relative links in a doc become absolute through `absoluteHref`, as the docx export does, so a link back to the source server still works from another one. The Worker builds the zip with `writeZip`.
 
 A document whose package would exceed what `openZip` accepts is refused on export with a message that says so. No file goes out that cannot come back (Open question 3).
 

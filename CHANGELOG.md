@@ -13,13 +13,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 - **Slide size** — File → **Page setup…** in Slides switches a presentation between Widescreen 16:9 and Standard 4:3. Content keeps its position, so after a switch to 16:9 what sat near the bottom of a 4:3 slide is hidden until you undo or switch back. A 4:3 presentation downloads on 4:3 pages
 - **Charts in Vector, Slides and Sheets** — Insert → **Chart** → Bar, Column, Line or Pie places a chart with sample data. The Chart panel sets its type, stacking (None, Standard or 100%), titles, legend, font, axis range, gridlines and colors, each color Automatic until you pick one, and **Edit data** (or a double-click) edits its numbers in a small spreadsheet with the keys of Sheets, which grows as you type past the data and takes cells pasted from a spreadsheet. In Sheets, Insert → **Chart** charts the selected cells and follows them as they change: the **Chart editor** sets its data range and its look, its ⋮ menu downloads it as SVG, and the PDF and web page downloads and the Drive preview show it
 
-### Fixed
-
-- **Sheets copy and Tab** — copied cells paste into other apps as rows and columns, not one run of text, and Tab while typing in a cell confirms it and moves right (Shift+Tab left)
-
 ### Changed
 
 - **Image sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag a handle are in cm, as in Page setup
+- **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid
+
+### Fixed
+
+- **Sheets copy and Tab** — copied cells paste into other apps as rows and columns, not one run of text, and Tab while typing in a cell confirms it and moves right (Shift+Tab left)
+- **Copy and paste in Sheets** — a pasted cell keeps its font, mapped to the bundled one: Times New Roman becomes Source Serif 4, where every font became Inter
+- **Server** — a file too large for the server's memory to import, export, preview or index is refused instead of taking the server down. An import says Document too large or Spreadsheet too large
 
 ## [0.3.3] - 2026-10-13
 

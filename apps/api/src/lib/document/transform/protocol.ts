@@ -1,16 +1,17 @@
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
+import { ApiError, isOutOfMemory } from '../../core/errors';
 
-// Closed request/response unions crossing the document-transform Worker boundary.
-// Only clone-safe primitives, ArrayBuffers and Maps of primitives ride here — never
+// Closed request/response unions crossing the boundary to the document-transform process.
+// Only serializable primitives, ArrayBuffers and Maps of primitives ride here — never
 // Mount, database, Y.Doc, or other class instances, and never module/function names
 // user input could influence. Every eigensheets/eigendoc/eigenslides/eigenvector preview,
 // every vCard, message and calendar preview, every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports
 // and the search content extraction ride these unions.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
-// subprocess, so the Worker returns the document it renders from.
+// subprocess, so the transform returns the document it renders from.
 export type SheetExportFormat = 'html' | 'xlsx' | 'pdf-html';
 export type DocumentExportFormat = 'html' | 'pdf-html';
 // Only eigendoc exports to docx; the slides route rejects the format.
@@ -27,12 +28,11 @@ export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
 }
 
 // Document media crossing the boundary: prepared on the main thread for an export
-// (Mount I/O + screen previews), extracted from the upload by a docx import. The
-// bytes always ride as transferred buffers.
+// (Mount I/O + screen previews), extracted from the upload by a docx import.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
 // An export's media; only a docx's raster carries the thumbnail Worker's width and height. The docx arm adds an SVG's
-// size inside the Worker.
+// size inside the transform process.
 export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 
 // A job is everything a caller decides; the shared main-thread orchestration
@@ -46,13 +46,13 @@ export type CollabPreviewJob = {
 };
 
 // A .vcf, an .eml and an .ics hold no collaborative document: they preview from their own bytes, which
-// ride as a transferred buffer the way an upload does.
+// ride as a buffer the way an upload does.
 export type VCardPreviewJob = { kind: 'preview'; documentType: 'vcard' };
 export type EmlPreviewJob = { kind: 'preview'; documentType: 'eml' };
 export type IcsPreviewJob = { kind: 'preview'; documentType: 'ics' };
 export type BytesPreviewJob = VCardPreviewJob | EmlPreviewJob | IcsPreviewJob;
 
-// `title` is the document title the renderer embeds — the Worker has no DrivePath.
+// `title` is the document title the renderer embeds — the transform has no DrivePath.
 // (Sheets and slides strip the eigen extension; eigendoc's <title> keeps the full
 // container name, frozen output.)
 export type ExportTransformJob =
@@ -69,7 +69,7 @@ export type ExportTransformJob =
           format: EigendocExportFormat;
           title: string;
           media: ExportMedia[];
-          // The docx absolutizes root-relative links with it; the Worker reads no config.
+          // The docx absolutizes root-relative links with it; the transform reads no config.
           publicOrigin: string | undefined;
       }
     | {
@@ -88,13 +88,13 @@ export type ExportTransformJob =
       };
 
 // Search reindexing: the same captured document, read for its body text only. The
-// Worker returns text, never the materialized Sheet[]/deck/ProseMirror JSON.
+// transform returns text, never the materialized Sheet[]/deck/ProseMirror JSON.
 export type ExtractTextJob = {
     kind: 'extract-text';
     documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' | 'eigenvector';
 };
 
-// Pure conversion of uploaded bytes: the Worker learns nothing about the
+// Pure conversion of uploaded bytes: the transform learns nothing about the
 // destination — no owner, mount, ACL or path. One arm per supported source format,
 // so an impossible pairing (xlsx into an eigendoc) does not compile.
 export type SheetsImportJob = { kind: 'import'; sourceFormat: 'xlsx'; targetType: 'eigensheets' };
@@ -102,7 +102,7 @@ export type DocImportJob = {
     kind: 'import';
     sourceFormat: 'docx';
     targetType: 'eigendoc';
-    // Links into this instance come back root-relative with it; the Worker reads no config.
+    // Links into this instance come back root-relative with it; the transform reads no config.
     publicOrigin: string | undefined;
 };
 export type ImportTransformJob = SheetsImportJob | DocImportJob;
@@ -126,20 +126,30 @@ export type TransformWarning =
     | { code: 'section-pages-dropped'; count: number };
 
 // Small stable codes; `status` carries an HTTP status for controlled document
-// errors. Never structured-clone ApiError/Error instances across the boundary.
+// errors. Never ApiError/Error instances across the boundary. `out-of-memory`: the
+// child caught one, or died of one after it took the job.
 export type TransformError = {
-    code: 'transform-failed' | 'timeout' | 'crashed' | 'invalid-response' | 'canceled' | 'shutdown';
+    code: 'transform-failed' | 'out-of-memory' | 'timeout' | 'crashed' | 'invalid-response' | 'canceled' | 'shutdown';
     status?: number;
     message: string;
 };
 
+// What a throw inside the child becomes: an ApiError keeps its status, so controlled
+// document errors keep their HTTP semantics.
+export function toTransformError(err: unknown): TransformError {
+    if (isOutOfMemory(err)) return { code: 'out-of-memory', message: err.message };
+    return {
+        code: 'transform-failed',
+        ...(err instanceof ApiError && { status: err.status }),
+        message: err instanceof Error ? err.message : String(err),
+    };
+}
+
 // A doc's preview carries its page, which quick look and the hero draw it on.
 export type PreviewResult = { body: string; page?: PageSetup };
-// Body text for the content index, already capped by the extractor — a small clone
-// like a preview body.
+// Body text for the content index, already capped by the extractor — small like a
+// preview body.
 export type ExtractTextResult = { text: string };
-// Exports are binary and can be large: they travel as a transferred ArrayBuffer,
-// never as a structured-clone copy.
 export type ExportWorkerResult = { data: ArrayBuffer };
 // UTF-8 bytes of the lean Sheet[] JSON — the main thread commits the string
 // without parsing it.
@@ -175,32 +185,26 @@ export type DocumentTransformResponse =
     | { ok: true; result: TransformResult; warnings: TransformWarning[] }
     | { ok: false; error: TransformError };
 
-export type WorkerRequestEnvelope = { jobId: number; request: DocumentTransformRequest };
-export type WorkerResponseEnvelope = { jobId: number; response: DocumentTransformResponse; transformMs?: number };
+export type ChildRequestEnvelope = { jobId: number; request: DocumentTransformRequest };
+// The child's first message: the job arrived, so a death from here on is the job's.
+export type ChildAck = { jobId: number; ack: true };
+export type ChildResponseEnvelope = {
+    jobId: number;
+    response: DocumentTransformResponse;
+    transformMs?: number;
+    peakRssBytes?: number;
+};
 
-// Large binary inputs and outputs move by ownership transfer, not structured-clone
-// copy. A future request kind with a different payload fails to compile here until
-// it is handled.
-export function transferListOf(request: DocumentTransformRequest): ArrayBuffer[] {
-    if ('data' in request) return [request.data];
-    const buffers: ArrayBuffer[] = [];
-    if (request.source.snapshot) buffers.push(request.source.snapshot.data);
-    for (const update of request.source.updates) buffers.push(update.data);
+// The input bytes a job copies to the child, for its log line. A future request kind
+// with a different payload fails to compile here until it is handled.
+export function inputBytesOf(request: DocumentTransformRequest): number {
+    if ('data' in request) return request.data.byteLength;
+    let bytes = request.source.snapshot?.data.byteLength ?? 0;
+    for (const update of request.source.updates) bytes += update.data.byteLength;
     if (request.kind === 'export') {
-        for (const item of request.media) buffers.push(item.data);
+        for (const item of request.media) bytes += item.data.byteLength;
     }
-    return buffers;
-}
-
-// The Worker's side of the same rule: binary results are transferred, text results
-// (a preview body, extracted content) are small clones.
-export function transferListOfResult(response: DocumentTransformResponse): ArrayBuffer[] {
-    if (!response.ok) return [];
-    const result = response.result;
-    if ('data' in result) return [result.data];
-    if ('snapshotJson' in result) return [result.snapshotJson];
-    if ('update' in result) return [result.update, ...result.images.map((image) => image.data)];
-    return [];
+    return bytes;
 }
 
 // Nested payloads count as shape: resultBytes() sums image byte lengths after the
@@ -260,9 +264,12 @@ export function resultBytes(result: TransformResult): number {
     return result.images.reduce((sum, image) => sum + image.data.byteLength, result.update.byteLength);
 }
 
-// Buffers from TextEncoder/ExcelJS can be views over a larger pool, and a transfer
-// hands over the WHOLE backing buffer — copy to an exact standalone one first.
+// Buffers from TextEncoder/ExcelJS can be views over a larger pool, and IPC
+// serializes a view's WHOLE backing buffer — copy to an exact standalone one first.
 export function toTransferableBuffer(bytes: Uint8Array): ArrayBuffer {
+    const { buffer } = bytes;
+    if (buffer instanceof ArrayBuffer && bytes.byteOffset === 0 && bytes.byteLength === buffer.byteLength)
+        return buffer;
     const out = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(out).set(bytes);
     return out;

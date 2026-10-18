@@ -15,7 +15,7 @@ export function readEigendocPage(doc: Y.Doc): PageSetup {
     return readPageSetup(doc.getMap(PAGE_ROOT).toJSON());
 }
 
-// The import commit: a Yjs update prepared elsewhere (the transform Worker) replaces the body and the bands, and the
+// The import commit: a Yjs update prepared elsewhere (the transform process) replaces the body and the bands, and the
 // file's page replaces the page, in one transaction. Clearing first is what makes an import a replacement: an applied
 // update alone appends. The page keys are set here, on the live doc: set in the update, each would be concurrent with
 // the live key, and Yjs keeps whichever client id orders last.
