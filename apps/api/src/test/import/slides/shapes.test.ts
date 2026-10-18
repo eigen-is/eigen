@@ -418,6 +418,24 @@ describe('kinds', () => {
         expect(flipped(' flipH="1"').warnings).toEqual([]);
     });
 
+    test('a bent or curved connector is its path, its arrowheads lost and counted', () => {
+        const ln = `<a:ln w="12700">${solid('0000FF')}<a:tailEnd type="triangle"/></a:ln>`;
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes:
+                        cxn({ xfrm: box(0, 0, 100, 50), geom: 'bentConnector3', ln }) +
+                        cxn({ xfrm: box(0, 0, 100, 50), geom: 'curvedConnector3', ln: ln.replace('triangle', 'none') }),
+                },
+            ],
+        });
+        expect(deck.slides[0].elements.map((found) => [found.type, found.closed, found.strokeColor])).toEqual([
+            ['path', false, '#0000ff'],
+            ['path', false, '#0000ff'],
+        ]);
+        expect(deck.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
+    });
+
     test('a custGeom past the caps or empty, or a preset no definition names, keeps its text and says so', () => {
         const deck = deckOf({
             slides: [

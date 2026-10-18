@@ -374,7 +374,12 @@ function readShape(walk: Walk, leaf: Leaf): void {
         if (paint.strokeColor !== TRANSPARENT_COLOR) push(walk, lineOf(placed, paint, lines.lns));
         textOnTop();
     } else if (outline) {
-        for (const element of pathsOf(outline, box, paint)) push(walk, element);
+        const paths = pathsOf(outline, box, paint);
+        for (const element of paths) push(walk, element);
+        // A path has no arrowheads: a bent or curved connector's are lost.
+        const ends = [arrowheadOf(lines.lns, 'headEnd'), arrowheadOf(lines.lns, 'tailEnd')];
+        if (ends.some((end) => end !== 'none') && paths.some((path) => path.strokeColor !== TRANSPARENT_COLOR))
+            lost('shapes-simplified');
         textOnTop();
     } else {
         // A custGeom or preset past the path caps or the read's budget, or a preset no definition names.
@@ -538,14 +543,16 @@ function pieAngles(preset: XmlElement | undefined, placed: Placed): { startAngle
 // A pie's avLst evaluated once for its extents, however many shapes its placeholder places.
 const pieGuides = cachedBy<string, Guides | undefined>();
 
+// An a:ln's headEnd or tailEnd, the nearest that states one, as the arrowhead that draws closest.
+function arrowheadOf(lns: XmlElement[], local: 'headEnd' | 'tailEnd'): Arrowhead {
+    const decoration = lns.map((ln) => childOf(ln, A_NS, local)).find((found) => found !== undefined);
+    return ARROWHEAD_BY_END.get((decoration && xmlAttr(decoration, '', 'type')) ?? 'none') ?? 'none';
+}
+
 function lineOf(placed: Placed, stroke: Stroke, lns: XmlElement[]): NewVectorElement {
     const { start, end } = placed;
     const x = Math.min(start.x, end.x);
     const y = Math.min(start.y, end.y);
-    const head = (local: string) => {
-        const decoration = lns.map((ln) => childOf(ln, A_NS, local)).find((found) => found !== undefined);
-        return ARROWHEAD_BY_END.get((decoration && xmlAttr(decoration, '', 'type')) ?? 'none') ?? 'none';
-    };
     const line = {
         x,
         y,
@@ -559,7 +566,7 @@ function lineOf(placed: Placed, stroke: Stroke, lns: XmlElement[]): NewVectorEle
         roundness: 'sharp',
         ...stroke,
     } satisfies VectorElementPatch;
-    const [startArrowhead, endArrowhead] = [head('headEnd'), head('tailEnd')];
+    const [startArrowhead, endArrowhead] = [arrowheadOf(lns, 'headEnd'), arrowheadOf(lns, 'tailEnd')];
     return startArrowhead === 'none' && endArrowhead === 'none'
         ? { type: 'line', ...line }
         : { type: 'arrow', ...line, startArrowhead, endArrowhead, elbow: false };
