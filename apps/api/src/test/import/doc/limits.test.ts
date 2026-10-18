@@ -69,8 +69,8 @@ const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => nod
 const notes = (json: JSONContent) => (json.content?.at(-1)?.content ?? []).map((item) => texts(item).join(''));
 
 // A process of its own with a deadline, for a file that could hold the reader in a loop. Bun.write, not console.log:
-// once a module reads process.stdout (lib0 does, through the chart node's lib vector), a console.log into the pipe
-// ends at 64 KB when the process exits.
+// once a module reads process.stdout (lib0 does, so anything that reaches yjs), a console.log into the pipe ends at
+// 64 KB when the process exits.
 function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
     const script = `
         const { docxToPmJson } = await import(process.env.READER);
