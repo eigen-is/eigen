@@ -49,7 +49,7 @@ These are block styles: the whole paragraph changes, not just the selected words
 
 Normal text is the font, size, color, line spacing, and space before and after that text uses when you haven't changed them. A new document's normal text is Inter at 11 points.
 
-1. Click inside text that looks the way you want normal text to look.
+1. Click inside a paragraph of text that looks the way you want normal text to look. The item is available in normal paragraphs of the document, not in a heading, a title, a header, or a footer.
 2. Open **Format**, then **Paragraph styles**, then **Normal text**, and choose **Update 'Normal text' to match**.
 
 All text that doesn't have its own font, size, or color, and every paragraph that doesn't have its own spacing, changes to match, in the editor, the preview, and every download. Text you formatted yourself keeps its formatting, and headings keep their own size and spacing. To go back, press Cmd+Z / Ctrl+Z.
