@@ -20,6 +20,8 @@ const avLst = (guides: Record<string, string>): XmlElement => {
     return element;
 };
 
+const FILLED = { closed: true, filled: true, stroked: true };
+
 const presetNames = (): string[] => {
     const root = parseXml(fs.readFileSync(PRESETS_FILE));
     return root ? xmlElements(root).map((preset) => preset.local) : [];
@@ -108,7 +110,9 @@ describe('a preset', () => {
 });
 
 describe('every preset', () => {
-    const names = presetNames();
+    const inFile = presetNames();
+    // ST_ShapeType's 187: the file's, and upArrow, which it lacks.
+    const names = [...new Set(inFile), 'upArrow'];
     const hostile = [
         undefined,
         avLst({ adj: 'val 1e308', adj1: 'val 999999999999', adj2: 'val -999999999999', adj3: 'val 1e400' }),
@@ -121,10 +125,11 @@ describe('every preset', () => {
         [1000, 4_000_000],
     ];
 
-    test('is in the file: 187 definitions of 186 presets, upDownArrow twice and alike', () => {
-        expect(names.length).toBe(187);
-        expect(new Set(names).size).toBe(186);
-        expect(names.filter((name) => name === 'upDownArrow').length).toBe(2);
+    test('is in the file but upArrow: 187 definitions of 186 presets, upDownArrow twice and alike', () => {
+        expect(inFile.length).toBe(187);
+        expect(new Set(inFile).size).toBe(186);
+        expect(inFile.filter((name) => name === 'upDownArrow').length).toBe(2);
+        expect(inFile).not.toContain('upArrow');
     });
 
     test('draws for its default adjust values at any aspect', () => {
@@ -151,6 +156,18 @@ describe('every preset', () => {
                 }
             }
         }
+    });
+});
+
+describe('the overrides', () => {
+    // downArrow upside down, as LibreOffice's presets (taken from PowerPoint) define upArrow.
+    test("draw upArrow, which Ecma's file lacks, as downArrow turned upright", () => {
+        expect(presetGeometry('upArrow', undefined, 1000, 1000)).toEqual([
+            { path: 'M 0 0.5 L 0.5 0 L 1 0.5 L 0.75 0.5 L 0.75 1 L 0.25 1 L 0.25 0.5 Z', ...FILLED },
+        ]);
+        expect(presetGeometry('upArrow', avLst({ adj1: 'val 20000', adj2: 'val 25000' }), 1000, 2000)).toEqual([
+            { path: 'M 0 0.125 L 0.5 0 L 1 0.125 L 0.6 0.125 L 0.6 1 L 0.4 1 L 0.4 0.125 Z', ...FILLED },
+        ]);
     });
 });
 

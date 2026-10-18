@@ -28,6 +28,26 @@ export function presetKind(preset: string): PresetKind | undefined {
 
 const PRESETS_FILE = new URL('./presetShapeDefinitions.xml', import.meta.url);
 
+// What the file gets wrong, by preset, in its own spelling. It has no upArrow, upDownArrow twice instead: this is its
+// downArrow turned upright, as LibreOffice's presets, taken from PowerPoint, define it.
+const OVERRIDES: ReadonlyMap<string, string> = new Map([
+    [
+        'upArrow',
+        [
+            `<upArrow xmlns="${A_NS}">`,
+            '<avLst><gd name="adj1" fmla="val 50000"/><gd name="adj2" fmla="val 50000"/></avLst>',
+            '<gdLst><gd name="maxAdj2" fmla="*/ 100000 h ss"/><gd name="a1" fmla="pin 0 adj1 100000"/>',
+            '<gd name="a2" fmla="pin 0 adj2 maxAdj2"/><gd name="dy2" fmla="*/ ss a2 100000"/>',
+            '<gd name="y2" fmla="+- t dy2 0"/><gd name="dx1" fmla="*/ w a1 200000"/>',
+            '<gd name="x1" fmla="+- hc 0 dx1"/><gd name="x2" fmla="+- hc dx1 0"/></gdLst>',
+            '<pathLst><path><moveTo><pt x="l" y="y2"/></moveTo><lnTo><pt x="hc" y="t"/></lnTo>',
+            '<lnTo><pt x="r" y="y2"/></lnTo><lnTo><pt x="x2" y="y2"/></lnTo><lnTo><pt x="x2" y="b"/></lnTo>',
+            '<lnTo><pt x="x1" y="b"/></lnTo><lnTo><pt x="x1" y="y2"/></lnTo><close/></path></pathLst>',
+            '</upArrow>',
+        ].join(''),
+    ],
+]);
+
 // Read on the first preset a deck draws, once for the process.
 let presets: ReadonlyMap<string, XmlElement> | undefined;
 
@@ -41,7 +61,12 @@ export function presetGeometry(
 ): CustomGeometry[] | undefined {
     if (!presets) {
         const root = parseXml(readFileSync(PRESETS_FILE));
-        presets = new Map(root ? xmlElements(root).map((definition) => [definition.local, definition]) : []);
+        const found = new Map(root ? xmlElements(root).map((definition) => [definition.local, definition]) : []);
+        for (const [name, definition] of OVERRIDES) {
+            const parsed = parseXml(definition);
+            if (parsed) found.set(name, parsed);
+        }
+        presets = found;
     }
     const definition = presets.get(preset);
     if (!definition) return undefined;
