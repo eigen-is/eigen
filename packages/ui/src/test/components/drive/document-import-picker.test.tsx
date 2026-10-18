@@ -18,7 +18,9 @@ mock.module('@workspace/lib/drive', () => ({
     useImportDocument: () => ({ mutate: () => {}, isPending: pending.device }),
     useImportFromDrive: () => ({ mutate: () => {}, isPending: pending.drive }),
 }));
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => ({ user: { id: 'owner-1' } }) }));
+const session = { user: { id: 'owner-1' } };
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
 const browsed: { canPick?: (item: DrivePath) => boolean } = {};
 mock.module('../../../components/drive/drive-browser', () => ({
     DriveBrowser: ({ canPick }: { canPick?: (item: DrivePath) => boolean }) => {

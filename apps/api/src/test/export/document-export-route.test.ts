@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { inflateSync } from 'node:zlib';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { type MathRow, writeMathml } from '@workspace/math';
 import { openZip } from '../../lib/core/zip';
 import { EXPORT_CSP } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
@@ -7,6 +9,7 @@ import { getHome } from '../../lib/home/get-home';
 import {
     buildGoldenDeckScene,
     buildGoldenDocJson,
+    equation,
     GOLDEN_BEYOND_CAP,
     GOLDEN_MEDIA_NAME,
     seedDeckDoc,
@@ -187,6 +190,42 @@ suite('Document export routes — PDF (WeasyPrint end-to-end)', () => {
         expect(res.headers.get('content-disposition')).toBe('attachment; filename="Doc Contract.pdf"');
         const pdf = Buffer.from(await res.arrayBuffer());
         expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    }, 120_000);
+
+    // MathJax and the font ranges it loads per character run in the Worker, and WeasyPrint draws the SVG as paths: a PDF
+    // of text alone holds no curve.
+    test('an equation prints as the paths MathJax draws of it', async () => {
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        const path = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${root.id}/create/doc`,
+            { fileName: 'Doc Equation' },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, path.id);
+        const row: MathRow = [
+            { kind: 'identifier', text: 'Q', variant: 'bold-fraktur' },
+            { kind: 'operator', text: '⟹' },
+            { kind: 'nary', operator: '∯', limits: 'under', body: [{ kind: 'identifier', text: 'ℵ' }] },
+        ];
+        seedEigendoc(collab.doc, {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [equation(writeMathml(row, 'Q'), true)] }],
+        });
+
+        const res = await exportRequest(path.id, 'pdf');
+        expect(res.status).toBe(200);
+        const pdf = Buffer.from(await res.arrayBuffer());
+        const text = pdf.toString('latin1');
+        let curves = 0;
+        for (const match of text.matchAll(/>>\s*stream\r?\n/g)) {
+            const start = match.index + match[0].length;
+            const content = inflateSync(pdf.subarray(start, text.indexOf('endstream', start))).toString('latin1');
+            curves += content.match(/ c\n/g)?.length ?? 0;
+        }
+        expect(curves).toBeGreaterThan(20);
     }, 120_000);
 
     test('eigenslides pdf export serves a rendered PDF as an attachment', async () => {

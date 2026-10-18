@@ -1,12 +1,19 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { readOmml, writeMathml } from '@workspace/math';
+import { M_NS, parseOoxml, W_NS } from '../../../lib/core/ooxml';
+import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
+import { openZip } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
-import { HEADING_LOOKS } from '../../../lib/document/looks';
+import { readStoredEquation } from '../../../lib/document/equation';
+import { HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
 import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
-import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia, withoutEquations } from '../../fixtures/golden-documents';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
+import { importDocxBody } from '../../fixtures/golden-docx';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
 
@@ -28,8 +35,10 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
 // column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
-// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) A page number is its cached 1, before the
-// schema joins the text (cachedPageNumbers).
+// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out. (9) A
+// page number is its cached 1, before the schema joins the text (cachedPageNumbers). (10) Small is written as its look
+// and comes back as that size. (11) OMML has no slot for the typed LaTeX. (12) In Word a display equation is a paragraph
+// of its own.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -37,9 +46,19 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
             if (name in attrs && attrs[name] === null) attrs[name] = imported?.attrs?.[name] ?? null;
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
         if (attrs['textAlign'] === 'left') attrs['textAlign'] = null;
+        if (source.type === 'equation') attrs['mathml'] = writeMathml(readStoredEquation(attrs).row);
     }
+    const small = source.marks?.some((mark) => mark.type === 'small');
+    const styled = source.marks?.some((mark) => mark.type === 'textStyle');
+    const smallSize = (attrs: Mark['attrs']): Mark => ({
+        type: 'textStyle',
+        attrs: { color: null, fontFamily: null, caps: null, ...attrs, fontSize: SMALL_LOOK.sizePt },
+    });
     const marks = source.marks?.flatMap((mark): Mark[] => {
         if (mark.type === 'comment') return [];
+        // Small's rank is right before textStyle's, so its place in the marks is the size's.
+        if (mark.type === 'small') return styled ? [] : [smallSize({})];
+        if (mark.type === 'textStyle' && small) return [smallSize(mark.attrs)];
         if (mark.type === 'link' && typeof mark.attrs?.['href'] === 'string')
             return [{ ...mark, attrs: { ...mark.attrs, href: mark.attrs['href'].replaceAll(' ', '%20') } }];
         if (mark.type === 'textStyle' && mark.attrs?.['color'] === '#000000') {
@@ -47,7 +66,9 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         }
         return [mark];
     });
-    const kept = source.content?.filter((_, index, siblings) => !blankBeforeBreak(siblings, index));
+    const kept = source.content
+        ?.filter((child, index, siblings) => child.type !== 'chart' && !blankBeforeBreak(siblings, index))
+        .flatMap(splitAtDisplayEquations);
     const content = kept?.map((child, index) => expected(child, imported?.content?.[index]));
     return {
         ...source,
@@ -55,6 +76,18 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         ...(marks && (marks.length > 0 ? { marks } : { marks: undefined })),
         ...(content && { content }),
     };
+}
+
+const isDisplayEquation = (node: JSONContent) => node.type === 'equation' && node.attrs?.['display'] === true;
+
+function splitAtDisplayEquations(node: JSONContent): JSONContent[] {
+    if (!node.content?.some(isDisplayEquation)) return [node];
+    const pieces: JSONContent[][] = [[]];
+    for (const child of node.content) {
+        if (isDisplayEquation(child)) pieces.push([child], []);
+        else pieces.at(-1)?.push(child);
+    }
+    return pieces.filter((piece) => piece.length > 0).map((content) => ({ ...node, content }));
 }
 
 function blankBeforeBreak(siblings: JSONContent[], index: number): boolean {
@@ -87,11 +120,9 @@ const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(jso
 
 describe('the all-features doc', () => {
     test('comes back as it was written, but for the named differences', async () => {
-        const source = docSchema()
-            .nodeFromJSON(cachedPageNumbers(withoutEquations(buildAllFeaturesDocJson())))
-            .toJSON();
+        const source = docSchema().nodeFromJSON(cachedPageNumbers(buildAllFeaturesDocJson())).toJSON();
         const docx = await eigendocToDocx(
-            withoutEquations(buildAllFeaturesDocJson()),
+            buildAllFeaturesDocJson(),
             DEFAULT_PAGE_SETUP,
             buildAllFeaturesDocMedia(),
             'All features',
@@ -117,6 +148,44 @@ describe('the page', () => {
         expect(read.height).toBe(215.9);
         for (const side of ['top', 'right', 'bottom', 'left'] as const) expect(read.margin[side]).toBeCloseTo(10, 2);
         expect(read.differentFirstPage).toBe(false);
+    });
+});
+
+// T3-R4: the package's Word equations, through the server's parser, the import and the export, are the trees they were.
+describe("the math package's corpus equations", () => {
+    test('docx → Eigen → docx gives back each tree, display kept', async () => {
+        const corpus: { omml: string; display: boolean }[] = JSON.parse(
+            readFileSync(
+                new URL('../../../../../../packages/math/src/test/fixtures/omml-corpus.json', import.meta.url),
+                'utf8',
+            ),
+        );
+        const input = corpus
+            .map(
+                ({ omml, display }) =>
+                    `<w:p>${display ? `<m:oMathPara xmlns:m="${M_NS}">${omml}</m:oMathPara>` : omml}</w:p>`,
+            )
+            .join('');
+        const { json } = await importDocxBody(input);
+        const docx = await eigendocToDocx(json, DEFAULT_PAGE_SETUP, [], 'Equations', ORIGIN);
+        const document = parseOoxml(openZip(new Uint8Array(docx)).read('word/document.xml') ?? '');
+        const body = document && xmlChild(document, W_NS, 'body');
+        if (!body) throw new Error('no w:body');
+        const written = xmlChildren(body, W_NS, 'p').flatMap((paragraph) =>
+            xmlElements(paragraph)
+                .filter((math) => math.ns === M_NS)
+                .map((math) => {
+                    const display = math.local === 'oMathPara';
+                    const oMath = display ? xmlChild(math, M_NS, 'oMath') : math;
+                    return { row: oMath ? readOmml(oMath) : [], display };
+                }),
+        );
+        const read = corpus.map(({ omml, display }) => {
+            const oMath = parseOoxml(omml);
+            return { row: oMath ? readOmml(oMath) : [], display };
+        });
+        expect(written).toHaveLength(108);
+        expect(written).toStrictEqual(read);
     });
 });
 
@@ -286,6 +355,21 @@ describe("a numbered list's style and start", () => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
     });
+});
+
+// A size is the editor's own, so it comes back in pt, Word's half points kept; in a heading too, over its style's.
+test('font sizes come back as written, in a paragraph and in a heading', async () => {
+    const sized = (text: string, fontSize: number) => ({
+        type: 'text',
+        text,
+        marks: [{ type: 'textStyle', attrs: { fontSize } }],
+    });
+    const { source, json } = await roundTrip([
+        { type: 'paragraph', content: [{ type: 'text', text: 'body ' }, sized('big', 14), sized(' half', 10.5)] },
+        { type: 'heading', attrs: { level: 2 }, content: [sized('Plan', 30), { type: 'text', text: ' styled' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'fine', marks: [{ type: 'small' }] }] },
+    ]);
+    expect(stored(json)).toEqual(stored(expected(source, json)));
 });
 
 // The writer sets a task's checkbox at its container's text, so its quotes count from there.

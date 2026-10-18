@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { holdCapture } from '../../../../components/vector/hooks/use-canvas-doc';
+import { holdCapture } from '../../../components/properties-panel/property-gesture';
 
 function undoManager(): Y.UndoManager {
     const doc = new Y.Doc();

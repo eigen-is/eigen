@@ -39,6 +39,7 @@ import {
     BackgroundFillBlock,
     ColorRow,
     getMergedValue,
+    holdCapture,
     isMixed,
     MergedSelect,
     MergedSlider,
@@ -48,6 +49,7 @@ import {
     PropertyGestureContext,
     PropertyRow,
     PropertySection,
+    sealed,
     TransformSection,
     type ZOp,
     ZOrderButtons,
@@ -55,7 +57,6 @@ import {
 import { type ReactNode, useCallback } from 'react';
 import type * as Y from 'yjs';
 import { applyZOrder, convertElementToShapes } from './hooks/selection-ops';
-import { holdCapture, sealed } from './hooks/use-canvas-doc';
 import { ELEMENT_KIND_UI } from './kinds';
 
 // Discrete presets, the Excalidraw constants: strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,

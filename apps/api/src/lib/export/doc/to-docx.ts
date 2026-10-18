@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName, readFontSize } from '@workspace/lib/constants/fonts';
 import {
     type FigureAttrs,
+    isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     type PageSetup,
     pageTwips,
@@ -385,14 +386,19 @@ function styleFace(style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' |
     return face;
 }
 
-// Word's auto line scales with the tallest face, CSS's doesn't: a paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
+// Word's auto line scales with the tallest face's own line height, CSS's unitless one with the largest size alone: a
+// paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
 function familyLine(style: StyleId | undefined, markFace: RunFace, faces: RunFace[]): number | undefined {
     const family = faces[0]?.family;
     if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
-    const mark = fontLineHeight(markFace.family) * markFace.size;
-    let tallest = mark;
-    for (const face of faces) tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
-    return tallest === mark ? undefined : Math.round((styleSpacing(style, 'line') * mark) / tallest);
+    let tallest = fontLineHeight(markFace.family) * markFace.size;
+    let largest = markFace.size;
+    for (const face of faces) {
+        tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
+        largest = Math.max(largest, face.size);
+    }
+    const css = fontLineHeight(markFace.family) * largest;
+    return tallest === css ? undefined : Math.round((styleSpacing(style, 'line') * css) / tallest);
 }
 
 // ── Properties, written in the ECMA-376 sequence: Word reports a child out of order as unreadable content ─────────
@@ -650,7 +656,8 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
-        if (node.type === 'figure') {
+        // A chart writes as a figure without media, its caption alone, until the docx writes Word charts (T4-R12).
+        if (isFigureFrameNode(node.type)) {
             // A wrapped figure floats before the paragraph that holds it; a block one breaks the paragraph.
             const figure = figureOf(node, context);
             if (inline.length > 0 && figure.some((block) => !('float' in block))) flush();
@@ -661,7 +668,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
             continue;
         }
         // In Word a display equation is a paragraph of its own: it splits its textblock as a block figure does.
-        if (node.type === 'equation' && readStoredEquation(node.attrs ?? {}).display) {
+        if (node.type === 'equation' && node.attrs?.['display'] === true) {
             if (inline.length > 0) flush();
             inline.push(node);
             flush();
@@ -1290,15 +1297,21 @@ const INLINES = new Map<
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
-    // Word lays out the page and updates the field; 1 is what a reader without fields shows. The run takes no marks:
-    // the Yjs binding stores none on an atom, so a reloaded doc holds none.
+    // A complex field, as Word writes it: Google Docs leaves a w:fldSimple PAGE in the body blank. Word lays out the
+    // page and updates the field; 1 is what a reader without fields shows. Every run of the field gets the result's
+    // look, and none takes marks: the Yjs binding stores none on an atom, so a reloaded doc holds none.
     [
         'pageNumber',
-        (node, linked, context, style, faces) => {
-            const field = PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])];
-            const run = runXml(textXml('1'), {}, linked, context, style, faces);
-            return `<w:fldSimple w:instr=" ${field} ">${run}</w:fldSimple>`;
-        },
+        (node, linked, context, style, faces) =>
+            [
+                '<w:fldChar w:fldCharType="begin"/>',
+                `<w:instrText xml:space="preserve"> ${PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])]} </w:instrText>`,
+                '<w:fldChar w:fldCharType="separate"/>',
+                textXml('1'),
+                '<w:fldChar w:fldCharType="end"/>',
+            ]
+                .map((content) => runXml(content, {}, linked, context, style, faces))
+                .join(''),
     ],
     // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
     // math zone, as the editor draws an empty box.
@@ -1388,13 +1401,16 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ],
     [
         'textStyle',
-        ({ color, fontFamily, caps }) => {
+        ({ color, fontFamily, fontSize, caps }) => {
             const name = typeof fontFamily === 'string' ? getFontName(fontFamily) : undefined;
+            const size = readFontSize(fontSize);
             return {
                 color: colorOf(color),
                 font: name && EIGEN_FONT_NAMES.includes(name) ? name : undefined,
                 caps: caps === 'all' || undefined,
                 smallCaps: caps === 'small' || undefined,
+                // Only a size of its own, or it would unset Small's before it.
+                ...(size !== undefined && { size: halfPoints(size) }),
             };
         },
     ],

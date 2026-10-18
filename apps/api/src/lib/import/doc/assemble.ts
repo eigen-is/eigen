@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { readStoredEquation } from '../../document/equation';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../document/looks';
 import { LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
 import type { ListRef } from './numbering';
@@ -64,8 +65,19 @@ export function build(raw: Item[]): JSONContent[] {
     return buildLevel(items, 0);
 }
 
+// An equation is set off from the text and equations beside it by a space where none is.
 export function inlineText(nodes: JSONContent[]): string {
-    return nodes.map((node) => (node.type === 'hardBreak' ? '\n' : (node.text ?? ''))).join('');
+    let text = '';
+    let spaceNext = false;
+    for (const node of nodes) {
+        const equation = node.type === 'equation';
+        const part =
+            node.type === 'hardBreak' ? '\n' : equation ? readStoredEquation(node.attrs ?? {}).text : (node.text ?? '');
+        if (part && text && !/\s$/.test(text) && !/^\s/.test(part) && (spaceNext || equation)) text += ' ';
+        text += part;
+        if (part) spaceNext = equation;
+    }
+    return text;
 }
 
 // Word's Caption style, or a short line of small text, as Google Docs flattens the style.

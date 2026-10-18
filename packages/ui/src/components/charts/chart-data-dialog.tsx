@@ -457,7 +457,8 @@ function EditableGrid({
         }
         onSave({
             ...spec,
-            categoryAxis: final.corner === opened.corner ? spec.categoryAxis : { title: final.corner },
+            categoryAxis:
+                final.corner === opened.corner ? spec.categoryAxis : { ...spec.categoryAxis, title: final.corner },
             sliceColors: final.rows.map((row) => row.color),
             data: {
                 source: 'inline',

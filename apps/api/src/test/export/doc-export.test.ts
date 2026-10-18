@@ -1,18 +1,25 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { sampleChartSpec } from '@workspace/lib/charts';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
-import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
+import { escapeXml } from '@workspace/lib/xml';
+import { MATHML_NAMESPACE, type MathNode, type MathRow, writeMathml, writeText } from '@workspace/math';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { openZip } from '../../lib/core/zip';
+import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
+import { MATHML_LIMIT, renderDocHtml } from '../../lib/export/doc/render';
 import { renderEigendocExport } from '../../lib/export/doc/transform';
+import * as mathSvg from '../../lib/export/math-svg';
+import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
-import { seedEigendoc } from '../fixtures/golden-documents';
+import { corpusEquations, equation, seedEigendoc } from '../fixtures/golden-documents';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
     const doc = new Y.Doc();
@@ -94,8 +101,10 @@ describe('doc export — the page', () => {
 });
 
 describe('doc export — the stylesheet', () => {
-    test('no CSS variable survives into the export', async () => {
-        expect(await exportStyle('pdf-html')).not.toContain('var(');
+    // The app's tokens (--font-sans and the like) are not in the export; a property the stylesheet declares itself is.
+    test.each(['html', 'pdf-html'] as const)('%s declares every CSS variable it reads', async (format) => {
+        const css = await exportStyle(format);
+        for (const [, name] of css.matchAll(/var\((--[\w-]+)/g)) expect(css).toContain(`${name}:`);
     });
 
     test('headings print at medium and bold at 600', async () => {
@@ -226,6 +235,50 @@ describe('doc export — figures', () => {
     });
 });
 
+describe('doc export — charts', () => {
+    const chartDoc = (attrs: Record<string, unknown>, spec = sampleChartSpec('column')): JSONContent => ({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { spec: JSON.stringify(spec), ...attrs } }] }],
+    });
+
+    // Inline, so WeasyPrint draws the labels in the page's own fonts; an <img> of an SVG can't reach @font-face.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws a chart as inline SVG at its size in the figure box, its labels as text',
+        async (format) => {
+            const doc = seededDoc(chartDoc({ width: 480, height: 300, alignment: 'right', caption: 'Points' }));
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const html = new TextDecoder().decode(data);
+            expect(html).toContain(
+                '<span class="figure" data-layout="block" data-alignment="right"><svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300">',
+            );
+            // Never wider than the column, its height following, by the prose rule the editor's node view draws with.
+            expect(html).toMatch(/\.figure svg\s*\{[^}]*max-width: 100%;[^}]*height: auto;/);
+            expect(html).toMatch(/<text[^>]*>Team 1<\/text>/);
+            expect(html).toContain('</svg><span class="figcaption">Points</span></span>');
+            expect(html).not.toContain('<img');
+        },
+    );
+
+    test("every label draws in the spec's font", () => {
+        const fontsOf = (html: string) =>
+            new Set(Array.from(html.matchAll(/<text[^>]*font-family="([^"]*)"/g), (m) => m[1]));
+        const face = (font: string) => new Set([escapeXml(getFontFamily(font))]);
+        expect(fontsOf(renderDocHtml(chartDoc({}), () => null))).toEqual(face('Inter'));
+        const serif = { ...sampleChartSpec('column'), fontFamily: 'Source Serif 4' };
+        expect(fontsOf(renderDocHtml(chartDoc({}, serif), () => null))).toEqual(face('Source Serif 4'));
+    });
+
+    test('the sanitizer keeps every shape and label of the chart', () => {
+        const raw = renderDocHtml(chartDoc({ width: 480, height: 300 }), () => null);
+        const count = (html: string, tag: string) => html.split(`<${tag}`).length - 1;
+        const kept = sanitizeExportHtml(raw);
+        for (const tag of ['svg', 'g', 'path', 'text']) {
+            expect(count(raw, tag)).toBeGreaterThan(0);
+            expect(count(kept, tag)).toBe(count(raw, tag));
+        }
+    });
+});
+
 // The editor's ProseMirror ends a textblock with a <br> wherever its last line would otherwise collapse (addTextblockHacks).
 describe('doc export — trailing breaks', () => {
     async function bodyOf(...content: JSONContent[]): Promise<string> {
@@ -324,29 +377,238 @@ describe('doc export — page breaks', () => {
     });
 });
 
+// The declarations of a rule in an export's stylesheet.
+function proseCssRule(html: string, selector: string): string {
+    const at = html.indexOf(`${selector} {`);
+    return at < 0 ? '' : html.slice(at, html.indexOf('}', at));
+}
+
 describe('doc export — equations', () => {
     const MATH = `<math xmlns="${MATHML_NAMESPACE}">`;
     const x: MathRow = [{ kind: 'identifier', text: 'x' }];
+    const y: MathRow = [{ kind: 'identifier', text: 'y' }];
+    const fence: MathNode = { kind: 'fenced', open: '', close: '', separator: '', parts: [[]] };
+    const integral: MathNode = { kind: 'operator', text: '⨌' };
+    // 1,332 empty fences, about all MATH_LIMITS.size admits: about 4,000 elements of MathML and of SVG, so 12 fit. No
+    // LaTeX, as the docx import stores an equation; the fences write no text, so i is its linear form.
+    const fences = (i: number) => ({
+        mathml: writeMathml([{ kind: 'number', text: `${i}` }, ...Array.from({ length: 1332 }, () => fence)]),
+    });
+    const fenceRun = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => fences(from + i));
+    const fenceTexts = (from: number, to: number) =>
+        Array.from({ length: to - from }, (_, i) => `${from + i}`).join('');
+    const elements = (markup: string) => markup.match(/<[a-z]/g)?.length ?? 0;
 
-    async function exportHtml(...attrs: Record<string, unknown>[]): Promise<string> {
+    async function exportEquations(format: 'html' | 'pdf-html', ...attrs: Record<string, unknown>[]): Promise<string> {
         const equations = attrs.map((a) => ({ type: 'equation', attrs: a }));
         const doc = seededDoc({ type: 'doc', content: [{ type: 'paragraph', content: equations }] });
-        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
         return new TextDecoder().decode(data);
     }
 
-    // No screen draws the annotation, and an HTML sanitizer that drops it keeps its LaTeX as text.
-    test('an equation is its MathML without the LaTeX, display="block" when it is displayed', async () => {
-        const html = await exportHtml({ mathml: writeMathml(x, 'x') }, { mathml: writeMathml(x, 'x'), display: true });
-        expect(html).toContain(
-            `<p>${MATH}<mi>x</mi></math><math display="block" xmlns="${MATHML_NAMESPACE}"><mi>x</mi></math>`,
+    // No screen draws the annotation, and an HTML sanitizer that drops it keeps its LaTeX as text. The editor's span,
+    // so a displayed one takes its line as the editor's does, ending on the line the trailing <br> holds.
+    test('an equation is its MathML without the LaTeX in the editor\'s span, display="block" when it is displayed', async () => {
+        const html = await exportEquations(
+            'html',
+            { mathml: writeMathml(x, 'x') },
+            { mathml: writeMathml(x, 'x'), display: true },
         );
+        expect(html).toContain(
+            `<p><span class="equation">${MATH}<mi>x</mi></math></span><span class="equation" data-display="block"><math display="block" xmlns="${MATHML_NAMESPACE}"><mi>x</mi></math></span><br></p>`,
+        );
+        expect(proseCssRule(html, '.eigen-prose .equation[data-display]')).toContain('width: 100%');
         expect(html).not.toContain('x-tex');
+        expect(html).not.toContain('<svg');
     });
+
+    // WeasyPrint draws no MathML.
+    test('the PDF draws an equation as SVG, a displayed one in a block', async () => {
+        const html = await exportEquations(
+            'pdf-html',
+            { mathml: writeMathml(x, 'x') },
+            { mathml: writeMathml(y, 'y'), display: true },
+        );
+        expect(html).toMatch(
+            /<p><span class="math-svg"><svg [^>]*>[\s\S]*?<\/svg><\/span><span class="math-svg" data-display="block"><svg [^>]*>[\s\S]*?<\/svg><\/span><br><\/p>/,
+        );
+        expect(html.match(/<svg/g)).toHaveLength(2);
+        expect(html).not.toMatch(/<math|x-tex/);
+    });
+
+    // CSS's + skips text, so a rule hiding the <br> after a displayed equation would hide a user's break after text
+    // that follows it. The drawing takes its line as the editor's does instead, ending on the trailing <br>'s line.
+    test("the PDF keeps a user's break after a displayed equation", async () => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'equation', attrs: { mathml: writeMathml(y, 'y'), display: true } },
+                        { type: 'text', text: 'AFTER' },
+                        { type: 'hardBreak' },
+                        { type: 'text', text: 'MORE' },
+                    ],
+                },
+            ],
+        });
+        const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+        const html = new TextDecoder().decode(data);
+
+        expect(html).toMatch(/<\/svg><\/span>AFTER<br>MORE<\/p>/);
+        expect(html).not.toMatch(/\+\s*br\s*\{/);
+        expect(proseCssRule(html, '.math-svg[data-display]')).toMatch(/display: inline-block;[^}]*width: 100%/);
+    });
+
+    // MathJax draws each string once. Past its last drawing a repeat of a drawn one is text too, so the text is a tail.
+    test(`past ${mathSvg.MAX_SVG_EQUATIONS} drawings the PDF writes the rest as their text`, async () => {
+        const numbers = Array.from({ length: mathSvg.MAX_SVG_EQUATIONS }, (_, i) => ({
+            mathml: writeMathml([{ kind: 'number', text: String(i) }], String(i)),
+        }));
+        const mathmlToSvg = spyOn(mathSvg, 'mathmlToSvg');
+        try {
+            const html = await exportEquations(
+                'pdf-html',
+                numbers[0],
+                ...numbers,
+                { mathml: writeMathml(y, 'y') },
+                numbers[0],
+            );
+            expect(html.match(/class="math-svg"/g)).toHaveLength(mathSvg.MAX_SVG_EQUATIONS + 1);
+            expect(html).toContain('</svg></span>y0<br></p>');
+            expect(mathmlToSvg).toHaveBeenCalledTimes(mathSvg.MAX_SVG_EQUATIONS);
+        } finally {
+            mathmlToSvg.mockRestore();
+        }
+    }, 60_000);
+
+    // A row of 1,997 ⨌, about all MATH_LIMITS.size admits: 24 KB of MathML, about 4.1 MB of SVG. Each copy counts, as
+    // the sanitizer and WeasyPrint read each, and MathJax stops at the one that does not fit.
+    test(`the PDF draws at most ${mathSvg.SVG_LIMIT.bytes} bytes of SVG, and the rest as their text`, async () => {
+        const row = (i: number): MathRow => [
+            { kind: 'number', text: `${i}` },
+            ...Array.from({ length: 1997 }, () => integral),
+        ];
+        const wide = (i: number) => ({ mathml: writeMathml(row(i)) });
+        const equations = [wide(0), wide(0), ...Array.from({ length: 18 }, (_, i) => wide(i + 1))];
+        const draw = mathSvg.mathmlToSvg;
+        const built: number[] = [];
+        const mathmlToSvg = spyOn(mathSvg, 'mathmlToSvg').mockImplementation(async (mathml) => {
+            const svg = await draw(mathml);
+            built.push(Buffer.byteLength(svg));
+            return svg;
+        });
+        try {
+            const html = await exportEquations('pdf-html', ...equations);
+            const drawn = html.match(/<span class="math-svg">[\s\S]*?<\/svg><\/span>/g) ?? [];
+            const texts = html.slice(
+                html.lastIndexOf('</svg></span>') + '</svg></span>'.length,
+                html.indexOf('<br></p>'),
+            );
+
+            expect(drawn.reduce((bytes, svg) => bytes + Buffer.byteLength(svg), 0)).toBeLessThanOrEqual(
+                mathSvg.SVG_LIMIT.bytes,
+            );
+            expect(built.slice(0, -1).reduce((sum, bytes) => sum + bytes, 0)).toBeLessThanOrEqual(
+                mathSvg.SVG_LIMIT.bytes,
+            );
+            expect(drawn).toHaveLength(2);
+            expect(mathmlToSvg).toHaveBeenCalledTimes(2);
+            expect(texts).toBe(Array.from({ length: 18 }, (_, i) => writeText(row(i + 1))).join(''));
+        } finally {
+            mathmlToSvg.mockRestore();
+        }
+    }, 60_000);
+
+    // Each fences() draws 0.15 MB, where bytes alone would admit 68 copies. A copy past the budget is text, as WeasyPrint
+    // would draw it again.
+    test(`the PDF draws at most ${mathSvg.SVG_LIMIT.elements} elements of SVG, and the rest as their text`, async () => {
+        const equations = [fences(0), ...fenceRun(0, 11), fences(0), ...fenceRun(11, 16)];
+        const mathmlToSvg = spyOn(mathSvg, 'mathmlToSvg');
+        try {
+            const html = await exportEquations('pdf-html', ...equations);
+            const drawn = html.match(/<span class="math-svg">[\s\S]*?<\/svg><\/span>/g) ?? [];
+            const texts = html.slice(
+                html.lastIndexOf('</svg></span>') + '</svg></span>'.length,
+                html.indexOf('<br></p>'),
+            );
+
+            expect(drawn.reduce((sum, svg) => sum + elements(svg), 0)).toBeLessThanOrEqual(mathSvg.SVG_LIMIT.elements);
+            expect(drawn).toHaveLength(12);
+            expect(mathmlToSvg).toHaveBeenCalledTimes(11);
+            expect(texts).toBe(`0${fenceTexts(11, 16)}`);
+        } finally {
+            mathmlToSvg.mockRestore();
+        }
+    }, 60_000);
+
+    // The HTML download and the preview write MathML, which jsdom pays for by the element, every copy. Past the budget
+    // an equation is its linear text, whether it carries LaTeX or not.
+    test(`the HTML writes at most ${MATHML_LIMIT.elements} elements of MathML, and the rest as their text`, async () => {
+        const half: MathRow = [
+            { kind: 'fraction', numerator: x, denominator: [{ kind: 'number', text: '2' }], line: 'bar' },
+        ];
+        const readStoredEquation = spyOn(storedEquation, 'readStoredEquation');
+        try {
+            const html = await exportEquations('html', fences(0), ...fenceRun(0, 12), fences(0), fences(12), {
+                mathml: writeMathml(half, '\\frac{x}{2}'),
+            });
+            const drawn = html.match(/<math[\s\S]*?<\/math>/g) ?? [];
+
+            expect(drawn.reduce((sum, math) => sum + elements(math), 0)).toBeLessThanOrEqual(MATHML_LIMIT.elements);
+            expect(drawn).toHaveLength(12);
+            // Each distinct equation is read once to draw, and each past the budget once more for its text.
+            expect(readStoredEquation).toHaveBeenCalledTimes(12 + 4);
+            expect(html).toContain('</math></span>11012x/2<br></p>');
+        } finally {
+            readStoredEquation.mockRestore();
+        }
+    });
+
+    // The schema refuses an equation in a code block, a figure or another equation, but a Yjs update can hold one.
+    // The render skips it, and every other equation still draws as itself.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws each equation as itself around one the render skips',
+        async (format) => {
+            const digit = (d: number) => equation(writeMathml([{ kind: 'number', text: `${d}` }], `${d}`));
+            const doc = seededDoc({
+                type: 'doc',
+                content: [
+                    { type: 'paragraph', content: [digit(1)] },
+                    { type: 'codeBlock', content: [{ type: 'text', text: 'c' }, digit(2)] },
+                    { type: 'paragraph', content: [{ ...digit(3), content: [digit(4)] }] },
+                    {
+                        type: 'paragraph',
+                        content: [{ type: 'figure', attrs: { caption: 'c' }, content: [digit(5)] }, digit(6)],
+                    },
+                    { type: 'paragraph', content: [digit(7)] },
+                ],
+            });
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const html = new TextDecoder().decode(data);
+            // MathJax names each glyph by its code point: 0x31 is 1.
+            const drawn = format === 'html' ? /<mn>(\d)<\/mn>/g : /<span class="math-svg">[\s\S]*?data-c="3(\d)"/g;
+
+            expect([...html.matchAll(drawn)].map((match) => match[1])).toEqual(['1', '3', '6', '7']);
+        },
+    );
+
+    // The 108 corpus equations, over and over: a paper of 1,000 shows every one, in both budgets.
+    test('a 1,000-equation paper draws every equation', async () => {
+        const corpus = corpusEquations();
+        const paper = Array.from({ length: 1000 }, (_, i) => {
+            const { row, display } = corpus[i % corpus.length];
+            return { mathml: writeMathml(row), display };
+        });
+
+        expect((await exportEquations('html', ...paper)).match(/<math/g)).toHaveLength(1000);
+        expect((await exportEquations('pdf-html', ...paper)).match(/class="math-svg"/g)).toHaveLength(1000);
+    }, 60_000);
 
     // DOMPurify's MathML profile drops <none>, which holds an empty script's place.
     test('a prescript keeps its empty slot', async () => {
-        const html = await exportHtml({
+        const html = await exportEquations('html', {
             mathml: writeMathml([{ kind: 'scripts', base: x, sub: [{ kind: 'number', text: '1' }], pre: true }]),
         });
         expect(html).toContain(
@@ -355,11 +617,14 @@ describe('doc export — equations', () => {
     });
 
     test('a forged or malformed stored string never reaches the HTML', async () => {
-        const html = await exportHtml(
+        const html = await exportEquations(
+            'html',
             { mathml: `${MATH}<mi onclick="alert(1)">x</mi><script>alert(2)</script></math>` },
             { mathml: `${MATH}<mi>x</mi>` },
         );
-        expect(html).toContain(`<p>${MATH}<mi>x</mi></math>${MATH}</math><br></p>`);
+        expect(html).toContain(
+            `<p><span class="equation">${MATH}<mi>x</mi></math></span><span class="equation">${MATH}</math></span><br></p>`,
+        );
         expect(html).not.toContain('alert');
     });
 });
@@ -429,6 +694,22 @@ describe('doc export — caps', () => {
             '<p><span style="text-transform: uppercase">Title</span></p>',
         );
     });
+
+    // The schema's renderHTML reads the stored size, so a forged one draws nothing.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws a font size in pt, and a forged one not at all',
+        async (format) => {
+            const sized = (text: string, fontSize: unknown) => ({
+                type: 'text',
+                text,
+                marks: [{ type: 'textStyle', attrs: { fontSize } }],
+            });
+            const html = await exportBody(format, [
+                { type: 'paragraph', content: [sized('Big', 14), sized(' forged', '1pt; position: fixed')] },
+            ]);
+            expect(html).toContain('<p><span style="font-size: 14pt">Big</span><span> forged</span></p>');
+        },
+    );
 
     test('html draws small caps in CSS over the letters as typed', async () => {
         expect(await exportBody('html', [{ type: 'paragraph', content: [caps(' Name', 'small')] }])).toContain(
@@ -766,8 +1047,10 @@ const weasyPrint = await isWeasyPrintAvailable();
 const launcher = Bun.which('weasyprint');
 const python = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
 
-// The text of every list marker WeasyPrint lays out for the page the PDF is written from.
-const MARKER_SCRIPT = `
+// What `line` prints of each box WeasyPrint lays out for the pages the PDF is written from, `tag` its element's name.
+async function laidOut(html: string, line: string): Promise<string[]> {
+    if (python === null) throw new Error('no python behind the weasyprint launcher');
+    const script = `
 import sys, weasyprint
 def walk(box):
     yield box
@@ -775,13 +1058,10 @@ def walk(box):
         yield from walk(child)
 for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     for box in walk(page._page_box):
-        if 'marker' in str(getattr(box, 'element_tag', '')) and hasattr(box, 'text'):
-            print(box.text.strip())
+        tag = str(getattr(box, 'element_tag', '')).split('}')[-1]
+        ${line}
 `;
-
-async function markers(html: string): Promise<string[]> {
-    if (python === null) throw new Error('no python behind the weasyprint launcher');
-    const proc = Bun.spawn([python, '-I', '-c', MARKER_SCRIPT], { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' });
+    const proc = Bun.spawn([python, '-I', '-c', script], { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' });
     proc.stdin.write(html);
     await proc.stdin.end();
     return (await new Response(proc.stdout).text()).trim().split('\n');
@@ -798,6 +1078,34 @@ async function markers(html: string): Promise<string[]> {
             orderedList({ start: 2, type: 'a' }, listItem('d'), listItem('e')),
             orderedList({ type: 'I' }, listItem('f')),
         );
-        expect(await markers(html)).toEqual(['3.', 'v.', '4.', 'b.', 'c.', 'I.']);
+        const markers = await laidOut(html, "if 'marker' in tag and hasattr(box, 'text'): print(box.text.strip())");
+        expect(markers).toEqual(['3.', 'v.', '4.', 'b.', 'c.', 'I.']);
+    }, 60_000);
+});
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — equations (WeasyPrint)', () => {
+    // MathJax breaks no equation into lines, so one wider than the column scales down to it.
+    test('an equation wider than the column fits it, in its own proportions', async () => {
+        const terms = (count: number): MathRow =>
+            Array.from({ length: count }, (_, i) =>
+                i % 2 ? { kind: 'operator', text: '+' } : { kind: 'identifier', text: 'x' },
+            );
+        const html = await pdfHtml({
+            type: 'paragraph',
+            content: [
+                equation(writeMathml(terms(121)), true),
+                { type: 'text', text: 'and ' },
+                equation(writeMathml(terms(81))),
+            ],
+        });
+        const boxes = await laidOut(html, "if tag in ('article', 'svg'): print(tag, box.width, box.height)");
+        const [column, ...svgs] = boxes.map((box) => box.split(' ').slice(1).map(Number));
+        const drawn = [...html.matchAll(/<svg [^>]*width="([\d.]+)ex" height="([\d.]+)ex"/g)];
+
+        expect(svgs).toHaveLength(2);
+        svgs.forEach(([width, height], i) => {
+            expect(width).toBeCloseTo(column[0], 1);
+            expect(width / height).toBeCloseTo(Number(drawn[i][1]) / Number(drawn[i][2]), 0);
+        });
     }, 60_000);
 });

@@ -41,9 +41,20 @@ export type ChartSpec = {
     title: string;
     legend: LegendPosition;
     blanks: ChartBlanks;
-    categoryAxis: { title: string };
+    // visible false draws no labels and no axis line, as Excel's c:delete or a c:tickLblPos of none; the title and
+    // gridlines are their own.
+    // reversed runs the axis the other way from Google's, as Excel's minMax bar chart does from the bottom up: the
+    // whole axis turns, so the series in a category's band turn with it.
+    categoryAxis: { title: string; visible: boolean; reversed: boolean };
     // format: an Excel number format; null is General, or linked to the source cells.
-    valueAxis: { title: string; min: number | null; max: number | null; gridlines: boolean; format: string | null };
+    valueAxis: {
+        title: string;
+        min: number | null;
+        max: number | null;
+        gridlines: boolean;
+        format: string | null;
+        visible: boolean;
+    };
     // pie only: one color per category, null or missing the palette's at its index, as for a series
     sliceColors: (string | null)[];
     // An EIGEN_FONTS name; every label draws in it.

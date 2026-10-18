@@ -3,12 +3,13 @@ import { expect, spyOn, test } from 'bun:test';
 import { Editor } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import { writeMathml } from '@workspace/math';
+import { readLatex, writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
 
 const { buildTextClipboardItem, classifyPaste } = await import('@workspace/lib/clipboard');
+const { sampleChartSpec } = await import('@workspace/lib/charts');
 const { DOCUMENT_FONT, EIGEN_FONTS } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
@@ -116,17 +117,21 @@ test('a figure that does not resolve is left out', async () => {
     expect(blocks(await paste(clipboard))).toEqual([['One'], [], ['Two', 'chart.png']]);
 });
 
-// Slides and sheets read the text item, so an equation beside an image keeps its LaTeX there.
-test("an equation copied beside an image is its LaTeX in the copy's text item", () => {
-    const equation = {
-        type: 'equation',
-        attrs: { mathml: writeMathml([{ kind: 'identifier', text: 'x' }], '\\pi r^2') },
-    };
+// Slides and sheets read the text item, so an equation beside an image keeps its linear form there.
+test("an equation copied beside an image is its linear form in the copy's text item", () => {
+    const latex = '\\pi r^2';
+    const equation = { type: 'equation', attrs: { mathml: writeMathml(readLatex(latex), latex) } };
     const { eigen } = copy([paragraph(text('Area '), equation), paragraph(figure('chart.png'))]);
-    expect(eigen?.items.map((item) => (item.type === 'text' ? item.text : item.type))).toEqual([
-        'Area \\pi r^2',
-        'image',
-    ]);
+    expect(eigen?.items.map((item) => (item.type === 'text' ? item.text : item.type))).toEqual(['Area πr^2', 'image']);
+});
+
+// Another editor reads the <math> with its LaTeX, a plain-text one the linear form.
+test('an equation copied writes its MathML in the HTML and its linear form as plain text', () => {
+    const latex = '\\pi r^2';
+    const equation = { type: 'equation', attrs: { mathml: writeMathml(readLatex(latex), latex) } };
+    const { html, text: plain } = copy([paragraph(text('Area '), equation)]);
+    expect(html).toContain(writeMathml(readLatex(latex), latex));
+    expect(plain).toBe('Area πr^2');
 });
 
 test("a page number copied beside an image is # in the copy's text item", () => {
@@ -281,6 +286,39 @@ test('a text item pastes its text literally', async () => {
     const item = buildTextClipboardItem({ text: 'if a<b and c>d then\nAT&amp;T', box: { width: 100, height: 20 } });
     const target = await paste({ eigen: { version: 1, items: [item] }, html: '', text: '', files: [], imageFiles: [] });
     expect(blocks(target)).toEqual([['if a<b and c>d then'], ['AT&amp;T']]);
+});
+
+// A chart rides the docs HTML, not an eigen item, so within Docs it pastes back whole, alone or beside a figure.
+test('a chart copies and pastes back whole within Docs, alone or beside a figure', async () => {
+    const chart = {
+        type: 'chart',
+        attrs: {
+            spec: JSON.stringify(sampleChartSpec('pie')),
+            width: 300,
+            height: 200,
+            caption: 'Share',
+            alignment: 'center',
+            layout: 'wrap-left',
+            commentCardId: null,
+        },
+    };
+    const chartsIn = (editor: Editor) => {
+        const attrs: Record<string, unknown>[] = [];
+        editor.state.doc.descendants((node) => {
+            if (node.type.name === 'chart') attrs.push(node.attrs);
+        });
+        return attrs;
+    };
+
+    const alone = copy([paragraph(text('a'), chart)]);
+    expect(alone.eigen).toBeUndefined();
+    const target = new Editor({ extensions: getDocExtensions() });
+    target.view.pasteHTML(cleanPastedHTML(alone.html, 600, new Set()));
+    expect(chartsIn(target)).toEqual([chart.attrs]);
+
+    const beside = copy([paragraph(figure('a.png'), chart)]);
+    expect(beside.eigen?.items.map((item) => item.type)).toEqual(['image']);
+    expect(chartsIn(await paste(beside))).toEqual([chart.attrs]);
 });
 
 // A copy with no figure, title or upright italic is ProseMirror's own, so it never serializes the selection itself.

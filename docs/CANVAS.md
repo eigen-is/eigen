@@ -146,7 +146,7 @@ In frame mode, rendering, hit testing, marquee, snap, select-all and the keyboar
 
 ## One discrete op is one undo step
 
-`Y.UndoManager` merges everything within 500 ms. So every discrete op (delete, duplicate, z-order, a panel row, a frame op) runs through `sealed()` (`hooks/use-canvas-doc.ts`), which stops capturing on both sides. A gesture that writes as it goes (the opacity slider, a typed number, a run of arrow-key nudges) takes `holdCapture()` instead. It holds the window open until the gesture ends, and `sealed` stands down inside it. The panel publishes the hold on `PropertyGestureContext`, so every number input is one step without threading it.
+`Y.UndoManager` merges everything within 500 ms. So every discrete op (delete, duplicate, z-order, a panel row, a frame op) runs through `sealed()` (`packages/ui/src/components/properties-panel/property-gesture.ts`), which stops capturing on both sides. A gesture that writes as it goes (the opacity slider, a typed number, a run of arrow-key nudges) takes `holdCapture()` instead. It holds the window open until the gesture ends, and `sealed` stands down inside it. The panel publishes the hold on `PropertyGestureContext`, so every number input is one step without threading it.
 
 Fixups that must never be undone write under a non-null origin, which the UndoManager does not track: the image's pending-to-real media name swap, the sweep of abandoned upload placeholders, a text box re-fit caused by someone else, the deck's seed. They still sync to peers. The comments map is outside the undo scope, so ⌘Z never resurrects a card. It is not one of the declared `yjsRoots` either, so a version restore from before a card's delete brings back the element's `commentCardIds` but not the card. The canvas draws no mark for an id whose card is gone.
 
@@ -174,7 +174,7 @@ On the canvas Escape goes to the innermost active mode: rich-text editing, then 
 
 `ObjectTransform` (`packages/ui/src/components/transform/`) is the resize and rotate chrome for the canvas, docs figures and sheets images. Its `snapBox` applies on resize only. `snap.ts` takes its threshold in the box's units, so a zoomable host passes `SNAP_SCREEN_THRESHOLD / zoom` to keep the radius constant on screen. A rotated box's axis-aligned edges don't match what the user sees, so it snaps by center only. The aspect lock (`useAspectLock`) starts on for images and remembers a toggle per element while the editor is mounted.
 
-Every panel row is a `PropertyRow` over the shared controls in `packages/ui/src/components/properties-panel/`, never a bespoke control. With nothing selected a host may add its own rows (`emptySection`), because only it knows those words.
+Every panel row is a `PropertyRow` over the shared controls in `packages/ui/src/components/properties-panel/`, never a bespoke control. A checkbox is a `PropertyCheckbox` instead, its label beside the box across the row, because a box's label says what it turns on and outruns the label column. With nothing selected a host may add its own rows (`emptySection`), because only it knows those words.
 
 ## See also
 

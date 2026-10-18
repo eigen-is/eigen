@@ -404,8 +404,14 @@ function textFaces(reader: Reader, p: XmlElement, paraRun: DocxRunProps) {
     });
 }
 
-// Every run holding text set by hand below its heading's size and at most the body's, which Word draws as body
-// text, complex script at its szCs; the style's bold and italic then stay as marks.
+// A run holding text set by hand below its heading's size and at most the body's, in half points. The audit reads it
+// as the reader does.
+export function isBodySizedRun(size: number | undefined, heading: number, body: number): boolean {
+    return size !== undefined && size < heading && size <= body;
+}
+
+// Every run holding text body sized, which Word draws as body text, complex script at its szCs; the style's bold and
+// italic then stay as marks.
 function isBodySized(reader: Reader, p: XmlElement, heading: DocxRunProps): boolean {
     const headingSize = heading.size ?? 20;
     const headingSizeCs = heading.sizeCs ?? headingSize;
@@ -414,10 +420,7 @@ function isBodySized(reader: Reader, p: XmlElement, heading: DocxRunProps): bool
             ? { size: direct.sizeCs, heading: headingSizeCs, body: reader.bodySizeCs }
             : { size: direct.size, heading: headingSize, body: reader.bodySize },
     );
-    return (
-        faces.length > 0 &&
-        faces.every(({ size, heading, body }) => size !== undefined && size < heading && size <= body)
-    );
+    return faces.length > 0 && faces.every(({ size, heading, body }) => isBodySizedRun(size, heading, body));
 }
 
 // A code style draws code only where every run holding text is monospace, an empty line where its mark is;

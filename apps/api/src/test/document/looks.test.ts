@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, DOCUMENT_FONT_SIZE, SMALL_FONT_SIZE } from '@workspace/lib/constants/fonts';
 import { DEFAULT_PAGE_SETUP, ITALIC_HEADING_LEVELS } from '@workspace/lib/docs/eigendoc';
 import { W_NS } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
@@ -15,6 +15,7 @@ import {
     LINK_LOOK,
     nodeLook,
     QUOTE_LOOK,
+    SMALL_LOOK,
     TASK_DONE_LOOK,
     TITLE_LOOKS,
 } from '../../lib/document/looks';
@@ -147,6 +148,12 @@ describe('the writer draws the editor look from the vocabulary', () => {
 describe('the writer draws its body in the document font', () => {
     test('the prose body is the font a doc draws without a mark', () => {
         expect(BODY.font).toBe(DOCUMENT_FONT);
+    });
+
+    // The toolbar shows them where no size is set, and a paste drops the body's.
+    test('the prose body and Small are the sizes a doc draws without a size mark', () => {
+        expect(BODY.sizePt).toBe(DOCUMENT_FONT_SIZE);
+        expect(SMALL_LOOK.sizePt).toBe(SMALL_FONT_SIZE);
     });
 });
 

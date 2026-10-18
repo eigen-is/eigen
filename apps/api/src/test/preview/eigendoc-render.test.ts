@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_PAGE_SETUP, PAGE_ROOT } from '@workspace/lib/docs/eigendoc';
-import { type MathRow, writeMathml } from '@workspace/math';
+import { type MathNode, type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
+import { MATHML_LIMIT } from '../../lib/export/doc/render';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedEigendoc } from '../fixtures/golden-documents';
 
@@ -50,6 +52,16 @@ describe('renderEigendocPreviewBody', () => {
         expect(body).not.toContain('evil.example');
     });
 
+    test('a chart draws as inline SVG in the figure box, its labels as text', () => {
+        const spec = JSON.stringify(sampleChartSpec('column'));
+        const body = previewOf({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { spec, width: 480, height: 300 } }] }],
+        });
+        expect(body).toContain('<span class="figure" data-layout="block" data-alignment="center"><svg');
+        expect(body).toMatch(/<text[^>]*>Team 1<\/text>/);
+    });
+
     test('the golden document keeps its media and its hyperlink', () => {
         const body = previewOf(buildGoldenDocJson());
         expect(body).toContain(MEDIA_URL);
@@ -66,6 +78,27 @@ describe('renderEigendocPreviewBody', () => {
             content: [{ type: 'paragraph', content: [{ type: 'equation', attrs: { mathml } }] }],
         });
         expect(body).toContain('<mprescripts></mprescripts><mn>1</mn><none></none>');
+    });
+
+    // A viewer's open runs it, and the block cap leaves a paragraph any number of equations: jsdom pays per element.
+    test(`a paragraph's equations write at most ${MATHML_LIMIT.elements} elements of MathML, the rest as their text`, () => {
+        const fence: MathNode = { kind: 'fenced', open: '', close: '', separator: '', parts: [[]] };
+        // 1,332 empty fences, about all MATH_LIMITS.size admits: about 4,000 elements, so 12 fit. No LaTeX, as the docx
+        // import stores an equation; the fences write no text, so i is its linear form.
+        const equations = Array.from({ length: 20 }, (_, i) => ({
+            type: 'equation',
+            attrs: {
+                mathml: writeMathml([{ kind: 'number', text: `${i}` }, ...Array.from({ length: 1332 }, () => fence)]),
+            },
+        }));
+        const body = previewOf({ type: 'doc', content: [{ type: 'paragraph', content: equations }] });
+        const drawn = body.match(/<math[\s\S]*?<\/math>/g) ?? [];
+
+        expect(drawn.reduce((sum, math) => sum + (math.match(/<[a-z]/g)?.length ?? 0), 0)).toBeLessThanOrEqual(
+            MATHML_LIMIT.elements,
+        );
+        expect(drawn).toHaveLength(12);
+        expect(body).toContain(`</math></span>${Array.from({ length: 8 }, (_, i) => `${i + 12}`).join('')}<br></p>`);
     });
 
     test('an ordered list keeps its start and its type, as the export draws them', () => {

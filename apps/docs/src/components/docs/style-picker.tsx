@@ -9,7 +9,7 @@ import {
 import { Separator } from '@workspace/ui/components/separator';
 import { ChevronDown, Pilcrow } from 'lucide-react';
 import type { ToolbarState } from './hooks/use-toolbar-state';
-import { PARAGRAPH_STYLES } from './paragraph-styles';
+import { paragraphStylesIn } from './paragraph-styles';
 
 type StylePickerProps = {
     editor: Editor;
@@ -32,7 +32,7 @@ export const StylePicker = ({ editor, active, keepEditorFocus }: StylePickerProp
                 <Pilcrow className="mr-2 h-4 w-4" /> Normal text
             </DropdownMenuItem>
             <Separator className="my-1" />
-            {PARAGRAPH_STYLES.map(({ name, type, attrs, icon: Icon, preview }) => (
+            {paragraphStylesIn(editor.schema).map(({ name, type, attrs, icon: Icon, preview }) => (
                 <DropdownMenuItem
                     key={name}
                     onClick={() => editor.chain().focus().toggleNode(type, 'paragraph', attrs).run()}
