@@ -1159,8 +1159,9 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
 });
 
 // The transform process's memory limit is Linux's alone, the backstop past the budgets. At 1 GiB of data segment the child
-// has about 0.35 GB to use, which the honest document outgrows: the limit ends it with a crash, never the kernel's OOM
-// killer, whose SIGKILL the job line would show.
+// has 0.35 to 0.7 GB to use, by architecture; empty paragraphs just under the tag budget cost the reader about 2.2 GB
+// before the weight refuses them, so the limit ends it with a crash, never the kernel's OOM killer, whose SIGKILL the job
+// line would show.
 describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the memory of the transform process', () => {
     test('is 413, ended by the memory limit', async () => {
         const runner = documentTransformRunner as unknown as { memoryLimitKiB: number };
@@ -1169,7 +1170,7 @@ describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the m
         const logSpy = spyOn(console, 'log');
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
-            const docx = await buildDocxWithBody(await honestBody());
+            const docx = await buildDocxWithBody('<w:p/>'.repeat(Math.floor(0.98 * MAX_PACKAGE_XML_TAGS)));
             const job = {
                 kind: 'import',
                 sourceFormat: 'docx',

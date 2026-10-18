@@ -15,6 +15,12 @@ export const RASTER_EXTENSIONS = new Map([
     ['image/jpeg', 'jpeg'],
 ]);
 
+// The [Content_Types].xml Defaults of an Office image's parts: its raster, and an SVG's own beside its PNG.
+export const OFFICE_IMAGE_CONTENT_TYPES: Record<string, string> = {
+    ...Object.fromEntries([...RASTER_EXTENSIONS].map(([contentType, extension]) => [extension, contentType])),
+    svg: 'image/svg+xml',
+};
+
 // Lossless codings, which PNG keeps pixel for pixel. Every other type takes JPEG, a photo's size; one with alpha
 // retries as PNG.
 const PNG_SOURCES = new Set(['image/png', 'image/gif']);

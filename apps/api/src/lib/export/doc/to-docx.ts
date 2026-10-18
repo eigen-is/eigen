@@ -28,24 +28,15 @@ import {
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import { writeOmml } from '@workspace/math';
+import { A_NS, ASVG_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../core/ooxml';
 import {
-    A_NS,
-    ASVG_NS,
-    CONTENT_TYPES_NS,
-    CORE_PROPERTIES_NS,
-    DC_NS,
-    EMU_PER_PX,
-    M_NS,
-    MC_NS,
-    PACKAGE_RELATIONSHIPS_NS,
-    PIC_NS,
-    R_NS,
-    W_NS,
-    W14_NS,
-    WP_NS,
-} from '../../core/ooxml';
-import { relsPathOf, uriReference } from '../../core/opc';
-import { writeZip } from '../../core/zip';
+    type PackagePart,
+    type Relationship,
+    relationshipsXml,
+    relsPathOf,
+    uriReference,
+    writePackage,
+} from '../../core/opc';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import type { EigendocBands } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
@@ -98,7 +89,7 @@ import {
 } from '../../document/wordml';
 import { splitDataUri } from '../../shared/data-uri';
 import { DOCX_FONT_FILES, type DocxFontFiles, fontLineHeight, sfntTables } from '../fonts';
-import { encodeOfficeImage, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
+import { encodeOfficeImage, OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
@@ -145,7 +136,7 @@ export async function eigendocToDocx(
 
     // The notes the body referenced, in Word's notes part after its two separators, each in the body's column through
     // the part's own relationships, as a band is. A nested note is its text.
-    const noteParts: [path: string, xml: string, contentType?: string][] = [];
+    const noteParts: PackagePart[] = [];
     if (pkg.footnotes.length > 0) {
         pkg.part = { relationships: [], hyperlinks: new Map(), images: new Map() };
         const note: Context = { ...flow, style: 'FootnoteText' };
@@ -165,7 +156,7 @@ export async function eigendocToDocx(
 
     // Each band is a part of its own, in the body's column, its images and links related through its own rels. With page 1
     // different, a page-1 band the doc lacks is an empty part, as Word writes one.
-    const bandParts: [path: string, xml: string, contentType?: string][] = [];
+    const bandParts: PackagePart[] = [];
     const references: string[] = [];
     for (const edge of ['header', 'footer'] as const) {
         const own = bands[edge];
@@ -191,40 +182,33 @@ export async function eigendocToDocx(
     }
     const fonts = embeddedFonts(pkg.faces);
 
-    const parts: [path: string, xml: string, contentType?: string][] = [
-        ['_rels/.rels', relationshipsXml(PACKAGE_RELATIONSHIPS)],
-        [
-            'docProps/core.xml',
-            `<cp:coreProperties xmlns:cp="${CORE_PROPERTIES_NS}" xmlns:dc="${DC_NS}"><dc:title>${escapeXml(stripEigenExtension(title))}</dc:title></cp:coreProperties>`,
-            'application/vnd.openxmlformats-package.core-properties+xml',
-        ],
-        [
-            'word/document.xml',
-            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page, references.join(''))}</w:body></w:document>`,
-            `${WML}.document.main+xml`,
-        ],
-        ['word/_rels/document.xml.rels', relationshipsXml(document.relationships)],
-        ...noteParts,
-        ...bandParts,
-        ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
-        ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
-        ['word/settings.xml', settingsXml(pkg.footnotes.length > 0), `${WML}.settings+xml`],
-        ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
-        ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
-    ];
-    const overrides = parts.map(([path, , contentType]) =>
-        contentType ? `<Override PartName="/${path}" ContentType="${contentType}"/>` : '',
-    );
-
-    return writeZip([
-        {
-            name: '[Content_Types].xml',
-            data: `${XML_DECLARATION}<Types xmlns="${CONTENT_TYPES_NS}">${DEFAULT_CONTENT_TYPES}${overrides.join('')}</Types>`,
+    return writePackage({
+        main: 'word/document.xml',
+        title: stripEigenExtension(title),
+        defaults: {
+            ...OFFICE_IMAGE_CONTENT_TYPES,
+            odttf: 'application/vnd.openxmlformats-officedocument.obfuscatedFont',
         },
-        ...parts.map(([name, xml]) => ({ name, data: `${XML_DECLARATION}${xml}` })),
-        ...fonts.files.map(([name, data]) => ({ name, data })),
-        ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
-    ]);
+        parts: [
+            [
+                'word/document.xml',
+                `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page, references.join(''))}</w:body></w:document>`,
+                `${WML}.document.main+xml`,
+            ],
+            ['word/_rels/document.xml.rels', relationshipsXml(document.relationships)],
+            ...noteParts,
+            ...bandParts,
+            ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
+            ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
+            ['word/settings.xml', settingsXml(pkg.footnotes.length > 0), `${WML}.settings+xml`],
+            ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
+            ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
+        ],
+        files: [
+            ...fonts.files.map(([name, data]) => ({ name, data })),
+            ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
+        ],
+    });
 }
 
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
@@ -267,7 +251,6 @@ export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMed
 }
 
 const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
-const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
 const DOCUMENT_NAMESPACES = [
     `xmlns:w="${W_NS}"`,
@@ -282,33 +265,6 @@ const DOCUMENT_NAMESPACES = [
 ].join(' ');
 
 const BAND_TAGS = { header: 'w:hdr', footer: 'w:ftr' } as const;
-
-const DEFAULT_CONTENT_TYPES = [
-    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
-    '<Default Extension="xml" ContentType="application/xml"/>',
-    '<Default Extension="png" ContentType="image/png"/>',
-    '<Default Extension="jpeg" ContentType="image/jpeg"/>',
-    '<Default Extension="svg" ContentType="image/svg+xml"/>',
-    '<Default Extension="odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/>',
-].join('');
-
-type Relationship = { type: string; target: string; external?: true };
-
-const PACKAGE_RELATIONSHIPS: Relationship[] = [
-    { type: `${R_NS}/officeDocument`, target: 'word/document.xml' },
-    {
-        type: `${PACKAGE_RELATIONSHIPS_NS}/metadata/core-properties`,
-        target: 'docProps/core.xml',
-    },
-];
-
-function relationshipsXml(relationships: Relationship[]): string {
-    const items = relationships.map(
-        ({ type, target, external }, index) =>
-            `<Relationship Id="rId${index + 1}" Type="${type}" Target="${escapeXml(target)}"${external ? ' TargetMode="External"' : ''}/>`,
-    );
-    return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
-}
 
 // The relationships of the part being written, the document's or a band's, each hyperlink target and image once.
 type PartRelationships = { relationships: Relationship[]; hyperlinks: Map<string, string>; images: Map<string, Image> };
