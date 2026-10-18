@@ -1,7 +1,9 @@
 import { OrderedList } from '@tiptap/extension-list';
 
-// A selector matches `type` case-blind, so `a` and `A` can't be told apart in CSS: the list writes its own marker style.
-const LIST_STYLE_TYPES = new Map([
+// A list's own type, drawn on itself: a selector matches `type` case-blind, so `a` and `A` can't be told apart in CSS,
+// and a list set to decimal must beat eigen-prose.css's numbering by depth, which an untyped list takes.
+export const LIST_STYLE_TYPES = new Map([
+    ['1', 'decimal'],
     ['a', 'lower-alpha'],
     ['A', 'upper-alpha'],
     ['i', 'lower-roman'],
@@ -25,7 +27,7 @@ export const EigenOrderedList = OrderedList.extend({
                 ...this.options.HTMLAttributes,
                 ...rest,
                 ...(start !== 1 && { start }),
-                ...(type && type !== '1' && { type }),
+                ...(listStyleType && { type }),
                 ...(style && { style }),
             },
             0,

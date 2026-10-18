@@ -61,6 +61,22 @@ describe('counters', () => {
         ]);
     });
 
+    // An untyped list numbers by depth, 1. a. i. as Google's default: a level drawn so stores no type, a nested decimal '1'.
+    test('a nested decimal level is type 1, and a level that draws as its depth does stores none', async () => {
+        const numbering = `<w:abstractNum w:abstractNumId="1">${level(0, 'decimal', '%1.')}${level(1, 'decimal', '%2.')}${level(2, 'lowerRoman', '%3.')}</w:abstractNum>
+<w:abstractNum w:abstractNumId="2">${level(0, 'lowerLetter', '%1.')}${level(1, 'lowerLetter', '%2.')}${level(2, 'upperLetter', '%3.')}</w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="2"/></w:num>`;
+        const body = [0, 1, 2, 0, 1, 2].map((ilvl, index) => numbered(index < 3 ? 1 : 2, `${index}`, ilvl)).join('');
+        expect(lists((await importDocxBody(body, { numbering })).json)).toEqual([
+            [1, null, 1],
+            [1, '1', 1],
+            [1, null, 1],
+            [1, 'a', 1],
+            [1, null, 1],
+            [1, 'A', 1],
+        ]);
+    });
+
     // A plain object would read the prototype's constructor as a type.
     test('a format named after an object key is a decimal list', async () => {
         const numbering = `<w:abstractNum w:abstractNumId="1">${level(0, 'constructor', '%1.')}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;

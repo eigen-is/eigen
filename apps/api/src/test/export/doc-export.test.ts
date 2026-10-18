@@ -1033,13 +1033,15 @@ describe('doc export — ordered lists', () => {
         );
     });
 
-    test('a decimal ol draws no marker style of its own', async () => {
+    // A list set to decimal keeps it nested, over eigen-prose.css's numbering by depth; an unknown type is untyped.
+    test('a decimal ol draws decimal on itself, an untyped one and an unknown type no marker style', async () => {
         const html = await pdfHtml(
             orderedList({ type: '1' }, listItem('a')),
             orderedList({ type: 'x' }, listItem('b')),
+            orderedList({ type: null }, listItem('c')),
         );
-        expect(html).toContain('<ol type="x">');
-        expect(html).not.toMatch(/<ol [^>]*style=/);
+        expect(html).toContain('<ol type="1" style="list-style-type: decimal">');
+        expect(html.match(/<ol>/g)).toHaveLength(2);
     });
 });
 

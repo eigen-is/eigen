@@ -19,6 +19,7 @@ export {
     setFigureAttributes,
 } from './nodes/figure-frame';
 export { selectionFontSizes } from './nodes/font-size';
+export { LIST_STYLE_TYPES } from './nodes/ordered-list';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';
@@ -30,6 +31,7 @@ export {
     readParagraphFormat,
     selectionParagraphFormat,
 } from './nodes/paragraph-format';
+export { EigenTableCell, EigenTableHeader, readCellBackground } from './nodes/table-cell';
 export type { TitleType } from './nodes/title';
 export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {

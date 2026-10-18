@@ -62,8 +62,8 @@ export type Reader = {
     publicOrigin: string | undefined;
 };
 
-// Per part: its relationships, whether its breaks page, the tables around it, the table style, the cell's width in px
-// and whether the text sits on a fill the schema drops.
+// Per part: its relationships, whether its breaks page, the tables around it, the table style, the cell's width in px,
+// whether the text sits on a fill the schema drops, and the cell fill drawn behind it.
 export type Scope = {
     part: Part;
     inNote: boolean;
@@ -71,6 +71,7 @@ export type Scope = {
     tableRun?: DocxRunProps;
     room?: number;
     onFill?: boolean;
+    fill?: string;
 };
 
 export function createReader(pkg: DocxPackage, publicOrigin: string | undefined): Reader {

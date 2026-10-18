@@ -1112,6 +1112,29 @@ describe('docx writer — lists', () => {
         expect(w(child(child(inner, 'lvl'), 'numFmt'), 'val')).toBe('decimal');
     });
 
+    // eigen-prose.css numbers an untyped list by how many numbered lists it sits in, a bullet list between them or not.
+    test('an untyped nested list takes its depth from eigen-prose.css: 1. a. i. and 1. again', async () => {
+        const nested = (depth: number): JSONContent =>
+            ol({}, li(p(text(`level ${depth}`)), ...(depth < 4 ? [nested(depth + 1)] : [])));
+        const formats = async (json: JSONContent) =>
+            xmlChildren(await numberingOf(json), W, 'abstractNum').map((list) =>
+                w(child(child(list, 'lvl'), 'numFmt'), 'val'),
+            );
+        expect(await formats(doc(nested(1)))).toEqual(['decimal', 'lowerLetter', 'lowerRoman', 'decimal']);
+        const inner = ol({}, li(p(text('c'))));
+        expect(await formats(doc(ol({}, li(p(text('a')), ul(li(p(text('b')), inner))))))).toEqual([
+            'decimal',
+            'bullet',
+            'lowerLetter',
+        ]);
+    });
+
+    test('a nested list set to 1. 2. 3. stays decimal', async () => {
+        const json = doc(ol({}, li(p(text('a')), ol({ type: '1' }, li(p(text('b')))))));
+        const lists = xmlChildren(await numberingOf(json), W, 'abstractNum');
+        expect(lists.map((list) => w(child(child(list, 'lvl'), 'numFmt'), 'val'))).toEqual(['decimal', 'decimal']);
+    });
+
     test('two adjacent lists count separately', async () => {
         const json = doc(ol({}, li(p(text('a')))), ol({}, li(p(text('b')))));
         const numIds = descendants(await bodyOf(json), W, 'numId').map((numId) => w(numId, 'val'));
@@ -1382,6 +1405,33 @@ describe('docx writer — tables', () => {
         expect(third).toBe(
             `<w:tr>${cell(1500, run('d'))}${cell(1500, run('e'))}<w:tc><w:tcPr><w:tcW w:w="1500" w:type="dxa"/><w:vMerge/></w:tcPr><w:p/></w:tc></w:tr>`,
         );
+    });
+
+    // A cell's own fill wins over the header's grey; a covered cell continues its merge's fill, as Word draws one per cell.
+    test("a cell's fill is its w:shd, a header's own over the grey, and a merge's covered cells take it", async () => {
+        const fill = (hex: string) => `<w:shd w:val="clear" w:color="auto" w:fill="${hex}"/>`;
+        const tbl = only(
+            await tablesIn(
+                doc(
+                    table(
+                        tr(
+                            th({ colwidth: [100], backgroundColor: '#1f3864' }, p(text('A'))),
+                            th({ colwidth: [100], backgroundColor: 'navy' }, p(text('B'))),
+                        ),
+                        tr(
+                            td({ colwidth: [100], backgroundColor: '#CFE2F3', rowspan: 2 }, p(text('a'))),
+                            td({ colwidth: [100] }, p(text('b'))),
+                        ),
+                        tr(td({ colwidth: [100] }, p(text('c')))),
+                    ),
+                ),
+            ),
+        );
+        expect(xmlChildren(tbl, W, 'tr').map(xmlOf)).toEqual([
+            `<w:tr><w:trPr><w:tblHeader/></w:trPr>${cell(1500, run('A'), fill('1F3864'))}${cell(1500, run('B'), SHADED)}</w:tr>`,
+            `<w:tr>${cell(1500, run('a'), `<w:vMerge w:val="restart"/>${fill('CFE2F3')}`)}${cell(1500, run('b'))}</w:tr>`,
+            `<w:tr><w:tc><w:tcPr><w:tcW w:w="1500" w:type="dxa"/><w:vMerge/>${fill('CFE2F3')}</w:tcPr><w:p/></w:tc>${cell(1500, run('c'))}</w:tr>`,
+        ]);
     });
 
     test('a covered cell sits at its column, before the cells right of it, and spans as its merge does', async () => {

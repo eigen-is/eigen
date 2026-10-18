@@ -1,7 +1,8 @@
 import { EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
-import type { TitleType } from '@workspace/lib/docs/eigendoc';
+import { LIST_STYLE_TYPES, type TitleType } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
+import { LIST_FORMATS, LIST_LEVELS } from './wordml';
 
 // The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a
 // re-save drops the writer's styles and keeps it as direct formatting.
@@ -164,3 +165,23 @@ export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'backgroun
 export const TABLE_MARGIN = twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt));
 
 export const LINK_LOOK = { color: proseColor('.eigen-prose a', 'color') };
+
+const LIST_TYPE_BY_STYLE = new Map([...LIST_STYLE_TYPES].map(([type, style]) => [style, type]));
+
+// eigen-prose.css numbers a list that stores no type by the numbered lists it sits in: `ol`, `ol ol` and on.
+const UNTYPED_LIST_FORMATS = Array.from({ length: LIST_LEVELS }, (_, depth) => {
+    const style = proseValue(
+        `.eigen-prose ${Array(depth + 1)
+            .fill('ol')
+            .join(' ')}`,
+        'list-style-type',
+    );
+    const format = LIST_FORMATS.get(LIST_TYPE_BY_STYLE.get(style) ?? '');
+    if (!format) throw new Error(`eigen-prose.css numbers a list in ${style}, which Word has no format for`);
+    return format;
+});
+
+// The numFmt an untyped list draws in, `numbered` lists deep; past Word's levels as its last.
+export function untypedListFormat(numbered: number): string {
+    return UNTYPED_LIST_FORMATS[Math.min(numbered, LIST_LEVELS - 1)] ?? 'decimal';
+}

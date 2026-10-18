@@ -3,7 +3,7 @@ import Highlight from '@tiptap/extension-highlight';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import { Table, TableRow } from '@tiptap/extension-table';
 import TextAlign from '@tiptap/extension-text-align';
 import { Color, TextStyle } from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
@@ -20,6 +20,7 @@ import { PageBreakNode } from './nodes/page-break';
 import { PageNumberNode } from './nodes/page-number';
 import { EigenParagraphFormat, PROSE_TEXTBLOCKS } from './nodes/paragraph-format';
 import { SmallMark } from './nodes/small-mark';
+import { EigenTableCell, EigenTableHeader } from './nodes/table-cell';
 import { SubtitleNode, TitleNode } from './nodes/title';
 
 // textColumnWidth: the editor's text column in px, which a paragraph's indent stays within.
@@ -65,8 +66,8 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         ...(options?.lowlight ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })] : []),
         Table,
         TableRow,
-        TableCell,
-        TableHeader,
+        EigenTableCell,
+        EigenTableHeader,
         CommentMarkSchema,
     ];
     return exclude ? extensions.filter((ext) => !exclude.includes(ext.name)) : extensions;
