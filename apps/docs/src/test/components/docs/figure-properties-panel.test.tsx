@@ -1,5 +1,6 @@
 // The Image panel follows the figure selection, so a write from the panel must keep the figure selected, and the
-// panel must draw the new value though the selection didn't change. Its Width field clamps as the grips do.
+// panel must draw the new value though the selection didn't change. Its Width field shows and takes cm, stores px
+// and clamps as the grips do.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -119,6 +120,22 @@ test.each(['Alt text', 'Caption'])(
     },
 );
 
+// Focus alone starts no draft, so a peer's write shows in the field, and the blur after it writes nothing back.
+test.each([
+    ['Alt text', 'alt'],
+    ['Caption', 'caption'],
+])('a peer writing the %s of a focused, untouched field keeps theirs', async (placeholder, attribute) => {
+    const editor = await mount();
+    await act(async () => field(placeholder).focus());
+    await act(async () => {
+        editor.view.dispatch(editor.state.tr.setNodeAttribute(2, attribute, 'Theirs'));
+    });
+    expect(field(placeholder).value).toBe('Theirs');
+
+    await act(async () => field(placeholder).blur());
+    expect(editor.state.doc.nodeAt(2)?.attrs[attribute]).toBe('Theirs');
+});
+
 const widthField = () => {
     const input = document.querySelector<HTMLInputElement>('input[type="number"]');
     if (!input) throw new Error('no Width field');
@@ -137,52 +154,63 @@ const key = (input: HTMLInputElement, key: string) =>
         input.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
     });
 
-test('the Width field shows the figure width in px', async () => {
+test('the Width field shows the figure width in cm, to one decimal', async () => {
     await mount();
-    expect(widthField().value).toBe('200');
-    expect(widthField().parentElement?.textContent).toBe('px');
+    expect(widthField().value).toBe('5.3');
+    expect(widthField().parentElement?.textContent).toBe('cm');
 });
 
-test('Enter in the Width field writes the width and keeps the figure selected and the panel open', async () => {
+test('Enter in the Width field writes the width in px and keeps the figure selected and the panel open', async () => {
     const editor = await mount();
-    await type(widthField(), '320');
+    await type(widthField(), '8');
     await key(widthField(), 'Enter');
 
-    expect(widthAt2(editor)).toBe(320);
+    expect(widthAt2(editor)).toBe(302);
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
-    expect(widthField().value).toBe('320');
+    expect(widthField().value).toBe('8');
 });
 
 test('a blur writes the Width field', async () => {
     const editor = await mount();
-    await type(widthField(), '320');
+    await type(widthField(), '8');
     await act(async () => widthField().blur());
 
-    expect(widthAt2(editor)).toBe(320);
+    expect(widthAt2(editor)).toBe(302);
+});
+
+// 300 px shows as 7.9 cm, which is 298.6 px.
+test.each(['Enter', 'blur'])('an untouched Width field keeps the stored width on %s', async (end) => {
+    const editor = await mount({ width: 300 });
+    await act(async () => widthField().focus());
+    if (end === 'Enter') await key(widthField(), 'Enter');
+    await act(async () => widthField().blur());
+
+    expect(widthAt2(editor)).toBe(300);
+    expect(widthField().value).toBe('7.9');
 });
 
 test.each([
-    ['block', '900', 600],
-    ['wrap-left', '900', 300],
-    ['block', '20', 100],
-    ['block', '250.6', 251],
-])('a %s figure set to %s px gets %d px, as a grip would leave it', async (layout, value, width) => {
+    ['block', '30', 600, '15.9'],
+    ['wrap-left', '30', 300, '7.9'],
+    ['block', '1', 100, '2.6'],
+    ['block', '6.63', 251, '6.6'],
+])('a %s figure set to %s cm gets %d px, as a grip would leave it', async (layout, value, width, shown) => {
     const editor = await mount({ layout });
     await type(widthField(), value);
     await key(widthField(), 'Enter');
 
     expect(widthAt2(editor)).toBe(width);
-    expect(widthField().value).toBe(String(width));
+    expect(widthField().value).toBe(shown);
 });
 
 test('Escape drops a typed width', async () => {
     const editor = await mount();
-    await type(widthField(), '320');
+    await type(widthField(), '8');
     await key(widthField(), 'Escape');
     await act(async () => widthField().blur());
 
     expect(widthAt2(editor)).toBe(200);
-    expect(widthField().value).toBe('200');
+    expect(widthField().value).toBe('5.3');
 });
 
 test('an emptied Width field writes nothing', async () => {
@@ -192,7 +220,7 @@ test('an emptied Width field writes nothing', async () => {
     await act(async () => widthField().blur());
 
     expect(widthAt2(editor)).toBe(200);
-    expect(widthField().value).toBe('200');
+    expect(widthField().value).toBe('5.3');
 });
 
 test('a resize by Shift and an arrow key or by a grip shows in the Width field', async () => {
@@ -202,7 +230,8 @@ test('a resize by Shift and an arrow key or by a grip shows in the Width field',
             new KeyboardEvent('keydown', { key: 'ArrowRight', shiftKey: true, bubbles: true }),
         );
     });
-    expect(widthField().value).toBe('210');
+    expect(widthAt2(editor)).toBe(210);
+    expect(widthField().value).toBe('5.6');
 
     // A grip's drag ends in this write.
     await act(async () => {
@@ -211,5 +240,5 @@ test('a resize by Shift and an arrow key or by a grip shows in the Width field',
             return true;
         });
     });
-    expect(widthField().value).toBe('250');
+    expect(widthField().value).toBe('6.6');
 });

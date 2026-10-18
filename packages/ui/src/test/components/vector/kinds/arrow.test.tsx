@@ -19,7 +19,7 @@ g.document.fonts = { load: () => fontLoaded, check: () => false };
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { holdCapture, sealed } = await import('../../../../components/vector/hooks/use-canvas-doc');
+const { holdCapture, sealed } = await import('../../../../components/properties-panel/property-gesture');
 const { PropertyGestureContext } = await import('../../../../components/properties-panel');
 const { ArrowPanelSection } = await import('../../../../components/vector/kinds/arrow');
 

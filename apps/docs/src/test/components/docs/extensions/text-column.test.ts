@@ -1,5 +1,4 @@
-// A figure, a table and a paste measure the page's text column. A band's editor in the Headers and footers panel sits
-// off the page, and its content prints in the same column, so it measures the page too.
+// A figure, a table and a paste measure the text column of the page they sit on, a band's as the body's.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
@@ -22,13 +21,8 @@ test('a node on the page measures its text column', () => {
     expect(textColumnWidth(inside)).toBe(600);
 });
 
-test("a node off the page measures the page's text column", () => {
+test('a node off the page has no column', () => {
     page(700);
-    const panel = document.body.appendChild(document.createElement('div'));
-    expect(textColumnWidth(panel.appendChild(document.createElement('p')))).toBe(600);
-});
-
-test('with no page laid out there is no column', () => {
     expect(textColumnWidth(document.body.appendChild(document.createElement('p')))).toBeNull();
     expect(textColumnWidth(null)).toBeNull();
 });

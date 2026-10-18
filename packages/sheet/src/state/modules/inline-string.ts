@@ -111,7 +111,7 @@ export function convertCssToStyleList(cssText: string, originCell: Cell) {
         }
 
         if (key === 'font-size') {
-            styleList.fs = parseInt(value, 10);
+            styleList.fs = Number.parseFloat(value);
         }
 
         if (key === 'color') {

@@ -98,6 +98,21 @@ export function exceedsChartSpecBytes(value: string): boolean {
     return new TextEncoder().encode(value).length > MAX_CHART_SPEC_BYTES;
 }
 
+// What a search finds a chart by: its titles, series names and inline categories, a line each.
+export function chartSearchText(spec: ChartSpec | null): string {
+    if (!spec) return '';
+    const { data } = spec;
+    return [
+        spec.title,
+        spec.categoryAxis.title,
+        spec.valueAxis.title,
+        ...data.series.flatMap((series) => (typeof series.name === 'string' ? [series.name] : [])),
+        ...(data.source === 'inline' ? data.categories : []),
+    ]
+        .filter((text) => text !== '')
+        .join('\n');
+}
+
 // Takes the stored string, like the fill and points codecs, so the size limit is measured on what peers store.
 export function parseChartSpec(value: string): ChartSpec | null {
     if (exceedsChartSpecBytes(value)) return null;

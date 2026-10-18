@@ -9,10 +9,12 @@ import { Color, TextStyle } from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
 import StarterKit from '@tiptap/starter-kit';
 import { TextCaps } from './nodes/caps';
+import { ChartNode } from './nodes/chart';
 import { CommentMarkSchema } from './nodes/comment-mark';
 import { EquationNode } from './nodes/equation';
 import { FigureNode } from './nodes/figure';
 import { EigenFontFamily } from './nodes/font-family';
+import { EigenFontSize } from './nodes/font-size';
 import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
 import { PageNumberNode } from './nodes/page-number';
@@ -44,6 +46,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         TextStyle,
         Color,
         EigenFontFamily,
+        EigenFontSize,
         TextCaps,
         TaskList,
         TaskItem.configure({ nested: true }),
@@ -51,6 +54,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         SubtitleNode,
         TextAlign.configure({ types: PROSE_TEXTBLOCKS }),
         FigureNode,
+        ChartNode,
         EquationNode,
         PageBreakNode,
         PageNumberNode,

@@ -43,14 +43,20 @@ function cutToBytes(text: string, maxBytes: number): string {
     return bytes.toString('utf-8', 0, end);
 }
 
-// `readEquation` rides in from the caller's dynamic import, which keeps the doc schema out of the other extracts.
-function collectProseMirrorText(node: JSONContent, readEquation: typeof readStoredEquation, cap: number): string {
+// `attributeText` and `readEquation` ride in from the caller's dynamic import, which keeps the doc schema out of the
+// other extracts.
+function collectProseMirrorText(
+    node: JSONContent,
+    attributeText: (n: JSONContent) => string[],
+    readEquation: typeof readStoredEquation,
+    cap: number,
+): string {
     const out: CappedText = { parts: [], bytes: 0 };
     const walk = (n: JSONContent): boolean => {
         if (typeof n.text === 'string' && !appendCapped(out, n.text, cap)) return false;
-        // Until the package writes an equation's linear text, its LaTeX stands in.
-        const latex = n.type === 'equation' && readEquation(n.attrs ?? {}).latex;
-        if (latex && !appendCapped(out, latex, cap)) return false;
+        for (const text of attributeText(n)) if (!appendCapped(out, text, cap)) return false;
+        const equation = n.type === 'equation' && readEquation(n.attrs ?? {}).text;
+        if (equation && !appendCapped(out, equation, cap)) return false;
         if (Array.isArray(n.content)) {
             for (const child of n.content) {
                 if (!walk(child)) return false;
@@ -98,11 +104,17 @@ export async function extractCollabText(
 ): Promise<{ text: string; warnings: TransformWarning[] }> {
     switch (documentType) {
         case 'eigendoc': {
-            const [{ readEigendocFromDoc }, { readStoredEquation }] = await Promise.all([
+            const [{ readEigendocFromDoc }, { readStoredEquation }, { attributeSearchText }] = await Promise.all([
                 import('../document/doc'),
                 import('../document/equation'),
+                import('@workspace/lib/docs/eigendoc'),
             ]);
-            const text = collectProseMirrorText(readEigendocFromDoc(doc), readStoredEquation, CONTENT_INDEX_MAX_BYTES);
+            const text = collectProseMirrorText(
+                readEigendocFromDoc(doc),
+                attributeSearchText,
+                readStoredEquation,
+                CONTENT_INDEX_MAX_BYTES,
+            );
             return { text, warnings: [] };
         }
         case 'eigensheets': {

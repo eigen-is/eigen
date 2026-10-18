@@ -216,3 +216,72 @@ test('outside a table no transaction tries the cell commands', async () => {
     expect(can).not.toHaveBeenCalled();
     can.mockRestore();
 });
+
+// Google's size box: the size the selection draws at, and empty for a mix.
+test("the size reads the body's 11 pt where none is set, 9 for Small, and none for a mix", async () => {
+    // "body " at 1-6, the Small "fine " at 6-11, the 14 pt "big" at 11-14.
+    const sized = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'body ' },
+                        { type: 'text', text: 'fine ', marks: [{ type: 'small' }] },
+                        { type: 'text', text: 'big', marks: [{ type: 'textStyle', attrs: { fontSize: 14 } }] },
+                    ],
+                },
+            ],
+        },
+    });
+    sized.commands.setTextSelection(3);
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: sized })));
+    expect(seen.at(-1)?.fontSize).toBe(11);
+
+    await act(async () => sized.commands.setTextSelection(8));
+    expect(seen.at(-1)?.fontSize).toBe(9);
+
+    await act(async () => sized.commands.setTextSelection({ from: 11, to: 14 }));
+    expect(seen.at(-1)?.fontSize).toBe(14);
+
+    await act(async () => sized.commands.setTextSelection({ from: 2, to: 14 }));
+    expect(seen.at(-1)?.fontSize).toBeUndefined();
+    sized.destroy();
+});
+
+// A heading draws its own size, which the toolbar reads off the page; happy-dom has no prose CSS, so the page is stubbed
+// with eigen-prose.css's 1.75rem.
+test("the size in an unsized heading is the heading's drawn size, a sized run its own", async () => {
+    const computed = spyOn(globalThis, 'getComputedStyle').mockImplementation((element) => {
+        const { style } = document.createElement('p');
+        style.fontSize = element.tagName === 'H1' ? '28px' : '14.6667px';
+        return style;
+    });
+    // "Plan " at 1-6, the 30 pt "big" at 6-9.
+    const heading = new Editor({
+        extensions: getDocExtensions(),
+        content: {
+            type: 'doc',
+            content: [
+                {
+                    type: 'heading',
+                    attrs: { level: 1 },
+                    content: [
+                        { type: 'text', text: 'Plan ' },
+                        { type: 'text', text: 'big', marks: [{ type: 'textStyle', attrs: { fontSize: 30 } }] },
+                    ],
+                },
+            ],
+        },
+    });
+    heading.commands.setTextSelection(3);
+    ({ unmount } = await renderInDocument(createElement(Probe, { of: heading })));
+    expect(seen.at(-1)?.fontSize).toBe(21);
+
+    await act(async () => heading.commands.setTextSelection({ from: 6, to: 9 }));
+    expect(seen.at(-1)?.fontSize).toBe(30);
+    computed.mockRestore();
+    heading.destroy();
+});
