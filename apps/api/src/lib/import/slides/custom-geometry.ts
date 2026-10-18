@@ -52,8 +52,9 @@ type Point = { x: number; y: number };
 type Segment = { op: 'L' | 'C' | 'Q'; points: Point[] };
 type Subpath = { start: Point; segments: Segment[]; closed: boolean };
 
-// One geometry for each way the paths paint, in the order they first draw, the paths painting alike concatenated; each
-// becomes its own element at the shape's box. Undefined when nothing is drawn, or past a cap: the shape keeps its text.
+// One geometry for each way the paths paint, the paths painting alike concatenated, in the order they first draw but the
+// filled before the lines, as LibreOffice and Apache POI stroke over every fill; each becomes its own element at the
+// shape's box. Undefined when nothing is drawn, or past a cap: the shape keeps its text.
 // `width` and `height` are the shape's extents in EMU, its guides' w and h; `adjustments` a preset's, after its avLst.
 export function customGeometry(
     custGeom: XmlElement,
@@ -96,7 +97,7 @@ export function customGeometry(
         const closed = subpaths.every((subpath) => subpath.closed);
         geometries.push(shade ? { path, closed, filled, stroked, shade } : { path, closed, filled, stroked });
     }
-    return geometries.length > 0 ? geometries : undefined;
+    return geometries.length > 0 ? geometries.sort((a, b) => Number(b.filled) - Number(a.filled)) : undefined;
 }
 
 // Each count is read before the children it counts are walked.

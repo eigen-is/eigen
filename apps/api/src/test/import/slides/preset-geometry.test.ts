@@ -92,6 +92,13 @@ describe('a preset', () => {
         expect(bevel?.[1].path).toBe('M 0 0 L 1 0 L 0.875 0.125 L 0.125 0.125 Z');
     });
 
+    test("draws chartPlus's lines over its box, though the file lists them first", () => {
+        expect(presetGeometry('chartPlus', undefined, 1000, 1000)).toEqual([
+            { path: 'M 1 0 L 1 1 L 0 1 L 0 0 Z', closed: true, filled: true, stroked: false },
+            { path: 'M 0.5 0 L 0.5 1 M 0 0.5 L 1 0.5', closed: false, filled: false, stroked: true },
+        ]);
+    });
+
     test("charges the read's work budget for each guide it evaluates", () => {
         withWorkBudget(10_000, () => {
             presetGeometry('star32', undefined, 1000, 1000);

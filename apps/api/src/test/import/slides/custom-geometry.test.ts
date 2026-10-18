@@ -226,6 +226,15 @@ describe('fill and stroke', () => {
         ]);
     });
 
+    test('the filled geometries come first, the lines after: LibreOffice and Apache POI stroke over every fill', () => {
+        const lines = path(moveTo(50, 0) + lnTo(50, 100), 'w="100" h="100" fill="none"');
+        const square = path(SQUARE, 'w="100" h="100" stroke="0"');
+        expect(geometry(lines + square)?.map(({ filled, stroked }) => [filled, stroked])).toEqual([
+            [true, false],
+            [false, true],
+        ]);
+    });
+
     test('a filled path winding the other way is reversed, so paths concatenated fill as their union', () => {
         const backwards =
             moveTo(25, 25) +
