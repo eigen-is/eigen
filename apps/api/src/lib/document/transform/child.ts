@@ -1,8 +1,11 @@
 import type * as Y from 'yjs';
-import { ApiError } from '../../core/errors';
+import { peakRss } from '../../core/peak-rss';
 import {
     type BytesPreviewJob,
     type BytesTransformJob,
+    type ChildAck,
+    type ChildRequestEnvelope,
+    type ChildResponseEnvelope,
     type CollabPreviewJob,
     type CollabTransformJob,
     type DocumentTransformRequest,
@@ -13,16 +16,14 @@ import {
     type PreviewResult,
     type TransformResult,
     type TransformWarning,
-    transferListOfResult,
-    type WorkerRequestEnvelope,
-    type WorkerResponseEnvelope,
+    toTransformError,
 } from './protocol';
 
-// One-shot document-transform Worker: executes exactly one request, posts one
-// response, and is terminated by the runner. Operation dispatch stays a closed
-// switch over the request union — nothing from the message can select a module
-// or path. Format-specific modules load via dynamic import so a doc preview never
-// evaluates the sheet engine, and a deck export never loads lowlight.
+// One-shot document-transform process: acknowledges one request, sends one response,
+// and is killed by the runner. Operation dispatch stays a closed switch over the
+// request union — nothing from the message can select a module or path.
+// Format-specific modules load via dynamic import so a doc preview never evaluates
+// the sheet engine, and a deck export never loads lowlight.
 
 async function renderPreview(
     request: CollabPreviewJob,
@@ -153,34 +154,34 @@ async function handleRequest(request: DocumentTransformRequest): Promise<Documen
 
     // Preview and export both read the persisted document, so materialization is shared.
     const { materializeYjsState } = await import('../../collab/yjs-loader');
-    const { doc, blobsSkipped } = materializeYjsState(request.source, undefined, 'transform-worker');
+    const { doc, blobsSkipped } = materializeYjsState(request.source, undefined, 'transform-process');
 
     const { result, warnings } = await renderCollabRequest(request, doc);
     if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
     return { ok: true, result, warnings };
 }
 
-declare var self: Worker;
-
-self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
-    const { jobId, request } = event.data;
+process.on('message', async ({ jobId, request }: ChildRequestEnvelope) => {
+    const ack: ChildAck = { jobId, ack: true };
+    process.send?.(ack);
     const startedAt = performance.now();
-    let response: DocumentTransformResponse;
-    try {
-        response = await handleRequest(request);
-    } catch (err) {
-        // Never structured-clone Error instances — send a small stable shape. An
-        // ApiError's status survives so controlled document errors keep their HTTP
-        // semantics across the boundary.
-        response = {
-            ok: false,
-            error: {
-                code: 'transform-failed',
-                ...(err instanceof ApiError && { status: err.status }),
-                message: err instanceof Error ? err.message : String(err),
-            },
+    // Never an exit after the send: it would drop the reply. The runner kills the child once it has it.
+    const reply = (response: DocumentTransformResponse) => {
+        const envelope: ChildResponseEnvelope = {
+            jobId,
+            response,
+            transformMs: performance.now() - startedAt,
+            peakRssBytes: peakRss(),
         };
+        process.send?.(envelope);
+    };
+    // The send serializes the result, which can fail too, out of memory included: it is answered like any throw.
+    try {
+        reply(await handleRequest(request));
+    } catch (err) {
+        reply({ ok: false, error: toTransformError(err) });
     }
-    const envelope: WorkerResponseEnvelope = { jobId, response, transformMs: performance.now() - startedAt };
-    postMessage(envelope, transferListOfResult(response));
-};
+});
+
+// A parent that died first leaves no one to kill the child.
+process.on('disconnect', () => process.exit(0));

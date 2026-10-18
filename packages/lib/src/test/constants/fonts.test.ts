@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { bundledFont, bundledFontOfCategory, EIGEN_FONT_NAMES } from '../../constants/fonts';
+import { bundledFont, bundledFontOfCategory, bundledFontOfStack, EIGEN_FONT_NAMES } from '../../constants/fonts';
 
 describe('bundledFont', () => {
     test('a bundled font is its own', () => {
@@ -57,5 +57,22 @@ describe('bundledFontOfCategory', () => {
         ['hand-drawn', 'Excalifont'],
     ] as const)('%s is drawn in %s', (category, name) => {
         expect(bundledFontOfCategory(category)).toBe(name);
+    });
+});
+
+describe('bundledFontOfStack', () => {
+    test.each([
+        ['Georgia,serif', 'Source Serif 4'],
+        ['"Times New Roman", serif', 'Source Serif 4'],
+        ["'Source Serif 4', serif", 'Source Serif 4'],
+        ['Wingdings, "Courier New", monospace', 'JetBrains Mono'],
+        ['Calibri', 'Inter'],
+    ])('%s is drawn in %s', (stack, bundled) => {
+        expect(bundledFontOfStack(stack)).toBe(bundled);
+    });
+
+    test('a stack of unknown and generic families maps to none', () => {
+        expect(bundledFontOfStack('Wingdings, sans-serif')).toBeUndefined();
+        expect(bundledFontOfStack('')).toBeUndefined();
     });
 });

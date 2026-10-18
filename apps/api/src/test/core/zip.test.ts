@@ -1,7 +1,8 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as zlib from 'node:zlib';
 import JSZip from 'jszip';
 import {
     ApiError,
@@ -12,8 +13,8 @@ import {
     ZipError,
     type ZipErrorCode,
 } from '../../lib/core';
+import { peakRss } from '../../lib/core/peak-rss';
 import { build, deflated, deflatedZeros, type RawPart, stored } from '../fixtures/raw-zip';
-import { peakRss } from '../rss-test-helpers';
 
 const GiB = 2 ** 30;
 const MiB = 2 ** 20;
@@ -317,6 +318,19 @@ describe('openZip refuses', () => {
 });
 
 describe('openZip reads', () => {
+    // The entry was fine; the memory ran out, which the transform process answers itself.
+    test('an out-of-memory inflating an entry is thrown as it is, not as a corrupt archive', () => {
+        const outOfMemory = new RangeError('Out of memory');
+        const inflate = spyOn(zlib, 'inflateRawSync').mockImplementationOnce(() => {
+            throw outOfMemory;
+        });
+        try {
+            expect(() => openZip(build([TYPES, REAL])).read('word/document.xml')).toThrow(outOfMemory);
+        } finally {
+            inflate.mockRestore();
+        }
+    });
+
     test('every entry with its bytes, in the order of the directory', () => {
         const zip = openZip(build([TYPES, REAL]));
         expect([...zip.files()].map(([name, read]) => [name, utf8.decode(read())])).toEqual(
@@ -467,7 +481,7 @@ describe('a bomb stays within its peak RSS', () => {
             env: {
                 ...process.env,
                 ZIP_MODULE: Bun.resolveSync('../../lib/core/zip', import.meta.dir),
-                PEAK_RSS: Bun.resolveSync('../rss-test-helpers', import.meta.dir),
+                PEAK_RSS: Bun.resolveSync('../../lib/core/peak-rss', import.meta.dir),
                 ZIP_PATH: path,
             },
         });

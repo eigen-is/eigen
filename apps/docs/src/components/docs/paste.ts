@@ -1,4 +1,4 @@
-import { bundledFont, DOCUMENT_FONT, getFontFamily } from '@workspace/lib/constants/fonts';
+import { bundledFontOfStack, DOCUMENT_FONT, getFontFamily } from '@workspace/lib/constants/fonts';
 import { ITALIC_HEADING_SELECTOR } from '@workspace/lib/docs/eigendoc';
 
 // Pasted HTML before the schema parses it: foreign fonts onto the bundled ones, images and tables no wider than the
@@ -32,12 +32,8 @@ export function cleanPastedHTML(html: string, maxWidth: number, cardIds: Readonl
     }
 
     for (const el of doc.querySelectorAll<HTMLElement>('[style]')) {
-        // A stack's first family the map knows: Google Docs and Word write a font before its generic family, and a
-        // copy here writes a bundled font's stack. The document font needs no mark.
-        const font = el.style.fontFamily
-            .split(',')
-            .map((family) => bundledFont(family.replace(/['"]/g, '')))
-            .find((bundled) => bundled !== undefined);
+        // The document font needs no mark.
+        const font = bundledFontOfStack(el.style.fontFamily);
         el.style.fontFamily = font && font !== DOCUMENT_FONT ? getFontFamily(font) : '';
     }
 
