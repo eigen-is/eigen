@@ -1,5 +1,5 @@
 import type { Node } from '@tiptap/pm/model';
-import { readEquation } from './nodes/equation';
+import { type Equation, readEquation } from './nodes/equation';
 
 // The doc's header and footer, each a root XmlFragment beside `default`, edited by an editor of its own. The first
 // two print on every page, the last two on page 1 when the page map's differentFirstPage is set.
@@ -18,14 +18,22 @@ export const bandEdge = (root: BandRoot): BandEdge =>
 // Marks stay: a mark the schema lacks deletes the text that carries it.
 export const BAND_EXCLUDED_NODES = ['pageBreak', 'title', 'subtitle', 'codeBlock', 'chart'] as const;
 
+// A band's distance from the paper's edge, Word's and Google's default: the page draws it there, and so do the PDF and
+// the docx.
+export const BAND_DISTANCE_MM = 12.7;
+
 // A band prints, and the page draws it, only with something to show: focusing an empty band leaves an empty paragraph,
-// and a line break or an empty equation alone shows nothing either.
-export function bandHasContent(doc: Node): boolean {
+// and a line break or an empty equation alone shows nothing either. The server has no DOMParser, so it passes its own
+// equation reader.
+export function bandHasContent(
+    doc: Node,
+    equation: (attrs: Record<string, unknown>) => Equation = readEquation,
+): boolean {
     let found = false;
     doc.descendants((node) => {
         if (found) return false;
         if (node.isText) found = /\S/.test(node.text ?? '');
-        else if (node.type.name === 'equation') found = readEquation(node.attrs).row.length > 0;
+        else if (node.type.name === 'equation') found = equation(node.attrs).row.length > 0;
         else found = node.isLeaf && node.type.name !== 'hardBreak';
         return !found;
     });

@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditorState } from '@tiptap/react';
 import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { bandEdge, bandHasContent, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
+import { BAND_DISTANCE_MM, bandEdge, bandHasContent, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
@@ -21,9 +21,6 @@ import { type ReactNode, useId, useState } from 'react';
 import { keepEditorFocus } from './editor-toolbar';
 import { PageNumberItems, type PageNumberPreset } from './page-numbers';
 import { PageSetupDialog } from './page-setup-dialog';
-
-// A header's distance from the paper's top edge and a footer's from its bottom one, Word's and Google's default.
-const BAND_DISTANCE_MM = 12.7;
 
 const BAND_LABEL: Record<BandRoot, string> = {
     header: 'Header',
