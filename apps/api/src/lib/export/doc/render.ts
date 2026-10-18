@@ -8,6 +8,8 @@ import {
     chartSvg,
     type FigureAttrs,
     type FigureFrameAttrs,
+    FOOTNOTE_PARAGRAPH,
+    flattenNestedFootnotes,
     PROSE_TEXTBLOCKS,
     readChartAttrs,
     readFigureAttrs,
@@ -109,6 +111,23 @@ function renderFigureNode(
 // Inline, so its labels draw in the page's fonts; an <img> of an SVG can't reach the page's @font-face.
 function renderChartNode(attrs: ChartAttrs): string {
     return renderFigureFrame(attrs, chartSvg(parseChartSpec(attrs.spec ?? ''), attrs));
+}
+
+// The note in place, its paragraphs as spans, as the editor's renderHTML writes it.
+function renderFootnoteNode(
+    node: Node,
+    renderElement: (props: { content: Node; parent?: Node }) => string | string[],
+): string {
+    let paragraphs = '';
+    node.forEach((paragraph) => {
+        let inline = '';
+        paragraph.forEach((child) => {
+            const rendered = renderElement({ content: child, parent: paragraph });
+            inline += Array.isArray(rendered) ? rendered.join('') : rendered;
+        });
+        paragraphs += `<span data-type="${FOOTNOTE_PARAGRAPH}">${inline}</span>`;
+    });
+    return `<span class="footnote" data-type="footnote">${paragraphs}</span>`;
 }
 
 // Without the annotation, which no screen draws and the sanitizer would keep as text; the PDF's MathJax draws it too.
@@ -252,7 +271,7 @@ export function renderDocHtml(
         equations?: ({ node }: { node: Node }) => string;
     },
 ): string {
-    const content = inEditorMarkOrder(withTrailingBreaks(json));
+    const content = inEditorMarkOrder(withTrailingBreaks(flattenNestedFootnotes(json)));
     return renderToHTMLString({
         content,
         extensions: docExtensions(),
@@ -263,6 +282,7 @@ export function renderDocHtml(
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
                 equation: options?.equations ?? renderEquations(),
+                footnote: ({ node, renderElement }) => renderFootnoteNode(node, renderElement),
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
                 ...(options?.pageCounters && {
                     pageNumber: ({ node }) =>

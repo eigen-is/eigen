@@ -13,6 +13,7 @@ import {
     BAND_DISTANCE_MM,
     FIRST_PAGE_BAND,
     type FigureAttrs,
+    flattenNestedFootnotes,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     type PageSetup,
@@ -1421,6 +1422,16 @@ const INLINES = new Map<
             ]
                 .map((content) => runXml(content, {}, linked, context, style, faces))
                 .join(''),
+    ],
+    // Until the writer writes Word's footnotes part (U9): the note's text in brackets, in its place.
+    [
+        'footnote',
+        (node, linked, context, style, faces) => {
+            const note = (flattenNestedFootnotes(node).content ?? [])
+                .map((paragraph) => (paragraph.content ?? []).map((child) => child.text ?? '').join(''))
+                .join(' ');
+            return runXml(textXml(`[${note}]`), node, linked, context, style, faces);
+        },
     ],
     // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
     // math zone, as the editor draws an empty box.

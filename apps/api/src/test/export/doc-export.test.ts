@@ -1494,3 +1494,42 @@ const MARGIN_PX = px(20);
         expect(pages[0].body[0]).toBeCloseTo(MARGIN_PX, 0);
     }, 60_000);
 });
+
+describe('doc export — footnotes', () => {
+    const note = (...paragraphs: JSONContent[]): JSONContent => ({ type: 'footnote', content: paragraphs });
+
+    // Through a spec HTML parser: a <p> in the body's <p> would close it.
+    test('a note renders in its paragraph as spans, a note inside it as its text', () => {
+        const html = renderDocHtml(
+            {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            { type: 'text', text: 'Claim' },
+                            note(
+                                {
+                                    type: 'paragraph',
+                                    content: [{ type: 'text', text: 'See', marks: [{ type: 'bold' }] }],
+                                },
+                                {
+                                    type: 'paragraph',
+                                    content: [{ type: 'text', text: 'Two' }, note(paragraph('nested'))],
+                                },
+                            ),
+                            { type: 'text', text: '.' },
+                        ],
+                    },
+                ],
+            },
+            () => null,
+        );
+        const { body } = new JSDOM(`<body>${html}</body>`).window.document;
+        expect([...body.children].map((element) => element.tagName)).toEqual(['P']);
+        const paragraphs = [...body.querySelectorAll('p > span.footnote > span[data-type="footnote-paragraph"]')];
+        expect(paragraphs.map((span) => span.innerHTML)).toEqual(['<strong>See</strong>', 'Two nested']);
+        expect(body.querySelector('.footnote .footnote')).toBeNull();
+        expect(body.textContent).toBe('ClaimSeeTwo nested.');
+    });
+});

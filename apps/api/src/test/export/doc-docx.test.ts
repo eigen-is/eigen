@@ -240,7 +240,12 @@ describe('docx writer — schema coverage', () => {
         schema.nodeFromJSON(json).check();
         const { nodes, marks } = typesIn(json);
 
-        expect([...nodes].sort()).toEqual(Object.keys(schema.nodes).sort());
+        // The footnote joins the doc with Word's footnotes part (U9); until then the writer puts its text in place.
+        expect([...nodes].sort()).toEqual(
+            Object.keys(schema.nodes)
+                .filter((name) => name !== 'footnote')
+                .sort(),
+        );
         expect([...marks].sort()).toEqual(Object.keys(schema.marks).sort());
     });
 
@@ -471,6 +476,17 @@ describe('docx writer — text', () => {
             await paragraphsOf(doc(p(text('Page '), page('page', { type: 'bold' }), text(' of '), page('pages')))),
         ).toEqual([`<w:p>${run('Page ')}${field('PAGE')}${run(' of ')}${field('NUMPAGES')}</w:p>`]);
         expect(await paragraphsOf(doc(p(page('chapter'))))).toEqual([`<w:p>${field('PAGE')}</w:p>`]);
+    });
+
+    test("a footnote writes its note's text in brackets, in its place, a nested note's too", async () => {
+        const nested = { type: 'footnote', content: [p(text('nested'))] };
+        const note = {
+            type: 'footnote',
+            content: [p(text('See '), text('Smith', { type: 'bold' })), p(text('Two'), nested)],
+        };
+        expect(await paragraphsOf(doc(p(text('Claim'), note, text('.'))))).toEqual([
+            `<w:p>${run('Claim')}${run('[See Smith Two nested]')}${run('.')}</w:p>`,
+        ]);
     });
 });
 

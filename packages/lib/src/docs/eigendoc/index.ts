@@ -27,6 +27,14 @@ export {
     setFigureAttributes,
 } from './nodes/figure-frame';
 export { selectionFontSizes } from './nodes/font-size';
+export {
+    FOOTNOTE_PARAGRAPH,
+    FootnoteNode,
+    flattenNestedFootnotes,
+    footnoteNumbers,
+    footnotesInOrder,
+    insertFootnote,
+} from './nodes/footnote';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_KINDS, PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';
