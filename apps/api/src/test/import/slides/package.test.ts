@@ -1,7 +1,22 @@
 import { describe, expect, test } from 'bun:test';
+import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
-import { MAX_PPTX_XML_BYTES, MAX_PPTX_XML_TAGS, readPackage } from '../../../lib/import/slides/package';
-import { box, buildPptx, NS, PIXEL_PNG, PML, para, pic, pptxParts, REL, rel, sp, zipParts } from '../../fixtures/pptx';
+import { readPackage } from '../../../lib/import/slides/package';
+import {
+    box,
+    buildPptx,
+    graphicFrame,
+    NS,
+    PIXEL_PNG,
+    PML,
+    para,
+    pic,
+    pptxParts,
+    REL,
+    rel,
+    sp,
+    zipParts,
+} from '../../fixtures/pptx';
 
 // The package walk: what a pptx must be to be read, and the parts a relationship may hand the reader.
 
@@ -146,13 +161,44 @@ describe('a pptx package', () => {
         expect(deck.warnings).toContainEqual({ code: 'images-dropped', count: 3 });
     });
 
-    test(`the parsed parts are capped together at ${MAX_PPTX_XML_BYTES} bytes and ${MAX_PPTX_XML_TAGS} tags`, () => {
-        const tagged = buildPptx({ slides: [{ shapes: `<p:extLst>${'<a/>'.repeat(MAX_PPTX_XML_TAGS)}</p:extLst>` }] });
-        expect(refusal(tagged)).toEqual({ status: 413, message: 'This presentation is too large to import' });
-        const padded = buildPptx({ slides: [{ shapes: ' '.repeat(MAX_PPTX_XML_BYTES) }] });
-        expect(refusal(padded)).toEqual({ status: 413, message: 'This presentation is too large to import' });
-        // Under both, the same shapes read.
+    test(`every part it parses spends the package's one budget of ${MAX_PACKAGE_XML_BYTES} bytes and ${MAX_PACKAGE_XML_TAGS} tags`, () => {
+        const tooLarge = { status: 413, message: 'This presentation is too large to import' };
+        const tagged = buildPptx({
+            slides: [{ shapes: `<p:extLst>${'<a/>'.repeat(MAX_PACKAGE_XML_TAGS)}</p:extLst>` }],
+        });
+        expect(refusal(tagged)).toEqual(tooLarge);
+        const padded = buildPptx({ slides: [{ shapes: ' '.repeat(MAX_PACKAGE_XML_BYTES) }] });
+        expect(refusal(padded)).toEqual(tooLarge);
+        // Two slides each under the budget spend it together.
+        const half = { shapes: ' '.repeat(MAX_PACKAGE_XML_BYTES / 2 + 1) };
+        expect(refusal(buildPptx({ slides: [half, half] }))).toEqual(tooLarge);
+        // Under it, the same shapes read.
         expect(() => readPackage(buildPptx({ slides: [{ shapes: '<a/>'.repeat(1000) }] }))).not.toThrow();
+    });
+
+    test('[Content_Types].xml and a chart part spend it too, refusing the file before anything is read from them', () => {
+        const tooLarge = { status: 413, message: 'This presentation is too large to import' };
+        const parts = pptxParts({ slides: [{ shapes: text('types') }] });
+        parts['[Content_Types].xml'] = String(parts['[Content_Types].xml']).replace(
+            '</Types>',
+            `${' '.repeat(MAX_PACKAGE_XML_BYTES)}</Types>`,
+        );
+        expect(refusal(zipParts(parts))).toEqual(tooLarge);
+        // A chart part past the budget refuses the deck, not only its box: a damaged one costs only its box.
+        const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+        const chart = buildPptx({
+            slides: [
+                {
+                    shapes: graphicFrame(C, 0, 0, 9525, 9525, `<c:chart xmlns:c="${C}" r:id="rId5"/>`),
+                    rels: rel('rId5', 'chart', '../charts/chart1.xml'),
+                },
+            ],
+            types: '<Override PartName="/ppt/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>',
+            files: {
+                'ppt/charts/chart1.xml': `<c:chartSpace xmlns:c="${C}">${' '.repeat(MAX_PACKAGE_XML_BYTES)}</c:chartSpace>`,
+            },
+        });
+        expect(refusal(chart)).toEqual(tooLarge);
     });
 
     test('the relationship types match by their last segment, as a Strict package spells them', () => {

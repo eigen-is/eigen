@@ -1,21 +1,13 @@
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../core/ooxml';
-import { openPackage, optional, type Relationship, relOfType, relsPathOf } from '../../core/opc';
+import { openPackage, optional, type Relationship, relOfType } from '../../core/opc';
 import type { XmlElement } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { POINTS_PER_UNIT } from '../doc/package';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
-
-// The parts the reader parses, together: presentation, slides, layouts, masters and themes (a tree's cost: core/xml.ts).
-// The corpus's most is 7.5 MB, a 369-slide deck.
-export const MAX_PPTX_XML_BYTES = 16 * 1024 * 1024;
-
-// A tree costs per element too, so the parts' elements have a cap of their own, counted as '<' in the bytes: the corpus's
-// most is 398,000, and a million two-attribute tags peak near 600 MB.
-export const MAX_PPTX_XML_TAGS = 1_000_000;
 
 export const MAX_SLIDES = 500;
 
@@ -98,43 +90,21 @@ export type Lost = (code: CountedWarningCode) => void;
 
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
 export function readPackage(bytes: Uint8Array): PptxPackage {
+    // Every part it parses, [Content_Types].xml and the relationships too, spends the package's one parse budget.
     const pkg = openPackage(bytes, { passwordProtected: PASSWORD_PROTECTED, tooLarge: PRESENTATION_TOO_LARGE });
-    const budget = { bytes: MAX_PPTX_XML_BYTES, tags: MAX_PPTX_XML_TAGS, charged: new Set<string>() };
-    const charge = (paths: string[]) => {
-        const fresh = [...new Set(paths)].filter((path) => !budget.charged.has(path));
-        const declared = fresh.reduce((sum, path) => sum + (pkg.zip.entry(path)?.size ?? 0), 0);
-        if (declared > budget.bytes) throw new ApiError(413, PRESENTATION_TOO_LARGE);
-        budget.bytes -= declared;
-        for (const path of fresh) budget.charged.add(path);
-    };
-    // Its elements counted before the tree is built: the second inflate is the price of refusing first.
-    const counted = new Set<string>();
-    const parse = (path: string): XmlElement | undefined => {
-        charge([path]);
-        const data = counted.has(path) ? undefined : pkg.zip.read(path);
-        counted.add(path);
-        for (let at = data?.indexOf(LESS_THAN) ?? -1; data && at >= 0; at = data.indexOf(LESS_THAN, at + 1)) {
-            if (--budget.tags < 0) throw new ApiError(413, PRESENTATION_TOO_LARGE);
-        }
-        return pkg.part(path);
-    };
-    const relsOf = (path: string) => {
-        parse(relsPathOf(path));
-        return pkg.relationships(path);
-    };
     const read = (path: string | undefined, kind: PartKind): Part | undefined => {
         if (!path?.startsWith('ppt/') || pkg.contentTypeOf(path) !== PART_TYPES[kind]) return undefined;
-        const root = parse(path);
-        return root && { path, root, rels: relsOf(path) };
+        const root = pkg.part(path);
+        return root && { path, root, rels: pkg.relationships(path) };
     };
 
-    const main = relOfType(relsOf(''), 'officeDocument');
+    const main = relOfType(pkg.relationships(''), 'officeDocument');
     const mainType = main && pkg.contentTypeOf(main);
     if (mainType && NOT_A_PRESENTATION.has(mainType)) throw new ApiError(400, SAVE_AS_PPTX);
     if (!main?.startsWith('ppt/') || mainType !== PRESENTATION) throw new ApiError(400, NOT_A_PPTX);
-    const root = parse(main);
+    const root = pkg.part(main);
     if (root?.ns !== P_NS || root.local !== 'presentation') throw new ApiError(400, NOT_A_PPTX);
-    const presentation: Part = { path: main, root, rels: relsOf(main) };
+    const presentation: Part = { path: main, root, rels: pkg.relationships(main) };
 
     const ids = childrenOf(childOf(root, P_NS, 'sldIdLst') ?? root, P_NS, 'sldId');
     if (ids.length > MAX_SLIDES) throw new ApiError(413, PRESENTATION_TOO_LARGE);
@@ -145,23 +115,6 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
         return path && pkg.contentTypeOf(path) === PART_TYPES.slide && pkg.zip.entry(path) ? [path] : [];
     });
     const slides = [...new Set(listed)];
-
-    // Every content part the slides reach is charged before the first of them inflates.
-    const reached = new Set<string>(slides);
-    const reach = (from: string, type: Exclude<PartKind, 'slide'>) => {
-        const path = relOfType(optional(() => relsOf(from)) ?? new Map(), type);
-        if (path && !reached.has(path) && pkg.contentTypeOf(path) === PART_TYPES[type]) {
-            reached.add(path);
-            return path;
-        }
-        return undefined;
-    };
-    for (const slide of slides) {
-        const layout = reach(slide, 'slideLayout');
-        const master = layout && reach(layout, 'slideMaster');
-        if (master) reach(master, 'theme');
-    }
-    charge([...reached]);
 
     const parts = new Map<string, Part | undefined>();
     const related = (from: Part, kind: Exclude<PartKind, 'slide'>): Part | undefined => {
@@ -187,7 +140,7 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
             if (!charts.has(path))
                 charts.set(
                     path,
-                    optional(() => parse(path)),
+                    optional(() => pkg.part(path)),
                 );
             return charts.get(path);
         },
@@ -207,8 +160,6 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
         readMedia: (path) => optional(() => pkg.zip.read(path)),
     };
 }
-
-const LESS_THAN = 0x3c;
 
 export const EMU_PER_POINT = 12_700;
 
