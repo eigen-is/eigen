@@ -79,5 +79,8 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
-  "trustedDependencies": []
+  "trustedDependencies": [],
+  "patchedDependencies": {
+    "@formulajs/formulajs@2.9.3": "patches/@formulajs%2Fformulajs@2.9.3.patch"
+  }
 }

@@ -402,6 +402,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "@formulajs/formulajs@2.9.3": "patches/@formulajs%2Fformulajs@2.9.3.patch",
+  },
   "overrides": {
     "jsdom": "^29.1.1",
     "react": "^19.2.4",

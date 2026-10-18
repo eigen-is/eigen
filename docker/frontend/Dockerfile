@@ -1,12 +1,12 @@
 # No default: .bun-version is the one pin.
 ARG BUN_VERSION
 
-# Only the manifests, so the install layer below stays cached until a dependency changes. Without the release version
-# too, which the lockfile does not hold and every release bumps.
+# Only the manifests and patches/, so the install layer below stays cached until a dependency changes. Without the
+# release version too, which the lockfile does not hold and every release bumps.
 FROM oven/bun:${BUN_VERSION}-slim AS manifests
 WORKDIR /src
 COPY . .
-RUN mkdir /out && cp --parents package.json bun.lock .bun-version apps/*/package.json packages/*/package.json /out/ \
+RUN mkdir /out && cp -r --parents package.json bun.lock .bun-version patches apps/*/package.json packages/*/package.json /out/ \
     && sed -i '/^  "version": /d' /out/package.json
 
 FROM oven/bun:${BUN_VERSION}-slim AS builder
