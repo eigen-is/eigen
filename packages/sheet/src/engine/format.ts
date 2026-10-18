@@ -1,5 +1,5 @@
 import numeral from 'numeral';
-import { format, isDateFormat, isValidFormat } from 'numfmt';
+import { format, isDateFormat } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
 import type { Cell, CellMatrix, CellType } from './types';
 import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
@@ -269,9 +269,7 @@ export function numberDisplay(value: Cell['v'] | null, fa = 'General'): string {
     }
 }
 
-export function isValidNumberFormat(fmt: string): boolean {
-    return isValidFormat(fmt);
-}
+export { isValidFormat as isValidNumberFormat } from 'numfmt';
 
 export function is_date(fmt: number | string): boolean {
     if (typeof fmt !== 'string') return false;

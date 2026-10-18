@@ -19,7 +19,7 @@ import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
-import { DependencyIndex, dependencyBlocks } from './dependency-index';
+import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { calPostfixExpression, iscelldata, operatorjson, operatorPriority, resolveCellRange } from './formula-utils';
@@ -532,14 +532,13 @@ type Extent = { rows: number; columns: number };
 // A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the
 // index, and each lies in its sheet's data, so `SUM(A1:XFD1048576)` costs the blocks the sheet spans, not 16 million.
 function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): FormulaDependency | null {
-    const extent = dep.sheetId == null ? undefined : extents.get(dep.sheetId);
-    if (extent == null) return null;
-    const r0 = Math.max(0, Math.min(dep.row[0], dep.row[1]));
-    const c0 = Math.max(0, Math.min(dep.column[0], dep.column[1]));
-    const r1 = Math.min(extent.rows - 1, Math.max(dep.row[0], dep.row[1]));
-    const c1 = Math.min(extent.columns - 1, Math.max(dep.column[0], dep.column[1]));
-    if (r0 > r1 || c0 > c1) return null;
-    return { row: [r0, r1], column: [c0, c1], sheetId: dep.sheetId };
+    const cells = cellsOf(dep);
+    const extent = cells && extents.get(cells.sheetId);
+    if (!cells || extent == null) return null;
+    const r1 = Math.min(extent.rows - 1, cells.r1);
+    const c1 = Math.min(extent.columns - 1, cells.c1);
+    if (cells.r0 > r1 || cells.c0 > c1) return null;
+    return { row: [cells.r0, r1], column: [cells.c0, c1], sheetId: cells.sheetId };
 }
 
 // `maxDependencyBlocks` bounds what the formulas' ranges cost the dependency index (dependencyBlocks), and

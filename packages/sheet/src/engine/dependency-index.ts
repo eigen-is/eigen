@@ -23,7 +23,9 @@ type RangeEntry = {
 type KeyedEntry = { sheetId: string; point: number } | { sheetId: string; entry: RangeEntry };
 
 // A dependency's sheet and cells, its corners in order and none below 0; null when it names no sheet.
-function cellsOf(dep: FormulaDependency): { sheetId: string; r0: number; r1: number; c0: number; c1: number } | null {
+export function cellsOf(
+    dep: FormulaDependency,
+): { sheetId: string; r0: number; r1: number; c0: number; c1: number } | null {
     if (dep.sheetId == null) return null;
     return {
         sheetId: dep.sheetId,
