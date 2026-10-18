@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
+import { readFontSize } from '@workspace/lib/constants/fonts';
 import type { Caps } from '@workspace/lib/docs/eigendoc';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import { trimXmlSpace, XML_NAMESPACE, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../core/xml';
@@ -292,8 +293,8 @@ export function pushText(reader: Reader, text: string, direct: DocxRunProps, con
 type Marks = NonNullable<JSONContent['marks']>;
 
 // Small print is at most this share of the body size, so the writer's 9 pt in 11 is small and a body style a point
-// smaller is still body text.
-export const SMALL_PRINT = 0.85;
+// smaller is still body text: a line of it may be a figure's caption.
+const SMALL_PRINT = 0.85;
 
 // Link looks a re-save writes as direct formatting, color to whether it underlines: the editor's, Google Docs' and
 // Word's Hyperlink style; any color from the theme's link colors underlines too. The editor draws its own, so on a link
@@ -352,8 +353,20 @@ function marksOf(
         const size = complex ? props.sizeCs : props.size;
         return size !== undefined && size <= SMALL_PRINT * (complex ? reader.bodySizeCs : reader.bodySize);
     };
+    // The docx's body draws at the doc's body size, and a heading or a title at its own, so only a size apart from
+    // the one its node draws is a mark; in half-points, Word's default 10 pt where none is set.
+    const nodeRun = absorbed.includes('size')
+        ? mergeRun(styles.docRun, paraRun)
+        : { size: reader.bodySize, sizeCs: reader.bodySizeCs };
+    const fontSizeOf = (complex: boolean) => {
+        const sizeOf = (run: DocxRunProps) => (complex ? (run.sizeCs ?? run.size) : run.size) ?? 20;
+        const size = sizeOf(full);
+        return size === sizeOf(nodeRun) ? undefined : readFontSize(size / 2);
+    };
     const complexLook =
-        !!props.boldCs !== !!props.bold || !!props.italicCs !== !!props.italic || isSmall(true) !== isSmall(false);
+        !!props.boldCs !== !!props.bold ||
+        !!props.italicCs !== !!props.italic ||
+        fontSizeOf(true) !== fontSizeOf(false);
     const faces = byFace(text, full.fonts, full, complexLook, reader.pkg.chargePiece);
 
     const shade = props.highlight || props.shading || '';
@@ -386,21 +399,22 @@ function marksOf(
         const shape: Marks = [];
         if (complex ? props.boldCs : props.bold) shape.push({ type: 'bold' });
         const italic = !!(complex ? props.italicCs : props.italic);
-        if (small) shape.push({ type: 'small' });
         // Code is a monospace run in a code style or on a light grey, the editor's look of any shade; a foreign
         // monospace run alone is a font.
         const code =
             isMonospaceFont(font, reader.fontTable) && (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
         if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font };
         const fontFamily = fontMark(font, reader.fontTable);
+        const fontSize = fontSizeOf(complex);
         const textStyle: Marks =
-            color || fontFamily || caps
+            color || fontFamily || caps || fontSize
                 ? [
                       {
                           type: 'textStyle',
                           attrs: {
                               color: color ? markColor(color) : null,
                               fontFamily: fontFamily ?? null,
+                              fontSize: fontSize ?? null,
                               caps,
                           },
                       },

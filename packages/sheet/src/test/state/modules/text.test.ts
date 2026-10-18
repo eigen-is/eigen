@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
-import { clearMeasureTextCache, getCellTextInfo } from '../../../state/modules/text';
+import { clearMeasureTextCache, getCellTextInfo, getFontSet } from '../../../state/modules/text';
 import type { Cell } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
@@ -60,4 +60,9 @@ describe('state/modules/text — getCellTextInfo wrap', () => {
         const info = layout({ v: 45000, m: '2023-03-15', ct: { fa: 'yyyy-MM-dd', t: 'd' }, tb: '2' });
         expect(info?.values.map((word) => word.content)).toEqual(['2023-03-15']);
     });
+});
+
+// The size box takes Google's half points, so a cell draws the 10.5 it shows.
+test('a cell draws at its half-point size', () => {
+    expect(getFontSet({ fs: 10.5 }, 10)).toStartWith('normal normal normal 10.5pt ');
 });

@@ -8,6 +8,7 @@ export type { Equation } from './nodes/equation';
 export { EquationNode, equationText, readEquation } from './nodes/equation';
 export type { FigureAlignment, FigureAttrs, FigureLayout } from './nodes/figure';
 export { FigureNode, readFigureAttrs, setFigureAttributes } from './nodes/figure';
+export { selectionFontSizes } from './nodes/font-size';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';

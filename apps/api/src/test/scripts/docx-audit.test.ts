@@ -169,12 +169,35 @@ describe('source side', () => {
         ]);
     });
 
-    test('small text is noticeably smaller than the body, not a point smaller', async () => {
+    test('a font size is a size other than the body', async () => {
         // No size in the styles: Word's 10 pt body.
         const tally = await source(
-            `<w:p>${run('body', '<w:sz w:val="18"/>')}${run(' small', '<w:sz w:val="16"/>')}</w:p>`,
+            `<w:p>${run('body', '<w:sz w:val="20"/>')}${run(' small', '<w:sz w:val="16"/>')}${run(' big', '<w:sz w:val="28"/>')}</w:p>`,
         );
-        expect(tally.marks.get('small')).toEqual(['small']);
+        expect(tally.marks.get('size')).toEqual(['small', 'big']);
+    });
+
+    // As the import reads it: a heading draws its own size, so only a run set apart from its style's has one.
+    test("a heading's style size is no font size, a run's own is", async () => {
+        const tally = await source(
+            `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${run('Plan')}${run(' big', '<w:sz w:val="48"/>')}</w:p>`,
+            '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:sz w:val="32"/></w:rPr></w:style>',
+        );
+        expect(tally.marks.get('size')).toEqual(['big']);
+    });
+
+    // As the editor reads it: a size the schema drops draws at the node's own.
+    test('an imported font size is one readFontSize reads', () => {
+        const sized = (text: string, fontSize: unknown) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'textStyle', attrs: { fontSize } }],
+        });
+        const imported = auditImported({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [sized('big ', 14), sized('odd', '14pt')] }],
+        });
+        expect(imported.marks.get('size')).toEqual(['big']);
     });
 
     test("a footnote's marker is no text on either side", async () => {
@@ -409,6 +432,20 @@ describe('both sides', () => {
         expect([source.marks.get('bold'), source.marks.get('italic')]).toEqual([['مملكة', 'Madrid'], ['إسبانيا']]);
         const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
         expect([features['bold']?.kept, features['italic']?.kept]).toEqual([1, 1]);
+    });
+
+    // The reader reads a heading of only runs set by hand at most at the body's size as body text.
+    test('a heading the reader reads as body text sizes its runs against the body on both sides', async () => {
+        const docx = await buildDocxWithBody(
+            `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>${run('Question', '<w:sz w:val="20"/>')}${run(' fine', '<w:sz w:val="16"/>')}</w:p>`,
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:rPr><w:sz w:val="32"/></w:rPr></w:style>',
+            },
+        );
+        const source = auditSource(docx);
+        expect(source.marks.get('size')).toEqual(['fine']);
+        const { features } = compareTallies(source, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        expect([features['size']?.kept, features['size']?.invented]).toEqual([1, 0]);
     });
 
     // A link style in a color of its own is Word's look; one in the link look is the link's.

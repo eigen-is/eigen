@@ -71,6 +71,63 @@ describe('paste keeps caps', () => {
     });
 });
 
+// Google Docs writes a size on every span, its body's 11 pt and a heading's own included, which the doc draws already.
+describe('paste keeps a size the doc does not draw', () => {
+    const pastedSizes = (html: string) => {
+        const sizes: [string, unknown][] = [];
+        createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+            if (node.isText)
+                sizes.push([
+                    node.text ?? '',
+                    node.marks.find((mark) => mark.type.name === 'textStyle')?.attrs['fontSize'] ?? null,
+                ]);
+        });
+        return sizes;
+    };
+
+    test("the body's 11 pt is no size, another one is", () => {
+        expect(
+            pastedSizes(
+                '<p><span style="font-size:11pt">body </span><span style="font-size:14pt">big </span><span style="font-size:16px">px</span></p>',
+            ),
+        ).toEqual([
+            ['body ', null],
+            ['big ', 14],
+            ['px', 12],
+        ]);
+    });
+
+    test("another app's heading draws at the doc's heading size", () => {
+        expect(
+            pastedSizes('<b id="docs-internal-guid-1"><h1 dir="ltr"><span style="font-size:20pt">Plan</span></h1></b>'),
+        ).toEqual([['Plan', null]]);
+    });
+
+    test("a docs copy keeps its sizes, the body's in a heading included", () => {
+        const sized = (text: string, fontSize: number) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'textStyle', attrs: { fontSize } }],
+        });
+        const source = new Editor({
+            extensions: getDocExtensions(),
+            content: {
+                type: 'doc',
+                content: [
+                    { type: 'heading', attrs: { level: 1 }, content: [sized('big', 30), sized('body', 11)] },
+                    { type: 'paragraph', content: [sized('fine', 9)] },
+                ],
+            },
+        });
+        const { dom } = source.view.serializeForClipboard(source.state.doc.slice(0, source.state.doc.content.size));
+        expect(pastedSizes(dom.innerHTML)).toEqual([
+            ['big', 30],
+            ['body', 11],
+            ['fine', 9],
+        ]);
+    });
+});
+
 // Google Docs spells its italic Heading 6 on every run, and a run in it set upright as font-style normal. Heading 6
 // draws an italic mark upright, so the upright run is the mark and the italic one plain.
 test('an upright run in a pasted Google Docs Heading 6 is italic, its italic runs are not', () => {

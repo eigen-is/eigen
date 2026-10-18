@@ -675,7 +675,7 @@ describe("a node's look", () => {
         );
         expect(nodesOfType(json, 'blockquote')).toHaveLength(1);
         expect(marksOfType(json, 'textStyle').map((mark) => mark.attrs)).toEqual([
-            { color: null, fontFamily: null, caps: 'all' },
+            { color: null, fontFamily: null, fontSize: null, caps: 'all' },
         ]);
     });
 

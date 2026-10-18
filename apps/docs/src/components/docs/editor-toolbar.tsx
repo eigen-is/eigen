@@ -31,7 +31,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { ColorPickerButton } from '@workspace/ui/components/media';
+import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { printDocument } from '@workspace/ui/lib/printElement';
@@ -127,10 +127,10 @@ export const EditorToolbar = ({
     const { exportPath, isExporting } = useDocumentExport();
     // The icon row folds from its right end, as Google's does, so its order is its priority order; all it
     // folds stays in Format and Insert. At their widest (a link in a JetBrains Mono "Normal text") its three cuts
-    // sit centered beside the five menus from 997, 1179 and 1394px.
-    const showsRow = useMediaQuery('(min-width: 1000px)');
-    const showsMiddle = useMediaQuery('(min-width: 1200px)');
-    const showsAll = useMediaQuery('(min-width: 1400px)');
+    // sit centered beside the five menus from 1086, 1268 and 1483px.
+    const showsRow = useMediaQuery('(min-width: 1090px)');
+    const showsMiddle = useMediaQuery('(min-width: 1270px)');
+    const showsAll = useMediaQuery('(min-width: 1490px)');
     // A phone has no room for a fifth menu beside the offline badge, so Tools folds into the kebab.
     const isMobile = useIsMobile();
 
@@ -312,6 +312,14 @@ export const EditorToolbar = ({
                                 value={active.fontName}
                                 onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
                                 onCloseAutoFocus={keepEditorFocus}
+                            />
+
+                            <ToolbarSeparator />
+
+                            <FontSizeStepper
+                                value={active.fontSize}
+                                onChange={(size) => editor.chain().focus().applyFontSize(size).run()}
+                                onStep={(by) => editor.chain().focus().stepFontSize(by).run()}
                             />
 
                             <ToolbarSeparator />
