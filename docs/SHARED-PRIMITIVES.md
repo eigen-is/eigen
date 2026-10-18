@@ -1665,7 +1665,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `pasteAnchorOffset` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
-| `pathCommands` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `placeLayer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `PLACEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `pointInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -1696,6 +1695,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `round` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `round4` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `scaledPathCommands` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `scaleNormalizedPath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `sceneBounds` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
 | `sceneFontFamilies` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
