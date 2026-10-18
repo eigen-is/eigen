@@ -204,6 +204,17 @@ describe('tree → LaTeX → tree is the identity, but for the listed losses', (
             expect(writeLatex(viaLatex(read))).toBe(writeLatex(read));
         }
     });
+
+    // A fenced row with fences no command draws reads back as its characters, two parts more each.
+    test('a lossy tree may read back larger, so at the size bound its LaTeX is past it', () => {
+        const units = Math.floor((MATH_LIMITS.size - 1) / 2);
+        const fences = Array.from(
+            { length: units },
+            (): MathNode => ({ kind: 'fenced', open: '"', close: '"', separator: '', parts: [[]] }),
+        );
+        expect(viaMathml(fences)).toStrictEqual(fences);
+        expect(() => viaLatex(fences)).toThrow(MathError);
+    });
 });
 
 describe('the 45 formulas of the storage study', () => {
