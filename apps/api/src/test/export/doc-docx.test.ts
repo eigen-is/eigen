@@ -399,10 +399,10 @@ describe('docx writer — package', () => {
         expect(new Set(dates)).toEqual(new Set(['1980-01-01T00:00:00.000Z']));
     });
 
-    test('the writer zips with core/zip, not JSZip', () => {
+    test("the writer zips with core/opc's writePackage, not JSZip", () => {
         const source = fs.readFileSync(new URL('../../lib/export/doc/to-docx.ts', import.meta.url), 'utf8');
         expect(source).not.toContain("from 'jszip'");
-        expect(source).toContain("from '../../core/zip'");
+        expect(source).toContain('return writePackage({');
     });
 
     test('the title is the name without its extension', async () => {

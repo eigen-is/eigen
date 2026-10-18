@@ -8,12 +8,14 @@ import {
     openPackage,
     optional,
     relationshipsOf,
+    relationshipsXml,
     relOfType,
     relsPathOf,
+    writePackage,
 } from '../../lib/core/opc';
 import * as xml from '../../lib/core/xml';
 import { XmlError } from '../../lib/core/xml';
-import { writeZip, ZipError, ZipReader } from '../../lib/core/zip';
+import { openZip, writeZip, ZipError, ZipReader } from '../../lib/core/zip';
 import { build, deflated } from '../fixtures/raw-zip';
 
 const MESSAGES = { passwordProtected: 'Locked', tooLarge: 'Too large' };
@@ -207,6 +209,92 @@ describe("a package's parse budget", () => {
         expect(refusal(() => openPackage(bomb, MESSAGES))).toEqual([413, 'Too large']);
         expect(performance.now() - started).toBeLessThan(100);
         expect(reads).not.toHaveBeenCalled();
+    });
+});
+
+describe('written relationships', () => {
+    test("are numbered by place, with each target escaped and an External one's mode", () => {
+        const xml = relationshipsXml([
+            { type: IMAGE, target: 'media/a&b"<1>.png' },
+            { type: IMAGE, target: 'https://example.com/?a=1&b=2', external: true },
+            { type: IMAGE, target: 'media/c.png', external: false },
+        ]);
+        expect(xml).toBe(
+            `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}"><Relationship Id="rId1" Type="${IMAGE}" Target="media/a&amp;b&quot;&lt;1&gt;.png"/><Relationship Id="rId2" Type="${IMAGE}" Target="https://example.com/?a=1&amp;b=2" TargetMode="External"/><Relationship Id="rId3" Type="${IMAGE}" Target="media/c.png"/></Relationships>`,
+        );
+    });
+
+    test('read back as written, an internal target resolved', () => {
+        const xml = relationshipsXml([
+            { type: IMAGE, target: 'media/a&b.png' },
+            { type: IMAGE, target: 'https://example.com/x', external: true },
+        ]);
+        expect([...rels(xml.replace(/^<Relationships[^>]*>|<\/Relationships>$/g, ''))]).toEqual([
+            ['rId1', { type: IMAGE, target: 'word/media/a&b.png', external: false }],
+            ['rId2', { type: IMAGE, target: 'https://example.com/x', external: true }],
+        ]);
+    });
+});
+
+describe('a written package', () => {
+    const decoder = new TextDecoder();
+    const write = (title = 'Report') =>
+        writePackage({
+            main: 'doc/main.xml',
+            title,
+            defaults: { png: 'image/png', bin: 'application/x-test' },
+            parts: [
+                ['doc/main.xml', '<main/>', 'text/main'],
+                ['doc/_rels/main.xml.rels', relationshipsXml([{ type: IMAGE, target: 'media/a.png' }])],
+                ['doc/other.xml', '<other/>', 'text/other'],
+            ],
+            files: [
+                { name: 'doc/media/a.png', data: new Uint8Array([1, 2, 3]), store: true },
+                { name: 'doc/data.bin', data: 'data' },
+            ],
+        });
+
+    test('zips the content types, the package relationships and core properties, the parts, then the files', () => {
+        const zip = openZip(write());
+        expect(zip.names()).toEqual([
+            '[Content_Types].xml',
+            '_rels/.rels',
+            'docProps/core.xml',
+            'doc/main.xml',
+            'doc/_rels/main.xml.rels',
+            'doc/other.xml',
+            'doc/media/a.png',
+            'doc/data.bin',
+        ]);
+        const declaration = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+        for (const name of zip.names().slice(0, 6)) expect(decoder.decode(zip.read(name))).toStartWith(declaration);
+        expect([...(zip.read('doc/media/a.png') ?? [])]).toEqual([1, 2, 3]);
+        expect(decoder.decode(zip.read('doc/data.bin'))).toBe('data');
+    });
+
+    test("writes the package's Defaults, the format's after them, then an Override for each typed part in order", () => {
+        const types = decoder.decode(openZip(write()).read('[Content_Types].xml'));
+        expect(types).toEndWith(
+            `<Types xmlns="${CONTENT_TYPES_NS}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="bin" ContentType="application/x-test"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/doc/main.xml" ContentType="text/main"/><Override PartName="/doc/other.xml" ContentType="text/other"/></Types>`,
+        );
+    });
+
+    test('reads back: the main part, its relationships, the content types and the escaped title', () => {
+        const pkg = openPackage(write('A & <B>'), MESSAGES);
+        expect(relOfType(pkg.relationships(''), 'officeDocument')).toBe('doc/main.xml');
+        expect(relOfType(pkg.relationships('doc/main.xml'), 'image')).toBe('doc/media/a.png');
+        expect(pkg.contentTypeOf('doc/main.xml')).toBe('text/main');
+        expect(pkg.contentTypeOf('doc/_rels/main.xml.rels')).toBe(
+            'application/vnd.openxmlformats-package.relationships+xml',
+        );
+        expect(pkg.contentTypeOf('doc/data.bin')).toBe('application/x-test');
+        const core = relOfType(pkg.relationships(''), 'core-properties');
+        expect(core).toBe('docProps/core.xml');
+        expect(decoder.decode(pkg.zip.read('docProps/core.xml'))).toContain('<dc:title>A &amp; &lt;B&gt;</dc:title>');
+    });
+
+    test('is the same bytes for the same input', () => {
+        expect(Buffer.from(write()).equals(Buffer.from(write()))).toBe(true);
     });
 });
 
