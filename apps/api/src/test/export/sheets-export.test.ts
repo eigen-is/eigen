@@ -1108,6 +1108,25 @@ describe('Sheets xlsx export — the tabs', () => {
     });
 });
 
+describe('Sheets xlsx export — the active tab', () => {
+    // Excel opens on the workbook's active tab, the first sheet unless told: a hidden one would open hidden.
+    test('is the first sheet shown, selected', async () => {
+        const sheets: Sheet[] = [
+            { name: 'Hidden', celldata: [], hide: 1 },
+            { name: 'Shown', celldata: [] },
+            { name: 'Later', celldata: [] },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const workbook = await readZipEntry(buffer, 'xl/workbook.xml');
+        expect(workbook).toMatch(/<workbookView\b[^>]*\bactiveTab="1"/);
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buffer);
+        expect(getSheet(wb, 'Hidden').state).toBe('hidden');
+        expect(await readZipEntry(buffer, 'xl/worksheets/sheet2.xml')).toMatch(/<sheetView\b[^>]*\btabSelected="1"/);
+        expect(await readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).not.toMatch(/tabSelected="1"/);
+    });
+});
+
 describe('Sheets xlsx export — inline rich text', () => {
     test('exports ct.s segments as richText runs with mapped fonts', async () => {
         const sheets: Sheet[] = [

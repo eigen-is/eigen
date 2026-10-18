@@ -72,6 +72,12 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
     // Internal-link labels per worksheet (1-based, matching sheetN.xml), injected
     // as the `display` attribute by rewriteInternalHyperlinks below.
     const internalLinkLabels = new Map<number, Map<string, string>>();
+    // Excel opens on the active tab, the first unless told, so a hidden first sheet would open hidden.
+    const activeTab = Math.max(
+        sheets.findIndex((sheet) => sheet.hide !== 1),
+        0,
+    );
+    workbook.views = [{ activeTab, x: 0, y: 0, width: 10000, height: 20000, firstSheet: 0, visibility: 'visible' }];
 
     for (const [sheetIndex, sheet] of sheets.entries()) {
         const tabColor = sheet.color ? argbOf(sheet.color) : undefined;
@@ -205,7 +211,14 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 
         // Gridlines and frozen panes must live in ONE view object — exceljs renders
         // a <sheetView> per entry and Excel only honors the first.
-        const view: { showGridLines?: boolean; state?: 'frozen'; xSplit?: number; ySplit?: number } = {};
+        const view: {
+            showGridLines?: boolean;
+            state?: 'frozen';
+            xSplit?: number;
+            ySplit?: number;
+            tabSelected?: boolean;
+        } = {};
+        if (sheetIndex === activeTab) view.tabSelected = true;
         if (sheet.showGridLines === false || sheet.showGridLines === 0) {
             view.showGridLines = false;
         }
