@@ -130,7 +130,11 @@ export function openZip(bytes: Uint8Array): ZipReader {
     let directoryEnd = end;
     if (end >= 20 && u32(end - 20) === END64_LOCATOR) {
         const end64 = u64(end - 12);
-        if (u32(end - 16) !== 0 || u32(end - 4) > 1) throw new ZipError('multi-disk');
+        // Info-ZIP reads the plain record instead when its disk is neither the sentinel nor the locator's last.
+        const plainDisk = (at: number) => u16(at) === 0 || u16(at) === MAX16;
+        if (u32(end - 16) !== 0 || u32(end - 4) !== 1 || !plainDisk(end + 4) || !plainDisk(end + 6)) {
+            throw new ZipError('multi-disk');
+        }
         if (!inside(end64, 56, end - 20) || u32(end64) !== END64) throw new ZipError('corrupt');
         // The record runs up to its locator, so no bytes hide between them.
         if (end64 + 12 + u64(end64 + 4) !== end - 20) throw new ZipError('misplaced');

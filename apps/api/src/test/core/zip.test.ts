@@ -87,6 +87,53 @@ function hiddenDirectory(): Buffer {
     return zip;
 }
 
+// A ZIP64 archive whose plain record has the right count and size and the sentinel offset. A reader taking the plain
+// record seeks to 0xFFFFFFFF and counts the bytes it misses as a prefix to subtract, which lands on a directory hidden
+// in an extra field, naming EVIL's entry stored in another. `skip` makes Info-ZIP take the plain record.
+function infoZipFallback(skip: (zip: Buffer, end: number) => void): Buffer {
+    const inner = build([EVIL]);
+    const innerEnd = inner.length - 22;
+    const evilLocal = inner.subarray(0, inner.readUInt32LE(innerEnd + 16));
+    const evilCentral = Buffer.from(
+        inner.subarray(evilLocal.length, evilLocal.length + inner.readUInt32LE(innerEnd + 12)),
+    );
+    const room = 400;
+    const make = (blob: Buffer) =>
+        build([{ ...TYPES, extra: blob }, REAL, stored('docProps/custom.bin', evilLocal)], { zip64End: true });
+    const sized = make(Buffer.alloc(room, 0x20));
+    const end = sized.length - 22;
+    const end64 = end - 20 - 56;
+    const directorySize = Number(sized.readBigUInt64LE(end64 + 40));
+    const directoryStart = Number(sized.readBigUInt64LE(end64 + 48));
+    const shift = 0xffffffff + directorySize - end;
+    const headers: Buffer[] = [];
+    for (let at = directoryStart, index = 0; index < 3; index++) {
+        const length = 46 + sized.readUInt16LE(at + 28) + sized.readUInt16LE(at + 30) + sized.readUInt16LE(at + 32);
+        headers.push(Buffer.from(sized.subarray(at, at + length)));
+        at += length;
+    }
+    // A header without its extras and comment, at a shifted offset.
+    const fake = (header: Buffer, offset: number) => {
+        const out = Buffer.from(header.subarray(0, 46 + header.readUInt16LE(28)));
+        out.writeUInt16LE(0, 30);
+        out.writeUInt16LE(0, 32);
+        out.writeUInt32LE(offset + shift, 42);
+        return out;
+    };
+    const evil = Buffer.from(evilCentral);
+    evil.writeUInt32LE(sized.indexOf(evilLocal) + shift, 42);
+    const directory = Buffer.concat([fake(headers[0], 0), evil, fake(headers[2], headers[2].readUInt32LE(42))]);
+    const blob = Buffer.alloc(room, 0x20);
+    directory.copy(blob, end - directorySize - (directoryStart + 46 + TYPES.name.length));
+    const zip = make(blob);
+    zip.writeUInt16LE(3, end + 8);
+    zip.writeUInt16LE(3, end + 10);
+    zip.writeUInt32LE(directorySize, end + 12);
+    zip.writeUInt32LE(0xffffffff, end + 16);
+    skip(zip, end);
+    return zip;
+}
+
 const bombs: Record<string, () => Uint8Array> = {
     'an honest 1 GiB bomb': () => build([TYPES, bomb('word/document.xml', GiB, GiB)]),
     'a 1 GiB bomb declaring 1 KB': () => build([TYPES, bomb('word/document.xml', GiB, 1000)]),
@@ -255,14 +302,21 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         () => Buffer.concat([build([TYPES, REAL]), build([TYPES, EVIL]).subarray(-22), Buffer.from([0])]),
         'ambiguous-end',
     ],
-    [
-        'plain end record fields that differ from the ZIP64 ones',
+    ...(
+        [
+            ['entry count on this disk', 8, 2],
+            ['entry count', 10, 2],
+            ['directory size', 12, 4],
+            ['directory offset', 16, 4],
+        ] as const
+    ).map(([field, at, width]): [string, () => Uint8Array, ZipErrorCode] => [
+        `a plain ${field} differing from the ZIP64 one`,
         () => {
             const zip = build([TYPES, REAL], { zip64End: true });
-            return patched(zip, zip.length - 22 + 10, 1, 2);
+            return patched(zip, zip.length - 22 + at, 1, width);
         },
         'ambiguous-end',
-    ],
+    ]),
     // Info-ZIP, Java and Go read the plain fields, which name a directory hidden in an entry.
     ['plain end record fields naming a hidden directory', hiddenDirectory, 'ambiguous-end'],
     [
@@ -313,6 +367,41 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
             return patched(zip, zip.length - 22 - 20 - 56, 0x06054b50, 4);
         },
         'corrupt',
+    ],
+    [
+        'no disk in the ZIP64 locator',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            return patched(zip, zip.length - 22 - 4, 0, 4);
+        },
+        'multi-disk',
+    ],
+    [
+        'a plain disk number beside a ZIP64 end record',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            return patched(zip, zip.length - 22 + 4, 5, 2);
+        },
+        'multi-disk',
+    ],
+    [
+        'a plain start disk beside a ZIP64 end record',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            return patched(zip, zip.length - 22 + 6, 7, 2);
+        },
+        'multi-disk',
+    ],
+    // Info-ZIP reads the plain record instead of these, and so a directory hidden in an extra field.
+    [
+        'no disk in the ZIP64 locator, over a plain record leading to a hidden directory',
+        () => infoZipFallback((zip, end) => zip.writeUInt32LE(0, end - 4)),
+        'multi-disk',
+    ],
+    [
+        'a plain disk number over a plain record leading to a hidden directory',
+        () => infoZipFallback((zip, end) => zip.writeUInt16LE(5, end + 4)),
+        'multi-disk',
     ],
     [
         'a second disk in the ZIP64 end record',
@@ -532,6 +621,10 @@ describe('openZip reads', () => {
             Buffer.concat([build([TYPES, REAL], { comment: Buffer.from('a comment') }), Buffer.from([0])]),
         ];
         for (const shape of shapes) expect(readAll(shape)).toEqual(readAll(zip));
+    });
+
+    test('a ZIP64 archive whose plain record has its count and size and the sentinel offset', () => {
+        expect(readAll(infoZipFallback(() => {})).get('word/document.xml')).toBe('<w:document>REAL</w:document>');
     });
 
     test('an entry only when it is read', () => {
