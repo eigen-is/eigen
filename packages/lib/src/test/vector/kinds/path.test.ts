@@ -273,7 +273,7 @@ describe('path bounds', () => {
 describe('path hit test', () => {
     const kind = ELEMENT_KINDS.path;
 
-    test('a filled path is hit inside and on its edge, not outside', () => {
+    test('a closed path is hit inside and on its edge, not outside', () => {
         const el = box(TRIANGLE);
         expect(kind.hitTest(el, { x: 40, y: 160 }, 0)).toBe(true);
         expect(kind.hitTest(el, { x: 160, y: 40 }, 0)).toBe(false);
@@ -295,9 +295,10 @@ describe('path hit test', () => {
         expect(kind.hitTest(twice, { x: 100, y: 100 }, 0)).toBe(true);
     });
 
-    test('a path without a fill, or an open one, is hit on its stroke only', () => {
+    test('a closed path is hit inside whatever its fill, as a rectangle is; an open one only on its stroke', () => {
         const clear = box(TRIANGLE, { fill: solidFill('transparent') });
-        expect(kind.hitTest(clear, { x: 40, y: 160 }, 0)).toBe(false);
+        expect(kind.hitTest(clear, { x: 40, y: 160 }, 0)).toBe(true);
+        expect(kind.hitTest(clear, { x: 160, y: 40 }, 0)).toBe(false);
         expect(kind.hitTest(clear, { x: 0, y: 100 }, 0)).toBe(true);
         const open = box('M 0 0 L 1 1 L 0 1', { closed: false });
         expect(kind.hitTest(open, { x: 40, y: 160 }, 0)).toBe(false);

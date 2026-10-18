@@ -64,7 +64,8 @@ export const pathKind = defineKind<VectorPathElement>({
     },
     // A control point may pull a curve past the box, so the export, the marquee and the ring read the contour.
     bounds: (el) => grown(sampled(el).bounds, el.strokeWidth / 2),
-    // A filled path is hit inside by the fill rule; any path on its stroke, within the reach a line has.
+    // A closed path is hit inside by the fill rule whatever its fill, as the box shapes are; any path on its
+    // stroke, within the reach a line has.
     hitTest: (el, point, threshold) => {
         const { subpaths, bounds } = sampled(el);
         const reach = Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, el.strokeWidth / 2 + 0.1);
@@ -72,7 +73,7 @@ export const pathKind = defineKind<VectorPathElement>({
         if (point.x < near.minX || point.x > near.maxX || point.y < near.minY || point.y > near.maxY) return false;
         const p = rotatePoint(point, boxCenter(el), -el.angle);
         if (subpaths.some((points) => distanceToPolyline(points, p) <= reach)) return true;
-        return el.closed && !isTransparentFill(parseFill(el.fill)) && winding(subpaths, p) !== 0;
+        return el.closed && winding(subpaths, p) !== 0;
     },
     // The outer contour only: an arrow docks on the outside of a shape with a hole.
     outline: (el, inflate) => {
