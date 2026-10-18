@@ -614,6 +614,41 @@ describe('axes', () => {
         }
     });
 
+    test('a hidden category axis keeps the gridline at zero, as Office keeps its 0 line, and gridlines off draw none', () => {
+        const signed = { ...data, series: [series('S1', [-10, 20, 30, 40]), series('S2', [5, 15, 25, 35])] };
+        for (const type of ['column', 'bar'] as const) {
+            const zero = (out: ChartLayout) => {
+                const positive = bar(out, 0, 1);
+                return type === 'column' ? positive.y + positive.height : positive.x;
+            };
+            const at = (shape: VectorLinearElement) => (type === 'column' ? shape.y : shape.x);
+            const hidden = layout(type, axes(type, { category: { visible: false } }), { data: signed });
+            expect(lines(hidden, 'baseline')).toEqual([]);
+            expect(lines(hidden, 'gridline').some((shape) => Math.abs(at(shape) - zero(hidden)) < 0.01)).toBe(true);
+            const bare = layout(type, axes(type, { category: { visible: false }, value: { gridlines: false } }), {
+                data: signed,
+            });
+            expect(bare.shapes.filter((shape) => shape.type === 'line')).toEqual([]);
+        }
+    });
+
+    test('a hidden category axis keeps half a line below the plot for the lowest tick label, off the title and legend', () => {
+        for (const type of ['column', 'line'] as const) {
+            for (const patch of [
+                axes(type, { category: { visible: false, title: 'Teams' } }),
+                { ...axes(type, { category: { visible: false } }), legend: 'bottom' as const },
+            ]) {
+                const out = layout(type, patch, { data });
+                const ticks = out.labels.filter((label) => isTick(label.text));
+                const lowest = ticks.reduce((a, b) => (a.y > b.y ? a : b));
+                const below = out.labels.filter((label) => !isTick(label.text) && label.y > lowest.y);
+                expect(below.length).toBeGreaterThan(0);
+                for (const label of below)
+                    expect(labelBounds(lowest).bottom).toBeLessThanOrEqual(labelBounds(label).top + 0.01);
+            }
+        }
+    });
+
     test('a hidden value axis draws no tick labels, keeps its gridlines, and the plot takes its room', () => {
         for (const type of ['column', 'bar'] as const) {
             const shown = layout(type, {}, { data });

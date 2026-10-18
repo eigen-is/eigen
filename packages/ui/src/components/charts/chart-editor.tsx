@@ -140,7 +140,15 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                     <MergedSelect
                         value={type}
                         options={CHART_TYPE_OPTIONS}
-                        onChange={(next) => onChange({ ...spec, type: next })}
+                        onChange={(next) =>
+                            // Excel's bar chart reads reversed by default, so its direction would turn a
+                            // column chart right to left.
+                            onChange(
+                                (next === 'bar') === (type === 'bar')
+                                    ? { ...spec, type: next }
+                                    : { ...spec, type: next, categoryAxis: { ...categoryAxis, reversed: false } },
+                            )
+                        }
                     />
                 </PropertyRow>
                 {(type === 'column' || type === 'bar') && (

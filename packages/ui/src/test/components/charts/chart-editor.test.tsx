@@ -159,6 +159,24 @@ describe('ChartEditor', () => {
         expect(editor.changes).toEqual([{ ...sample('column'), type: 'pie' }]);
     });
 
+    test("a switch between bar and any other type sets the category axis back to Google's direction, in the same change", async () => {
+        const reversed = (type: ChartType): ChartSpec => {
+            const spec = sample(type);
+            return { ...spec, categoryAxis: { ...spec.categoryAxis, reversed: true } };
+        };
+        const bar = await mount(reversed('bar'));
+        await bar.choose('Type', 'Column');
+        expect(bar.changes).toEqual([
+            { ...reversed('bar'), type: 'column', categoryAxis: { ...reversed('bar').categoryAxis, reversed: false } },
+        ]);
+        const column = await mount(reversed('column'));
+        await column.choose('Type', 'Bar');
+        expect(column.last().categoryAxis.reversed).toBe(false);
+        const line = await mount(reversed('column'));
+        await line.choose('Type', 'Line');
+        expect(line.changes).toEqual([{ ...reversed('column'), type: 'line' }]);
+    });
+
     test('stacking shows for column and bar, writes the grouping, and is gone for line and pie', async () => {
         const column = await mount(sample('column'));
         expect(column.rowLabels()).toContain('Stacking');

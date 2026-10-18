@@ -363,8 +363,10 @@ function layoutCartesian(
             name === '' ? [] : [label(ctx, name, plot.left - gap, band.center(i) - lh / 2, 'end')],
         );
     } else {
+        // The end tick labels overhang the plot by half a line, below it only where no names sit.
         const top = frame.top + (showTicks ? lh / 2 : 0);
-        const estimate = (showNames ? frame.bottom - bottomReserve - gap - lh : frame.bottom - bottomReserve) - top;
+        const floor = frame.bottom - bottomReserve - (showTicks && !showNames ? lh / 2 : 0);
+        const estimate = (showNames ? floor - gap - lh : floor) - top;
         axis = valueAxis(
             spec,
             extent,
@@ -376,7 +378,7 @@ function layoutCartesian(
         const placed = showNames
             ? placeCategoryLabels(ctx, categories, bandScale(count, left, frame.right, reversed), frame, bottomReserve)
             : { labels: [], height: 0 };
-        plot = { left, top, right: frame.right, bottom: frame.bottom - bottomReserve - placed.height };
+        plot = { left, top, right: frame.right, bottom: floor - placed.height };
         categoryLabels = placed.labels.map((placedLabel) => ({ ...placedLabel, y: placedLabel.y + plot.bottom + gap }));
     }
     const minPlot = 2 * fontSize;
@@ -417,7 +419,9 @@ function layoutCartesian(
                     : label(ctx, axis.texts[i], plot.left - gap, at - lh / 2, 'end'),
             );
         }
-        if (spec.valueAxis.gridlines && t !== zero) shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
+        // The baseline draws zero's line; without it a gridline does, as Office keeps its 0 line.
+        if (spec.valueAxis.gridlines && (t !== zero || !showNames))
+            shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
     });
     if (spec.type === 'line') shapes.push(...lineMarks(ctx, spec, series, values, band, scale));
     else shapes.push(...barMarks(ctx, spec, series, values, band, scale, horizontal, stacked));
