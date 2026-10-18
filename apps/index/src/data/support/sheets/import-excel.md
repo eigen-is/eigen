@@ -41,10 +41,11 @@ The import reads every worksheet in the workbook and preserves:
 - Merged cells
 - Column widths and row heights
 - Cell borders
-- Text formatting: bold, italic, underline, strikethrough, font size, and text color
+- Text formatting: bold, italic, underline, strikethrough, font size, and text color, also where one cell mixes several formats
 - Fill colors
 - Text alignment (horizontal and vertical), text wrapping, and text rotation
-- The sheet tab names and their order
+- The sheet tab names, colors, and order
+- Hidden sheets, which stay hidden until you show them from the **View** menu
 - The gridlines setting (hidden or visible)
 - Conditional formatting rules, data validation rules, and hyperlinks
 - Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)
@@ -58,7 +59,6 @@ The following are not imported:
 - Charts
 - Images embedded in cells
 - Comments and notes
-- Whether a sheet is hidden: hidden sheets come in as visible tabs
 
 If these are important, keep the original `.xlsx` file in Drive so you have a reference copy.
 

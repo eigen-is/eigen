@@ -22,8 +22,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 - **Print in Docs** — File → **Print** and ⌘P open the document as a PDF in a new tab to print from, so headers, footers and page numbers print. Offline, before your latest edits are saved, or when the PDF can't be made, Docs prints from the browser without them and says so
 - **Image sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag an image's handle are in cm, as in Page setup
-- **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid
-- **Sheets import** — Eigen reads the `.xlsx` itself instead of through ExcelJS. Overlapping merged ranges come in as Excel repairs them, a link to another workbook keeps its sheet anchor, ISO dates read right, and Excel 2010's conditional formats and validation lists come in. A workbook with more than 10,000 merged ranges, 500 sheets or 2 million rows imports when its cells fit. A password-protected file says so
+- **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, its column widths match the grid, and it keeps hidden sheets hidden and tab colors. PDF and web page downloads leave hidden sheets out
+- **Sheets import** — Eigen reads the `.xlsx` itself instead of through ExcelJS. Overlapping merged ranges come in as Excel repairs them, a link to another workbook keeps its sheet anchor, ISO dates read right, and Excel 2010's conditional formats and validation lists come in. A workbook with more than 10,000 merged ranges, 500 sheets or 2 million rows imports when its cells fit. A password-protected file says so. Hidden sheets stay hidden, tabs keep their colors, and a cell that mixes bold, italic, colors or fonts keeps them
 
 ### Fixed
 

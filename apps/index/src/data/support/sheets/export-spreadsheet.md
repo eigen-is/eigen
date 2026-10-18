@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, export, download, excel, xlsx, pdf]
 related: [sheets/import-excel, sheets/get-started]
 order: 160
-updated: 2026-09-13
+updated: 2026-10-18
 ---
 
 You can download a copy of any spreadsheet to your computer without removing it from Eigen. Three formats are available: Excel, PDF, and web page.
@@ -16,9 +16,9 @@ You can download a copy of any spreadsheet to your computer without removing it 
 2. Click **File** in the top-left of the menu bar.
 3. Hover over **Download** to open the submenu.
 4. Choose the format you want:
-   - **Microsoft Excel (.xlsx)** saves the workbook in the standard Excel format. All sheets are included.
-   - **PDF (.pdf)** saves each sheet as a page in a single PDF document.
-   - **Web Page (.html)** saves the spreadsheet as an HTML file you can open in a browser.
+   - **Microsoft Excel (.xlsx)** saves the workbook in the standard Excel format. All sheets are included, and hidden sheets stay hidden.
+   - **PDF (.pdf)** saves each visible sheet as a page in a single PDF document.
+   - **Web Page (.html)** saves the visible sheets as an HTML file you can open in a browser.
 5. An **Exporting document** progress bar appears while Eigen prepares the file. When it is ready, your browser downloads it automatically.
 
 The downloaded file takes the name of the spreadsheet.
@@ -34,7 +34,7 @@ When you download as **Microsoft Excel (.xlsx)**, the following are preserved:
 - Cell borders
 - Text formatting: bold, italic, underline, strikethrough, font size, text color, and fill color
 - Text alignment, text wrapping, and text rotation
-- The sheet tab names and their order
+- The sheet tab names, colors, and order
 - Hidden gridlines (if you hid them)
 - Conditional formatting rules, data validation rules, and hyperlinks
 - Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)

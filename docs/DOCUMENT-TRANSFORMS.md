@@ -38,12 +38,12 @@ A core dump is off: an abort is an expected way for a child to die. macOS refuse
 
 | Arch | Machine | Usable, objects | Usable, `ArrayBuffer`s | docx bug65649 import | 1M-cell xlsx import | 1M-cell xlsx export |
 |---|---|---|---|---|---|---|
-| arm64 | 4 GiB | 1.72 GB | 1.58 GB | 0.54 GB | 1.52 GB | refused at 1.64 GB |
-| arm64 | 7.65 GiB | 3.32 GB | 3.02 GB | 0.53 GB | 1.52 GB | 1.79 GB |
-| amd64 | 4 GiB | 2.52 GB | 1.44 GB | 0.54 GB | 1.75 GB | 1.92 GB |
-| amd64 | 7.65 GiB | 5.39 GB | 2.87 GB | 0.61 GB | 1.57 GB | 1.81 GB |
+| arm64 | 4 GiB | 1.72 GB | 1.58 GB | 0.54 GB | 1.71 GB | refused at 1.64 GB |
+| arm64 | 7.65 GiB | 3.32 GB | 3.02 GB | 0.53 GB | 1.71 GB | 1.79 GB |
+| amd64 | 4 GiB | 2.52 GB | 1.44 GB | 0.54 GB | 1.74 GB | 1.92 GB |
+| amd64 | 7.65 GiB | 5.39 GB | 2.87 GB | 0.61 GB | 1.63 GB | 1.81 GB |
 
-So on a 4 GB arm64 host a 1M-cell xlsx export is refused while the 1M-cell import still fits. At 512 MiB Bun cannot start on x86-64 at all, so a test that dials the limit down stays at 1 GiB. **The usable share depends on the Bun version and the arch: re-measure it on every Bun bump**, with the Linux-only suite of `document-transform-runner.test.ts` and the jobs of the table, and correct the table and the help center's memory advice.
+The 1M-cell import is a workbook of 10,000 rows of 100 mixed cells (shared strings, dates, numbers, booleans, formulas and styles), read under the child's limits. So on a 4 GB arm64 host a 1M-cell xlsx export is refused while the 1M-cell import still fits. At 512 MiB Bun cannot start on x86-64 at all, so a test that dials the limit down stays at 1 GiB. **The usable share depends on the Bun version and the arch: re-measure it on every Bun bump**, with the Linux-only suite of `document-transform-runner.test.ts` and the jobs of the table, and correct the table and the help center's memory advice.
 
 ## A package's parts have a parse budget before the memory limit
 
