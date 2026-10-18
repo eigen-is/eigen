@@ -25,6 +25,8 @@ export const STYLE_NAMES = {
     TaskDone: 'Task Done',
     Hyperlink: 'Hyperlink',
     Code: 'Code',
+    FootnoteText: 'footnote text',
+    FootnoteReference: 'footnote reference',
 } as const;
 
 export type StyleId = keyof typeof STYLE_NAMES | `Heading${number}` | `CodeBlock-${string}`;
@@ -139,6 +141,10 @@ export const PAGE_NUMBER_FIELDS: Record<PageNumberKind, string> = { page: 'PAGE'
 
 // Word's widest table. The reader and the writer cap the grid at it, so no row walks or fills a column past it.
 export const MAX_TABLE_COLUMNS = 63;
+
+// The notes a notes part holds that no reference names: the rule above the notes, the one above a note a page break
+// continues, and the notice under one. Word writes the first two as notes -1 and 0 and names them in its settings.
+export const NOTE_SEPARATORS = ['separator', 'continuationSeparator', 'continuationNotice'] as const;
 
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
 

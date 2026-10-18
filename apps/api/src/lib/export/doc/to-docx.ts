@@ -55,6 +55,7 @@ import {
     CODE_BLOCK_LOOK,
     CODE_LOOK,
     cssPt,
+    FOOTNOTE_LOOK,
     HEADER_CELL_LOOK,
     HEADING_LOOKS,
     halfPoints,
@@ -85,6 +86,7 @@ import {
     LIST_FORMATS,
     LIST_LEVELS,
     MAX_TABLE_COLUMNS,
+    NOTE_SEPARATORS,
     PAGE_NUMBER_FIELDS,
     STYLE_NAMES,
     type StyleId,
@@ -126,6 +128,7 @@ export async function eigendocToDocx(
         imageFiles: new Map(),
         files: [],
         drawings: 0,
+        footnotes: [],
         // A Spacer's and a figure's mark draw in the body's Regular.
         faces: new Map([[BODY.font, new Set<FontSlot>(['Regular'])]]),
     };
@@ -133,6 +136,26 @@ export async function eigendocToDocx(
     const column = page.width - page.margin.left - page.margin.right;
     const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
+
+    // The notes the body referenced, in Word's notes part after its two separators, each in the body's column through
+    // the part's own relationships, as a band is. A nested note is its text.
+    const noteParts: [path: string, xml: string, contentType?: string][] = [];
+    if (pkg.footnotes.length > 0) {
+        pkg.part = { relationships: [], hyperlinks: new Map(), images: new Map() };
+        const note: Context = { ...flow, style: 'FootnoteText' };
+        const notes = pkg.footnotes.map((node, index) => {
+            const blocks = blocksOf(flattenNestedFootnotes(node).content ?? [], {}, note, false);
+            return `<w:footnote w:id="${index + 1}">${blocksXml(numbered(blocks))}</w:footnote>`;
+        });
+        noteParts.push([
+            'word/footnotes.xml',
+            `<w:footnotes ${DOCUMENT_NAMESPACES}>${NOTE_SEPARATORS.slice(0, 2).map(separatorXml).join('')}${notes.join('')}</w:footnotes>`,
+            `${WML}.footnotes+xml`,
+        ]);
+        if (pkg.part.relationships.length > 0)
+            noteParts.push([relsPathOf('word/footnotes.xml'), relationshipsXml(pkg.part.relationships)]);
+        document.relationships.push({ type: `${R_NS}/footnotes`, target: 'footnotes.xml' });
+    }
 
     // Each band is a part of its own, in the body's column, its images and links related through its own rels. With page 1
     // different, a page-1 band the doc lacks is an empty part, as Word writes one.
@@ -173,10 +196,11 @@ export async function eigendocToDocx(
             `${WML}.document.main+xml`,
         ],
         ['word/_rels/document.xml.rels', relationshipsXml(document.relationships)],
+        ...noteParts,
         ...bandParts,
         ['word/styles.xml', stylesXml(pkg.languages), `${WML}.styles+xml`],
         ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
-        ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
+        ['word/settings.xml', settingsXml(pkg.footnotes.length > 0), `${WML}.settings+xml`],
         ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
         ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
     ];
@@ -296,6 +320,8 @@ type Package = {
     files: [path: string, data: ArrayBuffer][];
     drawings: number;
     faces: Map<string, Set<FontSlot>>;
+    // The notes the body references, note n at index n - 1.
+    footnotes: JSONContent[];
 };
 
 // The walk's surroundings, so a nested block sizes and indents itself against its parent: column and indent in twips.
@@ -331,7 +357,28 @@ function sectionXml({ width, height, margin, differentFirstPage }: PageSetup, re
 }
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
-const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;
+// Word names the notes part's separators here.
+function settingsXml(footnotes: boolean): string {
+    const separators = footnotes ? '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>' : '';
+    return `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/>${separators}<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;
+}
+
+// As Word writes them: single spaced with no space after, which Normal's spacing would add above the notes.
+function separatorXml(type: (typeof NOTE_SEPARATORS)[number], index: number): string {
+    return `<w:footnote w:type="${type}" w:id="${index - 1}"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:${type}/></w:r></w:p></w:footnote>`;
+}
+
+// Word's number opens a note's first paragraph, then a space.
+const NOTE_NUMBER =
+    '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r>';
+
+function numbered(blocks: Block[]): Block[] {
+    const first = blocks.findIndex((block) => !('table' in block));
+    if (first < 0) return [{ props: { style: 'FootnoteText' }, runs: NOTE_NUMBER }, ...blocks];
+    return blocks.map((block, index) =>
+        index === first && !('table' in block) ? { ...block, runs: NOTE_NUMBER + block.runs } : block,
+    );
+}
 
 // The ECMA-376 order of a font's embed elements.
 const FONT_SLOTS = ['Regular', 'Bold', 'Italic', 'BoldItalic'] as const satisfies readonly (keyof DocxFontFiles)[];
@@ -1423,14 +1470,15 @@ const INLINES = new Map<
                 .map((content) => runXml(content, {}, linked, context, style, faces))
                 .join(''),
     ],
-    // Until the writer writes Word's footnotes part (U9): the note's text in brackets, in its place.
+    // Word's reference, numbered as met, which is footnotesInOrder's order; its note is written to the notes part after
+    // the body. The atom takes no marks, as the Yjs binding stores none on one.
     [
         'footnote',
-        (node, linked, context, style, faces) => {
-            const note = (flattenNestedFootnotes(node).content ?? [])
-                .map((paragraph) => (paragraph.content ?? []).map((child) => child.text ?? '').join(''))
-                .join(' ');
-            return runXml(textXml(`[${note}]`), node, linked, context, style, faces);
+        (node, _linked, context, style, faces) => {
+            const id = context.pkg.footnotes.push(node);
+            const props: RunProps = { style: 'FootnoteReference' };
+            faces.push(useFace(context.pkg, props, style));
+            return `<w:r><w:rPr>${rPrXml(props)}</w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
         },
     ],
     // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
@@ -1853,6 +1901,28 @@ function styleDefinitions(): StyleDef[] {
             name: STYLE_NAMES.TaskDone,
             basedOn: 'Normal',
             rPr: { strike: TASK_DONE_LOOK.strike || undefined, color: TASK_DONE_LOOK.color },
+        },
+        // Word's own, which Google's notes take too: 10 pt, single spaced, no space after, the number superscript.
+        {
+            type: 'paragraph',
+            id: 'FootnoteText',
+            name: STYLE_NAMES.FootnoteText,
+            basedOn: 'Normal',
+            uiPriority: 99,
+            semiHidden: true,
+            unhideWhenUsed: true,
+            pPr: { spacing: { after: 0, line: 240 } },
+            rPr: { size: halfPoints(FOOTNOTE_LOOK.sizePt) },
+        },
+        {
+            type: 'character',
+            id: 'FootnoteReference',
+            name: STYLE_NAMES.FootnoteReference,
+            basedOn: 'DefaultParagraphFont',
+            uiPriority: 99,
+            semiHidden: true,
+            unhideWhenUsed: true,
+            rPr: { vertAlign: 'superscript' },
         },
         {
             type: 'character',
