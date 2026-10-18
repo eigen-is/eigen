@@ -11,7 +11,7 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { bandEdge, FIRST_PAGE_BAND, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
+import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -564,9 +564,10 @@ const TiptapEditor = ({
                                         }
                                     }}
                                     // While a band is edited a press in the body leaves it, the caret where it landed,
-                                    // as in Google; a press anywhere else but the band would focus nothing, leaving
-                                    // the band edited with Esc and typing reaching nothing, so it keeps the caret.
-                                    // A portaled menu or dialog is the band's own.
+                                    // as in Google, and one in another band moves there, as that band is read-only
+                                    // until entered; a press anywhere else would focus nothing, leaving the band
+                                    // edited with Esc and typing reaching nothing, so it keeps the caret. A portaled
+                                    // menu or dialog is the band's own.
                                     onMouseDown={
                                         editingBand
                                             ? (e) => {
@@ -577,10 +578,16 @@ const TiptapEditor = ({
                                                   ) {
                                                       return;
                                                   }
-                                                  if (target.closest('[data-page-body]')) setEditingBand(null);
-                                                  else if (!bands[editingBand].view.dom.contains(target)) {
-                                                      e.preventDefault();
+                                                  if (target.closest('[data-page-body]')) {
+                                                      setEditingBand(null);
+                                                      return;
                                                   }
+                                                  const pressed = BAND_ROOTS.find((root) =>
+                                                      bands[root].view.dom.contains(target),
+                                                  );
+                                                  if (pressed === editingBand) return;
+                                                  e.preventDefault();
+                                                  if (pressed) enterBand(pressed, { left: e.clientX, top: e.clientY });
                                               }
                                             : undefined
                                     }
@@ -589,9 +596,8 @@ const TiptapEditor = ({
                                         data-document="true"
                                         className={cn(
                                             // eigen-paper: the page always renders light, in dark mode too (globals.css)
-                                            // Rows: the header band, the body, the footer band. Isolated, so a band's bar
-                                            // stays under the side panel.
-                                            'eigen-paper isolate grid grid-rows-[auto_1fr_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
+                                            // Rows: the header band, the body, the footer band.
+                                            'eigen-paper grid grid-rows-[auto_1fr_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}

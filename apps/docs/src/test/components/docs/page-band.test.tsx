@@ -114,6 +114,26 @@ test("edited with Different first page, page 1's header tops the margin and the 
     ]);
 });
 
+// The bar takes its room in the margin, so the body moves down by what the margin can't hold and nothing covers it.
+test("edited, each band's bar sits in the flow between the band and the body", async () => {
+    const setup = { ...DEFAULT_PAGE_SETUP, differentFirstPage: true };
+    // A margin's rows top to bottom, a bar as 'bar'.
+    const rows = (margin: HTMLElement) =>
+        [...margin.querySelectorAll<HTMLElement>('[data-page-band]')].flatMap((b) =>
+            [...b.children].map((row) => (row.hasAttribute('data-band-rule') ? 'bar' : b.dataset.pageBand)),
+        );
+    const bars = (margin: HTMLElement) => [...margin.querySelectorAll<HTMLElement>('[data-band-rule]')];
+
+    const header = await render(new Y.Doc(), { edge: 'header', setup, editing: 'header' });
+    expect(rows(header)).toEqual(['headerFirst', 'bar', 'header', 'bar']);
+    for (const bar of bars(header)) expect(bar.className).not.toMatch(/(^|\s)-m[tby]-/);
+    await unmount();
+
+    const footer = await render(new Y.Doc(), { edge: 'footer', setup, editing: 'footer' });
+    expect(rows(footer)).toEqual(['bar', 'footer', 'bar', 'footerFirst']);
+    for (const bar of bars(footer)) expect(bar.className).not.toMatch(/(^|\s)-m[tby]-/);
+});
+
 test('a double-click enters the band under the pointer, or none in particular beside the bands', async () => {
     const doc = new Y.Doc();
     write(doc, 'headerFirst', 'Acme');

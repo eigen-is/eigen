@@ -30,7 +30,7 @@ The number goes in and your cursor moves to that header or footer. A header or f
 
 ## Give the first page its own header and footer
 
-While you edit a header or footer, tick **Different first page** on the bar. What you typed stays as the header or footer for the other pages, and your cursor moves to a new, empty **First page header** above it, or **First page footer** below it. While you edit a header, both headers show, each on its own bar, and the same goes for the footers. Otherwise the top of the page shows the first page's header and the bottom the other pages' footer. A letterhead on page 1 and a short title on the rest is the usual use.
+While you edit a header or footer, tick **Different first page** on the bar. What you typed stays as the header or footer for the other pages, and your cursor moves to a new, empty **First page header** above it, or **First page footer** below it. While you edit a header, both headers show, each on its own bar, and you click either one to edit it. The same goes for the footers. Otherwise the top of the page shows the first page's header and the bottom the other pages' footer. A letterhead on page 1 and a short title on the rest is the usual use.
 
 ## Remove a header or footer
 

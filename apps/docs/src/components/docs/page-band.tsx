@@ -46,8 +46,8 @@ type PageBandsProps = {
 
 // One margin of the page and the bands in it, each drawn by its own live editor: the header above the first block, the
 // footer after the last. The margin's negative margins pull it over the page's padding to the paper's edges, so a
-// double-click anywhere in it reaches it, and its min-height gives the room back, so a band taller than the room left
-// by its 1.27 cm pushes the body, as in Word. Not edited, a margin shows the band the long page's end prints, with
+// double-click anywhere in it reaches it, and its min-height gives the room back, so a band, with its bar while edited,
+// taller than the room left by its 1.27 cm pushes the body, as in Word. Not edited, a margin shows the band the long page's end prints, with
 // content: page 1's header, the other pages' footer. Edited, with Different first page, both stack, page 1's at the
 // paper's edge and the other pages' next to the body.
 export function PageBands({ edge, editors, setup, editing, onEnter, controls }: PageBandsProps) {
@@ -98,16 +98,12 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
             }
         >
             {roots.map((root) => {
-                // Google's bar, across the paper. Beside the body it takes no room, so entering a band leaves the body
-                // where it was: it overlays the margin, and the body's top where the band leaves less room than the bar.
-                // Z 10 is in-content floating UI, above the dimmed body, which opacity paints after the header.
+                // Google's bar, across the paper between the band and the body. It takes its room in the margin, so the
+                // body moves down only by what the margin can't hold, and nothing covers it.
                 const rule = edited && shows(root) && (
                     <div
                         data-band-rule
-                        className={cn(
-                            'relative z-10 flex h-9 cursor-default items-center gap-3 border-y border-dashed border-muted-foreground/50 bg-muted px-4 text-sm',
-                            root === edge && (edge === 'header' ? '-mb-9' : '-mt-9'),
-                        )}
+                        className="flex h-9 cursor-default items-center gap-3 border-y border-dashed border-muted-foreground/50 bg-muted px-4 text-sm"
                         style={{ marginLeft: `-${left}mm`, marginRight: `-${right}mm` }}
                     >
                         <span data-band-label className="font-medium">

@@ -510,6 +510,30 @@ test('Different first page stacks both headers, keeps what was typed in the othe
     expect([editing(), labels('footer')]).toEqual([['footer'], ['Footer']]);
 });
 
+test.each([
+    ['header', 'headerFirst', 'header'],
+    ['footer', 'footer', 'footerFirst'],
+] as const)('with both %ss stacked, a press in either one puts the caret there', async (edge, entered, other) => {
+    doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
+    await render(WRITER);
+    await doubleClick(edge);
+    expect(editing()).toEqual([entered]);
+    const press = (root: BandRoot) =>
+        inBrowserFrames(() =>
+            bandView(root)
+                ?.querySelector('p')
+                ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })),
+        );
+
+    await press(other);
+    expect(editing()).toEqual([other]);
+    expect(document.activeElement === bandView(other)).toBe(true);
+
+    await press(entered);
+    expect(editing()).toEqual([entered]);
+    expect(document.activeElement === bandView(entered)).toBe(true);
+});
+
 test('a collaborator’s untick of Different first page hands page 1’s header over to the other pages’', async () => {
     doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
     await render(WRITER);
