@@ -128,7 +128,7 @@ export async function eigendocToDocx(
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
 
     // Each band is a part of its own, in the body's column, its images and links related through its own rels. With page 1
-    // different, an empty part stands in for a page-1 band the doc lacks, or Word would draw the other one there.
+    // different, a page-1 band the doc lacks is an empty part, as Word writes one.
     const bandParts: [path: string, xml: string, contentType?: string][] = [];
     const references: string[] = [];
     for (const edge of ['header', 'footer'] as const) {

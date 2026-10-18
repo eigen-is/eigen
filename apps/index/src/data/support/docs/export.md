@@ -6,7 +6,7 @@ category: Files
 tags: [docs, export, download, word, pdf, html]
 related: [docs/import-word, docs/print]
 order: 90
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original document in Eigen stays exactly as it was.
@@ -29,7 +29,9 @@ You do not need to open the document to export it. In Drive, right-click the doc
 
 ## What is included
 
-The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Comment threads, the header, and the footer are not included in the exported file. The Word file leaves charts out for now and keeps their captions.
+The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Comment threads are not included in the exported file. The Word file leaves charts out for now and keeps their captions.
+
+The PDF and the Word file put the header and footer on every page, with the page numbers and page count filled in, and give the first page its own when you set one. The web page shows the header at the top and the footer at the end, with **#** for a page number. See [Add headers, footers, and page numbers](/support/docs/headers-and-footers).
 
 A page break starts a new page in the PDF and the Word file. In all three formats, links to other files in Eigen point to your Eigen server, and a numbered list keeps the number it starts at and its style (1, a, A, i, or I).
 

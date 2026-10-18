@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit]
 order: 100
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, and images.
@@ -45,6 +45,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Tables keep their merged cells and column widths. A table wider than the page shrinks to fit.
 - Images keep their size and caption. An image that floats left or right of the text floats there in Eigen too.
 - Footnotes and endnotes become a numbered list at the end of the document, linked from the text.
+- The header and footer come across, with page numbers and page counts, and the first page's own header and footer when the Word file has them. An image that floats in a header or footer comes in on a line of its own.
 - A page break, "Page break before" in Word's paragraph settings, and a section break that starts a new page all start a new page in Eigen.
 - The paper size, orientation, and margins. A document has one page setup, so when the Word file's sections differ, the last section's is used.
 - Blank lines stay, except the ones right before a new page.
@@ -52,7 +53,8 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 
 ## What doesn't come across
 
-- Comments, headers, and footers aren't imported. The commented text stays.
+- Comments aren't imported. The commented text stays.
+- A Word file with different headers or footers for even and odd pages comes in with the odd pages' ones on every page.
 - Tracked changes come in as if you had accepted them all.
 - Line spacing and indents follow Eigen's own.
 - A SmartArt graphic comes in as its text, one paragraph per shape, and a chart as its title only.
