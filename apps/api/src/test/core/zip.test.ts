@@ -117,7 +117,22 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         'no-end',
     ],
     ['all but the last 10 bytes', () => build([TYPES, REAL]).subarray(0, -10), 'no-end'],
-    ['bytes after the end record', () => Buffer.concat([build([TYPES, REAL]), Buffer.from('trailing')]), 'no-end'],
+    [
+        'bytes after an end record whose directory ends elsewhere',
+        () => {
+            const zip = build([TYPES, REAL]);
+            return Buffer.concat([patched(zip, zip.length - 22 + 16, 0, 4), Buffer.from([0])]);
+        },
+        'no-end',
+    ],
+    [
+        'a comment past the end on an end record whose directory ends elsewhere',
+        () => {
+            const zip = build([TYPES, REAL]);
+            return patched(patched(zip, zip.length - 22 + 12, 0, 4), zip.length - 2, 1, 2);
+        },
+        'no-end',
+    ],
     ['text', () => Buffer.from('<w:document/>'), 'no-end'],
     ['nothing', () => new Uint8Array(0), 'no-end'],
     [
@@ -126,6 +141,26 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
             const real = build([TYPES, REAL]);
             return build([TYPES, REAL], { comment: build([TYPES, EVIL], { base: real.length }) });
         },
+        'ambiguous-end',
+    ],
+    [
+        'a second end record in the comment, then a byte',
+        () => {
+            const real = build([TYPES, REAL]);
+            const comment = build([TYPES, EVIL], { base: real.length });
+            return Buffer.concat([build([TYPES, REAL], { comment }), Buffer.from([0])]);
+        },
+        'ambiguous-end',
+    ],
+    [
+        'a second end record after the end record',
+        () => Buffer.concat([build([TYPES, REAL]), build([TYPES, EVIL]).subarray(-22)]),
+        'ambiguous-end',
+    ],
+    // A reader taking the last record would read this one, whatever directory it names.
+    [
+        'a record after the end record whose directory ends elsewhere',
+        () => Buffer.concat([build([TYPES, REAL]), build([TYPES, EVIL]).subarray(-22), Buffer.from([0])]),
         'ambiguous-end',
     ],
     [
@@ -192,6 +227,11 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
             const end64 = zip.length - 22 - 20 - 56;
             return patched(zip, end64 + 4, 43, 4);
         },
+        'misplaced',
+    ],
+    [
+        'a prefix and a byte after the end record',
+        () => Buffer.concat([new Uint8Array(1024), build([TYPES, REAL], { base: 1024 }), Buffer.from([0])]),
         'misplaced',
     ],
     ['a prefix the offsets ignore', () => Buffer.concat([new Uint8Array(1024), build([TYPES, REAL])]), 'misplaced'],
@@ -381,6 +421,20 @@ describe('openZip reads', () => {
         expect(readAll(zip).get('word/document.xml')).toBe('<w:document>REAL</w:document>');
     });
 
+    // As Info-ZIP, LibreOffice and PowerPoint read them: POI's HowWeRefactor.pptx has a byte after its end record.
+    test('an end record with bytes after it or a comment past the end of the file', () => {
+        const zip = build([TYPES, REAL]);
+        const shapes = [
+            Buffer.concat([zip, Buffer.from([0])]),
+            Buffer.concat([zip, Buffer.from('trailing')]),
+            build([TYPES, REAL], { comment: Buffer.from('a comment') }).subarray(0, -1),
+            patched(zip, zip.length - 2, 1, 2),
+            patched(zip, zip.length - 2, 0xffff, 2),
+            Buffer.concat([build([TYPES, REAL], { zip64End: true }), Buffer.from([0])]),
+        ];
+        for (const shape of shapes) expect(readAll(shape)).toEqual(readAll(zip));
+    });
+
     test('an entry only when it is read', () => {
         const zip = openZip(build([TYPES, REAL, bomb('word/media/image1.png', GiB, 1000)]));
         expect(utf8.decode(zip.read('word/document.xml'))).toBe('<w:document>REAL</w:document>');
@@ -551,7 +605,8 @@ describe('openZip under fuzzing', () => {
                     }
                 } else if (kind === 3) bytes = bytes.subarray(0, pick(bytes.length + 1));
                 else if (kind === 4) {
-                    const at = pick(bytes.length + 1);
+                    // Bytes after the end record a quarter of the time: a shape real files have.
+                    const at = next() < 0.25 ? bytes.length : pick(bytes.length + 1);
                     bytes = Buffer.concat([
                         bytes.subarray(0, at),
                         Buffer.from(Array.from({ length: 1 + pick(64) }, () => pick(256))),
