@@ -11,7 +11,14 @@ import {
 } from '../../../vector/geometry';
 import { capabilitiesOf, ELEMENT_FIELDS, ELEMENT_KINDS, isBindable, storedFields } from '../../../vector/kinds';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parseNormalizedPath } from '../../../vector/kinds/read-fields';
-import { type OutlineShape, outlineContains, outlineDistance, scaleNormalizedPath } from '../../../vector/outline';
+import {
+    type OutlineShape,
+    outlineContains,
+    outlineDistance,
+    scaledPathCommands,
+    scaleNormalizedPath,
+    serializePath,
+} from '../../../vector/outline';
 import { readVectorFromDoc } from '../../../vector/read-vector';
 import { serializeBinding, type VectorPathElement } from '../../../vector/types';
 import { arrow, byIdOf, path } from '../element-factories';
@@ -142,11 +149,30 @@ describe('path read', () => {
     });
 });
 
-describe('scaleNormalizedPath', () => {
+describe('scaledPathCommands', () => {
+    const d = 'M 0 0 L 1 0.5 C 0.5 0 1 1 0.25 -0.1 Q 2 3 0 1 Z';
+
     test('scales x by the width and y by the height, commands kept', () => {
-        expect(scaleNormalizedPath('M 0 0 L 1 0.5 C 0.5 0 1 1 0.25 -0.1 Q 2 3 0 1 Z', 200, 100)).toBe(
-            'M 0 0 L 200 50 C 100 0 200 100 50 -10 Q 400 300 0 100 Z',
-        );
+        expect(scaleNormalizedPath(d, 200, 100)).toBe('M 0 0 L 200 50 C 100 0 200 100 50 -10 Q 400 300 0 100 Z');
+    });
+
+    test('the drawn d is the command list the hit test and the outline read, written out', () => {
+        const commands = scaledPathCommands(d, 333, 77);
+        expect(commands.map((c) => c.op)).toEqual(['M', 'L', 'C', 'Q', 'Z']);
+        expect(commands[1].points).toEqual([{ x: 333, y: 38.5 }]);
+        expect(serializePath(commands)).toBe(scaleNormalizedPath(d, 333, 77));
+    });
+
+    test('a path at a fractional scale outlines on the rounded points it draws', () => {
+        // 0.3333 × 1000.0001 is 333.30003, which the drawn d rounds to 333.3
+        const el = box('M 0.3333 0 L 0.3333 1', { closed: false, width: 1000.0001, strokeWidth: 0 });
+        expect(ELEMENT_KINDS.path.outline(el, 0)).toEqual({
+            kind: 'polyline',
+            points: [
+                { x: 333.3, y: 0 },
+                { x: 333.3, y: 200 },
+            ],
+        });
     });
 });
 

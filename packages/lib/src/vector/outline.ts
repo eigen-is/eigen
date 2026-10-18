@@ -393,29 +393,25 @@ function complete(command: PathCommand | null): boolean {
 }
 
 export function serializePath(commands: PathCommand[]): string {
-    return pathString(commands, (p) => p);
-}
-
-// The canonical `path` in the element's local frame, where render draws it.
-export function scaleNormalizedPath(path: string, width: number, height: number): string {
-    return pathString(pathCommands(path), (p) => ({ x: n(p.x * width), y: n(p.y * height) }));
-}
-
-// A stored `path` is the reader's canonical string; [] for one that never went through it.
-export function pathCommands(path: string): PathCommand[] {
-    return parsePathCommands(path) ?? [];
-}
-
-function pathString(commands: PathCommand[], map: (p: Point) => Point): string {
     const parts: string[] = [];
     for (const { op, points } of commands) {
         parts.push(op);
-        for (const p of points) {
-            const q = map(p);
-            parts.push(`${q.x}`, `${q.y}`);
-        }
+        for (const p of points) parts.push(`${p.x}`, `${p.y}`);
     }
     return parts.join(' ');
+}
+
+// A stored `path` in the element's local frame at its box size: the one mapping render draws and the hit
+// test, the outline and the pptx writer read. [] for a string that never went through the reader.
+export function scaledPathCommands(path: string, width: number, height: number): PathCommand[] {
+    return (parsePathCommands(path) ?? []).map(({ op, points }) => ({
+        op,
+        points: points.map((p) => ({ x: n(p.x * width), y: n(p.y * height) })),
+    }));
+}
+
+export function scaleNormalizedPath(path: string, width: number, height: number): string {
+    return serializePath(scaledPathCommands(path, width, height));
 }
 
 // --- primitives ---------------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { isTransparentFill, parseFill } from '../fill';
 import { boxCenter, distanceToPolyline, LINEAR_HIT_SCREEN_FACTOR, type Point, rotatePoint } from '../geometry';
-import { pathCommands, polylineOutline } from '../outline';
+import { polylineOutline, scaledPathCommands } from '../outline';
 import type { VectorPathElement } from '../types';
 import { defineKind } from './kind';
 import { bool, fillField, parseNormalizedPath } from './read-fields';
@@ -70,10 +70,10 @@ export const pathKind = defineKind<VectorPathElement>({
 // Every subpath as a polyline in the unrotated scene frame, its curves flattened; a closed one ends on
 // its start.
 function sampledSubpaths(el: VectorPathElement): Point[][] {
-    const at = (p: Point): Point => ({ x: el.x + p.x * el.width, y: el.y + p.y * el.height });
+    const at = (p: Point): Point => ({ x: el.x + p.x, y: el.y + p.y });
     const subpaths: Point[][] = [];
     let current: Point[] = [];
-    for (const { op, points } of pathCommands(el.path)) {
+    for (const { op, points } of scaledPathCommands(el.path, el.width, el.height)) {
         if (op === 'M') {
             current = [at(points[0])];
             subpaths.push(current);
