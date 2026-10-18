@@ -168,6 +168,14 @@ export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'backgroun
 // In twips: the writer spaces the block after an in-flow table by it, and the reader takes that space as the table's.
 export const TABLE_MARGIN = twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt));
 
+// In twips: the margin the writer gives an outermost list's and a quote's last block, and to a table that ends one, so
+// the block after it.
+export const BLOCK_MARGINS = {
+    ul: twips(cssPt(proseValue('.eigen-prose ul', 'margin-bottom'), BODY.sizePt)),
+    ol: twips(cssPt(proseValue('.eigen-prose ol', 'margin-bottom'), BODY.sizePt)),
+    blockquote: twips(cssPt(proseValue('.eigen-prose blockquote', 'margin-bottom'), BODY.sizePt)),
+};
+
 export const LINK_LOOK = { color: proseColor('.eigen-prose a', 'color') };
 
 // eigen-prose.css numbers a list that stores no type by the numbered lists it sits in: `ol`, then Docs' `ol ol` and on.

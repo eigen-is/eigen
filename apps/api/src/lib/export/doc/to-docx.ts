@@ -41,6 +41,7 @@ import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import type { EigendocBands } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
 import {
+    BLOCK_MARGINS,
     BODY,
     type Border,
     boxSide,
@@ -643,7 +644,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
             const indent = context.indent + (context.quotes < LIST_LEVELS ? QUOTE_LOOK.indent : 0);
             const quote: Context = { ...context, indent, quotes: context.quotes + 1, style: 'Quote', after: undefined };
             const blocks = blocksOf(node.content ?? [], textProps({}, quote), quote, false);
-            return withAfter(blocks, proseTwips('.eigen-prose blockquote', 'margin-bottom'), context.pkg.styles);
+            return withAfter(blocks, BLOCK_MARGINS.blockquote, context.pkg.styles);
         },
     ],
     [
@@ -1002,7 +1003,7 @@ function listOf(
     const runsOn = tag === 'ol' && context.next === 'orderedList';
     return withAfter(
         blocks,
-        proseTwips(runsOn ? '.eigen-prose ol:has(+ ol)' : `.eigen-prose ${tag}`, 'margin-bottom'),
+        runsOn ? proseTwips('.eigen-prose ol:has(+ ol)', 'margin-bottom') : BLOCK_MARGINS[tag],
         context.pkg.styles,
     );
 }
