@@ -4,15 +4,17 @@ import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
 import {
-    DEFAULT_PAGE_SETUP,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
+    type PageSetup,
     pageTwips,
     readFigureAttrs,
+    readPageNumberKind,
     type TitleType,
 } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
+import { writeOmml } from '@workspace/math';
 import {
     A_NS,
     ASVG_NS,
@@ -20,6 +22,7 @@ import {
     CORE_PROPERTIES_NS,
     DC_NS,
     EMU_PER_PX,
+    M_NS,
     MC_NS,
     PACKAGE_RELATIONSHIPS_NS,
     PIC_NS,
@@ -30,6 +33,7 @@ import {
 } from '../../core/ooxml';
 import { writeZip } from '../../core/zip';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
+import { readStoredEquation } from '../../document/equation';
 import {
     BODY,
     type Border,
@@ -67,6 +71,7 @@ import {
     LIST_FORMATS,
     LIST_LEVELS,
     MAX_TABLE_COLUMNS,
+    PAGE_NUMBER_FIELDS,
     STYLE_NAMES,
     type StyleId,
     TWIPS_PER_PX,
@@ -83,6 +88,7 @@ export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,
+    setup: PageSetup,
     media: DocxMedia[],
     title: string,
     publicOrigin: string | undefined,
@@ -106,7 +112,9 @@ export async function eigendocToDocx(
         // A Spacer's and a figure's mark draw in the body's Regular.
         faces: new Map([[BODY.font, new Set<FontSlot>(['Regular'])]]),
     };
-    const flow: Context = { pkg, first: false, column: TEXT_COLUMN, indent: 0, depth: 0, quotes: 0 };
+    const page = pageTwips(setup);
+    const column = page.width - page.margin.left - page.margin.right;
+    const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, quotes: 0 };
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
     const fonts = embeddedFonts(pkg.faces);
 
@@ -119,7 +127,7 @@ export async function eigendocToDocx(
         ],
         [
             'word/document.xml',
-            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${SECTION_XML}</w:body></w:document>`,
+            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page)}</w:body></w:document>`,
             `${WML}.document.main+xml`,
         ],
         ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
@@ -155,6 +163,7 @@ const DOCUMENT_NAMESPACES = [
     `xmlns:pic="${PIC_NS}"`,
     `xmlns:w14="${W14_NS}"`,
     `xmlns:mc="${MC_NS}"`,
+    `xmlns:m="${M_NS}"`,
     'mc:Ignorable="w14"',
 ].join(' ');
 
@@ -225,14 +234,14 @@ type Context = {
     upright?: boolean;
 };
 
-const PAGE = pageTwips(DEFAULT_PAGE_SETUP);
-
-const TEXT_COLUMN = PAGE.width - PAGE.margin.left - PAGE.margin.right;
-
 // Word's default 1.25 cm from the page edge, inside a smaller margin.
 const HEADER_DISTANCE = 709;
 
-const SECTION_XML = `<w:sectPr><w:pgSz w:w="${PAGE.width}" w:h="${PAGE.height}"${PAGE.width > PAGE.height ? ' w:orient="landscape"' : ''}/><w:pgMar w:top="${PAGE.margin.top}" w:right="${PAGE.margin.right}" w:bottom="${PAGE.margin.bottom}" w:left="${PAGE.margin.left}" w:header="${Math.min(HEADER_DISTANCE, PAGE.margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, PAGE.margin.bottom)}" w:gutter="0"/></w:sectPr>`;
+function sectionXml({ width, height, margin }: PageSetup): string {
+    const orient = width > height ? ' w:orient="landscape"' : '';
+    const bands = `w:header="${Math.min(HEADER_DISTANCE, margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, margin.bottom)}"`;
+    return `<w:sectPr><w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" ${bands} w:gutter="0"/></w:sectPr>`;
+}
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
 const SETTINGS_XML = `<w:settings xmlns:w="${W_NS}"><w:embedTrueTypeFonts/><w:defaultTabStop w:val="720"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="${WORD_SETTINGS_URI}" w:val="15"/></w:compat></w:settings>`;
@@ -589,7 +598,7 @@ function titleOf(type: TitleType, style: StyleId) {
 function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context, textblock: boolean): Block[] {
     const blocks: Block[] = [];
     let inline: JSONContent[] = [];
-    // The in-flow pieces a figure splits a textblock into, by index in blocks.
+    // The in-flow pieces a figure or a display equation splits a textblock into, by index in blocks.
     const pieces: number[] = [];
     const flush = () => {
         const faces: RunFace[] = [];
@@ -612,6 +621,13 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
                 const index = blocks.push(block) - 1;
                 if (!('table' in block)) pieces.push(index);
             }
+            continue;
+        }
+        // In Word a display equation is a paragraph of its own: it splits its textblock as a block figure does.
+        if (node.type === 'equation' && readStoredEquation(node.attrs ?? {}).display) {
+            if (inline.length > 0) flush();
+            inline.push(node);
+            flush();
             continue;
         }
         if (INLINES.has(node.type ?? '')) {
@@ -1238,15 +1254,46 @@ const INLINES = new Map<
         'text',
         (node, linked, context, style, faces) => {
             const content = textXml(node.text ?? '');
-            if (!content) return '';
-            const props = runProps(node.marks ?? [], linked, context);
-            faces.push(useFace(context.pkg, props, style));
-            const rPr = rPrXml(props);
-            return `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
+            return content && runXml(content, node, linked, context, style, faces);
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
+    // Word lays out the page and updates the field; 1 is what a reader without fields shows. The run takes no marks:
+    // the Yjs binding stores none on an atom, so a reloaded doc holds none.
+    [
+        'pageNumber',
+        (node, linked, context, style, faces) => {
+            const field = PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])];
+            const run = runXml(textXml('1'), {}, linked, context, style, faces);
+            return `<w:fldSimple w:instr=" ${field} ">${run}</w:fldSimple>`;
+        },
+    ],
+    // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
+    // math zone, as the editor draws an empty box.
+    [
+        'equation',
+        (node) => {
+            const { row, display } = readStoredEquation(node.attrs ?? {});
+            const math = writeOmml(row);
+            return display ? `<m:oMathPara>${math}</m:oMathPara>` : math;
+        },
+    ],
 ]);
+
+// A run in the node's marks.
+function runXml(
+    content: string,
+    node: JSONContent,
+    linked: boolean,
+    context: Context,
+    style: StyleId | undefined,
+    faces: RunFace[],
+): string {
+    const props = runProps(node.marks ?? [], linked, context);
+    faces.push(useFace(context.pkg, props, style));
+    const rPr = rPrXml(props);
+    return `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}${content}</w:r>`;
+}
 
 // Runs that share a link share one w:hyperlink.
 function runsXml(nodes: JSONContent[], context: Context, style: StyleId | undefined, faces: RunFace[]): string {

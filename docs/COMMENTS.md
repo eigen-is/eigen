@@ -30,14 +30,14 @@ Each fact lives where its writer is. Text, color and creator change in the edito
 
 | App | Anchor |
 |---|---|
-| Docs | The `comment` mark on text (`cardId`, `data-comment-id` in HTML); an image's `commentCardId` attribute |
+| Docs | The `comment` mark on text (`cardId`, `data-comment-id` in HTML); an image's or an equation's `commentCardId` attribute |
 | Sheets | `Cell.commentCardIds`, an array of card ids |
 | Stickies | The card id in a column's `taskIds` |
 | Slides, vector | `VectorElementBase.commentCardIds`, a JSON id string, because every stored canvas field is a scalar ([CANVAS.md](CANVAS.md#every-stored-field-is-a-scalar)) |
 
 `useCreateCommentCard` creates the chat, then writes the card and runs the host's anchor callback inside one Y.Doc transaction, so in docs and stickies the card and its anchor are one undo step. The callback must be synchronous: anything it defers escapes the transaction. The canvas is the exception: it anchors once the card exists, as an untracked write, because its `comments` map is outside the undo scope ([CANVAS.md § One discrete op is one undo step](CANVAS.md#one-discrete-op-is-one-undo-step)).
 
-A docs image or chart anchors through an attribute, not the mark, because the Yjs binding persists marks only on text: a mark on the node would vanish on reload and never reach a peer. `nodeCommentCardId` (`apps/docs/src/components/docs/extensions/comment-mark.ts`) reads either form, and everything outside the figure's node view goes through it: the active set, the decorations, scroll-to and delete. A text selection that spans a figure marks only the text. The figure reads as "Image" and the chart as "Chart" in a card's anchor text, so a comment on either alone has something to quote.
+A docs image, chart or equation anchors through an attribute, not the mark, because the Yjs binding persists marks only on text: a mark on the node would vanish on reload and never reach a peer. `nodeCommentCardId` (`apps/docs/src/components/docs/extensions/comment-mark.ts`) reads either form, and everything outside the figure's node view goes through it: the active set, the decorations, scroll-to and delete. A text selection that spans a figure, a chart or an equation marks only the text. The figure reads as "Image" and the chart as "Chart" in a card's anchor text, so a comment on either alone has something to quote, and an equation reads as its LaTeX, or "Equation".
 
 A cut image keeps its card, because the cut serializes the figure's `data-comment-id` like the mark and the card stays in the document's `comments` map. A paste keeps only the anchors that map holds: `cleanPastedHTML` (`apps/docs/src/components/docs/paste.ts`) strips every other `data-comment-id`, so content copied from another document arrives without anchors to cards this one lacks. A docs-to-docs paste of an image goes through the copy's HTML too, so in its own document a copied image keeps its card like copied text does. Pasted into a slide or a sheet, it arrives as an image item, which carries no card. A canvas paste clears `commentCardIds`, so a canvas copy starts without comments.
 

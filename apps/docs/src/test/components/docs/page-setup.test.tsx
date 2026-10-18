@@ -17,6 +17,7 @@ const LETTER_LANDSCAPE: PageSetup = {
     width: 279.4,
     height: 215.9,
     margin: { top: 25.4, right: 12.7, bottom: 25.4, left: 30 },
+    differentFirstPage: false,
 };
 
 function mount() {
@@ -59,6 +60,21 @@ test('⌘Z takes back a page setup change as its own step, then the typing befor
     editor.commands.redo();
     expect(editor.getText()).toBe('Hello');
     expect(page()).toEqual(LETTER_LANDSCAPE);
+
+    editor.destroy();
+});
+
+// The Headers and footers panel's checkbox writes it as OK writes the page, so ⌘Z takes it back on its own.
+test('Different first page is a page key, and turning it on is an undo step of the body', () => {
+    const { doc, undoManager, editor } = mount();
+    editor.commands.insertContent('Hello');
+    writePageSetup(doc, undoManager, DEFAULT_PAGE_SETUP, { ...DEFAULT_PAGE_SETUP, differentFirstPage: true });
+    expect(doc.getMap(PAGE_ROOT).toJSON()).toEqual({ differentFirstPage: true });
+    expect(undoManager.undoStack.length).toBe(2);
+
+    editor.commands.undo();
+    expect(readPageSetup(doc.getMap(PAGE_ROOT).toJSON()).differentFirstPage).toBe(false);
+    expect(editor.getText()).toBe('Hello');
 
     editor.destroy();
 });

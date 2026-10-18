@@ -20,7 +20,7 @@ import {
     useFigureResize,
 } from './figure-frame';
 
-type ChartOptions = FigureFrameOptions & {
+export type ChartOptions = FigureFrameOptions & {
     // Opens Edit data for the selected chart.
     onEditData: () => void;
 };

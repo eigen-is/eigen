@@ -11,6 +11,7 @@ import type {
     DocumentTransformRequest,
     ExportTransformJob,
     ExtractTextJob,
+    PreviewResult,
     SheetsImportJob,
     TransformResultFor,
     TransformWarning,
@@ -99,14 +100,13 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
 // job kind decides which the Worker returns and which limits it runs under. The runner
 // validated the result pairs with the request (protocol.ts's resultMatchesRequest), so
 // these narrow instead of re-checking.
-export async function runTransformToText(
+export async function runTransformToPreview(
     mount: Mount,
     drivePath: DrivePath,
     job: CollabPreviewJob,
     opts: TransformOptions,
-): Promise<string> {
-    const { body } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
-    return body;
+): Promise<PreviewResult> {
+    return runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
 }
 
 export async function runTransformToExtractedText(

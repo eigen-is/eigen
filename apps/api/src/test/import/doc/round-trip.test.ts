@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
+import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { HEADING_LOOKS } from '../../../lib/document/looks';
 import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
-import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
+import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia, withoutEquations } from '../../fixtures/golden-documents';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
 
@@ -27,7 +28,8 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
 // column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
-// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out.
+// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out. (9) A
+// page number is its cached 1, before the schema joins the text (cachedPageNumbers).
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -75,14 +77,24 @@ function withSourceNames(node: JSONContent, names: Map<string, string>): JSONCon
     };
 }
 
+// The reader doesn't read a PAGE or NUMPAGES field yet, so a page number is its cached 1, run into the text beside it
+// once the schema joins them.
+function cachedPageNumbers(node: JSONContent): JSONContent {
+    if (node.type === 'pageNumber') return { type: 'text', text: '1' };
+    return node.content ? { ...node, content: node.content.map(cachedPageNumbers) } : node;
+}
+
 // JSON round trips drop undefined keys, so both sides compare as stored.
 const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(json));
 
 describe('the all-features doc', () => {
     test('comes back as it was written, but for the named differences', async () => {
-        const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
+        const source = docSchema()
+            .nodeFromJSON(cachedPageNumbers(withoutEquations(buildAllFeaturesDocJson())))
+            .toJSON();
         const docx = await eigendocToDocx(
-            buildAllFeaturesDocJson(),
+            withoutEquations(buildAllFeaturesDocJson()),
+            DEFAULT_PAGE_SETUP,
             buildAllFeaturesDocMedia(),
             'All features',
             ORIGIN,
@@ -90,6 +102,23 @@ describe('the all-features doc', () => {
         const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
         const imported = withSourceNames(json, sourceNames(images));
         expect(stored(imported)).toEqual(stored(expected(source, imported)));
+    });
+});
+
+describe('the page', () => {
+    test('Letter landscape with 1 cm margins comes back as it was written, within a twip', async () => {
+        const page = {
+            width: 279.4,
+            height: 215.9,
+            margin: { top: 10, right: 10, bottom: 10, left: 10 },
+            differentFirstPage: false,
+        };
+        const source = buildAllFeaturesDocJson();
+        const { page: read } = docxToPmJson(Buffer.from(await eigendocToDocx(source, page, [], 'Letter', undefined)));
+        expect(read.width).toBe(279.4);
+        expect(read.height).toBe(215.9);
+        for (const side of ['top', 'right', 'bottom', 'left'] as const) expect(read.margin[side]).toBeCloseTo(10, 2);
+        expect(read.differentFirstPage).toBe(false);
     });
 });
 
@@ -124,7 +153,9 @@ const tasks = (...items: JSONContent[][]) => ({
 // The source as the schema stores it, and what an import of its docx gives back.
 async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent; json: JSONContent }> {
     const source = docSchema().nodeFromJSON({ type: 'doc', content }).toJSON();
-    const { json } = docxToPmJson(Buffer.from(await eigendocToDocx(source, [], 'Nested', undefined)));
+    const { json } = docxToPmJson(
+        Buffer.from(await eigendocToDocx(source, DEFAULT_PAGE_SETUP, [], 'Nested', undefined)),
+    );
     return { source, json };
 }
 
@@ -413,9 +444,15 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        // The recording predates the title and subtitle, so it holds neither.
+        // The recording predates the title, the subtitle, the equations' paragraph and the page number, so it holds
+        // none of them.
         source.content = source.content.filter(
-            (block: JSONContent) => block.type !== 'title' && block.type !== 'subtitle',
+            (block: JSONContent) =>
+                block.type !== 'title' &&
+                block.type !== 'subtitle' &&
+                !block.content?.some(
+                    (inline: JSONContent) => inline.type === 'pageNumber' || inline.type === 'equation',
+                ),
         );
         expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));
     });

@@ -9,7 +9,12 @@ import {
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR, type TitleType } from '@workspace/lib/docs/eigendoc';
+import {
+    equationText,
+    ITALIC_HEADING_LEVELS,
+    ITALIC_HEADING_SELECTOR,
+    type TitleType,
+} from '@workspace/lib/docs/eigendoc';
 import type {
     EigenClipboardImageItem,
     EigenClipboardItem,
@@ -55,8 +60,8 @@ function textRunBox(view: EditorView, from: number, to: number): ClipboardBox {
 }
 
 // The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file
-// resolves, and the text between them as a text item, a line per paragraph. None resolves → no items,
-// and the copy is ProseMirror's own.
+// resolves, and the text between them as a text item, a line per paragraph, an equation as its text and any
+// other leaf as its leafText. None resolves → no items, and the copy is ProseMirror's own.
 function copiedClipboardItems(
     view: EditorView,
     from: number,
@@ -66,7 +71,11 @@ function copiedClipboardItems(
     const items: EigenClipboardItem[] = [];
     let runFrom = from;
     const pushText = (runTo: number) => {
-        const text = view.state.doc.textBetween(runFrom, runTo, '\n').trim();
+        const text = view.state.doc
+            .textBetween(runFrom, runTo, '\n', (leaf) =>
+                leaf.type.name === 'equation' ? equationText(leaf) : (leaf.type.spec.leafText?.(leaf) ?? ''),
+            )
+            .trim();
         if (text) items.push(buildTextClipboardItem({ text, box: textRunBox(view, runFrom, runTo) }));
     };
     view.state.doc.nodesBetween(from, to, (node, pos) => {

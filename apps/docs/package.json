@@ -12,6 +12,7 @@
   "dependencies": {
     "@tanstack/react-hotkeys": "^0.1.3",
     "@workspace/lib": "workspace:*",
+    "@workspace/math": "workspace:*",
     "@workspace/ui": "workspace:*",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-code-block-lowlight": "^3.31.3",

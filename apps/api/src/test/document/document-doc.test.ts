@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { getSchema } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { BAND_ROOTS, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
-import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { commitEigendocImport, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import { getHome } from '../../lib/home/get-home';
 import { seedEigendoc } from '../fixtures/golden-documents';
@@ -54,24 +54,53 @@ describe('document/doc', () => {
         persisted.destroy();
     });
 
-    test('writeEigendocUpdateToYjs replaces existing content instead of appending', () => {
+    test('commitEigendocImport replaces the body, the bands and the page in one transaction', () => {
         const doc = new Y.Doc();
         seedEigendoc(doc, {
             type: 'doc',
             content: [{ type: 'paragraph', content: [{ type: 'text', text: 'PRIOR' }] }],
         });
+        for (const root of BAND_ROOTS) {
+            const band = prosemirrorJSONToYDoc(
+                schema,
+                { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'LETTERHEAD' }] }] },
+                root,
+            );
+            Y.applyUpdate(doc, Y.encodeStateAsUpdate(band));
+            band.destroy();
+        }
+        doc.getMap(PAGE_ROOT).set('marginLeft', 50);
+        doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
 
         const tempDoc = prosemirrorJSONToYDoc(
             schema,
             { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'IMPORTED' }] }] },
             'default',
         );
-        writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
+        const letter = {
+            width: 279.4,
+            height: 215.9,
+            margin: { top: 10, right: 10, bottom: 10, left: 10 },
+            differentFirstPage: false,
+        };
+        let transactions = 0;
+        doc.on('afterTransaction', () => transactions++);
+        commitEigendocImport(doc, { update: Y.encodeStateAsUpdate(tempDoc), page: letter });
         tempDoc.destroy();
 
+        expect(transactions).toBe(1);
         const json = JSON.stringify(readEigendocFromDoc(doc));
         expect(json).toContain('IMPORTED');
         expect(json).not.toContain('PRIOR');
+        for (const root of BAND_ROOTS) expect(doc.getXmlFragment(root).length).toBe(0);
+        expect(doc.getMap(PAGE_ROOT).toJSON()).toEqual(pageRecord(letter));
+        expect(readEigendocPage(doc)).toEqual(letter);
+        doc.destroy();
+    });
+
+    test('a doc with no page map reads the default page', () => {
+        const doc = new Y.Doc();
+        expect(readEigendocPage(doc)).toEqual(DEFAULT_PAGE_SETUP);
         doc.destroy();
     });
 

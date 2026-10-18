@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
-import { DEFAULT_PAGE_SETUP, PAGE_BREAK_CLASS, pageStylesheet, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { PAGE_BREAK_CLASS, type PageSetup, pageStylesheet, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
-import { readEigendocFromDoc } from '../../document/doc';
+import { readEigendocFromDoc, readEigendocPage } from '../../document/doc';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
@@ -35,10 +35,14 @@ export async function renderEigendocExport(
     publicOrigin: string | undefined,
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const json = readEigendocFromDoc(doc);
+    const page = readEigendocPage(doc);
     if (format === 'docx') {
         const { eigendocToDocx } = await import('./to-docx');
         const docxMedia = await withSvgFallbacks([...media, ...(await pastedFigureMedia(json))]);
-        return { data: toTransferableBuffer(await eigendocToDocx(json, docxMedia, title, publicOrigin)), warnings: [] };
+        return {
+            data: toTransferableBuffer(await eigendocToDocx(json, page, docxMedia, title, publicOrigin)),
+            warnings: [],
+        };
     }
     const dataUriMap = toDataUriMap(media);
     const body = renderDocHtml(
@@ -48,7 +52,7 @@ export async function renderEigendocExport(
     );
     const html = exportHtmlDocument({
         title,
-        css: `${PROSE_CSS}${PRINT_EXTRAS}`,
+        css: `${PROSE_CSS}${printExtras(page)}`,
         body: `<div class="page"><article class="eigen-prose tiptap">${body}</article></div>`,
     });
     return { data: toTransferableText(html), warnings: [] };
@@ -129,9 +133,10 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
     return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };
 }
 
-const PRINT_EXTRAS = `
+function printExtras(page: PageSetup): string {
+    return `
 /* The docs page as the editor draws it; on paper @page draws the margins */
-${pageStylesheet(DEFAULT_PAGE_SETUP, '.page')}
+${pageStylesheet(page, '.page')}
 
 /* Minimal Tailwind preflight — reset browser defaults that conflict with eigen-prose */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -162,3 +167,4 @@ ul[data-type="taskList"] li > label input[type="checkbox"] {
     accent-color: #2563eb;
 }
 `;
+}

@@ -11,10 +11,12 @@ import StarterKit from '@tiptap/starter-kit';
 import { TextCaps } from './nodes/caps';
 import { ChartNode } from './nodes/chart';
 import { CommentMarkSchema } from './nodes/comment-mark';
+import { EquationNode } from './nodes/equation';
 import { FigureNode } from './nodes/figure';
 import { EigenFontFamily } from './nodes/font-family';
 import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
+import { PageNumberNode } from './nodes/page-number';
 import { SmallMark } from './nodes/small-mark';
 import { SubtitleNode, TitleNode } from './nodes/title';
 
@@ -51,7 +53,9 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         TextAlign.configure({ types: PROSE_TEXTBLOCKS }),
         FigureNode,
         ChartNode,
+        EquationNode,
         PageBreakNode,
+        PageNumberNode,
         Highlight.configure({ multicolor: true }),
         ...(options?.lowlight ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })] : []),
         Table,

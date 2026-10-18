@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_PAGE_SETUP, PAGE_ROOT } from '@workspace/lib/docs/eigendoc';
+import { type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedEigendoc } from '../fixtures/golden-documents';
@@ -25,6 +27,20 @@ function docWithFigure(attrs: Record<string, unknown>): JSONContent {
 }
 
 describe('renderEigendocPreviewBody', () => {
+    test('the preview carries the page the doc stores, read as every reader reads it', () => {
+        const doc = new Y.Doc();
+        seedEigendoc(doc, docWithFigure({ mediaName: GOLDEN_MEDIA_NAME }));
+        doc.getMap(PAGE_ROOT).set('width', 297);
+        doc.getMap(PAGE_ROOT).set('height', 210);
+        doc.getMap(PAGE_ROOT).set('marginLeft', 'wide');
+        expect(renderEigendocPreviewBody(doc, mediaUrls).page).toEqual({
+            ...DEFAULT_PAGE_SETUP,
+            width: 297,
+            height: 210,
+        });
+        doc.destroy();
+    });
+
     test("a figure's prepared media URL reaches the viewer", () => {
         const body = previewOf(docWithFigure({ mediaName: GOLDEN_MEDIA_NAME, alt: 'A pixel' }));
         expect(body).toContain(`src="${MEDIA_URL}"`);
@@ -50,6 +66,17 @@ describe('renderEigendocPreviewBody', () => {
         expect(body).toContain(MEDIA_URL);
         expect(body).toContain('href="https://example.com/report"');
         expect(body).not.toMatch(/<script/i);
+    });
+
+    // DOMPurify's MathML profile drops <none>, which holds an empty script's place.
+    test("an equation's prescript keeps its empty slot", () => {
+        const x: MathRow = [{ kind: 'identifier', text: 'x' }];
+        const mathml = writeMathml([{ kind: 'scripts', base: x, sub: [{ kind: 'number', text: '1' }], pre: true }]);
+        const body = previewOf({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'equation', attrs: { mathml } }] }],
+        });
+        expect(body).toContain('<mprescripts></mprescripts><mn>1</mn><none></none>');
     });
 
     test('an ordered list keeps its start and its type, as the export draws them', () => {

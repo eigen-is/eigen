@@ -13,7 +13,9 @@ import {
     readFigureAttrs,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
+import { writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
+import { readStoredEquation } from '../../document/equation';
 import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
@@ -180,6 +182,12 @@ export function renderDocHtml(
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
+                // Without the annotation, which no screen draws and the sanitizer would keep as text.
+                equation: ({ node }) => {
+                    const { row, display } = readStoredEquation(node.attrs);
+                    const math = writeMathml(row);
+                    return display ? math.replace('<math', '<math display="block"') : math;
+                },
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
             },
         },

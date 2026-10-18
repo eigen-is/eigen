@@ -56,10 +56,11 @@ function docOf(scene: VectorScene): Y.Doc {
 
 const decode = (data: ArrayBuffer): string => new TextDecoder().decode(data);
 
-// The layer bodies of a compositor document, as the browser's HTML parser serializes them.
-function layerBodies(html: string): string[] {
+// The layer bodies of a compositor document, as the browser's HTML parser serializes them. A screen page
+// holds its layers in a scene box; a PDF page holds them straight in the page box (renderPrintPage).
+function layerBodies(html: string, layers: string): string[] {
     const { document } = new JSDOM(html).window;
-    return [...document.querySelectorAll('.canvas-page > div > div')].map((layer) => layer.innerHTML);
+    return [...document.querySelectorAll(layers)].map((layer) => layer.innerHTML);
 }
 
 function asParsed(fragment: string): string {
@@ -80,7 +81,8 @@ describe('a chart in the canvas exports', () => {
         const body = drawn.slice(drawn.indexOf('>') + 1, drawn.lastIndexOf('</svg>'));
         expect(body.startsWith('<g transform="translate(40 60)">')).toBe(true);
         expect(svg).toContain(body);
-        expect(svg).not.toContain('foreignObject');
+        // canvas-text.css rides along in the <defs>, and its comments name one
+        expect(svg).not.toContain('<foreignObject');
         expect(svg).toContain('Q1 &lt;draft&gt; &amp; more</text>');
         expect(svg).toContain('font-weight="600"');
         expect(svg).toContain('transform="rotate(-90 ');
@@ -93,7 +95,7 @@ describe('a chart in the canvas exports', () => {
         const html = decode(renderEigenvectorExport(docOf(scene), 'pdf-html', 'Drawing', []).data);
         const layer = elementLayer(chart);
         if (!layer) throw new Error('a chart always draws');
-        const bodies = layerBodies(html);
+        const bodies = layerBodies(html, '.canvas-page > div');
         expect(bodies).toEqual([asParsed(layerInnerHtml(layer.content))]);
         // WeasyPrint draws SVG text and ignores a foreignObject (the stylesheet's comments name one).
         expect(bodies[0]).toContain('Q1 &lt;draft&gt; &amp; more</text>');
@@ -110,7 +112,7 @@ describe('a chart in the canvas exports', () => {
         const html = decode(renderEigenslidesExport(docOf(deck), 'html', 'Deck', []).data);
         const layer = elementLayer(slide);
         if (!layer) throw new Error('a chart always draws');
-        expect(layerBodies(html)).toEqual([asParsed(layerInnerHtml(layer.content))]);
+        expect(layerBodies(html, '.canvas-page > div > div')).toEqual([asParsed(layerInnerHtml(layer.content))]);
         expect(elementToSvg(slide)).toContain('font-family="&apos;Inter&apos;, sans-serif"');
     });
 });

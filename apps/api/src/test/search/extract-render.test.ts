@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
+import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
@@ -94,6 +95,29 @@ describe('extractCollabText', () => {
         expect((await extractCollabText('eigendoc', doc)).text).toBe(
             'Before Team photo Scores by team Points scored Period 1 Team 1 Team 2 Team 3 Team 4',
         );
+        doc.destroy();
+    });
+
+    // Until the package writes an equation's linear text, its typed LaTeX is what search finds.
+    test("eigendoc: an equation indexes its LaTeX, and one the server can't parse nothing", async () => {
+        const doc = new Y.Doc();
+        const x: MathRow = [{ kind: 'identifier', text: 'x' }];
+        const equation = (mathml: string) => ({ type: 'equation', attrs: { mathml } });
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Area' },
+                        equation(writeMathml(x, '\\pi r^2')),
+                        equation(writeMathml(x)),
+                        equation(`<math xmlns="${MATHML_NAMESPACE}"><mi>x</mi>`),
+                    ],
+                },
+            ],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe('Area \\pi r^2');
         doc.destroy();
     });
 

@@ -13,14 +13,20 @@ import {
 import {
     ChartColumn,
     CodeXml,
+    Files,
+    Hash,
     ImagePlus,
     Link,
     MessageSquarePlus,
     Minus,
+    PanelBottom,
+    PanelsTopLeft,
+    PanelTop,
     SeparatorHorizontal,
     Table,
 } from 'lucide-react';
 import { textColumnWidth } from './extensions/text-column';
+import { type BandRequest, PAGE_NUMBER_PRESETS } from './headers-footers-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 
 type InsertMenuProps = {
@@ -30,6 +36,7 @@ type InsertMenuProps = {
     onLink: () => void;
     onInsertImage?: () => void;
     onAddComment?: () => void;
+    onOpenBand?: (request: BandRequest) => void;
 };
 
 export const InsertMenu = ({
@@ -39,6 +46,7 @@ export const InsertMenu = ({
     onLink,
     onInsertImage,
     onAddComment,
+    onOpenBand,
 }: InsertMenuProps) => (
     <ToolbarMenu label="Insert" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuItem onClick={onLink}>
@@ -95,10 +103,53 @@ export const InsertMenu = ({
         <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
             <CodeXml className="h-4 w-4 mr-2" /> Code block
         </DropdownMenuItem>
+        {onOpenBand && (
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                    <PanelsTopLeft className="h-4 w-4 mr-2" /> Page elements
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                    <DropdownMenuItem onClick={() => onOpenBand({ band: 'header' })}>
+                        <PanelTop className="h-4 w-4 mr-2" /> Header
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onOpenBand({ band: 'footer' })}>
+                        <PanelBottom className="h-4 w-4 mr-2" /> Footer
+                    </DropdownMenuItem>
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <Hash className="h-4 w-4 mr-2" /> Page numbers
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            {PAGE_NUMBER_PRESETS.map((preset) => (
+                                <DropdownMenuItem
+                                    key={preset.label}
+                                    onClick={() => onOpenBand({ band: preset.band, preset })}
+                                >
+                                    {preset.label}
+                                </DropdownMenuItem>
+                            ))}
+                            <DropdownMenuSeparator />
+                            {/* Google's Page count goes in at the caret, wherever it is. */}
+                            <DropdownMenuItem
+                                onClick={() =>
+                                    editor
+                                        .chain()
+                                        .focus()
+                                        .insertContent({ type: 'pageNumber', attrs: { kind: 'pages' } })
+                                        .run()
+                                }
+                            >
+                                <Files className="h-4 w-4 mr-2" /> Page count
+                            </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
+        )}
         {onAddComment && (
             <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem disabled={active.selectionEmpty} onClick={onAddComment}>
+                <DropdownMenuItem disabled={!active.canComment} onClick={onAddComment}>
                     <MessageSquarePlus className="h-4 w-4 mr-2" /> Comment
                 </DropdownMenuItem>
             </>

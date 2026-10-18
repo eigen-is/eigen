@@ -13,6 +13,7 @@ import type {
 import { runTransformToBytes } from '../document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../document/transform/runner';
 import type { Mount } from '../mount';
+import { DECK_SCALE } from './canvas/render';
 import { collectExportMedia } from './media';
 import { htmlToPdf } from './weasyprint';
 
@@ -105,10 +106,13 @@ async function serveExport(
     signal?: AbortSignal,
 ): Promise<ExportResult> {
     const bytes = await runDocumentExport(job, mount, path, signal);
+    // A deck's PDF document lays its slides out at 1:1 (renderPrintPage), so WeasyPrint's zoom scales them
+    // onto the sheet.
+    const zoom = job.documentType === 'eigenslides' ? DECK_SCALE : 1;
     return {
         // WeasyPrint stays a main-thread subprocess (already off-process, so it never
         // blocks the event loop) over the document the Worker rendered.
-        data: envelope.workerFormat === 'pdf-html' ? await htmlToPdf(bytes) : bytes,
+        data: envelope.workerFormat === 'pdf-html' ? await htmlToPdf(bytes, zoom) : bytes,
         contentType: envelope.contentType,
         fileName: `${stripEigenExtension(path.name)}.${envelope.extension}`,
     };
