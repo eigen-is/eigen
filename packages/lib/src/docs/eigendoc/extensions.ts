@@ -63,7 +63,8 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         PageBreakNode,
         PageNumberNode,
         FootnoteNode,
-        Highlight.configure({ multicolor: true }),
+        // ⇧⌘H is Find and replace, as in Google Docs, which binds no key to highlighting.
+        Highlight.extend({ addKeyboardShortcuts: () => ({}) }).configure({ multicolor: true }),
         ...(options?.lowlight ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })] : []),
         Table,
         TableRow,

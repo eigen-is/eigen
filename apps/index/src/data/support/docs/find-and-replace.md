@@ -7,7 +7,7 @@ tags: [docs, search, find, replace, editing]
 related: [docs/create-and-edit, docs/comments, getting-started/search-and-command-palette]
 crossSections: [sheets]
 order: 25
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 Every Eigen editor has a find bar for searching the document you already have open. It works the same way in Docs, Sheets, Slides, Stickies boards, drawings, and the text and code editors built into Drive, and in some of them it replaces what it finds as well.
@@ -22,7 +22,7 @@ There are three ways in:
 
 The bar appears in the top right of the editor. Type your term and the matches light up as you type.
 
-To open it with the replace row already showing, press **⌥⌘F** on a Mac (**Ctrl+Alt+F** or **Ctrl+H** on Windows and Linux), or choose **Find and replace** from the **Edit** menu.
+To open it with the replace row already showing, press **⇧⌘H** on a Mac (**Ctrl+Shift+H** or **Ctrl+H** on Windows and Linux), or choose **Find and replace** from the **Edit** menu.
 
 ## Step through the matches
 
