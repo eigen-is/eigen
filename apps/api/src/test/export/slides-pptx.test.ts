@@ -9,6 +9,7 @@ import {
     FRAME_FIELDS,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
+    type SlideSize,
     serializeBackgroundFill,
     serializeFill,
     type VectorElementType,
@@ -53,9 +54,10 @@ function element(type: VectorElementType, over: Fields): Fields {
     };
 }
 
-function deckDoc(frames: FrameSpec[], elements: Fields[]): Y.Doc {
+function deckDoc(frames: FrameSpec[], elements: Fields[], slideSize?: SlideSize): Y.Doc {
     const doc = new Y.Doc();
     doc.transact(() => {
+        if (slideSize) doc.getMap('meta').set('slideSize', slideSize);
         for (const spec of frames) {
             const frame = new Y.Map<unknown>();
             const values: Fields = {
@@ -79,8 +81,12 @@ function deckDoc(frames: FrameSpec[], elements: Fields[]): Y.Doc {
 }
 
 // The scene as the transform reads it: the reader, then the export's rich-text filter.
-function sceneOf(elements: Fields[], frames: FrameSpec[] = [{ id: 'f1', index: 'a0' }]): VectorScene {
-    return sanitizeSceneHtml(readVectorFromDoc(deckDoc(frames, elements)));
+function sceneOf(
+    elements: Fields[],
+    frames: FrameSpec[] = [{ id: 'f1', index: 'a0' }],
+    slideSize?: SlideSize,
+): VectorScene {
+    return sanitizeSceneHtml(readVectorFromDoc(deckDoc(frames, elements, slideSize)));
 }
 
 function pptx(scene: VectorScene, media: OfficeMedia[] = []): ZipReader {
@@ -256,17 +262,26 @@ describe('pptx package', () => {
         expect(() => eigenslidesToPptx(sceneOf([], []), [], 'Deck')).toThrow('The deck is empty');
     });
 
-    test('the slide size comes from the frame: 16:9 and 4:3', () => {
-        const wide = pptx(sceneOf([element('rectangle', { corners: 'straight' })]));
+    test("the slide size is the deck's: 16:9 and 4:3", () => {
+        const wideScene = sceneOf([element('rectangle', { corners: 'straight' })]);
+        const wide = pptx(wideScene);
         const wideSize = first(part(wide, 'ppt/presentation.xml'), P, 'sldSz');
         expect([attr(wideSize, 'cx'), attr(wideSize, 'cy')]).toEqual(['12192000', '6858000']);
         expect(xfrm(only(wide))).toEqual({ x: 100 * EMU, y: 50 * EMU, cx: 200 * EMU, cy: 100 * EMU, rot: 0 });
+        // The size is the deck's meta, not its frames' shape.
+        const relabeled = pptx({ ...wideScene, meta: { ...wideScene.meta, slideSize: '4:3' } });
+        expect(attr(first(part(relabeled, 'ppt/presentation.xml'), P, 'sldSz'), 'cx')).toBe('9144000');
 
-        const scene = sceneOf([
-            element('rectangle', { corners: 'straight', x: 192, y: 144 }),
-            element('richtext', { index: 'a1', html: '<p>small</p>', fontSize: 48 }),
-        ]);
-        const square = pptx({ ...scene, frames: scene.frames.map((frame) => ({ ...frame, height: 1440 })) });
+        const square = pptx(
+            sceneOf(
+                [
+                    element('rectangle', { corners: 'straight', x: 192, y: 144 }),
+                    element('richtext', { index: 'a1', html: '<p>small</p>', fontSize: 48 }),
+                ],
+                undefined,
+                '4:3',
+            ),
+        );
         const squareSize = first(part(square, 'ppt/presentation.xml'), P, 'sldSz');
         expect([attr(squareSize, 'cx'), attr(squareSize, 'cy')]).toEqual(['9144000', '6858000']);
         const [rectangle, text] = shapes(square);
