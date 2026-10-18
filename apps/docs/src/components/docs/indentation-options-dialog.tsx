@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/react';
+import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { cmText, readCm, readParagraphFormat, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -9,6 +10,7 @@ import { useState } from 'react';
 
 type IndentationOptionsDialogProps = {
     editor: Editor;
+    normal: NormalStyle;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 };
@@ -26,7 +28,7 @@ const cm = (pt: number) => cmText((pt * 25.4) / 72, 2);
 const pt = (text: string) => (readCm(text) * 72) / 25.4;
 
 // Google Docs' Format › Align and indent › Indentation options, on the paragraphs the selection spans.
-export function IndentationOptionsDialog({ editor, open, onOpenChange }: IndentationOptionsDialogProps) {
+export function IndentationOptionsDialog({ editor, normal, open, onOpenChange }: IndentationOptionsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -41,7 +43,7 @@ export function IndentationOptionsDialog({ editor, open, onOpenChange }: Indenta
                 <DialogHeader>
                     <DialogTitle>Indentation options</DialogTitle>
                 </DialogHeader>
-                <IndentationOptionsForm editor={editor} onDone={() => onOpenChange(false)} />
+                <IndentationOptionsForm editor={editor} normal={normal} onDone={() => onOpenChange(false)} />
             </DialogContent>
         </Dialog>
     );
@@ -49,9 +51,21 @@ export function IndentationOptionsDialog({ editor, open, onOpenChange }: Indenta
 
 // Mounted with the dialog, so each opening starts from the selection's first paragraph. As in Google and Word, Left is
 // where the body lines stand, and a first line or hanging indent moves the first line right or left of it.
-function IndentationOptionsForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
+function IndentationOptionsForm({
+    editor,
+    normal,
+    onDone,
+}: {
+    editor: Editor;
+    normal: NormalStyle;
+    onDone: () => void;
+}) {
     const [initial] = useState(() => {
-        const { indentLeft, indentRight, indentFirstLine } = selectionParagraphFormat(editor.state, editor.view).drawn;
+        const { indentLeft, indentRight, indentFirstLine } = selectionParagraphFormat(
+            editor.state,
+            editor.view,
+            normal,
+        ).drawn;
         const special: SpecialIndent = indentFirstLine > 0 ? 'firstLine' : indentFirstLine < 0 ? 'hanging' : 'none';
         return {
             left: indentLeft,

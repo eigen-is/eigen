@@ -157,10 +157,16 @@ export function isMonospaceFont(name: string | undefined, fontTable: FontTable):
     return bundledFontOf(name, fontTable) === MONOSPACE_FONT;
 }
 
-// The document font draws without a mark, so a foreign sans body is no mark and a serif or mono one is one per run.
-export function fontMark(name: string | undefined, fontTable?: FontTable): string | undefined {
-    const font = bundledFontOf(name, fontTable);
-    return font === DOCUMENT_FONT ? undefined : font;
+// The font a run draws in where it is not the doc's Normal font, which draws without a mark: in an Inter doc a foreign
+// sans run is no mark and a serif or mono one is one, in a Times doc a serif one is none. A font Eigen has no stand-in
+// for draws in the document font.
+export function fontMark(
+    name: string | undefined,
+    fontTable?: FontTable,
+    normalFont: string = DOCUMENT_FONT,
+): string | undefined {
+    const font = bundledFontOf(name, fontTable) ?? DOCUMENT_FONT;
+    return font === normalFont ? undefined : font;
 }
 
 // A symbol font's character as Unicode; Word's private-use spelling, U+F0xx, is the font's own xx.

@@ -24,7 +24,9 @@ import {
     PAGE_BAND_CLASS,
     PAGE_ROOT,
     pagePx,
+    readNormalStyle,
     readPageSetup,
+    STYLE_ROOT,
 } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -234,12 +236,15 @@ export function docEditorOptions({
         const { width, margin } = pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
         return width - margin.left - margin.right;
     };
+    // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one.
+    const normalStyle = () => readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON());
     return {
         editable,
         extensions: [
             ...getDocExtensions({
                 lowlight,
                 textColumnWidth,
+                normalStyle,
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
                     'figure',
@@ -296,7 +301,8 @@ export function docEditorOptions({
                 copy: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
                 cut: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
             },
-            transformPastedHTML: (html: string) => cleanPastedHTML(html, textColumnWidth(), cardIds()),
+            transformPastedHTML: (html: string) =>
+                cleanPastedHTML(html, textColumnWidth(), cardIds(), normalStyle().font),
             handleDrop: (view, event) => {
                 if (!event.dataTransfer) return false;
                 const files = Array.from(event.dataTransfer.files);

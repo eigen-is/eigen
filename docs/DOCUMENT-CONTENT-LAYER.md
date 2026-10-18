@@ -14,7 +14,7 @@ Two details surprise people: capture leaves the database open, because a live se
 
 | Type | Reader | Returns | Writer |
 |---|---|---|---|
-| `.eigendoc` | `readEigendocFromDoc`, `readEigendocPage` (`doc.ts`) | ProseMirror `JSONContent`, the `PageSetup` | `commitEigendocImport` |
+| `.eigendoc` | `readEigendocFromDoc`, `readEigendocPage`, `readEigendocStyle` (`doc.ts`) | ProseMirror `JSONContent`, the `PageSetup`, the `NormalStyle` | `commitEigendocImport` |
 | `.eigensheets` | `readSheetsFromDoc` (`sheets.ts`) | `{ sheets, recalcError }` | `writeSheetsSnapshotToYjs` |
 | `.eigenslides` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` | `writeSlidesUpdateToYjs`, `appendSlidesUpdateToYjs` (`slides.ts`), for the pptx import |
 | `.eigenvector` | `readVectorFromDoc` | `VectorScene` | none |
@@ -47,7 +47,7 @@ Only the export read recalcs, and only a workbook nobody computed ([SHEETS.md §
 
 ## The docs and sheets writers replace, they don't merge
 
-`writeSheetsSnapshotToYjs` sets `state.snapshot` and clears `ops` in one transaction. `commitEigendocImport` clears the `default` fragment and the header and footer fragments, applies a prepared Yjs update and sets the page keys, in one transaction; clearing first is what makes an import a replacement ([EXPORT.md](EXPORT.md#a-docx-import-replaces-the-document)). The import's transform builds that update itself (`apps/api/src/lib/import/doc/transform.ts`). The import path hands both writers what the transform produced, so the main thread never parses the file ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-transform-succeeds)).
+`writeSheetsSnapshotToYjs` sets `state.snapshot` and clears `ops` in one transaction. `commitEigendocImport` clears the `default` fragment and the header and footer fragments, applies a prepared Yjs update and sets the page and Normal keys, in one transaction; clearing first is what makes an import a replacement ([EXPORT.md](EXPORT.md#a-docx-import-replaces-the-document)). The import's transform builds that update itself (`apps/api/src/lib/import/doc/transform.ts`). The import path hands both writers what the transform produced, so the main thread never parses the file ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-transform-succeeds)).
 
 Both write into the live `CollabDocument`, so the change persists and reaches connected editors like any edit, and a sheet editor remounts on the new snapshot. But nothing merges. The sheet ops a peer made since the last flush are cleared with the rest, and a peer's unsynced typing inside a deleted paragraph has nowhere to land. `convertToDocument` writes into a document it has just created, so no one can be editing it. `importIntoDocument` writes into an existing one, and `Drive` has no check for an open session. The live-safe writers are open work in [ROADMAP.md](ROADMAP.md).
 
