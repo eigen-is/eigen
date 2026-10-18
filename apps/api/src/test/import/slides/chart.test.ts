@@ -249,7 +249,8 @@ describe('a chart left as a box', () => {
             },
             { types: chartType('ppt/charts/chart1.xml', 'application/xml') },
             { ...at('../charts/chart1.xml', 'image') },
-            { ...at('../charts/chart1.xml', 'chart', true) },
+            // An external target is kept as written, so it names the part outright.
+            { ...at('ppt/charts/chart1.xml', 'chart', true) },
             { ...at('../charts/missing.xml') },
             { slides: [{ shapes: frame('rId9'), rels: rel('rId5', 'chart', '../charts/chart1.xml') }] },
         ];
