@@ -6,7 +6,7 @@ category: Basics
 tags: [mobile, phone, getting-started, layout]
 related: [getting-started/your-first-steps, getting-started/search-and-command-palette]
 order: 6
-updated: 2026-10-12
+updated: 2026-10-18
 ---
 
 Eigen runs in the browser on your phone, with the same account and the same files as on your computer. The apps rearrange themselves for the smaller screen rather than shrinking. This page covers what moves where, and the few things a phone cannot do.
@@ -47,7 +47,7 @@ A board's columns are as wide as the screen, so you see one at a time and swipe 
 
 Rows of icons turn into one **⋮** menu. In a document, spreadsheet, presentation, drawing, or board, that menu collects what the toolbar icons do on a computer: **Edit** to rename, **Find in document**, **Word count**, **Activity**, **Watch**, **Comments**, and **Share**. Which of them you see depends on the app and on whether you can edit the file.
 
-In Calendar, **Today** and the month or week choice move into a **View options** menu on the right of the toolbar. In Docs, the formatting row folds into a **Format** menu, which holds **Text**, **Font**, **Paragraph styles**, **Align and indent**, **Bullets and numbering**, **Table**, **Image**, and **Clear formatting**. **Table** works when the cursor is in a table, and **Image** when an image is selected.
+In Calendar, **Today** and the month or week choice move into a **View options** menu on the right of the toolbar. In Docs, the formatting row folds into a **Format** menu, which holds **Text**, **Font**, **Paragraph styles**, **Align and indent**, **Line & paragraph spacing**, **Bullets and numbering**, **Table**, **Image**, and **Clear formatting**. **Table** works when the cursor is in a table, and **Image** when an image is selected.
 
 ## Comments and activity
 

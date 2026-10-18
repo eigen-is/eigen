@@ -22,10 +22,8 @@ export { selectionFontSizes } from './nodes/font-size';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';
-export type { ParagraphFormat, ParagraphFormatKey } from './nodes/paragraph-format';
 export {
     DOCUMENT_PARAGRAPH_FORMAT,
-    INDENT_STEP,
     PARAGRAPH_FORMAT_KEYS,
     PARAGRAPH_FORMAT_LIMITS,
     PROSE_TEXTBLOCKS,

@@ -19,9 +19,9 @@ export const PARAGRAPH_FORMAT_KEYS = [
     'indentFirstLine',
 ] as const;
 
-export type ParagraphFormatKey = (typeof PARAGRAPH_FORMAT_KEYS)[number];
+type ParagraphFormatKey = (typeof PARAGRAPH_FORMAT_KEYS)[number];
 
-export type ParagraphFormat = Record<ParagraphFormatKey, number>;
+type ParagraphFormat = Record<ParagraphFormatKey, number>;
 
 // Eigen's own look, which a paragraph that sets none draws: eigen-prose.css spells it, looks.test.ts holds the two together.
 export const DOCUMENT_PARAGRAPH_FORMAT: ParagraphFormat = {
@@ -34,7 +34,7 @@ export const DOCUMENT_PARAGRAPH_FORMAT: ParagraphFormat = {
 };
 
 // Google Docs' Increase and Decrease indent step, 1.27 cm.
-export const INDENT_STEP = 36;
+const INDENT_STEP = 36;
 
 // Word's largest page, 22 in, as no page setup reads wider.
 const MAX_INDENT = (MAX_PAPER_MM / 25.4) * 72;
