@@ -39,7 +39,7 @@ import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
 import type { Mount } from '../mount';
 import type { User } from '../user';
-import { IMPORT_TOO_LARGE, importSummary, PRESENTATION_EMPTY } from './messages';
+import { IMPORT_MESSAGES, importSummary, PRESENTATION_EMPTY } from './messages';
 
 const XLSX_TO_SHEETS: SheetsImportJob = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets' };
 
@@ -84,7 +84,7 @@ function importPptxUpdate(
 // openZip refuses an archive past the byte cap anyway; refused here, a file that large is never read or copied to the
 // transform. The upload cap allows up to a gigabyte, and a convert reads a stored file of any size.
 function assertWithinByteCap(bytes: number, format: ImportTransformJob['sourceFormat']): void {
-    if (bytes > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, IMPORT_TOO_LARGE[format]);
+    if (bytes > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, IMPORT_MESSAGES[format].tooLarge);
 }
 
 // The route checked write before buffering, but the job can queue and transform for

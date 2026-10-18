@@ -11,6 +11,7 @@ import { Window } from 'happy-dom';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { evaluateConditionalFormat } from '../../../engine/conditional-format';
 import type { CellType } from '../../../engine/types';
+import { setCellValue as apiSetCellValue } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
 import {
     getCellValue,
@@ -19,6 +20,7 @@ import {
     setCellValue,
     updateCell,
 } from '../../../state/modules/cell';
+import { groupValuesRefresh } from '../../../state/modules/formula-exec';
 import { clearMeasureTextCache } from '../../../state/modules/text';
 import type { CellMatrix, SheetConfig } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
@@ -155,6 +157,20 @@ describe('state/modules/cell — updateCell auto-height', () => {
 
         const synced = applyPatches(base, filterPatch(patches));
         expect(synced.sheets[0].config?.rowlen?.[0]).toBe(grown.sheets[0].config?.rowlen?.[0]);
+    });
+
+    test('a rich edit recomputes the formulas that read the cell', () => {
+        const ctx = editContext();
+        ctx.sheets[0].data![0][0] = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Cherry', bl: 1 }] } };
+        apiSetCellValue(ctx, 0, 1, '=A1&"!"', null);
+        expect(ctx.sheets[0].data![0][1]?.v).toBe('Cherry!');
+        const input = win.document.createElement('div');
+        input.innerHTML = '<span style="font-weight: bold;">Kiwi</span>';
+        updateCell(ctx, 0, 0, input as unknown as HTMLDivElement, undefined, measuringCanvas());
+        // The workbook applies the recomputed values after the edit, as here.
+        groupValuesRefresh(ctx);
+        expect(ctx.sheets[0].data![0][0]?.ct?.t).toBe('inlineStr');
+        expect(ctx.sheets[0].data![0][1]?.v).toBe('Kiwi!');
     });
 });
 

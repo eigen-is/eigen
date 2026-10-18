@@ -28,7 +28,6 @@ import type {
     Borders,
     ConditionalFormattingRule,
     DataValidation,
-    DataValidationOperator,
     Font,
     RichText,
     Cell as XlsxCell,
@@ -36,17 +35,19 @@ import type {
 import { relsPathOf } from '../../core/opc';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from '../../core/zip';
 import { cssColorToHex } from '../../document/colors';
+import {
+    DAY_MS,
+    DEFAULT_ROW_HEIGHT_PT,
+    DV_XLSX_DATE_OPERATOR,
+    DV_XLSX_OPERATOR,
+    EXCEL_EPOCH_MS,
+    NUMERIC,
+    withFuturePrefixes,
+} from '../../document/spreadsheetml';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
 
-// Sheet[] -> XLSX workbook bytes. Runs inside the transform Worker (worker.ts owns
-// execution; the main-thread orchestration lives in export-document.ts). This module
-// must not reach the Mount or the main-thread transform seam — the Worker imports it.
-
-// Excel's date epoch is 1899-12-30 (Lotus 1-2-3 1900 leap-year bug).
-const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
-const DAY_MS = 86_400_000;
-// Excel's default row height; the importer treats it as "no explicit height".
-const DEFAULT_ROW_HEIGHT_PT = 15.75;
+// Sheet[] -> XLSX workbook bytes. Runs in the transform process (child.ts owns execution, export-document.ts the
+// orchestration), so it never reaches the Mount.
 
 // A font's category as styles.xml's <family> numbers it (ECMA-376 Part 1 § 18.8.18).
 const FONT_FAMILY_NUMBER: Record<EigenFont['category'], number> = {
@@ -71,9 +72,20 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
     // Internal-link labels per worksheet (1-based, matching sheetN.xml), injected
     // as the `display` attribute by rewriteInternalHyperlinks below.
     const internalLinkLabels = new Map<number, Map<string, string>>();
+    // Excel opens on the active tab, the first unless told, so a hidden first sheet would open hidden. Excel refuses to
+    // hide every sheet: then the first is the active tab, shown, as the import shows it.
+    const activeTab = Math.max(
+        sheets.findIndex((sheet) => sheet.hide !== 1),
+        0,
+    );
+    workbook.views = [{ activeTab, x: 0, y: 0, width: 10000, height: 20000, firstSheet: 0, visibility: 'visible' }];
 
     for (const [sheetIndex, sheet] of sheets.entries()) {
-        const worksheet = workbook.addWorksheet(sheet.name);
+        const tabColor = sheet.color ? argbOf(sheet.color) : undefined;
+        const worksheet = workbook.addWorksheet(sheet.name, {
+            state: sheet.hide === 1 && sheetIndex !== activeTab ? 'hidden' : 'visible',
+            ...(tabColor && { properties: { tabColor: { argb: tabColor } } }),
+        });
         const config = sheet.config ?? {};
 
         if (config.columnlen) {
@@ -200,7 +212,14 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 
         // Gridlines and frozen panes must live in ONE view object — exceljs renders
         // a <sheetView> per entry and Excel only honors the first.
-        const view: { showGridLines?: boolean; state?: 'frozen'; xSplit?: number; ySplit?: number } = {};
+        const view: {
+            showGridLines?: boolean;
+            state?: 'frozen';
+            xSplit?: number;
+            ySplit?: number;
+            tabSelected?: boolean;
+        } = {};
+        if (sheetIndex === activeTab) view.tabSelected = true;
         if (sheet.showGridLines === false || sheet.showGridLines === 0) {
             view.showGridLines = false;
         }
@@ -284,7 +303,7 @@ function rewritePackage(buffer: Buffer, labelsBySheet: Map<number, Map<string, s
 
 function applyCellValue(cell: XlsxCell, v: FortuneCell): void {
     if (v.f) {
-        const formula = v.f.startsWith('=') ? v.f.slice(1) : v.f;
+        const formula = withFuturePrefixes(v.f.startsWith('=') ? v.f.slice(1) : v.f);
         cell.value = { formula, result: v.v ?? undefined };
         if (v.ct?.fa) cell.numFmt = v.ct.fa;
         return;
@@ -559,32 +578,8 @@ function toCfStyle(format: DefaultConditionalFormatRule['format']): XlsxCfWriteS
 // becomes a quoted Excel string literal with embedded quotes doubled.
 function encodeCfOperand(value: string | number): string {
     const txt = String(value);
-    return /^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(txt) ? txt : `"${txt.replace(/"/g, '""')}"`;
+    return NUMERIC.test(txt) ? txt : `"${txt.replace(/"/g, '""')}"`;
 }
-
-// Engine type2 → xlsx operator; exact reverse of the importer's DV_OPERATOR.
-const DV_XLSX_OPERATOR: Record<string, DataValidationOperator> = {
-    between: 'between',
-    notBetween: 'notBetween',
-    equal: 'equal',
-    notEqualTo: 'notEqual',
-    moreThanThe: 'greaterThan',
-    lessThan: 'lessThan',
-    greaterOrEqualTo: 'greaterThanOrEqual',
-    lessThanOrEqualTo: 'lessThanOrEqual',
-};
-
-// Exact reverse of the importer's DV_DATE_OPERATOR.
-const DV_XLSX_DATE_OPERATOR: Record<string, DataValidationOperator> = {
-    between: 'between',
-    notBetween: 'notBetween',
-    equal: 'equal',
-    notEqualTo: 'notEqual',
-    earlierThan: 'lessThan',
-    noEarlierThan: 'greaterThanOrEqual',
-    laterThan: 'greaterThan',
-    noLaterThan: 'lessThanOrEqual',
-};
 
 const DV_XLSX_TYPE: Record<string, DataValidation['type']> = {
     number: 'decimal',
@@ -614,7 +609,7 @@ function toDataValidation(rule: DataVerificationRule, r: number, c: number): Dat
     const type = DV_XLSX_TYPE[rule.type];
     if (type == null) return null; // checkbox / validity have no xlsx equivalent
 
-    const operator = (type === 'date' ? DV_XLSX_DATE_OPERATOR : DV_XLSX_OPERATOR)[rule.type2];
+    const operator = (type === 'date' ? DV_XLSX_DATE_OPERATOR : DV_XLSX_OPERATOR).get(rule.type2);
     if (operator == null) return null;
     const toOperand = type === 'date' ? dateDvOperand : numericDvOperand;
     const value1 = toOperand(rule.value1);

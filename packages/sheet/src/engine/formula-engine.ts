@@ -1,5 +1,7 @@
 import { DependencyIndex } from './dependency-index';
+import { cellValue } from './format';
 import { ERROR_REF, Parser } from './parser';
+import { ERROR_VALUE } from './parser/error';
 import { dateToSerial } from './parser/helper/number';
 import type {
     Cell,
@@ -18,12 +20,11 @@ export function isFormula(value: unknown): boolean {
 }
 
 function getCellValue(cell: Cell | null | undefined): unknown {
-    if (cell == null) return undefined;
-    if (cell.ct?.t === 'n') {
+    if (cell?.ct?.t === 'n') {
         const n = Number(cell.v);
         return Number.isNaN(n) ? cell.v : n;
     }
-    return cell.v;
+    return cellValue(cell);
 }
 
 function inferType(value: unknown): EvaluationResult['type'] {
@@ -37,8 +38,12 @@ export class FormulaEngine {
     state: FormulaEngineState;
     private parser: Parser;
     private currentResolver: CellResolver | null = null;
+    // The cells range reads have cost; a read that would pass `maxCellsRead` fails before it reads.
+    cellsRead = 0;
+    private readonly maxCellsRead: number;
 
-    constructor() {
+    constructor({ maxCellsRead = Number.POSITIVE_INFINITY } = {}) {
+        this.maxCellsRead = maxCellsRead;
         this.state = {
             execFunctionGlobalData: {},
             formulaCellInfoMap: null,
@@ -96,6 +101,10 @@ export class FormulaEngine {
                 if (emptyCol) startCol = 0;
                 endRow = emptyRow ? lastRow : Math.min(endRow, lastRow);
                 endCol = emptyCol ? lastCol : Math.min(endCol, lastCol);
+                if (endRow >= startRow && endCol >= startCol) {
+                    this.cellsRead += (endRow - startRow + 1) * (endCol - startCol + 1);
+                    if (this.cellsRead > this.maxCellsRead) throw Error(ERROR_VALUE);
+                }
 
                 const fragment: unknown[][] = [];
                 for (let row = startRow; row <= endRow; row++) {

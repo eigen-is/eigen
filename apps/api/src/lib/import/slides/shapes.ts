@@ -17,7 +17,7 @@ import { ApiError } from '../../core/errors';
 import { A_NS, C_NS, DGM_NS, isAlternateContent, isOn, P_NS, R_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
-import { PRESENTATION_TOO_LARGE } from '../messages';
+import { IMPORT_MESSAGES } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
 import { type CustomGeometry, closedPath, customGeometry } from './custom-geometry';
 import { DEGREE, evaluateGuides, type Guides, guideListOf } from './guides';
@@ -233,7 +233,7 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): 
         const known = deck.decorations.get(key);
         if (known) {
             deck.shapes += known.shapes;
-            if (deck.shapes > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+            if (deck.shapes > MAX_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
             for (const element of known.elements) push(walk, { ...element });
             continue;
         }
@@ -249,9 +249,9 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): 
 }
 
 function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: number, group: GroupFill | undefined): void {
-    if (depth > MAX_GROUP_DEPTH) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+    if (depth > MAX_GROUP_DEPTH) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
     for (const shape of shapes) {
-        if (++walk.deck.shapes > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+        if (++walk.deck.shapes > MAX_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
         charge(1);
         if (isAlternateContent(shape)) {
             readTree(walk, alternative(shape), placeIn, depth + 1, group);
@@ -294,7 +294,7 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
 const DRAWN = new Set(['sp', 'pic', 'cxnSp', 'grpSp', 'graphicFrame', 'contentPart']);
 
 function push(walk: Walk, element: NewVectorElement): void {
-    if (++walk.deck.elements > MAX_ELEMENTS) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+    if (++walk.deck.elements > MAX_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
     let weight = 1;
     for (const value of Object.values(element))
         if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
@@ -304,7 +304,7 @@ function push(walk: Walk, element: NewVectorElement): void {
 
 function weigh(deck: DeckWalk, weight: number): void {
     deck.weight += weight;
-    if (deck.weight > MAX_PPTX_WEIGHT) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+    if (deck.weight > MAX_PPTX_WEIGHT) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
 }
 
 // A drawn shape and what it inherits: its placeholder, what it and the layout's and master's placeholders it takes from

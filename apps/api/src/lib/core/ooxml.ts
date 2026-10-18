@@ -16,6 +16,9 @@ export const DGM_NS = 'http://schemas.openxmlformats.org/drawingml/2006/diagram'
 // Word's drawing of a SmartArt, the shapes and their text as laid out.
 export const DSP_NS = 'http://schemas.microsoft.com/office/drawing/2008/diagram';
 export const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+// Excel 2010's SpreadsheetML extensions, and the formulas and references they hold.
+export const X14_NS = 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
+export const XM_NS = 'http://schemas.microsoft.com/office/excel/2006/main';
 export const P_NS = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 export const W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
 export const MC_NS = MARKUP_COMPATIBILITY_NAMESPACE;

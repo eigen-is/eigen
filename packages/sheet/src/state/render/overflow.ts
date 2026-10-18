@@ -2,9 +2,10 @@
 // columns (cell.tb === '1'), and the per-row cache shared across passes.
 
 import { isEmpty } from 'es-toolkit/compat';
+import { cellValue } from '../../engine/format';
+import { isRealNull } from '../../engine/validation';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { normalizedAttr } from '../modules/cell';
-import { isInlineStringCell } from '../modules/inline-string';
 import { getCellTextInfo } from '../modules/text';
 import { colEndX, colStartX } from './geometry';
 import type { CellOverflowMap } from './types';
@@ -60,7 +61,7 @@ export function computeCellOverflowMap(
                 continue;
             }
 
-            if (cell && (!isEmpty(cell.v) || isInlineStringCell(cell)) && cell.mc == null && cell.tb === '1') {
+            if (cell && !isEmpty(cellValue(cell)) && cell.mc == null && cell.tb === '1') {
                 const horizonAlign = normalizedAttr(flowdata, r, c, 'ht');
 
                 const textMetricsObj = getCellTextInfo(cell, canvas, sheetCtx, {
@@ -181,7 +182,7 @@ function traceOverflow(
 
     // Trace terminates if cell is non-empty or merged
     const cell = flowdata[r][traceC];
-    if (cell && (!isEmpty(cell.v) || cell.mc)) {
+    if (cell && (!isRealNull(cellValue(cell)) || cell.mc)) {
         return {
             success: false,
             r,

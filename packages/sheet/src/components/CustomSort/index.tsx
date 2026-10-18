@@ -7,6 +7,7 @@ import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import { cellDisplay } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
 import { type Context, getSheetIndex, sortSelection } from '../../state';
 
@@ -30,7 +31,7 @@ export function CustomSort() {
         if (isTitleChange) {
             for (let i = col_start; i <= col_end; i += 1) {
                 const cell = context.sheets[sheetIndex].data?.[row_start]?.[i];
-                const colHeaderValue = cell?.m || cell?.v;
+                const colHeaderValue = cellDisplay(cell) || cell?.v;
                 if (colHeaderValue) {
                     list.push(colHeaderValue as string);
                 } else {

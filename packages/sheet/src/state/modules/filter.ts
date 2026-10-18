@@ -1,5 +1,5 @@
 import { cloneDeep, find, flatten, reduce, size } from 'es-toolkit/compat';
-import { parseCellInput, update } from '../../engine/format';
+import { cellDisplay, cellValue, parseCellInput, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { FilterCondition, FilterConditionName, Selection } from '../types';
@@ -261,7 +261,7 @@ export function createFilter(ctx: Context) {
         for (let c = 0; c < flowdata[curR].length; c += 1) {
             const cell = flowdata[curR][c];
 
-            if (cell != null && !isRealNull(cell.v)) {
+            if (!isRealNull(cellValue(cell))) {
                 if (st_c == null) {
                     st_c = c;
                 }
@@ -301,7 +301,7 @@ export type FilterDate = {
 export type FilterValue = {
     key: string;
     value: Cell['v'] | null;
-    mask: Cell['m'] | null;
+    mask: Cell['v'] | null;
     text: string;
     rows: number[];
 };
@@ -398,9 +398,10 @@ export function buildFilterConditionMatcher(condition: FilterCondition): (cell: 
     }
 
     return (cell) => {
-        const blank = cell == null || isRealNull(cell.v);
-        const display = blank ? '' : `${cell.m ?? cell.v}`.toLowerCase();
-        const raw = blank ? '' : `${cell.v}`;
+        const value = cellValue(cell);
+        const blank = cell == null || isRealNull(value);
+        const display = blank ? '' : `${cellDisplay(cell)}`.toLowerCase();
+        const raw = blank ? '' : `${value}`;
 
         switch (conditionName) {
             case 'isEmpty':
@@ -578,13 +579,13 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
             }
         } else {
             let v: Cell['v'] | null;
-            let m: Cell['m'] | null;
-            if (cell == null || isRealNull(cell.v)) {
+            let m: Cell['v'] | null;
+            if (cell == null || isRealNull(cellValue(cell))) {
                 v = null;
                 m = null;
             } else {
-                v = cell.v;
-                m = cell.m;
+                v = cellValue(cell);
+                m = cellDisplay(cell);
             }
 
             const data = valuesMap.get(`${v}`);
@@ -691,10 +692,10 @@ export function getFilterColumnColors(ctx: Context, col: number, startRow: numbe
         }
         if (fc != null) {
             const fcData = fcMap.get(fc);
-            if (fcData != null && cell != null && !isRealNull(cell.v)) {
+            if (fcData != null && !isRealNull(cellValue(cell))) {
                 fcData.rows.push(r);
                 if (isRowHidden) fcData.checked = false;
-            } else if (cell != null && !isRealNull(cell.v)) {
+            } else if (!isRealNull(cellValue(cell))) {
                 fcMap.set(fc, { color: fc, checked: !isRowHidden, rows: [r] });
             }
         }

@@ -1,6 +1,6 @@
 import { ApiError } from '../../core/errors';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
-import { PRESENTATION_TOO_LARGE } from '../messages';
+import { IMPORT_MESSAGES } from '../messages';
 
 // Every lookup the reader makes into an element goes through here. An element of a layout, master, theme or the
 // presentation is looked into again for every slide, shape, paragraph and run that inherits it, and among its children
@@ -26,7 +26,7 @@ export function withWorkBudget<T>(units: number, read: () => T): T {
 // Whatever a file repeats or keys a cache by, each unit of work proportional to it is charged here before it is done.
 export function charge(units: number): void {
     workLeft -= units;
-    if (workLeft < 0) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+    if (workLeft < 0) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
 }
 
 // Whether the read under way can still do this much, charging nothing: what may be left out, a chart, asks first.

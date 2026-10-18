@@ -26,12 +26,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 - **Print in Docs** — File → **Print** and ⌘P open the document as a PDF in a new tab to print from, so headers, footers and page numbers print. Offline, before your latest edits are saved, or when the PDF can't be made, Docs prints from the browser without them and says so
 - **Nested numbered lists** — a numbered list inside another numbers 1. a. i. by depth, as in Google Docs. A list set to 1. 2. 3. from now on stays decimal at any depth. In existing documents, a nested list that showed 1. 2. 3., whether set so or imported from Word, now shows a. or i.: choose Format → Bullets and numbering → Numbered list → **1. 2. 3.** in it again
 - **Image sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag an image's handle are in cm, as in Page setup
-- **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid
+- **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, its column widths match the grid, and it keeps hidden sheets hidden and tab colors. PDF and web page downloads leave hidden sheets out
+- **Sheets import** — Eigen reads the `.xlsx` itself instead of through ExcelJS. Overlapping merged ranges come in as Excel repairs them, a link to another workbook keeps its sheet anchor, ISO dates read right, and Excel 2010's conditional formats and validation lists come in. A workbook with more than 10,000 merged ranges, 500 sheets or 2 million rows imports when its cells fit. A password-protected file says so. Hidden sheets stay hidden, tabs keep their colors, and a cell that mixes bold, italic, colors or fonts keeps them
 
 ### Fixed
 
 - **Sheets copy and Tab** — copied cells paste into other apps as rows and columns, not one run of text, and Tab while typing in a cell confirms it and moves right (Shift+Tab left)
 - **Copy and paste in Sheets** — a pasted cell keeps its font, mapped to the bundled one: Times New Roman becomes Source Serif 4, where every font became Inter
+- **Rich text in Sheets** — a cell that mixes bold, italic, colors or fonts counts in sorting, filtering, conditional formats, dropdown checks, formulas and the status bar, where it read as empty, imported or typed in the editor. A number, which counted as empty too, anchors a merge and stops text overflowing into its cell, as in Google Sheets
 - **Docs images** — switching an image or chart to wrap text shrinks it to half the width of the text so text fits beside it, dragging an image's handle follows the pointer when the page is shown smaller, and a list beside a wrapped image keeps its bullets or numbers clear of it. A Word file's wrapped picture placed from the page's edge comes in on the side Word shows it
 - **Server** — a file too large for the server's memory to import, export, preview or index is refused instead of taking the server down. An import says Document too large or Spreadsheet too large
 

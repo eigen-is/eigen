@@ -8,7 +8,7 @@ Not obvious from the code: one child runs at a time because memory is the limit,
 
 ## `async` does not leave the event loop
 
-Awaiting a preview only suspends the caller. Yjs materialization, formula recalc, HTML rendering, sanitizing and ExcelJS or zip work still run on the request thread, and they stall every other API, WebSocket, SSE, mail and sync task. On the main thread a cold heavy-sheet preview stalled the event loop for 14.1 s. In the child the same preview's worst loop delay is 30 ms. Image and video thumbnails have their own Worker thread (`lib/shared/thumbnail-worker.ts`).
+Awaiting a preview only suspends the caller. Yjs materialization, formula recalc, HTML rendering, sanitizing, xlsx and docx reading and writing, and zip work still run on the request thread, and they stall every other API, WebSocket, SSE, mail and sync task. On the main thread a cold heavy-sheet preview stalled the event loop for 14.1 s. In the child the same preview's worst loop delay is 30 ms. Image and video thumbnails have their own Worker thread (`lib/shared/thumbnail-worker.ts`).
 
 ## Every transform takes one main-thread path
 
@@ -38,16 +38,16 @@ A core dump is off: an abort is an expected way for a child to die. macOS refuse
 
 | Arch | Machine | Usable, objects | Usable, `ArrayBuffer`s | docx bug65649 import | 1M-cell xlsx import | 1M-cell xlsx export |
 |---|---|---|---|---|---|---|
-| arm64 | 4 GiB | 1.72 GB | 1.58 GB | 0.54 GB | 1.52 GB | refused at 1.64 GB |
-| arm64 | 7.65 GiB | 3.32 GB | 3.02 GB | 0.53 GB | 1.52 GB | 1.79 GB |
-| amd64 | 4 GiB | 2.52 GB | 1.44 GB | 0.54 GB | 1.75 GB | 1.92 GB |
-| amd64 | 7.65 GiB | 5.39 GB | 2.87 GB | 0.61 GB | 1.57 GB | 1.81 GB |
+| arm64 | 4 GiB | 1.72 GB | 1.58 GB | 0.54 GB | 1.71 GB | refused at 1.64 GB |
+| arm64 | 7.65 GiB | 3.32 GB | 3.02 GB | 0.53 GB | 1.71 GB | 1.79 GB |
+| amd64 | 4 GiB | 2.52 GB | 1.44 GB | 0.54 GB | 1.74 GB | 1.92 GB |
+| amd64 | 7.65 GiB | 5.39 GB | 2.87 GB | 0.61 GB | 1.63 GB | 1.81 GB |
 
-So on a 4 GB arm64 host a 1M-cell xlsx export is refused while the 1M-cell import still fits. At 512 MiB Bun cannot start on x86-64 at all, so a test that dials the limit down stays at 1 GiB. **The usable share depends on the Bun version and the arch: re-measure it on every Bun bump**, with the Linux-only suite of `document-transform-runner.test.ts` and the jobs of the table, and correct the table and the help center's memory advice.
+The 1M-cell import is a workbook of 10,000 rows of 100 mixed cells (shared strings, dates, numbers, booleans, formulas and styles), read under the child's limits. So on a 4 GB arm64 host a 1M-cell xlsx export is refused while the 1M-cell import still fits. At 512 MiB Bun cannot start on x86-64 at all, so a test that dials the limit down stays at 1 GiB. **The usable share depends on the Bun version and the arch: re-measure it on every Bun bump**, with the Linux-only suite of `document-transform-runner.test.ts` and the jobs of the table, and correct the table and the help center's memory advice.
 
 ## A package's parts have a parse budget before the memory limit
 
-The memory limit refuses a file only once the parse has spent it, seconds in, and an OOXML part compresses a hundredfold: a 1 MB upload can hold a `[Content_Types].xml` that inflates to 180 MB. So `openPackage` (`apps/api/src/lib/core/opc.ts`) charges every part it parses whole against one budget per package, `[Content_Types].xml` and the relationships parts included: the part's declared size against `MAX_PACKAGE_XML_BYTES` (32 MiB) before it inflates, and its tags against `MAX_PACKAGE_XML_TAGS` (1,500,000) before it parses. A part past the budget refuses the whole file, a 413 in the format's words. One pair of limits serves every format: the docx, xlsx and pptx corpora's most is 15.5 MB and 611,000 tags, under half. The xlsx sheet grid and shared strings are parsed in batches outside this budget, under the xlsx import's own caps ([EXPORT.md](EXPORT.md)). The memory limit stays the backstop past both.
+The memory limit refuses a file only once the parse has spent it, seconds in, and an OOXML part compresses a hundredfold: a 1 MB upload can hold a `[Content_Types].xml` that inflates to 180 MB. So `openPackage` (`apps/api/src/lib/core/opc.ts`) charges every part it parses whole against one budget per package, `[Content_Types].xml` and the relationships parts included: the part's declared size against `MAX_PACKAGE_XML_BYTES` (32 MiB) before it inflates, and its tags against `MAX_PACKAGE_XML_TAGS` (1,500,000) before it parses. A part past the budget refuses the whole file, a 413 in the format's words. One pair of limits serves every format: the docx, xlsx and pptx corpora's most is 15.5 MB and 611,000 tags, under half. The xlsx sheet grid and shared strings are parsed in batches outside this budget, under the xlsx import's own caps, and a sheet's part past its grid under a budget of the same values ([EXPORT.md](EXPORT.md#zip-guards-run-before-the-parser-inflates-anything)). The memory limit stays the backstop past both.
 
 ## Out of memory is the job's, not the server's
 
@@ -64,7 +64,7 @@ A crash stays a 500 because a broken install, a missing entry or a dev's Ctrl-C 
 
 A SIGSEGV or SIGTRAP after the ack is also what a native crash looks like (Bun's XML parser, sharp), so one reads as out of memory too: an import answers it as too large, an extract indexes nothing, and an export or a preview answers 500. The job line logs the signal that ended the child, and a child killed by a signal sends no peak, so its line reads `peakRssBytes=-1`. On such a death Bun prints its crash banner and a `bun.report` link into the API's log: expected, not a bug to report.
 
-A caught out-of-memory must reach the child's top level, so `isOutOfMemory` (`core/errors.ts`) is rethrown by the catches that would turn it into something else: the XML and zip readers (a 400), the xlsx import (a 400), the docx import's error mapping, its block check (a flattened block) and its optional parts (a dropped part), and a Yjs blob (skipped, which would export a truncated document). The other catches a transform reaches may swallow one: an object allocation aborts before any catch sees it, and the vCard, `.eml` and `.ics` previews' 422s, the calendar parser's skipped event and the sheet engine's formula catches hold allocations too small to fail first. Three keep it on purpose: a recalc that runs out of memory, on import or on export, falls back to the parsed or replayed values with a `recalc-failed` warning, as for any recalc failure ([§ A failure never falls back to the main thread](#a-failure-never-falls-back-to-the-main-thread)), and a docx or pptx export's SVG that can't be drawn is left out, a docx keeping its caption.
+A caught out-of-memory must reach the child's top level, so `isOutOfMemory` (`core/errors.ts`) is rethrown by the catches that would turn it into something else: the XML and zip readers (a 400), the imports' error mapping (`importError`, `import/messages.ts`), the docx import's block check (a flattened block), the optional parts of a package (a dropped part), and a Yjs blob (skipped, which would export a truncated document). The other catches a transform reaches may swallow one: an object allocation aborts before any catch sees it, and the vCard, `.eml` and `.ics` previews' 422s, the calendar parser's skipped event and the sheet engine's formula catches hold allocations too small to fail first. Three keep it on purpose: a recalc that runs out of memory, on import or on export, falls back to the parsed or replayed values with a `recalc-failed` warning, as for any recalc failure ([§ A failure never falls back to the main thread](#a-failure-never-falls-back-to-the-main-thread)), and a docx or pptx export's SVG that can't be drawn is left out, a docx keeping its caption.
 
 ## Only buffers and plain data cross the boundary
 
@@ -86,7 +86,7 @@ The snapshot flush deletes every update with `id <= lastUpdateId` in the same tr
 
 ## One child runs at a time
 
-Memory is the limit, not cores: one ExcelJS or Yjs heap exists at a time, and each child may use what the machine has. The sheet cell cap fires only after ExcelJS has loaded the workbook ([EXPORT.md](EXPORT.md#zip-guards-run-before-the-parser-inflates-anything)). So concurrency 1, the one-shot lifetime, the memory limit, the zip guards and the output byte guards are all load-bearing.
+Memory is the limit, not cores: one reader's, writer's or Yjs heap exists at a time, and each child may use what the machine has. A reader builds a part's XML tree before its output caps can count what the tree holds, and a tree costs many times its text ([EXPORT.md](EXPORT.md#zip-guards-run-before-the-parser-inflates-anything)). So concurrency 1, the one-shot lifetime, the memory limit, the zip guards and the output byte guards are all load-bearing.
 
 ## Admission is bounded by predicted wait
 

@@ -2,7 +2,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import { type BorderSide, columnIndexToLabel, type MergeCell } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { booleanDisplay, cellWrapsText, numberDisplay, parseCellInput } from '../../engine/format';
+import { booleanDisplay, cellWrapsText, dropRuns, numberDisplay, parseCellInput, richText } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
@@ -104,6 +104,8 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
 
         if (d?.ct && d.ct.t === 'd') {
             retv = d.m;
+        } else if (attr === 'v' || attr === 'm') {
+            retv = richText(d) ?? retv;
         }
     }
 
@@ -152,6 +154,11 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         }
     } else {
         vupdate = v;
+    }
+
+    // A rich write, runs with no value or formula, brings its runs; any other write drops the cell's.
+    if (cell != null && !(isPlainObject(v) && isNil(v.f) && isRealNull(vupdate) && richText(v) !== undefined)) {
+        dropRuns(cell);
     }
 
     if (isRealNull(vupdate)) {
@@ -263,18 +270,8 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
 }
 
 export function getRealCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell) {
-    let value = getCellValue(r, c, data, 'm');
-    if (isNil(value)) {
-        value = getCellValue(r, c, data, attr);
-        if (isNil(value)) {
-            const ct = getCellValue(r, c, data, 'ct');
-            if (isInlineStringCT(ct)) {
-                value = ct.s;
-            }
-        }
-    }
-
-    return value;
+    const value = getCellValue(r, c, data, 'm');
+    return isNil(value) ? getCellValue(r, c, data, attr) : value;
 }
 
 // A number stored as text (qp === 1) that still reads as a number. The painter marks it with a
@@ -686,6 +683,10 @@ export function updateCell(
                     }
                 }
             }
+        } else {
+            // A rich edit's dependents read its runs, as a plain edit's read its value.
+            delFunctionGroup(ctx, r, c);
+            execFunctionGroup(ctx, r, c, curv);
         }
         value = curv;
     } else {

@@ -139,9 +139,7 @@ describe('engine/formula-shift — functionCopy formulas', () => {
     test('shifts refs inside function calls', () => {
         expect(functionCopy('=SUM(A1,B1,C1)', 1, 0)).toBe('SUM(A2,B2,C2)');
         expect(functionCopy('=SUM(A1:A3)', 1, 0)).toBe('SUM(A2:A4)');
-        // Note: leading whitespace inside arguments is discarded by `str.trim()` at the
-        // recursion boundary — same behavior as the original state-side functionCopy.
-        expect(functionCopy('=AND(A1>0, B1>0)', 1, 0)).toBe('AND(A2>0,B2>0)');
+        expect(functionCopy('=AND(A1>0, B1>0)', 1, 0)).toBe('AND(A2>0, B2>0)');
     });
 
     test('shifts row-only range inside SUM', () => {
@@ -159,6 +157,68 @@ describe('engine/formula-shift — functionCopy formulas', () => {
     test('step=0 is a no-op', () => {
         expect(functionCopy('=A1+B1', 0, 0)).toBe('A1+B1');
         expect(functionCopy('=A1:B3', 0, 0)).toBe('A1:B3');
+    });
+});
+
+// What an xlsx's shared formulas and a paste write: a copy reads as the original at its offset, or as #REF!.
+describe('engine/formula-shift — functionCopy sheet names, intersections and chained ranges', () => {
+    test('a quoted sheet name is kept as written, its commas, spaces, brackets and doubled quotes too', () => {
+        expect(functionCopy("=SUM('Q1, 2023'!A1:A3)", 1, 1)).toBe("SUM('Q1, 2023'!B2:B4)");
+        expect(functionCopy("='My (Sheet)'!A1+'a+b'!A1", 1, 1)).toBe("'My (Sheet)'!B2+'a+b'!B2");
+        expect(functionCopy("='It''s, here'!A1", 1, 1)).toBe("'It''s, here'!B2");
+    });
+
+    test('spaces are kept, and an intersection shifts both its ranges', () => {
+        expect(functionCopy('=IF(A1>0, 1, 0)', 1, 1)).toBe('IF(B2>0, 1, 0)');
+        expect(functionCopy('=A1 B1', 1, 1)).toBe('B2 C2');
+        expect(functionCopy('=SUM(A1:B2 B1:C3)', 1, 1)).toBe('SUM(B2:C3 C2:D4)');
+        expect(functionCopy('=A1&" x, y "&B1', 1, 1)).toBe('B2&" x, y "&C2');
+    });
+
+    test('a chained range moves every leg, or is #REF! when one leaves the sheet', () => {
+        expect(functionCopy('=A1:A2:A3', 1, 1)).toBe('B2:B3:B4');
+        expect(functionCopy('=SUM(Sheet1!A1:A2:B3)', 1, 1)).toBe('SUM(Sheet1!B2:B3:C4)');
+        expect(functionCopy('=A1:A2:A3', -1, 0)).toBe('#REF!');
+    });
+
+    test('a range that names its sheet on both legs keeps both names', () => {
+        expect(functionCopy("='Sheet 1'!A1:'Sheet 1'!B2", 1, 1)).toBe("'Sheet 1'!B2:'Sheet 1'!C3");
+        expect(functionCopy('=SUM(Data!A1:Data!A3)', 1, 0)).toBe('SUM(Data!A2:Data!A4)');
+    });
+
+    // A sheet prefix the reader can't split into one sheet per leg is no ref it can move.
+    test('a ref naming more sheets than legs is kept as written', () => {
+        for (const formula of ['=a!b!A1:B2', '=a!!A1:B2', "='x'!'y'!A1:B2"]) {
+            expect(functionCopy(formula, 1, 1)).toBe(formula.slice(1));
+            expect(functionStrChange(formula, 'add', 'row', 'lefttop', 0, 1, 'a', false)).toBe(formula.slice(1));
+        }
+    });
+
+    test("spaces around a range's colon are the range's; before a bracket they are an intersection, as in Excel", () => {
+        expect(functionCopy('=SUM(A1 :B2)', 1, 1)).toBe('SUM(B2:C3)');
+        expect(functionCopy('=SUM(A1: B2)', 1, 1)).toBe('SUM(B2:C3)');
+        expect(functionCopy('=SUM(A1  :  B2)+C1', 1, 1)).toBe('SUM(B2:C3)+D2');
+        expect(functionCopy('=A1 (B1:C2)', 1, 1)).toBe('B2 (C2:D3)');
+        expect(functionCopy('=SUM(A1:B2 (B1:C3))', 1, 1)).toBe('SUM(B2:C3 (C2:D4))');
+        expect(functionCopy('=LOG10 (A1)', 1, 1)).toBe('LOH11 (B2)');
+        expect(functionCopy('=A1  B1', 1, 1)).toBe('B2  C2');
+    });
+
+    test('a 3D reference, a workbook reference and whole rows and columns still shift as before', () => {
+        expect(functionCopy('=SUM(Sheet1:Sheet3!A1)', 1, 1)).toBe('SUM(Sheet1:Sheet3!B2)');
+        expect(functionCopy('=[1]Sheet1!A1', 1, 1)).toBe('[1]Sheet1!B2');
+        expect(functionCopy('=SUM(A:A)', 1, 1)).toBe('SUM(B:B)');
+        expect(functionCopy('=SUM(1:1)', 1, 1)).toBe('SUM(2:2)');
+    });
+});
+
+describe('functionStrChange — sheet names on both legs', () => {
+    test('moves the range as the one naming its sheet once does', () => {
+        const once = functionStrChange("='Sheet 1'!A1:B2", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false);
+        expect(functionStrChange("='Sheet 1'!A1:'Sheet 1'!B2", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false)).toBe(
+            once.replace(':', ":'Sheet 1'!"),
+        );
+        expect(once).not.toBe("'Sheet 1'!A1:B2");
     });
 });
 
@@ -369,5 +429,25 @@ describe('functionStrChange — unary-minus predecessor scan', () => {
     test('functionCopy output is unchanged on the same input (already reads i-1)', () => {
         expect(functionCopy('CONCAT(-1:3)', 1, 0)).toBe('CONCAT(-1:3)');
         expect(functionCopy('CONCAT(-3:A10)', 1, 0)).toBe('CONCAT(-3:A10)');
+    });
+});
+
+describe('engine/formula-shift — functionCopy functions in a range and structured references', () => {
+    // A range may end or start at a function returning a reference: its other leg is a ref like any.
+    test('a function bordering a colon leaves the leg beside it a ref', () => {
+        expect(functionCopy('SUM(A1:OFFSET(A1,1,0))', 1, 0)).toBe('SUM(A2:OFFSET(A2,1,0))');
+        expect(functionCopy('SUM(B2:INDEX(B:B,ROW()))', 1, 0)).toBe('SUM(B3:INDEX(B:B,ROW()))');
+        expect(functionCopy('INDEX(A:A,1):A5', 1, 0)).toBe('INDEX(A:A,1):A6');
+        expect(functionCopy("SUM('My Sheet'!A1:INDEX('My Sheet'!A:A,3))", 1, 0)).toBe(
+            "SUM('My Sheet'!A2:INDEX('My Sheet'!A:A,3))",
+        );
+    });
+
+    // `'` escapes a structured reference's special character; it opens no sheet name there.
+    test('a structured reference is no ref, and its escape quote opens no sheet name', () => {
+        expect(functionCopy("Table1[[#This Row],[Item '#]]*B1", 1, 0)).toBe("Table1[[#This Row],[Item '#]]*B2");
+        expect(functionCopy('Table1[[#This Row],[A1]]+A1', 1, 0)).toBe('Table1[[#This Row],[A1]]+A2');
+        expect(functionCopy("Table1[a'[b]*B1", 1, 0)).toBe("Table1[a'[b]*B2");
+        expect(functionCopy("Table1[[#This Row],[a']b]]*B1", 1, 0)).toBe("Table1[[#This Row],[a']b]]*B2");
     });
 });

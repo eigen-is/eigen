@@ -4,7 +4,7 @@ import { alternativeFor, isOn, R_NS, W_NS } from '../../core/ooxml';
 import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../core/opc';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import type { ZipReader } from '../../core/zip';
-import { DOCUMENT_TOO_LARGE } from '../messages';
+import { IMPORT_MESSAGES } from '../messages';
 
 // A piece past a run's first is a node no tag counts, about 600 bytes held before the output is weighed; the corpus's
 // most is 1,055.
@@ -17,9 +17,6 @@ export const MAX_DOCX_WEIGHT = 150_000;
 
 // A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
 export const CHARS_PER_UNIT = 512;
-
-export const NOT_A_DOCX = 'Not a valid docx file';
-const PASSWORD_PROTECTED = 'This document is password-protected. Remove the password in Word and import it again.';
 
 export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
 
@@ -50,7 +47,7 @@ export type DocxPackage = {
 };
 
 export function readPackage(bytes: Uint8Array): DocxPackage {
-    const pkg = openPackage(bytes, { passwordProtected: PASSWORD_PROTECTED, tooLarge: DOCUMENT_TOO_LARGE });
+    const pkg = openPackage(bytes, IMPORT_MESSAGES.docx);
     let pieces = MAX_DOCX_PIECES;
     let mathml = MAX_DOCX_WEIGHT * CHARS_PER_UNIT;
     const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
@@ -58,7 +55,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
     // By relationship, else where Word puts the part.
     const located = (type: string) => relOfType(documentRels, type) ?? `word/${type}.xml`;
     const document = pkg.part(documentPath);
-    if (!document) throw new ApiError(400, NOT_A_DOCX);
+    if (!document) throw new ApiError(400, IMPORT_MESSAGES.docx.invalid);
     const xml = (type: string) => optional(() => pkg.part(located(type)));
     const part = (type: string) =>
         optional((): Part | undefined => {
@@ -108,11 +105,11 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         readMedia: (path) => optional(() => pkg.zip.read(path)),
         chargePiece: () => {
             pieces--;
-            if (pieces < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+            if (pieces < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         },
         chargeMathml: (length) => {
             mathml -= length;
-            if (mathml < 0) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+            if (mathml < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         },
     };
 }

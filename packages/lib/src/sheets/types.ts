@@ -247,6 +247,10 @@ export type Sheet = {
     name: string;
     id?: string;
     order?: number;
+    // 1 hides the tab (View > Hidden sheets shows it again); the editor opens on a sheet it shows.
+    hide?: number;
+    // The tab's colour, a CSS colour.
+    color?: string;
     config?: SheetConfig;
     celldata?: CellWithRowAndCol[];
     data?: CellMatrix;

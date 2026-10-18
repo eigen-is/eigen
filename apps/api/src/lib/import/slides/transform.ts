@@ -12,7 +12,8 @@ import {
     type TransformWarning,
     toTransferableBuffer,
 } from '../../document/transform/protocol';
-import { importError, readPptx } from './from-pptx';
+import { importError } from '../messages';
+import { readPptx } from './from-pptx';
 import { PPTX_STYLE } from './shapes';
 
 // Runs in the transform process: the reader and the Yjs encoding both stay off the event loop. The main thread
@@ -50,7 +51,7 @@ export function importPptxToSlidesUpdate(
         update = Y.encodeStateAsUpdate(doc);
         doc.destroy();
     } catch (error) {
-        throw importError(error);
+        throw importError(error, 'pptx');
     }
     return {
         update: toTransferableBuffer(update),

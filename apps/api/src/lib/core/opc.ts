@@ -46,14 +46,26 @@ export function uriReference(href: string): string {
 }
 
 // An absolute target climbs from the package root, so neither kind keeps a '..' a format's prefix check would miss.
+// A part name is a URI, so a target's escapes are decoded, `sheet%201.xml` naming the entry `sheet 1.xml`; a malformed
+// one, or one that would add a '/' no '..' check saw, is kept as written.
 function resolveTarget(base: string, target: string): string {
     const parts = target.startsWith('/') ? [] : base.split('/').slice(0, -1);
-    for (const segment of target.split('/')) {
+    for (const written of target.split('/')) {
+        const segment = written.replace(ESCAPES, (escapes) => {
+            try {
+                const decoded = decodeURIComponent(escapes);
+                return decoded.includes('/') ? escapes : decoded;
+            } catch {
+                return escapes;
+            }
+        });
         if (segment === '..') parts.pop();
         else if (segment !== '.' && segment !== '') parts.push(segment);
     }
     return parts.join('/');
 }
+
+const ESCAPES = /(?:%[0-9A-Fa-f]{2})+/g;
 
 // A format reads its package only through relationships and [Content_Types].xml, so an entry named outside them is never
 // read.
@@ -139,7 +151,7 @@ export function openPackage(bytes: Uint8Array, messages: PackageMessages): Ooxml
 
 const LESS_THAN = 0x3c;
 
-function tagsIn(data: Uint8Array): number {
+export function tagsIn(data: Uint8Array): number {
     let tags = 0;
     for (let at = data.indexOf(LESS_THAN); at >= 0; at = data.indexOf(LESS_THAN, at + 1)) tags++;
     return tags;

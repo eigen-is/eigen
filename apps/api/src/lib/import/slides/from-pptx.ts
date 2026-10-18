@@ -1,14 +1,13 @@
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import { type NewVectorElement, nearestSlideSize, SLIDE_SIZES, type SlideSize } from '@workspace/lib/vector';
-import { ApiError, isOutOfMemory } from '../../core/errors';
+import { ApiError } from '../../core/errors';
 import { P_NS } from '../../core/ooxml';
-import { type XmlElement, XmlError, xmlAttr } from '../../core/xml';
-import { ZipError } from '../../core/zip';
+import { type XmlElement, xmlAttr } from '../../core/xml';
 import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
-import { PRESENTATION_TOO_LARGE } from '../messages';
+import { IMPORT_MESSAGES, importError } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
 import { childOf, withWorkBudget } from './lookup';
-import { type DeckWalk, type Frame, NOT_A_PPTX, readPackage } from './package';
+import { type DeckWalk, type Frame, readPackage } from './package';
 import { readSlideShapes } from './shapes';
 
 // pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
@@ -45,7 +44,7 @@ export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     try {
         return withWorkBudget(MAX_PPTX_WORK, () => readDeck(bytes, options));
     } catch (error) {
-        throw importError(error);
+        throw importError(error, 'pptx');
     }
 }
 
@@ -83,7 +82,7 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
             if (names.has(part.path)) return names.get(part.path);
             mediaBytes += part.size;
             if (names.size >= MAX_MEDIA_PARTS || mediaBytes > options.maxMediaBytes)
-                throw new ApiError(413, PRESENTATION_TOO_LARGE);
+                throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
             // Read as it is named, so a picture whose bytes don't read is dropped where it is shown.
             const data = pkg.readMedia(part.path);
             const name = data && `${prefix}-image-${media.length + 1}.${part.extension}`;
@@ -110,18 +109,4 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
 
     const warnings: TransformWarning[] = [...losses].map(([code, sources]) => ({ code, count: sources.size }));
     return { slides, media, warnings, slideSize };
-}
-
-// The zip's and the XML's messages speak of archives and markup; the user uploaded a presentation.
-export function importError(error: unknown): Error {
-    if (isOutOfMemory(error)) return error;
-    if (error instanceof ZipError)
-        return new ApiError(error.status, error.status === 413 ? PRESENTATION_TOO_LARGE : NOT_A_PPTX, { cause: error });
-    if (error instanceof XmlError) return new ApiError(400, NOT_A_PPTX, { cause: error });
-    if (error instanceof ApiError) return error;
-    if (error instanceof RangeError && /call stack/i.test(error.message))
-        return new ApiError(413, PRESENTATION_TOO_LARGE, { cause: error });
-    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the log.
-    console.warn('[import] pptx import failed:', error instanceof Error ? (error.stack ?? error.message) : error);
-    return new ApiError(400, NOT_A_PPTX, { cause: error });
 }

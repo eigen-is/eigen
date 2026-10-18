@@ -72,19 +72,8 @@ export function getDataArr(regStr: string, ctx: Context) {
         const reg = new RegExp(regStr, 'g');
         const dataArr = [];
         for (let r = r1; r <= r2; r += 1) {
-            let rowArr = [];
-            const cell = data![r][c];
-            let value: string | number | boolean | null | undefined;
-            if (cell !== null && cell.m !== null) {
-                value = cell.m;
-            } else {
-                value = getCellValue(r, c, data!);
-            }
-            if (value === null || value === undefined) {
-                value = '';
-            }
-            rowArr = value.toString().split(reg);
-            dataArr.push(rowArr);
+            const value = getCellValue(r, c, data!, 'm') ?? getCellValue(r, c, data!);
+            dataArr.push(String(value ?? '').split(reg));
         }
         const rlen = dataArr.length;
         let clen = 0;
@@ -104,13 +93,7 @@ export function getDataArr(regStr: string, ctx: Context) {
     } else {
         for (let r = r1; r <= r2; r += 1) {
             const rowArr = [];
-            const cell = data![r][c];
-            let value: string | number | boolean | null | undefined;
-            if (cell !== null && cell.m !== null) {
-                value = cell.m;
-            } else {
-                value = getCellValue(r, c, data!);
-            }
+            const value = getCellValue(r, c, data!, 'm') ?? getCellValue(r, c, data!);
 
             rowArr.push(value == null ? '' : String(value));
 

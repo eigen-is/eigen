@@ -1,7 +1,7 @@
 import { escapeHtml } from '@workspace/lib/html';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { inlineStringText } from '../../engine/format';
+import { richText } from '../../engine/format';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import {
     cancelNormalSelected,
@@ -9,7 +9,6 @@ import {
     getFormulaHtml,
     handleFormulaInput,
     isAllowEdit,
-    isInlineStringCell,
     isShowHidenCR,
     moveHighlightCell,
     rangeHightlightselected,
@@ -47,8 +46,9 @@ export function FxEditor() {
             const cell = d?.[r]?.[c];
             let isGeneratedHtml = false;
             if (cell) {
-                if (isInlineStringCell(cell)) {
-                    value = inlineStringText(cell.ct);
+                const rich = richText(cell);
+                if (rich !== undefined) {
+                    value = rich;
                 } else if (cell.f) {
                     // Colored spans, escaped at their leaves — render, do not escape again.
                     value = getFormulaHtml(r, c, d) ?? '';

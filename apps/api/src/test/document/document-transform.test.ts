@@ -34,7 +34,7 @@ import {
 } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
-import { readSheetsFromDoc } from '../../lib/document/sheets';
+import { readSheetsFromDoc, SERVER_RECALC_BUDGET } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import {
     type DocumentTransformRequest,
@@ -53,7 +53,7 @@ import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
 import { type DocxImage, docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
-import { DOCUMENT_TOO_LARGE, PRESENTATION_TOO_LARGE, SPREADSHEET_TOO_LARGE } from '../../lib/import/messages';
+import { IMPORT_MESSAGES } from '../../lib/import/messages';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
@@ -303,6 +303,29 @@ describe('document transform (eigensheets preview)', () => {
         }
     });
 
+    test("the export's recalc runs under the server's budget", () => {
+        const original = { ...engine };
+        const budgets: unknown[] = [];
+        mock.module('@workspace/sheet/engine', () => ({
+            ...original,
+            recalcSheets: (sheets: Sheet[], options?: { maxDependencyBlocks?: number; maxCellsRead?: number }) => {
+                budgets.push(options);
+                return original.recalcSheets(sheets, options);
+            },
+        }));
+        try {
+            const doc = new Y.Doc();
+            const sheets: Sheet[] = [
+                { id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata: [{ r: 0, c: 0, v: { f: '=1+1' } }] },
+            ];
+            doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
+            expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(2);
+            expect(budgets).toEqual([SERVER_RECALC_BUDGET]);
+        } finally {
+            mock.module('@workspace/sheet/engine', () => original);
+        }
+    });
+
     test('byte guard replaces an oversized body with the truncated notice, never a sliced string', async () => {
         // The budget counts cells, not bytes — one enormous cell sails through
         // 200×50/10k and only the byte guard stands between it and the cache.
@@ -535,8 +558,9 @@ describe('document transform (eigensheets export)', () => {
 // Recorded from the import pipeline (xlsxToSheets + recalcImportedSheets +
 // encodeSheetsSnapshot) over buildImportFixture(), so the Worker and the main
 // thread are proven to emit the same bytes. Regenerate only for an intentional
-// converter or wire-format change (last moved by the snapshot v2 format).
-const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '310a4f1b918d8901737343cddd8bcad48487d706af4440b3d28670c398b2a4ae';
+// converter or wire-format change (last moved by Eigen's own xlsx reader, whose
+// merged cell B6 keeps no copy of its anchor's value).
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '965dcd01c81fc8e5e293405ce134623e27ca795f490e0230a7c480998479cff5';
 
 // Small but representative workbook: values, a stale cached formula result the
 // import recalc must correct, styles, a date format, a merge, a column width, a
@@ -602,7 +626,7 @@ const XLSX_FIXTURE: ImportFormatFixture = {
     build: buildImportFixture,
     readState: (pathId) => liveState(pathId, (doc) => doc.getMap('state').get('snapshot')),
     expectSeeded: (state) => expect(typeof state).toBe('string'),
-    tooLarge: SPREADSHEET_TOO_LARGE,
+    tooLarge: IMPORT_MESSAGES.xlsx.tooLarge,
 };
 
 const DOCX_FIXTURE: ImportFormatFixture = {
@@ -613,7 +637,7 @@ const DOCX_FIXTURE: ImportFormatFixture = {
     build: () => buildGoldenDocx(TEST_PNG_BYTES),
     readState: (pathId) => liveState(pathId, readEigendocFromDoc),
     expectSeeded: (state) => expect((state as JSONContent).content?.length).toBeGreaterThan(0),
-    tooLarge: DOCUMENT_TOO_LARGE,
+    tooLarge: IMPORT_MESSAGES.docx.tooLarge,
 };
 
 // A crashed child is the server's failure; one that ran out of memory says the file was too large for it, in the
@@ -710,7 +734,7 @@ describe('document transform (xlsx import)', () => {
         expect(response.ok && response.warnings).toEqual([]);
 
         // The same pure pipeline the Worker dispatches to, run on this thread.
-        const direct = await importXlsxToSheetsSnapshot(await buildImportFixture());
+        const direct = importXlsxToSheetsSnapshot(await buildImportFixture());
         expect(snapshotJson).toBe(new TextDecoder().decode(direct.snapshotJson));
         // The stale cached SUM(B2:B3)=999 was recomputed at import.
         const sheets = decodeSheetsSnapshot(snapshotJson);
@@ -742,7 +766,7 @@ describe('document transform (xlsx import)', () => {
             },
         }));
         try {
-            const { snapshotJson, warnings } = await importXlsxToSheetsSnapshot(await buildImportFixture());
+            const { snapshotJson, warnings } = importXlsxToSheetsSnapshot(await buildImportFixture());
             expect(warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
             const sheets = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
             // Parsed values survive: the xlsx's own stale cached result, not a failure.
@@ -1557,9 +1581,9 @@ const UNOPENED_DRIVE = {
 
 describe('document transform (input bound)', () => {
     test.each([
-        [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, SPREADSHEET_TOO_LARGE],
-        [DRIVE_TYPE_DOC, DRIVE_MIME_DOC, DOCUMENT_TOO_LARGE],
-        [DRIVE_TYPE_SLIDES, DRIVE_MIME_SLIDES, PRESENTATION_TOO_LARGE],
+        [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, IMPORT_MESSAGES.xlsx.tooLarge],
+        [DRIVE_TYPE_DOC, DRIVE_MIME_DOC, IMPORT_MESSAGES.docx.tooLarge],
+        [DRIVE_TYPE_SLIDES, DRIVE_MIME_SLIDES, IMPORT_MESSAGES.pptx.tooLarge],
     ])('an import past the byte cap into a %s is 413 and never runs', async (type, mimeType, message) => {
         const runSpy = spyOn(documentTransformRunner, 'run');
         try {
@@ -1576,8 +1600,8 @@ describe('document transform (input bound)', () => {
     });
 
     test.each([
-        ['eigensheets', 'large.xlsx', SPREADSHEET_TOO_LARGE],
-        ['eigendoc', 'large.docx', DOCUMENT_TOO_LARGE],
+        ['eigensheets', 'large.xlsx', IMPORT_MESSAGES.xlsx.tooLarge],
+        ['eigendoc', 'large.docx', IMPORT_MESSAGES.docx.tooLarge],
     ] as const)(
         'a convert to %s of a stored file past the byte cap is 413 and never reads it',
         async (target, name, message) => {

@@ -1,8 +1,9 @@
-import { cloneDeep, isEmpty } from 'es-toolkit/compat';
+import { cloneDeep } from 'es-toolkit/compat';
+import { cellValue } from '../../engine/format';
+import { isRealNull } from '../../engine/validation';
 import type { Context } from '../context';
 import type { Cell, CellMatrix, MergeCell, Range } from '../types';
 import { getSheetIndex } from '../utils';
-import { isInlineStringCT } from './inline-string';
 
 // Restore the cells covered by merges intersecting the range: the anchor cell's
 // content is stashed in `fv` and re-applied, the other members are cleared.
@@ -121,11 +122,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
                         for (let c = c1; c <= c2; c += 1) {
                             const cell = d[r][c];
 
-                            if (
-                                cell != null &&
-                                (isInlineStringCT(cell.ct) || !isEmpty(cell.v) || cell.f != null) &&
-                                !isfirst
-                            ) {
+                            if (cell != null && (!isRealNull(cellValue(cell)) || cell.f != null) && !isfirst) {
                                 fv = cloneDeep(cell) || {};
                                 isfirst = true;
                             }
@@ -153,7 +150,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
                         for (let r = r1; r <= r2; r += 1) {
                             const cell = d[r][c];
 
-                            if (cell != null && (!isEmpty(cell.v) || cell.f != null) && !isfirst) {
+                            if (cell != null && (!isRealNull(cellValue(cell)) || cell.f != null) && !isfirst) {
                                 fv = cloneDeep(cell) || {};
                                 isfirst = true;
                             }
@@ -181,7 +178,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
                         for (let c = c1; c <= c2; c += 1) {
                             const cell = d[r][c];
 
-                            if (cell != null && (!isEmpty(cell.v) || cell.f != null) && !isfirst) {
+                            if (cell != null && (!isRealNull(cellValue(cell)) || cell.f != null) && !isfirst) {
                                 fv = cloneDeep(cell) || {};
                                 isfirst = true;
                             }

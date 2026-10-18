@@ -60,6 +60,15 @@ describe('a relationship target', () => {
         expect(targetOf('/../../word/./x.png')).toBe('word/x.png');
     });
 
+    // A part name is a URI: a space in an entry's name is %20 in its target, and a malformed escape is no escape.
+    test("an internal target's escapes are decoded, a malformed one kept as written", () => {
+        expect(targetOf('worksheets/sheet%201.xml', 'xl/workbook.xml')).toBe('xl/worksheets/sheet 1.xml');
+        expect(targetOf('media/caf%C3%A9%2.png')).toBe('word/media/café%2.png');
+        expect(targetOf('media/%E9%zz.png')).toBe('word/media/%E9%zz.png');
+        expect(targetOf('%2E%2E/x.png', 'xl/worksheets/sheet1.xml')).toBe('xl/x.png');
+        expect(targetOf('media/%2E%2E%2F%2E%2E%2Fevil.xml')).toBe('word/media/%2E%2E%2F%2E%2E%2Fevil.xml');
+    });
+
     test('an External target is kept as written, and is no part', () => {
         const external = rels(
             `<Relationship Id="rId1" Type="${IMAGE}" Target="https://example.com/x.png" TargetMode="External"/>`,

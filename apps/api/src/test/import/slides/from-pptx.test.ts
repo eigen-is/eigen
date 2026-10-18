@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
-import { importError, MAX_MEDIA_PARTS, MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
+import { MAX_MEDIA_PARTS, MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_SLIDES } from '../../../lib/import/slides/package';
 import { MAX_ELEMENTS, MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import { box, buildPptx, NS, PIXEL_PNG, para, pic, pptxParts, rel, solid, sp, zipParts } from '../../fixtures/pptx';
@@ -170,12 +170,5 @@ describe('limits', () => {
         const read = (count: number) => refusal(buildPptx({ masters: [{ shapes: master }], slides: slides(count) }));
         expect(read(9)).toBe('read');
         expect(read(10)).toEqual([413, TOO_LARGE]);
-    });
-
-    test('a stack the file outgrew is too large, a slip of the reader is a file it cannot read', () => {
-        const overflow = importError(new RangeError('Maximum call stack size exceeded.'));
-        expect(overflow).toMatchObject({ status: 413, message: TOO_LARGE });
-        const slip = importError(new TypeError('x is undefined'));
-        expect(slip).toMatchObject({ status: 400, message: 'Not a valid pptx file' });
     });
 });

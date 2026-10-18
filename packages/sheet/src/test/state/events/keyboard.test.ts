@@ -212,6 +212,23 @@ describe('handleGlobalKeyDown — Ctrl+D / Ctrl+R fill', () => {
     });
 });
 
+// Ctrl+Arrow stops on a rich-text cell, which keeps its text in its runs with no `v`.
+describe('handleGlobalKeyDown — Ctrl+Arrow over rich text', () => {
+    test('Ctrl+Down stops on a rich cell below a gap', () => {
+        const rich: Cell = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Note' }] } };
+        const data: (Cell | null)[][] = [[{ v: 'a', m: 'a' }], [null], [rich], [null], [null]];
+        const ctx = contextFactory({
+            // No `row` or `column`: a loaded sheet has neither until a row or column is inserted.
+            sheets: [{ name: 'Sheet1', id: 'id_1', order: 0, data }],
+            selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
+        }) as Context;
+        ctx.sheetFocused = true;
+        ctx.editingCellPosition = [];
+        keyDown(ctx, 'ArrowDown', { ctrlKey: true });
+        expect(ctx.selections?.[0]?.row_focus).toBe(2);
+    });
+});
+
 // Tab while editing commits the cell and moves right, Shift+Tab left, as Enter commits and moves
 // down: Google's behavior. The keydown returned early and the edit stayed open.
 describe('handleGlobalKeyDown — Tab while editing', () => {

@@ -62,6 +62,26 @@ function dvRule(
     return { value2: '', prohibitInput: false, hintShow: false, hintValue: '', ...partial };
 }
 
+describe("Excel's future functions", () => {
+    test('are written with their prefixes, so Excel reads them as functions, and read back without', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 1, f: '=IFNA(B1,0)' } },
+                    { r: 0, c: 1, v: { v: 2, f: '=SORT(C1:C2)+SUM(C1:C2)' } },
+                ],
+            },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const xml = await readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
+        expect(xml).toContain('<f>_xlfn.IFNA(B1,0)</f>');
+        expect(xml).toContain('<f>_xlfn._xlws.SORT(C1:C2)+SUM(C1:C2)</f>');
+        const cells = xlsxToSheets(buffer)[0].celldata ?? [];
+        expect(cells.map((cell) => cell.v?.f)).toEqual(['=IFNA(B1,0)', '=SORT(C1:C2)+SUM(C1:C2)']);
+    });
+});
+
 describe('Sheets xlsx export', () => {
     test('writes textRotation in signed degrees', async () => {
         const sheets: Sheet[] = [
@@ -158,7 +178,7 @@ describe('Sheets xlsx export', () => {
         expect(byCoord.get('1:0')?.ct).toEqual({ fa: '0.00%', t: 'n' });
         // Number/currency masks round-trip byte-for-byte; a date mask's month token is
         // canonicalised to the Google convention on re-import (`m` → `M`), which numfmt
-        // renders identically (see normalizeMonthMinuteTokens in from-xlsx).
+        // renders identically (see normalizeMonthMinuteTokens in import/sheets/styles.ts).
         expect(byCoord.get('2:0')?.ct).toEqual({ fa: 'M/d/yyyy', t: 'd' });
         expect(byCoord.get('2:0')?.v).toBe(45366);
     });
@@ -1067,6 +1087,56 @@ describe('Sheets xlsx export — merged-cell borders', () => {
     });
 });
 
+describe('Sheets xlsx export — the tabs', () => {
+    test('a hidden sheet exports hidden and a tab its colour, and both import back', async () => {
+        const sheets: Sheet[] = [
+            { name: 'Shown', celldata: [], color: '#FF0000' },
+            { name: 'Hidden', celldata: [], hide: 1, color: 'rgb(0, 128, 255)' },
+            { name: 'Plain', celldata: [] },
+        ];
+        const wb = await exportAndReload(sheets);
+        expect(getSheet(wb, 'Shown').state).toBe('visible');
+        expect(getSheet(wb, 'Hidden').state).toBe('hidden');
+        expect(getSheet(wb, 'Shown').properties.tabColor).toEqual({ argb: 'FFFF0000' });
+        expect(getSheet(wb, 'Plain').properties.tabColor).toBeUndefined();
+        const back = await roundTrip(sheets);
+        expect(back.map(({ hide, color }) => ({ hide, color }))).toEqual([
+            { hide: undefined, color: '#FF0000' },
+            { hide: 1, color: '#0080FF' },
+            { hide: undefined, color: undefined },
+        ]);
+    });
+});
+
+describe('Sheets xlsx export — the active tab', () => {
+    // Excel opens on the workbook's active tab, the first sheet unless told: a hidden one would open hidden.
+    test('is the first sheet shown, selected', async () => {
+        const sheets: Sheet[] = [
+            { name: 'Hidden', celldata: [], hide: 1 },
+            { name: 'Shown', celldata: [] },
+            { name: 'Later', celldata: [] },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        const workbook = await readZipEntry(buffer, 'xl/workbook.xml');
+        expect(workbook).toMatch(/<workbookView\b[^>]*\bactiveTab="1"/);
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buffer);
+        expect(getSheet(wb, 'Hidden').state).toBe('hidden');
+        expect(await readZipEntry(buffer, 'xl/worksheets/sheet2.xml')).toMatch(/<sheetView\b[^>]*\btabSelected="1"/);
+        expect(await readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).not.toMatch(/tabSelected="1"/);
+    });
+
+    // Excel refuses a workbook with every sheet hidden; the import shows the first, and so does the export.
+    test('is the first sheet, shown, when every sheet is hidden', async () => {
+        const wb = await exportAndReload([
+            { name: 'One', celldata: [], hide: 1 },
+            { name: 'Two', celldata: [], hide: 1 },
+        ]);
+        expect(getSheet(wb, 'One').state).toBe('visible');
+        expect(getSheet(wb, 'Two').state).toBe('hidden');
+    });
+});
+
 describe('Sheets xlsx export — inline rich text', () => {
     test('exports ct.s segments as richText runs with mapped fonts', async () => {
         const sheets: Sheet[] = [
@@ -1110,10 +1180,17 @@ describe('Sheets xlsx export — inline rich text', () => {
             color: { argb: 'FF0080FF' },
         });
 
-        // Minimum bar: the concatenated text must survive a full round-trip.
+        // The runs come back with their looks, holding the text alone.
         const rt = await roundTrip(sheets);
         const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
-        expect(a1?.v?.v).toBe('Hello world');
+        expect(a1?.v?.v).toBeUndefined();
+        expect(a1?.v?.ct).toMatchObject({
+            t: 'inlineStr',
+            s: [
+                { v: 'Hello ', bl: 1, fc: '#FF0000' },
+                { v: 'world', it: 1, un: 1, cl: 1, fs: 14, fc: '#0080FF' },
+            ],
+        });
     });
 
     test('falls back to plain value when segments are empty or text-less', async () => {
@@ -1166,7 +1243,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(rels).toContain('TargetMode="External"');
 
         // Full importer round-trip: linkType/linkAddress and the hl backref restored.
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({
             '0_0': { linkType: 'webpage', linkAddress: 'https://jira.example.com/browse/PLATFORMS-1452' },
             '1_0': { linkType: 'webpage', linkAddress: 'mailto:erikjan@example.com' },
@@ -1193,7 +1270,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(xml).not.toContain('<hyperlink');
         expect(xml).not.toContain('javascript:');
 
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toBeUndefined();
     });
 
@@ -1223,7 +1300,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
 
         // Closed round-trip through the importer: sheet links re-import as
         // cellrange@A1 — accepted drift recorded in the spec.
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({
             '0_0': { linkType: 'cellrange', linkAddress: "'My Sheet'!A1" },
             '1_0': { linkType: 'cellrange', linkAddress: "'It''s'!A1" },
@@ -1259,7 +1336,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(xml).toContain('location="&apos;Sheet1&apos;!D4"');
         expect(xml).toContain('location="&apos;Sheet 2&apos;!A1"');
 
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({
             '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!B2' },
             '1_0': { linkType: 'cellrange', linkAddress: "'Sheet1'!D4" },
@@ -1306,7 +1383,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(rels).not.toContain('My Sheet');
 
         // The stripped form still round-trips through our own importer.
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink?.['1_0']).toEqual({ linkType: 'cellrange', linkAddress: "'My Sheet'!A1" });
     });
 
@@ -1365,7 +1442,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
             hyperlink: 'https://example.com/docs',
         });
 
-        const rt = await xlsxToSheets(buffer);
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({ '1_1': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } });
         const b2 = (rt[0].celldata ?? []).find((c) => c.r === 1 && c.c === 1);
         expect(b2?.v?.v).toBe('https://example.com/docs');
@@ -1417,11 +1494,11 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(runs[1].text).toBe('docs');
         expect(runs[1].font).toMatchObject({ color: { argb: 'FF0000FF' } });
 
-        // Importer round-trip: the concatenated text and the link both survive.
-        const rt = await xlsxToSheets(buffer);
+        // Importer round-trip: the runs and the link both survive.
+        const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({ '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } });
         const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
-        expect(a1?.v?.v).toBe('Eigen docs');
+        expect(a1?.v?.ct?.s?.map((run) => run.v).join('')).toBe('Eigen docs');
         expect(a1?.v?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
     });
 });

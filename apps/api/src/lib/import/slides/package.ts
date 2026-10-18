@@ -6,14 +6,11 @@ import type { XmlElement } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { POINTS_PER_UNIT } from '../doc/package';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
-import { PRESENTATION_TOO_LARGE } from '../messages';
+import { IMPORT_MESSAGES } from '../messages';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 
 export const MAX_SLIDES = 500;
 
-export const NOT_A_PPTX = 'Not a valid pptx file';
-const PASSWORD_PROTECTED =
-    'This presentation is password-protected. Remove the password in PowerPoint and import it again.';
 const SAVE_AS_PPTX =
     'Only .pptx presentations can be imported. Save the file as a .pptx in PowerPoint and import it again.';
 
@@ -91,7 +88,7 @@ export type Lost = (code: CountedWarningCode) => void;
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
 export function readPackage(bytes: Uint8Array): PptxPackage {
     // Every part it parses, [Content_Types].xml and the relationships too, spends the package's one parse budget.
-    const pkg = openPackage(bytes, { passwordProtected: PASSWORD_PROTECTED, tooLarge: PRESENTATION_TOO_LARGE });
+    const pkg = openPackage(bytes, IMPORT_MESSAGES.pptx);
     const read = (path: string | undefined, kind: PartKind): Part | undefined => {
         if (!path?.startsWith('ppt/') || pkg.contentTypeOf(path) !== PART_TYPES[kind]) return undefined;
         const root = pkg.part(path);
@@ -101,13 +98,13 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
     const main = relOfType(pkg.relationships(''), 'officeDocument');
     const mainType = main && pkg.contentTypeOf(main);
     if (mainType && NOT_A_PRESENTATION.has(mainType)) throw new ApiError(400, SAVE_AS_PPTX);
-    if (!main?.startsWith('ppt/') || mainType !== PRESENTATION) throw new ApiError(400, NOT_A_PPTX);
+    if (!main?.startsWith('ppt/') || mainType !== PRESENTATION) throw new ApiError(400, IMPORT_MESSAGES.pptx.invalid);
     const root = pkg.part(main);
-    if (root?.ns !== P_NS || root.local !== 'presentation') throw new ApiError(400, NOT_A_PPTX);
+    if (root?.ns !== P_NS || root.local !== 'presentation') throw new ApiError(400, IMPORT_MESSAGES.pptx.invalid);
     const presentation: Part = { path: main, root, rels: pkg.relationships(main) };
 
     const ids = childrenOf(childOf(root, P_NS, 'sldIdLst') ?? root, P_NS, 'sldId');
-    if (ids.length > MAX_SLIDES) throw new ApiError(413, PRESENTATION_TOO_LARGE);
+    if (ids.length > MAX_SLIDES) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
     // PowerPoint lists a slide once; a list naming one again would read it again.
     const listed = ids.flatMap((id) => {
         const rel = presentation.rels.get(prefixedAttrOf(id, R_NS, 'id') ?? '');

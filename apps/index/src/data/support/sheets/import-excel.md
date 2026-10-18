@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-09-23
+updated: 2026-10-18
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into an existing spreadsheet to replace its content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
@@ -41,10 +41,11 @@ The import reads every worksheet in the workbook and preserves:
 - Merged cells
 - Column widths and row heights
 - Cell borders
-- Text formatting: bold, italic, underline, strikethrough, font size, and text color
+- Text formatting: bold, italic, underline, strikethrough, font size, and text color, also where one cell mixes several formats
 - Fill colors
 - Text alignment (horizontal and vertical), text wrapping, and text rotation
-- The sheet tab names and their order
+- The sheet tab names, colors, and order
+- Hidden sheets, which stay hidden until you show them from the **View** menu
 - The gridlines setting (hidden or visible)
 - Conditional formatting rules, data validation rules, and hyperlinks
 - Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)
@@ -57,5 +58,10 @@ The following are not imported:
 
 - Charts
 - Images embedded in cells
+- Comments and notes
 
 If these are important, keep the original `.xlsx` file in Drive so you have a reference copy.
+
+A password-protected Excel file can't be imported. Open it in Excel, remove the password, save it, and import it again.
+
+A workbook whose only sheets are chart sheets can't be imported yet, because Sheets has nothing to show from it.

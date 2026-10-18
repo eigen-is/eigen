@@ -85,7 +85,7 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
     switch (request.sourceFormat) {
         case 'xlsx': {
             const { importXlsxToSheetsSnapshot } = await import('../../import/sheets/transform');
-            const { snapshotJson, warnings } = await importXlsxToSheetsSnapshot(request.data);
+            const { snapshotJson, warnings } = importXlsxToSheetsSnapshot(request.data);
             return { ok: true, result: { snapshotJson }, warnings };
         }
         case 'docx': {

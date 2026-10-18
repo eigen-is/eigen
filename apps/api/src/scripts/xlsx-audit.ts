@@ -185,12 +185,12 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
     const summaries: SheetSummary[] = [];
     const cells: Cells = { prints: [], sample: {} };
     for (const sheet of sheets) {
-        // hide and color are R4's: read as data until Sheet has them.
+        // Read by name, as SHEET_FIELDS lists them.
         const fields = new Map<string, unknown>(Object.entries(sheet));
         const config = sheet.config ?? {};
         bump(counts, 'sheets');
-        if (fields.get('hide')) bump(counts, 'hiddenSheets');
-        if (fields.get('color')) bump(counts, 'tabColors');
+        if (sheet.hide) bump(counts, 'hiddenSheets');
+        if (sheet.color) bump(counts, 'tabColors');
         const prints: number[] = [];
         const corner: Record<string, string[]> = {};
         for (const { r, c, v: cell } of sheet.celldata ?? []) {

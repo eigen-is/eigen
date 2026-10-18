@@ -1,5 +1,5 @@
 import { forEach, isNil, isNumber, isPlainObject } from 'es-toolkit/compat';
-import { inlineStringText, numberDisplay } from '../../engine/format';
+import { numberDisplay, richText } from '../../engine/format';
 import type { Cell, CellMatrix, CellStyle } from '../../engine/types';
 import type { Context } from '../context';
 import {
@@ -59,10 +59,8 @@ export function getCellValue(
     if (cellData && isPlainObject(cellData)) {
         if (cellData.ct && cellData.ct.fa === 'yyyy-MM-dd') {
             ret = cellData.m;
-        } else if (cellData.ct?.t === 'inlineStr') {
-            ret = inlineStringText(cellData.ct);
         } else {
-            ret = cellData[type];
+            ret = type === 'v' || type === 'm' ? (richText(cellData) ?? cellData[type]) : cellData[type];
         }
     }
 

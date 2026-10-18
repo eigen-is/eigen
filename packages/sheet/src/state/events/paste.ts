@@ -19,9 +19,9 @@ import {
     zip,
 } from 'es-toolkit/compat';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
-import { numberDisplay, parseCellInput } from '../../engine/format';
+import { numberDisplay, parseCellInput, richText } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
-import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
+import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { carrySides, clearSides, getBorderInfoCompute } from '../modules/border';
@@ -1058,8 +1058,9 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         v = '';
                     }
 
-                    if (isNil(v) && d[r]?.[c]?.ct?.t === 'inlineStr') {
-                        v = d[r]![c]!.ct!.s!.map((val: InlineStringSegment) => val.v).join('');
+                    const rich = isNil(v) ? richText(d[r]?.[c]) : undefined;
+                    if (rich !== undefined) {
+                        v = rich;
                         isInlineStr = true;
                     }
                     if (isNil(v)) {

@@ -55,7 +55,7 @@ Only the canvas border pass skips hidden rows and columns. Every carry path (cut
 
 ## Position-bound properties live beside the cell
 
-Everything that is the cell (value, formula, number format, colors, font, rotation, rich-text runs) lives on the `Cell` in the matrix, and overwriting the cell overwrites all of it in one op. What is bound to the grid position lives in a map beside the matrix:
+Everything that is the cell (value, formula, number format, colors, font, rotation, rich-text runs) lives on the `Cell` in the matrix, and overwriting the cell overwrites all of it in one op. A rich-text cell keeps its text in its runs alone, with no `v` or `m`, and every reader takes it from there through `richText`, `cellValue` for a value that is the runs' text or `v`, or `cellDisplay` for the text the grid shows, the runs' text or `m` or `v` (`engine/format.ts`), except find and replace, which skips rich-text cells for now ([ROADMAP.md](ROADMAP.md), "Sheets: find and replace inside rich-text cells"). A writer that writes plain text over a rich cell drops its runs with `dropRuns`: they would otherwise outrank the value it wrote. What is bound to the grid position lives in a map beside the matrix:
 
 | Property | Home | Why not on the cell |
 |---|---|---|
@@ -105,6 +105,8 @@ A switch closes the cell editor and any formula range selection, so Enter can ne
 
 The functions come from `@formulajs/formulajs`, behind a parser inherited from the fortune-sheet fork. A function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER) evaluates to `#NAME?`. The engine overrides `VALUE`, which rejects a number, and `TEXT`, which formulajs leaves unimplemented, so it formats through the same numfmt masks the grid renders with.
 
+formulajs carries one patch, `patches/@formulajs%2Fformulajs@2.9.3.patch`, listed in `patchedDependencies` in the root `package.json`. Its `flattenShallow` (`lib/utils/common.js`, the only build the engine loads: `main` is `index.js`, which requires `lib/`) concatenated onto a `reduce` accumulator, copying it per row, so flattening a range was quadratic in its rows: 100,000 rows took 2.1 s, one `SUMIFS` over 208,681 rows 305 s. The patch is the same flatten as a loop, with the same output, and it no longer pushes into its input. 4.6.0 has the old code. Once a release fixes it, delete the file and the `patchedDependencies` entry and run `bun install`. Keep `src/test/engine/formulajs-flatten.test.ts`, which pins the output and the time. Both Dockerfiles copy `patches/` with the manifests, because the install applies it.
+
 ## Values follow Excel's grid and calendar
 
 - A Date result (`DATE`, `EOMONTH`, `NOW`) is stored as its Excel serial, taken from the Date's local calendar fields, because formulajs builds its Dates at local midnight. `dateToSerial` in `engine/parser/helper/number.ts` is the engine's conversion, with the Lotus leap day from 1900-03-01. The cell keeps its format mask, so a mask-less cell shows the serial.
@@ -123,6 +125,8 @@ The editor's dependent recompute runs inside the recipe that emits the op, so re
 So `readSheetsFromDoc` recomputes only on the export read. Preview and the search extract pass `{ recalc: false }` and serve the replayed values, and a formula cell with no value stays blank. A legacy never-computed workbook costs an unbounded recalc (about 39 s measured), past the 30 s transform deadline of a preview, so every preview of such a doc would fail. An export recomputes under its 120 s deadline, because a deliverable with blank formula cells is wrong output.
 
 Even on export, `recalcSheets` runs only when `sheetsNeedRecalc` finds a sheet with formula cells and an empty `calcChain`. The decoder leaves the chain empty unless the envelope says `computed: true`, which every editor flush writes ([the codec](#the-snapshot-is-interned-and-written-only-through-the-codec)). The xlsx importer runs `recalcSheets` once in its transform and writes `computed: true`, or `false` when its recalc failed, so that export recomputes. Any recalc failure falls back to the replayed values: an export never fails because recalc did.
+
+The server's recalc, at import and at export, runs under a budget, `SERVER_RECALC_BUDGET` (`document/sheets.ts`). The dependency index lists a range in every 64 × 16 block it meets, cut to the cells its sheet holds: only a formula cell is ever looked up, so `SUM(A1:XFD1048576)` on a small sheet costs the few blocks the sheet spans. Past the budget `recalcSheets` throws before it evaluates, a recalc failure like any other. Evaluation is charged each cell a range read covers, cut to its sheet (`maxCellsRead`), and stops at the formula after the one that passed it. Nothing bounds the parent edges, one per formula cell and formula reading it ([ROADMAP.md](ROADMAP.md)).
 
 ## Recalc keeps what it can't improve
 
@@ -193,7 +197,7 @@ A sheet whose formulas the op moved too is still written back whole, and its who
 
 ## A range chart reads the grid's own values and labels
 
-`resolveRangeChartData` (`engine/chart-data.ts`) turns a range chart into the categories and series the layout draws, through a `CellResolver`, so the editor and the server read the same cells. A value is the cell's computed `v` when it is a finite number and a gap otherwise. A label or series name is the cell's display text `m`, the string the grid shows, or a rich-text cell's runs joined, since such a cell has neither `m` nor `v`. A name ref reads its first cell. A chart with no categories counts them 1, 2, … up to its longest series.
+`resolveRangeChartData` (`engine/chart-data.ts`) turns a range chart into the categories and series the layout draws, through a `CellResolver`, so the editor and the server read the same cells. A value is the cell's computed `v` when it is a finite number and a gap otherwise. A label or series name is the cell's display text `m`, the string the grid shows, or a rich-text cell's runs joined, since one made in the editor has neither `m` nor `v`. A name ref reads its first cell. A chart with no categories counts them 1, 2, … up to its longest series.
 
 A series whose values ref is null, deleted with its rows or columns, is left out and the rest draw, as Google does; it keeps its color in the spec, so an undo brings it back as it was. An automatic color resolves by the series' index in the spec before that, so the series after a deleted one keep the colors the editor shows them in. No series left, or a ref that names a missing sheet or spans several rows and several columns at once, is a `'ref'` error, which the chart shows as Excel's #REF. More points than `MAX_CHART_POINTS` is `'too-many-points'`. Both are decided from the refs before a cell is read, so selecting a whole column costs nothing. Hidden rows and columns are read like visible ones, while Excel and Google skip them by default ([ROADMAP](ROADMAP.md)).
 
@@ -314,7 +318,6 @@ These are deliberate. Where a test pins one, it is in `apps/api/src/test/export/
 
 - A `sheet` link re-imports as a `cellrange` link at `'Name'!A1`, and a range link keeps only its top-left cell, because ExcelJS's internal-link pattern needs a single trailing cell ref. A bare ref gains its own sheet's quoted prefix. A webpage URL with exactly one `!` and a cell-shaped tail is misread as internal by that pattern.
 - Imported link cells keep Excel's font, while the link dialog sets blue and underline. Forcing the dialog style at import would clobber theme-styled link cells.
-- A link to another workbook that carries a sheet anchor imports as an internal link: the `location` attribute wins over the relationship target.
 
 Column widths:
 
