@@ -54,7 +54,7 @@ function unlessRefused<T>(read: () => T): T | undefined {
 // else it reads as nothing.
 function readMath(math: MathXmlElement): Read | undefined {
     const latex = unlessRefused(() => readMathmlLatex(math));
-    const row = unlessRefused(() => readMathml(math).row);
+    const row = unlessRefused(() => readMathml(math));
     if (row) {
         const annotated = latex === undefined ? undefined : unlessRefused(() => writeMathml(row, latex));
         return annotated ? { row, latex, mathml: annotated } : { row, latex: undefined, mathml: writeMathml(row) };

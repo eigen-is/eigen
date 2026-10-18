@@ -138,6 +138,12 @@ describe('equation parseHTML', () => {
         const html = `<p><math><semantics><mi>x</mi><annotation encoding="application/x-tex">\\mymacro{x}</annotation></semantics></math></p>`;
         expect(parsed(html)).toEqual([{ mathml: writeMathml(x), display: false, commentCardId: null }]);
     });
+
+    // An HTML parser keeps the control character a reference names, which XML can't hold.
+    test('an annotation holding a control character goes, and the tree stays', () => {
+        const html = `<p><math><semantics><mi>x</mi><annotation encoding="application/x-tex">x&#1;</annotation></semantics></math></p>`;
+        expect(parsed(html)).toEqual([{ mathml: writeMathml(x), display: false, commentCardId: null }]);
+    });
 });
 
 // A page that draws its math pastes each equation twice, as its <math> and as the glyphs or image drawn from it, and

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { readLatex, writeLatex } from '../latex';
 import { LATEX_COMMANDS, type LatexCommand } from '../latex-commands';
-import { readMathml, writeMathml } from '../mathml';
+import { readMathml, readMathmlLatex, writeMathml } from '../mathml';
 import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
 import { readOmml } from '../omml';
 import { MATH_ENCLOSURES, MATH_LIMITS, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
@@ -212,7 +212,9 @@ describe('the 45 formulas of the storage study', () => {
             const tree = readLatex(latex);
             expect(canonicalIssue(tree)).toBeUndefined();
             expect(viaLatex(tree)).toStrictEqual(tree);
-            expect(readMathml(el(writeMathml(tree, latex)))).toStrictEqual({ row: tree, latex });
+            const written = el(writeMathml(tree, latex));
+            expect(readMathml(written)).toStrictEqual(tree);
+            expect(readMathmlLatex(written)).toBe(latex);
         });
     }
 });
@@ -813,7 +815,9 @@ describe('writeLatex', () => {
 describe('typed LaTeX rides along as the annotation', () => {
     test.each(['a<b', 'x \\& y', '\\text{]]>}', '\\text{non-BMP 😀} 𝟘', '\\mathbb{R}^n % "quoted"'])('%p', (latex) => {
         const row = readLatex(latex);
-        expect(readMathml(el(writeMathml(row, latex)))).toStrictEqual({ row, latex });
+        const written = el(writeMathml(row, latex));
+        expect(readMathml(written)).toStrictEqual(row);
+        expect(readMathmlLatex(written)).toBe(latex);
     });
 
     test('the longest LaTeX with the largest tree fits the MathML cap', () => {

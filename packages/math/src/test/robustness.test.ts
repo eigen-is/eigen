@@ -286,8 +286,8 @@ function pasted(element: MathXmlElement, index = 0): MathXmlElement {
 describe('every reader ends in a tree or a MathError, within its time budget', () => {
     test.each<[string, Grammar, (root: MathXmlElement) => MathRow]>([
         ['readOmml', OMML, readOmml],
-        ['readMathml', MATHML, (root) => readMathml(root).row],
-        ['readMathml through an HTML DOM', MATHML, (root) => readMathml(pasted(root)).row],
+        ['readMathml', MATHML, readMathml],
+        ['readMathml through an HTML DOM', MATHML, (root) => readMathml(pasted(root))],
     ])('%s on 1,500 seeded element trees, one in five a damaged writer output', (name, grammar, read) => {
         const start = performance.now();
         let trees = 0;

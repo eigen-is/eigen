@@ -546,11 +546,11 @@ export function readMathmlLatex(math: MathXmlElement): string | undefined {
     return tex && checkedXml(textOf(tex));
 }
 
-export function readMathml(math: MathXmlElement): { row: MathRow; latex: string | undefined } {
+// The tree alone: readMathmlLatex reads the annotation, so one it refuses never costs the tree.
+export function readMathml(math: MathXmlElement): MathRow {
     const semantics = semanticsOf(math);
     const scope = scopeOf(math, { budget: { size: 0 } });
-    const row = readArgument(semantics ? elementsOf(semantics)[0] : math, scope, 1);
-    return { row, latex: readMathmlLatex(math) };
+    return readArgument(semantics ? elementsOf(semantics)[0] : math, scope, 1);
 }
 
 // ── Writer ─────────────────────────────────────────────────────────────────────────────────────────────────────
