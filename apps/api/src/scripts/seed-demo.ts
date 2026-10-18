@@ -29,7 +29,7 @@ import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
-import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
@@ -459,7 +459,11 @@ async function main(): Promise<void> {
         const docPath = await drive.create(mountId, parentId, name, 'doc', author);
         const collab = await drive.getCollabDocument(mountId, docPath.id);
         const update = prosemirrorJSONToYDoc(docSchema(), json, 'default');
-        commitEigendocImport(collab.doc, { update: Y.encodeStateAsUpdate(update), page: DEFAULT_PAGE_SETUP });
+        commitEigendocImport(collab.doc, {
+            update: Y.encodeStateAsUpdate(update),
+            page: DEFAULT_PAGE_SETUP,
+            style: DEFAULT_NORMAL_STYLE,
+        });
         update.destroy();
         return docPath;
     };
@@ -531,7 +535,11 @@ async function main(): Promise<void> {
         // The doc's one write, with the anchored marks; cards land in the comments Y.Map the
         // panel renders from. Both persist through the live collab doc.
         const marked = prosemirrorJSONToYDoc(docSchema(), docJson, 'default');
-        commitEigendocImport(collab.doc, { update: Y.encodeStateAsUpdate(marked), page: DEFAULT_PAGE_SETUP });
+        commitEigendocImport(collab.doc, {
+            update: Y.encodeStateAsUpdate(marked),
+            page: DEFAULT_PAGE_SETUP,
+            style: DEFAULT_NORMAL_STYLE,
+        });
         marked.destroy();
         collab.doc.transact(() => {
             for (const { card } of cards) writeCommentCard(collab.doc, card);

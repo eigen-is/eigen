@@ -1,14 +1,23 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import { type PageSetup, pagePx, pageTwips, readPageSetup } from '@workspace/lib/docs/eigendoc';
+import { DOCUMENT_FONT, EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
+import {
+    type NormalStyle,
+    type PageSetup,
+    pagePx,
+    pageTwips,
+    readNormalStyle,
+    readPageSetup,
+} from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES } from '../../document/wordml';
+import { fontLineHeight } from '../../export/fonts';
 import { DOCUMENT_TOO_LARGE } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
+import { byFace, type FontTable, fontMark, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
 import { alternative, type DocxPackage, descendants, type Part, twipsOf, w, wChild } from './package';
@@ -20,6 +29,7 @@ import {
     markColor,
     mergePara,
     mergeRun,
+    type ParaProps,
     type Role,
     readParaProps,
     readRunProps,
@@ -50,24 +60,32 @@ export type Reader = {
     bodySize: number;
     bodySizeCs: number;
     baseColor: string | undefined;
+    // The docx's Normal as the doc stores it, which a run in its font and a paragraph in its format need no mark for.
+    normal: NormalStyle;
     // The doc holds one page, the body's final section's; its text column places anchors and caps widths.
     page: PageSetup;
     columnTwips: number;
     columnPx: number;
     // Earlier sections whose page differs from it.
     pagesDropped: number;
+    // Pictures a band anchored, which it holds as block figures.
+    bandAnchors: number;
+    // What a band drops: a picture behind the text or a VML one, a letterhead or a watermark, and a note reference.
+    bandDropped: number;
     publicOrigin: string | undefined;
 };
 
-// Per part: its relationships, whether its breaks page, the tables around it, the table style, the cell's width in px
-// and whether the text sits on a fill the schema drops.
+// Per part: its relationships, the story it tells (only the body's breaks page, and only the body's pictures float), the
+// tables around it, the table style, the cell's width in px, whether the text sits on a fill the schema drops, and the
+// cell fill drawn behind it.
 export type Scope = {
     part: Part;
-    inNote: boolean;
+    story: 'body' | 'note' | 'band';
     tables: number;
     tableRun?: DocxRunProps;
     room?: number;
     onFill?: boolean;
+    fill?: string;
 };
 
 export function createReader(pkg: DocxPackage, publicOrigin: string | undefined): Reader {
@@ -76,14 +94,22 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const theme = readTheme(pkg.theme, { bidi: w(lang, 'bidi'), eastAsia: w(lang, 'eastAsia') });
     const styles = new Styles(pkg.styles, theme);
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
+    const fontTable = readFontTable(pkg.fontTable);
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
-    const page = sectionPage(sectPr);
+    const size = sectionPage(sectPr);
+    const page = { ...size, differentFirstPage: pkg.titlePg };
     const px = pagePx(page);
     const twips = pageTwips(page);
+    // Word's default is 10 pt.
+    const bodySize = body.size ?? 20;
+    const font = fontMark(byFace(' ', body.fonts, body, false)[0]?.font, fontTable) ?? DOCUMENT_FONT;
+    const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
+    // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
+    const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) / 240 : 1;
     return {
         pkg,
         theme,
-        fontTable: readFontTable(pkg.fontTable),
+        fontTable,
         styles,
         numbering: new Numbering(pkg.numbering, styles),
         images: [],
@@ -92,16 +118,25 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         fields: [],
         graphicsDropped: 0,
         graphicParts: new Set(),
-        // Word's default is 10 pt.
-        bodySize: body.size ?? 20,
+        bodySize,
         bodySizeCs: body.sizeCs ?? body.size ?? 20,
         baseColor: body.color?.hex,
+        normal: readNormalStyle({
+            font,
+            size: bodySize / 2,
+            lineSpacing: (line * fontLineHeight(font)) / fontLineHeight(DOCUMENT_FONT),
+            spaceBefore: (para.before ?? 0) / 20,
+            spaceAfter: (para.after ?? 0) / 20,
+            color: body.color?.hex && markColor(body.color.hex),
+        }),
         page,
         columnTwips: twips.width - twips.margin.left - twips.margin.right,
         columnPx: Math.floor(px.width - px.margin.left - px.margin.right),
         pagesDropped: descendants(pkg.document.root, W_NS, 'sectPr').filter(
-            (section) => section !== sectPr && !isDeepStrictEqual(sectionPage(section), page),
+            (section) => section !== sectPr && !isDeepStrictEqual(sectionPage(section), size),
         ).length,
+        bandAnchors: 0,
+        bandDropped: 0,
         publicOrigin,
     };
 }
@@ -132,11 +167,21 @@ export function readDocument(reader: Reader): JSONContent[] {
     const body = wChild(reader.pkg.document.root, 'body');
     if (!body) return [];
     const blocks = build(
-        readBlocks(reader, xmlElements(body), { part: reader.pkg.document, inNote: false, tables: 0 }),
+        readBlocks(reader, xmlElements(body), { part: reader.pkg.document, story: 'body', tables: 0 }),
     );
     const notes = readNotes(reader);
     if (notes.length > 0) blocks.push({ type: 'orderedList', attrs: { start: 1, type: null }, content: notes });
     return blocks;
+}
+
+// A header or footer part's blocks, read as the body's are, through the part's own relationships.
+// A band's last block draws no space after (PAGE_BAND_CLASS), so one the docx sets there isn't kept.
+export function readBand(reader: Reader, part: Part): JSONContent[] {
+    reader.fields.length = 0;
+    const blocks = build(readBlocks(reader, xmlElements(part.root), { part, story: 'band', tables: 0 }));
+    const last = blocks.at(-1);
+    if (last?.attrs?.['spaceAfter'] == null) return blocks;
+    return [...blocks.slice(0, -1), { ...last, attrs: { ...last.attrs, spaceAfter: null } }];
 }
 
 // Notes as Eigen holds them: a [n] reference, and at the end one numbered list with a back link per note.
@@ -160,7 +205,7 @@ function readNotes(reader: Reader): JSONContent[] {
         const note = byType[ref.type].get(ref.id);
         if (!part || !note) continue;
         reader.fields.length = 0;
-        const blocks = build(readBlocks(reader, xmlElements(note), { part, inNote: true, tables: 0 }));
+        const blocks = build(readBlocks(reader, xmlElements(note), { part, story: 'note', tables: 0 }));
         if (blocks[0]?.type === 'paragraph') trimStart(blocks[0].content ?? []);
         const back: JSONContent[] = [
             { type: 'text', text: ' ' },
@@ -310,12 +355,52 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             node: { type: 'text', text: list?.suffix === 'nothing' ? label : `${label} ` },
         });
 
+    // What the paragraph sets apart from the docx's Normal, or a heading, a title or a quote from its style, whose look
+    // is the node's. A line is drawn in its family's own line, so it is stored as a multiple of Inter's; the writer
+    // scales the line of a paragraph all in one family other than the Normal's by that family's line, which this
+    // undoes, so a line Word draws as Normal's reads as none.
+    const base = role.kind === 'paragraph' ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
+    const autoLine = (para: ParaProps) => ((para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : undefined);
+    const line = autoLine(props);
+    const baseLine = autoLine(base);
+    const { normal } = reader;
+    const families = new Set(
+        texts.flatMap((piece) =>
+            piece.kind === 'node' && piece.node.text?.trim()
+                ? [piece.node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'] ?? normal.font]
+                : [],
+        ),
+    );
+    const [family] = families;
+    const scaleOf = (font: string) => fontLineHeight(font) / fontLineHeight(DOCUMENT_FONT);
+    const scale = families.size === 1 && EIGEN_FONT_NAMES.includes(family) ? scaleOf(family) : 1;
+    const lineSpacing =
+        line !== undefined &&
+        line !== baseLine &&
+        (baseLine === undefined ||
+            Math.round((line * scale) / 2.4) !== Math.round((baseLine * scaleOf(normal.font)) / 2.4))
+            ? (line * scale) / 240
+            : undefined;
+    const before = props.before ?? 0;
+    const after = props.after ?? 0;
+    // A cell's paragraphs take their spacing from the cell.
+    const format = {
+        lineSpacing,
+        spaceBefore: scope.tables > 0 || before === (base.before ?? 0) ? undefined : before / 20,
+        spaceAfter: scope.tables > 0 || after === (base.after ?? 0) ? undefined : after / 20,
+    };
+    // An item's indent holds its number or checkbox.
+    const indent =
+        list || task
+            ? undefined
+            : { left: props.indLeft ?? 0, right: props.indRight ?? 0, firstLine: props.indFirst ?? 0 };
+
     const captionColor = markColor(CAPTION_LOOK.color);
     const markSize = direct.markSize ?? styles.run(styleId).size ?? 24;
     // A paragraph whose mark and text are hidden is not there at all.
     const markHidden = direct.markHidden ?? styles.run(styleId).vanish ?? false;
     const items: Item[] = [];
-    if (props.pageBreakBefore && !scope.inNote) items.push({ kind: 'break' });
+    if (props.pageBreakBefore && scope.story === 'body') items.push({ kind: 'break' });
     const split = halves.length > 1;
     let numbered = false;
     for (const [index, half] of halves.entries()) {
@@ -361,6 +446,13 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                         ),
                 ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
+            // Word spaces a split paragraph above its first line and below its last.
+            format: {
+                lineSpacing: format.lineSpacing,
+                spaceBefore: index === 0 ? format.spaceBefore : undefined,
+                spaceAfter: index === halves.length - 1 ? format.spaceAfter : undefined,
+            },
+            indent,
         };
         if (!numbered && list && !SIZED.has(role.kind)) para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;
@@ -387,7 +479,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         } else if (item.kind === 'table') item.indent += indLeft;
         items.push(item);
     }
-    if (props.sectionBreak && !scope.inNote) items.push({ kind: 'break' });
+    if (props.sectionBreak && scope.story === 'body') items.push({ kind: 'break' });
     return items;
 }
 

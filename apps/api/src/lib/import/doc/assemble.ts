@@ -1,7 +1,8 @@
 import type { JSONContent } from '@tiptap/core';
+import { readParagraphFormat } from '@workspace/lib/docs/eigendoc';
 import { readStoredEquation } from '../../document/equation';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../document/looks';
-import { LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
+import { CODE_BLOCK_LOOK, QUOTE_LOOK, TABLE_MARGIN, untypedListFormat } from '../../document/looks';
+import { LIST_FORMATS, LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
 
@@ -35,6 +36,10 @@ export type Para = {
     // The side of the text frame it stands in, which holds a wrapped figure and its caption.
     frame?: 'left' | 'right';
     hairline: boolean;
+    // What it sets apart from the docx's Normal, in pt, and its own indent in twips, which counts from its container's
+    // text; an item's holds its number.
+    format?: { lineSpacing?: number; spaceBefore?: number; spaceAfter?: number };
+    indent?: { left: number; right: number; firstLine: number };
 };
 
 export type Item =
@@ -509,6 +514,7 @@ function buildFlow(items: Item[]): JSONContent[] {
             const host = hostAt(item.indent);
             if (host) {
                 closeLists(stack.indexOf(host) + 1);
+                numberWithin(block, stack.filter((open) => open.kind === 'orderedList').length);
                 host.item.content?.push(block);
                 continue;
             }
@@ -527,9 +533,8 @@ function buildFlow(items: Item[]): JSONContent[] {
             continue;
         }
         if (item.kind === 'float') continue;
-        const node = textblockOf(item);
         if (item.list || item.task) {
-            placeItem(item, node, stack, closeLists);
+            placeItem(item, textblockOf(item, undefined), stack, closeLists);
             continue;
         }
         // The writer clears an item's wrapped figure with a break, which a Google Docs re-save leaves bare.
@@ -544,12 +549,16 @@ function buildFlow(items: Item[]): JSONContent[] {
                       : hostAt(item.indLeft);
             if (host) {
                 closeLists(stack.indexOf(host) + 1);
-                host.item.content?.push(node);
+                host.item.content?.push(textblockOf(item, host.indent));
                 continue;
             }
         }
         closeLists();
-        blocks.push(node);
+        // The space Eigen draws above it anyway: none at the top, as the writer writes a first heading, a table's margin.
+        let above: number | undefined;
+        if (blocks.length === 0) above = 0;
+        else if (blocks.at(-1)?.type === 'table') above = TABLE_MARGIN;
+        blocks.push(textblockOf(item, 0, above));
     }
     flushCode();
     closeLists();
@@ -581,7 +590,30 @@ function nestsUnder(para: Para, text: number, inTask: boolean): boolean {
         : para.indLeft > text + INDENT_TOLERANCE;
 }
 
-function textblockOf(para: Para): JSONContent {
+// Its format where Eigen draws no container around it: an item's, a quote's or a paragraph's in an item take their
+// spacing from it, as the writer writes it, and list and quote nesting is the indent's structure. Only an indent past
+// the text of the item it lands in is its own. A space above no larger than the one Eigen draws there anyway, in twips,
+// is the writer's.
+function formatOf(para: Para, edge: number | undefined, above?: number): Record<string, number> {
+    const { indent, format } = para;
+    const past = indent && edge !== undefined && para.quote === 0 ? indent.left - edge : undefined;
+    return readParagraphFormat({
+        lineSpacing: format?.lineSpacing,
+        ...(edge === 0 &&
+            para.quote === 0 && {
+                spaceBefore:
+                    above !== undefined && (format?.spaceBefore ?? 0) * 20 <= above ? undefined : format?.spaceBefore,
+                spaceAfter: format?.spaceAfter,
+            }),
+        ...(past !== undefined && {
+            indentLeft: past > INDENT_TOLERANCE ? past / 20 : undefined,
+            indentRight: indent && indent.right > 0 ? indent.right / 20 : undefined,
+            indentFirstLine: indent?.firstLine ? indent.firstLine / 20 : undefined,
+        }),
+    });
+}
+
+function textblockOf(para: Para, edge: number | undefined, above?: number): JSONContent {
     const { textAlign, inlines: content } = para;
     if (isFigureOnly(para)) {
         for (const figure of content) {
@@ -590,10 +622,32 @@ function textblockOf(para: Para): JSONContent {
         }
         return { type: 'paragraph', content };
     }
-    if (para.role.kind === 'heading') return { type: 'heading', attrs: { level: para.role.level, textAlign }, content };
-    if (para.role.kind === 'title' || para.role.kind === 'subtitle')
-        return { type: para.role.kind, attrs: { textAlign }, content };
-    return { type: 'paragraph', attrs: { textAlign }, content };
+    const attrs = { textAlign, ...formatOf(para, edge, above) };
+    if (para.role.kind === 'heading') return { type: 'heading', attrs: { level: para.role.level, ...attrs }, content };
+    if (para.role.kind === 'title' || para.role.kind === 'subtitle') return { type: para.role.kind, attrs, content };
+    return { type: 'paragraph', attrs, content };
+}
+
+// A list that draws as an untyped one does at its depth stores no type, so it numbers by depth as Google's 1. a. i.
+// does; any other keeps its own, a nested decimal one '1'. A format Eigen has no type for draws decimal, as Word's would.
+function listType(para: Para, stack: Open[]): string | null {
+    const type = LIST_TYPES.get(para.list?.format ?? '') ?? '1';
+    const numbered = stack.filter((open) => open.kind === 'orderedList').length;
+    return LIST_FORMATS.get(type) === untypedListFormat(numbered) ? null : type;
+}
+
+// A table's cells were read as flows of their own, so a list in one took its type at its depth there; in the list
+// item that holds the table, `numbered` lists more surround it.
+function numberWithin(node: JSONContent, numbered: number, depth = 0): void {
+    if (numbered === 0) return;
+    const ordered = node.type === 'orderedList';
+    if (ordered && node.attrs) {
+        const type = node.attrs['type'];
+        const format = typeof type === 'string' ? LIST_FORMATS.get(type) : untypedListFormat(depth);
+        node.attrs['type'] =
+            format === untypedListFormat(depth + numbered) ? null : (LIST_TYPES.get(format ?? '') ?? null);
+    }
+    for (const child of node.content ?? []) numberWithin(child, numbered, depth + (ordered ? 1 : 0));
 }
 
 // Lists nest by Word's level within one list; across lists by where the number starts, at or right of the open item's
@@ -603,7 +657,11 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], closeLists
     const paragraph: JSONContent =
         textblock.type === 'paragraph'
             ? textblock
-            : { type: 'paragraph', attrs: { textAlign: para.textAlign }, content: textblock.content };
+            : {
+                  type: 'paragraph',
+                  attrs: { textAlign: para.textAlign, ...formatOf(para, undefined) },
+                  content: textblock.content,
+              };
     const kind = para.task ? 'taskList' : para.list?.ordered ? 'orderedList' : 'bulletList';
     const key = para.task ? 'task' : (para.list?.key ?? '');
     const ilvl = para.list?.ilvl ?? 0;
@@ -641,8 +699,7 @@ function placeItem(para: Para, textblock: JSONContent, stack: Open[], closeLists
         closeLists(stack.length - 1);
         if (deeper) break;
     }
-    const attrs =
-        kind === 'orderedList' ? { start: number, type: LIST_TYPES.get(para.list?.format ?? '') ?? null } : undefined;
+    const attrs = kind === 'orderedList' ? { start: number, type: listType(para, stack) } : undefined;
     const level: Open = {
         list: { type: kind, ...(attrs && { attrs }), content: [item] },
         item,

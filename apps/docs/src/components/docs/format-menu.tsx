@@ -1,7 +1,7 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
-import type { BandEdge } from '@workspace/lib/docs/eigendoc';
+import { type BandEdge, readCellBackground } from '@workspace/lib/docs/eigendoc';
 import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { ToolbarMenu } from '@workspace/ui';
 import {
@@ -24,6 +24,8 @@ import {
     AlignLeft,
     AlignRight,
     Baseline,
+    BetweenHorizontalEnd,
+    BetweenHorizontalStart,
     Bold,
     CaseSensitive,
     CaseUpper,
@@ -36,14 +38,18 @@ import {
     ImagePlus,
     Italic,
     List,
+    ListIndentDecrease,
+    ListIndentIncrease,
     ListOrdered,
     ListRestart,
     type LucideIcon,
+    PaintBucket,
     PanelTop,
     Pilcrow,
     Quote,
     RemoveFormatting,
     RotateCwSquare,
+    Ruler,
     Settings2,
     Strikethrough,
     Subscript,
@@ -52,6 +58,7 @@ import {
     Type,
     TypeOutline,
     Underline,
+    UnfoldVertical,
 } from 'lucide-react';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
@@ -76,6 +83,17 @@ const NUMBERED_LIST_STYLES = [
     { type: 'I', preview: 'I. II. III.' },
 ] as const;
 
+// Format › Line & paragraph spacing: Google's presets, by the multiple a paragraph stores.
+const LINE_SPACINGS = [
+    { value: 1, label: 'Single' },
+    { value: 1.15, label: '1.15' },
+    { value: 1.5, label: '1.5' },
+    { value: 2, label: 'Double' },
+] as const;
+
+// What Add space before or after paragraph sets, in pt: Word's amount, as Google's is unchecked.
+const ADDED_SPACE = 12;
+
 type FormatMenuProps = {
     editor: Editor;
     active: ToolbarState;
@@ -84,6 +102,10 @@ type FormatMenuProps = {
     setHighlightColor: (color: string) => void;
     clearFormatting: () => void;
     onRestartNumbering: () => void;
+    onCustomSpacing: () => void;
+    // None while a band is edited: the body's undo holds the Normal, so a band's ⌘Z could not take it back.
+    onUpdateNormalStyle?: () => void;
+    onIndentationOptions: () => void;
     onPageSetup: () => void;
     onReplaceImage: () => void;
     onEnterBand?: (edge: BandEdge) => void;
@@ -98,6 +120,9 @@ export const FormatMenu = ({
     setHighlightColor,
     clearFormatting,
     onRestartNumbering,
+    onCustomSpacing,
+    onUpdateNormalStyle,
+    onIndentationOptions,
     onPageSetup,
     onReplaceImage,
     onEnterBand,
@@ -190,9 +215,23 @@ export const FormatMenu = ({
                 <Heading2 className="h-4 w-4 mr-2" /> Paragraph styles
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-                <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
-                    <Pilcrow className="mr-2 h-4 w-4" /> Normal text
-                </DropdownMenuItem>
+                {/* Google's own submenu: the doc's Normal is the one style it holds. */}
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                        <Pilcrow className="mr-2 h-4 w-4" /> Normal text
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                        <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
+                            Apply 'Normal text'
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            disabled={!onUpdateNormalStyle || !active.inParagraph}
+                            onClick={onUpdateNormalStyle}
+                        >
+                            Update 'Normal text' to match
+                        </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 {paragraphStylesIn(editor.schema).map(({ name, type, attrs, icon: Icon }) => (
                     <DropdownMenuItem
                         key={name}
@@ -223,6 +262,68 @@ export const FormatMenu = ({
                         </DropdownMenuItem>
                     );
                 })}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => editor.chain().focus().stepIndent(1).run()}>
+                    <ListIndentIncrease className="h-4 w-4 mr-2" /> Increase indent
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+]')}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => editor.chain().focus().stepIndent(-1).run()}>
+                    <ListIndentDecrease className="h-4 w-4 mr-2" /> Decrease indent
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+[')}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onIndentationOptions}>
+                    <Ruler className="h-4 w-4 mr-2" /> Indentation options…
+                </DropdownMenuItem>
+            </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+                <UnfoldVertical className="h-4 w-4 mr-2" /> Line & paragraph spacing
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+                <DropdownMenuRadioGroup value={active.lineSpacing === undefined ? '' : String(active.lineSpacing)}>
+                    {LINE_SPACINGS.map(({ value, label }) => (
+                        <DropdownMenuRadioItem
+                            key={label}
+                            value={String(value)}
+                            onSelect={() => editor.chain().focus().setParagraphFormat({ lineSpacing: value }).run()}
+                        >
+                            {label}
+                        </DropdownMenuRadioItem>
+                    ))}
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    disabled={!active.paragraphSpacing}
+                    onClick={() =>
+                        editor
+                            .chain()
+                            .focus()
+                            .setParagraphFormat({ spaceBefore: active.spaceBefore ? 0 : ADDED_SPACE })
+                            .run()
+                    }
+                >
+                    <BetweenHorizontalStart className="h-4 w-4 mr-2" /> {active.spaceBefore ? 'Remove' : 'Add'} space
+                    before paragraph
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    disabled={!active.paragraphSpacing}
+                    onClick={() =>
+                        editor
+                            .chain()
+                            .focus()
+                            .setParagraphFormat({ spaceAfter: active.spaceAfter ? 0 : ADDED_SPACE })
+                            .run()
+                    }
+                >
+                    <BetweenHorizontalEnd className="h-4 w-4 mr-2" /> {active.spaceAfter ? 'Remove' : 'Add'} space after
+                    paragraph
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onCustomSpacing}>
+                    <Settings2 className="h-4 w-4 mr-2" /> Custom spacing…
+                </DropdownMenuItem>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
@@ -335,6 +436,15 @@ export const FormatMenu = ({
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
                     <TABLE_ACTION_ICONS.toggleHeaderRow className="h-4 w-4 mr-2" /> Toggle header row
                 </DropdownMenuItem>
+                <ColorPickerMenuItem
+                    icon={PaintBucket}
+                    label="Cell background color"
+                    value={active.cellBackground}
+                    resetLabel="None"
+                    onChange={(color) =>
+                        editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
+                    }
+                />
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>

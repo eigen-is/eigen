@@ -1,12 +1,12 @@
 ---
 title: "Format text"
-description: "Apply bold, headings, lists, alignment, colors, fonts, and text sizes to text in a Docs document using the toolbar."
+description: "Apply bold, headings, lists, alignment, indents, line spacing, colors, fonts, and text sizes to text in a Docs document using the toolbar."
 type: how-to
 category: Editing
-tags: [docs, formatting, fonts, font size, headings, lists, numbering, color, alignment, caps]
+tags: [docs, formatting, fonts, font size, headings, normal text, lists, numbering, color, alignment, indent, line spacing, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font and its size, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.
@@ -41,9 +41,18 @@ The style selector sits next to the font picker. It shows the current style of t
 
 1. Click inside the paragraph you want to change, or select several lines.
 2. Click the style selector to open the dropdown, or open **Format**, then **Paragraph styles**.
-3. Choose **Normal text**, **Title**, **Subtitle**, or one of **Heading 1** through **Heading 6**.
+3. Choose **Normal text**, **Title**, **Subtitle**, or one of **Heading 1** through **Heading 6**. In the **Format** menu, **Normal text** opens a menu of its own: choose **Apply 'Normal text'**.
 
 These are block styles: the whole paragraph changes, not just the selected words. Choosing **Normal text** removes the style and returns the paragraph to the default style.
+
+## Change the document's normal text
+
+Normal text is the font, size, color, line spacing, and space before and after that text uses when you haven't changed them. A new document's normal text is Inter at 11 points.
+
+1. Click inside a paragraph of text that looks the way you want normal text to look. The item is available in normal paragraphs of the document, not in a heading, a title, a header, or a footer.
+2. Open **Format**, then **Paragraph styles**, then **Normal text**, and choose **Update 'Normal text' to match**.
+
+All text that doesn't have its own font, size, or color, and every paragraph that doesn't have its own spacing, changes to match, in the editor, the preview, and every download. Text you formatted yourself keeps its formatting, and headings keep their own size and spacing. To go back, press Cmd+Z / Ctrl+Z.
 
 To set paragraphs off as a quote, open **Format**, then **Paragraph styles**, and choose **Quote**. Choose it again to turn the quote back into normal paragraphs.
 
@@ -94,6 +103,22 @@ Alignment applies to the whole paragraph the cursor is in, or to all paragraphs 
 
 Click the **Align** button in the toolbar, which shows the current alignment, and choose one. The current alignment is marked in the list. You can also open **Format**, then **Align and indent**, and choose **Left**, **Center**, **Right**, or **Justified**.
 
+## Indent a paragraph
+
+Open **Format**, then **Align and indent**, and choose **Increase indent** (Cmd+] / Ctrl+]) or **Decrease indent** (Cmd+[ / Ctrl+[). Each step moves the paragraph 1.27 cm. In a list, they move the item one level in or out instead.
+
+For an exact indent, choose **Indentation options…**. Set **Left** and **Right** in centimetres, and under **Special indent** choose **First line** to indent only the first line, or **Hanging** to start the first line that distance left of the others, with the distance beside it. **Left** is where the lines after the first one start. An indent stops at the right edge of the text. Click **Apply**.
+
+## Change line and paragraph spacing
+
+Open **Format**, then **Line & paragraph spacing**:
+
+- **Single**, **1.15**, **1.5**, or **Double** sets the space between the lines of a paragraph. The one the paragraph uses is marked. A paragraph you haven't changed uses the line spacing of the document's normal text, 1.4 in a new document, so none is marked.
+- **Add space before paragraph** and **Add space after paragraph** add 12 points above or below the paragraph. Where the paragraph has space there already, the item reads **Remove space before paragraph** or **Remove space after paragraph** and takes it away.
+- **Custom spacing…** sets the **Line spacing** and the space **Before** and **After** the paragraph in points. Click **Apply**.
+
+Each of these applies to the paragraph the cursor is in, or to every paragraph in the selection. In a list, a quote, or a table, the space before and after a paragraph is the list's, quote's, or table's own, so you can set only the line spacing there.
+
 ## Add a list
 
 Place your cursor on the line where you want the list to start, then click one of the list buttons:
@@ -109,6 +134,8 @@ Press Enter to add the next item, and press Enter on an empty item to end the li
 ### Choose a numbering style
 
 Open **Format**, then **Bullets and numbering**, then **Numbered list**, and choose one of five styles: **1. 2. 3.**, **a. b. c.**, **A. B. C.**, **i. ii. iii.**, or **I. II. III.** On a regular paragraph this starts a numbered list in that style. Inside a numbered list it changes the style of that list. The style of the list the cursor is in is marked.
+
+A numbered list inside another numbered list counts 1. a. i. by level, as in Google Docs: letters one level in, roman numerals two levels in, then numbers again. A list you choose a style for, **1. 2. 3.** included, keeps that style at any level.
 
 ### Restart numbering
 

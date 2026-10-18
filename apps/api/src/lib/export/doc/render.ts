@@ -11,12 +11,13 @@ import {
     PROSE_TEXTBLOCKS,
     readChartAttrs,
     readFigureAttrs,
+    readPageNumberKind,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { type MathRow, writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
-import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
+import { nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
 import { SVG_LIMIT } from '../math-svg';
@@ -188,8 +189,9 @@ const SYNTHESIZED_SMALL_CAPS_SIZE = '0.7em';
 const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
 
 // WeasyPrint draws small caps only from a font's own smcp glyphs and fakes none, so where the face has none
-// (hasSmallCaps) the PDF writes a small-caps text's lowercase as smaller capitals.
-function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) => string {
+// (hasSmallCaps) the PDF writes a small-caps text's lowercase as smaller capitals. Text without a font mark draws in
+// the doc's Normal font.
+function renderTextSynthesizingSmallCaps(doc: Node, normalFont: string): ({ node }: { node: Node }) => string {
     const quoted = new Set<Node>();
     // A node that draws italic draws an italic mark upright.
     const upright = new Set<Node>();
@@ -205,7 +207,7 @@ function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) 
         const style = node.marks.find((mark) => mark.type.name === 'textStyle')?.attrs;
         if (style?.['caps'] !== 'small') return escapeHtml(text);
         const font = style['fontFamily'];
-        const family = typeof font === 'string' ? getFontName(font) : BODY.font;
+        const family = typeof font === 'string' ? getFontName(font) : normalFont;
         const marked = node.marks.some((mark) => mark.type.name === 'italic');
         const italic = upright.has(node) ? !marked : (QUOTE_LOOK.italic && quoted.has(node)) || marked;
         if (hasSmallCaps(family, italic ? 'italic' : 'normal')) return escapeHtml(text);
@@ -228,15 +230,30 @@ function smaller(capitals: string): string {
     return capitals && `<span style="font-size: ${SYNTHESIZED_SMALL_CAPS_SIZE}">${escapeHtml(capitals)}</span>`;
 }
 
-// The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds, but for the PDF's
-// small caps and equations.
+// One export's equations, the body's and its bands' spending one budget: the PDF's SVG drawings, else the MathML in the
+// editor's span, whose rule lays a displayed one out on its line as the editor does.
+export function renderEquations(svgs?: ReadonlyMap<string, EquationDrawing>): ({ node }: { node: Node }) => string {
+    if (svgs) return renderBudgetedEquations((_attrs, key) => svgs.get(key), SVG_LIMIT);
+    return renderBudgetedEquations((attrs) => {
+        const { row, display } = readStoredEquation(attrs);
+        const data = display ? ' data-display="block"' : '';
+        return equationDrawing(`<span class="equation"${data}>${equationMathml(row, display)}</span>`);
+    }, MATHML_LIMIT);
+}
+
+// The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds, but for the
+// PDF's small caps, synthesized where the font has none, its equations and its page numbers, which its stylesheet's counter() fills in.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean; svgEquations?: ReadonlyMap<string, EquationDrawing> },
+    options?: {
+        lazy?: boolean;
+        smallCapsFont?: string;
+        pageCounters?: boolean;
+        equations?: ({ node }: { node: Node }) => string;
+    },
 ): string {
     const content = inEditorMarkOrder(withTrailingBreaks(json));
-    const svgs = options?.svgEquations;
     return renderToHTMLString({
         content,
         extensions: docExtensions(),
@@ -246,17 +263,14 @@ export function renderDocHtml(
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
-                // In the editor's span, whose rule lays a displayed one out on its line as the editor does.
-                equation: svgs
-                    ? renderBudgetedEquations((_attrs, key) => svgs.get(key), SVG_LIMIT)
-                    : renderBudgetedEquations((attrs) => {
-                          const { row, display } = readStoredEquation(attrs);
-                          const data = display ? ' data-display="block"' : '';
-                          return equationDrawing(
-                              `<span class="equation"${data}>${equationMathml(row, display)}</span>`,
-                          );
-                      }, MATHML_LIMIT),
-                ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
+                equation: options?.equations ?? renderEquations(),
+                ...(options?.smallCapsFont && {
+                    text: renderTextSynthesizingSmallCaps(content, options.smallCapsFont),
+                }),
+                ...(options?.pageCounters && {
+                    pageNumber: ({ node }) =>
+                        `<span data-type="page-number" data-kind="${readPageNumberKind(node.attrs['kind'])}"></span>`,
+                }),
             },
         },
     });

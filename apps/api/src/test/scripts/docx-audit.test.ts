@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JSONContent } from '@tiptap/core';
-import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { writeZip } from '../../lib/core/zip';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
@@ -493,8 +493,8 @@ describe('both sides', () => {
 <w:style w:type="paragraph" w:styleId="Chapter"><w:name w:val="heading 1"/>${heading}</w:style>`,
             },
         );
-        const { json } = docxToPmJson(Buffer.from(docx));
-        return { source: auditSource(docx), imported: auditImported(json) };
+        const { json, style } = docxToPmJson(Buffer.from(docx));
+        return { source: auditSource(docx), imported: auditImported(json, style.font) };
     }
 
     const NO_FONT = { source: 0, imported: 0, matched: 0, invented: 0, kept: null };
@@ -593,7 +593,8 @@ describe('both sides', () => {
 <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/></w:rPr></w:style>`,
         });
         const tally = auditSource(docx);
-        const { features } = compareTallies(tally, auditImported(docxToPmJson(Buffer.from(docx)).json));
+        const { json, style } = docxToPmJson(Buffer.from(docx));
+        const { features } = compareTallies(tally, auditImported(json, style.font));
         expect([count(tally, 'font'), features['font']?.kept]).toEqual([4, 1]);
     });
 
@@ -618,7 +619,9 @@ describe('both sides', () => {
         const json = buildAllFeaturesDocJson();
         const docx = await eigendocToDocx(
             json,
+            {},
             DEFAULT_PAGE_SETUP,
+            DEFAULT_NORMAL_STYLE,
             buildAllFeaturesDocMedia(),
             'Report.eigendoc',
             undefined,

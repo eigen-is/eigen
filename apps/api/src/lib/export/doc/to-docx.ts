@@ -2,23 +2,42 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName, readFontSize } from '@workspace/lib/constants/fonts';
 import {
+    DOCUMENT_LINE_RATIO,
+    EIGEN_FONT_NAMES,
+    EIGEN_FONTS,
+    getFontName,
+    readFontSize,
+} from '@workspace/lib/constants/fonts';
+import {
+    BAND_DISTANCE_MM,
+    FIRST_PAGE_BAND,
     type FigureAttrs,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
+    type NormalStyle,
     type PageSetup,
     pageTwips,
+    readCellBackground,
     readFigureAttrs,
     readPageNumberKind,
+    readParagraphFormat,
     type TitleType,
 } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import { writeOmml } from '@workspace/math';
 import { A_NS, ASVG_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../core/ooxml';
-import { type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
+import {
+    type PackagePart,
+    type Relationship,
+    relationshipsXml,
+    relsPathOf,
+    uriReference,
+    writePackage,
+} from '../../core/opc';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
+import type { EigendocBands } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
 import {
     BODY,
@@ -38,10 +57,12 @@ import {
     proseTextLook,
     QUOTE_LOOK,
     SMALL_LOOK,
+    TABLE_MARGIN,
     TASK_DONE_LOOK,
     TITLE_LOOKS,
     TITLE_SELECTORS,
     twips,
+    untypedListFormat,
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
@@ -64,7 +85,7 @@ import {
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
 import { splitDataUri } from '../../shared/data-uri';
-import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
+import { DOCX_FONT_FILES, type DocxFontFiles, fontLineHeight, sfntTables } from '../fonts';
 import { encodeOfficeImage, OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
@@ -72,17 +93,23 @@ import { absoluteHref, type HastNode, highlightCode } from './render';
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,
+    bands: EigendocBands,
     setup: PageSetup,
+    normal: NormalStyle,
     media: OfficeMedia[],
     title: string,
     publicOrigin: string | undefined,
 ): Promise<Uint8Array> {
-    const pkg: Package = {
+    const document: PartRelationships = {
         relationships: ['styles', 'numbering', 'settings', 'fontTable'].map((type) => ({
             type: `${R_NS}/${type}`,
             target: `${type}.xml`,
         })),
         hyperlinks: new Map(),
+        images: new Map(),
+    };
+    const pkg: Package = {
+        part: document,
         publicOrigin,
         lists: [],
         nums: [],
@@ -90,16 +117,45 @@ export async function eigendocToDocx(
         checkboxes: false,
         languages: new Set(),
         media: new Map(media.map((item) => [item.name, item])),
-        images: new Map(),
+        imageFiles: new Map(),
         files: [],
         drawings: 0,
-        // A Spacer's and a figure's mark draw in the body's Regular.
-        faces: new Map([[BODY.font, new Set<FontSlot>(['Regular'])]]),
+        // A Spacer's and a figure's mark draw in the Normal's Regular.
+        faces: new Map([[normal.font, new Set<FontSlot>(['Regular'])]]),
+        normal,
+        styles: new Map(styleDefinitions(normal).map((style) => [style.id, style])),
     };
     const page = pageTwips(setup);
     const column = page.width - page.margin.left - page.margin.right;
-    const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, quotes: 0 };
-    const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
+    const flow: Context = { pkg, first: false, column, indent: 0, depth: 0, numbered: 0, quotes: 0 };
+    const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false), pkg.styles);
+
+    // Each band is a part of its own, in the body's column, its images and links related through its own rels. With page 1
+    // different, a page-1 band the doc lacks is an empty part, as Word writes one.
+    const bandParts: PackagePart[] = [];
+    const references: string[] = [];
+    for (const edge of ['header', 'footer'] as const) {
+        const own = bands[edge];
+        const pageOne = bands[FIRST_PAGE_BAND[edge]];
+        const written: [type: 'default' | 'first', band: JSONContent | undefined][] = own ? [['default', own]] : [];
+        if (setup.differentFirstPage && (own || pageOne)) written.push(['first', pageOne]);
+        for (const [index, [type, band]] of written.entries()) {
+            pkg.part = { relationships: [], hyperlinks: new Map(), images: new Map() };
+            const path = `word/${edge}${index + 1}.xml`;
+            const content = band
+                ? blocksXml(withoutAfter(blocksOf(band.content ?? [], {}, flow, false)), pkg.styles)
+                : '<w:p/>';
+            bandParts.push([
+                path,
+                `<${BAND_TAGS[edge]} ${DOCUMENT_NAMESPACES}>${content}</${BAND_TAGS[edge]}>`,
+                `${WML}.${edge}+xml`,
+            ]);
+            if (pkg.part.relationships.length > 0)
+                bandParts.push([relsPathOf(path), relationshipsXml(pkg.part.relationships)]);
+            const rId = document.relationships.push({ type: `${R_NS}/${edge}`, target: path.slice('word/'.length) });
+            references.push(`<w:${edge}Reference w:type="${type}" r:id="rId${rId}"/>`);
+        }
+    }
     const fonts = embeddedFonts(pkg.faces);
 
     return writePackage({
@@ -112,11 +168,12 @@ export async function eigendocToDocx(
         parts: [
             [
                 'word/document.xml',
-                `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page)}</w:body></w:document>`,
+                `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page, references.join(''))}</w:body></w:document>`,
                 `${WML}.document.main+xml`,
             ],
-            ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
-            ['word/styles.xml', stylesXml(pkg.languages), `${WML}.styles+xml`],
+            ['word/_rels/document.xml.rels', relationshipsXml(document.relationships)],
+            ...bandParts,
+            ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
             ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
             ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
             ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
@@ -137,7 +194,7 @@ function figureMediaKey({ mediaName, src }: FigureAttrs): string | null {
 
 // A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
 // here, once, through the encode a media file takes; an SVG through the sanitizer the main thread's media took.
-export async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
+export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMedia[]> {
     const pasted = new Map<string, { mediaType: string | null; base64: string }>();
     const visit = (node: JSONContent) => {
         if (node.type === 'figure') {
@@ -150,7 +207,7 @@ export async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[
         }
         for (const child of node.content ?? []) visit(child);
     };
-    visit(json);
+    for (const root of roots) visit(root);
     if (pasted.size === 0) return [];
     const { sharpResize } = await import('../../shared/sharp-resize');
     const media: ExportMedia[] = [];
@@ -182,10 +239,14 @@ const DOCUMENT_NAMESPACES = [
     'mc:Ignorable="w14"',
 ].join(' ');
 
-// What one export accumulates as it walks, each hyperlink target, image, shared bullet numbering and face once.
+const BAND_TAGS = { header: 'w:hdr', footer: 'w:ftr' } as const;
+
+// The relationships of the part being written, the document's or a band's, each hyperlink target and image once.
+type PartRelationships = { relationships: Relationship[]; hyperlinks: Map<string, string>; images: Map<string, Image> };
+
+// What one export accumulates as it walks, each image file, shared bullet numbering and face once.
 type Package = {
-    relationships: Relationship[];
-    hyperlinks: Map<string, string>;
+    part: PartRelationships;
     publicOrigin: string | undefined;
     lists: List[];
     // Each w:num's abstractNum, by index.
@@ -194,10 +255,13 @@ type Package = {
     checkboxes: boolean;
     languages: Set<string>;
     media: Map<string, OfficeMedia>;
-    images: Map<string, Image>;
+    imageFiles: Map<string, ImageFile>;
     files: [path: string, data: ArrayBuffer][];
     drawings: number;
     faces: Map<string, Set<FontSlot>>;
+    // The doc's Normal, which docDefaults and the Normal style write, and the styles built on it.
+    normal: NormalStyle;
+    styles: Styles;
 };
 
 // The walk's surroundings, so a nested block sizes and indents itself against its parent: column and indent in twips.
@@ -209,6 +273,8 @@ type Context = {
     column: number;
     indent: number;
     depth: number;
+    // The numbered lists around the block, by which an untyped one numbers.
+    numbered: number;
     quotes: number;
     style?: StyleId;
     // The style TaskDone replaced, which an open task nested in a done one restores, as the editor strikes no nested task.
@@ -222,13 +288,14 @@ type Context = {
     upright?: boolean;
 };
 
-// Word's default 1.25 cm from the page edge, inside a smaller margin.
-const HEADER_DISTANCE = 709;
+// The bands' distance from the page edge, inside a smaller margin.
+const BAND_DISTANCE = Math.round((BAND_DISTANCE_MM * 1440) / 25.4);
 
-function sectionXml({ width, height, margin }: PageSetup): string {
+function sectionXml({ width, height, margin, differentFirstPage }: PageSetup, references: string): string {
     const orient = width > height ? ' w:orient="landscape"' : '';
-    const bands = `w:header="${Math.min(HEADER_DISTANCE, margin.top)}" w:footer="${Math.min(HEADER_DISTANCE, margin.bottom)}"`;
-    return `<w:sectPr><w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" ${bands} w:gutter="0"/></w:sectPr>`;
+    const bands = `w:header="${Math.min(BAND_DISTANCE, margin.top)}" w:footer="${Math.min(BAND_DISTANCE, margin.bottom)}"`;
+    const titlePg = differentFirstPage ? '<w:titlePg/>' : '';
+    return `<w:sectPr>${references}<w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" ${bands} w:gutter="0"/>${titlePg}</w:sectPr>`;
 }
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.
@@ -239,25 +306,20 @@ const FONT_SLOTS = ['Regular', 'Bold', 'Italic', 'BoldItalic'] as const satisfie
 
 type FontSlot = (typeof FONT_SLOTS)[number];
 
-// Each family's font table entry and Word's line height, (usWinAscent + usWinDescent) / unitsPerEm, from its Regular.
+// Each family's font table entry, from its Regular.
 const FONT_ENTRIES = EIGEN_FONTS.map(({ name, category }) => {
     const files = DOCX_FONT_FILES.get(name);
-    const tables = files && sfntTables(fs.readFileSync(files.Regular));
-    const os2 = tables?.get('OS/2');
-    const head = tables?.get('head');
-    if (!os2 || !head) throw new Error(`no OS/2 or head table for ${name}`);
+    const os2 = files && sfntTables(fs.readFileSync(files.Regular)).get('OS/2');
+    if (!os2) throw new Error(`no OS/2 table for ${name}`);
     const hex32 = (offset: number) => os2.readUInt32BE(offset).toString(16).toUpperCase().padStart(8, '0');
     const sig = Object.entries({ usb0: 42, usb1: 46, usb2: 50, usb3: 54, csb0: 78, csb1: 82 }).map(
         ([field, offset]) => `w:${field}="${hex32(offset)}"`,
     );
     return {
         name,
-        lineHeight: (os2.readUInt16BE(74) + os2.readUInt16BE(76)) / head.readUInt16BE(18),
         properties: `<w:panose1 w:val="${os2.subarray(32, 42).toString('hex').toUpperCase()}"/><w:charset w:val="00"/><w:family w:val="${FONT_FAMILY[category]}"/><w:pitch w:val="${category === 'monospace' ? 'fixed' : 'variable'}"/><w:sig ${sig.join(' ')}/>`,
     };
 });
-
-const FONT_LINE_HEIGHT = new Map(FONT_ENTRIES.map(({ name, lineHeight }) => [name, lineHeight]));
 
 // MS Gothic draws the checkbox glyphs.
 function fontTableXml(checkboxes: boolean, embeds: Map<string, string>): string {
@@ -306,10 +368,10 @@ type RunFace = { family: string; size: number };
 
 // As Word resolves a face: the run over its character style over its paragraph style, whose toggles flip each other.
 function useFace(pkg: Package, run: RunProps, paragraphStyle: StyleId | undefined): RunFace {
-    const character = styleFace(run.style);
-    const paragraph = styleFace(paragraphStyle ?? 'Normal');
-    const family = run.font ?? character.font ?? paragraph.font ?? BODY.font;
-    const size = run.size ?? character.size ?? paragraph.size ?? halfPoints(BODY.sizePt);
+    const character = styleFace(pkg.styles, run.style);
+    const paragraph = styleFace(pkg.styles, paragraphStyle ?? 'Normal');
+    const family = run.font ?? character.font ?? paragraph.font ?? pkg.normal.font;
+    const size = run.size ?? character.size ?? paragraph.size ?? halfPoints(pkg.normal.size);
     const files = DOCX_FONT_FILES.get(family);
     if (files) {
         const bold = run.bold ?? character.bold !== paragraph.bold;
@@ -322,10 +384,10 @@ function useFace(pkg: Package, run: RunProps, paragraphStyle: StyleId | undefine
 }
 
 // The nearest definition of each face property along a style's chain.
-function styleFace(style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> {
+function styleFace(styles: Styles, style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> {
     const face: Pick<RunProps, 'font' | 'bold' | 'italic' | 'size'> = {};
     for (let id = style; id !== undefined; ) {
-        const definition = STYLES.get(id);
+        const definition = styles.get(id);
         face.font ??= definition?.rPr?.font;
         face.bold ??= definition?.rPr?.bold;
         face.italic ??= definition?.rPr?.italic;
@@ -336,8 +398,8 @@ function styleFace(style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' |
 }
 
 // Word's auto line scales with the tallest face's own line height, CSS's unitless one with the largest size alone: a
-// paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
-function familyLine(style: StyleId | undefined, markFace: RunFace, faces: RunFace[]): number | undefined {
+// paragraph all in one family other than its mark's gets its line rescaled, unless the mark's taller.
+function familyLine(line: number, markFace: RunFace, faces: RunFace[]): number | undefined {
     const family = faces[0]?.family;
     if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
     let tallest = fontLineHeight(markFace.family) * markFace.size;
@@ -347,7 +409,7 @@ function familyLine(style: StyleId | undefined, markFace: RunFace, faces: RunFac
         largest = Math.max(largest, face.size);
     }
     const css = fontLineHeight(markFace.family) * largest;
-    return tallest === css ? undefined : Math.round((styleSpacing(style, 'line') * css) / tallest);
+    return tallest === css ? undefined : Math.round((line * css) / tallest);
 }
 
 // ── Properties, written in the ECMA-376 sequence: Word reports a child out of order as unreadable content ─────────
@@ -366,7 +428,7 @@ type ParagraphProps = {
     pBdr?: Partial<Record<(typeof BORDER_SIDES)[number], Border>>;
     shading?: string;
     spacing?: Spacing;
-    ind?: { left: number; right?: number; hanging?: number };
+    ind?: { left: number; right?: number; firstLine?: number; hanging?: number };
     contextualSpacing?: true;
     jc?: string;
     outlineLvl?: number;
@@ -424,7 +486,7 @@ function pPrXml(props: ParagraphProps): string {
         spacing &&
             `<w:spacing${spacing.before === undefined ? '' : ` w:before="${spacing.before}"`}${spacing.after === undefined ? '' : ` w:after="${spacing.after}"`}${spacing.line === undefined ? '' : ` w:line="${spacing.line}" w:lineRule="${spacing.exact ? 'exact' : 'auto'}"`}/>`,
         ind &&
-            `<w:ind w:left="${ind.left}"${ind.right === undefined ? '' : ` w:right="${ind.right}"`}${ind.hanging === undefined ? '' : ` w:hanging="${ind.hanging}"`}/>`,
+            `<w:ind w:left="${ind.left}"${ind.right === undefined ? '' : ` w:right="${ind.right}"`}${ind.firstLine === undefined ? '' : ` w:firstLine="${ind.firstLine}"`}${ind.hanging === undefined ? '' : ` w:hanging="${ind.hanging}"`}/>`,
         contextualSpacing && '<w:contextualSpacing/>',
         jc && `<w:jc w:val="${jc}"/>`,
         outlineLvl !== undefined && `<w:outlineLvl w:val="${outlineLvl}"/>`,
@@ -486,13 +548,19 @@ const TITLE_STYLES = [
 const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>([
     [
         'paragraph',
-        (node, context) => blocksOf(node.content ?? [], textProps({ jc: justification(node) }, context), context, true),
+        (node, context) =>
+            blocksOf(
+                node.content ?? [],
+                formatted(node, textProps({ jc: justification(node) }, context), context),
+                context,
+                true,
+            ),
     ],
     [
         'heading',
         (node, context) => {
             const level = clampInt(node.attrs?.['level'], 1, 6, 1);
-            const { sizePt } = textMetrics(`.eigen-prose h${level}`);
+            const { sizePt } = textMetrics(`.eigen-prose h${level}`, context.pkg.normal.size);
             const firstMargin = context.first
                 ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
                 : undefined;
@@ -505,7 +573,12 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 context,
             );
             const upright = !!nodeLook('heading', level).italic;
-            return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
+            return blocksOf(
+                node.content ?? [],
+                formatted(node, props, context),
+                { ...context, blockPt: sizePt, upright },
+                true,
+            );
         },
     ],
     ...TITLE_STYLES.map(({ type, id }) => [type, titleOf(type, id)] as const),
@@ -522,7 +595,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
             const indent = context.indent + (context.quotes < LIST_LEVELS ? QUOTE_LOOK.indent : 0);
             const quote: Context = { ...context, indent, quotes: context.quotes + 1, style: 'Quote', after: undefined };
             const blocks = blocksOf(node.content ?? [], textProps({}, quote), quote, false);
-            return withAfter(blocks, proseTwips('.eigen-prose blockquote', 'margin-bottom'));
+            return withAfter(blocks, proseTwips('.eigen-prose blockquote', 'margin-bottom'), context.pkg.styles);
         },
     ],
     [
@@ -545,7 +618,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
         'orderedList',
         (node, context) => {
             const type = node.attrs?.['type'];
-            const format = (typeof type === 'string' && LIST_FORMATS.get(type)) || 'decimal';
+            const format = (typeof type === 'string' && LIST_FORMATS.get(type)) || untypedListFormat(context.numbered);
             return listOf(node, context, 'ol', { format, start: clampInt(node.attrs?.['start'], 0, 32767, 1) });
         },
     ],
@@ -581,9 +654,14 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
 function titleOf(type: TitleType, style: StyleId) {
     return (node: JSONContent, context: Context): Block[] => {
         const props = textProps({ style, jc: justification(node) }, context);
-        const { sizePt } = textMetrics(TITLE_SELECTORS[type]);
+        const { sizePt } = textMetrics(TITLE_SELECTORS[type], context.pkg.normal.size);
         const upright = !!nodeLook(type).italic;
-        return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
+        return blocksOf(
+            node.content ?? [],
+            formatted(node, props, context),
+            { ...context, blockPt: sizePt, upright },
+            true,
+        );
     };
 }
 
@@ -596,10 +674,14 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
     const flush = () => {
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
-        const line = familyLine(props.style, useFace(context.pkg, {}, props.style), faces);
+        const line = familyLine(
+            props.spacing?.line ?? styleSpacing(context.pkg.styles, props.style, 'line'),
+            useFace(context.pkg, {}, props.style),
+            faces,
+        );
         let own = line === undefined ? props : { ...props, spacing: { ...props.spacing, line } };
         // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
-        if (pieces.length > 0 && props.style && STYLES.get(props.style)?.pPr?.outlineLvl !== undefined)
+        if (pieces.length > 0 && props.style && context.pkg.styles.get(props.style)?.pPr?.outlineLvl !== undefined)
             own = { ...own, outlineLvl: 9 };
         pieces.push(blocks.push({ props: own, runs }) - 1);
         inline = [];
@@ -637,20 +719,21 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
             blockPt: undefined,
             upright: undefined,
         });
-        if (BOXED.has(node.type ?? '') && BOXED.has(nodes[index - 1]?.type ?? '')) keepApart(blocks, written);
+        if (BOXED.has(node.type ?? '') && BOXED.has(nodes[index - 1]?.type ?? ''))
+            keepApart(blocks, written, context.pkg.styles);
         // A loop, not a spread: a code block of a million lines is a million arguments.
         for (const block of written) blocks.push(block);
     }
     // A textblock its wrapped figures emptied keeps its line, as the editor's trailing break does.
     if (inline.length > 0 || (textblock && pieces.length === 0)) flush();
-    if (textblock) shareMargins(blocks, pieces, props);
+    if (textblock) shareMargins(blocks, pieces, props, context.pkg.styles);
     return blocks;
 }
 
 // The pieces share their textblock's margins: the first takes the one above, the last the one below, none at a split.
-function shareMargins(blocks: Block[], pieces: number[], props: ParagraphProps): void {
-    const before = props.spacing?.before ?? styleSpacing(props.style, 'before');
-    const after = props.spacing?.after ?? styleSpacing(props.style, 'after');
+function shareMargins(blocks: Block[], pieces: number[], props: ParagraphProps, styles: Styles): void {
+    const before = props.spacing?.before ?? styleSpacing(styles, props.style, 'before');
+    const after = props.spacing?.after ?? styleSpacing(styles, props.style, 'after');
     for (const [order, index] of pieces.entries()) {
         const piece = blocks[index];
         if (!piece || 'table' in piece) continue;
@@ -674,7 +757,7 @@ const BOXED = new Set(['codeBlock', 'blockquote']);
 const SPACER: Paragraph = { props: { style: 'Spacer' }, runs: '' };
 
 // Readers draw adjacent boxes or bars as one, so the gap between them becomes a Spacer, its margins collapsed as CSS does.
-function keepApart(blocks: Block[], next: Block[]): void {
+function keepApart(blocks: Block[], next: Block[], styles: Styles): void {
     const last = blocks.at(-1);
     const first = next[0];
     if ((last && 'table' in last && !last.float) || (first && 'table' in first && !first.float)) return;
@@ -682,8 +765,8 @@ function keepApart(blocks: Block[], next: Block[]): void {
         blocks.push(SPACER);
         return;
     }
-    const after = last.props.spacing?.after ?? styleSpacing(last.props.style, 'after');
-    const before = first.props.spacing?.before ?? styleSpacing(first.props.style, 'before');
+    const after = last.props.spacing?.after ?? styleSpacing(styles, last.props.style, 'after');
+    const before = first.props.spacing?.before ?? styleSpacing(styles, first.props.style, 'before');
     if (after > 0)
         blocks[blocks.length - 1] = { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after: 0 } } };
     if (before > 0) next[0] = { ...first, props: { ...first.props, spacing: { ...first.props.spacing, before: 0 } } };
@@ -694,17 +777,18 @@ function keepApart(blocks: Block[], next: Block[]): void {
 }
 
 // Word merges adjacent tables and needs a paragraph after a flow's last one, so a Spacer stands where none does.
-function blocksXml(written: Block[]): string {
+function blocksXml(written: Block[], styles: Styles): string {
     const below = (block: Block | undefined) =>
         block && 'table' in block && !block.float ? (block.after ?? TABLE_LOOK.margin) : undefined;
     const spacer = (before: number | undefined) =>
         paragraphXml(before === undefined ? SPACER : { props: { style: 'Spacer', spacing: { before } }, runs: '' });
-    const blocks = withInsets(written);
+    const blocks = withInsets(written, styles);
     return blocks
         .map((block, index) => {
             const previous = blocks[index - 1];
             const before = below(previous);
-            if (!('table' in block)) return paragraphXml(before === undefined ? block : withBefore(block, before));
+            if (!('table' in block))
+                return paragraphXml(before === undefined ? block : withBefore(block, before, styles));
             const between = previous !== undefined && 'table' in previous ? spacer(before) : '';
             return `${between}${block.table}${index === blocks.length - 1 ? spacer(below(block)) : ''}`;
         })
@@ -713,14 +797,14 @@ function blocksXml(written: Block[]): string {
 
 // Readers collapse adjacent spacing to the larger, so an inset paragraph writes each whole gap on its side: the
 // neighbour's inset, the two collapsed, its own inset. A float is out of the flow.
-function withInsets(blocks: Block[]): Block[] {
+function withInsets(blocks: Block[], styles: Styles): Block[] {
     const flow = blocks.filter((block) => !('table' in block && block.float));
     const outer = (block: Block, side: 'before' | 'after') =>
         'table' in block
             ? side === 'after'
                 ? (block.after ?? TABLE_LOOK.margin)
                 : TABLE_LOOK.margin
-            : (block.props.spacing?.[side] ?? styleSpacing(block.props.style, side));
+            : (block.props.spacing?.[side] ?? styleSpacing(styles, block.props.style, side));
     const inset = (block: Block | undefined, side: keyof Inset) =>
         block && !('table' in block) ? (block.inset?.[side] ?? 0) : 0;
     const spaced = new Map<Block, Block>();
@@ -740,15 +824,46 @@ function withInsets(blocks: Block[]): Block[] {
     return blocks.map((block) => spaced.get(block) ?? block);
 }
 
-// A plain paragraph takes its container's style and spacing; a heading in a quote takes the quote's bar directly.
+// A plain paragraph takes its container's style and spacing, none of the Normal's before; a heading in a quote takes
+// the quote's bar directly.
 function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>, context: Context): ParagraphProps {
     const style = own.style ?? context.style;
     return {
         style,
         pBdr: quoteBar(style, context),
-        spacing: own.spacing ?? (own.style || context.after === undefined ? undefined : { after: context.after }),
+        spacing:
+            own.spacing ??
+            (own.style || context.after === undefined
+                ? undefined
+                : { ...(context.pkg.normal.spaceBefore > 0 && { before: 0 }), after: context.after }),
         ind: indentOf(style, context),
         jc: own.jc ?? context.align,
+    };
+}
+
+// A prose textblock's own format over what its style and container give it: its indent counts from the container's text.
+// An item, a quote and a cell own the spacing of what they hold, as the editor draws it.
+function formatted(node: JSONContent, props: ParagraphProps, context: Context): ParagraphProps {
+    const format = readParagraphFormat(node.attrs ?? {});
+    const spacing: Spacing = { ...props.spacing };
+    if (format.lineSpacing !== undefined) spacing.line = normalLine(format.lineSpacing, context.pkg.normal);
+    if (context.quotes === 0 && context.after === undefined) {
+        if (format.spaceBefore !== undefined) spacing.before = twips(format.spaceBefore);
+        if (format.spaceAfter !== undefined) spacing.after = twips(format.spaceAfter);
+    }
+    const { indentLeft, indentRight, indentFirstLine } = format;
+    const indented = indentLeft !== undefined || indentRight !== undefined || indentFirstLine !== undefined;
+    return {
+        ...props,
+        spacing: Object.keys(spacing).length > 0 ? spacing : undefined,
+        ind: indented
+            ? {
+                  left: context.indent + twips(indentLeft ?? 0),
+                  right: indentRight === undefined ? undefined : twips(indentRight),
+                  firstLine: indentFirstLine !== undefined && indentFirstLine > 0 ? twips(indentFirstLine) : undefined,
+                  hanging: indentFirstLine !== undefined && indentFirstLine < 0 ? twips(-indentFirstLine) : undefined,
+              }
+            : props.ind,
     };
 }
 
@@ -759,12 +874,12 @@ function quoteBar(style: StyleId | undefined, context: Context): ParagraphProps[
 
 // Direct only where the style's own indent isn't the container's.
 function indentOf(style: StyleId | undefined, context: Context): ParagraphProps['ind'] {
-    const own = (style && STYLES.get(style)?.pPr?.ind?.left) ?? 0;
+    const own = (style && context.pkg.styles.get(style)?.pPr?.ind?.left) ?? 0;
     return context.indent === own ? undefined : { left: context.indent };
 }
 
 // A container's bottom margin on its last block, collapsed with its own; a hairline and a floating figure keep theirs.
-function withAfter(blocks: Block[], after: number): Block[] {
+function withAfter(blocks: Block[], after: number, styles: Styles): Block[] {
     const last = blocks.at(-1);
     if (!last || ('table' in last && last.float)) return blocks;
     if ('table' in last) {
@@ -773,20 +888,32 @@ function withAfter(blocks: Block[], after: number): Block[] {
     }
     if (last.props.style === 'PageBreak' || (last.props.style === 'Spacer' && last.runs !== CLEAR_FLOATS))
         return blocks;
-    if (after <= (last.props.spacing?.after ?? styleSpacing(last.props.style, 'after'))) return blocks;
+    if (after <= (last.props.spacing?.after ?? styleSpacing(styles, last.props.style, 'after'))) return blocks;
     return [...blocks.slice(0, -1), { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after } } }];
 }
 
-function withBefore(paragraph: Paragraph, before: number): Paragraph {
+// A band's last block has no space after, as the editor and the PDF draw it (PAGE_BAND_CLASS) and as Word's Header and
+// Footer styles have none.
+function withoutAfter(blocks: Block[]): Block[] {
+    const last = blocks.at(-1);
+    if (!last || ('table' in last && last.float)) return blocks;
+    if ('table' in last) return [...blocks.slice(0, -1), { ...last, after: 0 }];
+    return [
+        ...blocks.slice(0, -1),
+        { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after: 0 } } },
+    ];
+}
+
+function withBefore(paragraph: Paragraph, before: number, styles: Styles): Paragraph {
     const { props } = paragraph;
-    if (before <= (props.spacing?.before ?? styleSpacing(props.style, 'before'))) return paragraph;
+    if (before <= (props.spacing?.before ?? styleSpacing(styles, props.style, 'before'))) return paragraph;
     return { ...paragraph, props: { ...props, spacing: { ...props.spacing, before } } };
 }
 
 // What the style chain gives a paragraph: its own style, what that is based on, Normal for none.
-function styleSpacing(style: StyleId | undefined, side: 'before' | 'after' | 'line'): number {
+function styleSpacing(styles: Styles, style: StyleId | undefined, side: 'before' | 'after' | 'line'): number {
     for (let id = style ?? 'Normal'; ; ) {
-        const definition = STYLES.get(id);
+        const definition = styles.get(id);
         const value = definition?.pPr?.spacing?.[side];
         if (value !== undefined) return value;
         if (!definition?.basedOn) return 0;
@@ -821,11 +948,15 @@ function listOf(
                   ilvl,
               }
             : undefined;
-    const items = { ...context, list };
+    const items = { ...context, list, numbered: context.numbered + (tag === 'ol' ? 1 : 0) };
     const blocks = blocksOf(content, textProps({}, items), items, false);
     if (context.depth > 0) return blocks;
     const runsOn = tag === 'ol' && context.next === 'orderedList';
-    return withAfter(blocks, proseTwips(runsOn ? '.eigen-prose ol:has(+ ol)' : `.eigen-prose ${tag}`, 'margin-bottom'));
+    return withAfter(
+        blocks,
+        proseTwips(runsOn ? '.eigen-prose ol:has(+ ol)' : `.eigen-prose ${tag}`, 'margin-bottom'),
+        context.pkg.styles,
+    );
 }
 
 // Each list is a w:num of its own, so lists side by side stay apart; a bullet counts nothing, so bullet lists at one
@@ -966,10 +1097,11 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     const { dxa, fixed } = gridWidths(widths, columnPx);
     const spanWidth = (column: number, colspan: number) =>
         dxa.slice(column, column + colspan).reduce((sum, width) => sum + width, 0);
-    const covered = new Map<string, number>();
+    // The merge each covered position continues.
+    const covered = new Map<string, GridCell>();
     for (const [rowIndex, cells] of grid.entries()) {
-        for (const { column, colspan, rowspan } of cells) {
-            for (let k = 1; k < rowspan; k++) covered.set(`${rowIndex + k}:${column}`, colspan);
+        for (const cell of cells) {
+            for (let k = 1; k < cell.rowspan; k++) covered.set(`${rowIndex + k}:${cell.column}`, cell);
         }
     }
     const rowsXml = grid.map((cells, rowIndex) => {
@@ -977,17 +1109,22 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
         const tcs: string[] = [];
         for (let column = 0; column < dxa.length; ) {
             const cell = byColumn.get(column);
-            const coveredSpan = covered.get(`${rowIndex}:${column}`);
-            const colspan = cell?.colspan ?? coveredSpan ?? 1;
+            const merged = covered.get(`${rowIndex}:${column}`);
+            const owner = cell ?? merged;
+            const colspan = owner?.colspan ?? 1;
             const width = spanWidth(column, colspan);
+            // Word draws a fill per cell, so a merge's covered cells carry it too; a cell's own wins over a header's grey.
+            const fill =
+                readCellBackground(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
+                (owner?.node.type === 'tableHeader' ? HEADER_CELL_LOOK.fill : undefined);
             const tcPr = (merge: string) =>
-                `<w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${cell?.node.type === 'tableHeader' ? `<w:shd w:val="clear" w:color="auto" w:fill="${HEADER_CELL_LOOK.fill}"/>` : ''}</w:tcPr>`;
+                `<w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}</w:tcPr>`;
             if (cell) {
                 const merge = cell.rowspan > 1 ? '<w:vMerge w:val="restart"/>' : '';
                 tcs.push(
-                    `<w:tc>${tcPr(merge)}${cellXml(cell, width - 2 * TABLE_LOOK.padding.horizontal, context.pkg)}</w:tc>`,
+                    `<w:tc>${tcPr(merge)}${cellXml(cell, width - 2 * TABLE_LOOK.padding.horizontal, context)}</w:tc>`,
                 );
-            } else tcs.push(`<w:tc>${tcPr(coveredSpan === undefined ? '' : '<w:vMerge/>')}<w:p/></w:tc>`);
+            } else tcs.push(`<w:tc>${tcPr(merged === undefined ? '' : '<w:vMerge/>')}<w:p/></w:tc>`);
             column += colspan;
         }
         // Only an all-header row repeats; a reader may take an explicit off as on.
@@ -1026,8 +1163,9 @@ function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: nu
     return { dxa: px.map((width) => Math.round(width * TWIPS_PER_PX)), fixed: unknown === 0 };
 }
 
-// A cell is a flow of its own: no indent or list around it, its paragraphs flush and aligned as the cell is.
-function cellXml({ node, content }: GridCell, column: number, pkg: Package): string {
+// A cell is a flow of its own: no indent or list around it, its paragraphs flush and aligned as the cell is. Only an
+// untyped list in it still numbers by the lists around the table, as eigen-prose.css draws it.
+function cellXml({ node, content }: GridCell, column: number, { pkg, numbered }: Context): string {
     const align = node.attrs?.['align'];
     const cell: Context = {
         pkg,
@@ -1035,12 +1173,13 @@ function cellXml({ node, content }: GridCell, column: number, pkg: Package): str
         column,
         indent: 0,
         depth: 0,
+        numbered,
         quotes: 0,
         after: 0,
         align: typeof align === 'string' ? JUSTIFICATION.get(align) : undefined,
     };
     const blocks = blocksOf(content, textProps({}, cell), cell, false);
-    return blocks.length > 0 ? blocksXml(blocks) : paragraphXml({ props: textProps({}, cell), runs: '' });
+    return blocks.length > 0 ? blocksXml(blocks, pkg.styles) : paragraphXml({ props: textProps({}, cell), runs: '' });
 }
 
 const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
@@ -1051,13 +1190,16 @@ const TABLE_LOOK = {
         vertical: twips(cssPt(boxSide(CELL_PADDING, 'top'), BODY.sizePt)),
         horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
     },
-    margin: twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt)),
+    margin: TABLE_MARGIN,
 };
 
 // ── Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback ─────────────────────────────────
 
-// One image part and relationship per media name; an SVG's PNG is its blip, the SVG its extension.
-type Image = { rId: string; svgRId?: string; part: string; width: number; height: number };
+// One image file per media name, and one relationship per part that shows it; an SVG's PNG is its blip, the SVG its
+// extension.
+type ImageFile = { part: string; svg?: string; width: number; height: number };
+
+type Image = ImageFile & { rId: string; svgRId?: string };
 
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
@@ -1070,7 +1212,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     const margin = proseValue('.eigen-prose .figure', 'margin');
     const top = twips(cssPt(boxSide(margin, 'top'), BODY.sizePt));
     const bottom = twips(cssPt(boxSide(margin, 'bottom'), BODY.sizePt));
-    const captionBefore = styleSpacing('Caption', 'before');
+    const captionBefore = styleSpacing(context.pkg.styles, 'Caption', 'before');
     const captionParagraph = (before: number, inset: Inset): Paragraph => ({
         props: {
             style: 'Caption',
@@ -1130,7 +1272,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
             paragraphXml({
                 props: {
                     style: 'Caption',
-                    spacing: { before: styleSpacing('Caption', 'before'), after: 0 },
+                    spacing: { before: captionBefore, after: 0 },
                     jc: 'center',
                 },
                 runs: `<w:r>${captionRuns}</w:r>`,
@@ -1146,25 +1288,30 @@ function figureOf(node: JSONContent, context: Context): Block[] {
     ];
 }
 
-// The first figure to show a media name adds its parts; no positive size, an SVG without PNG or another type adds none.
+// The first figure to show a media name adds its files, and the first in each part that part's relationships; no
+// positive size, an SVG without PNG or another type adds none.
 function imageOf(name: string, pkg: Package): Image | undefined {
-    const known = pkg.images.get(name);
+    const known = pkg.part.images.get(name);
     if (known) return known;
-    const media = pkg.media.get(name);
-    const { width, height } = media ?? {};
-    if (!media || !isPositive(width) || !isPositive(height)) return undefined;
-    const raster = media.contentType === 'image/svg+xml' ? media.png : media.data;
-    const extension = media.contentType === 'image/svg+xml' ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
-    if (!raster || !extension) return undefined;
-    const n = pkg.images.size + 1;
-    const add = (file: string, data: ArrayBuffer) => {
-        pkg.files.push([`word/media/${file}`, data]);
-        return `rId${pkg.relationships.push({ type: `${R_NS}/image`, target: `media/${file}` })}`;
-    };
-    const part = `image${n}.${extension}`;
-    const image: Image = { rId: add(part, raster), part, width, height };
-    if (media.contentType === 'image/svg+xml') image.svgRId = add(`image${n}.svg`, media.data);
-    pkg.images.set(name, image);
+    let file = pkg.imageFiles.get(name);
+    if (!file) {
+        const media = pkg.media.get(name);
+        const { width, height } = media ?? {};
+        if (!media || !isPositive(width) || !isPositive(height)) return undefined;
+        const svg = media.contentType === 'image/svg+xml';
+        const raster = svg ? media.png : media.data;
+        const extension = svg ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
+        if (!raster || !extension) return undefined;
+        const n = pkg.imageFiles.size + 1;
+        file = { part: `image${n}.${extension}`, ...(svg && { svg: `image${n}.svg` }), width, height };
+        pkg.files.push([`word/media/${file.part}`, raster]);
+        if (file.svg) pkg.files.push([`word/media/${file.svg}`, media.data]);
+        pkg.imageFiles.set(name, file);
+    }
+    const relate = (target: string) =>
+        `rId${pkg.part.relationships.push({ type: `${R_NS}/image`, target: `media/${target}` })}`;
+    const image: Image = { ...file, rId: relate(file.part), ...(file.svg && { svgRId: relate(file.svg) }) };
+    pkg.part.images.set(name, image);
     return image;
 }
 
@@ -1302,10 +1449,11 @@ function runsXml(nodes: JSONContent[], context: Context, style: StyleId | undefi
             xml += runs;
             continue;
         }
-        let id = context.pkg.hyperlinks.get(link.target);
+        const { part } = context.pkg;
+        let id = part.hyperlinks.get(link.target);
         if (!id) {
-            id = `rId${context.pkg.relationships.push({ type: `${R_NS}/hyperlink`, target: link.target, external: true })}`;
-            context.pkg.hyperlinks.set(link.target, id);
+            id = `rId${part.relationships.push({ type: `${R_NS}/hyperlink`, target: link.target, external: true })}`;
+            part.hyperlinks.set(link.target, id);
         }
         const tooltip = link.tooltip ? ` w:tooltip="${escapeXml(link.tooltip)}"` : '';
         xml += `<w:hyperlink r:id="${id}"${tooltip} w:history="1">${runs}</w:hyperlink>`;
@@ -1416,10 +1564,9 @@ function autoLine(linePt: number, sizePt: number, font: string): number {
     return Math.round((240 * linePt) / (sizePt * fontLineHeight(font)));
 }
 
-function fontLineHeight(font: string): number {
-    const lineHeight = FONT_LINE_HEIGHT.get(font);
-    if (lineHeight === undefined) throw new Error(`no line height for ${font}`);
-    return lineHeight;
+// A line spacing, which CSS draws in Inter's line, in the Normal's font, as Word draws it.
+function normalLine(lineSpacing: number, normal: NormalStyle): number {
+    return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
 }
 
 // A length an element in the body text takes, in twips.
@@ -1427,12 +1574,11 @@ function proseTwips(selector: string, property: string): number {
     return twips(cssPt(proseValue(selector, property), BODY.sizePt));
 }
 
-// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do.
-function textMetrics(selector: string) {
-    const sizePt = cssPt(
-        proseValueIfSet(selector, 'font-size') ?? proseValue('.eigen-prose', 'font-size'),
-        BODY.sizePt,
-    );
+// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do: its size the
+// Normal's.
+function textMetrics(selector: string, normalPt: number) {
+    const size = proseValueIfSet(selector, 'font-size');
+    const sizePt = size === undefined ? normalPt : cssPt(size, BODY.sizePt);
     const line = proseValueIfSet(selector, 'line-height') ?? proseValue('.eigen-prose', 'line-height');
     const tracking = proseValueIfSet(selector, 'letter-spacing');
     return {
@@ -1443,6 +1589,8 @@ function textMetrics(selector: string) {
         tracking: tracking === undefined ? undefined : twips(cssPt(tracking, sizePt)),
     };
 }
+
+type Styles = Map<StyleId, StyleDef>;
 
 type StyleDef = {
     type: 'paragraph' | 'character' | 'table' | 'numbering';
@@ -1501,9 +1649,11 @@ const HAIRLINE: Pick<StyleDef, 'pPr' | 'rPr'> = {
     rPr: { size: 2 },
 };
 
-// No w:lang, so Word checks spelling in the reader's own language.
-function stylesXml(languages: Set<string>): string {
-    const defaults = `<w:docDefaults><w:rPrDefault><w:rPr>${rPrXml({ font: BODY.font, color: BODY.color, size: halfPoints(BODY.sizePt) })}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>${pPrXml({ spacing: { before: 0, after: 0 } })}</w:pPr></w:pPrDefault></w:docDefaults>`;
+// No w:lang, so Word checks spelling in the reader's own language. Text without a font, colour or size draws in the
+// Normal's.
+function stylesXml({ normal, styles, languages }: Package): string {
+    const run = { font: normal.font, color: cssColorToHex(normal.color), size: halfPoints(normal.size) };
+    const defaults = `<w:docDefaults><w:rPrDefault><w:rPr>${rPrXml(run)}</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>${pPrXml({ spacing: { before: 0, after: 0 } })}</w:pPr></w:pPrDefault></w:docDefaults>`;
     // Without unhideWhenUsed a language's style stays out of the gallery once used.
     const variants = [...languages].map(
         (language): StyleDef => ({
@@ -1513,17 +1663,18 @@ function stylesXml(languages: Set<string>): string {
             semiHidden: true,
         }),
     );
-    return `<w:styles xmlns:w="${W_NS}">${defaults}${[...STYLES.values(), ...variants].map(styleXml).join('')}</w:styles>`;
+    return `<w:styles xmlns:w="${W_NS}">${defaults}${[...styles.values(), ...variants].map(styleXml).join('')}</w:styles>`;
 }
 
-function styleDefinitions(): StyleDef[] {
-    const paragraphLine = lineHeightPt(proseValue('.eigen-prose p', 'line-height'), BODY.sizePt);
+// Built per export on the doc's Normal. A quote's paragraphs take none of its space before, as the editor draws them.
+function styleDefinitions(normal: NormalStyle): StyleDef[] {
+    const before = normal.spaceBefore > 0 ? { before: 0 } : {};
     const codePt = cssPt(proseValue('.eigen-prose pre code', 'font-size'), BODY.sizePt);
     const codeMargin = proseValue('.eigen-prose pre', 'margin');
     const rule = { ...proseBorder('.eigen-prose hr', 'border-top'), space: 1 };
     const ruleMargin = proseValue('.eigen-prose hr', 'margin');
     const titles = TITLE_STYLES.map(({ type, id, uiPriority }): StyleDef => {
-        const { sizePt, before, after, line, tracking } = textMetrics(TITLE_SELECTORS[type]);
+        const { sizePt, before, after, line, tracking } = textMetrics(TITLE_SELECTORS[type], normal.size);
         return {
             type: 'paragraph',
             id,
@@ -1535,14 +1686,14 @@ function styleDefinitions(): StyleDef[] {
             pPr: {
                 keepNext: true,
                 keepLines: true,
-                spacing: { before, after, line: autoLine(line, sizePt, BODY.font) },
+                spacing: { before, after, line: autoLine(line, sizePt, normal.font) },
             },
             rPr: { spacing: tracking, size: halfPoints(sizePt), ...TITLE_LOOKS[type] },
         };
     });
     const headings = HEADING_LOOKS.map((look, index): StyleDef => {
         const level = index + 1;
-        const { sizePt, before, after, line, tracking } = textMetrics(`.eigen-prose h${level}`);
+        const { sizePt, before, after, line, tracking } = textMetrics(`.eigen-prose h${level}`, normal.size);
         return {
             type: 'paragraph',
             id: `Heading${level}`,
@@ -1554,7 +1705,7 @@ function styleDefinitions(): StyleDef[] {
             pPr: {
                 keepNext: true,
                 keepLines: true,
-                spacing: { before, after, line: autoLine(line, sizePt, BODY.font) },
+                spacing: { before, after, line: autoLine(line, sizePt, normal.font) },
                 outlineLvl: level - 1,
             },
             rPr: { spacing: tracking, size: halfPoints(sizePt), ...look },
@@ -1569,8 +1720,9 @@ function styleDefinitions(): StyleDef[] {
             qFormat: true,
             pPr: {
                 spacing: {
-                    after: twips(cssPt(proseValue('.eigen-prose p', 'margin-bottom'), BODY.sizePt)),
-                    line: autoLine(paragraphLine, BODY.sizePt, BODY.font),
+                    before: normal.spaceBefore > 0 ? twips(normal.spaceBefore) : undefined,
+                    after: twips(normal.spaceAfter),
+                    line: normalLine(normal.lineSpacing, normal),
                 },
             },
         },
@@ -1613,6 +1765,7 @@ function styleDefinitions(): StyleDef[] {
             pPr: {
                 pBdr: { left: QUOTE_LOOK.border },
                 spacing: {
+                    ...before,
                     after: twips(
                         cssPt(boxSide(proseValue('.eigen-prose blockquote p', 'margin'), 'bottom'), BODY.sizePt),
                     ),
@@ -1710,5 +1863,3 @@ function styleDefinitions(): StyleDef[] {
         },
     ];
 }
-
-const STYLES = new Map(styleDefinitions().map((style) => [style.id, style]));

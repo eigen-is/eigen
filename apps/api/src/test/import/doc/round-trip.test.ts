@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { readOmml, writeMathml } from '@workspace/math';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/core/ooxml';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
@@ -35,10 +35,10 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
 // column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
-// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out. (9) A
-// page number is its cached 1, before the schema joins the text (cachedPageNumbers). (10) Small is written as its look
-// and comes back as that size. (11) OMML has no slot for the typed LaTeX. (12) In Word a display equation is a paragraph
-// of its own.
+// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out. (9) Small
+// is written as its look and comes back as that size. (10) OMML has no slot for the typed LaTeX. (11) In Word a display
+// equation is a paragraph of its own, and every piece but the last keeps the writer's no space after, so the pieces draw
+// as one paragraph.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -87,7 +87,13 @@ function splitAtDisplayEquations(node: JSONContent): JSONContent[] {
         if (isDisplayEquation(child)) pieces.push([child], []);
         else pieces.at(-1)?.push(child);
     }
-    return pieces.filter((piece) => piece.length > 0).map((content) => ({ ...node, content }));
+    return pieces
+        .filter((piece) => piece.length > 0)
+        .map((content, index, all) =>
+            index < all.length - 1
+                ? { ...node, attrs: { ...node.attrs, spaceAfter: 0 }, content }
+                : { ...node, content },
+        );
 }
 
 function blankBeforeBreak(siblings: JSONContent[], index: number): boolean {
@@ -108,22 +114,17 @@ function withSourceNames(node: JSONContent, names: Map<string, string>): JSONCon
     };
 }
 
-// The reader doesn't read a PAGE or NUMPAGES field yet, so a page number is its cached 1, run into the text beside it
-// once the schema joins them.
-function cachedPageNumbers(node: JSONContent): JSONContent {
-    if (node.type === 'pageNumber') return { type: 'text', text: '1' };
-    return node.content ? { ...node, content: node.content.map(cachedPageNumbers) } : node;
-}
-
 // JSON round trips drop undefined keys, so both sides compare as stored.
 const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(json));
 
 describe('the all-features doc', () => {
     test('comes back as it was written, but for the named differences', async () => {
-        const source = docSchema().nodeFromJSON(cachedPageNumbers(buildAllFeaturesDocJson())).toJSON();
+        const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
         const docx = await eigendocToDocx(
             buildAllFeaturesDocJson(),
+            {},
             DEFAULT_PAGE_SETUP,
+            DEFAULT_NORMAL_STYLE,
             buildAllFeaturesDocMedia(),
             'All features',
             ORIGIN,
@@ -143,11 +144,105 @@ describe('the page', () => {
             differentFirstPage: false,
         };
         const source = buildAllFeaturesDocJson();
-        const { page: read } = docxToPmJson(Buffer.from(await eigendocToDocx(source, page, [], 'Letter', undefined)));
+        const { page: read } = docxToPmJson(
+            Buffer.from(await eigendocToDocx(source, {}, page, DEFAULT_NORMAL_STYLE, [], 'Letter', undefined)),
+        );
         expect(read.width).toBe(279.4);
         expect(read.height).toBe(215.9);
         for (const side of ['top', 'right', 'bottom', 'left'] as const) expect(read.margin[side]).toBeCloseTo(10, 2);
         expect(read.differentFirstPage).toBe(false);
+    });
+
+    // Each band comes back where it was, page numbers as fields and an equation as Word's; page 1's footer is the empty
+    // part the writer stands in.
+    test("the header, the footer and page 1's own header come back as they were written", async () => {
+        const number = (kind: string) => ({ type: 'pageNumber', attrs: { kind } });
+        const equation = { type: 'equation', attrs: { mathml: writeMathml([{ kind: 'identifier', text: 'y' }]) } };
+        const bands = {
+            header: {
+                type: 'doc',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Acme ' }, equation] }],
+            },
+            footer: {
+                type: 'doc',
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            { type: 'text', text: 'Page ' },
+                            number('page'),
+                            { type: 'text', text: ' of ' },
+                            number('pages'),
+                        ],
+                    },
+                ],
+            },
+            headerFirst: { type: 'doc', content: [p('Letterhead')] },
+        };
+        const docx = await eigendocToDocx(
+            { type: 'doc', content: [p('Body')] },
+            bands,
+            { ...DEFAULT_PAGE_SETUP, differentFirstPage: true },
+            DEFAULT_NORMAL_STYLE,
+            [],
+            'Bands',
+            undefined,
+        );
+        const { bands: read, page } = docxToPmJson(Buffer.from(docx));
+        expect(page.differentFirstPage).toBe(true);
+        expect(Object.keys(read)).toEqual(['header', 'footer', 'headerFirst']);
+        for (const root of ['header', 'footer', 'headerFirst'] as const)
+            expect(stored(read[root] ?? {})).toEqual(stored(docSchema().nodeFromJSON(bands[root]).toJSON()));
+    });
+});
+
+describe('the Normal', () => {
+    // Every key apart from Eigen's.
+    const normal = {
+        font: 'Source Serif 4',
+        size: 12,
+        lineSpacing: 1,
+        spaceBefore: 6,
+        spaceAfter: 0,
+        color: '#000000',
+    };
+
+    test("docDefaults and the Normal style come back as the doc's Normal, and what sets a paragraph or a run apart stays", async () => {
+        const text = (value: string, marks?: Mark[]): JSONContent => ({ type: 'text', text: value, marks });
+        const source = docSchema()
+            .nodeFromJSON({
+                type: 'doc',
+                content: [
+                    { type: 'paragraph', content: [text('Plain')] },
+                    { type: 'paragraph', attrs: { lineSpacing: 1.5, spaceAfter: 12 }, content: [text('Spaced')] },
+                    {
+                        type: 'paragraph',
+                        content: [
+                            text('Sans', [{ type: 'textStyle', attrs: { fontFamily: 'Inter' } }]),
+                            text(' big', [{ type: 'textStyle', attrs: { fontSize: 14 } }]),
+                        ],
+                    },
+                ],
+            })
+            .toJSON();
+        // A header is a part of its own over the same styles.xml, so its text draws in the Normal with no marks either.
+        const header = { type: 'doc', content: [{ type: 'paragraph', content: [text('Acme')] }] };
+        const { json, bands, style } = docxToPmJson(
+            Buffer.from(await eigendocToDocx(source, { header }, DEFAULT_PAGE_SETUP, normal, [], 'Word', undefined)),
+        );
+        expect(style).toEqual(normal);
+        expect(stored(json)).toEqual(stored(source));
+        expect(stored(bands['header'] ?? {})).toEqual(stored(docSchema().nodeFromJSON(header).toJSON()));
+    });
+
+    test("Eigen's own Normal comes back as the default", async () => {
+        const source = buildAllFeaturesDocJson();
+        const { style } = docxToPmJson(
+            Buffer.from(
+                await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Eigen', undefined),
+            ),
+        );
+        expect(style).toEqual(DEFAULT_NORMAL_STYLE);
     });
 });
 
@@ -167,7 +262,7 @@ describe("the math package's corpus equations", () => {
             )
             .join('');
         const { json } = await importDocxBody(input);
-        const docx = await eigendocToDocx(json, DEFAULT_PAGE_SETUP, [], 'Equations', ORIGIN);
+        const docx = await eigendocToDocx(json, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Equations', ORIGIN);
         const document = parseOoxml(openZip(new Uint8Array(docx)).read('word/document.xml') ?? '');
         const body = document && xmlChild(document, W_NS, 'body');
         if (!body) throw new Error('no w:body');
@@ -221,7 +316,9 @@ const tasks = (...items: JSONContent[][]) => ({
 async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent; json: JSONContent }> {
     const source = docSchema().nodeFromJSON({ type: 'doc', content }).toJSON();
     const { json } = docxToPmJson(
-        Buffer.from(await eigendocToDocx(source, DEFAULT_PAGE_SETUP, [], 'Nested', undefined)),
+        Buffer.from(
+            await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Nested', undefined),
+        ),
     );
     return { source, json };
 }
@@ -518,6 +615,46 @@ function toggleItalic(node: JSONContent): JSONContent {
     if (marks.length === (node.marks ?? []).length) marks.push({ type: 'italic' });
     return { ...node, marks };
 }
+
+// D13: a paragraph's own format comes back as set, in another family too, where the writer scales its line.
+describe("a paragraph's format", () => {
+    const formatted = (attrs: Record<string, unknown>, ...marks: NonNullable<JSONContent['marks']>): JSONContent => ({
+        type: 'paragraph',
+        attrs,
+        content: [{ type: 'text', text: 'Text', ...(marks.length > 0 && { marks }) }],
+    });
+    const serif = { type: 'textStyle', attrs: { fontFamily: 'Source Serif 4' } };
+    test.each<[string, JSONContent[]]>([
+        [
+            'line spacing and spacing',
+            [
+                formatted({ lineSpacing: 1.15 }),
+                formatted({ lineSpacing: 2, spaceBefore: 6, spaceAfter: 0 }),
+                formatted({ lineSpacing: 1.5 }, serif),
+                formatted({}, serif),
+            ],
+        ],
+        [
+            'indents',
+            [
+                formatted({ indentLeft: 36, indentRight: 18 }),
+                formatted({ indentFirstLine: 18 }),
+                formatted({ indentLeft: 36, indentFirstLine: -36 }),
+            ],
+        ],
+        [
+            'a heading and the title',
+            [
+                { type: 'title', attrs: { spaceAfter: 12 }, content: [{ type: 'text', text: 'T' }] },
+                { type: 'heading', attrs: { level: 2, lineSpacing: 1 }, content: [{ type: 'text', text: 'H' }] },
+            ],
+        ],
+        ['an indent in an item, past its text', [bullets([p('One'), formatted({ indentLeft: 36, lineSpacing: 1.5 })])]],
+    ])('%s come back as set', async (_name, content) => {
+        const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
 
 describe("the all-features doc's Google Docs re-save", () => {
     test('comes back as written, but for the named differences and what Google Docs drops', async () => {

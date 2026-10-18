@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createDocument, Editor, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
-import { getDocExtensions, selectionFontSizes } from '../../../../docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, getDocExtensions, selectionFontSizes } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
 const MOD = /Mac|iP(hone|[oa]d)/.test(navigator.platform) ? { metaKey: true } : { ctrlKey: true };
@@ -36,8 +36,11 @@ const sizesOf = (doc: JSONContent): [string | undefined, unknown, boolean][] =>
 
 const parsed = (html: string) => sizesOf(createDocument(`<p>${html}</p>`, schema).toJSON());
 
-const mount = (content: JSONContent): Editor =>
-    new Editor({ element: document.createElement('div'), extensions, content });
+const mount = (content: JSONContent, editorExtensions = extensions): Editor =>
+    new Editor({ element: document.createElement('div'), extensions: editorExtensions, content });
+
+// A doc whose Normal is Word's 12 pt.
+const NORMAL_12 = { ...DEFAULT_NORMAL_STYLE, size: 12 };
 
 describe('font size HTML', () => {
     test('a size renders in pt', () => {
@@ -104,6 +107,24 @@ describe('font size commands', () => {
         editor.destroy();
     });
 
+    test("unsized text steps from the doc's Normal, at a caret and in a range", () => {
+        const editor = mount(
+            paragraph({ type: 'text', text: 'body' }),
+            getDocExtensions({ normalStyle: () => NORMAL_12 }),
+        );
+        editor.commands.setTextSelection({ from: 1, to: 5 });
+        editor.commands.stepFontSize(1);
+        expect(sizesOf(editor.getJSON())).toEqual([['body', 13, false]]);
+        editor.commands.setTextSelection(5);
+        editor.commands.stepFontSize(-1);
+        editor.commands.insertContent('!');
+        expect(sizesOf(editor.getJSON())).toEqual([
+            ['body', 13, false],
+            ['!', 12, false],
+        ]);
+        editor.destroy();
+    });
+
     test('a step keeps the color and font the run had', () => {
         const editor = mount(
             paragraph({
@@ -155,19 +176,20 @@ describe('font size commands', () => {
 });
 
 describe('selectionFontSizes', () => {
-    const sizesAt = (content: JSONContent, from: number, to = from) => {
+    const sizesAt = (content: JSONContent, from: number, to = from, normal = DEFAULT_NORMAL_STYLE) => {
         const editor = mount(content);
         editor.commands.setTextSelection({ from, to });
-        const sizes = [...selectionFontSizes(editor.state, editor.view)];
+        const sizes = [...selectionFontSizes(editor.state, editor.view, normal)];
         editor.destroy();
         return sizes;
     };
 
-    test("unset text is the body's 11 pt, Small 9 pt, a size its own", () => {
+    test("unset text is the Normal's size, by default 11 pt, Small 9 pt, a size its own", () => {
         const doc = paragraph({ type: 'text', text: 'body ' }, small('fine '), sized('big', 14));
         expect(sizesAt(doc, 2)).toEqual([11]);
-        expect(sizesAt(doc, 8)).toEqual([9]);
-        expect(sizesAt(doc, 13)).toEqual([14]);
+        expect(sizesAt(doc, 2, 2, NORMAL_12)).toEqual([12]);
+        expect(sizesAt(doc, 8, 8, NORMAL_12)).toEqual([9]);
+        expect(sizesAt(doc, 13, 13, NORMAL_12)).toEqual([14]);
     });
 
     test('a range holds every size it spans', () => {

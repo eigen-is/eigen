@@ -1,7 +1,7 @@
 import type { Node } from '@tiptap/pm/model';
 import { EditorState } from '@tiptap/pm/state';
 import { fixTables, TableMap } from '@tiptap/pm/tables';
-import { prosemirrorToYDoc } from '@tiptap/y-tiptap';
+import { prosemirrorToYDoc, prosemirrorToYXmlFragment } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
@@ -19,10 +19,13 @@ export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     publicOrigin: string | undefined,
 ): DocImportWorkerResult & { warnings: TransformWarning[] } {
-    const { doc, page, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
+    const { doc, bands, page, style, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
     let update: Uint8Array;
     try {
+        // The bands ride in the update beside the body; the commit clears every root before it applies.
         const tempDoc = prosemirrorToYDoc(asOpened(doc), 'default');
+        for (const [root, band] of Object.entries(bands))
+            prosemirrorToYXmlFragment(asOpened(band), tempDoc.getXmlFragment(root));
         update = Y.encodeStateAsUpdate(tempDoc);
         tempDoc.destroy();
     } catch (error) {
@@ -32,6 +35,7 @@ export function importDocxToEigendocUpdate(
     return {
         update: toTransferableBuffer(update),
         page,
+        style,
         images: images.map((image) => ({
             name: image.name,
             contentType: image.contentType,
@@ -44,7 +48,7 @@ export function importDocxToEigendocUpdate(
 // fixTables' transaction keeps a copy of the table per repair, so a table's repairs are bounded before they run.
 export const MAX_TABLE_REPAIRS = 10_000_000;
 
-// The doc as the editor leaves it on open, or the first open writes an edit nobody made, twice when two open it
+// The doc or band as its editor leaves it on open, or the first open writes an edit nobody made, twice when two open it
 // together: prosemirror-tables repairs a table the reader got wrong, and TrailingNode ends the doc in a paragraph.
 export function asOpened(doc: Node): Node {
     eachTable(doc, (table, repairs) => {

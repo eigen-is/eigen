@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { readFontSize } from '@workspace/lib/constants/fonts';
-import type { Caps } from '@workspace/lib/docs/eigendoc';
+import { type Caps, PAGE_NUMBER_KINDS, type PageNumberKind } from '@workspace/lib/docs/eigendoc';
 import { MathError, readOmml, readOmmlText, writeMathml } from '@workspace/math';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import {
@@ -15,7 +15,7 @@ import {
     xmlText,
 } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
-import { DEFAULT_HIGHLIGHT } from '../../document/wordml';
+import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../document/wordml';
 import type { Item } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
@@ -101,7 +101,14 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
                 break;
             }
             case 'fldSimple': {
-                const link = hyperlinkField(reader, w(element, 'instr') ?? '');
+                const instr = w(element, 'instr') ?? '';
+                const kind = pageNumberKind(instr);
+                if (kind) {
+                    if (!reader.fields.at(-1)?.inCode)
+                        context.pieces.push({ kind: 'node', node: { type: 'pageNumber', attrs: { kind } } });
+                    break;
+                }
+                const link = hyperlinkField(reader, instr);
                 walkInline(reader, xmlElements(element), link ? { ...context, link } : context);
                 break;
             }
@@ -179,8 +186,8 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
             case 'cr': {
                 const type = w(child, 'type');
                 if (type === 'page') {
-                    // A note isn't paged.
-                    if (!context.scope.inNote) context.pieces.push({ kind: 'break' });
+                    // Only the body is paged.
+                    if (context.scope.story === 'body') context.pieces.push({ kind: 'break' });
                 } else if (type !== 'column') {
                     const clear = w(child, 'clear');
                     context.pieces.push(
@@ -198,6 +205,11 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                 break;
             case 'footnoteReference':
             case 'endnoteReference': {
+                // The notes list is the body's, so a band's [n] would link nowhere.
+                if (context.scope.story === 'band') {
+                    reader.bandDropped++;
+                    break;
+                }
                 const type = child.local === 'footnoteReference' ? 'footnote' : 'endnote';
                 const id = w(child, 'id') ?? '';
                 const key = `${type}-${id}`;
@@ -227,7 +239,8 @@ function runText(t: XmlElement): string {
     return kept.replace(/[\r\n]/g, ' ');
 }
 
-// A complex field keeps its result and drops its code; a HYPERLINK field links its result, a form checkbox is a checkbox.
+// A complex field keeps its result and drops its code; a HYPERLINK field links its result, a form checkbox is a checkbox,
+// and a PAGE or NUMPAGES field is the page number node, its result skipped as a code is: the digits a page last had.
 function fieldChar(reader: Reader, element: XmlElement, context: RunContext): void {
     const type = w(element, 'fldCharType');
     if (type === 'begin') {
@@ -238,15 +251,23 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
         const field = reader.fields.at(-1);
         const outer = reader.fields.at(-2);
         if (field) {
-            field.inCode = outer?.inCode ?? false;
+            field.inCode = (outer?.inCode ?? false) || pageNumberKind(field.code) !== undefined;
             field.link = hyperlinkField(reader, field.code) ?? outer?.link;
             field.toc = outer?.toc || /^TOC\b/i.test(field.code.trim());
         }
     } else if (type === 'end') {
         const field = reader.fields.pop();
-        if (field?.checkbox !== undefined && !reader.fields.at(-1)?.inCode)
-            context.pieces.push({ kind: 'checkbox', checked: field.checkbox });
+        const kind = field && pageNumberKind(field.code);
+        if (reader.fields.at(-1)?.inCode) return;
+        if (field?.checkbox !== undefined) context.pieces.push({ kind: 'checkbox', checked: field.checkbox });
+        else if (kind) context.pieces.push({ kind: 'node', node: { type: 'pageNumber', attrs: { kind } } });
     }
+}
+
+// PAGE and NUMPAGES whatever their switches; a field's name is case-insensitive.
+function pageNumberKind(code: string): PageNumberKind | undefined {
+    const name = code.trim().split(/\s/, 1)[0]?.toUpperCase();
+    return PAGE_NUMBER_KINDS.find((kind) => PAGE_NUMBER_FIELDS[kind] === name);
 }
 
 function linkOf(reader: Reader, element: XmlElement, scope: Scope): Link | undefined {
@@ -406,8 +427,9 @@ function marksOf(
     if (props.strike) marks.push({ type: 'strike' });
     if (props.vertAlign === 'superscript') marks.push({ type: 'superscript' });
     if (props.vertAlign === 'subscript') marks.push({ type: 'subscript' });
-    // Explicit black is Word's and Google Docs' default, a mark lost in dark mode; auto on a dark highlight is white.
+    // Explicit black is Word's and Google Docs' default, a mark lost in dark mode; auto on a dark highlight or cell is white.
     const hex = props.color?.hex;
+    const behind = isFill(shade) ? shade : scope.fill;
     const color =
         hex &&
         hex !== reader.baseColor &&
@@ -415,7 +437,7 @@ function marksOf(
         linkLook === undefined &&
         !(scope.onFill && !isFill(shade) && isLight(hex))
             ? hex
-            : !full.color?.hex && !asLink && isFill(shade) && isDark(shade)
+            : !full.color?.hex && !asLink && behind && isDark(behind)
               ? 'FFFFFF'
               : undefined;
     // Word draws capitals over small caps.
@@ -433,7 +455,7 @@ function marksOf(
         const code =
             isMonospaceFont(font, reader.fontTable) && (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
         if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font };
-        const fontFamily = fontMark(font, reader.fontTable);
+        const fontFamily = fontMark(font, reader.fontTable, reader.normal.font);
         const fontSize = fontSizeOf(complex);
         const textStyle: Marks =
             color || fontFamily || caps || fontSize

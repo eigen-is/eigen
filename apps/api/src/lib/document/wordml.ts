@@ -56,7 +56,7 @@ export function codeBlockLanguage(styleName: string): string | undefined {
 // Word's levels, ilvl 0 to 8.
 export const LIST_LEVELS = 9;
 
-// An ordered list's type as Word's numFmt, and back; decimal is the default, which reads back as no type.
+// An ordered list's type as Word's numFmt, and back.
 export const LIST_FORMATS = new Map([
     ['1', 'decimal'],
     ['a', 'lowerLetter'],
@@ -65,9 +65,7 @@ export const LIST_FORMATS = new Map([
     ['I', 'upperRoman'],
 ]);
 
-export const LIST_TYPES = new Map(
-    [...LIST_FORMATS].flatMap(([type, format]) => (format === 'decimal' ? [] : [[format, type] as const])),
-);
+export const LIST_TYPES = new Map([...LIST_FORMATS].map(([type, format]) => [format, type]));
 
 // A number as a level of that numFmt shows it; a format spelled otherwise shows decimal.
 export function spellNumber(value: number, format: string): string {

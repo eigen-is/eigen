@@ -29,6 +29,7 @@ const olOf = (attrs: Record<string, unknown>) => {
 describe('ordered list HTML', () => {
     // Chrome matches `type` case-blind and reads no `s` flag, so a stylesheet can't tell `a` from `A`.
     test.each([
+        ['1', 'decimal'],
         ['a', 'lower-alpha'],
         ['A', 'upper-alpha'],
         ['i', 'lower-roman'],
@@ -45,8 +46,9 @@ describe('ordered list HTML', () => {
         expect(ol.style.cssText).toBe('counter-reset: list-item 2; list-style-type: lower-alpha;');
     });
 
-    test('a decimal list from 1 writes neither', () => {
-        expect(olOf({ start: 1, type: '1' }).attributes).toHaveLength(0);
+    // An untyped list numbers by its depth, from eigen-prose.css: 1. a. i. as Google's default.
+    test('a list with no type from 1 writes neither', () => {
+        expect(olOf({ start: 1, type: null }).attributes).toHaveLength(0);
     });
 
     test('the HTML parses back to the same start and type', () => {
@@ -57,5 +59,16 @@ describe('ordered list HTML', () => {
             },
         );
         expect(attrs).toEqual([{ start: 3, type: 'A' }]);
+    });
+
+    // A list set to 1. 2. 3. stays decimal when nested, where an untyped one takes its depth's letters.
+    test.each([['1'], [null]])('a list of type %p parses back as it was', (type) => {
+        const types: unknown[] = [];
+        createDocument(generateHTML(listDoc({ start: 1, type }), extensions), getSchema(extensions)).descendants(
+            (node) => {
+                if (node.type.name === 'orderedList') types.push(node.attrs['type']);
+            },
+        );
+        expect(types).toEqual([type]);
     });
 });

@@ -1,13 +1,28 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { getSchema } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import { BAND_ROOTS, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pageRecord } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_ROOTS,
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    getDocExtensions,
+    PAGE_ROOT,
+    pageRecord,
+    STYLE_ROOT,
+} from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
-import { commitEigendocImport, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
+import {
+    commitEigendocImport,
+    readEigendocBands,
+    readEigendocFromDoc,
+    readEigendocPage,
+    readEigendocStyle,
+} from '../../lib/document/doc';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import { getHome } from '../../lib/home/get-home';
-import { seedEigendoc } from '../fixtures/golden-documents';
+import { seedBand, seedEigendoc } from '../fixtures/golden-documents';
 import { readPersistedDoc } from '../fixtures/transform-results';
 import { driveGet, drivePost, getTestContext } from '../setup';
 
@@ -54,7 +69,7 @@ describe('document/doc', () => {
         persisted.destroy();
     });
 
-    test('commitEigendocImport replaces the body, the bands and the page in one transaction', () => {
+    test('commitEigendocImport replaces the body, the bands, the page and the Normal in one transaction', () => {
         const doc = new Y.Doc();
         seedEigendoc(doc, {
             type: 'doc',
@@ -71,6 +86,8 @@ describe('document/doc', () => {
         }
         doc.getMap(PAGE_ROOT).set('marginLeft', 50);
         doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
+        doc.getMap(STYLE_ROOT).set('font', 'JetBrains Mono');
+        doc.getMap(STYLE_ROOT).set('color', '#ff0000');
 
         const tempDoc = prosemirrorJSONToYDoc(
             schema,
@@ -85,7 +102,8 @@ describe('document/doc', () => {
         };
         let transactions = 0;
         doc.on('afterTransaction', () => transactions++);
-        commitEigendocImport(doc, { update: Y.encodeStateAsUpdate(tempDoc), page: letter });
+        const style = { ...DEFAULT_NORMAL_STYLE, size: 12, lineSpacing: 1.15, spaceAfter: 10 };
+        commitEigendocImport(doc, { update: Y.encodeStateAsUpdate(tempDoc), page: letter, style });
         tempDoc.destroy();
 
         expect(transactions).toBe(1);
@@ -95,12 +113,63 @@ describe('document/doc', () => {
         for (const root of BAND_ROOTS) expect(doc.getXmlFragment(root).length).toBe(0);
         expect(doc.getMap(PAGE_ROOT).toJSON()).toEqual(pageRecord(letter));
         expect(readEigendocPage(doc)).toEqual(letter);
+        // Every key, the default's too, so the file's Normal replaces the doc's whole.
+        expect(doc.getMap(STYLE_ROOT).toJSON()).toEqual(style);
+        expect(readEigendocStyle(doc)).toEqual(style);
         doc.destroy();
     });
 
-    test('a doc with no page map reads the default page', () => {
+    describe('readEigendocBands', () => {
+        const text = (value: string) => ({ type: 'paragraph', content: [{ type: 'text', text: value }] });
+
+        test('reads each band with content, and the first-page ones only when page 1 differs', () => {
+            const doc = new Y.Doc();
+            seedBand(doc, 'header', text('Acme'));
+            seedBand(doc, 'footer', { type: 'paragraph', content: [{ type: 'pageNumber', attrs: { kind: 'page' } }] });
+            seedBand(doc, 'headerFirst', text('Letterhead'));
+            seedBand(doc, 'footerFirst', { type: 'paragraph', content: [{ type: 'hardBreak' }] }, text('  '));
+
+            expect(Object.keys(readEigendocBands(doc))).toEqual(['header', 'footer']);
+            doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
+            const bands = readEigendocBands(doc);
+            expect(Object.keys(bands)).toEqual(['header', 'footer', 'headerFirst']);
+            expect(JSON.stringify(bands.headerFirst)).toContain('Letterhead');
+            doc.destroy();
+        });
+
+        // A band's schema has none of them, so only a forged peer writes one; the reader leaves it out of every render.
+        test('drops the nodes a band leaves out, and a band that holds nothing else reads as none', () => {
+            const doc = new Y.Doc();
+            seedBand(doc, 'header', { type: 'title', content: [{ type: 'text', text: 'FORGED' }] }, text('Acme'));
+            seedBand(
+                doc,
+                'footer',
+                { type: 'pageBreak' },
+                { type: 'codeBlock', content: [{ type: 'text', text: 'x' }] },
+            );
+
+            const bands = readEigendocBands(doc);
+            expect(bands.header).toEqual({ type: 'doc', content: [text('Acme')] });
+            expect(bands.footer).toBeUndefined();
+            doc.destroy();
+        });
+
+        // The server has no DOMParser; the band's equation reads through the server's parser.
+        test('reads an equation in a band with the server parser', () => {
+            const doc = new Y.Doc();
+            seedBand(doc, 'header', {
+                type: 'paragraph',
+                content: [{ type: 'equation', attrs: { mathml: writeMathml([{ kind: 'identifier', text: 'x' }]) } }],
+            });
+            expect(readEigendocBands(doc).header).toBeDefined();
+            doc.destroy();
+        });
+    });
+
+    test('a doc with no page or style map reads the default page and Normal', () => {
         const doc = new Y.Doc();
         expect(readEigendocPage(doc)).toEqual(DEFAULT_PAGE_SETUP);
+        expect(readEigendocStyle(doc)).toEqual(DEFAULT_NORMAL_STYLE);
         doc.destroy();
     });
 

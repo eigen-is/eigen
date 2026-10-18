@@ -1,7 +1,7 @@
 // A block figure's box is the column's width: a click in its empty space beside the image places the caret on that
 // side, and the image itself still selects the node. A selected figure still drags, and a drag that empties the
 // figure's paragraph removes it. Shift and the arrow keys resize a selected figure within the text column, and a grip
-// shows the size in cm while it is held.
+// shows the size in cm while it is held, its drag in the page's pixels at any scale.
 import { afterEach, expect, test } from 'bun:test';
 import { NodeSelection } from '@tiptap/pm/state';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -166,6 +166,37 @@ test('a grip held on a selected figure shows its size in cm', async () => {
     await act(async () => {
         document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1 }));
     });
+});
+
+// The page draws scaled below its width (DOCS.md), and a figure stores its width in the page's own pixels.
+test.each([
+    [1, 250],
+    [0.5, 300],
+])('a grip dragged 50 screen px on a page drawn at %p makes a 200 px figure %d px wide', async (scale, width) => {
+    const { editor, box } = await mount([paragraph(text('a'), figure)]);
+    await act(async () => {
+        editor.commands.setNodeSelection(2);
+    });
+    const img = box.querySelector('img');
+    if (!img) throw new Error('no img');
+    Object.defineProperties(img, { naturalWidth: { value: 600 }, naturalHeight: { value: 300 } });
+    await act(async () => {
+        img.dispatchEvent(new Event('load'));
+    });
+    Object.defineProperty(box, 'offsetWidth', { value: 600 });
+    box.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 0, width: 600 * scale, height: 100 * scale });
+
+    const grip = box.querySelectorAll('.eigen-selection-handle')[3];
+    if (!grip) throw new Error('no south-east grip');
+    Object.defineProperty(grip, 'setPointerCapture', { value: () => {} });
+    await act(async () => {
+        grip.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0, clientX: 100 }));
+    });
+    await act(async () => {
+        document.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 150 }));
+        document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, clientX: 150 }));
+    });
+    expect(editor.state.doc.nodeAt(2)?.attrs['width']).toBe(width);
 });
 
 const press = (editor: InstanceType<typeof Editor>, key: string) =>

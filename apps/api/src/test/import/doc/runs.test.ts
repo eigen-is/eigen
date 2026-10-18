@@ -51,7 +51,7 @@ describe('colors', () => {
     });
 
     // ST_Shd: solid paints the pattern color over the fill, clear and nil leave the fill, the percentages blend the two.
-    test('a solid shading is its pattern color, an auto one and any other pattern its fill', async () => {
+    test('a solid shading is its pattern color, an auto one and any other pattern its fill, and nil none', async () => {
         const shaded = (text: string, val: string, color: string, fill: string) =>
             `${run(text, `<w:shd w:val="${val}" w:color="${color}" w:fill="${fill}"/>`)}${run(' ')}`;
         const json = await imported(
@@ -68,7 +68,6 @@ describe('colors', () => {
             ['solid', '#800080'],
             ['auto', '#ffe4b5'],
             ['clear', '#00ff00'],
-            ['nil', '#0000ff'],
             ['percent', '#ff0000'],
         ]);
     });

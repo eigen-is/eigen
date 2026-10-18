@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { pageTwips } from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
     ASVG_NS,
@@ -6,6 +7,7 @@ import {
     DGM_NS,
     DSP_NS,
     EMU_PER_PX,
+    isOn,
     O_NS,
     PIC_NS,
     R_NS,
@@ -65,7 +67,15 @@ function widthPx(px: number, columnPx: number): number {
 export function readDrawing(reader: Reader, drawing: XmlElement, context: RunContext): void {
     for (const frame of xmlElements(drawing)) {
         if (frame.ns !== WP_NS) continue;
-        const layout = frame.local === 'anchor' ? anchorLayout(frame, reader.columnTwips * EMU_PER_TWIP) : {};
+        const anchored = frame.local === 'anchor';
+        // A band holds no floating picture: a header's logo would cover the page's body. One behind the text, a full-page
+        // letterhead or a watermark, it drops, as a block it would push the body off the page.
+        const inBand = context.scope.story === 'band';
+        if (anchored && inBand && isOn(frame.attributes['behindDoc'])) {
+            reader.bandDropped++;
+            continue;
+        }
+        const layout = anchored ? anchorLayout(frame, reader, inBand) : {};
         const docPr = xmlChild(frame, WP_NS, 'docPr');
         const alt = docPr?.attributes['descr'] || docPr?.attributes['title'] || null;
         const extent = xmlChild(frame, WP_NS, 'extent');
@@ -86,6 +96,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const cx = int(ext?.attributes['cx']);
             const width = cx ? widthPx(cx / EMU_PER_PX, reader.columnPx) : null;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, width, ...layout } });
+            if (anchored && inBand) reader.bandAnchors++;
         }
         // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
         const boxed = descendants(frame, W_NS, 'txbxContent').flatMap((box) =>
@@ -182,6 +193,11 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             continue;
         }
         for (const data of descendants(shape, V_NS, 'imagedata')) {
+            // A band's VML picture is Word's picture watermark, laid over the page.
+            if (context.scope.story === 'band') {
+                reader.bandDropped++;
+                continue;
+            }
             const path = partPath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);
             const name = path && mediaName(reader, path);
             if (!name) continue;
@@ -199,8 +215,9 @@ function onShape(scope: Scope): Scope {
     return { ...scope, onFill: true };
 }
 
-// Wrapped beside the text, on the side its alignment or its offset puts it; otherwise a block, aligned if Word aligns it.
-function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, string> {
+// Wrapped beside the text, on the side its alignment or its offset puts it; otherwise, or as a block, aligned if Word
+// aligns it.
+function anchorLayout(anchor: XmlElement, reader: Reader, block: boolean): Record<string, string> {
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
@@ -208,12 +225,31 @@ function anchorLayout(anchor: XmlElement, columnEmu: number): Record<string, str
     const cx = int(xmlChild(anchor, WP_NS, 'extent')?.attributes['cx']) ?? 0;
     const side = align
         ? xmlText(align).trim()
-        : offset && (int(xmlText(offset)) ?? 0) + cx / 2 > columnEmu / 2
+        : offset &&
+            columnOffset(reader, positionH.attributes['relativeFrom'], int(xmlText(offset)) ?? 0, cx) + cx / 2 >
+                reader.columnTwips * EMU_PER_TWIP * 0.5
           ? 'right'
           : 'left';
-    if (wrapped) return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
+    if (wrapped && !block) return { layout: side === 'right' || side === 'outside' ? 'wrap-right' : 'wrap-left' };
     return side === 'left' || side === 'right' || side === 'center' ? { alignment: side } : {};
 }
+
+// An offset from the area relativeFrom names, from the text column's left edge, kept on the paper: the page and the
+// left or inside margin start at the paper's edge, the right or outside margin at the column's end, and the margin, the
+// column and a character at the column, a character's place in its line being unknown.
+function columnOffset(reader: Reader, relativeFrom: string | undefined, offset: number, cx: number): number {
+    const { width, margin } = pageTwips(reader.page);
+    const marginLeft = margin.left * EMU_PER_TWIP;
+    const area = AREA_AT_PAPER_EDGE.has(relativeFrom ?? '')
+        ? -marginLeft
+        : AREA_AT_COLUMN_END.has(relativeFrom ?? '')
+          ? reader.columnTwips * EMU_PER_TWIP
+          : 0;
+    return Math.min(Math.max(area + offset, -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
+}
+
+const AREA_AT_PAPER_EDGE = new Set(['page', 'leftMargin', 'insideMargin']);
+const AREA_AT_COLUMN_END = new Set(['rightMargin', 'outsideMargin']);
 
 // A point is 20 twips.
 const PX_PER_UNIT = new Map([

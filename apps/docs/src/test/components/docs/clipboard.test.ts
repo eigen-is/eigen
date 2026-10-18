@@ -54,7 +54,7 @@ async function paste(
 ) {
     const target = new Editor({
         extensions: getDocExtensions(),
-        editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, cardIds) },
+        editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, cardIds, DOCUMENT_FONT) },
     });
     await insertEigenItems(target, clipboard.eigen?.items ?? [], clipboard.html, pastedMediaName);
     return target;
@@ -313,7 +313,7 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
     const alone = copy([paragraph(text('a'), chart)]);
     expect(alone.eigen).toBeUndefined();
     const target = new Editor({ extensions: getDocExtensions() });
-    target.view.pasteHTML(cleanPastedHTML(alone.html, 600, new Set()));
+    target.view.pasteHTML(cleanPastedHTML(alone.html, 600, new Set(), DOCUMENT_FONT));
     expect(chartsIn(target)).toEqual([chart.attrs]);
 
     const beside = copy([paragraph(figure('a.png'), chart)]);

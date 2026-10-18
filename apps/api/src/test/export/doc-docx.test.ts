@@ -2,13 +2,20 @@ import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import { DEFAULT_PAGE_SETUP, type PageSetup } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    type NormalStyle,
+    type PageSetup,
+} from '@workspace/lib/docs/eigendoc';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
 import JSZip from 'jszip';
 import { parseOoxml } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip, type ZipReader } from '../../lib/core/zip';
+import type { EigendocBands } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
+import { cssPt, QUOTE_LOOK, twips } from '../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
 import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
@@ -39,8 +46,10 @@ function docx(
     publicOrigin?: string,
     media = buildAllFeaturesDocMedia(),
     page: PageSetup = DEFAULT_PAGE_SETUP,
+    bands: EigendocBands = {},
+    normal: NormalStyle = DEFAULT_NORMAL_STYLE,
 ): Promise<Uint8Array> {
-    return eigendocToDocx(json, page, media, 'Report.eigendoc', publicOrigin);
+    return eigendocToDocx(json, bands, page, normal, media, 'Report.eigendoc', publicOrigin);
 }
 
 async function unzip(
@@ -48,8 +57,9 @@ async function unzip(
     publicOrigin?: string,
     media?: ExportMedia[],
     page?: PageSetup,
+    bands?: EigendocBands,
 ): Promise<ZipReader> {
-    return openZip(await docx(json, publicOrigin, media, page));
+    return openZip(await docx(json, publicOrigin, media, page, bands));
 }
 
 function entryText(zip: ZipReader, path: string): string | undefined {
@@ -664,12 +674,12 @@ describe('docx writer — paragraphs and headings', () => {
                 p(text('h', { type: 'code' })),
             ),
         );
-        // 337 is 1.7 × 11 pt at Inter's 1.210; Source Serif 4 is 1.371, JetBrains Mono 1.32, Excalifont 1.26.
+        // 336 is line spacing 1.4 at Inter's 1.210; Source Serif 4 is 1.371, JetBrains Mono 1.32, Excalifont 1.26.
         // Mixed families keep the style's; inline code is smaller, so the mark's Inter stays the tallest.
         expect(xmlChildren(body, W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')))).toEqual([
             '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
-            '<w:pPr><w:spacing w:line="309" w:lineRule="auto"/></w:pPr>',
-            '<w:pPr><w:spacing w:line="324" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:spacing w:line="308" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:spacing w:line="323" w:lineRule="auto"/></w:pPr>',
             '<w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:line="210" w:lineRule="auto"/></w:pPr>',
             '',
             '',
@@ -686,6 +696,102 @@ describe('docx writer — paragraphs and headings', () => {
             '',
             '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
         ]);
+    });
+});
+
+// D13: a prose textblock's own line spacing, spacing and indents, over its style's and its container's.
+describe('docx writer — paragraph format', () => {
+    const formatted = (attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent => ({
+        type: 'paragraph',
+        attrs,
+        content: content.length > 0 ? content : [text('x')],
+    });
+    const pPrOf = async (...blocks: JSONContent[]) =>
+        xmlChildren(await bodyOf(doc(...blocks)), W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')));
+
+    test.each([
+        [1, 240],
+        [1.15, 276],
+        [1.5, 360],
+        [2, 480],
+    ])('line spacing %p is an auto line of %p', async (lineSpacing, line) => {
+        expect(await pPrOf(formatted({ lineSpacing }))).toEqual([
+            `<w:pPr><w:spacing w:line="${line}" w:lineRule="auto"/></w:pPr>`,
+        ]);
+    });
+
+    test('space before and after in twips, an indent left, right and first line', async () => {
+        expect(
+            await pPrOf(
+                formatted({ spaceBefore: 12, spaceAfter: 0 }),
+                formatted({ indentLeft: 36, indentRight: 18, indentFirstLine: 18 }),
+                formatted({ indentLeft: 36, indentFirstLine: -36 }),
+                // Google's Left 2 cm with a hanging 1 cm: the body lines at 2 cm, the first line at 1 cm.
+                formatted({ indentLeft: 56.7, indentFirstLine: -28.35 }),
+                formatted({ indentRight: 9 }),
+            ),
+        ).toEqual([
+            '<w:pPr><w:spacing w:before="240" w:after="0"/></w:pPr>',
+            '<w:pPr><w:ind w:left="720" w:right="360" w:firstLine="360"/></w:pPr>',
+            '<w:pPr><w:ind w:left="720" w:hanging="720"/></w:pPr>',
+            '<w:pPr><w:ind w:left="1134" w:hanging="567"/></w:pPr>',
+            '<w:pPr><w:ind w:left="0" w:right="180"/></w:pPr>',
+        ]);
+    });
+
+    test("a heading's format goes on top of its style; in a quote an indent counts from the quote's text", async () => {
+        expect(
+            await pPrOf(
+                { type: 'heading', attrs: { level: 2, lineSpacing: 2, spaceAfter: 6 }, content: [text('h')] },
+                quote(formatted({ indentLeft: 36 })),
+            ),
+        ).toEqual([
+            // The first block's heading has no space above, as the editor's first child.
+            '<w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="0" w:after="120" w:line="480" w:lineRule="auto"/></w:pPr>',
+            `<w:pPr><w:pStyle w:val="Quote"/><w:spacing w:after="${twips(cssPt(proseValue('.eigen-prose blockquote', 'margin-bottom'), 11))}"/><w:ind w:left="${QUOTE_LOOK.indent + 720}"/></w:pPr>`,
+        ]);
+    });
+
+    // A container owns the spacing of what it holds, as the editor draws it and the reader reads it.
+    test.each([
+        ['a list item', (block: JSONContent) => ul(li(block))],
+        ['a quote', (block: JSONContent) => quote(block)],
+        ['a table cell', (block: JSONContent) => table(tr(td({}, block)))],
+    ])(
+        "in %s a paragraph's space before and after is the container's, its line spacing and indent its own",
+        async (_, wrap) => {
+            const pPrs = async (block: JSONContent) =>
+                descendants(await bodyOf(doc(wrap(block))), W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')));
+            const own = { lineSpacing: 2, indentLeft: 36 };
+            const written = await pPrs(formatted({ ...own, spaceBefore: 12, spaceAfter: 6 }));
+            expect(written).toEqual(await pPrs(formatted(own)));
+            expect(written.join('')).toContain('w:line="480"');
+        },
+    );
+
+    // The writer scales a paragraph all in one other family by that family's line, as it does the style's.
+    test('a line spacing in another family is scaled by its line height', async () => {
+        const serif = { type: 'textStyle', attrs: { fontFamily: 'Source Serif 4' } };
+        const lineHeight = (family: string) => {
+            const tables = sfntTables(fs.readFileSync(DOCX_FONT_FILES.get(family)?.Regular ?? ''));
+            const os2 = tables.get('OS/2');
+            const head = tables.get('head');
+            if (!os2 || !head) throw new Error(`no metrics for ${family}`);
+            return (os2.readUInt16BE(74) + os2.readUInt16BE(76)) / head.readUInt16BE(18);
+        };
+        const line = Math.round((480 * lineHeight('Inter')) / lineHeight('Source Serif 4'));
+        expect(await pPrOf(formatted({ lineSpacing: 2 }, text('x', serif)))).toEqual([
+            `<w:pPr><w:spacing w:line="${line}" w:lineRule="auto"/></w:pPr>`,
+        ]);
+    });
+
+    test('a forged format writes within its bounds or not at all', async () => {
+        expect(
+            await pPrOf(
+                formatted({ lineSpacing: '2; x', spaceBefore: Number.NaN }),
+                formatted({ spaceAfter: 1e9, indentFirstLine: -1e9 }),
+            ),
+        ).toEqual(['', '<w:pPr><w:spacing w:after="8000"/><w:ind w:left="0" w:hanging="31680"/></w:pPr>']);
     });
 });
 
@@ -1009,6 +1115,29 @@ describe('docx writer — lists', () => {
         expect(w(child(child(inner, 'lvl'), 'numFmt'), 'val')).toBe('decimal');
     });
 
+    // eigen-prose.css numbers an untyped list by how many numbered lists it sits in, a bullet list between them or not.
+    test('an untyped nested list takes its depth from eigen-prose.css: 1. a. i. and 1. again', async () => {
+        const nested = (depth: number): JSONContent =>
+            ol({}, li(p(text(`level ${depth}`)), ...(depth < 4 ? [nested(depth + 1)] : [])));
+        const formats = async (json: JSONContent) =>
+            xmlChildren(await numberingOf(json), W, 'abstractNum').map((list) =>
+                w(child(child(list, 'lvl'), 'numFmt'), 'val'),
+            );
+        expect(await formats(doc(nested(1)))).toEqual(['decimal', 'lowerLetter', 'lowerRoman', 'decimal']);
+        const inner = ol({}, li(p(text('c'))));
+        expect(await formats(doc(ol({}, li(p(text('a')), ul(li(p(text('b')), inner))))))).toEqual([
+            'decimal',
+            'bullet',
+            'lowerLetter',
+        ]);
+    });
+
+    test('a nested list set to 1. 2. 3. stays decimal', async () => {
+        const json = doc(ol({}, li(p(text('a')), ol({ type: '1' }, li(p(text('b')))))));
+        const lists = xmlChildren(await numberingOf(json), W, 'abstractNum');
+        expect(lists.map((list) => w(child(child(list, 'lvl'), 'numFmt'), 'val'))).toEqual(['decimal', 'decimal']);
+    });
+
     test('two adjacent lists count separately', async () => {
         const json = doc(ol({}, li(p(text('a')))), ol({}, li(p(text('b')))));
         const numIds = descendants(await bodyOf(json), W, 'numId').map((numId) => w(numId, 'val'));
@@ -1278,6 +1407,49 @@ describe('docx writer — tables', () => {
         );
         expect(third).toBe(
             `<w:tr>${cell(1500, run('d'))}${cell(1500, run('e'))}<w:tc><w:tcPr><w:tcW w:w="1500" w:type="dxa"/><w:vMerge/></w:tcPr><w:p/></w:tc></w:tr>`,
+        );
+    });
+
+    // A cell's own fill wins over the header's grey; a covered cell continues its merge's fill, as Word draws one per cell.
+    test("a cell's fill is its w:shd, a header's own over the grey, and a merge's covered cells take it", async () => {
+        const fill = (hex: string) => `<w:shd w:val="clear" w:color="auto" w:fill="${hex}"/>`;
+        const tbl = only(
+            await tablesIn(
+                doc(
+                    table(
+                        tr(
+                            th({ colwidth: [100], backgroundColor: '#1f3864' }, p(text('A'))),
+                            th({ colwidth: [100], backgroundColor: 'navy' }, p(text('B'))),
+                        ),
+                        tr(
+                            td({ colwidth: [100], backgroundColor: '#CFE2F3', rowspan: 2 }, p(text('a'))),
+                            td({ colwidth: [100] }, p(text('b'))),
+                        ),
+                        tr(td({ colwidth: [100] }, p(text('c')))),
+                    ),
+                ),
+            ),
+        );
+        expect(xmlChildren(tbl, W, 'tr').map(xmlOf)).toEqual([
+            `<w:tr><w:trPr><w:tblHeader/></w:trPr>${cell(1500, run('A'), fill('1F3864'))}${cell(1500, run('B'), SHADED)}</w:tr>`,
+            `<w:tr>${cell(1500, run('a'), `<w:vMerge w:val="restart"/>${fill('CFE2F3')}`)}${cell(1500, run('b'))}</w:tr>`,
+            `<w:tr><w:tc><w:tcPr><w:tcW w:w="1500" w:type="dxa"/><w:vMerge/>${fill('CFE2F3')}</w:tcPr><w:p/></w:tc>${cell(1500, run('c'))}</w:tr>`,
+        ]);
+    });
+
+    test("a header's vertical merge writes the header's grey on its covered cells too", async () => {
+        const tbl = only(
+            await tablesIn(
+                doc(
+                    table(
+                        tr(th({ colwidth: [100], rowspan: 2 }, p(text('H'))), th({ colwidth: [100] }, p(text('A')))),
+                        tr(td({ colwidth: [100] }, p(text('b')))),
+                    ),
+                ),
+            ),
+        );
+        expect(xmlOf(xmlChildren(tbl, W, 'tr')[1])).toBe(
+            `<w:tr><w:tc><w:tcPr><w:tcW w:w="1500" w:type="dxa"/><w:vMerge/>${SHADED}</w:tcPr><w:p/></w:tc>${cell(1500, run('b'))}</w:tr>`,
         );
     });
 
@@ -2367,6 +2539,7 @@ const SEQUENCES: Record<string, string[]> = {
         ...['alwaysMergeEmptyNamespace', 'updateFields', 'hdrShapeDefaults', 'footnotePr', 'endnotePr', 'compat'],
     ],
     sectPr: [
+        ...['headerReference', 'footerReference'],
         ...['footnotePr', 'endnotePr', 'type', 'pgSz', 'pgMar', 'paperSrc', 'pgBorders', 'lnNumType', 'pgNumType'],
         ...['cols', 'formProt', 'vAlign', 'noEndnote', 'titlePg', 'textDirection', 'bidi', 'rtlGutter', 'docGrid'],
     ],
@@ -2430,6 +2603,7 @@ const QUALIFIED_SEQUENCES = { ...DRAWING_SEQUENCES, ...MATH_SEQUENCES };
 
 // The children a sequence may repeat in a row.
 const REPEATED = new Set([
+    ...['headerReference', 'footerReference'],
     ...['abstractNum', 'num', 'lvl', 'numPicBullet', 'lvlOverride', 'tr', 'tc', 'gridCol', 'a:ext'],
     ...['m:e', 'm:mr'],
 ]);
@@ -2477,12 +2651,151 @@ describe('docx writer — the page', () => {
         const pgSz = child(sectPr, 'pgSz');
         expect([w(pgSz, 'w'), w(pgSz, 'h'), w(pgSz, 'orient')]).toEqual(['11906', '16838', undefined]);
         const pgMar = child(sectPr, 'pgMar');
+        // The bands' 1.27 cm from the edge.
         expect(['top', 'right', 'bottom', 'left', 'header', 'footer', 'gutter'].map((side) => w(pgMar, side))).toEqual([
             ...Array(4).fill('1134'),
-            '709',
-            '709',
+            '720',
+            '720',
             '0',
         ]);
+    });
+});
+
+describe('docx writer — headers and footers', () => {
+    const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
+    const page = (value: string) => ({ type: 'pageNumber', attrs: { kind: value } });
+    const BANDS: EigendocBands = {
+        header: doc(
+            p(text('Acme'), {
+                type: 'text',
+                text: ' site',
+                marks: [{ type: 'link', attrs: { href: 'https://acme.example' } }],
+            }),
+        ),
+        footer: doc(p(text('Page '), page('page'), text(' of '), page('pages'))),
+    };
+
+    async function relationships(zip: ZipReader, path: string) {
+        return xmlChildren(await part(zip, path), RELS, 'Relationship').map((rel) => [
+            xmlAttr(rel, '', 'Id'),
+            xmlAttr(rel, '', 'Type'),
+            xmlAttr(rel, '', 'Target'),
+            xmlAttr(rel, '', 'TargetMode'),
+        ]);
+    }
+
+    function sectPrOf(document: XmlElement): XmlElement {
+        const sectPr = xmlElements(child(document, 'body') ?? document).at(-1);
+        if (sectPr?.local !== 'sectPr') throw new Error('no sectPr');
+        return sectPr;
+    }
+
+    test('each band is a part of its own, with its content type, referenced from the section', async () => {
+        const zip = await unzip(doc(p(text('Body'))), undefined, undefined, undefined, BANDS);
+        const types = await part(zip, '[Content_Types].xml');
+        const overrides = new Map(
+            xmlChildren(types, CONTENT_TYPES, 'Override').map((o) => [
+                xmlAttr(o, '', 'PartName'),
+                xmlAttr(o, '', 'ContentType'),
+            ]),
+        );
+        expect(overrides.get('/word/header1.xml')).toBe(`${WML}.header+xml`);
+        expect(overrides.get('/word/footer1.xml')).toBe(`${WML}.footer+xml`);
+
+        const documentRels = await relationships(zip, 'word/_rels/document.xml.rels');
+        expect(documentRels.slice(4)).toEqual([
+            ['rId5', `${R}/header`, 'header1.xml', undefined],
+            ['rId6', `${R}/footer`, 'footer1.xml', undefined],
+        ]);
+        const sectPr = sectPrOf(await part(zip, 'word/document.xml'));
+        expect(
+            xmlElements(sectPr).map((element) => [element.local, w(element, 'type'), xmlAttr(element, R, 'id')]),
+        ).toEqual([
+            ['headerReference', 'default', 'rId5'],
+            ['footerReference', 'default', 'rId6'],
+            ['pgSz', undefined, undefined],
+            ['pgMar', undefined, undefined],
+        ]);
+
+        const header = await part(zip, 'word/header1.xml');
+        expect(header.name).toBe('w:hdr');
+        // The document's namespaces, m: included, as a band may hold an equation.
+        expect(header.attributes).toEqual((await part(zip, 'word/document.xml')).attributes);
+        expect(texts(header)).toBe('Acme site');
+        expect(await relationships(zip, 'word/_rels/header1.xml.rels')).toEqual([
+            ['rId1', `${R}/hyperlink`, 'https://acme.example', 'External'],
+        ]);
+        expect(only(descendants(header, W, 'hyperlink')).attributes['r:id']).toBe('rId1');
+
+        const footer = await part(zip, 'word/footer1.xml');
+        expect(footer.name).toBe('w:ftr');
+        expect(descendants(footer, W, 'instrText').map(xmlText)).toEqual([' PAGE ', ' NUMPAGES ']);
+        expect(zip.entry('word/_rels/footer1.xml.rels')).toBeUndefined();
+    });
+
+    // An image the body shows too is one media file, which each part relates to through its own rels.
+    test("a header's image resolves through the header's own relationships", async () => {
+        const chart = { type: 'figure', attrs: { mediaName: 'chart.png', width: 100 } };
+        const zip = await unzip(doc(p(chart)), undefined, undefined, undefined, { header: doc(p(chart)) });
+        expect(zip.names().filter((path) => path.startsWith('word/media/'))).toEqual(['word/media/image1.png']);
+        expect(await relationships(zip, 'word/_rels/header1.xml.rels')).toEqual([
+            ['rId1', `${R}/image`, 'media/image1.png', undefined],
+        ]);
+        const header = await part(zip, 'word/header1.xml');
+        const blip = only(descendants(header, 'http://schemas.openxmlformats.org/drawingml/2006/main', 'blip'));
+        expect(xmlAttr(blip, R, 'embed')).toBe('rId1');
+        // Drawing ids are the package's: the body's 1, the header's 2.
+        expect(descendants(header, WP, 'docPr').map((docPr) => xmlAttr(docPr, '', 'id'))).toEqual(['2']);
+    });
+
+    // Word draws page 1 with no header when the section names none of type first, so an empty one stands in.
+    test('a different first page writes titlePg and its own parts, an empty one where page 1 has none', async () => {
+        const first = { ...DEFAULT_PAGE_SETUP, differentFirstPage: true };
+        const zip = await unzip(doc(p(text('Body'))), undefined, undefined, first, {
+            ...BANDS,
+            headerFirst: doc(p(text('Letterhead'))),
+        });
+        const sectPr = sectPrOf(await part(zip, 'word/document.xml'));
+        const references = xmlElements(sectPr)
+            .filter((element) => element.local.endsWith('Reference'))
+            .map((element) => [element.local, w(element, 'type'), xmlAttr(element, R, 'id')]);
+        expect(references).toEqual([
+            ['headerReference', 'default', 'rId5'],
+            ['headerReference', 'first', 'rId6'],
+            ['footerReference', 'default', 'rId7'],
+            ['footerReference', 'first', 'rId8'],
+        ]);
+        expect(child(sectPr, 'titlePg')).toBeDefined();
+        expect(
+            (await relationships(zip, 'word/_rels/document.xml.rels')).slice(4).map(([, , target]) => target),
+        ).toEqual(['header1.xml', 'header2.xml', 'footer1.xml', 'footer2.xml']);
+        expect(texts(await part(zip, 'word/header2.xml'))).toBe('Letterhead');
+        expect(xmlElements(await part(zip, 'word/footer2.xml')).map(xmlOf)).toEqual(['<w:p/>']);
+    });
+
+    // As the editor and the PDF draw it (PAGE_BAND_CLASS), and as Word's Header and Footer styles have none.
+    test("a band's last block has no space after", async () => {
+        const zip = await unzip(doc(p(text('Body'))), undefined, undefined, undefined, {
+            header: doc(p(text('Acme')), p(text('Site'))),
+            footer: doc(table(tr(td({}, p(text('x')))))),
+        });
+        expect(xmlElements(await part(zip, 'word/header1.xml')).map(xmlOf)).toEqual([
+            `<w:p>${run('Acme')}</w:p>`,
+            `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${run('Site')}</w:p>`,
+        ]);
+        expect(xmlOf(xmlElements(await part(zip, 'word/footer1.xml')).at(-1))).toBe(
+            '<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:before="0"/></w:pPr></w:p>',
+        );
+    });
+
+    test('a doc with no bands writes no band parts and no titlePg', async () => {
+        const zip = await unzip(doc(p(text('Body'))), undefined, undefined, {
+            ...DEFAULT_PAGE_SETUP,
+            differentFirstPage: true,
+        });
+        expect(zip.names().filter((path) => /header|footer/.test(path))).toEqual([]);
+        const sectPr = sectPrOf(await part(zip, 'word/document.xml'));
+        expect(xmlElements(sectPr).map((element) => element.local)).toEqual(['pgSz', 'pgMar', 'titlePg']);
     });
 });
 
@@ -2507,10 +2820,10 @@ describe('docx writer — styles from the CSS', () => {
         expect(descendants(root, W, 'lang')).toEqual([]);
     });
 
-    test('a paragraph is .eigen-prose p: 1 em after, line height 1.7 as an auto multiple of Inter', async () => {
+    test("a paragraph is .eigen-prose p: 1 em after, Eigen's line spacing 1.4 as an auto line", async () => {
         const normal = style(await styles(), 'Normal');
         expect(w(normal, 'default')).toBe('1');
-        expect(spacingOf(normal)).toEqual([undefined, '220', '337', 'auto']);
+        expect(spacingOf(normal)).toEqual([undefined, '220', '336', 'auto']);
     });
 
     test('headings take their size, margins, line height and tracking from the CSS; h5 and h6 the body size', async () => {

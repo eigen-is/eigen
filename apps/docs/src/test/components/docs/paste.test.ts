@@ -4,19 +4,31 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
 
-const { getFontName } = await import('@workspace/lib/constants/fonts');
+const { DOCUMENT_FONT, getFontName } = await import('@workspace/lib/constants/fonts');
 const { cleanPastedHTML } = await import('../../../components/docs/paste');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 
 const schema = getSchema(getDocExtensions());
 
 // The name the textStyle mark's parseHTML reads from the pasted stack.
-function pastedFont(fontFamily: string): string {
-    const html = cleanPastedHTML(`<p><span style="font-family: ${fontFamily}">x</span></p>`, 600, new Set());
+function pastedFont(fontFamily: string, normalFont = DOCUMENT_FONT): string {
+    const html = cleanPastedHTML(
+        `<p><span style="font-family: ${fontFamily}">x</span></p>`,
+        600,
+        new Set(),
+        normalFont,
+    );
     const span = new DOMParser().parseFromString(html, 'text/html').querySelector('span');
     if (!span) throw new Error('span gone');
     return getFontName(span.style.fontFamily);
 }
+
+// Text without a mark draws in the doc's Normal font, so only that font goes, Inter staying a mark in a Times doc.
+test("a font is dropped only where it is the doc's Normal font", () => {
+    expect(pastedFont('Arial', 'Source Serif 4')).toBe('Inter');
+    expect(pastedFont("'Times New Roman'", 'Source Serif 4')).toBe('');
+    expect(pastedFont('Arial')).toBe('');
+});
 
 describe('paste maps foreign fonts onto the bundled ones', () => {
     test.each([
@@ -65,7 +77,7 @@ describe('paste keeps caps', () => {
         ['font-family:Calibri;font-variant:small-caps', 'small'],
         ['font-variant:normal;text-transform:none', null],
     ])('%s pastes as caps %s', (style, caps) => {
-        const html = cleanPastedHTML(`<p><span style="${style}">x</span></p>`, 600, new Set());
+        const html = cleanPastedHTML(`<p><span style="${style}">x</span></p>`, 600, new Set(), DOCUMENT_FONT);
         const marks = createDocument(html, schema).firstChild?.firstChild?.marks ?? [];
         expect(marks.find((mark) => mark.type.name === 'textStyle')?.attrs['caps'] ?? null).toBe(caps);
     });
@@ -75,7 +87,7 @@ describe('paste keeps caps', () => {
 describe('paste keeps a size the doc does not draw', () => {
     const pastedSizes = (html: string) => {
         const sizes: [string, unknown][] = [];
-        createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+        createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
             if (node.isText)
                 sizes.push([
                     node.text ?? '',
@@ -137,7 +149,7 @@ test('an upright run in a pasted Google Docs Heading 6 is italic, its italic run
         `<b style="font-weight:normal;" id="docs-internal-guid-1"><h6 dir="ltr">${span('Fine ', 'italic')}${span('print', 'normal')}</h6>` +
         `<p dir="ltr">${span('Said ', 'italic')}${span('plainly', 'normal')}</p></b>`;
     const runs: [string, string[]][] = [];
-    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+    createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
         if (node.isText) runs.push([node.text ?? '', node.marks.map((mark) => mark.type.name)]);
     });
     expect(runs.map(([text, marks]) => [text, marks.includes('italic')])).toEqual([
@@ -154,7 +166,7 @@ test.each([
     ['an upright run', '<h6><span style="font-style:normal">a<span style="font-style:italic">b</span>c</span></h6>'],
 ])('an italic run inside %s of a pasted Heading 6 stays plain', (_name, html) => {
     const runs: [string, boolean][] = [];
-    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+    createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
         if (node.isText) runs.push([node.text ?? '', node.marks.some((mark) => mark.type.name === 'italic')]);
     });
     expect(runs).toEqual([
@@ -162,6 +174,23 @@ test.each([
         ['b', false],
         ['c', true],
     ]);
+});
+
+// D13: Google Docs writes its body's line height and margins on every paragraph, which would read as a format typed
+// text lacks; another app's paragraph CSS is its own look, so a paste takes the doc's.
+test("a paragraph pasted from Google Docs takes the doc's spacing and indents", () => {
+    const html =
+        '<b id="docs-internal-guid-1"><p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;margin-left:36pt;text-indent:-18pt"><span style="font-size:11pt">a</span></p></b>';
+    const formats: Record<string, unknown>[] = [];
+    createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
+        if (node.type.name === 'paragraph')
+            formats.push(
+                Object.fromEntries(
+                    Object.entries(node.attrs).filter(([key, value]) => key !== 'textAlign' && value !== null),
+                ),
+            );
+    });
+    expect(formats).toEqual([{}]);
 });
 
 // A docs copy pasted back through ProseMirror's own HTML, the way a docs editor reads it.
@@ -179,12 +208,23 @@ describe('a docs copy pastes back as it was copied', () => {
             [paragraph(text('a')), paragraph(figure), paragraph(text('b'))],
         ],
         ['a figure between text keeps its paragraph whole', [paragraph(text('a'), figure, text('b'))]],
+        [
+            'a heading and a paragraph keep their spacing and indents',
+            [
+                { type: 'heading', attrs: { level: 2, spaceBefore: 6, indentLeft: 36 }, content: [text('a')] },
+                {
+                    type: 'paragraph',
+                    attrs: { lineSpacing: 1.15, spaceAfter: 0, indentFirstLine: -18 },
+                    content: [text('b')],
+                },
+            ],
+        ],
     ])('%s', (_name, content) => {
         const source = new Editor({ extensions: getDocExtensions(), content: { type: 'doc', content } });
         const { dom } = source.view.serializeForClipboard(source.state.doc.slice(0, source.state.doc.content.size));
         const target = new Editor({
             extensions: getDocExtensions(),
-            editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, new Set()) },
+            editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT) },
         });
         target.view.pasteHTML(dom.innerHTML);
         expect(target.getJSON()).toEqual(source.getJSON());
@@ -196,7 +236,7 @@ test('a pasted chart wider than the column shrinks to it, keeping its shape', ()
         '<p><span class="chart" data-chart="{}" data-width="1200" data-height="742"></span>' +
         '<span class="chart" data-chart="{}" data-width="400" data-height="300"></span></p>';
     const sizes: unknown[][] = [];
-    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+    createDocument(cleanPastedHTML(html, 600, new Set(), DOCUMENT_FONT), schema).descendants((node) => {
         if (node.type.name === 'chart') sizes.push([node.attrs.width, node.attrs.height]);
     });
     expect(sizes).toEqual([
@@ -212,7 +252,7 @@ test('paste keeps the comment anchors this document has cards for and strips the
         '<p><span class="figure" data-comment-id="here"><img data-media-name="a.png"></span>' +
         '<span class="figure" data-comment-id="elsewhere"><img data-media-name="b.png"></span></p>';
     const anchors: unknown[][] = [];
-    createDocument(cleanPastedHTML(html, 600, new Set(['here'])), schema).descendants((node) => {
+    createDocument(cleanPastedHTML(html, 600, new Set(['here']), DOCUMENT_FONT), schema).descendants((node) => {
         const mark = node.marks.find((m) => m.type.name === 'comment');
         if (node.isLeaf)
             anchors.push([node.text ?? node.attrs.mediaName, node.attrs.commentCardId, mark?.attrs.cardId]);
@@ -231,7 +271,7 @@ test("a KaTeX equation's drawn glyphs are not pasted beside its <math>", () => {
     const math =
         '<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>';
     const drawn = `<span class="katex"><span class="katex-mathml">${math}</span><span class="katex-html" aria-hidden="true"><span class="mord mathnormal">x</span></span></span>`;
-    expect(cleanPastedHTML(`<p>a ${drawn} b</p>`, 600, new Set())).toBe(
-        cleanPastedHTML(`<p>a ${math} b</p>`, 600, new Set()),
+    expect(cleanPastedHTML(`<p>a ${drawn} b</p>`, 600, new Set(), DOCUMENT_FONT)).toBe(
+        cleanPastedHTML(`<p>a ${math} b</p>`, 600, new Set(), DOCUMENT_FONT),
     );
 });
