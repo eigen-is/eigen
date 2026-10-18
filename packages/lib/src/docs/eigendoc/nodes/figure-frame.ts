@@ -43,14 +43,16 @@ export function figureFrameAttributes() {
             default: null,
             parseHTML: (element: HTMLElement) => element.getAttribute('data-comment-id'),
         },
+        // A paste or a peer's HTML carries any string: an unknown one parses as the default.
         alignment: {
             default: 'center',
-            parseHTML: (element: HTMLElement) => element.getAttribute('data-alignment'),
+            parseHTML: (element: HTMLElement) =>
+                FIGURE_ALIGNMENTS.find((a) => a === element.getAttribute('data-alignment')) ?? 'center',
         },
         layout: {
-            default: 'block' as FigureLayout,
-            parseHTML: (element: HTMLElement) => {
-                const attr = element.getAttribute('data-layout');
+            default: 'block',
+            parseHTML: (element: HTMLElement): FigureLayout => {
+                const attr = FIGURE_LAYOUTS.find((l) => l === element.getAttribute('data-layout'));
                 if (attr) return attr;
                 const float = element.style?.float;
                 if (float === 'left') return 'wrap-left';

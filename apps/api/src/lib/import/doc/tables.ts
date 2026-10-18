@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { MIN_TABLE_COLUMN_PX, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
+import { MIN_TABLE_COLUMN_PX, PROSE_TEXTBLOCKS, readCellBackground } from '@workspace/lib/docs/eigendoc';
 import { isOn, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
@@ -36,24 +36,26 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     const tableRun = tableStyle ? reader.styles.run(tableStyle.id) : undefined;
     const tableLook = tableStyle ? reader.styles.table(tableStyle.id) : undefined;
     const tableFill = shadingOf(wChild(tblPr, 'shd')) ?? tableLook?.fill;
+    // The fill a cell draws: its own, else its table style's first row's, else the table's.
+    const fillOf = (cell: XmlElement, rowIndex: number) =>
+        shadingOf(wChild(wChild(cell, 'tcPr'), 'shd')) ??
+        (rowIndex === 0 && firstRowOn ? tableLook?.firstRowFill : undefined) ??
+        tableFill;
     const cellItems = (
         cell: XmlElement,
         rowIndex: number,
         colwidth: number[] | null,
         content = cellContent(cell),
     ): Item[] => {
-        const firstRow = rowIndex === 0 && firstRowOn;
-        const first = firstRow && tableLook?.firstRowRun;
-        const fill =
-            shadingOf(wChild(wChild(cell, 'tcPr'), 'shd')) ??
-            (firstRow ? tableLook?.firstRowFill : undefined) ??
-            tableFill;
+        const first = rowIndex === 0 && firstRowOn && tableLook?.firstRowRun;
+        const fill = fillOf(cell, rowIndex);
         const cellScope: Scope = {
             ...scope,
             tables: scope.tables + 1,
             tableRun: first ? mergeRun(tableRun ?? {}, first) : tableRun,
             room: colwidth ? colwidth.reduce((sum, width) => sum + width, 0) : scope.room,
-            onFill: scope.onFill || isFill(fill),
+            // A plain cell lets the fill around it show.
+            fill: isFill(fill) ? fill : scope.fill,
         };
         return readBlocks(reader, content, cellScope);
     };
@@ -124,15 +126,23 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                           (item) => item.kind !== 'para' || !item.empty,
                       );
             const content = build([...own, ...past]);
-            const fill = shadingOf(wChild(tcPr, 'shd'));
+            const type =
+                header || shadingOf(wChild(tcPr, 'shd')) === HEADER_CELL_LOOK.fill ? 'tableHeader' : 'tableCell';
+            const fill = fillOf(cell, rowIndex);
+            // A header's grey is the header's own look.
+            const backgroundColor =
+                isFill(fill) && !(type === 'tableHeader' && fill === HEADER_CELL_LOOK.fill)
+                    ? readCellBackground(`#${fill}`)
+                    : null;
             const attrs: CellAttrs = {
                 colspan: column + colspan - start,
                 rowspan: 1,
                 colwidth,
                 ...hoistAlignment(content),
+                ...(backgroundColor && { backgroundColor }),
             };
             cells.push({
-                type: header || fill === HEADER_CELL_LOOK.fill ? 'tableHeader' : 'tableCell',
+                type,
                 attrs,
                 content: content.length > 0 ? content : [{ type: 'paragraph' }],
             });
@@ -173,7 +183,13 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     return tables;
 }
 
-type CellAttrs = { colspan: number; rowspan: number; colwidth: number[] | null; align?: string };
+type CellAttrs = {
+    colspan: number;
+    rowspan: number;
+    colwidth: number[] | null;
+    align?: string;
+    backgroundColor?: string;
+};
 
 // The columns a row skips before or after its cells: one empty cell, as the editor would pad them on open.
 function gridFiller(columnPx: number[], column: number, colspan: number, type = 'tableCell'): JSONContent {

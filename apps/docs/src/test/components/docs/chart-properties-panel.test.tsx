@@ -48,6 +48,8 @@ async function mount() {
         );
     }
     const rendered = await renderInDocument(createElement(Host));
+    const page = document.querySelector('[data-document]');
+    if (page) Object.defineProperty(page, 'clientWidth', { value: 600 });
     unmount = async () => {
         await rendered.unmount();
         editor.destroy();
@@ -186,12 +188,13 @@ test("a Style toggle wraps the chart in one undo step and lights it, the spec's 
     const wrapLeft = document.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')[1];
     expect(wrapLeft.getAttribute('aria-pressed')).toBe('false');
     await click(wrapLeft);
-    expect(editor.state.doc.nodeAt(1)?.attrs.layout).toBe('wrap-left');
+    // Half the 600 px column at most, its shape kept, or nothing wraps beside it.
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ layout: 'wrap-left', width: 300, height: 186 });
     expect(wrapLeft.getAttribute('aria-pressed')).toBe('true');
     expect(spec()).toEqual(before);
 
     undoManager.undo();
-    expect(editor.state.doc.nodeAt(1)?.attrs.layout).toBe('block');
+    expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ layout: 'block', width: 600, height: 371 });
 });
 
 test("the sample's colors are Automatic, and a picked color and a Stacking pick are one undo step each", async () => {

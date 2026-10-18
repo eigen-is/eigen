@@ -1,12 +1,21 @@
 import { OrderedList } from '@tiptap/extension-list';
 
-// A selector matches `type` case-blind, so `a` and `A` can't be told apart in CSS: the list writes its own marker style.
+// A list's own type, drawn on itself: a selector matches `type` case-blind, so `a` and `A` can't be told apart in CSS,
+// and a list set to decimal must beat eigen-prose.css's numbering by depth, which an untyped list takes.
 const LIST_STYLE_TYPES = new Map([
+    ['1', 'decimal'],
     ['a', 'lower-alpha'],
     ['A', 'upper-alpha'],
     ['i', 'lower-roman'],
     ['I', 'upper-roman'],
 ]);
+
+const LIST_TYPE_BY_STYLE = new Map([...LIST_STYLE_TYPES].map(([type, style]) => [style, type]));
+
+// The type a list-style-type draws, which an untyped list takes from eigen-prose.css by its depth.
+export function listTypeOfStyle(style: string): string | undefined {
+    return LIST_TYPE_BY_STYLE.get(style);
+}
 
 // WeasyPrint reads `start` only as a presentational hint, which the PDF render takes none of: the counter-reset sets it.
 export const EigenOrderedList = OrderedList.extend({
@@ -25,7 +34,7 @@ export const EigenOrderedList = OrderedList.extend({
                 ...this.options.HTMLAttributes,
                 ...rest,
                 ...(start !== 1 && { start }),
-                ...(type && type !== '1' && { type }),
+                ...(listStyleType && { type }),
                 ...(style && { style }),
             },
             0,

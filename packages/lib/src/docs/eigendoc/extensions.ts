@@ -3,7 +3,7 @@ import Highlight from '@tiptap/extension-highlight';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import { Table, TableRow } from '@tiptap/extension-table';
 import TextAlign from '@tiptap/extension-text-align';
 import { Color, TextStyle } from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
@@ -18,13 +18,20 @@ import { EigenFontSize } from './nodes/font-size';
 import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
 import { PageNumberNode } from './nodes/page-number';
+import { EigenParagraphFormat, PROSE_TEXTBLOCKS } from './nodes/paragraph-format';
 import { SmallMark } from './nodes/small-mark';
+import { EigenTableCell, EigenTableHeader } from './nodes/table-cell';
 import { SubtitleNode, TitleNode } from './nodes/title';
+import type { NormalStyle } from './normal-style';
 
-// The textblocks that hold prose, which an alignment applies to; a code block holds code.
-export const PROSE_TEXTBLOCKS = ['paragraph', 'title', 'subtitle', 'heading'];
-
-export function getDocExtensions(options?: { lowlight?: unknown; exclude?: string[] }) {
+// textColumnWidth: the editor's text column in px, which a paragraph's indent stays within. normalStyle: the doc's
+// Normal, which unsized text draws at.
+export function getDocExtensions(options?: {
+    lowlight?: unknown;
+    exclude?: string[];
+    textColumnWidth?: () => number;
+    normalStyle?: () => NormalStyle;
+}) {
     const exclude = options?.exclude;
     const extensions = [
         StarterKit.configure({
@@ -46,13 +53,17 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         TextStyle,
         Color,
         EigenFontFamily,
-        EigenFontSize,
+        EigenFontSize.configure(options?.normalStyle && { normalStyle: options.normalStyle }),
         TextCaps,
         TaskList,
         TaskItem.configure({ nested: true }),
         TitleNode,
         SubtitleNode,
         TextAlign.configure({ types: PROSE_TEXTBLOCKS }),
+        EigenParagraphFormat.configure({
+            types: PROSE_TEXTBLOCKS,
+            ...(options?.textColumnWidth && { textColumnWidth: options.textColumnWidth }),
+        }),
         FigureNode,
         ChartNode,
         EquationNode,
@@ -62,8 +73,8 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         ...(options?.lowlight ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })] : []),
         Table,
         TableRow,
-        TableCell,
-        TableHeader,
+        EigenTableCell,
+        EigenTableHeader,
         CommentMarkSchema,
     ];
     return exclude ? extensions.filter((ext) => !exclude.includes(ext.name)) : extensions;

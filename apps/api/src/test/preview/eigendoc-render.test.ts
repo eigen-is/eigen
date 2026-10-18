@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import { DEFAULT_PAGE_SETUP, PAGE_ROOT } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, PAGE_ROOT, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
 import { type MathNode, type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { MATHML_LIMIT } from '../../lib/export/doc/render';
@@ -39,6 +39,16 @@ describe('renderEigendocPreviewBody', () => {
             width: 297,
             height: 210,
         });
+        doc.destroy();
+    });
+
+    test('the preview carries the Normal the doc stores, read as every reader reads it', () => {
+        const doc = new Y.Doc();
+        seedEigendoc(doc, docWithFigure({ mediaName: GOLDEN_MEDIA_NAME }));
+        expect(renderEigendocPreviewBody(doc, mediaUrls).style).toEqual(DEFAULT_NORMAL_STYLE);
+        doc.getMap(STYLE_ROOT).set('size', 12);
+        doc.getMap(STYLE_ROOT).set('font', 'url(x)');
+        expect(renderEigendocPreviewBody(doc, mediaUrls).style).toEqual({ ...DEFAULT_NORMAL_STYLE, size: 12 });
         doc.destroy();
     });
 

@@ -11,7 +11,14 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_ROOTS,
+    bandEdge,
+    FIRST_PAGE_BAND,
+    normalStyleProperties,
+    pagePx,
+    pageStylesheet,
+} from '@workspace/lib/docs/eigendoc';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -55,8 +62,10 @@ import {
 } from './extensions/comment-mark';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
+import { useNormalStyle } from './hooks/use-normal-style';
 import { usePageSetup } from './hooks/use-page-setup';
 import { type SelectionPanel, useSelectionPanel } from './hooks/use-selection-panel';
+import { updateNormalStyle } from './normal-style';
 import { BandControls, PageBands } from './page-band';
 import { applyPageNumberPreset, type PageNumberPreset } from './page-numbers';
 import { createDocUndoManager, writePageSetup } from './page-setup';
@@ -189,6 +198,7 @@ const TiptapEditor = ({
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
     const pageSetup = usePageSetup(yDoc);
     const writeSetup = (from: PageSetup, to: PageSetup) => writePageSetup(yDoc, undoManager, from, to);
+    const normalStyle = useNormalStyle(yDoc);
     // The page at 96 dpi, for the layout math below and the text column before the page mounts.
     const page = pagePx(pageSetup);
     // Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
@@ -538,6 +548,12 @@ const TiptapEditor = ({
                                     canRedo={canRedo}
                                     pageSetup={pageSetup}
                                     onPageSetupChange={writeSetup}
+                                    normalStyle={normalStyle}
+                                    onUpdateNormalStyle={
+                                        editingBand
+                                            ? undefined
+                                            : () => updateNormalStyle(yDoc, undoManager, editor, normalStyle)
+                                    }
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     // Always offered: desktop draws the side panel, mobile the Column.
                                     onToggleCommentPanel={toggleComments}
@@ -614,17 +630,17 @@ const TiptapEditor = ({
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}
-                                        style={
-                                            needsScale
+                                        // The doc's Normal, which the body and the bands draw unformatted text in.
+                                        style={{
+                                            ...normalStyleProperties(normalStyle),
+                                            ...(needsScale
                                                 ? {
                                                       transform: `scale(${canvasScale})`,
                                                       transformOrigin: 'top left',
                                                       marginBottom: -(1 - canvasScale) * docHeight,
                                                   }
-                                                : canvasShift > 0
-                                                  ? { transform: `translateX(${-canvasShift}px)` }
-                                                  : undefined
-                                        }
+                                                : canvasShift > 0 && { transform: `translateX(${-canvasShift}px)` }),
+                                        }}
                                     >
                                         <PageBands
                                             edge="header"

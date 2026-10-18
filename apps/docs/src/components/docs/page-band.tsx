@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditorState } from '@tiptap/react';
 import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { bandEdge, bandHasContent, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
+import { BAND_DISTANCE_MM, bandEdge, bandHasContent, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
@@ -21,9 +21,6 @@ import { type ReactNode, useId, useState } from 'react';
 import { keepEditorFocus } from './editor-toolbar';
 import { PageNumberItems, type PageNumberPreset } from './page-numbers';
 import { PageSetupDialog } from './page-setup-dialog';
-
-// A header's distance from the paper's top edge and a footer's from its bottom one, Word's and Google's default.
-const BAND_DISTANCE_MM = 12.7;
 
 const BAND_LABEL: Record<BandRoot, string> = {
     header: 'Header',
@@ -68,6 +65,8 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
             ? root === edge || setup.differentFirstPage
             : root === printed && (root === edge ? otherHasContent : firstHasContent);
     const room = edge === 'header' ? setup.margin.top : setup.margin.bottom;
+    // At a margin narrower than its distance a band sits on the margin's edge, as the PDF and the docx put it.
+    const distance = Math.min(BAND_DISTANCE_MM, room);
     const { left, right } = setup.margin;
     return (
         <div
@@ -81,9 +80,7 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
                 margin:
                     edge === 'header' ? `-${room}mm -${right}mm 0 -${left}mm` : `0 -${right}mm -${room}mm -${left}mm`,
                 padding:
-                    edge === 'header'
-                        ? `${BAND_DISTANCE_MM}mm ${right}mm 0 ${left}mm`
-                        : `0 ${right}mm ${BAND_DISTANCE_MM}mm ${left}mm`,
+                    edge === 'header' ? `${distance}mm ${right}mm 0 ${left}mm` : `0 ${right}mm ${distance}mm ${left}mm`,
                 minHeight: `${room}mm`,
             }}
             onDoubleClick={
@@ -125,8 +122,8 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
                     className="pointer-events-none absolute text-xs text-muted-foreground invisible pointer-fine:group-hover:visible"
                     style={
                         edge === 'header'
-                            ? { top: `${BAND_DISTANCE_MM}mm`, left: `${left}mm` }
-                            : { bottom: `${BAND_DISTANCE_MM}mm`, left: `${left}mm` }
+                            ? { top: `${distance}mm`, left: `${left}mm` }
+                            : { bottom: `${distance}mm`, left: `${left}mm` }
                     }
                 >
                     Double-click to add a {edge}

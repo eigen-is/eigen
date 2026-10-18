@@ -1,6 +1,6 @@
 import { type Editor, useEditorState } from '@tiptap/react';
 import { parseChartSpec } from '@workspace/lib/charts';
-import { type ChartAttrs, readChartAttrs } from '@workspace/lib/docs/eigendoc';
+import { CHART_DEFAULT_SIZE, type ChartAttrs, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
 import {
@@ -14,12 +14,13 @@ import {
 import { Table } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import type * as Y from 'yjs';
+import { widthWithinLayout } from './extensions/figure-frame';
 import { FigureField, FigureLayoutSection } from './figure-properties-panel';
 
 // The selected chart's attributes. useEditor re-renders on no transaction, and a write that keeps the chart selected
 // fires no selectionUpdate.
 function useSelectedChart(editor: Editor) {
-    const { spec, layout, alignment, caption } = useEditorState({
+    const { spec, layout, alignment, caption, width, height } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
             const attrs = readChartAttrs(e.getAttributes('chart'));
@@ -28,10 +29,12 @@ function useSelectedChart(editor: Editor) {
                 layout: attrs.layout || 'block',
                 alignment: attrs.alignment || 'center',
                 caption: attrs.caption || '',
+                width: attrs.width ?? CHART_DEFAULT_SIZE.width,
+                height: attrs.height ?? CHART_DEFAULT_SIZE.height,
             };
         },
     });
-    return { spec: useMemo(() => parseChartSpec(spec ?? ''), [spec]), layout, alignment, caption };
+    return { spec: useMemo(() => parseChartSpec(spec ?? ''), [spec]), layout, alignment, caption, width, height };
 }
 
 // Each write one undo step, sealed from the typing around it; a typed title holds its step until the field is left.
@@ -46,7 +49,7 @@ type ChartPropertiesPanelProps = {
 };
 
 export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartPropertiesPanelProps) {
-    const { spec, layout, alignment, caption } = useSelectedChart(editor);
+    const { spec, layout, alignment, caption, width, height } = useSelectedChart(editor);
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
     // A field that writes as the user types keeps the caret out of the editor's keymap, so it hands ⌘Z to the doc.
     const history = useMemo(
@@ -68,7 +71,19 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                             )}
                         </ChartEditor>
                     )}
-                    <FigureLayoutSection layout={layout} alignment={alignment} onChange={write} />
+                    <FigureLayoutSection
+                        layout={layout}
+                        alignment={alignment}
+                        onChange={(attributes) => {
+                            // A chart shrunk to a wrap keeps its shape.
+                            const fitted = widthWithinLayout(editor.view.dom, attributes.layout, width);
+                            write(
+                                fitted === undefined
+                                    ? attributes
+                                    : { ...attributes, width: fitted, height: Math.round((height * fitted) / width) },
+                            );
+                        }}
+                    />
                     <PropertySection title="Caption">
                         <FigureField
                             value={caption}

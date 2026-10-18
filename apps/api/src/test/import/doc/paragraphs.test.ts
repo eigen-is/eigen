@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { DEFAULT_PAGE_SETUP, pagePx, readPageSetup } from '@workspace/lib/docs/eigendoc';
+import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
+import {
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    PARAGRAPH_FORMAT_KEYS,
+    pagePx,
+    readPageSetup,
+} from '@workspace/lib/docs/eigendoc';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../../lib/document/looks';
+import { fontLineHeight } from '../../../lib/export/fonts';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.
@@ -10,6 +18,8 @@ const run = (text: string, rPr = '') =>
     `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t xml:space="preserve">${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
 const EMPTY = '<w:p/>';
+// A prose textblock as the schema writes it: every format attribute, unset.
+const UNFORMATTED = Object.fromEntries(PARAGRAPH_FORMAT_KEYS.map((key) => [key, null]));
 const PAGE_BREAK = '<w:r><w:br w:type="page"/></w:r>';
 const section = (type?: string) => `<w:sectPr>${type ? `<w:type w:val="${type}"/>` : ''}</w:sectPr>`;
 
@@ -69,7 +79,7 @@ describe('empty paragraphs', () => {
             '<w:pStyle w:val="Heading1"/>',
         );
         const { json } = await importDocxBody(`${paragraph(run('One'))}${heading}${paragraph(run('Two'))}`);
-        expect(json.content?.[1]).toEqual({ type: 'paragraph', attrs: { textAlign: null } });
+        expect(json.content?.[1]).toEqual({ type: 'paragraph', attrs: { textAlign: null, ...UNFORMATTED } });
     });
 
     test('a paragraph of spaces counts as empty before a break', async () => {
@@ -313,13 +323,23 @@ describe('tracked changes and hidden text', () => {
             { numbering },
         );
         expect(json.content).toEqual([
-            { type: 'paragraph', attrs: { textAlign: 'center' }, content: [{ type: 'text', text: 'Joined centred' }] },
+            {
+                type: 'paragraph',
+                attrs: { textAlign: 'center', ...UNFORMATTED },
+                content: [{ type: 'text', text: 'Joined centred' }],
+            },
             {
                 type: 'orderedList',
                 attrs: { start: 1, type: null },
                 content: ['One and more', 'Two'].map((text) => ({
                     type: 'listItem',
-                    content: [{ type: 'paragraph', attrs: { textAlign: null }, content: [{ type: 'text', text }] }],
+                    content: [
+                        {
+                            type: 'paragraph',
+                            attrs: { textAlign: null, ...UNFORMATTED },
+                            content: [{ type: 'text', text }],
+                        },
+                    ],
                 })),
             },
         ]);
@@ -335,7 +355,7 @@ describe('tracked changes and hidden text', () => {
         expect(json.content).toEqual([
             {
                 type: 'heading',
-                attrs: { level: 1, textAlign: null },
+                attrs: { level: 1, textAlign: null, ...UNFORMATTED },
                 content: [{ type: 'text', text: '1. Joined Title' }],
             },
         ]);
@@ -405,7 +425,7 @@ describe('indented code', () => {
     const pre = (text: string) => paragraph(run(text), '<w:pStyle w:val="HTMLPreformatted"/><w:ind w:left="720"/>');
     const text = (value: string) => ({
         type: 'paragraph',
-        attrs: { textAlign: null },
+        attrs: { textAlign: null, ...UNFORMATTED },
         content: [{ type: 'text', text: value }],
     });
     const code = { type: 'codeBlock', attrs: { language: null }, content: [{ type: 'text', text: 'x = 1' }] };
@@ -760,5 +780,176 @@ describe("a node's look", () => {
         const [heading] = nodesOfType(json, 'heading');
         expect(heading?.attrs?.['level']).toBe(6);
         expect(nodesOfType(heading ?? {}, 'text').map((node) => [node.text, node.marks ?? []])).toEqual([['More', []]]);
+    });
+});
+
+// D13: a paragraph keeps what it sets apart from the docx's own Normal; what it shares with it is the doc's look.
+describe('paragraph format', () => {
+    // Word 2007's and Google Docs' Normal: 1.15 lines, 10 pt after.
+    const STYLES = [
+        '<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:after="200" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>',
+        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>',
+        '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="200" w:after="0"/></w:pPr><w:rPr><w:sz w:val="32"/></w:rPr></w:style>',
+        '<w:style w:type="paragraph" w:styleId="BodyText"><w:name w:val="Body Text"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:line="360" w:lineRule="auto"/></w:pPr></w:style>',
+    ].join('');
+    const NUMBERING =
+        '<w:abstractNum w:abstractNumId="5"><w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="5"><w:abstractNumId w:val="5"/></w:num>';
+    const bullet = paragraph(run('Item'), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="5"/></w:numPr>');
+    const formatOf = (node: JSONContent | undefined) =>
+        Object.fromEntries(
+            PARAGRAPH_FORMAT_KEYS.flatMap((key) => (node?.attrs?.[key] == null ? [] : [[key, node.attrs[key]]])),
+        );
+    const formats = async (body: string) => {
+        const { json } = await importDocxBody(body, { styles: STYLES, numbering: NUMBERING });
+        return [...nodesOfType(json, 'paragraph'), ...nodesOfType(json, 'heading')].map(formatOf);
+    };
+
+    test('a paragraph that follows Normal, or sets what Normal does as Google Docs writes it, gets none', async () => {
+        expect(
+            await formats(
+                `${paragraph(run('a'))}${paragraph(run('b'), '<w:spacing w:before="0" w:after="200" w:line="276" w:lineRule="auto"/>')}`,
+            ),
+        ).toEqual([{}, {}]);
+    });
+
+    test('what differs from Normal is kept: an auto line as its multiple, spacing in pt', async () => {
+        expect(
+            await formats(
+                [
+                    paragraph(run('a'), '<w:spacing w:line="360" w:lineRule="auto"/>'),
+                    paragraph(run('b'), '<w:spacing w:before="240" w:after="0"/>'),
+                    paragraph(run('c'), '<w:pStyle w:val="BodyText"/>'),
+                ].join(''),
+            ),
+        ).toEqual([{ lineSpacing: 1.5 }, { spaceBefore: 12, spaceAfter: 0 }, { lineSpacing: 1.5 }]);
+    });
+
+    // An exact or at-least line is a height in points, no multiple: it would read differently at each size.
+    test.each(['exact', 'atLeast'])('a %s line gives no line spacing', async (rule) => {
+        expect(await formats(paragraph(run('a'), `<w:spacing w:line="480" w:lineRule="${rule}"/>`))).toEqual([{}]);
+    });
+
+    test("a heading's own spacing is its look; only what the paragraph sets apart from its style is kept", async () => {
+        const heading = (pPr: string) => paragraph(run('H'), `<w:pStyle w:val="Heading2"/>${pPr}`);
+        expect(await formats(`${heading('')}${heading('<w:spacing w:before="0"/>')}`)).toEqual([
+            {},
+            { spaceBefore: 0 },
+        ]);
+    });
+
+    // Word draws the space before above the paragraph's first line and the space after below its last.
+    test('a paragraph a page break splits keeps its space before on the first half and its space after on the last', async () => {
+        expect(
+            await formats(
+                paragraph(
+                    `${run('Top')}${PAGE_BREAK}${run('Middle')}${PAGE_BREAK}${run('Bottom')}`,
+                    '<w:spacing w:before="240" w:after="0" w:line="360" w:lineRule="auto"/>',
+                ),
+            ),
+        ).toEqual([{ lineSpacing: 1.5, spaceBefore: 12 }, { lineSpacing: 1.5 }, { lineSpacing: 1.5, spaceAfter: 0 }]);
+    });
+
+    test('an indent outside any list or quote is kept: left, right, first line and hanging', async () => {
+        expect(
+            await formats(
+                [
+                    paragraph(run('a'), '<w:ind w:left="720" w:right="360"/>'),
+                    paragraph(run('b'), '<w:ind w:firstLine="360"/>'),
+                    paragraph(run('c'), '<w:ind w:left="720" w:hanging="720"/>'),
+                ].join(''),
+            ),
+        ).toEqual([
+            { indentLeft: 36, indentRight: 18 },
+            { indentFirstLine: 18 },
+            { indentLeft: 36, indentFirstLine: -36 },
+        ]);
+    });
+
+    // List and quote nesting stays structural: only the indent past the container's text is the paragraph's.
+    test("in a list item an indent counts from the item's text, and the item's own paragraph gets none", async () => {
+        const { json } = await importDocxBody(
+            `${bullet}${paragraph(run('At the text'), '<w:ind w:left="720"/>')}${paragraph(run('Past it'), '<w:ind w:left="1440"/>')}`,
+            { styles: STYLES, numbering: NUMBERING },
+        );
+        const [item] = nodesOfType(json, 'listItem');
+        expect((item?.content ?? []).map(formatOf)).toEqual([{}, {}, { indentLeft: 36 }]);
+    });
+
+    test("a quote's paragraph keeps no indent of its own", async () => {
+        const bar = `<w:pBdr><w:left w:val="single" w:sz="${QUOTE_LOOK.border.sz}" w:space="${QUOTE_LOOK.border.space}" w:color="${QUOTE_LOOK.border.color}"/></w:pBdr><w:ind w:left="${QUOTE_LOOK.indent}"/>`;
+        const { json } = await importDocxBody(paragraph(run('Quoted'), bar), { styles: STYLES });
+        expect(nodesOfType(json, 'blockquote')).toHaveLength(1);
+        expect(nodesOfType(json, 'paragraph').map(formatOf)).toEqual([{}]);
+    });
+
+    test('a hostile value is bounded as a stored one is', async () => {
+        expect(
+            await formats(
+                paragraph(
+                    run('a'),
+                    '<w:spacing w:before="99999999" w:line="99999" w:lineRule="auto"/><w:ind w:right="99999999"/>',
+                ),
+            ),
+        ).toEqual([{ lineSpacing: 5, spaceBefore: 400, indentRight: 1584 }]);
+    });
+});
+
+describe('the Normal', () => {
+    // Word 2007's Normal in a Times body at 12 pt, grey: what Word draws a paragraph that sets nothing in.
+    const TIMES = [
+        '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr></w:rPrDefault>',
+        '<w:pPrDefault><w:pPr><w:spacing w:after="200" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>',
+        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:before="60"/></w:pPr><w:rPr><w:color w:val="333333"/><w:sz w:val="24"/></w:rPr></w:style>',
+    ].join('');
+    // Its line as the multiple CSS draws Word's pitch at, in Source Serif 4's line, as a paragraph's.
+    const TIMES_LINE =
+        Math.round(((1.15 * fontLineHeight('Source Serif 4')) / fontLineHeight(DOCUMENT_FONT)) * 100) / 100;
+
+    test("docDefaults and the Normal style are the doc's Normal: the font through the font map, size, line, spacing, colour", async () => {
+        const { style } = await importDocxBody(paragraph(run('Body')), { styles: TIMES });
+        expect(style).toEqual({
+            font: 'Source Serif 4',
+            size: 12,
+            lineSpacing: TIMES_LINE,
+            spaceBefore: 3,
+            spaceAfter: 10,
+            color: '#333333',
+        });
+    });
+
+    test('a 12 pt body imports with no size, font or colour mark and no paragraph format', async () => {
+        const { json } = await importDocxBody(
+            `${paragraph(run('One'))}${paragraph(run('Two', '<w:sz w:val="24"/><w:color w:val="333333"/>'), '<w:spacing w:before="60" w:after="200" w:line="276" w:lineRule="auto"/>')}`,
+            { styles: TIMES },
+        );
+        expect(marksOfType(json, 'textStyle')).toEqual([]);
+        for (const node of nodesOfType(json, 'paragraph')) expect(node.attrs).toMatchObject(UNFORMATTED);
+    });
+
+    test("a run in another bundled font is marked, the document font's included, and one Eigen can't draw draws in Inter", async () => {
+        const font = (name: string) => `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`;
+        const { json } = await importDocxBody(
+            paragraph(
+                `${run('Times')}${run('Arial', font('Arial'))}${run('Courier', font('Courier New'))}${run('Unknown', font('Zapfino Pro'))}`,
+            ),
+            { styles: TIMES },
+        );
+        expect(marksOfType(json, 'textStyle').map(({ text, attrs }) => [text, attrs['fontFamily']])).toEqual([
+            ['Arial', 'Inter'],
+            ['Courier', 'JetBrains Mono'],
+            ['Unknown', 'Inter'],
+        ]);
+    });
+
+    test("a docx without docDefaults or a Normal style is Word's: 10 pt, single, nothing around, Eigen's font and colour", async () => {
+        const { style } = await importDocxBody(paragraph(run('Body')), { styles: '' });
+        expect(style).toEqual({ ...DEFAULT_NORMAL_STYLE, size: 10, lineSpacing: 1, spaceAfter: 0 });
+    });
+
+    test('a hostile Normal is bounded as a stored one is', async () => {
+        const { style } = await importDocxBody(paragraph(run('Body')), {
+            styles: '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="9999"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="99999999" w:line="99999" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>',
+        });
+        expect(style).toMatchObject({ size: 400, lineSpacing: 5, spaceAfter: 400 });
     });
 });

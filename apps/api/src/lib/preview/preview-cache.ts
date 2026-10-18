@@ -42,7 +42,8 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 // f5: a deck previews as canvas compositor pages, not slide divs.
 // f6: CSS is refused on the `url(` token in every attribute, so a cached body predates that sanitizer fix.
 // f7: a doc's preview carries its page.
-export const TEXT_FORMAT = 'f7';
+// f8: a doc's preview carries its Normal.
+export const TEXT_FORMAT = 'f8';
 
 // The three typed previews below are each a different artifact for the same path — contact cards, a
 // message, a calendar's events, never a rendered body — so each carries its own format and none of them
@@ -161,7 +162,7 @@ const inFlightText = new Map<string, Promise<void>>();
 // value, so one generation serves callers whatever each of them parses it into.
 const inFlightFirstText = new Map<string, Promise<CachedText | null>>();
 
-// The JSON envelope every generated text artifact is cached in: the body, and a doc's page. What is served on top of
+// The JSON envelope every generated text artifact is cached in: the body, and a doc's page and Normal. What is served on top of
 // it is the caller's business — the text preview adds the mode it already knows — so only these are stored.
 type CachedText = PreviewResult;
 
@@ -387,7 +388,7 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
     // Refused off the row's size, before any read; a container's size is its databases, not its body.
     if (!documentType && drivePath.size > TEXT_PREVIEW_MAX_BYTES) return null;
 
-    // A body and its page are served exactly as they were stored; the mode is composed here, where it is already known.
+    // A body, its page and its Normal are served exactly as they were stored; the mode is composed here, where it is already known.
     return getOrCacheText(
         mount.previewsDir,
         drivePath,

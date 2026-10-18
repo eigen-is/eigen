@@ -196,12 +196,12 @@ export async function convertToDocument(
         });
     }
 
-    const { update, page, images } = await importDocxUpdate(buffer);
+    const { update, page, style, images } = await importDocxUpdate(buffer);
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
     const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
     return fillNewDocument(drive, newPath, user, async (doc) => {
         await saveDocImages(drive, newPath, images, user);
-        commitEigendocImport(doc, { update: new Uint8Array(update), page });
+        commitEigendocImport(doc, { update: new Uint8Array(update), page, style });
     });
 }
 
@@ -227,7 +227,7 @@ export async function importIntoDocument(
     }
 
     if (containerMime === DRIVE_MIME_DOC) {
-        const { update, page, images } = await importDocxUpdate(buffer, signal);
+        const { update, page, style, images } = await importDocxUpdate(buffer, signal);
         // Media before the update that names it: an open tab looks each name up once, as the update arrives. The open
         // and the abort check come before the write check that guards the save.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
@@ -235,7 +235,7 @@ export async function importIntoDocument(
         await requireWritePermission(drive, path, user);
         await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
-        commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page });
+        commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page, style });
         return null;
     }
 

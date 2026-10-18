@@ -10,6 +10,8 @@ export const MAX_PDF_PAGE_PX = 19_200;
 // The first with the URLFetcher class weasyprint-render.py subclasses.
 const MIN_WEASYPRINT_MAJOR = 68;
 
+const RENDER_TIMEOUT_MS = 60_000;
+
 type WeasyPrintProbe = { python: string } | { python: null; found: string | null };
 
 let cachedProbe: Promise<WeasyPrintProbe> | null = null;
@@ -58,7 +60,7 @@ export async function isWeasyPrintAvailable(): Promise<boolean> {
 
 // A cached interpreter can vanish, as a Homebrew upgrade removes the old Cellar path, so a spawn that finds none probes
 // once more. The script's fetcher opens only data: URIs, so nothing in the HTML makes WeasyPrint fetch from the API host.
-async function spawnRender(zoom: number) {
+async function spawnRender(zoom: number, timeout: number) {
     const spawn = async () => {
         const probe = await weasyPrint();
         if (probe.python === null) {
@@ -72,7 +74,7 @@ async function spawnRender(zoom: number) {
             stdin: 'pipe',
             stdout: 'pipe',
             stderr: 'pipe',
-            timeout: 60_000,
+            timeout,
         });
     };
     try {
@@ -84,11 +86,8 @@ async function spawnRender(zoom: number) {
     }
 }
 
-// Accepts the UTF-8 bytes the transform Worker returns as well as a plain string —
-// Bun's stdin sink writes both, and the render script reads stdin as UTF-8. `zoom` scales the
-// laid-out pages onto their sheets: at 0.5 a 1920 px page prints 960 px, 254 mm, wide.
-export async function htmlToPdf(html: string | Uint8Array, zoom = 1): Promise<Buffer> {
-    const proc = await spawnRender(zoom);
+async function render(html: string | Uint8Array, zoom: number, timeout: number) {
+    const proc = await spawnRender(zoom, timeout);
 
     // A WeasyPrint that exits early (bad input) closes its stdin; writing to the dead pipe throws
     // EPIPE. Guard it so an early exit becomes the exitCode-500 below, never a process crash.
@@ -99,22 +98,42 @@ export async function htmlToPdf(html: string | Uint8Array, zoom = 1): Promise<Bu
         // Early stdin close is surfaced by the exitCode check below.
     }
 
-    const [exitCode, stdoutResponse, stderrResponse] = await Promise.all([
+    const [exitCode, stdout, stderr] = await Promise.all([
         proc.exited,
         new Response(proc.stdout).arrayBuffer(),
         new Response(proc.stderr).text(),
     ]);
+    return { exitCode, signalCode: proc.signalCode, stdout, stderr };
+}
+
+// Accepts the UTF-8 bytes the transform Worker returns as well as a plain string —
+// Bun's stdin sink writes both, and the render script reads stdin as UTF-8. `zoom` scales the
+// laid-out pages onto their sheets: at 0.5 a 1920 px page prints 960 px, 254 mm, wide.
+export async function htmlToPdf(html: string | Uint8Array, zoom = 1): Promise<Buffer> {
+    const started = Date.now();
+    let result = await render(html, zoom, RENDER_TIMEOUT_MS);
+
+    // WeasyPrint 68 segfaults in a glib thread now and then while renders run side by side, and the same HTML renders
+    // the next time. One more render, in what is left of the timeout, and none once the first took most of it.
+    const left = RENDER_TIMEOUT_MS - (Date.now() - started);
+    if (result.signalCode === 'SIGSEGV' && left > RENDER_TIMEOUT_MS / 2) {
+        console.warn('[export] WeasyPrint died of SIGSEGV, rendering once more:', result.stderr);
+        result = await render(html, zoom, left);
+    }
 
     // Only the deadline sends SIGTERM; a render that exited on its own has no signalCode.
-    if (proc.signalCode === 'SIGTERM') {
+    if (result.signalCode === 'SIGTERM') {
         throw new ApiError(504, 'PDF export timed out');
     }
 
     // The traceback names the install and the checkout, so it stays in the log.
-    if (exitCode !== 0) {
-        console.error(`[export] WeasyPrint exited with code ${exitCode}:`, stderrResponse);
+    if (result.exitCode !== 0) {
+        console.error(`[export] WeasyPrint exited with code ${result.exitCode}:`, result.stderr);
         throw new ApiError(500, 'PDF generation failed');
     }
 
-    return Buffer.from(stdoutResponse);
+    // WeasyPrint's logger has no handler, so a render that succeeds writes to stderr only when the script falls back.
+    if (result.stderr.trim()) console.warn('[export] WeasyPrint:', result.stderr.trim());
+
+    return Buffer.from(result.stdout);
 }

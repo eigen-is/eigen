@@ -17,6 +17,14 @@ describe('prose css — the lookup', () => {
         expect(proseValue('.eigen-prose blockquote', 'margin-bottom')).toBe('1em');
     });
 
+    // The page sets a --doc-* property only for a doc's own Normal, so what is read is Eigen's own look.
+    test("a custom property answers with its fallback, and the sheet keeps the var() for a doc's Normal", () => {
+        expect(proseValue('.eigen-prose', 'font-size')).toBe('11pt');
+        expect(proseValue('.eigen-prose', 'font-family')).toBe('"Inter", system-ui, -apple-system, sans-serif');
+        expect(proseValue('.eigen-prose p', 'margin-bottom')).toBe('11pt');
+        expect(PROSE_CSS).toContain('font-size: var(--doc-font-size, 11pt)');
+    });
+
     test('weights come from font-weights.css', () => {
         expect(proseValue('.eigen-prose strong', 'font-weight')).toBe('600');
     });
@@ -27,6 +35,17 @@ describe('prose css — the lookup', () => {
 
     test('a missing property throws', () => {
         expect(() => proseValue('.eigen-prose h5', 'font-size')).toThrow();
+    });
+});
+
+// A mail or chat editor takes eigen-prose.css too, and its sent HTML numbers a nested list 1. 1. 1.
+describe("prose css — Docs' own rules", () => {
+    test("the depth numbering and the lists that contain their floats are only Docs'", () => {
+        expect(proseValue('.eigen-doc ol ol', 'list-style-type')).toBe('lower-alpha');
+        expect(proseValue('.eigen-doc ol ol ol', 'list-style-type')).toBe('lower-roman');
+        expect(proseValue('.eigen-doc ul', 'display')).toBe('flow-root');
+        expect(PROSE_CSS).not.toMatch(/\.(eigen-prose|tiptap) ol ol[^{]*\{[^}]*list-style-type/);
+        expect(PROSE_CSS).not.toMatch(/\.(eigen-prose|tiptap) (ul|ol)[^{]*\{[^}]*flow-root;/);
     });
 });
 

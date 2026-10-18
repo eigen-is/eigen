@@ -1,13 +1,22 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { type PageSetup, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_EXCLUDED_NODES,
+    BAND_ROOTS,
+    type BandRoot,
+    bandHasContent,
+    type NormalStyle,
+    type PageSetup,
+    PROSE_TEXTBLOCKS,
+} from '@workspace/lib/docs/eigendoc';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
+import { readStoredEquation } from '../../document/equation';
 import type { TransformWarning } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { CHARS_PER_UNIT, MAX_DOCX_WEIGHT, readPackage } from './package';
-import { createReader, readDocument } from './paragraphs';
+import { createReader, readBand, readDocument } from './paragraphs';
 
 // docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform process.
 
@@ -29,33 +38,75 @@ const SLOTS_PER_UNIT = 64;
 export function docxToPmJson(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): { json: JSONContent; page: PageSetup; images: DocxImage[]; warnings: TransformWarning[] } {
-    const { doc, page, images, warnings } = readDocx(buffer, options);
-    return { json: doc.toJSON(), page, images, warnings };
+): {
+    json: JSONContent;
+    bands: Partial<Record<BandRoot, JSONContent>>;
+    page: PageSetup;
+    style: NormalStyle;
+    images: DocxImage[];
+    warnings: TransformWarning[];
+} {
+    const { doc, bands, page, style, images, warnings } = readDocx(buffer, options);
+    const json = Object.fromEntries(Object.entries(bands).map(([root, band]) => [root, band.toJSON()]));
+    return { json: doc.toJSON(), bands: json, page, style, images, warnings };
 }
 
 export function readDocx(
     buffer: Buffer,
     options: { publicOrigin?: string } = {},
-): { doc: Node; page: PageSetup; images: DocxImage[]; warnings: TransformWarning[] } {
+): {
+    doc: Node;
+    bands: Partial<Record<BandRoot, Node>>;
+    page: PageSetup;
+    style: NormalStyle;
+    images: DocxImage[];
+    warnings: TransformWarning[];
+} {
     try {
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
         const content = readDocument(reader);
-        const { weight, text } = sizeOf(content);
-        if (weight > MAX_DOCX_WEIGHT || text > MAX_DOCX_TEXT) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
-        const refused = new Set(content.filter((block) => !fits(block)));
-        const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
-        const doc = docSchema().nodeFromJSON({
-            type: 'doc',
-            content: blocks.length > 0 ? blocks : [{ type: 'paragraph' }],
+        let refused = 0;
+        // A band's schema holds none of BAND_EXCLUDED_NODES: each keeps its text.
+        const withoutExcluded = (node: JSONContent): JSONContent[] => {
+            if (!BAND_EXCLUDED_NODES.has(node.type ?? '')) {
+                return [node.content ? { ...node, content: node.content.flatMap(withoutExcluded) } : node];
+            }
+            refused++;
+            return asParagraphs(node);
+        };
+        const bandContent = BAND_ROOTS.flatMap((root): [BandRoot, JSONContent[]][] => {
+            const part = pkg.bands[root];
+            return part ? [[root, readBand(reader, part).flatMap(withoutExcluded)]] : [];
         });
-        doc.check();
+        const { weight, text } = sizeOf([...content, ...bandContent.flatMap(([, blocks]) => blocks)]);
+        if (weight > MAX_DOCX_WEIGHT || text > MAX_DOCX_TEXT) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
+        // A block the schema refuses keeps its text and equations as paragraphs, so a reader slip never fails the import.
+        const checked = (blocks: JSONContent[]) => {
+            const kept = blocks.flatMap((block) => {
+                if (fits(block)) return [block];
+                refused++;
+                return asParagraphs(block);
+            });
+            const node = docSchema().nodeFromJSON({
+                type: 'doc',
+                content: kept.length > 0 ? kept : [{ type: 'paragraph' }],
+            });
+            node.check();
+            return node;
+        };
+        const doc = checked(content);
+        const bands: Partial<Record<BandRoot, Node>> = {};
+        for (const [root, blocks] of bandContent) {
+            const band = checked(blocks);
+            if (bandHasContent(band, readStoredEquation)) bands[root] = band;
+        }
         // Only the media a kept figure names: a flattened block's figures went with it.
         const named = new Set<string>();
-        doc.descendants((node) => {
-            if (node.type.name === 'figure') named.add(node.attrs['mediaName']);
-        });
+        for (const node of [doc, ...Object.values(bands)])
+            node.descendants((child) => {
+                if (child.type.name === 'figure') named.add(child.attrs['mediaName']);
+            });
         const kept = reader.images.filter((image) => named.has(image.name));
         const images = kept.flatMap(({ name, path, contentType }): DocxImage[] => {
             const data = pkg.readMedia(path);
@@ -65,13 +116,16 @@ export function readDocx(
                 : [];
         });
         const warnings: TransformWarning[] = [];
-        if (refused.size > 0) warnings.push({ code: 'blocks-flattened', count: refused.size });
+        if (refused > 0) warnings.push({ code: 'blocks-flattened', count: refused });
         const damaged = kept.length - images.length;
         const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
         if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
         if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
-        return { doc, page: reader.page, images, warnings };
+        if (pkg.evenBands > 0) warnings.push({ code: 'even-bands-dropped', count: pkg.evenBands });
+        if (reader.bandAnchors > 0) warnings.push({ code: 'band-images-unanchored', count: reader.bandAnchors });
+        if (reader.bandDropped > 0) warnings.push({ code: 'band-content-dropped', count: reader.bandDropped });
+        return { doc, bands, page: reader.page, style: reader.normal, images, warnings };
     } catch (error) {
         throw importError(error, 'docx');
     }
@@ -111,7 +165,6 @@ function fits(block: JSONContent): boolean {
     }
 }
 
-// A block the schema refuses keeps its text and equations as paragraphs, so a reader slip never fails the import.
 function asParagraphs(block: JSONContent): JSONContent[] {
     const lines: JSONContent[] = [];
     const walk = (node: JSONContent, line: JSONContent[]) => {

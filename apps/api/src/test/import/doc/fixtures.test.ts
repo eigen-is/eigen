@@ -59,11 +59,16 @@ describe('docx fixtures', () => {
         expect(words).not.toContain('Maang Tika');
     });
 
+    // Its numbers, letters and roman numerals by level are what an untyped list draws by depth, so they store no type.
     test('POI numbering: bullets and numbers four and three levels deep, letters and roman numerals by level', async () => {
         const { json } = await imported('poi-Numbering.docx');
         const [bullets, numbers] = json.content ?? [];
         expect(nodesOfType(bullets ?? {}, 'bulletList')).toHaveLength(4);
-        expect(nodesOfType(numbers ?? {}, 'orderedList').map((list) => list.attrs?.['type'])).toEqual([null, 'a', 'i']);
+        expect(nodesOfType(numbers ?? {}, 'orderedList').map((list) => list.attrs?.['type'])).toEqual([
+            null,
+            null,
+            null,
+        ]);
     });
 
     test("mammoth's text box: its text follows the paragraph that anchors it", async () => {

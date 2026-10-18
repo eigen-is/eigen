@@ -20,10 +20,14 @@ import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
     BAND_ROOTS,
+    DOC_PROSE_CLASS,
     getDocExtensions,
+    PAGE_BAND_CLASS,
     PAGE_ROOT,
     pagePx,
+    readNormalStyle,
     readPageSetup,
+    STYLE_ROOT,
 } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -228,16 +232,20 @@ export function docEditorOptions({
     const band = 'field' in target;
     const cardIds = band ? () => NO_CARDS : target.cardIds;
     // The page map, not the page on screen: an update that changes the content and the page together reaches the
-    // editor before React draws the new page. A band prints in the body's column.
+    // editor before React draws the new page. A band prints in the body's column. Tables and indents keep within it.
     const textColumnWidth = () => {
         const { width, margin } = pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
         return width - margin.left - margin.right;
     };
+    // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one.
+    const normalStyle = () => readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON());
     return {
         editable,
         extensions: [
             ...getDocExtensions({
                 lowlight,
+                textColumnWidth,
+                normalStyle,
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
                     'figure',
@@ -288,13 +296,14 @@ export function docEditorOptions({
         ],
         editorProps: {
             attributes: {
-                class: 'eigen-prose',
+                class: band ? `eigen-prose ${DOC_PROSE_CLASS} ${PAGE_BAND_CLASS}` : `eigen-prose ${DOC_PROSE_CLASS}`,
             },
             handleDOMEvents: {
                 copy: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
                 cut: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
             },
-            transformPastedHTML: (html: string) => cleanPastedHTML(html, textColumnWidth(), cardIds()),
+            transformPastedHTML: (html: string) =>
+                cleanPastedHTML(html, textColumnWidth(), cardIds(), normalStyle().font),
             handleDrop: (view, event) => {
                 if (!event.dataTransfer) return false;
                 const files = Array.from(event.dataTransfer.files);

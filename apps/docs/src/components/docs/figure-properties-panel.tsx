@@ -13,7 +13,7 @@ import {
 } from '@workspace/ui/components/properties-panel';
 import { ImagePlus, PanelLeft, PanelRight, Rows3 } from 'lucide-react';
 import { useState } from 'react';
-import { clampFigureWidth, figureMaxWidth } from './extensions/figure-frame';
+import { clampFigureWidth, figureMaxWidth, widthWithinLayout } from './extensions/figure-frame';
 
 // Alt, Cap or Width. A keystroke starts a draft; Enter or a blur writes it if it differs from the value it started
 // from, and Escape drops it. Until then the field shows the value as stored, a peer's write too, so a visit writes
@@ -148,7 +148,10 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
             <FigureLayoutSection
                 layout={layout}
                 alignment={alignment}
-                onChange={(attributes) => editor.commands.updateFigure(attributes)}
+                onChange={(attributes) => {
+                    const fitted = widthWithinLayout(editor.view.dom, attributes.layout, width);
+                    editor.commands.updateFigure(fitted === undefined ? attributes : { ...attributes, width: fitted });
+                }}
             />
 
             <PropertySection title="Image">

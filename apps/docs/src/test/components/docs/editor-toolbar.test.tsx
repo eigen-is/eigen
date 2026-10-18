@@ -11,7 +11,9 @@ const { formatForDisplay, getHotkeyManager } = await import('@tanstack/react-hot
 const { Editor } = await import('@tiptap/react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_EXCLUDED_NODES, DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, getDocExtensions } = await import(
+    '@workspace/lib/docs/eigendoc'
+);
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { CommandPaletteProvider } = await import('@workspace/ui');
@@ -55,6 +57,8 @@ async function render(
         canRedo: false,
         pageSetup: DEFAULT_PAGE_SETUP,
         onPageSetupChange: () => {},
+        normalStyle: DEFAULT_NORMAL_STYLE,
+        onUpdateNormalStyle: () => {},
         onAccessDialogOpen: () => {},
         onImageUpload: () => {},
         onReplaceImage,
@@ -165,6 +169,7 @@ test("Format's submenus follow Google Docs' names and order", async () => {
         '—',
         'Paragraph styles',
         'Align and indent',
+        'Line & paragraph spacing',
         'Bullets and numbering',
         '—',
         'Headers and footers',
@@ -322,11 +327,158 @@ test.each([
     expect([editor.state.doc.firstChild?.type.name, iconRow()[0]]).toEqual(['paragraph', 'Normal text']);
 });
 
-test('Format › Align and indent lists Left, Center, Right and Justified, as Google does', async () => {
+test('Format › Align and indent lists the alignments, then the indents, as Google does', async () => {
     await render(1920, true);
     await openMenu('Format');
     await openSubmenu('Align and indent');
-    expect(openMenuEntries()).toEqual(['Left', 'Center', 'Right', 'Justified']);
+    expect(openMenuEntries()).toEqual([
+        'Left',
+        'Center',
+        'Right',
+        'Justified',
+        '—',
+        `Increase indent${formatForDisplay('Mod+]')}`,
+        `Decrease indent${formatForDisplay('Mod+[')}`,
+        '—',
+        'Indentation options…',
+    ]);
+});
+
+const formatted = (...attrs: Record<string, unknown>[]) => ({
+    type: 'doc',
+    content: attrs.map((format) => ({ type: 'paragraph', attrs: format, content: [{ type: 'text', text: 'ab' }] })),
+});
+
+// Each paragraph's stored format, unset keys left out.
+const formats = () =>
+    (editor.getJSON().content ?? []).map((block) =>
+        Object.fromEntries(
+            ['lineSpacing', 'spaceBefore', 'spaceAfter', 'indentLeft', 'indentRight', 'indentFirstLine'].flatMap(
+                (key) => (block.attrs?.[key] == null ? [] : [[key, block.attrs[key]]]),
+            ),
+        ),
+    );
+
+async function openSpacing(content: Parameters<typeof editor.commands.setContent>[0], from = 1, to = from) {
+    editor.commands.setContent(content);
+    editor.commands.setTextSelection({ from, to });
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Line & paragraph spacing');
+}
+
+// S7: an unset paragraph draws Eigen's 1.4, which no preset is.
+test("Format › Line & paragraph spacing lists Google's presets and ticks none for an unset paragraph", async () => {
+    await openSpacing(formatted({}));
+    expect(openMenuEntries()).toEqual([
+        'Single',
+        '1.15',
+        '1.5',
+        'Double',
+        '—',
+        'Add space before paragraph',
+        'Remove space after paragraph',
+        '—',
+        'Custom spacing…',
+    ]);
+    expect(checkedPresets()).toEqual([]);
+});
+
+test('a line spacing the selected paragraphs share is ticked, a mix none, and a preset sets every one', async () => {
+    await openSpacing(formatted({ lineSpacing: 1.15 }, { lineSpacing: 1.15 }), 1, 6);
+    expect(checkedPresets()).toEqual(['1.15']);
+    await unmount();
+    await openSpacing(formatted({ lineSpacing: 1.15 }, {}), 1, 6);
+    expect(checkedPresets()).toEqual([]);
+    await pickPreset('Double');
+    expect(formats()).toEqual([{ lineSpacing: 2 }, { lineSpacing: 2 }]);
+});
+
+test('Add and Remove space before and after toggle as Google does, 12 pt added', async () => {
+    await openSpacing(formatted({}));
+    await clickItem('Add space before paragraph');
+    await openMenu('Format');
+    await openSubmenu('Line & paragraph spacing');
+    await clickItem('Remove space after paragraph');
+    expect(formats()).toEqual([{ spaceBefore: 12, spaceAfter: 0 }]);
+    await openMenu('Format');
+    await openSubmenu('Line & paragraph spacing');
+    expect(openMenuEntries()).toContain('Remove space before paragraph');
+    expect(openMenuEntries()).toContain('Add space after paragraph');
+    await clickItem('Remove space before paragraph');
+    expect(formats()).toEqual([{ spaceBefore: 0, spaceAfter: 0 }]);
+});
+
+// A list, a quote and a table cell own the spacing of what they hold, as the docx reader and writer take it.
+test('in a list item Add space before and after are disabled, and line spacing still applies', async () => {
+    const paragraph = { type: 'paragraph', content: [{ type: 'text', text: 'ab' }] };
+    await openSpacing(
+        { type: 'doc', content: [{ type: 'bulletList', content: [{ type: 'listItem', content: [paragraph] }] }] },
+        3,
+    );
+    const disabled = [
+        ...([...document.querySelectorAll('[role="menu"]')].at(-1)?.querySelectorAll('[data-disabled]') ?? []),
+    ];
+    expect(disabled.map((item) => item.textContent?.trim())).toEqual([
+        'Add space before paragraph',
+        'Add space after paragraph',
+    ]);
+    await pickPreset('Double');
+    expect(editor.state.doc.firstChild?.firstChild?.firstChild?.attrs['lineSpacing']).toBe(2);
+});
+
+// As Google's does: the paragraphs go back to the doc's own alignment, spacing and indents too.
+test('Clear formatting takes away every paragraph format in the selection', async () => {
+    const format = {
+        lineSpacing: 2,
+        spaceBefore: 12,
+        spaceAfter: 0,
+        indentLeft: 36,
+        indentRight: 18,
+        indentFirstLine: -18,
+    };
+    const text = [{ type: 'text', text: 'ab' }];
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            { type: 'heading', attrs: { level: 2, ...format }, content: text },
+            { type: 'paragraph', attrs: { ...format, textAlign: 'center' }, content: text },
+            { type: 'blockquote', content: [{ type: 'paragraph', attrs: format, content: text }] },
+            { type: 'paragraph', attrs: format, content: text },
+        ],
+    });
+    editor.commands.setTextSelection({ from: 1, to: 12 });
+    await render(1920, true);
+    await openMenu('Format');
+    await clickItem('Clear formatting');
+    expect(formats()).toEqual([{}, {}, {}, format]);
+    expect(editor.getJSON().content?.[1]?.attrs?.['textAlign']).toBeNull();
+});
+
+test('Custom spacing… and Indentation options… open their dialogs', async () => {
+    await openSpacing(formatted({}));
+    await clickItem('Custom spacing…');
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Custom spacing');
+    await unmount();
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Align and indent');
+    await clickItem('Indentation options…');
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Indentation options');
+});
+
+test('Increase and Decrease indent step the paragraph by 1.27 cm', async () => {
+    editor.commands.setContent(formatted({}));
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Align and indent');
+    await clickItem(`Increase indent${formatForDisplay('Mod+]')}`);
+    expect(formats()).toEqual([{ indentLeft: 36 }]);
+    await openMenu('Format');
+    await openSubmenu('Align and indent');
+    await clickItem(`Decrease indent${formatForDisplay('Mod+[')}`);
+    expect(formats()).toEqual([{}]);
 });
 
 // The trigger draws the paragraph's alignment, as Google's does, so its first icon names it.
@@ -452,6 +604,7 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
         'Unmerge cells',
         '—',
         'Toggle header row',
+        'Cell background color',
     ]);
     // A caret merges nothing and splits only a merged cell.
     expect(submenuDisabled('Merge cells')).toBe(true);
@@ -459,6 +612,26 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
 
     await clickItem('Insert row below');
     expect(editor.state.doc.child(1).childCount).toBe(3);
+});
+
+test('Format › Table › Cell background color fills the cell the caret is in, and None takes it away', async () => {
+    editor.commands.setContent(TABLE_AND_FIGURE);
+    editor.commands.setTextSelection(7);
+    const fill = () => editor.state.doc.child(1).child(0).child(0).attrs['backgroundColor'];
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Table');
+    await openSubmenu('Cell background color');
+    const swatch = [...document.querySelectorAll<HTMLElement>('[role="menuitem"][title^="#"]')].at(-1);
+    if (!swatch) throw new Error('no swatch');
+    await act(async () => swatch.click());
+    expect(fill()).toBe(swatch.title.toLowerCase());
+
+    await openMenu('Format');
+    await openSubmenu('Table');
+    await openSubmenu('Cell background color');
+    await clickItem('None');
+    expect(fill()).toBeNull();
 });
 
 test('Format › Image › Replace image opens the picker the image panel opens', async () => {
@@ -563,6 +736,25 @@ test("in a band, Insert, Format and the style picker offer only what the band's 
     await openMenu('Normal text');
     expect(menuItems()).not.toContain('Title');
     expect(menuItems()).not.toContain('Subtitle');
+    band.destroy();
+});
+
+// A band shares the schema, so its paragraphs take a format as the body's do.
+test("in a band, Line & paragraph spacing and Increase indent act on the band's paragraph", async () => {
+    const band = new Editor({
+        element: document.body.appendChild(document.createElement('div')),
+        extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }),
+        content: formatted({}),
+    });
+    band.commands.setTextSelection(1);
+    await render(1920, true, { active: band });
+    await openMenu('Format');
+    await openSubmenu('Line & paragraph spacing');
+    await pickPreset('Double');
+    await openMenu('Format');
+    await openSubmenu('Align and indent');
+    await clickItem(`Increase indent${formatForDisplay('Mod+]')}`);
+    expect(band.getJSON().content?.[0]?.attrs).toMatchObject({ lineSpacing: 2, indentLeft: 36 });
     band.destroy();
 });
 
@@ -695,9 +887,10 @@ test('Numbered list › i. ii. iii. makes a paragraph a list numbered in small r
     expect(editor.getJSON().content?.[0]).toMatchObject({ type: 'orderedList', attrs: { start: 1, type: 'i' } });
 });
 
+// Decimal is stored as '1', so a nested list set to it keeps it over the letters an untyped one draws by depth.
 test.each([
     ['A. B. C.', 'A'],
-    ['1. 2. 3.', null],
+    ['1. 2. 3.', '1'],
 ])("Numbered list › %s sets a list's style and keeps its items and start", async (preset, type) => {
     editor.commands.setContent(orderedList({ start: 4, type: 'a' }));
     editor.commands.setTextSelection(8);
@@ -945,18 +1138,21 @@ test.each([
 // Where Google's Insert › Symbols › Equation sits relative to the chart and the line. The equation goes in once the menu
 // has closed, so Radix hands the focus to no trigger after the new equation's field has taken it.
 test('Insert › Equation follows Chart and inserts once the menu has closed', async () => {
-    const onInsertEquation = mock(() => {});
+    // Whether a menu was still in the page when the equation went in: Radix calls onCloseAutoFocus in a timeout its
+    // unmount sets, which may run inside the click's own act under load, so the order is read at the call.
+    const menuOpenAtInsert: boolean[] = [];
+    const onInsertEquation = mock(() => {
+        menuOpenAtInsert.push(document.querySelector('[role="menu"]') !== null);
+    });
     await render(1920, true, { onInsertEquation });
     await openMenu('Insert');
     expect(openMenuEntries().slice(0, 5)).toEqual(['Link', 'Image', 'Chart', 'Equation', 'Horizontal rule']);
 
     await clickItem('Equation');
-    expect(onInsertEquation).not.toHaveBeenCalled();
-    // Radix calls onCloseAutoFocus in a timeout its unmount sets, which under load a single tick can precede.
     for (let tick = 0; tick < 50 && onInsertEquation.mock.calls.length === 0; tick++) {
         await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
     }
-    expect(onInsertEquation).toHaveBeenCalledTimes(1);
+    expect(menuOpenAtInsert).toEqual([false]);
 });
 
 // A phone has no panel to edit one in, and a band being edited none that follows it.
