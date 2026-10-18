@@ -86,8 +86,10 @@ export function customGeometry(
     for (const { filled, stroked, shade, subpaths } of painted.values()) {
         if (subpaths.length === 0) continue;
         let path = fitted(subpaths);
+        const segments = subpaths.reduce((count, subpath) => count + subpath.segments.length, 0);
         for (const tolerance of SIMPLIFY_TOLERANCES) {
             if (path !== undefined) break;
+            charge(segments);
             path = fitted(subpaths.map((subpath) => simplified(subpath, tolerance)));
         }
         if (path === undefined) return undefined;
@@ -146,8 +148,10 @@ function subpathsOf(path: XmlElement, guides: Guides, width: number, height: num
         else if (command.local === 'quadBezTo' && points.length >= 2) draw('Q', points.slice(0, 2));
         else if (command.local === 'arcTo') {
             const radii = { x: value(command, 'wR'), y: value(command, 'hR') };
-            for (const curve of arcCurves(pen, radii, value(command, 'stAng'), value(command, 'swAng')))
-                draw('C', curve);
+            const curves = arcCurves(pen, radii, value(command, 'stAng'), value(command, 'swAng'));
+            // One node, but up to four segments each pass scans.
+            charge(curves.length);
+            for (const curve of curves) draw('C', curve);
         } else if (command.local === 'close' && open && !open.closed && open.segments.length > 0) {
             open.closed = true;
             pen = start;
@@ -219,16 +223,19 @@ function arcCurves(from: Point, radii: Point, startAngle: number, sweepAngle: nu
 
 // The canonical spelling the canvas reader keeps, or undefined past its caps.
 function fitted(subpaths: Subpath[]): string | undefined {
-    let commands = 0;
+    const commands = subpaths.reduce(
+        (count, { segments, closed }) => count + 1 + segments.length + (closed ? 1 : 0),
+        0,
+    );
+    if (commands > MAX_PATH_COMMANDS) return undefined;
     const parts: string[] = [];
     for (const { start, segments, closed } of subpaths) {
-        commands += 1 + segments.length + (closed ? 1 : 0);
         parts.push(`M ${start.x} ${start.y}`);
         for (const { op, points } of segments) parts.push(`${op} ${points.map(({ x, y }) => `${x} ${y}`).join(' ')}`);
         if (closed) parts.push('Z');
     }
     const path = parts.join(' ');
-    return commands <= MAX_PATH_COMMANDS && path.length <= MAX_PATH_BYTES ? path : undefined;
+    return path.length <= MAX_PATH_BYTES ? path : undefined;
 }
 
 // A curve that bulges less than the tolerance is its chord; each run of lines keeps only the points that turn it more,
@@ -265,6 +272,7 @@ function reduced(points: Point[], tolerance: number): Point[] {
     const spans: [from: number, to: number, depth: number][] = [[0, last, 0]];
     for (let span = spans.pop(); span; span = spans.pop()) {
         const [from, to, depth] = span;
+        charge(to - from);
         let farthest = -1;
         let most = tolerance;
         for (let i = from + 1; i < to; i++) {

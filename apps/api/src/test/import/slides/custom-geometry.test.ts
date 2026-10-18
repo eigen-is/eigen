@@ -289,6 +289,28 @@ describe('caps', () => {
         expect(geometry(path('').repeat(MAX_GEOMETRY_NODES + 1))).toBeUndefined();
     });
 
+    test("charge the read's work budget each curve an arc draws and each point a simplifying pass scans", () => {
+        const circles = (count: number) => path(moveTo(100, 50) + arcTo(50, 50, 0, 360).repeat(count));
+        const charged = (paths: string) =>
+            withWorkBudget(100_000, () => {
+                geometry(paths);
+                let [low, high] = [0, 100_000];
+                while (low < high) {
+                    const middle = Math.ceil((low + high) / 2);
+                    if (affords(middle)) low = middle;
+                    else high = middle - 1;
+                }
+                return 100_000 - low;
+            });
+        // 4 curves an arc; 200 arcs' 800 curves are past MAX_PATH_COMMANDS, scanned by each of 3 passes that can't fit them.
+        expect(charged(circles(10))).toBeGreaterThanOrEqual(40);
+        expect(charged(circles(200))).toBeGreaterThanOrEqual(200 * 4 * 4);
+        let zigzag = moveTo(0, 0);
+        for (let i = 1; i <= 1000; i++) zigzag += lnTo(i / 10, i % 2 === 0 ? 0 : 0.01);
+        // Its 2,000 nodes, a pass over its 1,000 segments, and that pass's scans of the points between the ends it keeps.
+        expect(charged(path(zigzag))).toBeGreaterThanOrEqual(4000);
+    });
+
     test('a path past MAX_PATH_COMMANDS drops points on the line between their neighbours and tiny steps', () => {
         let body = moveTo(0, 0);
         for (let i = 1; i <= 1000; i++) body += lnTo(i / 10, i % 2 === 0 ? 0 : 0.01);
