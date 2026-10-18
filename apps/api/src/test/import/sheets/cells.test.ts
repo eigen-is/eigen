@@ -138,6 +138,15 @@ describe('a formula', () => {
         expect(cell('B1')).toEqual({ f: '=NOW()' });
     });
 
+    test('on a rich string keeps the formula and its cached text, plain', () => {
+        const { cell } = read(
+            '<row r="1"><c r="A1" t="s"><f>B1</f><v>0</v></c><c r="B1" t="inlineStr"><f>C1</f><is><r><rPr><b/></rPr><t>in</t></r><r><t>line</t></r></is></c></row>',
+            { strings: ['<r><rPr><i/></rPr><t>ri</t></r><r><t>ch</t></r>'] },
+        );
+        expect(cell('A1')).toEqual({ v: 'rich', m: 'rich', f: '=B1', ct: { fa: 'General', t: 's' } });
+        expect(cell('B1')).toEqual({ v: 'inline', m: 'inline', f: '=C1', ct: { fa: 'General', t: 's' } });
+    });
+
     test("a shared formula's copies shift its relative references by their offset", () => {
         const { cell } = read(
             '<row r="1"><c r="C1"><f t="shared" ref="C1:D3" si="0">A1*$B$1+B$1</f><v>1</v></c><c r="D1"><f t="shared" si="0"/><v>2</v></c></row><row r="3"><c r="C3"><f t="shared" si="0"/><v>3</v></c><c r="D3"><f t="shared" si="7"/><v>4</v></c></row>',

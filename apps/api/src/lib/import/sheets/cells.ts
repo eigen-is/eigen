@@ -150,8 +150,9 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         if (context.date1904) value += DAYS_1904;
     }
     const cell: FortuneCell = { ...look.cell };
-    // A rich string's text is its runs', as the editor keeps one: neither `v` nor `m` holds it.
-    const runs = typeof string === 'object' && value ? runsOf(string.runs, look.font, context) : undefined;
+    // A rich string's text is its runs', as the editor keeps one: neither `v` nor `m` holds it. A formula's is its
+    // cached result, plain.
+    const runs = !formula && typeof string === 'object' && value ? runsOf(string.runs, look.font, context) : undefined;
     if (runs) {
         cell.ct = { fa: look.fa ?? 'General', t: 'inlineStr', s: runs };
         return cell;
