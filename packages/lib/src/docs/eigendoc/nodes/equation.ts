@@ -84,16 +84,24 @@ function isWritable(mathml: string): boolean {
     return true;
 }
 
+// Only a string the writer could have written is parsed, so no prolog, DOCTYPE or entity reaches either parser, and
+// neither builds more elements than the writer writes: the stored attr, and MathML typed in the panel's field.
+export function parseMathml(
+    mathml: string,
+    parse: (mathml: string) => MathXmlElement | null = parseInBrowser,
+): MathXmlElement | null {
+    return isWritable(mathml) ? parse(mathml) : null;
+}
+
 // Every consumer's read of the attrs: the stored string is never mounted as is, and any string reads as an equation
-// the writers can write. Only a string the writer could have written is parsed, so no prolog, DOCTYPE or entity
-// reaches either parser, and neither builds more elements than the writer writes. The server passes Bun's parser.
+// the writers can write. The server passes Bun's parser.
 export function readEquation(
     attrs: Record<string, unknown>,
     parse: (mathml: string) => MathXmlElement | null = parseInBrowser,
 ): Equation {
     const display = attrs['display'] === true;
     const mathml = attrs['mathml'];
-    const math = typeof mathml === 'string' && isWritable(mathml) ? parse(mathml) : null;
+    const math = typeof mathml === 'string' ? parseMathml(mathml, parse) : null;
     const read = (math && readMath(math)) || EMPTY;
     return { ...read, text: writeText(read.row), display };
 }

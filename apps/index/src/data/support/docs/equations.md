@@ -31,6 +31,8 @@ Type a command's name and a space, and Eigen adds the braces it needs. `\frac` a
 
 If the LaTeX has a mistake, the field turns red and a message under it says what's wrong, with the spot underlined. The equation isn't saved until you fix it, and the preview shows the equation as it was last saved.
 
+You can also paste MathML, starting with `<math`, into the field. Eigen reads it as the equation, and once it's saved the field shows its LaTeX.
+
 ## Pick symbols from the menus
 
 Above the **LaTeX** field are five buttons, each opening a grid of symbols, as in Google Docs:

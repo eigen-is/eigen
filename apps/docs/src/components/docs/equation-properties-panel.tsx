@@ -1,8 +1,18 @@
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorState, Transaction } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
-import { equationMath, readEquation } from '@workspace/lib/docs/eigendoc';
-import { LATEX_COMMANDS, MathError, type MathRow, readLatex, writeLatex, writeMathml } from '@workspace/math';
+import { equationMath, parseMathml, readEquation } from '@workspace/lib/docs/eigendoc';
+import {
+    LATEX_COMMANDS,
+    MathError,
+    type MathRow,
+    type MathXmlElement,
+    readLatex,
+    readMathml,
+    readMathmlLatex,
+    writeLatex,
+    writeMathml,
+} from '@workspace/math';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -26,11 +36,31 @@ type Read =
     | { mathml: string; row: MathRow; error?: undefined }
     | { mathml?: undefined; row?: undefined; error: MathError };
 
-// The MathML a draft commits as, its LaTeX the annotation, or where the reader stopped.
-function readDraft(latex: string): Read {
+// A MathML draft's own LaTeX when the LaTeX reader takes it, as a paste keeps it, else its tree's.
+function latexOf(math: MathXmlElement, row: MathRow): string {
     try {
-        const row = readLatex(latex);
-        return { mathml: writeMathml(row, latex), row };
+        const latex = readMathmlLatex(math);
+        if (latex !== undefined) readLatex(latex);
+        return latex ?? writeLatex(row);
+    } catch (error) {
+        if (!(error instanceof MathError)) throw error;
+        return writeLatex(row);
+    }
+}
+
+// The MathML a draft commits as, its LaTeX the annotation, or where the reader stopped. A draft that starts with <math
+// is MathML, parsed as the stored attr is.
+function readDraft(draft: string): Read {
+    try {
+        const source = draft.trim();
+        if (!source.startsWith('<math')) {
+            const row = readLatex(draft);
+            return { mathml: writeMathml(row, draft), row };
+        }
+        const math = parseMathml(source);
+        if (!math) throw new MathError("This MathML can't be read");
+        const row = readMathml(math);
+        return { mathml: writeMathml(row, latexOf(math, row)), row };
     } catch (error) {
         if (!(error instanceof MathError)) throw error;
         return { error };
