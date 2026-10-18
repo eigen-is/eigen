@@ -5,7 +5,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
 import type { FigureFrameNode } from '@workspace/lib/docs/eigendoc';
-import { CommentMarkSchema, isFigureFrameNode, readEquation } from '@workspace/lib/docs/eigendoc';
+import { CommentMarkSchema, isFigureFrameNode, PAGE_NUMBER_TEXT, readEquation } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -88,13 +88,13 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
 const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart' };
 
 // A comment on an image or a chart alone has no text to quote, so it reads as "Image" or "Chart", and an equation with
-// no text as "Equation". The callback replaces every leaf's own text, so any other leaf reads as its leafText.
+// no text as "Equation", and a page number as its #.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
         .textBetween(from, to, ' ', (leaf) => {
             if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
             if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
-            return leaf.type.spec.leafText?.(leaf) ?? '';
+            return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
         })
         .slice(0, 100);
 }
