@@ -92,7 +92,7 @@ describe('the panel for a path', () => {
         await act(async () => {
             width.focus();
             setValue?.call(width, '300');
-            width.dispatchEvent(new window.Event('input', { bubbles: true }));
+            width.dispatchEvent(new Event('input', { bubbles: true }));
         });
         expect(writes).toEqual([[{ id: 'p', fields: { width: 300 } }]]);
     });
