@@ -18,8 +18,7 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { holdCapture, sealed } = await import('../../../../components/properties-panel/property-gesture');
-const { PropertyGestureContext } = await import('../../../../components/properties-panel');
+const { holdCapture, PropertyGestureContext, sealed } = await import('../../../../components/properties-panel');
 const { ChartEditDialog, ChartPanelSection, newChartElement } = await import(
     '../../../../components/vector/kinds/chart'
 );
