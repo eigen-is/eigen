@@ -5,6 +5,7 @@ import {
     bindingAnchor,
     bindingGap,
     boundEndpoint,
+    elementBounds,
     type Point,
     rotatePoint,
     serializePoints,
@@ -20,8 +21,9 @@ import {
     serializePath,
 } from '../../../vector/outline';
 import { readVectorFromDoc } from '../../../vector/read-vector';
+import { sceneToSvg } from '../../../vector/scene-to-svg';
 import { serializeBinding, type VectorPathElement } from '../../../vector/types';
-import { arrow, byIdOf, path } from '../element-factories';
+import { arrow, byIdOf, path, scene } from '../element-factories';
 
 const SQUARE = 'M 0 0 L 1 0 L 1 1 L 0 1 Z';
 // The square with a hole: the inner ring runs the other way, so nonzero leaves it empty.
@@ -229,6 +231,42 @@ describe('path render', () => {
         expect(kind.paintsNothing(box(SQUARE, bare))).toBe(false);
         expect(kind.paintsNothing(box('M 0 0 L 1 1', { ...bare, closed: false }))).toBe(true);
         expect(kind.paintsNothing(box(SQUARE, { ...bare, fill: solidFill('transparent') }))).toBe(true);
+    });
+});
+
+describe('path bounds', () => {
+    // a cubic arching from the bottom corners up to half its height above the box
+    const arch = (over: Partial<VectorPathElement> = {}) =>
+        box('M 0 1 C 0 -1 1 -1 1 1 Z', { width: 100, height: 100, strokeWidth: 2, ...over });
+
+    test('a curve past its box is in the bounds, half the stroke beyond the contour', () => {
+        const b = elementBounds(arch());
+        expect(b.minX).toBeCloseTo(-1, 6);
+        expect(b.maxX).toBeCloseTo(101, 6);
+        expect(b.maxY).toBeCloseTo(101, 6);
+        expect(b.minY).toBeCloseTo(-51, 0);
+    });
+
+    test('a rotated path is bounded where it is drawn', () => {
+        const b = elementBounds(arch({ angle: 90 }));
+        expect(b.minX).toBeCloseTo(-1, 6);
+        expect(b.maxX).toBeCloseTo(151, 0);
+        expect(b.minY).toBeCloseTo(-1, 6);
+        expect(b.maxY).toBeCloseTo(101, 6);
+    });
+
+    test('the SVG export frames the overshoot instead of cropping it', () => {
+        const viewBox = sceneToSvg(scene([arch()]))
+            .match(/viewBox="([^"]+)"/)?.[1]
+            .split(' ')
+            .map(Number);
+        expect(viewBox?.[1]).toBeLessThan(-51);
+    });
+
+    test('a probe outside the bounds misses; inside the overshoot it hits', () => {
+        expect(ELEMENT_KINDS.path.hitTest(arch(), { x: 50, y: -40 }, 0)).toBe(true);
+        expect(ELEMENT_KINDS.path.hitTest(arch(), { x: 50, y: -60 }, 8)).toBe(false);
+        expect(ELEMENT_KINDS.path.hitTest(arch(), { x: 50, y: -55 }, 8)).toBe(true);
     });
 });
 

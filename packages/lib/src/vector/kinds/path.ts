@@ -1,5 +1,13 @@
 import { isTransparentFill, parseFill } from '../fill';
-import { boxCenter, distanceToPolyline, LINEAR_HIT_SCREEN_FACTOR, type Point, rotatePoint } from '../geometry';
+import {
+    type Bounds,
+    boxCenter,
+    distanceToPolyline,
+    LINEAR_HIT_SCREEN_FACTOR,
+    type Point,
+    pointsBounds,
+    rotatePoint,
+} from '../geometry';
 import { polylineOutline, scaledPathCommands } from '../outline';
 import type { VectorPathElement } from '../types';
 import { defineKind } from './kind';
@@ -19,7 +27,8 @@ const JOIN_STEP = Math.PI / 12;
 
 // Hover hit-tests every element and arrow docking outlines every candidate on each pointer move. An edit
 // makes a new element object, so a cache keyed by the object never goes stale.
-const SAMPLED = new WeakMap<VectorPathElement, Point[][]>();
+type Sampled = { subpaths: Point[][]; bounds: Bounds };
+const SAMPLED = new WeakMap<VectorPathElement, Sampled>();
 
 export const pathKind = defineKind<VectorPathElement>({
     type: 'path',
@@ -53,17 +62,21 @@ export const pathKind = defineKind<VectorPathElement>({
             closed: bool(src.get('closed'), false) && path.includes('Z'),
         };
     },
+    // A control point may pull a curve past the box, so the export, the marquee and the ring read the contour.
+    bounds: (el) => grown(sampled(el).bounds, el.strokeWidth / 2),
     // A filled path is hit inside by the fill rule; any path on its stroke, within the reach a line has.
     hitTest: (el, point, threshold) => {
-        const p = rotatePoint(point, boxCenter(el), -el.angle);
-        const subpaths = sampledSubpaths(el);
+        const { subpaths, bounds } = sampled(el);
         const reach = Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, el.strokeWidth / 2 + 0.1);
+        const near = grown(bounds, reach);
+        if (point.x < near.minX || point.x > near.maxX || point.y < near.minY || point.y > near.maxY) return false;
+        const p = rotatePoint(point, boxCenter(el), -el.angle);
         if (subpaths.some((points) => distanceToPolyline(points, p) <= reach)) return true;
         return el.closed && !isTransparentFill(parseFill(el.fill)) && winding(subpaths, p) !== 0;
     },
     // The outer contour only: an arrow docks on the outside of a shape with a hole.
     outline: (el, inflate) => {
-        const outer = outerContour(sampledSubpaths(el));
+        const outer = outerContour(sampled(el).subpaths);
         if (!el.closed) return polylineOutline(outer);
         return { kind: 'polygon', corners: grownRing(outer, inflate) };
     },
@@ -71,9 +84,9 @@ export const pathKind = defineKind<VectorPathElement>({
     render: (el) => ({ svg: renderRoughShape(el) }),
 });
 
-// Every subpath as a polyline in the unrotated scene frame, its curves flattened; a closed one ends on
-// its start.
-function sampledSubpaths(el: VectorPathElement): Point[][] {
+// Every subpath as a polyline in the unrotated scene frame, its curves flattened, a closed one ending on
+// its start; and the box of those points rotated as drawn.
+function sampled(el: VectorPathElement): Sampled {
     const cached = SAMPLED.get(el);
     if (cached) return cached;
     const at = (p: Point): Point => ({ x: el.x + p.x, y: el.y + p.y });
@@ -89,8 +102,14 @@ function sampledSubpaths(el: VectorPathElement): Point[][] {
             current.push(...flatten([current[current.length - 1], ...points.map(at)]));
         }
     }
-    SAMPLED.set(el, subpaths);
-    return subpaths;
+    const center = boxCenter(el);
+    const entry = { subpaths, bounds: pointsBounds(subpaths.flat().map((p) => rotatePoint(p, center, el.angle))) };
+    SAMPLED.set(el, entry);
+    return entry;
+}
+
+function grown(b: Bounds, by: number): Bounds {
+    return { minX: b.minX - by, minY: b.minY - by, maxX: b.maxX + by, maxY: b.maxY + by };
 }
 
 // A line's end, or a Bézier's points after its start in enough steps that no chord strays more than
