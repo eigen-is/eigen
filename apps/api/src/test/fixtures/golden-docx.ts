@@ -131,6 +131,59 @@ function zipDocx(document: string, parts: DocxParts): ArrayBuffer {
     return toTransferableBuffer(writeZip(Object.entries(entries).map(([name, data]) => ({ name, data, store: true }))));
 }
 
+// The namespaces a header or footer part declares, as Word's do.
+export const BAND_NAMESPACES = [
+    'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"',
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"',
+    'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"',
+    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"',
+    'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"',
+].join(' ');
+
+const RELATIONSHIP = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const WORDPROCESSING = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
+
+// A header or footer part, word/<id>.xml, the final section names by its id; rels are its own relationships.
+export type DocxBand = { id: string; kind: 'header' | 'footer'; type?: string; xml: string; rels?: string };
+
+// The golden package with a body, a final section naming each band, its sectPr content, settings.xml's and styles.
+export async function buildDocxWithBands(
+    bands: DocxBand[],
+    options: { sectPr?: string; settings?: string; body?: string; styles?: string } = {},
+): Promise<ArrayBuffer> {
+    const encode = (text: string) => new TextEncoder().encode(text);
+    const references = bands
+        .map(({ id, kind, type }) => `<w:${kind}Reference${type ? ` w:type="${type}"` : ''} r:id="${id}"/>`)
+        .join('');
+    const media: Record<string, Uint8Array> = { 'word/media/pixel.png': new Uint8Array() };
+    for (const { id, kind, xml, rels } of bands) {
+        const tag = kind === 'header' ? 'w:hdr' : 'w:ftr';
+        media[`word/${id}.xml`] = encode(`<${tag} ${BAND_NAMESPACES}>${xml}</${tag}>`);
+        if (rels)
+            media[`word/_rels/${id}.xml.rels`] = encode(
+                `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels}</Relationships>`,
+            );
+    }
+    if (options.settings)
+        media['word/settings.xml'] = encode(`<w:settings ${BAND_NAMESPACES}>${options.settings}</w:settings>`);
+    const body = options.body ?? '<w:p><w:r><w:t>Body</w:t></w:r></w:p>';
+    return buildDocxWithBody(`${body}<w:sectPr>${references}${options.sectPr ?? ''}</w:sectPr>`, {
+        styles: options.styles,
+        rels: [
+            ...bands.map(
+                ({ id, kind }) => `<Relationship Id="${id}" Type="${RELATIONSHIP}/${kind}" Target="${id}.xml"/>`,
+            ),
+            ...(options.settings
+                ? [`<Relationship Id="rIdSettings" Type="${RELATIONSHIP}/settings" Target="settings.xml"/>`]
+                : []),
+        ].join(''),
+        contentTypes: bands
+            .map(({ id, kind }) => `<Override PartName="/word/${id}.xml" ContentType="${WORDPROCESSING}.${kind}+xml"/>`)
+            .join(''),
+        media,
+    });
+}
+
 // A body imported as an upload is, its parts beside the golden package's.
 export async function importDocxBody(
     body: string,

@@ -142,7 +142,10 @@ export type CountedWarningCode =
     | 'shapes-simplified'
     | 'fills-simplified'
     | 'text-simplified'
-    | 'section-pages-dropped';
+    | 'section-pages-dropped'
+    | 'even-bands-dropped'
+    | 'band-images-unanchored'
+    | 'band-content-dropped';
 
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }
