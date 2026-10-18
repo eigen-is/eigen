@@ -10,7 +10,8 @@ import {
     useCommentLifecycle,
     useDocumentPanels,
 } from '@workspace/lib/comments';
-import { pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
+import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
+import { bandEdge, FIRST_PAGE_BAND, pagePx, pageStylesheet } from '@workspace/lib/docs/eigendoc';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -51,10 +52,10 @@ import {
     updateCommentDecorations,
 } from './extensions/comment-mark';
 import { FigurePropertiesPanel } from './figure-properties-panel';
-import { type BandRequest, HeadersFootersPanel } from './headers-footers-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { usePageSetup } from './hooks/use-page-setup';
-import { PageBand } from './page-band';
+import { BandControls, PageBands } from './page-band';
+import { applyPageNumberPreset, type PageNumberPreset } from './page-numbers';
 import { createDocUndoManager, writePageSetup } from './page-setup';
 import { TablePropertiesPanel } from './table-properties-panel';
 
@@ -177,6 +178,7 @@ const TiptapEditor = ({
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
     const pageSetup = usePageSetup(yDoc);
+    const writeSetup = (from: PageSetup, to: PageSetup) => writePageSetup(yDoc, undoManager, from, to);
     // The page at 96 dpi, for the layout math below and the text column before the page mounts.
     const page = pagePx(pageSetup);
     // Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
@@ -255,14 +257,53 @@ const TiptapEditor = ({
     // The body's editor is built anew with its comment handler, and an upload settles into whichever holds the doc then.
     const editorRef = useRef<Editor | null>(null);
     editorRef.current = editor;
-    const bands = useBandEditors({ media, yDoc, provider, editable: canWrite });
 
-    // A page setup change is no editor transaction; it re-renders through usePageSetup, which reruns this selector.
+    // The band being edited in place: a writer's, on a desktop or a tablet. Explicit rather than the focused editor,
+    // as a menu takes focus when it opens. Losing write access or the desktop leaves it, and a first page's band hands
+    // over to the other pages' once Different first page goes off, a collaborator's untick too.
+    const bandsAllowed = canWrite && !isMobile;
+    const [editingBand, setEditingBand] = useState<BandRoot | null>(null);
+    if (editingBand && !bandsAllowed) setEditingBand(null);
+    else if (editingBand && !pageSetup.differentFirstPage && editingBand !== bandEdge(editingBand)) {
+        setEditingBand(bandEdge(editingBand));
+    }
+    // Esc puts the caret back where it was in the body.
+    const leaveBand = () => {
+        setEditingBand(null);
+        editor.commands.focus();
+    };
+    const bands = useBandEditors({
+        media,
+        yDoc,
+        provider,
+        editable: canWrite,
+        editing: editingBand,
+        onLeave: leaveBand,
+    });
+    const activeEditor = editingBand ? bands[editingBand] : editor;
+    // A double-click puts the caret where it was, a menu at the band's end.
+    const enterBand = (root: BandRoot, at?: { left: number; top: number }) => {
+        setEditingBand(root);
+        const band = bands[root];
+        band.commands.focus((at && band.view.posAtCoords(at)?.pos) ?? 'end');
+    };
+    // Page 1's header tops the long page, and the other pages' footer ends it.
+    const entryBand = (edge: BandEdge) =>
+        edge === 'header' && pageSetup.differentFirstPage ? FIRST_PAGE_BAND.header : edge;
+    const applyPreset = (preset: PageNumberPreset) => {
+        applyPageNumberPreset(bands, preset, pageSetup, writeSetup);
+        enterBand(preset.band);
+    };
+    // An image goes where the caret is and settles into that editor: a band's lives as long as the doc, and the body's
+    // is read again once the upload lands.
+    const insertTarget = editingBand ? () => bands[editingBand] : () => editorRef.current;
+
+    // A page setup change is no editor transaction; it re-renders through usePageSetup, which reruns this selector. It
+    // reads the active editor, not the snapshot's, which stays the last editor until the new one's first transaction.
     const { canUndo, canRedo } = useEditorState({
-        editor,
-        selector: ({ editor: e }) => {
-            if (!e) return { canUndo: false, canRedo: false };
-            const pluginState = yUndoPluginKey.getState(e.state);
+        editor: activeEditor,
+        selector: () => {
+            const pluginState = yUndoPluginKey.getState(activeEditor.state);
             const um = pluginState?.undoManager;
             return {
                 canUndo: (um?.undoStack.length ?? 0) > 0,
@@ -280,21 +321,6 @@ const TiptapEditor = ({
         setAddOpen(true);
     };
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
-
-    // The Headers and footers panel, open on a band: a writer's, on a desktop, in the slot comments take back. Losing
-    // write access or the desktop closes it.
-    const bandsAllowed = canWrite && !isMobile;
-    const [bandRequest, setBandRequest] = useState<BandRequest | null>(null);
-    const openBands = bandsAllowed
-        ? (request: BandRequest) => {
-              closePanels();
-              setBandRequest(request);
-          }
-        : undefined;
-    const bandPanel = bandsAllowed ? bandRequest : null;
-    useEffect(() => {
-        if (panel || !bandsAllowed) setBandRequest(null);
-    }, [panel, bandsAllowed]);
 
     const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
     const lastPanelRef = useRef<'figure' | 'table'>('figure');
@@ -385,10 +411,17 @@ const TiptapEditor = ({
     }, [editor]);
 
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
+    // Find searches the body, so ⌘F leaves a band.
+    const handleSearchOpenChange = useCallback(
+        (open: boolean) => {
+            if (open) setEditingBand(null);
+            onSearchOpenChange(open);
+        },
+        [onSearchOpenChange],
+    );
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const showSidebar =
-        !isMobile && (panel !== null || bandPanel !== null || (canWrite && sidebarContext !== 'document'));
+    const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
@@ -411,6 +444,7 @@ const TiptapEditor = ({
     // Desktop reveals the anchor and switches an activity tap over to comments; the mobile pane hides
     // the editor, so it just opens the card.
     const openCard = (cardId: string) => {
+        setEditingBand(null);
         if (!isMobile) {
             openComments();
             selectCommentAnchor(editor, cardId);
@@ -437,12 +471,34 @@ const TiptapEditor = ({
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
+            setEditingBand(null);
             openComments();
             // The mobile pane hides the editor, so scrolling would drive a view nobody can see.
             if (!isMobile) selectCommentAnchor(editor, cardId);
             setOpenCardId(cardId);
         },
     };
+
+    const bandControls = editingBand && (
+        <BandControls
+            band={editingBand}
+            editor={bands[editingBand]}
+            setup={pageSetup}
+            onSetupChange={writeSetup}
+            onDifferentFirstPage={(differentFirstPage) => {
+                writeSetup(pageSetup, { ...pageSetup, differentFirstPage });
+                // Ticked, what was typed stays the other pages' and the caret goes into page 1's new band, as in Google.
+                const edge = bandEdge(editingBand);
+                if (differentFirstPage) enterBand(FIRST_PAGE_BAND[edge]);
+                else if (editingBand !== edge) enterBand(edge);
+            }}
+            onPageNumbers={applyPreset}
+            onRemove={() => {
+                bands[editingBand].commands.clearContent();
+                leaveBand();
+            }}
+        />
+    );
 
     return (
         <>
@@ -453,7 +509,7 @@ const TiptapEditor = ({
                         controller={docSearchController}
                         commentSearch={commentSearch}
                         initialSearchTerm={initialSearchTerm}
-                        onOpenChange={onSearchOpenChange}
+                        onOpenChange={handleSearchOpenChange}
                         // right-68 = panel width + the bar's own gutter.
                         barClassName={cn('top-14', showSidebar && 'right-68')}
                         // No .focus(): focus stays in the bar so the user can keep replacing after ⌘Z.
@@ -466,7 +522,8 @@ const TiptapEditor = ({
                             toolbarBorder="always"
                             toolbar={
                                 <EditorToolbar
-                                    editor={editor}
+                                    editor={activeEditor}
+                                    body={editor}
                                     path={path}
                                     canWrite={canWrite}
                                     offline={offline}
@@ -474,7 +531,7 @@ const TiptapEditor = ({
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     pageSetup={pageSetup}
-                                    onPageSetupChange={(from, to) => writePageSetup(yDoc, undoManager, from, to)}
+                                    onPageSetupChange={writeSetup}
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     // Always offered: desktop draws the side panel, mobile the Column.
                                     onToggleCommentPanel={toggleComments}
@@ -483,18 +540,18 @@ const TiptapEditor = ({
                                     activityPanelOpen={activityPanelOpen}
                                     assignedCommentCount={assignedCount}
                                     onImageUpload={
-                                        mediaFolderId
-                                            ? (file) => media.uploadImage(() => editorRef.current, file)
-                                            : undefined
+                                        mediaFolderId ? (file) => media.uploadImage(insertTarget, file) : undefined
                                     }
                                     onImagePickFromDrive={
                                         mediaFolderId
-                                            ? (paths) => media.insertFromDrive(() => editorRef.current, paths)
+                                            ? (paths) => media.insertFromDrive(insertTarget, paths)
                                             : undefined
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
-                                    onAddComment={chatFolderId ? handleAddComment : undefined}
-                                    onOpenBand={openBands}
+                                    // Comments anchor in the body only.
+                                    onAddComment={chatFolderId && !editingBand ? handleAddComment : undefined}
+                                    onEnterBand={bandsAllowed ? (edge) => enterBand(entryBand(edge)) : undefined}
+                                    onPageNumbers={bandsAllowed ? applyPreset : undefined}
                                 />
                             }
                         >
@@ -534,33 +591,39 @@ const TiptapEditor = ({
                                                   : undefined
                                         }
                                     >
-                                        {/* Page 1's header on top, and at the end the footer of the pages after it. */}
-                                        <PageBand
-                                            key={pageSetup.differentFirstPage ? 'headerFirst' : 'header'}
-                                            media={media}
-                                            yDoc={yDoc}
-                                            field={pageSetup.differentFirstPage ? 'headerFirst' : 'header'}
-                                            edge="top"
-                                            margin={pageSetup.margin.top}
-                                            onOpen={
-                                                openBands &&
-                                                (() =>
-                                                    openBands({
-                                                        band: pageSetup.differentFirstPage ? 'headerFirst' : 'header',
-                                                    }))
+                                        <PageBands
+                                            edge="header"
+                                            editors={bands}
+                                            setup={pageSetup}
+                                            editing={editingBand}
+                                            onEnter={
+                                                bandsAllowed
+                                                    ? (root, at) => enterBand(root ?? entryBand('header'), at)
+                                                    : undefined
                                             }
+                                            controls={bandControls}
                                         />
                                         <EditorContent
                                             editor={editor}
-                                            className="row-start-2 h-full min-w-0 tiptap-wrapper"
+                                            // Dimmed and still editable while a band is edited: a press in it leaves the
+                                            // band, and the body puts the caret where it landed, as in Google.
+                                            className={cn(
+                                                'row-start-2 h-full min-w-0 tiptap-wrapper',
+                                                editingBand && 'opacity-50',
+                                            )}
+                                            onMouseDown={editingBand ? () => setEditingBand(null) : undefined}
                                         />
-                                        <PageBand
-                                            media={media}
-                                            yDoc={yDoc}
-                                            field="footer"
-                                            edge="bottom"
-                                            margin={pageSetup.margin.bottom}
-                                            onOpen={openBands && (() => openBands({ band: 'footer' }))}
+                                        <PageBands
+                                            edge="footer"
+                                            editors={bands}
+                                            setup={pageSetup}
+                                            editing={editingBand}
+                                            onEnter={
+                                                bandsAllowed
+                                                    ? (root, at) => enterBand(root ?? entryBand('footer'), at)
+                                                    : undefined
+                                            }
+                                            controls={bandControls}
                                         />
                                     </div>
                                 </div>
@@ -570,17 +633,6 @@ const TiptapEditor = ({
                                         <div className="pointer-events-auto absolute inset-y-0 right-0">
                                             {panel ? (
                                                 <PanelColumn activePanel={panel} {...panelProps} />
-                                            ) : bandPanel ? (
-                                                <HeadersFootersPanel
-                                                    editors={bands}
-                                                    media={media}
-                                                    setup={pageSetup}
-                                                    onSetupChange={(from, to) =>
-                                                        writePageSetup(yDoc, undoManager, from, to)
-                                                    }
-                                                    request={bandPanel}
-                                                    onClose={() => setBandRequest(null)}
-                                                />
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
                                                     editor={editor}
@@ -605,8 +657,8 @@ const TiptapEditor = ({
                 onOpenChange={setReplacePickerOpen}
                 title="Replace image"
                 canPick={(item) => isImageMime(item.mimeType)}
-                onPickFromDrive={(paths) => media.replaceFromDrive(() => editorRef.current, paths)}
-                onPickFromDevice={(files) => files[0] && media.replaceImage(() => editorRef.current, files[0])}
+                onPickFromDrive={(paths) => media.replaceFromDrive(insertTarget, paths)}
+                onPickFromDevice={(files) => files[0] && media.replaceImage(insertTarget, files[0])}
                 accept="image/*"
             />
 

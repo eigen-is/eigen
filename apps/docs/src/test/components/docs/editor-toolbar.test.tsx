@@ -11,7 +11,7 @@ const { formatForDisplay } = await import('@tanstack/react-hotkeys');
 const { Editor } = await import('@tiptap/react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { CommandPaletteProvider } = await import('@workspace/ui');
@@ -27,12 +27,14 @@ const editor = new Editor({
 });
 
 const onReplaceImage = mock(() => {});
-const onOpenBand = mock((_request: unknown) => {});
+const onEnterBand = mock((_band: unknown) => {});
+const onPageNumbers = mock((_preset: unknown) => {});
 
-async function render(width: number, canWrite: boolean) {
+async function render(width: number, canWrite: boolean, active = editor) {
     window.happyDOM.setViewport({ width, height: 1000 });
     const toolbar = createElement(EditorToolbar, {
-        editor,
+        editor: active,
+        body: editor,
         canWrite,
         offline: false,
         storageUnavailable: false,
@@ -43,7 +45,8 @@ async function render(width: number, canWrite: boolean) {
         onAccessDialogOpen: () => {},
         onImageUpload: () => {},
         onReplaceImage,
-        onOpenBand,
+        onEnterBand,
+        onPageNumbers,
         path: drivePath({ name: 'Notes', mimeType: DRIVE_MIME_DOC }),
     });
     const router = createRouter({
@@ -393,16 +396,22 @@ test('Format › Image › Replace image opens the picker the image panel opens'
     expect(onReplaceImage).toHaveBeenCalledTimes(1);
 });
 
-test.each([
-    ['Headers and footers', { band: 'header' }],
-    ['Page numbers', { section: 'pageNumbers' }],
-])('Format › %s opens the Headers and footers panel on %p', async (item, request) => {
-    onOpenBand.mockClear();
+test('Format › Headers and footers puts the caret in the header', async () => {
+    onEnterBand.mockClear();
     await render(1920, true);
     await openMenu('Format');
-    await clickItem(item);
-    expect(onOpenBand.mock.calls).toEqual([[request]]);
+    await clickItem('Headers and footers');
+    expect(onEnterBand.mock.calls).toEqual([['header']]);
 });
+
+const PAGE_NUMBER_ENTRIES = [
+    'In the header',
+    'In the header, not on the first page',
+    'In the footer',
+    'In the footer, not on the first page',
+    '—',
+    'Page count',
+];
 
 test("Insert › Page elements holds Header, Footer and Google's page number presets with Page count", async () => {
     await render(1920, true);
@@ -410,46 +419,73 @@ test("Insert › Page elements holds Header, Footer and Google's page number pre
     await openSubmenu('Page elements');
     expect(openMenuEntries()).toEqual(['Header', 'Footer', 'Page numbers']);
     await openSubmenu('Page numbers');
-    expect(openMenuEntries()).toEqual([
-        'In the header',
-        'In the header, not on the first page',
-        'In the footer',
-        'In the footer, not on the first page',
-        '—',
-        'Page count',
-    ]);
+    expect(openMenuEntries()).toEqual(PAGE_NUMBER_ENTRIES);
+});
+
+test('Format › Page numbers holds the same presets', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Page numbers');
+    expect(openMenuEntries()).toEqual(PAGE_NUMBER_ENTRIES);
 });
 
 test.each([
-    ['Header', { band: 'header' }],
-    ['Footer', { band: 'footer' }],
-])('Insert › Page elements › %s opens the panel on that band', async (item, request) => {
-    onOpenBand.mockClear();
+    ['Header', 'header'],
+    ['Footer', 'footer'],
+])('Insert › Page elements › %s puts the caret in the %s', async (item, band) => {
+    onEnterBand.mockClear();
     await render(1920, true);
     await openMenu('Insert');
     await openSubmenu('Page elements');
     await clickItem(item);
-    expect(onOpenBand.mock.calls).toEqual([[request]]);
+    expect(onEnterBand.mock.calls).toEqual([[band]]);
 });
 
-test('a page number preset opens the panel on its band with the preset, and Page count goes in at the caret', async () => {
+test('a page number preset goes to the editor, and Page count goes in at the caret', async () => {
     editor.commands.setContent(ONE_PARAGRAPH);
     editor.commands.setTextSelection(2);
-    onOpenBand.mockClear();
+    onPageNumbers.mockClear();
     await render(1920, true);
     await openMenu('Insert');
     await openSubmenu('Page elements');
     await openSubmenu('Page numbers');
     await clickItem('In the footer, not on the first page');
-    expect(onOpenBand.mock.calls).toEqual([
-        [{ band: 'footer', preset: expect.objectContaining({ band: 'footer', onFirstPage: false }) }],
-    ]);
+    expect(onPageNumbers.mock.calls).toEqual([[expect.objectContaining({ band: 'footer', onFirstPage: false })]]);
 
     await openMenu('Insert');
     await openSubmenu('Page elements');
     await openSubmenu('Page numbers');
     await clickItem('Page count');
     expect(editor.getJSON().content?.[0]?.content?.at(-1)).toEqual({ type: 'pageNumber', attrs: { kind: 'pages' } });
+});
+
+// A command the schema lacks is a TypeError, so the menus ask the editor they act on what it holds.
+test("in a band, Insert, Format and the style picker offer only what the band's schema holds", async () => {
+    const band = new Editor({ extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }) });
+    await render(1920, true, band);
+    await openMenu('Insert');
+    expect(menuItems().filter((item) => item?.startsWith('Page break') || item === 'Code block')).toEqual([]);
+    expect(menuItems()).toContain('Table');
+
+    await openMenu('Format');
+    await openSubmenu('Paragraph styles');
+    expect(openMenuEntries()).toEqual([
+        'Normal text',
+        'Heading 1',
+        'Heading 2',
+        'Heading 3',
+        'Heading 4',
+        'Heading 5',
+        'Heading 6',
+        '—',
+        'Quote',
+    ]);
+
+    await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await openMenu('Normal text');
+    expect(menuItems()).not.toContain('Title');
+    expect(menuItems()).not.toContain('Subtitle');
+    band.destroy();
 });
 
 // Google has Format › Page orientation beside File › Page setup; both open the one dialog.
@@ -488,21 +524,6 @@ test.each([
     await openMenu(trigger);
     await pickInBrowserFrames(() => clickItem(choice));
     expect(document.activeElement === editor.view.dom).toBe(true);
-});
-
-// The panel puts the caret in the band a frame after the pick, as Tiptap does in the body.
-test('a pick that opens a band leaves focus in the band', async () => {
-    const band = document.body.appendChild(document.createElement('div'));
-    band.setAttribute('data-band', 'header');
-    const caret = band.appendChild(document.createElement('div'));
-    caret.tabIndex = 0;
-    onOpenBand.mockImplementationOnce(() => requestAnimationFrame(() => caret.focus()));
-    await render(1920, true);
-    await openMenu('Insert');
-    await openSubmenu('Page elements');
-    await pickInBrowserFrames(() => clickItem('Header'));
-    expect(document.activeElement === caret).toBe(true);
-    band.remove();
 });
 
 const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];

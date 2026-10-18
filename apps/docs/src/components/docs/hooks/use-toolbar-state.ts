@@ -47,12 +47,14 @@ export function selectCellCommands(
 // Each check walks every node a range spans, some 20 per transaction, and a collaborator's edit or caret is one too.
 const MAX_READ_RANGE = 10_000;
 
-// useEditor re-renders on no transaction, so the toolbar subscribes to what it draws, and a caret move updates it.
+// useEditor re-renders on no transaction, so the toolbar subscribes to what it draws, and a caret move updates it. The
+// selector reads the editor passed in, not the snapshot's: the toolbar follows a band's editor while it is edited, and
+// the snapshot keeps the last editor until the new one's first transaction.
 export function useToolbarState(editor: Editor): ToolbarState {
     return useEditorState({
         editor,
-        selector: ({ editor: e }) => {
-            const { doc, selection } = e.state;
+        selector: () => {
+            const { doc, selection } = editor.state;
             // A longer range reads its first MAX_READ_RANGE positions, as a caret would take the marks before it; a state without the editor's plugins costs nothing to make.
             const state =
                 selection.to - selection.from > MAX_READ_RANGE
@@ -63,7 +65,7 @@ export function useToolbarState(editor: Editor): ToolbarState {
                               doc.resolve(selection.from + MAX_READ_RANGE),
                           ),
                       })
-                    : e.state;
+                    : editor.state;
             const active = (name: string | null, attributes?: Record<string, unknown>) =>
                 isActive(state, name, attributes);
             // isActive sums the matched nodes' ranges, so a list's own range would outweigh its centred items, and
@@ -100,10 +102,10 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 taskList: active('taskList'),
                 link: active('link'),
                 selectionEmpty: selection.empty,
-                canComment: canAnchorComment(e.state),
+                canComment: canAnchorComment(editor.state),
                 table,
                 figure: active('figure'),
-                ...selectCellCommands(e, table),
+                ...selectCellCommands(editor, table),
             };
         },
     });

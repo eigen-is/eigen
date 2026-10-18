@@ -1,5 +1,5 @@
-export type { BandRoot } from './bands';
-export { BAND_EXCLUDED_NODES, BAND_ROOTS, bandHasContent } from './bands';
+export type { BandEdge, BandRoot } from './bands';
+export { BAND_EXCLUDED_NODES, BAND_ROOTS, bandEdge, bandHasContent, FIRST_PAGE_BAND } from './bands';
 export { getDocExtensions, PROSE_TEXTBLOCKS } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';
 export type { Caps } from './nodes/caps';

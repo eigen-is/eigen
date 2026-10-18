@@ -1,7 +1,7 @@
 import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
-import type { PageSetup } from '@workspace/lib/docs/eigendoc';
+import type { BandEdge, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
@@ -58,9 +58,9 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { ALIGNMENT_LOOK, FormatMenu } from './format-menu';
-import type { BandRequest } from './headers-footers-panel';
 import { useToolbarState } from './hooks/use-toolbar-state';
 import { InsertMenu } from './insert-menu';
+import type { PageNumberPreset } from './page-numbers';
 import { PageSetupDialog } from './page-setup-dialog';
 import { RestartNumberingDialog } from './restart-numbering-dialog';
 import { StylePicker } from './style-picker';
@@ -68,7 +68,10 @@ import { ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
 import { WordCountDialog } from './word-count-dialog';
 
 type EditorToolbarProps = {
+    // The editor the caret is in: the body's, or a band's while the band is edited.
     editor: Editor;
+    // Word count counts the body, from a band too.
+    body: Editor;
     canWrite: boolean;
     offline: boolean;
     storageUnavailable: boolean;
@@ -88,12 +91,14 @@ type EditorToolbarProps = {
     onReplaceImage: () => void;
     // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
     onAddComment?: () => void;
-    // Opens the Headers and footers panel; a writer's on a desktop only, as a phone has no side panel.
-    onOpenBand?: (request: BandRequest) => void;
+    // Puts the caret in a band, and writes a page-number preset there; a writer's on a desktop or a tablet only.
+    onEnterBand?: (edge: BandEdge) => void;
+    onPageNumbers?: (preset: PageNumberPreset) => void;
 };
 
 export const EditorToolbar = ({
     editor,
+    body,
     path,
     canWrite,
     offline,
@@ -112,7 +117,8 @@ export const EditorToolbar = ({
     onImagePickFromDrive,
     onReplaceImage,
     onAddComment,
-    onOpenBand,
+    onEnterBand,
+    onPageNumbers,
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -166,11 +172,10 @@ export const EditorToolbar = ({
         setLinkDialogOpen(false);
     };
 
-    // A menu item's editor command refocuses the editor a frame later, or the Headers and footers panel a band's or
-    // its page numbers; keep it there rather than let Radix restore focus to the menu trigger, which would swallow the
-    // next keystrokes.
+    // A menu item's editor command refocuses the editor a frame later, a band's too when the pick enters it; keep it
+    // there rather than let Radix restore focus to the menu trigger, which would swallow the next keystrokes.
     const keepEditorFocus = (e: Event) => {
-        if (editor.isFocused || document.activeElement?.closest('[data-band], [data-page-numbers]')) e.preventDefault();
+        if (editor.isFocused) e.preventDefault();
     };
 
     // A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's
@@ -278,7 +283,8 @@ export const EditorToolbar = ({
                                     onRestartNumbering={() => setRestartNumberingOpen(true)}
                                     onPageSetup={() => setPageSetupOpen(true)}
                                     onReplaceImage={onReplaceImage}
-                                    onOpenBand={onOpenBand}
+                                    onEnterBand={onEnterBand}
+                                    onPageNumbers={onPageNumbers}
                                 />
 
                                 <InsertMenu
@@ -288,7 +294,8 @@ export const EditorToolbar = ({
                                     onLink={handleLinkOperation}
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}
-                                    onOpenBand={onOpenBand}
+                                    onEnterBand={onEnterBand}
+                                    onPageNumbers={onPageNumbers}
                                 />
                             </>
                         )}
@@ -544,7 +551,7 @@ export const EditorToolbar = ({
                 onSetupChange={onPageSetupChange}
             />
 
-            <WordCountDialog editor={editor} open={wordCountOpen} onOpenChange={setWordCountOpen} />
+            <WordCountDialog editor={body} open={wordCountOpen} onOpenChange={setWordCountOpen} />
 
             <RestartNumberingDialog
                 editor={editor}

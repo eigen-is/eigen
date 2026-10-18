@@ -1,5 +1,6 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
+import type { BandEdge } from '@workspace/lib/docs/eigendoc';
 import { ToolbarMenu } from '@workspace/ui';
 import {
     DropdownMenuItem,
@@ -11,7 +12,6 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import {
     CodeXml,
-    Files,
     Hash,
     ImagePlus,
     Link,
@@ -23,8 +23,8 @@ import {
     SeparatorHorizontal,
     Table,
 } from 'lucide-react';
-import { type BandRequest, PAGE_NUMBER_PRESETS } from './headers-footers-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
+import { PageNumberItems, type PageNumberPreset } from './page-numbers';
 
 type InsertMenuProps = {
     editor: Editor;
@@ -33,9 +33,11 @@ type InsertMenuProps = {
     onLink: () => void;
     onInsertImage?: () => void;
     onAddComment?: () => void;
-    onOpenBand?: (request: BandRequest) => void;
+    onEnterBand?: (edge: BandEdge) => void;
+    onPageNumbers?: (preset: PageNumberPreset) => void;
 };
 
+// What a band can't hold is missing from its editor's schema, and a command for a node the schema lacks throws.
 export const InsertMenu = ({
     editor,
     active,
@@ -43,7 +45,8 @@ export const InsertMenu = ({
     onLink,
     onInsertImage,
     onAddComment,
-    onOpenBand,
+    onEnterBand,
+    onPageNumbers,
 }: InsertMenuProps) => (
     <ToolbarMenu label="Insert" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuItem onClick={onLink}>
@@ -57,10 +60,12 @@ export const InsertMenu = ({
         <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
             <Minus className="h-4 w-4 mr-2" /> Horizontal rule
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => editor.chain().focus().setPageBreak().run()}>
-            <SeparatorHorizontal className="h-4 w-4 mr-2" /> Page break
-            <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
-        </DropdownMenuItem>
+        {'pageBreak' in editor.schema.nodes && (
+            <DropdownMenuItem onClick={() => editor.chain().focus().setPageBreak().run()}>
+                <SeparatorHorizontal className="h-4 w-4 mr-2" /> Page break
+                <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
+            </DropdownMenuItem>
+        )}
         <DropdownMenuItem
             onClick={() =>
                 editor
@@ -76,19 +81,21 @@ export const InsertMenu = ({
         >
             <Table className="h-4 w-4 mr-2" /> Table
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
-            <CodeXml className="h-4 w-4 mr-2" /> Code block
-        </DropdownMenuItem>
-        {onOpenBand && (
+        {'codeBlock' in editor.schema.nodes && (
+            <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
+                <CodeXml className="h-4 w-4 mr-2" /> Code block
+            </DropdownMenuItem>
+        )}
+        {onEnterBand && onPageNumbers && (
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                     <PanelsTopLeft className="h-4 w-4 mr-2" /> Page elements
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                    <DropdownMenuItem onClick={() => onOpenBand({ band: 'header' })}>
+                    <DropdownMenuItem onClick={() => onEnterBand('header')}>
                         <PanelTop className="h-4 w-4 mr-2" /> Header
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onOpenBand({ band: 'footer' })}>
+                    <DropdownMenuItem onClick={() => onEnterBand('footer')}>
                         <PanelBottom className="h-4 w-4 mr-2" /> Footer
                     </DropdownMenuItem>
                     <DropdownMenuSub>
@@ -96,27 +103,7 @@ export const InsertMenu = ({
                             <Hash className="h-4 w-4 mr-2" /> Page numbers
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
-                            {PAGE_NUMBER_PRESETS.map((preset) => (
-                                <DropdownMenuItem
-                                    key={preset.label}
-                                    onClick={() => onOpenBand({ band: preset.band, preset })}
-                                >
-                                    {preset.label}
-                                </DropdownMenuItem>
-                            ))}
-                            <DropdownMenuSeparator />
-                            {/* Google's Page count goes in at the caret, wherever it is. */}
-                            <DropdownMenuItem
-                                onClick={() =>
-                                    editor
-                                        .chain()
-                                        .focus()
-                                        .insertContent({ type: 'pageNumber', attrs: { kind: 'pages' } })
-                                        .run()
-                                }
-                            >
-                                <Files className="h-4 w-4 mr-2" /> Page count
-                            </DropdownMenuItem>
+                            <PageNumberItems editor={editor} onPreset={onPageNumbers} />
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                 </DropdownMenuSubContent>
