@@ -29,6 +29,7 @@ import {
     showLinkCard,
     tryInsertRowCol,
 } from '../../state';
+import { ChartBoxs } from '../ChartBoxs';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropDownList } from '../DataVerification/DropdownList';
 import { ValidationHintCard } from '../DataVerification/HintCard';
@@ -452,6 +453,7 @@ export const SheetOverlay: React.FC = () => {
                             <OverlayRegion key={pane} {...rect}>
                                 <OverlayVisuals containerRef={containerRef} />
                                 {pane === 'main' && <ImgBoxs />}
+                                {pane === 'main' && <ChartBoxs />}
                             </OverlayRegion>
                         ))}
                         <OverlayRegion {...editorRegion}>

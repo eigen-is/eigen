@@ -13,6 +13,7 @@ import {
     type ExportMedia,
     type ExportTransformJob,
     type ImportTransformJob,
+    type PreviewResult,
     type TransformResult,
     type TransformWarning,
     toTransformError,
@@ -27,7 +28,7 @@ import {
 async function renderPreview(
     request: CollabPreviewJob,
     doc: Y.Doc,
-): Promise<{ body: string; warnings: TransformWarning[] }> {
+): Promise<PreviewResult & { warnings: TransformWarning[] }> {
     switch (request.documentType) {
         case 'eigensheets': {
             const { renderEigensheetsPreviewBody } = await import('../../preview/eigensheets-render');
@@ -137,8 +138,8 @@ async function renderCollabRequest(
 ): Promise<{ result: TransformResult; warnings: TransformWarning[] }> {
     switch (request.kind) {
         case 'preview': {
-            const { body, warnings } = await renderPreview(request, doc);
-            return { result: { body }, warnings };
+            const { warnings, ...result } = await renderPreview(request, doc);
+            return { result, warnings };
         }
         case 'export': {
             const { data, warnings } = await renderExport(request, doc);

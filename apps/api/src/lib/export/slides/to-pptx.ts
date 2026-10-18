@@ -30,6 +30,7 @@ import {
     parsePoints,
     pointsBounds,
     rectOutline,
+    type SlideSize,
     type StrokeStyle,
     type TextAlign,
     type VectorArrowElement,
@@ -65,7 +66,7 @@ import { isElement } from '../sanitize';
 // the scene sanitizeSceneHtml returns, and media by name as the Office media prep hands it over (an SVG beside its PNG).
 export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], title: string): Uint8Array {
     if (scene.frames.length === 0) throw new ApiError(400, 'The deck is empty');
-    const size = slideSize(scene.frames[0]);
+    const size = PPTX_SLIDE_SIZES[scene.meta.slideSize];
     const deck: Deck = {
         scale: size.cx / scene.frames[0].width,
         media: new Map(media.map((item) => [item.name, item])),
@@ -166,17 +167,11 @@ function relationshipsXml(relationships: Relationship[]): string {
     return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
 }
 
-// PowerPoint's two slide sizes; a deck takes the one nearest its frame's aspect, so a frame's width sets EMU per px.
-const SLIDE_SIZES = [
-    { cx: 12_192_000, cy: 6_858_000, type: undefined },
-    { cx: 9_144_000, cy: 6_858_000, type: 'screen4x3' },
-];
-
-function slideSize(frame: VectorFrame): (typeof SLIDE_SIZES)[number] {
-    const aspect = frame.width / frame.height;
-    const off = (size: (typeof SLIDE_SIZES)[number]) => Math.abs(size.cx / size.cy - aspect);
-    return SLIDE_SIZES.reduce((best, size) => (off(size) < off(best) ? size : best));
-}
+// The EMU size PowerPoint gives each of a deck's slide sizes; a frame's width sets EMU per px.
+const PPTX_SLIDE_SIZES: Record<SlideSize, { cx: number; cy: number; type?: string }> = {
+    '16:9': { cx: 12_192_000, cy: 6_858_000 },
+    '4:3': { cx: 9_144_000, cy: 6_858_000, type: 'screen4x3' },
+};
 
 const EMU_PER_PT = 12_700;
 

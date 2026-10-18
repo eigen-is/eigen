@@ -4,9 +4,9 @@ import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     baseDefaultsFor,
+    DEFAULT_SCENE_META,
     ELEMENT_KINDS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
+    SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
     solidFill,
@@ -130,12 +130,11 @@ describe('deck export — assembled HTML surface', () => {
                     id: 'f1',
                     index: 'a0',
                     name: '',
-                    width: FRAME_WIDTH,
-                    height: FRAME_HEIGHT,
+                    ...SLIDE_SIZES['16:9'],
                     background: serializeBackgroundFill({ type: 'solid', color: '#ffffff' }),
                 },
             ],
-            meta: { background: 'transparent' },
+            meta: DEFAULT_SCENE_META,
         });
 
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);

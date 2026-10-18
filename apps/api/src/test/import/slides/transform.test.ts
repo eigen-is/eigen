@@ -11,7 +11,7 @@ import {
 import * as Y from 'yjs';
 import { appendSlidesUpdateToYjs, writeSlidesUpdateToYjs } from '../../../lib/document/slides';
 import { type SlidesImportJob, toTransferableBuffer } from '../../../lib/document/transform/protocol';
-import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-transform';
+import { runImportToSlidesUpdate } from '../../../lib/document/transform/run-transform';
 import { importPptxToSlidesUpdate } from '../../../lib/import/slides/transform';
 import { box, buildPptx, cxn, graphicFrame, PIXEL_PNG, para, pic, rel, solid, sp, xfrm } from '../../fixtures/pptx';
 
@@ -155,7 +155,7 @@ describe('a pptx converted to a deck', () => {
     test('runs in the transform process, its warnings and refusals crossing the boundary', async () => {
         spyOn(console, 'log').mockImplementation(() => {});
         const job: SlidesImportJob = { kind: 'import', sourceFormat: 'pptx', targetType: 'eigenslides', ...JOB };
-        const { update, images } = await runImportToDocumentUpdate(job, toTransferableBuffer(PPTX), {});
+        const { update, images } = await runImportToSlidesUpdate(job, toTransferableBuffer(PPTX), {});
         const doc = new Y.Doc();
         writeSlidesUpdateToYjs(doc, new Uint8Array(update));
         expect(readVectorFromDoc(doc).frames).toHaveLength(2);
@@ -164,7 +164,7 @@ describe('a pptx converted to a deck', () => {
             slides: [{}],
             mainType: 'application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml',
         });
-        const refused = await runImportToDocumentUpdate(job, toTransferableBuffer(pptm), {}).catch(
+        const refused = await runImportToSlidesUpdate(job, toTransferableBuffer(pptm), {}).catch(
             (error: unknown) => error,
         );
         expect(refused).toMatchObject({ status: 400 });

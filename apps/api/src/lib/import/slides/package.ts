@@ -98,7 +98,7 @@ export type Lost = (code: CountedWarningCode) => void;
 
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
 export function readPackage(bytes: Uint8Array): PptxPackage {
-    const pkg = openPackage(bytes, PASSWORD_PROTECTED);
+    const pkg = openPackage(bytes, { passwordProtected: PASSWORD_PROTECTED, tooLarge: PRESENTATION_TOO_LARGE });
     const budget = { bytes: MAX_PPTX_XML_BYTES, tags: MAX_PPTX_XML_TAGS, charged: new Set<string>() };
     const charge = (paths: string[]) => {
         const fresh = [...new Set(paths)].filter((path) => !budget.charged.has(path));

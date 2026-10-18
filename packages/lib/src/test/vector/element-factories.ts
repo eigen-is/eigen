@@ -5,6 +5,7 @@ import { serializePoints } from '../../vector/geometry';
 import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import {
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SCENE_META,
     type VectorArrowElement,
     type VectorChartElement,
     type VectorElement,
@@ -102,7 +103,7 @@ export function arrow(over: Partial<VectorArrowElement> & Pick<VectorArrowElemen
 }
 
 export function scene(elements: VectorElement[], background = 'transparent'): VectorScene {
-    return { meta: { background }, frames: [], elements };
+    return { meta: { ...DEFAULT_SCENE_META, background }, frames: [], elements };
 }
 
 // The scene lookup every geometry entry point takes, from the elements a test cares about.

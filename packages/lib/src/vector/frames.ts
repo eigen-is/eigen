@@ -1,13 +1,30 @@
 // Frames: the bounded pages a canvas can hold. A deck is a canvas whose elements all carry a frameId;
-// a drawing is the same canvas with no frames at all. Every frame in this program is 16:9 at
-// 1920x1080 — elements may overhang and the frame clips them.
+// a drawing is the same canvas with no frames at all. Every frame of a deck has the deck's slide size —
+// elements may overhang and the frame clips them.
 
 import { serializeBackgroundFill } from './fill';
 import type { Point } from './geometry';
+import type { Extent } from './viewport';
 
+// Every slide size shares this width, as Google's 10 in does, so a size change moves nothing sideways
+// and the export and preview scales, which divide by it, hold for every deck.
 export const FRAME_WIDTH = 1920;
-export const FRAME_HEIGHT = 1080;
-export const FRAME_ASPECT_RATIO = FRAME_WIDTH / FRAME_HEIGHT;
+
+// A deck's slide size, stored once in `meta.slideSize` (DEFAULT_SCENE_META holds the default); the
+// reader stamps it on every frame.
+export const SLIDE_SIZE_KEYS = ['16:9', '4:3'] as const;
+export type SlideSize = (typeof SLIDE_SIZE_KEYS)[number];
+export const SLIDE_SIZES: Readonly<Record<SlideSize, Readonly<Extent>>> = {
+    '16:9': { width: FRAME_WIDTH, height: 1080 },
+    '4:3': { width: FRAME_WIDTH, height: 1440 },
+};
+
+// The slide size closest in shape to a page of any size, for an importer: widescreen and 16:10 read as
+// 16:9, 4:3 and A4 as 4:3.
+export function nearestSlideSize(width: number, height: number): SlideSize {
+    const off = (key: SlideSize) => Math.abs(width / height - SLIDE_SIZES[key].width / SLIDE_SIZES[key].height);
+    return SLIDE_SIZE_KEYS.reduce((best, key) => (off(key) < off(best) ? key : best));
+}
 
 // `background` is a serialized BackgroundFill ('' = none), the same codec element fills use, so the
 // reader has one validator and the panel one writer. `index` is a fractional index like an element's.
@@ -20,8 +37,8 @@ export type VectorFrame = {
     background: string;
 };
 
-// The stored keys a frame writer may set. `width`/`height` are constants, never stored, so a writer
-// that tried to persist them would be inventing a second source for the frame size.
+// The stored keys a frame writer may set. `width`/`height` come from the deck's slide size, never a
+// frame's own keys, so a writer that tried to persist them would be inventing a second source for it.
 export const FRAME_FIELDS: readonly string[] = ['id', 'index', 'name', 'background'];
 
 // What a NEW page is painted with, for every writer that makes one (the editor's +, the deck seeder).

@@ -1,5 +1,5 @@
 import { escapeHtml } from '@workspace/lib/html';
-import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
+import { type BorderSide, columnIndexToLabel, type MergeCell } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { booleanDisplay, cellWrapsText, numberDisplay, parseCellInput } from '../../engine/format';
@@ -8,7 +8,7 @@ import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { Range, RangeOrWholeAxis, Selection } from '../types';
-import { getSheetIndex, indexToColumnChar, rgbToHex, styleObjectToCss } from '../utils';
+import { getSheetIndex, rgbToHex, styleObjectToCss } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
@@ -859,7 +859,7 @@ export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAx
     }
 
     if (isWholeColumnRef(range)) {
-        return `${sheettxt + indexToColumnChar(range.column[0])}:${indexToColumnChar(range.column[1])}`;
+        return `${sheettxt + columnIndexToLabel(range.column[0])}:${columnIndexToLabel(range.column[1])}`;
     }
     if (isWholeRowRef(range)) {
         return `${sheettxt + (range.row[0] + 1)}:${range.row[1] + 1}`;
@@ -867,9 +867,9 @@ export function getRangetxt(ctx: Context, sheetId: string, range: RangeOrWholeAx
 
     const { row, column } = range;
     if (column[0] === column[1] && row[0] === row[1]) {
-        return sheettxt + indexToColumnChar(column[0]) + (row[0] + 1);
+        return sheettxt + columnIndexToLabel(column[0]) + (row[0] + 1);
     }
-    return `${sheettxt + indexToColumnChar(column[0]) + (row[0] + 1)}:${indexToColumnChar(column[1])}${row[1] + 1}`;
+    return `${sheettxt + columnIndexToLabel(column[0]) + (row[0] + 1)}:${columnIndexToLabel(column[1])}${row[1] + 1}`;
 }
 
 // Convert a string like A1:A2 to a selection range array

@@ -57,6 +57,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { ALIGNMENT_LOOK, FormatMenu } from './format-menu';
+import type { BandRequest } from './headers-footers-panel';
 import { useToolbarState } from './hooks/use-toolbar-state';
 import { InsertMenu } from './insert-menu';
 import { PageSetupDialog } from './page-setup-dialog';
@@ -86,6 +87,8 @@ type EditorToolbarProps = {
     onReplaceImage: () => void;
     // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
     onAddComment?: () => void;
+    // Opens the Headers and footers panel; a writer's on a desktop only, as a phone has no side panel.
+    onOpenBand?: (request: BandRequest) => void;
 };
 
 export const EditorToolbar = ({
@@ -108,6 +111,7 @@ export const EditorToolbar = ({
     onImagePickFromDrive,
     onReplaceImage,
     onAddComment,
+    onOpenBand,
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -161,10 +165,11 @@ export const EditorToolbar = ({
         setLinkDialogOpen(false);
     };
 
-    // A menu item's editor command refocuses the editor a frame later; keep it there rather than let
-    // Radix restore focus to the menu trigger, which would swallow the next keystrokes.
+    // A menu item's editor command refocuses the editor a frame later, or the Headers and footers panel a band's or
+    // its page numbers; keep it there rather than let Radix restore focus to the menu trigger, which would swallow the
+    // next keystrokes.
     const keepEditorFocus = (e: Event) => {
-        if (editor.isFocused) e.preventDefault();
+        if (editor.isFocused || document.activeElement?.closest('[data-band], [data-page-numbers]')) e.preventDefault();
     };
 
     // A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's
@@ -272,6 +277,7 @@ export const EditorToolbar = ({
                                     onRestartNumbering={() => setRestartNumberingOpen(true)}
                                     onPageSetup={() => setPageSetupOpen(true)}
                                     onReplaceImage={onReplaceImage}
+                                    onOpenBand={onOpenBand}
                                 />
 
                                 <InsertMenu
@@ -281,6 +287,7 @@ export const EditorToolbar = ({
                                     onLink={handleLinkOperation}
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}
+                                    onOpenBand={onOpenBand}
                                 />
                             </>
                         )}

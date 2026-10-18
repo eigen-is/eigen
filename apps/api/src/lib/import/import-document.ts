@@ -10,14 +10,14 @@ import {
     isCollabType,
     isConvertSource,
 } from '@workspace/lib/types/drive';
-import { FRAME_HEIGHT, FRAME_WIDTH } from '@workspace/lib/vector';
+import { SLIDE_SIZES } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { enforceMountQuota } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
 import { getMaxUploadSize } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { MAX_DECOMPRESSED_BYTES } from '../core/zip';
-import { writeEigendocUpdateToYjs } from '../document/doc';
+import { commitEigendocImport } from '../document/doc';
 import { writeSheetsSnapshotToYjs } from '../document/sheets';
 import { appendSlidesUpdateToYjs, writeSlidesUpdateToYjs } from '../document/slides';
 import {
@@ -25,11 +25,16 @@ import {
     type ImportTransformJob,
     type SheetsImportJob,
     type SlidesImportJob,
+    type SlidesImportWorkerResult,
     type TransformMedia,
     type TransformWarning,
     toTransferableBuffer,
 } from '../document/transform/protocol';
-import { runImportToDocumentUpdate, runImportToSnapshotJson } from '../document/transform/run-transform';
+import {
+    runImportToDocumentUpdate,
+    runImportToSlidesUpdate,
+    runImportToSnapshotJson,
+} from '../document/transform/run-transform';
 import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
 import type { Mount } from '../mount';
@@ -51,9 +56,7 @@ function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<strin
     return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), { signal });
 }
 
-type DocumentImport = DocImportWorkerResult & { warnings: TransformWarning[] };
-
-function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocumentImport> {
+function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'docx');
     return runImportToDocumentUpdate(
@@ -68,10 +71,10 @@ function importPptxUpdate(
     buffer: Buffer,
     frame: SlidesImportJob['frame'],
     signal?: AbortSignal,
-): Promise<DocumentImport> {
+): Promise<SlidesImportWorkerResult & { warnings: TransformWarning[] }> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'pptx');
-    return runImportToDocumentUpdate(
+    return runImportToSlidesUpdate(
         { kind: 'import', sourceFormat: 'pptx', targetType: 'eigenslides', frame, maxMediaBytes: getMaxUploadSize() },
         toTransferableBuffer(buffer),
         { signal },
@@ -180,18 +183,26 @@ export async function convertToDocument(
         return fillNewDocument(drive, newPath, user, (doc) => writeSheetsSnapshotToYjs(doc, snapshotJson));
     }
 
-    const slides = targetType === 'eigenslides';
-    // Every deck is 1920×1080 today, the reader's frame when none is passed, so a Convert fits the slides into the same
-    // frame Import slides… passes, a 4:3 file letterboxed.
-    const { update, images } = slides ? await importPptxUpdate(buffer, undefined) : await importDocxUpdate(buffer);
-    // Refused before the create, so a file whose pictures can't fit makes no document; saveDocImages charges again.
+    if (targetType === 'eigenslides') {
+        // Every deck is 1920×1080 today, the reader's frame when none is passed, so a Convert fits the slides into the
+        // same frame Import slides… passes, a 4:3 file letterboxed.
+        const { update, images } = await importPptxUpdate(buffer, undefined);
+        // Refused before the create, so a file whose pictures can't fit makes no document; saveDocImages charges again.
+        await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
+        const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
+        return fillNewDocument(drive, newPath, user, async (doc) => {
+            await saveDocImages(drive, newPath, images, user);
+            // A file with no slides makes a deck with none, which the Slides editor seeds as it does a new one.
+            writeSlidesUpdateToYjs(doc, new Uint8Array(update));
+        });
+    }
+
+    const { update, page, images } = await importDocxUpdate(buffer);
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
     const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
     return fillNewDocument(drive, newPath, user, async (doc) => {
         await saveDocImages(drive, newPath, images, user);
-        // A file with no slides makes a deck with none, which the Slides editor seeds as it does a new one.
-        if (slides) writeSlidesUpdateToYjs(doc, new Uint8Array(update));
-        else writeEigendocUpdateToYjs(doc, new Uint8Array(update));
+        commitEigendocImport(doc, { update: new Uint8Array(update), page });
     });
 }
 
@@ -217,7 +228,7 @@ export async function importIntoDocument(
     }
 
     if (containerMime === DRIVE_MIME_DOC) {
-        const { update, images } = await importDocxUpdate(buffer, signal);
+        const { update, page, images } = await importDocxUpdate(buffer, signal);
         // Media before the update that names it: an open tab looks each name up once, as the update arrives. The open
         // and the abort check come before the write check that guards the save.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
@@ -225,14 +236,14 @@ export async function importIntoDocument(
         await requireWritePermission(drive, path, user);
         await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
-        writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
+        commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page });
         return null;
     }
 
     if (containerMime === DRIVE_MIME_SLIDES) {
         // The deck's own frame, which every deck shares today: the slides are fitted into it, letterboxed. The importer
         // prefixes its picture names per import, so they land beside the deck's media, never over it.
-        const frame = { width: FRAME_WIDTH, height: FRAME_HEIGHT };
+        const frame = SLIDE_SIZES['16:9'];
         const { update, images, warnings } = await importPptxUpdate(buffer, frame, signal);
         // As the docx branch: media before the update that names it, the write check last.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);

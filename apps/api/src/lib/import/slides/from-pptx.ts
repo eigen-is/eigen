@@ -1,5 +1,5 @@
 import type { BackgroundFill } from '@workspace/lib/types/background';
-import { FRAME_HEIGHT, FRAME_WIDTH, type NewVectorElement } from '@workspace/lib/vector';
+import { type NewVectorElement, SLIDE_SIZES } from '@workspace/lib/vector';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { P_NS } from '../../core/ooxml';
 import { type XmlElement, XmlError, xmlAttr } from '../../core/xml';
@@ -60,7 +60,7 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     };
     const slideSize = { cx: side('cx', DEFAULT_SLIDE_SIZE.cx), cy: side('cy', DEFAULT_SLIDE_SIZE.cy) };
     // A Convert's new deck takes Eigen's frame: every deck frame is 16:9 at 1920×1080.
-    const frame = options.frame ?? { width: FRAME_WIDTH, height: FRAME_HEIGHT };
+    const frame = options.frame ?? SLIDE_SIZES['16:9'];
     // Letterboxed: the whole slide fits the frame, centred.
     const scale = Math.min(frame.width / slideSize.cx, frame.height / slideSize.cy);
 

@@ -97,10 +97,11 @@ describe('a chart', () => {
             slides: [{ shapes: frame(), rels: rel('rId5', 'chart', '../charts/chart1.xml'), after: OVERRIDE }],
         });
         expect(element).toMatchObject({ x: 100, y: 50, width: 600, height: 300, angle: 0 });
-        expect(element).toMatchObject({ fontFamily: 'Inter', strokeStyle: 'solid', roughness: 0 });
+        expect(element).toMatchObject({ strokeStyle: 'solid', roughness: 0 });
         expect(element.fill && JSON.parse(element.fill)).toMatchObject({ color: TRANSPARENT_COLOR });
         expect(spec).toMatchObject({
             type: 'column',
+            fontFamily: 'Inter',
             title: 'Revenue',
             legend: 'bottom',
             data: {
@@ -215,8 +216,9 @@ describe('a chart left as a box', () => {
     });
 
     test("the box names the kind as PowerPoint's Insert Chart does, a bar plot by its direction", () => {
+        // A log value axis is one the spec can't draw, so a column or bar plot on one is a box too.
         const plot = (local: string, inner = '') =>
-            `<c:${local}>${inner}<c:grouping val="percentStacked"/>${ser(0, 'S', [1, 2, 3])}</c:${local}>`;
+            `<c:${local}>${inner}${ser(0, 'S', [1, 2, 3])}</c:${local}><c:valAx><c:scaling><c:logBase val="10"/></c:scaling></c:valAx>`;
         const cases: [string, string][] = [
             [plot('barChart', '<c:barDir val="col"/>'), 'Column'],
             [plot('barChart', '<c:barDir val="bar"/>'), 'Bar'],

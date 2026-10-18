@@ -58,7 +58,7 @@ export async function isWeasyPrintAvailable(): Promise<boolean> {
 
 // A cached interpreter can vanish, as a Homebrew upgrade removes the old Cellar path, so a spawn that finds none probes
 // once more. The script's fetcher opens only data: URIs, so nothing in the HTML makes WeasyPrint fetch from the API host.
-async function spawnRender() {
+async function spawnRender(zoom: number) {
     const spawn = async () => {
         const probe = await weasyPrint();
         if (probe.python === null) {
@@ -68,7 +68,7 @@ async function spawnRender() {
                     'Install it with Homebrew (brew install weasyprint) or with pip in a venv, not pip install --user.',
             );
         }
-        return Bun.spawn([probe.python, '-I', renderScript], {
+        return Bun.spawn([probe.python, '-I', renderScript, String(zoom)], {
             stdin: 'pipe',
             stdout: 'pipe',
             stderr: 'pipe',
@@ -85,9 +85,10 @@ async function spawnRender() {
 }
 
 // Accepts the UTF-8 bytes the transform Worker returns as well as a plain string —
-// Bun's stdin sink writes both, and the render script reads stdin as UTF-8.
-export async function htmlToPdf(html: string | Uint8Array): Promise<Buffer> {
-    const proc = await spawnRender();
+// Bun's stdin sink writes both, and the render script reads stdin as UTF-8. `zoom` scales the
+// laid-out pages onto their sheets: at 0.5 a 1920 px page prints 960 px, 254 mm, wide.
+export async function htmlToPdf(html: string | Uint8Array, zoom = 1): Promise<Buffer> {
+    const proc = await spawnRender(zoom);
 
     // A WeasyPrint that exits early (bad input) closes its stdin; writing to the dead pipe throws
     // EPIPE. Guard it so an early exit becomes the exitCode-500 below, never a process crash.

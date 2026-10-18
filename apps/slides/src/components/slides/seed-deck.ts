@@ -24,7 +24,8 @@ const SEED_ELEMENT_ID = 'el-deck-seed';
 // with +, is painted with the shared DEFAULT_FRAME_BACKGROUND by writeFrame.
 const SEED_BACKGROUND_COLOR = '#f6339a';
 
-// The centered title band a deck has always opened with, in frame coordinates (0,0 → 1920,1080).
+// The centered title band a deck has always opened with, in 16:9 frame coordinates (0,0 → 1920,1080):
+// a new deck is 16:9.
 const WELCOME: VectorElementPatch = {
     x: 192,
     y: 378,

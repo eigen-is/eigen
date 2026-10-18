@@ -12,8 +12,10 @@ import type {
     DocumentTransformRequest,
     ExportTransformJob,
     ExtractTextJob,
+    PreviewResult,
     SheetsImportJob,
     SlidesImportJob,
+    SlidesImportWorkerResult,
     TransformResultFor,
     TransformWarning,
 } from './protocol';
@@ -110,14 +112,13 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
 // job kind decides which the child returns and which limits it runs under. The runner
 // validated the result pairs with the request (protocol.ts's resultMatchesRequest), so
 // these narrow instead of re-checking.
-export async function runTransformToText(
+export async function runTransformToPreview(
     mount: Mount,
     drivePath: DrivePath,
     job: CollabPreviewJob,
     opts: TransformOptions,
-): Promise<string> {
-    const { body } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
-    return body;
+): Promise<PreviewResult> {
+    return runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
 }
 
 export async function runTransformToExtractedText(
@@ -185,12 +186,21 @@ export async function runImportToSnapshotJson(
     return new TextDecoder().decode(result.snapshotJson);
 }
 
-// The warnings come back too: a pptx import's counted losses are the summary its caller answers with.
 export async function runImportToDocumentUpdate(
-    job: DocImportJob | SlidesImportJob,
+    job: DocImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
-): Promise<DocImportWorkerResult & { warnings: TransformWarning[] }> {
+): Promise<DocImportWorkerResult> {
+    const { result } = await runTransformRequest({ ...job, data }, opts);
+    return result;
+}
+
+// The warnings come back too: a pptx import's counted losses are the summary its caller answers with.
+export async function runImportToSlidesUpdate(
+    job: SlidesImportJob,
+    data: ArrayBuffer,
+    opts: TransformOptions,
+): Promise<SlidesImportWorkerResult & { warnings: TransformWarning[] }> {
     const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
     return { ...result, warnings };
 }

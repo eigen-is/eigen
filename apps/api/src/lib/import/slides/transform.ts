@@ -7,8 +7,8 @@ import {
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import {
-    type DocImportWorkerResult,
     type SlidesImportJob,
+    type SlidesImportWorkerResult,
     type TransformWarning,
     toTransferableBuffer,
 } from '../../document/transform/protocol';
@@ -20,7 +20,7 @@ import { PPTX_STYLE } from './shapes';
 export function importPptxToSlidesUpdate(
     data: ArrayBuffer,
     job: Pick<SlidesImportJob, 'frame' | 'maxMediaBytes'>,
-): DocImportWorkerResult & { warnings: TransformWarning[] } {
+): SlidesImportWorkerResult & { warnings: TransformWarning[] } {
     const { slides, media, warnings } = readPptx(Buffer.from(data), job);
     let update: Uint8Array;
     try {

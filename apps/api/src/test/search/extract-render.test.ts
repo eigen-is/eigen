@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
+import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
@@ -66,6 +68,29 @@ describe('extractCollabText', () => {
             content: [{ type: 'paragraph', content: [caps('Typed Words', 'all'), caps(' Small Caps', 'small')] }],
         });
         expect((await extractCollabText('eigendoc', doc)).text).toBe('Typed Words  Small Caps');
+        doc.destroy();
+    });
+
+    // Until the package writes an equation's linear text, its typed LaTeX is what search finds.
+    test("eigendoc: an equation indexes its LaTeX, and one the server can't parse nothing", async () => {
+        const doc = new Y.Doc();
+        const x: MathRow = [{ kind: 'identifier', text: 'x' }];
+        const equation = (mathml: string) => ({ type: 'equation', attrs: { mathml } });
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Area' },
+                        equation(writeMathml(x, '\\pi r^2')),
+                        equation(writeMathml(x)),
+                        equation(`<math xmlns="${MATHML_NAMESPACE}"><mi>x</mi>`),
+                    ],
+                },
+            ],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe('Area \\pi r^2');
         doc.destroy();
     });
 
@@ -140,7 +165,7 @@ describe('extractCollabText', () => {
 
     test('eigenvector: an empty drawing extracts to the empty string', async () => {
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: 'transparent' } });
+        seedVectorDoc(doc, { elements: [], frames: [], meta: DEFAULT_SCENE_META });
 
         const { text, warnings } = await extractCollabText('eigenvector', doc);
         expect(text).toBe('');

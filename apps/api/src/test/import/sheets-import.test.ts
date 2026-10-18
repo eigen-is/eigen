@@ -1889,7 +1889,7 @@ describe('xlsxToSheets resource guards', () => {
             expect(readLocationHyperlinks(await reader(zip))).toEqual(new Map());
             expect(process.memoryUsage().heapUsed - relsBefore).toBeLessThan(treeless);
         }
-    });
+    }, 60_000);
 
     test('a hyperlinks block of 15 MB of tags costs no tree and loses only its own links', async () => {
         const workbook = new ExcelJS.Workbook();

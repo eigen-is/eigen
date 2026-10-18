@@ -3,6 +3,7 @@ import { CLIPBOARD_SVG_MAX_ELEMENTS, extractClipboardSvgMetadata } from '@worksp
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SCENE_META,
     ELEMENT_KINDS,
     readElementsClipboardItem,
     VECTOR_STYLE_DEFAULTS,
@@ -28,7 +29,7 @@ g.Node = window.Node;
 // so the sync copy path stays byte-free and the ref resolves against the target's media/ on paste. A
 // still-pending upload (no portable path) is left out of the whole payload.
 
-const meta: VectorMeta = { background: 'transparent' };
+const meta: VectorMeta = DEFAULT_SCENE_META;
 
 const BASE = { ...DEFAULT_ELEMENT_PROPS, x: 0, y: 0, width: 100, height: 60, angle: 0 };
 

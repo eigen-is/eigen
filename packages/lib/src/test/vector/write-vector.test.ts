@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { DEFAULT_FRAME_BACKGROUND, FRAME_HEIGHT, FRAME_WIDTH } from '../../vector/frames';
+import { DEFAULT_FRAME_BACKGROUND, SLIDE_SIZES } from '../../vector/frames';
 import { ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { readVectorFromDoc } from '../../vector/read-vector';
 import { serializeBinding } from '../../vector/types';
@@ -79,24 +79,17 @@ describe('writeElementInDoc', () => {
 });
 
 describe('writeFrameInDoc', () => {
-    test('a frame reads back with its name and background at the constant size', () => {
+    test("a frame reads back with its name and background at the deck's slide size", () => {
         const doc = new Y.Doc();
         writeFrameInDoc(doc, { id: 'f1', index: 'a0', name: 'Intro', background: '' });
         writeFrameInDoc(doc, { id: 'f2', index: 'a1' });
         expect(readVectorFromDoc(doc).frames).toEqual([
-            { id: 'f1', index: 'a0', name: 'Intro', width: FRAME_WIDTH, height: FRAME_HEIGHT, background: '' },
-            {
-                id: 'f2',
-                index: 'a1',
-                name: '',
-                width: FRAME_WIDTH,
-                height: FRAME_HEIGHT,
-                background: DEFAULT_FRAME_BACKGROUND,
-            },
+            { id: 'f1', index: 'a0', name: 'Intro', ...SLIDE_SIZES['16:9'], background: '' },
+            { id: 'f2', index: 'a1', name: '', ...SLIDE_SIZES['16:9'], background: DEFAULT_FRAME_BACKGROUND },
         ]);
     });
 
-    test('never stores the size, which is a constant', () => {
+    test("never stores the size, which is the deck's", () => {
         const doc = new Y.Doc();
         writeFrameInDoc(doc, { id: 'f', index: 'a0', width: 800, height: 600 });
         const stored = doc.getMap('frames').get('f');
