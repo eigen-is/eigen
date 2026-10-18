@@ -164,6 +164,57 @@ describe('Sheets xlsx export', () => {
     });
 });
 
+describe('Sheets xlsx export — fonts', () => {
+    test('the workbook default font is Inter at the sheet default size, not a theme font', async () => {
+        const xml = await readZipEntry(await sheetsToXlsx([{ name: 'Sheet1', celldata: [] }]), 'xl/styles.xml');
+        expect(xml.match(/<fonts\b[^>]*>(<font>.*?<\/font>)/)?.[1]).toBe(
+            '<font><color theme="1"/><family val="2"/><sz val="10"/><name val="Inter"/></font>',
+        );
+    });
+
+    test('each written font names its face and the family of a bundled one, in cells and runs', async () => {
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'bold', bl: 1 } },
+                    { r: 1, c: 0, v: { v: 'serif', ff: 1 } },
+                    { r: 2, c: 0, v: { v: 'mono', ff: "'jetbrains mono', sans-serif" } },
+                    { r: 3, c: 0, v: { v: 'hand', ff: 'Excalifont', fs: 14 } },
+                    { r: 4, c: 0, v: { v: 'foreign', ff: 'Georgia' } },
+                    {
+                        r: 5,
+                        c: 0,
+                        v: { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'a' }, { v: 'b', ff: 'Source Serif 4' }] } },
+                    },
+                ],
+            },
+        ];
+        const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
+        expect(ws.getCell('A1').font).toMatchObject({ bold: true, name: 'Inter', family: 2, size: 10 });
+        expect(ws.getCell('A2').font).toMatchObject({ name: 'Source Serif 4', family: 1 });
+        expect(ws.getCell('A3').font).toMatchObject({ name: 'JetBrains Mono', family: 3 });
+        expect(ws.getCell('A4').font).toMatchObject({ name: 'Excalifont', family: 4, size: 14 });
+        expect(ws.getCell('A5').font?.name).toBe('Georgia');
+        expect(ws.getCell('A5').font?.family).toBeUndefined();
+        const value = ws.getCell('A6').value;
+        if (typeof value !== 'object' || value === null || !('richText' in value)) {
+            throw new Error('expected a richText cell value');
+        }
+        expect(value.richText.map((run) => run.font)).toMatchObject([
+            { name: 'Inter', family: 2, size: 10 },
+            { name: 'Source Serif 4', family: 1, size: 10 },
+        ]);
+    });
+
+    test("a column width counts the default font's digits, and the import reads it back to the pixel", async () => {
+        const sheets: Sheet[] = [{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 90, 1: 131 } } }];
+        const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
+        expect(ws.getColumn(1).width).toBe(10);
+        expect((await roundTrip(sheets))[0].config?.columnlen).toEqual({ 0: 90, 1: 131 });
+    });
+});
+
 describe('Sheets xlsx export — typed numbers', () => {
     test('a typed number exports as a numeric cell', async () => {
         const sheets: Sheet[] = [

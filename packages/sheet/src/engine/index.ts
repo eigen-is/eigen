@@ -38,3 +38,4 @@ export type {
     FormulaEngineState,
     SheetInfo,
 } from './types';
+export { valueIsError } from './validation';

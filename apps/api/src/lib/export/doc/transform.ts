@@ -20,9 +20,9 @@ import { DOCX_IMAGE_MAX_SIZE, encodeDocxImage, figureMediaKey } from './docx-ima
 import { renderDocHtml, withAbsoluteLinks } from './render';
 import type { DocxMedia } from './to-docx';
 
-// Materialized doc + prepared media → export bytes. Runs inside the transform Worker
-// (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
-// This module must not reach the Mount or the preview cache — the Worker imports it.
+// Materialized doc + prepared media → export bytes. Runs inside the transform process
+// (child.ts owns execution; the main-thread orchestration lives in export-document.ts).
+// This module must not reach the Mount or the preview cache — the child imports it.
 //
 // HTML and PDF render the same document by design: WeasyPrint consumes what the HTML download
 // serves, but for the small caps the PDF fakes (render.ts). The docx is written from the JSON by

@@ -16,7 +16,7 @@ import {
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { EMU_PER_TWIP, FLOATING_WRAPS, TWIPS_PER_PX } from '../../document/wordml';
 import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
-import { contentTypeOf, descendants, int, POINTS_PER_UNIT } from './package';
+import { descendants, int, POINTS_PER_UNIT } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
 import { pushText, type RunContext } from './runs';
 
@@ -43,7 +43,7 @@ const MIME_BY_EXTENSION = new Map([
 const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
 
 function imageType(reader: Reader, path: string): string | undefined {
-    const declared = contentTypeOf(reader.pkg, path);
+    const declared = reader.pkg.contentTypeOf(path);
     if (declared) return MIME_ALIASES.get(declared) ?? declared;
     return MIME_BY_EXTENSION.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase());
 }

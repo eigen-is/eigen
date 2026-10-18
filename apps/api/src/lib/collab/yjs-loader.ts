@@ -2,7 +2,7 @@ import { Database as BunDatabase } from 'bun:sqlite';
 import { asc, desc, gt } from 'drizzle-orm';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
 import * as Y from 'yjs';
-import { ApiError } from '../core/errors';
+import { ApiError, isOutOfMemory } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
 import { decompressBlob } from './blob-codec';
 import * as schema from './schema';
@@ -10,7 +10,7 @@ import * as schema from './schema';
 type DocDb = BunSQLiteDatabase<typeof schema>;
 
 // Compressed persisted Yjs state, captured as standalone buffers so it can be
-// transferred to a document-transform Worker (or materialized right here on the
+// sent to the document-transform process (or materialized right here on the
 // main thread). Blob ids ride along for diagnostics only.
 export type YjsStatePayload = {
     snapshot: { id: number; lastUpdateId: number; data: ArrayBuffer } | null;
@@ -78,7 +78,8 @@ export function materializeYjsState(
     if (payload.snapshot) {
         try {
             Y.applyUpdate(doc, decompressBlob(new Uint8Array(payload.snapshot.data)));
-        } catch {
+        } catch (error) {
+            if (isOutOfMemory(error)) throw error;
             blobsSkipped++;
             console.error(`[yjs-loader] Skipping corrupted snapshot${label ? ` for ${label}` : ''}`);
         }
@@ -89,7 +90,8 @@ export function materializeYjsState(
             const data = decompressBlob(new Uint8Array(update.data));
             Y.applyUpdate(doc, data);
             bytesApplied += data.byteLength;
-        } catch {
+        } catch (error) {
+            if (isOutOfMemory(error)) throw error;
             blobsSkipped++;
             console.error(`[yjs-loader] Skipping corrupted update ${update.id}${label ? ` for ${label}` : ''}`);
         }

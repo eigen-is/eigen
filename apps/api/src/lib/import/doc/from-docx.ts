@@ -1,16 +1,17 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { type PageSetup, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
-import { ApiError } from '../../core/errors';
+import { ApiError, isOutOfMemory } from '../../core/errors';
 import { XmlError } from '../../core/xml';
 import { ZipError } from '../../core/zip';
 import { docSchema } from '../../document/doc-schema';
 import type { TransformWarning } from '../../document/transform/protocol';
+import { DOCUMENT_TOO_LARGE } from '../messages';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
-import { DOCUMENT_TOO_LARGE, NOT_A_DOCX, readPackage } from './package';
+import { NOT_A_DOCX, readPackage } from './package';
 import { createReader, readDocument } from './paragraphs';
 
-// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform Worker.
+// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform process.
 
 export type DocxImage = {
     name: string;
@@ -22,6 +23,11 @@ export type DocxImage = {
 // weight, 3.8 KB for a cell's 63 column widths. At this budget the heaviest file met peaks near 1 GB, and the corpus's
 // heaviest weighs 57,688.
 export const MAX_DOCX_WEIGHT = 150_000;
+
+// The update holds every character, a string attribute's too (a link's href is spelled out for every text node it
+// marks), and a client opens it in one WebSocket message of at most 128 MB: three bytes a character at most. The
+// corpus's most is 511,898.
+export const MAX_DOCX_TEXT = 16_000_000;
 
 // A TableMap slot, a column of a row however spanned or padded, costs about 16 bytes, a unit 1.3 KB and more.
 const SLOTS_PER_UNIT = 64;
@@ -46,7 +52,8 @@ export function readDocx(
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
         const content = readDocument(reader);
-        if (weightOf(content) > MAX_DOCX_WEIGHT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
+        const { weight, text } = sizeOf(content);
+        if (weight > MAX_DOCX_WEIGHT || text > MAX_DOCX_TEXT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
         const refused = new Set(content.filter((block) => !fits(block)));
         const blocks = content.flatMap((block) => (refused.has(block) ? asParagraphs(block) : [block]));
         const doc = docSchema().nodeFromJSON({
@@ -80,44 +87,52 @@ export function readDocx(
     }
 }
 
-// The zip's and the XML's messages speak of archives and markup; the user uploaded a document.
-export function importError(error: unknown): ApiError {
+// The zip's and the XML's messages speak of archives and markup; the user uploaded a document. An out-of-memory passes as
+// it is: the transform process answers it for every format.
+export function importError(error: unknown): Error {
+    if (isOutOfMemory(error)) return error;
     if (error instanceof ZipError)
         return new ApiError(error.status, error.status === 413 ? DOCUMENT_TOO_LARGE : NOT_A_DOCX, { cause: error });
     if (error instanceof XmlError) return new ApiError(400, NOT_A_DOCX, { cause: error });
     if (error instanceof ApiError) return error;
-    // A stack or an allocation the document outgrew; ProseMirror's other RangeErrors are the reader's slips.
-    if (error instanceof RangeError && /call stack|out of memory/i.test(error.message))
+    // A stack the document outgrew; ProseMirror's other RangeErrors are the reader's slips.
+    if (error instanceof RangeError && /call stack/i.test(error.message))
         return new ApiError(413, DOCUMENT_TOO_LARGE, { cause: error });
-    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the Worker.
+    // A file the reader slips on is refused as one it can't read; the slip is a bug, and its cause stays in the transform's log.
     console.warn('[import] docx import failed:', error instanceof Error ? (error.stack ?? error.message) : error);
     return new ApiError(400, NOT_A_DOCX, { cause: error });
 }
 
-// Every node and mark, and every table's area.
-function weightOf(nodes: JSONContent[]): number {
+// The weight is every node and mark, and every table's area; the text every character, string attributes' included.
+function sizeOf(nodes: JSONContent[]): { weight: number; text: number } {
     let weight = 0;
     let slots = 0;
+    let text = 0;
     const strings = (attrs: Record<string, unknown> | undefined) => {
         for (const value of Object.values(attrs ?? {}))
-            if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
+            if (typeof value === 'string') {
+                weight += Math.floor(value.length / CHARS_PER_UNIT);
+                text += value.length;
+            }
     };
     const stack = [...nodes];
     for (let node = stack.pop(); node; node = stack.pop()) {
         weight += 1 + (node.marks?.length ?? 0);
+        text += node.text?.length ?? 0;
         slots += (node.attrs?.['colspan'] ?? 0) * (node.attrs?.['rowspan'] ?? 1);
         strings(node.attrs);
         for (const mark of node.marks ?? []) strings(mark.attrs);
         for (const child of node.content ?? []) stack.push(child);
     }
-    return weight + Math.floor(slots / SLOTS_PER_UNIT);
+    return { weight: weight + Math.floor(slots / SLOTS_PER_UNIT), text };
 }
 
 function fits(block: JSONContent): boolean {
     try {
         docSchema().nodeFromJSON(block).check();
         return true;
-    } catch {
+    } catch (error) {
+        if (isOutOfMemory(error)) throw error;
         return false;
     }
 }
