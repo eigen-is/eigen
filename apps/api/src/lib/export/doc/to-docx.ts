@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
+import { parseChartSpec } from '@workspace/lib/charts';
 import {
     DOCUMENT_LINE_RATIO,
     EIGEN_FONT_NAMES,
@@ -11,14 +12,15 @@ import {
 } from '@workspace/lib/constants/fonts';
 import {
     BAND_DISTANCE_MM,
+    chartSvg,
     FIRST_PAGE_BAND,
-    type FigureAttrs,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     type NormalStyle,
     type PageSetup,
     pageTwips,
     readCellBackground,
+    readChartAttrs,
     readFigureAttrs,
     readPageNumberKind,
     readParagraphFormat,
@@ -67,7 +69,7 @@ import {
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
-import { type ExportMedia, toTransferableBuffer } from '../../document/transform/protocol';
+import { type ExportMedia, toTransferableBuffer, toTransferableText } from '../../document/transform/protocol';
 import {
     BORDER_SIDES,
     CHECKBOX_GLYPHS,
@@ -188,9 +190,35 @@ export async function eigendocToDocx(
 }
 
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
-// under that src. A media name holds no `/`, so the two never meet.
-function figureMediaKey({ mediaName, src }: FigureAttrs): string | null {
+// under that src, as it draws a chart under its spec and size. A media name holds no `/`, so no two keys meet.
+function figureMediaKey(node: JSONContent): string | null {
+    if (node.type === 'chart') {
+        const { spec, width, height } = readChartAttrs(node.attrs ?? {});
+        return `chart/${width}/${height}/${spec}`;
+    }
+    const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
     return mediaName ?? (src && splitDataUri(src) ? src : null);
+}
+
+// A chart has no media file either: it draws as the SVG the HTML export inlines, through the sanitizer a pasted SVG
+// takes. A spec that doesn't parse draws nothing, so its caption stands alone.
+export async function chartFigureMedia(roots: JSONContent[]): Promise<ExportMedia[]> {
+    const charts = new Map<string, string>();
+    const visit = (node: JSONContent) => {
+        const key = node.type === 'chart' ? figureMediaKey(node) : null;
+        if (key && !charts.has(key)) {
+            const attrs = readChartAttrs(node.attrs ?? {});
+            const spec = parseChartSpec(attrs.spec ?? '');
+            if (spec) charts.set(key, chartSvg(spec, attrs));
+        }
+        for (const child of node.content ?? []) visit(child);
+    };
+    for (const root of roots) visit(root);
+    if (charts.size === 0) return [];
+    const { sanitizeExportMedia } = await import('../sanitize');
+    return sanitizeExportMedia(
+        Array.from(charts, ([name, svg]) => ({ name, contentType: 'image/svg+xml', data: toTransferableText(svg) })),
+    );
 }
 
 // A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
@@ -199,9 +227,8 @@ export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMed
     const pasted = new Map<string, { mediaType: string | null; base64: string }>();
     const visit = (node: JSONContent) => {
         if (node.type === 'figure') {
-            const attrs = readFigureAttrs(node.attrs ?? {});
-            const key = figureMediaKey(attrs);
-            if (key && key === attrs.src) {
+            const key = figureMediaKey(node);
+            if (key && key === node.attrs?.['src']) {
                 const split = splitDataUri(key);
                 if (split) pasted.set(key, split);
             }
@@ -688,7 +715,6 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
-        // A chart writes as a figure without media, its caption alone, until the docx writes Word charts (T4-R12).
         if (isFigureFrameNode(node.type)) {
             // A wrapped figure floats before the paragraph that holds it; a block one breaks the paragraph.
             const figure = figureOf(node, context);
@@ -1225,7 +1251,7 @@ function figureOf(node: JSONContent, context: Context): Block[] {
         runs: `<w:r>${captionRuns}</w:r>`,
         inset,
     });
-    const key = figureMediaKey(attrs);
+    const key = figureMediaKey(node);
     const image = key ? imageOf(key, context.pkg) : undefined;
     // The caption alone is the figure's box, as the HTML's.
     if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
