@@ -7,9 +7,9 @@ export const BAND_ROOTS = ['header', 'footer', 'headerFirst', 'footerFirst'] as 
 export type BandRoot = (typeof BAND_ROOTS)[number];
 
 // Nodes a band's schema leaves out, so the Yjs binding deletes one a peer writes: none has a meaning in a header that
-// prints on every page. A footnote joins them when the node exists. Marks stay: a mark the schema lacks deletes the
-// text that carries it.
-export const BAND_EXCLUDED_NODES = ['pageBreak', 'title', 'subtitle', 'codeBlock'] as const;
+// prints on every page, and the chart panel edits the body's charts only. A footnote joins them when the node exists.
+// Marks stay: a mark the schema lacks deletes the text that carries it.
+export const BAND_EXCLUDED_NODES = ['pageBreak', 'title', 'subtitle', 'codeBlock', 'chart'] as const;
 
 // A band prints, and the page draws it, only with something to show: focusing an empty band leaves an empty paragraph,
 // and a line break or an empty equation alone shows nothing either.

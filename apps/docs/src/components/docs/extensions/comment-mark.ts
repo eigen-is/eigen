@@ -4,7 +4,8 @@ import type { EditorState } from '@tiptap/pm/state';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
-import { CommentMarkSchema, equationText } from '@workspace/lib/docs/eigendoc';
+import type { FigureFrameNode } from '@workspace/lib/docs/eigendoc';
+import { CommentMarkSchema, equationText, isFigureFrameNode } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -84,13 +85,14 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
     selected.scrollIntoView().run();
 }
 
+const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart' };
+
 // A comment on an image or a chart alone has no text to quote, so it reads as "Image" or "Chart", and an equation with
 // no text as "Equation". The callback replaces every leaf's own text, so any other leaf reads as its leafText.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
         .textBetween(from, to, ' ', (leaf) => {
-            if (leaf.type.name === 'figure') return 'Image';
-            if (leaf.type.name === 'chart') return 'Chart';
+            if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
             if (leaf.type.name === 'equation') return equationText(leaf) || 'Equation';
             return leaf.type.spec.leafText?.(leaf) ?? '';
         })

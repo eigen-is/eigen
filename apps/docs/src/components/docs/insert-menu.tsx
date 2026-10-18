@@ -57,27 +57,29 @@ export const InsertMenu = ({
                 <ImagePlus className="h-4 w-4 mr-2" /> Image
             </DropdownMenuItem>
         )}
-        <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-                <ChartColumn className="h-4 w-4 mr-2" /> Chart
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-                {CHART_TYPE_OPTIONS.map((option) => (
-                    <DropdownMenuItem
-                        key={option.value}
-                        onClick={() =>
-                            editor
-                                .chain()
-                                .focus()
-                                .insertChart(option.value, textColumnWidth(editor.view.dom) ?? undefined)
-                                .run()
-                        }
-                    >
-                        <option.icon className="h-4 w-4 mr-2" /> {option.label}
-                    </DropdownMenuItem>
-                ))}
-            </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        {'chart' in editor.schema.nodes && (
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                    <ChartColumn className="h-4 w-4 mr-2" /> Chart
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                    {CHART_TYPE_OPTIONS.map((option) => (
+                        <DropdownMenuItem
+                            key={option.value}
+                            onClick={() =>
+                                editor
+                                    .chain()
+                                    .focus()
+                                    .insertChart(option.value, textColumnWidth(editor.view.dom) ?? undefined)
+                                    .run()
+                            }
+                        >
+                            <option.icon className="h-4 w-4 mr-2" /> {option.label}
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
+        )}
         <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
             <Minus className="h-4 w-4 mr-2" /> Horizontal rule
         </DropdownMenuItem>

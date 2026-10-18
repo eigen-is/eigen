@@ -240,7 +240,7 @@ export function docEditorOptions({
             }),
             EditorTable.configure({ resizable: !coarsePointer }),
             Figure.configure(figure),
-            Chart.configure(chart),
+            ...(band ? [] : [Chart.configure(chart)]),
             PageNumber,
             TableWidthClamp.configure({ textColumnWidth }),
             AtomMarks,
