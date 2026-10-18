@@ -1,0 +1,177 @@
+import { isTransparentFill, parseFill } from '../fill';
+import { boxCenter, distanceToPolyline, LINEAR_HIT_SCREEN_FACTOR, type Point, rotatePoint } from '../geometry';
+import { pathCommands, polylineOutline } from '../outline';
+import type { VectorPathElement } from '../types';
+import { defineKind } from './kind';
+import { bool, fillField, parseNormalizedPath } from './read-fields';
+import { isBordered, renderRoughShape } from './render-utils';
+
+// A new path fills its box until a caller gives it a contour.
+const DEFAULT_PATH = 'M 0 0 L 1 0 L 1 1 L 0 1 Z';
+// How far a sampled curve may stray from the drawn one, in scene units.
+const CURVE_TOLERANCE = 0.5;
+// The most chords one curve samples into, so a path stretched to the coordinate cap stays a bounded hit test.
+const MAX_CURVE_STEPS = 64;
+// SVG's default stroke-miterlimit: a grown vertex moves at most this many times the inflate.
+const MITER_LIMIT = 4;
+
+export const pathKind = defineKind<VectorPathElement>({
+    type: 'path',
+    is: (el): el is VectorPathElement => el.type === 'path',
+    capabilities: {
+        fill: true,
+        fillStyle: true,
+        strokeStyle: true,
+        corners: false,
+        edges: false,
+        strokeOptional: true,
+        bindable: true,
+        silhouette: 'box',
+        creation: 'none',
+    },
+    // An open path is its stroke: nothing to fill, no edge to dock to, no body without it.
+    capabilitiesOf: (el) => (el.closed ? {} : { fill: false, bindable: false, strokeOptional: false }),
+    defaults: (style) => ({
+        fill: style.fill,
+        path: DEFAULT_PATH,
+        closed: true,
+    }),
+    read: (src, base) => {
+        const path = parseNormalizedPath(src.get('path'));
+        if (path === null) return null;
+        return {
+            ...base,
+            type: 'path',
+            fill: fillField(src.get('fill')),
+            path,
+            closed: bool(src.get('closed'), false) && path.includes('Z'),
+        };
+    },
+    // A filled path is hit inside by the fill rule; any path on its stroke, within the reach a line has.
+    hitTest: (el, point, threshold) => {
+        const p = rotatePoint(point, boxCenter(el), -el.angle);
+        const subpaths = sampledSubpaths(el);
+        const reach = Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, el.strokeWidth / 2 + 0.1);
+        if (subpaths.some((points) => distanceToPolyline(points, p) <= reach)) return true;
+        return el.closed && !isTransparentFill(parseFill(el.fill)) && winding(subpaths, p) !== 0;
+    },
+    // The outer contour only: an arrow docks on the outside of a shape with a hole.
+    outline: (el, inflate) => {
+        const outer = outerContour(sampledSubpaths(el));
+        if (!el.closed) return polylineOutline(outer);
+        return { kind: 'polygon', corners: grownRing(outer, inflate) };
+    },
+    paintsNothing: (el) => !isBordered(el) && (!el.closed || isTransparentFill(parseFill(el.fill))),
+    render: (el) => ({ svg: renderRoughShape(el) }),
+});
+
+// Every subpath as a polyline in the unrotated scene frame, its curves flattened; a closed one ends on
+// its start.
+function sampledSubpaths(el: VectorPathElement): Point[][] {
+    const at = (p: Point): Point => ({ x: el.x + p.x * el.width, y: el.y + p.y * el.height });
+    const subpaths: Point[][] = [];
+    let current: Point[] = [];
+    for (const { op, points } of pathCommands(el.path)) {
+        if (op === 'M') {
+            current = [at(points[0])];
+            subpaths.push(current);
+        } else if (op === 'Z') {
+            current.push(current[0]);
+        } else {
+            current.push(...flatten([current[current.length - 1], ...points.map(at)]));
+        }
+    }
+    return subpaths;
+}
+
+// A line's end, or a Bézier's points after its start in enough steps that no chord strays more than
+// CURVE_TOLERANCE from the curve (Wang's bound on the control polygon's second differences).
+function flatten(control: Point[]): Point[] {
+    const degree = control.length - 1;
+    let bend = 0;
+    for (let i = 2; i < control.length; i++) {
+        const a = control[i - 2];
+        const b = control[i - 1];
+        const c = control[i];
+        bend = Math.max(bend, Math.hypot(a.x - 2 * b.x + c.x, a.y - 2 * b.y + c.y));
+    }
+    const wang = Math.ceil(Math.sqrt((degree * (degree - 1) * bend) / (8 * CURVE_TOLERANCE)));
+    const steps = Math.min(Math.max(wang, 1), MAX_CURVE_STEPS);
+    const out: Point[] = [];
+    for (let s = 1; s < steps; s++) out.push(bezierAt(control, s / steps));
+    out.push(control[degree]);
+    return out;
+}
+
+function bezierAt(control: Point[], t: number): Point {
+    let points = control;
+    while (points.length > 1) {
+        const previous = points;
+        points = previous.slice(1).map((p, i) => ({
+            x: previous[i].x + (p.x - previous[i].x) * t,
+            y: previous[i].y + (p.y - previous[i].y) * t,
+        }));
+    }
+    return points[0];
+}
+
+// The nonzero winding number of `p` over every subpath, each closed back to its start as a fill closes it.
+function winding(subpaths: Point[][], p: Point): number {
+    let total = 0;
+    for (const ring of subpaths) {
+        for (let i = 0; i < ring.length; i++) {
+            const a = ring[i];
+            const b = ring[(i + 1) % ring.length];
+            const side = (b.x - a.x) * (p.y - a.y) - (p.x - a.x) * (b.y - a.y);
+            if (a.y <= p.y && b.y > p.y && side > 0) total++;
+            else if (a.y > p.y && b.y <= p.y && side < 0) total--;
+        }
+    }
+    return total;
+}
+
+// Twice the signed area, positive for a ring wound clockwise on screen (y down).
+function signedArea(ring: Point[]): number {
+    let sum = 0;
+    for (let i = 0; i < ring.length; i++) {
+        const a = ring[i];
+        const b = ring[(i + 1) % ring.length];
+        sum += a.x * b.y - b.x * a.y;
+    }
+    return sum;
+}
+
+function outerContour(subpaths: Point[][]): Point[] {
+    let outer: Point[] = [];
+    let area = -1;
+    for (const ring of subpaths) {
+        const a = Math.abs(signedArea(ring));
+        if (a > area) {
+            outer = ring;
+            area = a;
+        }
+    }
+    return outer;
+}
+
+// Every edge moved `inflate` outward (inward when negative): each vertex moves along its miter, which
+// for a curve's dense samples follows the offset curve. A vertex sharper than MITER_LIMIT stops there.
+function grownRing(ring: Point[], inflate: number): Point[] {
+    const points = ring.filter((p, i) => {
+        const next = ring[(i + 1) % ring.length];
+        return p.x !== next.x || p.y !== next.y;
+    });
+    if (points.length < 3) return [];
+    if (inflate === 0) return points;
+    const sign = Math.sign(signedArea(points));
+    const normal = (a: Point, b: Point): Point => {
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        return { x: (sign * (b.y - a.y)) / len, y: (sign * (a.x - b.x)) / len };
+    };
+    return points.map((p, i) => {
+        const n1 = normal(points[(i + points.length - 1) % points.length], p);
+        const n2 = normal(p, points[(i + 1) % points.length]);
+        const k = Math.max(1 + n1.x * n2.x + n1.y * n2.y, 2 / MITER_LIMIT ** 2);
+        return { x: p.x + ((n1.x + n2.x) * inflate) / k, y: p.y + ((n1.y + n2.y) * inflate) / k };
+    });
+}

@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1763 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1769 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -523,7 +523,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (410)
+## Types (412)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -843,6 +843,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `ObjectFit` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `OutlineShape` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `PathCommand` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `PinPatch` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `PinRoutingContext` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -867,6 +868,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorImageElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorMeta` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorPathElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorPieElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorRectangleElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorRichTextElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -938,7 +940,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (861)
+## Utilities & constants (865)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1659,9 +1661,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `parseFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parseIdList` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `parsePathCommands` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `pasteAnchorOffset` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `pathCommands` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `placeLayer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `PLACEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `pointInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -1692,6 +1696,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `round` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `round4` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `scaleNormalizedPath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `sceneBounds` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
 | `sceneFontFamilies` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `sceneLayers` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
@@ -1705,6 +1710,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `serializeFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `serializeFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `serializeIdList` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `serializePath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `serializePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `shapeAnchorPoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |

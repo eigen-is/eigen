@@ -50,6 +50,14 @@ The `pie` kind is a sector of the ellipse its box inscribes, like OOXML's `pie`.
 
 The `chart` kind holds one chart's stored spec, kept as stored, and draws it as the canvas's own shapes plus SVG text, each shape through its own kind ([CHARTS.md](CHARTS.md)). Its fill is its background and its stroke its axes. No tool draws one either: Insert → Chart places Google's sample at the viewport center (`CanvasHandle.insertChart`), 640 × 400 on a drawing and 1200 × 675 on a slide.
 
+## A path is stored in its unit box
+
+The `path` kind is a free contour of lines and Bézier curves, what a pptx `custGeom` draws. `path` holds absolute `M`, `L`, `C`, `Q` and `Z` commands in the unit box, numbers from 0 to 1 across the element's width and height. A resize writes only `width` and `height`: a line or a freehand stroke stores scene units and rewrites every point on every resize, which drifts and can't stretch one axis cleanly. `scaleNormalizedPath` (`outline.ts`) turns it into the local-frame SVG `d` that render, hit test and outline all read. `closed` says whether it fills. An open path only strokes, so it offers no fill, no None stroke and no binding (`capabilitiesOf`).
+
+The reader's `parseNormalizedPath` (`kinds/read-fields.ts`) accepts any SVG spelling of the five commands and stores one canonical string: numbers rounded to 4 decimals and clamped to [-2, 3], so control points may overshoot the box but a 1e15 never reaches roughjs or a viewBox. Anything else drops the element: another command, a relative one, a wrong count of numbers, a subpath that doesn't start with `M`, more than `MAX_PATH_COMMANDS` commands, or more than `MAX_PATH_BYTES` before or after canonicalizing. The cap holds after canonicalizing too, because a stored path must read back. `closed` reads false for a path without a `Z`.
+
+A hole is a subpath wound the other way. Browsers, WeasyPrint and DrawingML fill nonzero and roughjs hatches even-odd, and the two rules agree on a hole wound that way. The hit test uses nonzero. Hit test and docking sample each curve into chords within a fixed tolerance, with a cap on chords per curve so a path stretched to the coordinate cap stays cheap. The outline is the outer contour, the subpath with the largest area, grown along each vertex's miter. So an arrow docks on the drawn edge, never in a hole. No tool draws a path.
+
 ## Capabilities are asked of the element
 
 `capabilitiesOf(el)` answers what an element supports: fill, hatch, dash, corners, bindable, how it is created. The panel, the tools and the binding code gate on it, never on a type list. It takes the element, not the kind, because some answers depend on geometry: an open line or freehand stroke has nothing to fill until its path closes.
@@ -70,7 +78,7 @@ Gradients carry nine stops sampled in OKLab (`packages/lib/src/background/gradie
 
 An arrow is the one kind that depends on other elements. Its math lives in `packages/lib/src/vector/` (`geometry.ts`, `outline.ts`, `elbow-route.ts`, `elbow-pins.ts`), its handles in `packages/ui/src/components/vector/tools/`.
 
-An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, the pie, the chart, rich text and images.
+An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, the pie, a closed path, the chart, rich text and images.
 
 There is no stored reverse index. `arrowsBoundTo` derives "which arrows dock on this shape" in memory, so there is no second write to keep consistent. A binding to a missing or unbindable shape is dropped on read and never written ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
 

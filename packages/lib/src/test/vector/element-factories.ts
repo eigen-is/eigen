@@ -12,6 +12,7 @@ import {
     type VectorEllipseElement,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorPathElement,
     type VectorPieElement,
     type VectorRectangleElement,
     type VectorRichTextElement,
@@ -63,6 +64,10 @@ export function ellipse(over: Partial<VectorEllipseElement> & Pick<VectorEllipse
 
 export function pie(over: Partial<VectorPieElement> & Pick<VectorPieElement, 'id'>): VectorPieElement {
     return { ...BASE, ...ELEMENT_KINDS.pie.defaults(VECTOR_STYLE_DEFAULTS), type: 'pie', ...over };
+}
+
+export function path(over: Partial<VectorPathElement> & Pick<VectorPathElement, 'id'>): VectorPathElement {
+    return { ...BASE, ...ELEMENT_KINDS.path.defaults(VECTOR_STYLE_DEFAULTS), type: 'path', ...over };
 }
 
 export function chart(over: Partial<VectorChartElement> & Pick<VectorChartElement, 'id'>): VectorChartElement {
