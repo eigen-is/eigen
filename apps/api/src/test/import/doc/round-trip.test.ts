@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { readOmml, writeMathml } from '@workspace/math';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/core/ooxml';
@@ -10,7 +11,8 @@ import { openZip } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
 import { HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
-import { eigendocToDocx } from '../../../lib/export/doc/to-docx';
+import { chartFigureMedia, eigendocToDocx } from '../../../lib/export/doc/to-docx';
+import { withSvgFallbacks } from '../../../lib/export/office-image';
 import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 import { importDocxBody } from '../../fixtures/golden-docx';
@@ -35,10 +37,11 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
 // column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
-// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) T4-R12: the docx leaves a chart out. (9) Small
-// is written as its look and comes back as that size. (10) OMML has no slot for the typed LaTeX. (11) In Word a display
-// equation is a paragraph of its own, and every piece but the last keeps the writer's no space after, so the pieces draw
-// as one paragraph.
+// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) The fixture's media holds no chart drawing,
+// which the transform process makes, so a chart writes nothing; 'a chart' round-trips one. (9) Small is written as its
+// look and comes back as that size. (10) OMML has no slot for the typed LaTeX. (11) In Word a display equation is a
+// paragraph of its own, and every piece but the last keeps the writer's no space after, so the pieces draw as one
+// paragraph.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -132,6 +135,36 @@ describe('the all-features doc', () => {
         const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
         const imported = withSourceNames(json, sourceNames(images));
         expect(stored(imported)).toEqual(stored(expected(source, imported)));
+    });
+});
+
+describe('a chart', () => {
+    test('comes back as an image of its SVG, at its width, its title its alt, its caption and layout kept', async () => {
+        const spec = JSON.stringify(sampleChartSpec('column'));
+        const chart = {
+            type: 'chart',
+            attrs: { spec, width: 480, height: 300, caption: 'Points', layout: 'wrap-left' },
+        };
+        const source = { type: 'doc', content: [{ type: 'paragraph', content: [chart] }] };
+        const media = await withSvgFallbacks(await chartFigureMedia([source]));
+        const docx = await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, media, 'Chart', ORIGIN);
+        const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
+        expect(json.content?.[0]?.content).toEqual([
+            {
+                type: 'figure',
+                attrs: {
+                    mediaName: 'image-1.svg',
+                    src: null,
+                    alt: 'Points scored',
+                    caption: 'Points',
+                    commentCardId: null,
+                    width: 480,
+                    alignment: 'center',
+                    layout: 'wrap-left',
+                },
+            },
+        ]);
+        expect(images.map((image) => image.contentType)).toEqual(['image/svg+xml']);
     });
 });
 

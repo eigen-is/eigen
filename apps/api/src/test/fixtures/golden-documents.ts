@@ -529,7 +529,8 @@ export function buildAllFeaturesDocJson(): JSONContent {
             },
             small('One of two tables in a row'),
             small('Two of two'),
-            // The docx leaves the chart out, so the Google Docs re-save, which predates it, still reads the paragraph.
+            // The fixture's media holds no chart drawing, so the docx writes none, and the Google Docs re-save, which predates
+            // the chart, still reads the paragraph.
             {
                 type: 'paragraph',
                 content: [

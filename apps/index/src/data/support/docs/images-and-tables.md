@@ -76,7 +76,7 @@ On a wide screen, selecting a chart opens the **Chart** panel on the right side 
 
 You can paste cells copied from a spreadsheet or a table in a document into the grid, and copy cells out of it. A paste fills the grid from the selected cell, and the grid grows to fit. A chart holds up to 12 series, 200 categories, and 2,000 values; when a paste has more, the dialog says how much it pasted and leaves the rest out. Numbers may have thousands separators, a currency sign or a percent sign, as a spreadsheet shows them.
 
-A chart prints and downloads as a PDF or a web page. The Word file leaves it out for now and keeps its caption. See [Export to Word, PDF, or HTML](/support/docs/export).
+A chart prints and downloads as a PDF, a web page, or a Word file. In the Word file it is a picture, so you can't change its data in Word. See [Export to Word, PDF, or HTML](/support/docs/export).
 
 ## Insert a table
 
