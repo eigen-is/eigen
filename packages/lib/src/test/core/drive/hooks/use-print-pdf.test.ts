@@ -144,7 +144,9 @@ describe('usePrintPdf', () => {
 
         expect(calls).toEqual([]);
         expect(fallbacks).toBe(1);
-        expect(toasts).toEqual(["info: Printing without headers and footers. You're offline."]);
+        expect(toasts).toEqual([
+            'info: Printing without headers and footers. Your latest edits have not reached the server yet.',
+        ]);
     });
 
     test('a blocked tab prints in the browser and sends no request', async () => {

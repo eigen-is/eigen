@@ -21,7 +21,7 @@ export function usePrintPdf(fallback: () => void): {
 } {
     const printPdf = useCallback(
         async (ownerId: string, mountId: string, pathId: string, canUsePdf: boolean) => {
-            if (!canUsePdf) return printWithoutBands(fallback, "You're offline.");
+            if (!canUsePdf) return printWithoutBands(fallback, 'Your latest edits have not reached the server yet.');
             const tab = window.open('', '_blank');
             if (!tab) return printWithoutBands(fallback, 'The browser blocked the tab for the PDF.');
             try {
