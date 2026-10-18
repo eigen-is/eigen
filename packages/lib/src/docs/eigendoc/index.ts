@@ -39,7 +39,7 @@ export {
     readParagraphFormat,
     selectionParagraphFormat,
 } from './nodes/paragraph-format';
-export { EigenTableCell, EigenTableHeader, readCellBackground } from './nodes/table-cell';
+export { readCellBackground } from './nodes/table-cell';
 export type { TitleType } from './nodes/title';
 export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {

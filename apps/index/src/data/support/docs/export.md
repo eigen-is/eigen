@@ -41,7 +41,7 @@ The PDF, the web page, and the Word file use the editor's spacing, including the
 - Paragraphs keep their line spacing, the space before and after them, and their indents. The first paragraph of a list item follows the list's indent.
 - Images keep their width, alignment, and caption. An image that floats left or right floats in the Word file too, with the text wrapping around it.
 - Numbered lists keep their numbers, and task lists keep their checkboxes, ticked or not.
-- Tables keep their column widths and borders, and a header row repeats on every page.
+- Tables keep their column widths, borders, and cell colors, and a header row repeats on every page.
 - Code blocks keep their colors, and quotes keep the bar along their left edge.
 - Equations become Word equations that you can edit in Word, and a displayed one stays on its own line. The LaTeX you typed stays behind, since Word has no place for it, so after a round trip through Word the **LaTeX** field shows Eigen's way of writing the equation, which may differ from yours.
 
