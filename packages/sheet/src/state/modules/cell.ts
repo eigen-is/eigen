@@ -683,6 +683,10 @@ export function updateCell(
                     }
                 }
             }
+        } else {
+            // A rich edit's dependents read its runs, as a plain edit's read its value.
+            delFunctionGroup(ctx, r, c);
+            execFunctionGroup(ctx, r, c, curv);
         }
         value = curv;
     } else {
