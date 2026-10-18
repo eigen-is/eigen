@@ -78,15 +78,20 @@ export const MATH_LIMITS = {
     marks: 30,
     // 64 characters a unit (an menclose of every line), the annotation escaped at six a character (&quot;), the root.
     mathmlLength: 64 * SIZE + 6 * LATEX_LENGTH + 512,
+    // Every < the writer writes is a tag, three a unit at most (an accent, line or brace over an empty row, a fence
+    // pair around one), and six for math, semantics and annotation.
+    mathmlTags: 3 * SIZE + 6,
 } as const;
+
+const tooLarge = (budget: MathBudget) =>
+    new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`, budget.at?.());
 
 // Every reader calls this as it builds: at each level it walks, and for each node, row and character it makes.
 export function bound(budget: MathBudget, depth: number, size: number): void {
     budget.size += size;
     if (depth > MATH_LIMITS.depth)
         throw new MathError(`An equation nests at most ${MATH_LIMITS.depth} levels deep`, budget.at?.());
-    if (budget.size > MATH_LIMITS.size)
-        throw new MathError(`An equation holds at most ${MATH_LIMITS.size} parts`, budget.at?.());
+    if (budget.size > MATH_LIMITS.size) throw tooLarge(budget);
 }
 
 // Variation selectors too: an emoji presentation is no math.
@@ -174,7 +179,7 @@ export function equationCells(row: MathRow): MathRow[] {
     return cells;
 }
 
-type StyledChar = { char: string; marks: string; variant: MathVariant; color: string | undefined };
+type StyledChar = { char: string; marks: string; markCount: number; variant: MathVariant; color: string | undefined };
 
 // The MathML writer keeps a text's edge spaces as no-break spaces; they read back as spaces.
 const TEXT_EDGE: ReadonlySet<string> = new Set(' \u00A0');
@@ -186,7 +191,7 @@ export type RowSlot = 'required' | 'optional' | 'equation';
 export class RowBuilder {
     readonly #row: MathRow = [];
     #chars: StyledChar[] = [];
-    // Characters and marks waiting in #chars.
+    // Characters and marks since the last flush, those dropped too.
     #waiting = 0;
 
     constructor(
@@ -200,23 +205,22 @@ export class RowBuilder {
     // Without `letters`, each letter takes its default.
     chars(text: string, letters: MathVariant | undefined, others: MathVariant, color: string | undefined): void {
         for (const char of checkedXml(text)) {
+            // Every two kept characters or marks make at least one part (two quads are one qquad), and a dropped one
+            // counts as kept: bound them as they come.
+            if (this.budget.size + ++this.#waiting / 2 > MATH_LIMITS.size) throw tooLarge(this.budget);
             if (INVISIBLE.test(char)) continue;
             const last = this.#chars.at(-1);
-            if (MARK.test(char)) {
-                // A combining mark joins the character before it; after a space or nothing it marks nothing.
-                if (!last || SPACE_OF_CHAR.has(last.char) || [...last.marks].length >= MATH_LIMITS.marks) continue;
-                last.marks += char;
-            } else {
+            if (!MARK.test(char)) {
                 const [base, variant] = fromAlphanumeric(char) ?? [
                     char,
                     LETTER.test(char) ? (letters ?? defaultVariant('identifier', char)) : others,
                 ];
-                this.#chars.push({ char: base, marks: '', variant, color });
+                this.#chars.push({ char: base, marks: '', markCount: 0, variant, color });
+            } else if (last && !SPACE_OF_CHAR.has(last.char) && last.markCount < MATH_LIMITS.marks) {
+                // A combining mark joins the character before it; after a space or nothing it marks nothing.
+                last.marks += char;
+                last.markCount++;
             }
-            // Every two waiting characters or marks make at least one part (two quads are one qquad): bound them as
-            // they come.
-            if (this.budget.size + ++this.#waiting / 2 > MATH_LIMITS.size)
-                bound(this.budget, this.depth, MATH_LIMITS.size);
         }
     }
 

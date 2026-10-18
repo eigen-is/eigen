@@ -241,9 +241,10 @@ function readArgument(element: MathXmlElement | undefined, scope: Scope, depth: 
     return readRow(elements, inner, depth, slot);
 }
 
-// Content that reads as if it stood in the row itself: a level deeper, so deep wrappers meet the bound.
+// Content that reads as if it stood in the row itself: a level deeper and a part, so deep or many wrappers meet the
+// bounds.
 function readThrough(row: RowBuilder, elements: MathXmlElement[], depth: number, scope: Scope): Waiting[] {
-    bound(scope.budget, depth, 0);
+    bound(scope.budget, depth, 1);
     return readElements(row, elements, depth, scope);
 }
 
@@ -373,8 +374,7 @@ function readPattern(mrow: MathXmlElement, scope: Scope, depth: number): MathNod
     }
 }
 
-function readToken(row: RowBuilder, element: MathXmlElement, name: string, scope: Scope): void {
-    const text = trimXmlSpace(textOf(element));
+function readToken(row: RowBuilder, text: string, name: string, scope: Scope): void {
     const { variant, color } = scope;
     // MathML draws a lone letter in an mi italic and anything else upright.
     const lone = name === 'mi' && isCluster(text);
@@ -389,22 +389,31 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer
     const children = elementsOf(element);
     const argument = (index: number) => readArgument(children[index], scope, depth + 1);
     const name = nameOf(element);
+    // An element that makes nothing counts as a part, so no number of them goes unbounded.
+    const empty = () => bound(budget, depth, 1);
     if (baseOf(element) && isLargeOperator(element)) return [{ kind: 'nary', element, scope: outer, depth }];
     switch (name) {
         case 'mi':
         case 'mn':
-        case 'mo':
-            readToken(row, element, name, scope);
+        case 'mo': {
+            const text = trimXmlSpace(textOf(element));
+            if (text === '') empty();
+            else readToken(row, text, name, scope);
             return;
+        }
         // MathML Core draws a string literal without the quotes MathML 3 put around it.
         case 'ms':
-        case 'mtext':
-            row.text(trimXmlSpace(textOf(element)), scope.color);
+        case 'mtext': {
+            const text = trimXmlSpace(textOf(element));
+            if (text === '') empty();
+            else row.text(text, scope.color);
             return;
+        }
         case 'mspace': {
             const space = spaceOf(attribute(element, 'width'));
             // As characters, so two quads pair as they do in text.
             if (space) row.chars(SPACES[space].text, 'normal', 'normal', undefined);
+            else empty();
             return;
         }
         case 'math':
@@ -522,6 +531,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer
         case 'annotation-xml':
         case 'none':
         case 'mprescripts':
+            empty();
             return;
         // mstyle, mpadded, mphantom (the tree has no phantom: it shows) and anything unknown.
         default:
@@ -697,6 +707,9 @@ export function writeMathml(row: MathRow, latex?: string): string {
     const mathml = checkedXml(`<math xmlns="${MATHML_NAMESPACE}">${content}</math>`);
     if (mathml.length > MATH_LIMITS.mathmlLength) {
         throw new MathError(`An equation's MathML is at most ${MATH_LIMITS.mathmlLength} characters`);
+    }
+    if (mathml.split('<').length - 1 > MATH_LIMITS.mathmlTags) {
+        throw new MathError(`An equation's MathML holds at most ${MATH_LIMITS.mathmlTags} tags`);
     }
     return mathml;
 }

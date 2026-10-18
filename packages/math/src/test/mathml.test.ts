@@ -461,9 +461,10 @@ describe('foreign MathML', () => {
     });
 });
 
-// Every reader counts the tree it makes, so an empty script or degree costs nothing the tree doesn't hold.
+// Every reader counts the tree it makes, so an empty script or degree costs nothing the tree doesn't hold. An msub
+// without scripts reads through, which counts one.
 test.each<[string, MathRow, number]>([
-    ['<msub><mi>x</mi><mrow/></msub>', x, 4],
+    ['<msub><mi>x</mi><mrow/></msub>', x, 5],
     ['<mroot><mi>x</mi><mrow/></mroot>', [{ kind: 'radical', body: x }], 6],
     // An & in an equation's cell counts as the cell it starts, not as an operator.
     [
