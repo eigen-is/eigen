@@ -16,24 +16,8 @@ import {
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import { writeOmml } from '@workspace/math';
-import {
-    A_NS,
-    ASVG_NS,
-    CONTENT_TYPES_NS,
-    CORE_PROPERTIES_NS,
-    DC_NS,
-    EMU_PER_PX,
-    M_NS,
-    MC_NS,
-    PACKAGE_RELATIONSHIPS_NS,
-    PIC_NS,
-    R_NS,
-    W_NS,
-    W14_NS,
-    WP_NS,
-} from '../../core/ooxml';
-import { uriReference } from '../../core/opc';
-import { writeZip } from '../../core/zip';
+import { A_NS, ASVG_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../core/ooxml';
+import { type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { readStoredEquation } from '../../document/equation';
 import {
@@ -81,7 +65,7 @@ import {
 } from '../../document/wordml';
 import { splitDataUri } from '../../shared/data-uri';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
-import { encodeOfficeImage, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
+import { encodeOfficeImage, OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
@@ -118,38 +102,31 @@ export async function eigendocToDocx(
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
     const fonts = embeddedFonts(pkg.faces);
 
-    const parts: [path: string, xml: string, contentType?: string][] = [
-        ['_rels/.rels', relationshipsXml(PACKAGE_RELATIONSHIPS)],
-        [
-            'docProps/core.xml',
-            `<cp:coreProperties xmlns:cp="${CORE_PROPERTIES_NS}" xmlns:dc="${DC_NS}"><dc:title>${escapeXml(stripEigenExtension(title))}</dc:title></cp:coreProperties>`,
-            'application/vnd.openxmlformats-package.core-properties+xml',
-        ],
-        [
-            'word/document.xml',
-            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page)}</w:body></w:document>`,
-            `${WML}.document.main+xml`,
-        ],
-        ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
-        ['word/styles.xml', stylesXml(pkg.languages), `${WML}.styles+xml`],
-        ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
-        ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
-        ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
-        ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
-    ];
-    const overrides = parts.map(([path, , contentType]) =>
-        contentType ? `<Override PartName="/${path}" ContentType="${contentType}"/>` : '',
-    );
-
-    return writeZip([
-        {
-            name: '[Content_Types].xml',
-            data: `${XML_DECLARATION}<Types xmlns="${CONTENT_TYPES_NS}">${DEFAULT_CONTENT_TYPES}${overrides.join('')}</Types>`,
+    return writePackage({
+        main: 'word/document.xml',
+        title: stripEigenExtension(title),
+        defaults: {
+            ...OFFICE_IMAGE_CONTENT_TYPES,
+            odttf: 'application/vnd.openxmlformats-officedocument.obfuscatedFont',
         },
-        ...parts.map(([name, xml]) => ({ name, data: `${XML_DECLARATION}${xml}` })),
-        ...fonts.files.map(([name, data]) => ({ name, data })),
-        ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
-    ]);
+        parts: [
+            [
+                'word/document.xml',
+                `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page)}</w:body></w:document>`,
+                `${WML}.document.main+xml`,
+            ],
+            ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
+            ['word/styles.xml', stylesXml(pkg.languages), `${WML}.styles+xml`],
+            ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
+            ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
+            ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
+            ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
+        ],
+        files: [
+            ...fonts.files.map(([name, data]) => ({ name, data })),
+            ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
+        ],
+    });
 }
 
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
@@ -192,7 +169,6 @@ export async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[
 }
 
 const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
-const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
 const DOCUMENT_NAMESPACES = [
     `xmlns:w="${W_NS}"`,
@@ -205,33 +181,6 @@ const DOCUMENT_NAMESPACES = [
     `xmlns:m="${M_NS}"`,
     'mc:Ignorable="w14"',
 ].join(' ');
-
-const DEFAULT_CONTENT_TYPES = [
-    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
-    '<Default Extension="xml" ContentType="application/xml"/>',
-    '<Default Extension="png" ContentType="image/png"/>',
-    '<Default Extension="jpeg" ContentType="image/jpeg"/>',
-    '<Default Extension="svg" ContentType="image/svg+xml"/>',
-    '<Default Extension="odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/>',
-].join('');
-
-type Relationship = { type: string; target: string; external?: true };
-
-const PACKAGE_RELATIONSHIPS: Relationship[] = [
-    { type: `${R_NS}/officeDocument`, target: 'word/document.xml' },
-    {
-        type: `${PACKAGE_RELATIONSHIPS_NS}/metadata/core-properties`,
-        target: 'docProps/core.xml',
-    },
-];
-
-function relationshipsXml(relationships: Relationship[]): string {
-    const items = relationships.map(
-        ({ type, target, external }, index) =>
-            `<Relationship Id="rId${index + 1}" Type="${type}" Target="${escapeXml(target)}"${external ? ' TargetMode="External"' : ''}/>`,
-    );
-    return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
-}
 
 // What one export accumulates as it walks, each hyperlink target, image, shared bullet numbering and face once.
 type Package = {

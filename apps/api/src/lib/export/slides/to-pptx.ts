@@ -47,22 +47,11 @@ import {
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import { ApiError } from '../../core/errors';
-import {
-    A_NS,
-    AHYP_NS,
-    ASVG_NS,
-    CONTENT_TYPES_NS,
-    CORE_PROPERTIES_NS,
-    DC_NS,
-    P_NS,
-    PACKAGE_RELATIONSHIPS_NS,
-    R_NS,
-} from '../../core/ooxml';
-import { uriReference } from '../../core/opc';
-import { writeZip } from '../../core/zip';
+import { A_NS, AHYP_NS, ASVG_NS, P_NS, R_NS } from '../../core/ooxml';
+import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
 import { cssColorToHex } from '../../document/colors';
 import { canvasTextValue } from '../../document/prose-css';
-import { type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
+import { OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { isElement } from '../sanitize';
 
 // A deck → hand-written PresentationML, one slide per frame, each element as the DrawingML shape that draws it. Takes
@@ -87,88 +76,52 @@ export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], titl
         { type: `${R_NS}/tableStyles`, target: 'tableStyles.xml' },
     ];
     const slideIds = slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('');
-    const parts: [path: string, xml: string, contentType?: string][] = [
-        ['_rels/.rels', relationshipsXml(PACKAGE_RELATIONSHIPS)],
-        [
-            'docProps/core.xml',
-            `<cp:coreProperties xmlns:cp="${CORE_PROPERTIES_NS}" xmlns:dc="${DC_NS}"><dc:title>${escapeXml(stripEigenExtension(title))}</dc:title></cp:coreProperties>`,
-            'application/vnd.openxmlformats-package.core-properties+xml',
-        ],
-        [
-            'ppt/presentation.xml',
-            `<p:presentation ${NAMESPACES} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${size.cx}" cy="${size.cy}"${size.type ? ` type="${size.type}"` : ''}/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
-            `${PML}.presentation.main+xml`,
-        ],
-        ['ppt/_rels/presentation.xml.rels', relationshipsXml(presentationRelationships)],
-        ['ppt/presProps.xml', `<p:presentationPr ${NAMESPACES}/>`, `${PML}.presProps+xml`],
-        ['ppt/viewProps.xml', `<p:viewPr ${NAMESPACES}/>`, `${PML}.viewProps+xml`],
-        [
-            'ppt/tableStyles.xml',
-            `<a:tblStyleLst xmlns:a="${A_NS}" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>`,
-            `${PML}.tableStyles+xml`,
-        ],
-        ['ppt/slideMasters/slideMaster1.xml', MASTER_XML, `${PML}.slideMaster+xml`],
-        [
-            'ppt/slideMasters/_rels/slideMaster1.xml.rels',
-            relationshipsXml([
-                { type: `${R_NS}/slideLayout`, target: '../slideLayouts/slideLayout1.xml' },
-                { type: `${R_NS}/theme`, target: '../theme/theme1.xml' },
+    return writePackage({
+        main: 'ppt/presentation.xml',
+        title: stripEigenExtension(title),
+        defaults: OFFICE_IMAGE_CONTENT_TYPES,
+        parts: [
+            [
+                'ppt/presentation.xml',
+                `<p:presentation ${NAMESPACES} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${size.cx}" cy="${size.cy}"${size.type ? ` type="${size.type}"` : ''}/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+                `${PML}.presentation.main+xml`,
+            ],
+            ['ppt/_rels/presentation.xml.rels', relationshipsXml(presentationRelationships)],
+            ['ppt/presProps.xml', `<p:presentationPr ${NAMESPACES}/>`, `${PML}.presProps+xml`],
+            ['ppt/viewProps.xml', `<p:viewPr ${NAMESPACES}/>`, `${PML}.viewProps+xml`],
+            [
+                'ppt/tableStyles.xml',
+                `<a:tblStyleLst xmlns:a="${A_NS}" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>`,
+                `${PML}.tableStyles+xml`,
+            ],
+            ['ppt/slideMasters/slideMaster1.xml', MASTER_XML, `${PML}.slideMaster+xml`],
+            [
+                'ppt/slideMasters/_rels/slideMaster1.xml.rels',
+                relationshipsXml([
+                    { type: `${R_NS}/slideLayout`, target: '../slideLayouts/slideLayout1.xml' },
+                    { type: `${R_NS}/theme`, target: '../theme/theme1.xml' },
+                ]),
+            ],
+            ['ppt/slideLayouts/slideLayout1.xml', LAYOUT_XML, `${PML}.slideLayout+xml`],
+            [
+                'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
+                relationshipsXml([{ type: `${R_NS}/slideMaster`, target: '../slideMasters/slideMaster1.xml' }]),
+            ],
+            ['ppt/theme/theme1.xml', THEME_XML, 'application/vnd.openxmlformats-officedocument.theme+xml'],
+            ...slides.flatMap(({ xml, relationships }, i): PackagePart[] => [
+                [`ppt/slides/slide${i + 1}.xml`, xml, `${PML}.slide+xml`],
+                [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
             ]),
         ],
-        ['ppt/slideLayouts/slideLayout1.xml', LAYOUT_XML, `${PML}.slideLayout+xml`],
-        [
-            'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
-            relationshipsXml([{ type: `${R_NS}/slideMaster`, target: '../slideMasters/slideMaster1.xml' }]),
-        ],
-        ['ppt/theme/theme1.xml', THEME_XML, 'application/vnd.openxmlformats-officedocument.theme+xml'],
-        ...slides.flatMap(({ xml, relationships }, i): [string, string, string?][] => [
-            [`ppt/slides/slide${i + 1}.xml`, xml, `${PML}.slide+xml`],
-            [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
-        ]),
-    ];
-    const overrides = parts.map(([path, , contentType]) =>
-        contentType ? `<Override PartName="/${path}" ContentType="${contentType}"/>` : '',
-    );
-
-    return writeZip([
-        {
-            name: '[Content_Types].xml',
-            data: `${XML_DECLARATION}<Types xmlns="${CONTENT_TYPES_NS}">${DEFAULT_CONTENT_TYPES}${overrides.join('')}</Types>`,
-        },
-        ...parts.map(([name, xml]) => ({ name, data: `${XML_DECLARATION}${xml}` })),
-        ...[...deck.images.values()].flatMap(({ part, svgPart, raster, media }) => [
+        files: [...deck.images.values()].flatMap(({ part, svgPart, raster, media }) => [
             { name: `ppt/media/${part}`, data: new Uint8Array(raster), store: true },
             ...(svgPart ? [{ name: `ppt/media/${svgPart}`, data: new Uint8Array(media.data), store: true }] : []),
         ]),
-    ]);
+    });
 }
 
 const PML = 'application/vnd.openxmlformats-officedocument.presentationml';
-const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 const NAMESPACES = `xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"`;
-
-const DEFAULT_CONTENT_TYPES = [
-    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
-    '<Default Extension="xml" ContentType="application/xml"/>',
-    '<Default Extension="png" ContentType="image/png"/>',
-    '<Default Extension="jpeg" ContentType="image/jpeg"/>',
-    '<Default Extension="svg" ContentType="image/svg+xml"/>',
-].join('');
-
-type Relationship = { type: string; target: string; external?: true };
-
-const PACKAGE_RELATIONSHIPS: Relationship[] = [
-    { type: `${R_NS}/officeDocument`, target: 'ppt/presentation.xml' },
-    { type: `${PACKAGE_RELATIONSHIPS_NS}/metadata/core-properties`, target: 'docProps/core.xml' },
-];
-
-function relationshipsXml(relationships: Relationship[]): string {
-    const items = relationships.map(
-        ({ type, target, external }, index) =>
-            `<Relationship Id="rId${index + 1}" Type="${type}" Target="${escapeXml(target)}"${external ? ' TargetMode="External"' : ''}/>`,
-    );
-    return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
-}
 
 // The EMU size PowerPoint gives each of a deck's slide sizes; a frame's width sets EMU per px.
 const PPTX_SLIDE_SIZES: Record<SlideSize, { cx: number; cy: number; type?: string }> = {
