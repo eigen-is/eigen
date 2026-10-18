@@ -2,7 +2,7 @@
 // deletes the nodes a band leaves out and keeps every mark, a paste into it drops comment anchors, and an image pasted
 // into it lands in that editor. A table is fitted to the text column of the page the doc holds, not the one on screen.
 import { afterEach, expect, jest, mock, spyOn, test } from 'bun:test';
-import type { JSONContent } from '@tiptap/core';
+import { getSchema, type JSONContent } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -10,7 +10,7 @@ installHappyDom();
 const Y = await import('yjs');
 const { Editor } = await import('@tiptap/react');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
-const { prosemirrorJSONToYXmlFragment } = await import('@tiptap/y-tiptap');
+const { prosemirrorJSONToYXmlFragment, yUndoPluginKey } = await import('@tiptap/y-tiptap');
 const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pageRecord } = await import(
     '@workspace/lib/docs/eigendoc'
 );
@@ -175,6 +175,74 @@ test('an image pasted into a band lands in that editor, under the name its re-up
     expect(pastedMediaName).toHaveBeenCalledTimes(1);
     expect(doc.getXmlFragment('header').toString()).toContain('mediaName="logo-copy.png"');
     expect(doc.getXmlFragment('default').toString()).not.toContain('logo');
+});
+
+const withNote: JSONContent = {
+    type: 'paragraph',
+    content: [
+        { type: 'text', text: 'Claim' },
+        {
+            type: 'footnote',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'See ' },
+                        { type: 'text', text: 'Smith', marks: [{ type: 'bold' }] },
+                    ],
+                },
+                { type: 'paragraph', content: [{ type: 'text', text: 'p. 4' }] },
+            ],
+        },
+        { type: 'text', text: ' end.' },
+    ],
+};
+
+// A cut and a copy with no image are ProseMirror's own; the clipboard carries its HTML.
+function cutOrCopy(editor: InstanceType<typeof Editor>, type: 'cut' | 'copy'): string {
+    const event = new ClipboardEvent(type, { clipboardData: new DataTransfer(), bubbles: true, cancelable: true });
+    editor.view.dom.dispatchEvent(event);
+    return event.clipboardData?.getData('text/html') ?? '';
+}
+
+test('a copied paragraph holding a note pastes as one paragraph with the note', () => {
+    const page = body(new Y.Doc());
+    page.commands.setContent({ type: 'doc', content: [withNote] });
+    const copied = page.getJSON().content;
+    page.commands.selectAll();
+    const html = cutOrCopy(page, 'copy');
+
+    const target = body(new Y.Doc());
+    target.view.pasteHTML(html);
+    expect(target.getJSON().content).toEqual(copied);
+});
+
+test('a cut takes the note with its paragraph, and undo brings both back', () => {
+    const doc = new Y.Doc();
+    const page = body(doc);
+    page.commands.setContent({
+        type: 'doc',
+        content: [withNote, { type: 'paragraph', content: [{ type: 'text', text: 'After' }] }],
+    });
+    const undoManager = yUndoPluginKey.getState(page.state)?.undoManager;
+    undoManager?.clear();
+    const cut = page.getJSON().content?.[0];
+    page.commands.setTextSelection({ from: 1, to: (page.state.doc.firstChild?.nodeSize ?? 0) - 1 });
+    cutOrCopy(page, 'cut');
+    expect(page.state.doc.firstChild?.childCount).toBe(0);
+    page.commands.undo();
+    expect(page.getJSON().content?.[0]).toEqual(cut);
+});
+
+// Its note belongs to the body's text, which the band would otherwise take as its own.
+test('a note pasted into a band drops, note and all', () => {
+    const page = body(new Y.Doc());
+    page.commands.setContent({ type: 'doc', content: [withNote] });
+    page.commands.selectAll();
+    const html = cutOrCopy(page, 'copy');
+    const header = mount(new Y.Doc(), HEADER);
+    header.view.pasteHTML(html);
+    expect(header.getText()).toBe('Claim end.');
 });
 
 type PageSetup = typeof DEFAULT_PAGE_SETUP;
@@ -392,4 +460,120 @@ test.each([
         jest.useRealTimers();
     }
     expect(doc.getXmlFragment('header').toString()).toBe(left);
+});
+
+const { useOpenNote } = await import('../../../components/docs/hooks/use-open-note');
+
+// An image pasted into the open note lands there, and once its upload settles the note shows it under its name.
+test('an image pasted into the open note settles in the note', async () => {
+    const doc = new Y.Doc();
+    const undoManager = createDocUndoManager(doc);
+    const shown: {
+        body: InstanceType<typeof Editor> | null;
+        note: InstanceType<typeof Editor> | null;
+        session: ReturnType<typeof useOpenNote> | null;
+    } = { body: null, note: null, session: null };
+    function Host() {
+        const media = useDocMedia(path);
+        const body = useDocEditor({
+            media,
+            yDoc: doc,
+            provider: null,
+            editable: true,
+            target: { undoManager, cardIds: () => new Set() },
+        });
+        const note = useDocEditor({
+            media,
+            yDoc: doc,
+            provider: null,
+            editable: true,
+            target: { body: () => shown.body, onLeave: () => {} },
+        });
+        shown.body = body;
+        shown.note = note;
+        shown.session = useOpenNote(body, note, true);
+        return null;
+    }
+    ({ unmount } = await render(createElement(Host)));
+    const { body, note } = shown;
+    if (!body || !note) throw new Error('no editors');
+    await act(async () => {
+        body.commands.setContent({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'x' },
+                        { type: 'footnote', content: [{ type: 'paragraph' }] },
+                    ],
+                },
+            ],
+        });
+    });
+    await act(async () => shown.session?.open(2, { focus: true, at: null, selection: null }));
+
+    // Bun's own File, whose bytes the upload's object URL reads, as the clipboard's file.
+    const data = new DataTransfer();
+    Object.defineProperty(data, 'files', { value: [logo] });
+    await act(async () => {
+        note.view.dom.dispatchEvent(
+            new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }),
+        );
+    });
+    expect(doc.getXmlFragment('default').toString()).toContain('mediaName="pending:');
+    await settleUpload('logo-2.png');
+    expect(doc.getXmlFragment('default').toString()).toContain('mediaName="logo-2.png"');
+    const names: unknown[] = [];
+    note.state.doc.descendants((node) => {
+        if (node.type.name === 'figure') names.push(node.attrs.mediaName);
+    });
+    expect(names).toEqual(['logo-2.png']);
+    expect(shown.session?.anchor).not.toBeNull();
+});
+
+// A stored stack collapses to its name in a note's text too, which NoteFormatting would otherwise give back.
+test("the font-name pass reaches a note's text", async () => {
+    const doc = new Y.Doc();
+    const stack = (font: string) => [{ type: 'textStyle', attrs: { fontFamily: `'${font}', serif` } }];
+    const fragment = doc.getXmlFragment('default');
+    prosemirrorJSONToYXmlFragment(
+        getSchema(getDocExtensions()),
+        {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Body', marks: stack('Source Serif 4') },
+                        {
+                            type: 'footnote',
+                            content: [
+                                {
+                                    type: 'paragraph',
+                                    content: [{ type: 'text', text: 'Note', marks: stack('Source Serif 4') }],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        },
+        fragment,
+    );
+    function Body() {
+        useDocEditor({
+            media: useDocMedia(path),
+            yDoc: doc,
+            provider: null,
+            editable: true,
+            target: { undoManager: createDocUndoManager(doc), cardIds: () => new Set() },
+        });
+        return null;
+    }
+    ({ unmount } = await render(createElement(Body)));
+    expect(fragment.toString().match(/fontFamily="[^"]*"/g)).toEqual([
+        'fontFamily="Source Serif 4"',
+        'fontFamily="Source Serif 4"',
+    ]);
 });

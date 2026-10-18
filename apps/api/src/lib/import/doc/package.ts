@@ -39,8 +39,9 @@ export type DocxPackage = {
     readPart(path: string): XmlElement | undefined;
     // An image's bytes; a damaged entry is none, and costs only its picture.
     readMedia(path: string): Uint8Array | undefined;
-    // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own.
-    chargePiece(): void;
+    // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own, as has
+    // each node of a note's copy past its first.
+    chargePiece(count?: number): void;
     // An equation's MathML is charged as it is written: a space in m:t writes 26 characters, so a few KB zipped would
     // build hundreds of MB before the output is weighed.
     chargeMathml(length: number): void;
@@ -103,8 +104,8 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         contentTypeOf: pkg.contentTypeOf,
         readPart: (path) => optional(() => pkg.part(path)),
         readMedia: (path) => optional(() => pkg.zip.read(path)),
-        chargePiece: () => {
-            pieces--;
+        chargePiece: (count = 1) => {
+            pieces -= count;
             if (pieces < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         },
         chargeMathml: (length) => {

@@ -104,3 +104,13 @@ test('a caret counts no selection; a range counts itself beside the whole doc', 
         document: { words: 4, characters: 21, charactersExcludingSpaces: 18 },
     });
 });
+
+// Google Docs counts no footnote, and the reference ends the word before it.
+test("a footnote's note counts nothing, in the doc and a selection across its reference", () => {
+    const note = { type: 'footnote', content: [paragraph('Hello world'), paragraph('again')] };
+    const doc = state([{ type: 'paragraph', content: [text('Claim'), note, text('more words')] }]);
+    expect(countWords(doc).document).toEqual({ words: 3, characters: 15, charactersExcludingSpaces: 14 });
+
+    const all = doc.apply(doc.tr.setSelection(TextSelection.create(doc.doc, 1, doc.doc.content.size - 1)));
+    expect(countWords(all).selection?.words).toBe(3);
+});

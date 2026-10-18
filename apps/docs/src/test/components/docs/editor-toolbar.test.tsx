@@ -38,10 +38,14 @@ async function render(
     {
         active = editor,
         onInsertEquation,
+        onInsertFootnote,
+        inNote = false,
         sync = { offline: false, unsyncedEdits: false },
     }: {
         active?: typeof editor;
         onInsertEquation?: () => void;
+        onInsertFootnote?: () => void;
+        inNote?: boolean;
         sync?: { offline: boolean; unsyncedEdits: boolean };
     } = {},
 ) {
@@ -51,6 +55,8 @@ async function render(
         body: editor,
         canWrite,
         onInsertEquation,
+        onInsertFootnote,
+        inNote,
         ...sync,
         storageUnavailable: false,
         canUndo: false,
@@ -1229,4 +1235,40 @@ describe('Print', () => {
             global.unregister();
         }
     });
+});
+
+const footnoteItem = () =>
+    [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+        item.textContent?.trim().startsWith('Footnote'),
+    );
+
+// Google's Insert › Page elements › Footnote, after Page numbers. It inserts once the menu has closed, so the new note's
+// editor keeps the focus Radix would hand the trigger.
+test('Insert › Page elements › Footnote ends the submenu and inserts once the menu has closed', async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    const onInsertFootnote = mock(() => {});
+    await render(1920, true, { onInsertFootnote });
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    expect(openMenuEntries().at(-1)?.startsWith('Footnote')).toBe(true);
+    await act(async () => footnoteItem()?.click());
+    for (let tick = 0; tick < 50 && onInsertFootnote.mock.calls.length === 0; tick++) {
+        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
+    expect(onInsertFootnote).toHaveBeenCalledTimes(1);
+});
+
+// A code block's is pinned with insertNote, in footnote.test.ts: this editor's schema has none.
+test.each([
+    ['in a band', true, false],
+    ['in a note', false, true],
+])('Insert › Page elements › Footnote is off %s', async (_, inBand, inNote) => {
+    const band = new Editor({ extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }) });
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(2);
+    await render(1920, true, { onInsertFootnote: () => {}, inNote, active: inBand ? band : editor });
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    expect(footnoteItem()?.getAttribute('aria-disabled')).toBe('true');
+    band.destroy();
 });

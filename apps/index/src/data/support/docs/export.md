@@ -33,6 +33,8 @@ The exported file contains the document text and all formatting: headings, lists
 
 The PDF and the Word file put the header and footer on every page, with the page numbers and page count filled in, and give the first page its own when you set one. The web page shows the header at the top and the footer at the end, with **#** for a page number. See [Add headers, footers, and page numbers](/support/docs/headers-and-footers).
 
+Footnotes print at the bottom of their page in the PDF and are Word footnotes in the Word file. The web page numbers them in the text and lists them at the end, each linking back to its place.
+
 A page break starts a new page in the PDF and the Word file. Equations show in all three formats. A PDF draws up to 1,000 different equations; past that, or when the equations are very large, the rest print as one-line text, such as `(a+b)/2`. The web page download and the preview in Drive have a similar limit, which only far larger documents reach. In all three formats, links to other files in Eigen point to your Eigen server, and a numbered list keeps the number it starts at and its style (1, a, A, i, or I).
 
 The PDF, the web page, and the Word file use the editor's spacing, including the space around images and tables. In the PDF, a list next to an image that floats left or right starts below the image instead of beside it. In the Word file:

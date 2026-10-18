@@ -73,7 +73,7 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
             data-page-margin={edge}
             className={cn(
                 'group relative print:hidden',
-                edge === 'header' ? 'row-start-1' : 'row-start-3 flex flex-col justify-end',
+                edge === 'header' ? 'row-start-1' : 'row-start-4 flex flex-col justify-end',
                 onEnter && 'cursor-text touch-manipulation',
             )}
             style={{

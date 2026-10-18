@@ -15,14 +15,14 @@ export const bandEdge = (root: BandRoot): BandEdge =>
     root === 'footer' || root === FIRST_PAGE_BAND.footer ? 'footer' : 'header';
 
 // Nodes a band's schema leaves out, so the Yjs binding deletes one a peer writes: none has a meaning in a header that
-// prints on every page, and the chart panel edits the body's charts only. A footnote joins them when the node exists.
-// Marks stay: a mark the schema lacks deletes the text that carries it.
+// prints on every page, a note belongs to the body's text, and the chart panel edits the body's charts only. Marks stay: a mark the schema lacks deletes the text that carries it.
 export const BAND_EXCLUDED_NODES: ReadonlySet<string> = new Set([
     'pageBreak',
     'title',
     'subtitle',
     'codeBlock',
     'chart',
+    'footnote',
 ]);
 
 // A band's content in the editor and the export: eigen-prose.css drops its last block's space after, as Word's Header and

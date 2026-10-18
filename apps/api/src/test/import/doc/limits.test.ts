@@ -65,8 +65,8 @@ const smartArtData = (inner: string) => ({
 const imported = async (body: string, parts = {}) => (await importDocxBody(body, parts)).json;
 const cells = (json: JSONContent) => nodesOfType(json, 'tableCell');
 const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => node.text);
-// The notes list closes the document, one item per note.
-const notes = (json: JSONContent) => (json.content?.at(-1)?.content ?? []).map((item) => texts(item).join(''));
+// Each note's text, in document order.
+const notes = (json: JSONContent) => nodesOfType(json, 'footnote').map((note) => texts(note).join(''));
 
 // A process of its own with a deadline, for a file that could hold the reader in a loop. Bun.write, not console.log:
 // once a module reads process.stdout (lib0 does, so anything that reaches yjs), a console.log into the pipe ends at
@@ -289,7 +289,8 @@ describe('XML budget', () => {
                 .join(''),
             media: { 'word/notes.xml': encode(notes), 'word/_rels/notes.xml.rels': encode('<Relationships>') },
         });
-        expect(texts(json)).toEqual(['Body', '[1]']);
+        // Neither name reads the notes, so the reference has no note to hold.
+        expect(texts(json)).toEqual(['Body']);
     });
 
     // A graphic's part is charged as every other part is: past the budget it refuses the document.
@@ -759,6 +760,7 @@ describe('structure', () => {
         expect(nodesOfType(json, 'heading')).toHaveLength(200);
     }, 30_000);
 
+    // A note in a note is its text, read at most two deep: a note's reference to itself, or back to the note around it, goes.
     test('a footnote that references itself, or one that references it back, is read once', async () => {
         const docx = await buildDocxWithBody(paragraph(`${run('Body')}${noteRef(1)}${noteRef(3)}`), {
             footnotes: [
@@ -768,18 +770,17 @@ describe('structure', () => {
             ].join(''),
         });
         const json = importInChild(docx, 10_000);
-        expect(notes(json)).toEqual(['One[3] ↑', 'Self[2] ↑', 'Two[1] ↑']);
-        expect(texts(json.content?.[0] ?? {})).toEqual(['Body', '[1]', '[2]']);
+        expect(notes(json)).toEqual(['One Two', 'Self']);
     }, 15_000);
 
-    test('a long note referenced 400 times is read once', async () => {
-        const body = paragraph(noteRef(1).repeat(400));
+    // Each reference holds the note, so every copy past the first is charged as the pieces no tag counts are.
+    test('a long note referenced 400 times is read once, and its copies are charged', async () => {
         const footnotes = footnote(1, paragraph(run('Note')).repeat(2000));
+        expect(notes(await imported(paragraph(noteRef(1).repeat(2)), { footnotes }))).toHaveLength(2);
         const started = performance.now();
-        const json = await imported(body, { footnotes });
+        const error = await rejection(() => imported(paragraph(noteRef(1).repeat(400)), { footnotes }));
         expect(performance.now() - started).toBeLessThan(1000);
-        expect(notes(json)).toHaveLength(1);
-        expect(texts(json.content?.[0] ?? {})).toEqual(['[1]'.repeat(400)]);
+        expect(error.status).toBe(413);
     }, 20_000);
 
     test('a SmartArt that 1,000 graphics name is read once', async () => {
@@ -810,8 +811,8 @@ describe('structure', () => {
         const item = (text: string) => paragraph(run(text), ordered(2));
         const body = `${item('One')}${floating(`${item('Two')}${paragraph(`${run('Cell')}${noteRef(1)}`)}`)}${item('Three')}`;
         const json = await imported(body, { footnotes: footnote(1, paragraph(run('Note'))) });
-        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1, 2, 3, 1]);
-        expect(notes(json)).toEqual(['Note ↑']);
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1, 2, 3]);
+        expect(notes(json)).toEqual(['Note']);
     });
 
     test('floating tables nest at most eight deep, each read once', async () => {

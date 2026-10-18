@@ -706,14 +706,14 @@ describe("the all-features doc's Google Docs re-save", () => {
         ).arrayBuffer();
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        // The recording predates the title, the subtitle, the equations' paragraph and the page number, so it holds
-        // none of them.
+        // The recording predates the title, the subtitle, the note's paragraph, the equations' paragraph and the page
+        // number, so it holds none of them.
         source.content = source.content.filter(
             (block: JSONContent) =>
                 block.type !== 'title' &&
                 block.type !== 'subtitle' &&
-                !block.content?.some(
-                    (inline: JSONContent) => inline.type === 'pageNumber' || inline.type === 'equation',
+                !block.content?.some((inline: JSONContent) =>
+                    ['pageNumber', 'equation', 'footnote'].includes(inline.type ?? ''),
                 ),
         );
         expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));

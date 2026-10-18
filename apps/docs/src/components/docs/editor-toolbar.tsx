@@ -79,7 +79,7 @@ export const keepEditorFocus = (editor: Editor) => (e: Event) => {
 };
 
 type EditorToolbarProps = {
-    // The editor the caret is in: the body's, or a band's while the band is edited.
+    // The editor the caret is in: the body's, a band's while the band is edited, or the open note's.
     editor: Editor;
     // Word count counts the body, from a band too.
     body: Editor;
@@ -108,6 +108,10 @@ type EditorToolbarProps = {
     // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
     onAddComment?: () => void;
     onInsertEquation?: () => void;
+    // Inserts a footnote and opens its note; a writer's on a desktop or a tablet only.
+    onInsertFootnote?: () => void;
+    // The caret is in the open footnote's note, which holds paragraphs only.
+    inNote: boolean;
     // Puts the caret in a band, and writes a page-number preset there; a writer's on a desktop or a tablet only.
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
@@ -138,6 +142,8 @@ export const EditorToolbar = ({
     onReplaceImage,
     onAddComment,
     onInsertEquation,
+    onInsertFootnote,
+    inNote,
     onEnterBand,
     onPageNumbers,
 }: EditorToolbarProps) => {
@@ -332,6 +338,8 @@ export const EditorToolbar = ({
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}
                                     onInsertEquation={onInsertEquation}
+                                    onInsertFootnote={onInsertFootnote}
+                                    inNote={inNote}
                                     onEnterBand={onEnterBand}
                                     onPageNumbers={onPageNumbers}
                                 />

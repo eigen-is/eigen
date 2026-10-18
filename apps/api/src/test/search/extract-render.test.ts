@@ -57,6 +57,25 @@ describe('extractCollabText', () => {
     });
 
     // Caps draw capitals over the letters; search finds what was typed.
+    // As Google's search finds a note's words: each note's text after its reference's, set apart from it.
+    test("eigendoc: a footnote's paragraphs index as text where the note stands", async () => {
+        const doc = new Y.Doc();
+        const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
+        const text = (value: string) => ({ type: 'text', text: value });
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [
+                paragraph(
+                    text('Claim'),
+                    { type: 'footnote', content: [paragraph(text('See Smith')), paragraph(text('p. 4'))] },
+                    text(' holds.'),
+                ),
+            ],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe('Claim See Smith p. 4  holds.');
+        doc.destroy();
+    });
+
     test('eigendoc: text in caps indexes as typed', async () => {
         const doc = new Y.Doc();
         const caps = (text: string, value: string) => ({

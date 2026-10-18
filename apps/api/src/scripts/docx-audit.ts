@@ -48,6 +48,7 @@ import {
     FLOATING_WRAPS,
     headingLevel,
     LINK_THEME_COLORS,
+    NOTE_SEPARATORS,
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
 } from '../lib/document/wordml';
@@ -214,7 +215,7 @@ const TITLE_NAMES = new Map<string, TitleType>([
 ]);
 const CODE_BLOCK_STYLES = new Set(CODE_PARAGRAPH_STYLES.map((name) => name.toLowerCase()));
 const CODE_STYLES = new Set(CODE_CHARACTER_STYLES.map((name) => name.toLowerCase()));
-const SKIPPED_NOTES = new Set(['separator', 'continuationSeparator', 'continuationNotice']);
+const SKIPPED_NOTES = new Set<string>(NOTE_SEPARATORS);
 // The link look's colors, apart from the reader's so the audit never grades the reader by itself.
 const LINK_STYLE_COLORS = new Set(['2563EB', '1155CC', '0563C1', '0000FF', '000080']);
 
@@ -1127,7 +1128,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             runs: structural && look.heading === undefined ? defaults : look.runs,
             styleRuns: look.runs,
             weightRuns: structural ? defaults : look.runs,
-            sizeRuns: sized ? look.runs : plain,
+            // A note draws at its style's size, as a heading at its own.
+            sizeRuns: sized || scope.note ? look.runs : plain,
             drawn: look.heading ? nodeLook('heading', look.heading) : nodeLook(look.title ?? 'paragraph'),
             marks: !look.code && !caption,
         });
@@ -1303,8 +1305,14 @@ export function auditImported(json: JSONContent, normalFont = DOCUMENT_FONT): Ta
         const spans: Span[] = [];
         const space = () => spans.push({ text: ' ', marks: [] });
         let figure = false;
-        let footnoteHref: unknown;
         for (const inline of node.content ?? []) {
+            // A note's paragraphs are paragraphs of their own; its number is no text.
+            if (inline.type === 'footnote') {
+                add(tally, 'footnotes');
+                space();
+                for (const paragraph of inline.content ?? []) textblock(paragraph, undefined);
+                continue;
+            }
             if (inline.type === 'figure') {
                 const attrs = inline.attrs ?? {};
                 space();
@@ -1327,16 +1335,6 @@ export function auditImported(json: JSONContent, normalFont = DOCUMENT_FONT): Ta
             }
             const value = inline.text ?? '';
             const marks = inline.marks ?? [];
-            const href = marks.find((mark) => mark.type === 'link')?.attrs?.['href'];
-            // A footnote reference with no node of its own: a superscript link into the document. Its marker is no text.
-            const reference =
-                typeof href === 'string' && href.startsWith('#') && marks.some((mark) => mark.type === 'superscript');
-            if (reference && href !== footnoteHref) add(tally, 'footnotes');
-            footnoteHref = reference ? href : undefined;
-            if (reference) {
-                space();
-                continue;
-            }
             const features: Feature[] = [];
             const family = marks.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'];
             const font = fontMark(typeof family === 'string' ? family : normalFont);

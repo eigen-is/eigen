@@ -1689,3 +1689,115 @@ const MARGIN_PX = px(20);
         expect(pages[0].body[0]).toBeCloseTo(MARGIN_PX, 0);
     }, 60_000);
 });
+
+const note = (...paragraphs: JSONContent[]): JSONContent => ({ type: 'footnote', content: paragraphs });
+
+// A claim with a two-paragraph note, its second paragraph holding a forged nested note, then a second claim's note.
+const NOTED: JSONContent[] = [
+    {
+        type: 'paragraph',
+        content: [
+            { type: 'text', text: 'Claim' },
+            note(
+                { type: 'paragraph', content: [{ type: 'text', text: 'See', marks: [{ type: 'bold' }] }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Two' }, note(paragraph('nested'))] },
+            ),
+            { type: 'text', text: '.' },
+        ],
+    },
+    { type: 'paragraph', content: [{ type: 'text', text: 'Again' }, note(paragraph('Second'))] },
+];
+
+describe('doc export — footnotes', () => {
+    // Through a spec HTML parser: a <p> in the body's <p> would close it.
+    test('the PDF writes a note in its paragraph as spans, a note inside it as its text', async () => {
+        const html = await pdfHtml(...NOTED);
+        const { body } = new JSDOM(html).window.document;
+        expect([...body.querySelectorAll('article > *')].map((element) => element.tagName)).toEqual(['P', 'P']);
+        const paragraphs = [...body.querySelectorAll('p > span.footnote > span[data-type="footnote-paragraph"]')];
+        expect(paragraphs.map((span) => span.innerHTML)).toEqual(['<strong>See</strong>', 'Two nested', 'Second']);
+        expect(body.querySelector('.footnote .footnote')).toBeNull();
+        expect(body.querySelector('.footnotes, sup')).toBeNull();
+    });
+
+    test('the PDF floats notes to the page foot only for a doc that has them', async () => {
+        const css = await exportStyle('pdf-html', seededDoc({ type: 'doc', content: NOTED }));
+        expect(css).toContain('float: footnote');
+        expect(css).toContain('::footnote-call');
+        expect(css).toContain('@footnote');
+        expect(await exportStyle('pdf-html')).not.toContain('footnote');
+    });
+
+    // Google's HTML download: a superscript number linking to the note after the body, which links back.
+    test('the HTML writes each reference as a linked number and the notes in a list after the body', async () => {
+        const { body } = new JSDOM(await exported('html', seededDoc({ type: 'doc', content: NOTED }))).window.document;
+        const references = [...body.querySelectorAll('p > sup > a')];
+        expect(references.map((a) => [a.id, a.getAttribute('href'), a.textContent])).toEqual([
+            ['fnref-1', '#fn-1', '1'],
+            ['fnref-2', '#fn-2', '2'],
+        ]);
+        const items = [...body.querySelectorAll('section.footnotes > ol > li')];
+        expect(items.map((li) => li.id)).toEqual(['fn-1', 'fn-2']);
+        expect(items.map((li) => [...li.children].map((child) => child.innerHTML))).toEqual([
+            ['<strong>See</strong>', 'Two nested <a href="#fnref-1">↩</a>'],
+            ['Second <a href="#fnref-2">↩</a>'],
+        ]);
+        expect(body.querySelector('span.footnote')).toBeNull();
+        // The list closes the body, before a footer.
+        expect(body.querySelector('article')?.lastElementChild?.className).toBe('footnotes');
+    });
+
+    // readEigendocBands drops what a band's schema leaves out, so a peer's forged note never renders.
+    test.each(['html', 'pdf-html'] as const)('%s drops a note a peer forged into a band', async (format) => {
+        const doc = seededDoc();
+        seedBand(doc, 'header', {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Head' }, note(paragraph('Forged'))],
+        });
+        const html = await exported(format, doc);
+        expect(html).toContain('Head');
+        expect(html).not.toContain('Forged');
+        expect(html).not.toContain('footnote');
+    });
+});
+
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — footnotes (WeasyPrint)', () => {
+    // Each page's text boxes, top down, as [text, y]: the body's and the footnote area's.
+    const pagesOf = async (html: string): Promise<[string, number][][]> => {
+        const lines = await laidOut(
+            html,
+            "if box is page._page_box: print('PAGE')\n        if type(box).__name__ == 'TextBox': print(box.position_y, box.text)",
+        );
+        const pages: [string, number][][] = [];
+        for (const line of lines) {
+            if (line === 'PAGE') pages.push([]);
+            else {
+                const [y, ...text] = line.split(' ');
+                pages.at(-1)?.push([text.join(' '), Number(y)]);
+            }
+        }
+        return pages;
+    };
+
+    test("a note prints at the foot of its reference's page, below the body, each paragraph a line", async () => {
+        const body = Array.from({ length: 40 }, (_, index) => paragraph(`Body ${index + 1}`));
+        const claim = {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Claim' }, note(paragraph('First line'), paragraph('Second line'))],
+        };
+        const pages = await pagesOf(await pdfHtml(...body, claim, paragraph('After')));
+        const page = pages.findIndex((boxes) => boxes.some(([text]) => text === 'Claim'));
+        expect(page).toBeGreaterThan(0);
+        const boxes = pages[page];
+        const y = (text: string) => boxes.find(([box]) => box === text)?.[1] ?? Number.NaN;
+        const lowestBody = Math.max(
+            ...boxes.filter(([text]) => /^(Body|Claim|After)/.test(text)).map(([, top]) => top),
+        );
+        expect(y('First line')).toBeGreaterThan(lowestBody);
+        expect(y('Second line')).toBeGreaterThan(y('First line'));
+        // The number in the text and at the note.
+        expect(boxes.filter(([text]) => text.trim() === '1')).toHaveLength(2);
+        for (const other of pages.filter((_, index) => index !== page))
+            expect(other.some(([text]) => text.includes('line'))).toBe(false);
+    }, 60_000);
+});
