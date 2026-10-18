@@ -114,6 +114,7 @@ export const CollaborativeEditor = ({
                         provider={provider}
                         canWrite={canWrite}
                         offline={offline}
+                        unsyncedEdits={unsyncedEdits}
                         storageUnavailable={storageUnavailable}
                         mediaFolderId={mediaFolderId}
                         chatFolderId={chatFolderId}
@@ -133,6 +134,7 @@ const TiptapEditor = ({
     path,
     canWrite,
     offline,
+    unsyncedEdits,
     storageUnavailable,
     mediaFolderId,
     chatFolderId,
@@ -145,6 +147,7 @@ const TiptapEditor = ({
     path: DrivePath;
     canWrite: boolean;
     offline: boolean;
+    unsyncedEdits: boolean;
     storageUnavailable: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
@@ -529,6 +532,7 @@ const TiptapEditor = ({
                                     path={path}
                                     canWrite={canWrite}
                                     offline={offline}
+                                    unsyncedEdits={unsyncedEdits}
                                     storageUnavailable={storageUnavailable}
                                     canUndo={canUndo}
                                     canRedo={canRedo}

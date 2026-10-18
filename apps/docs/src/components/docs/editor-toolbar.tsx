@@ -2,6 +2,7 @@ import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import type { BandEdge, PageSetup } from '@workspace/lib/docs/eigendoc';
+import { usePrintPdf } from '@workspace/lib/drive';
 import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
@@ -83,6 +84,8 @@ type EditorToolbarProps = {
     body: Editor;
     canWrite: boolean;
     offline: boolean;
+    // The server's PDF may miss these edits, so Print falls back to browser print.
+    unsyncedEdits: boolean;
     storageUnavailable: boolean;
     canUndo: boolean;
     canRedo: boolean;
@@ -112,6 +115,7 @@ export const EditorToolbar = ({
     path,
     canWrite,
     offline,
+    unsyncedEdits,
     storageUnavailable,
     canUndo,
     canRedo,
@@ -158,6 +162,20 @@ export const EditorToolbar = ({
     });
 
     const openWordCount = () => setWordCountOpen(true);
+
+    const { printPdf } = usePrintPdf(printDocument);
+    const print = () => printPdf(path.ownerId, path.mountId, path.id, !offline && !unsyncedEdits);
+
+    // On <html>, which the key reaches before the document: this handler stops it there, so EigenApp's ⌘P, browser
+    // print for every other app, never sees it.
+    useHotkey(
+        'Mod+P',
+        (e) => {
+            e.preventDefault();
+            print();
+        },
+        { target: document.documentElement },
+    );
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -236,7 +254,7 @@ export const EditorToolbar = ({
                             <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
                                 <FileSliders className="h-4 w-4 mr-2" /> Page setup…
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={printDocument}>
+                            <DropdownMenuItem onClick={print}>
                                 <Printer className="h-4 w-4 mr-2" /> Print
                             </DropdownMenuItem>
                         </FileMenu>

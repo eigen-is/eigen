@@ -18,6 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Changed
 
+- **Print in Docs** — File → **Print** and ⌘P open the document as a PDF in a new tab to print from, so headers, footers and page numbers print. Offline, before your latest edits are saved, or when the PDF can't be made, Docs prints from the browser without them and says so
 - **Image sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag an image's handle are in cm, as in Page setup
 - **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid
 
