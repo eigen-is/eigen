@@ -1049,7 +1049,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         cell.alignment = { wrapText: true };
         const sheets = await parseWorkbook(workbook);
         const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
-        expect(a1?.v?.v).toBe('GSV Assets\nCanva');
+        expect(a1?.v?.ct?.s?.map((run) => run.v).join('')).toBe('GSV Assets\nCanva');
     });
 
     test('convert imports hidden columns from col min/max ranges', async () => {
@@ -1760,7 +1760,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(() => xlsxToSheets(new Uint8Array(buffer))).toThrow('Not a valid xlsx file');
     });
 
-    test('convert imports hyperlinks on rich-text cells with flattened display text', async () => {
+    test('convert imports hyperlinks on rich-text cells, the text in their runs', async () => {
         // Benchmark shape (e.g. Project Checklist E9): the link cell's .text is a
         // CellRichTextValue, not a string.
         const workbook = new ExcelJS.Workbook();
@@ -1775,7 +1775,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             '8_4': { linkType: 'webpage', linkAddress: 'https://example.com/assets' },
         });
         const e9 = (sheets[0].celldata ?? []).find((c) => c.r === 8 && c.c === 4);
-        expect(e9?.v?.v).toBe('GSV Assets Canva');
+        expect(e9?.v?.ct?.s?.map((run) => run.v).join('')).toBe('GSV Assets Canva');
         expect(e9?.v?.hl).toEqual({ r: 8, c: 4, id: 'sheet-0' });
     });
 
