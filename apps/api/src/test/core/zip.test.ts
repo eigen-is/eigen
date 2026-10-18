@@ -59,6 +59,11 @@ function refusal(bytes: Uint8Array): ZipError {
     throw new Error('expected a ZipError');
 }
 
+// A whole zip after 16 bytes of a stored entry, its offsets counted from its own start.
+function hiding(): RawPart {
+    return stored('docProps/custom.bin', Buffer.concat([Buffer.alloc(16, 0x20), build([TYPES, EVIL])]));
+}
+
 const bombs: Record<string, () => Uint8Array> = {
     'an honest 1 GiB bomb': () => build([TYPES, bomb('word/document.xml', GiB, GiB)]),
     'a 1 GiB bomb declaring 1 KB': () => build([TYPES, bomb('word/document.xml', GiB, 1000)]),
@@ -125,13 +130,55 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         },
         'no-end',
     ],
+    ['an empty archive with a byte after its end record', () => Buffer.concat([build([]), Buffer.from([0])]), 'no-end'],
     [
-        'a comment past the end on an end record whose directory ends elsewhere',
+        'a ZIP64 archive with a byte after its end record',
+        () => Buffer.concat([build([TYPES, REAL], { zip64End: true }), Buffer.from([0])]),
+        'no-end',
+    ],
+    [
+        'a comment past the end of the file',
         () => {
             const zip = build([TYPES, REAL]);
-            return patched(patched(zip, zip.length - 22 + 12, 0, 4), zip.length - 2, 1, 2);
+            return patched(zip, zip.length - 2, 1, 2);
         },
         'no-end',
+    ],
+    [
+        'a comment far past the end of the file',
+        () => {
+            const zip = build([TYPES, REAL]);
+            return patched(zip, zip.length - 2, 0xffff, 2);
+        },
+        'no-end',
+    ],
+    // java.util.zip skips these end records for the hidden one, which reads as an archive at its own start.
+    [
+        'a ZIP64 archive with a byte after its end record, hiding a zip in an entry',
+        () => Buffer.concat([build([TYPES, REAL, hiding()], { zip64End: true }), Buffer.from([0])]),
+        'no-end',
+    ],
+    [
+        'a ZIP64 archive with a comment past the end, hiding a zip in an entry',
+        () => {
+            const zip = build([TYPES, REAL, hiding()], { zip64End: true });
+            return patched(zip, zip.length - 2, 5, 2);
+        },
+        'no-end',
+    ],
+    [
+        'a comment past the end, hiding a zip in an entry',
+        () => {
+            const zip = build([TYPES, REAL, hiding()]);
+            return patched(zip, zip.length - 2, 5, 2);
+        },
+        'no-end',
+    ],
+    // Python reads the last signature and refuses the record it can't read whole.
+    [
+        'part of a record in the last 21 bytes',
+        () => Buffer.concat([build([TYPES, REAL]), Buffer.from([0x50, 0x4b, 0x05, 0x06, 0, 0])]),
+        'ambiguous-end',
     ],
     ['text', () => Buffer.from('<w:document/>'), 'no-end'],
     ['nothing', () => new Uint8Array(0), 'no-end'],
@@ -232,7 +279,7 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
     [
         'a prefix and a byte after the end record',
         () => Buffer.concat([new Uint8Array(1024), build([TYPES, REAL], { base: 1024 }), Buffer.from([0])]),
-        'misplaced',
+        'no-end',
     ],
     ['a prefix the offsets ignore', () => Buffer.concat([new Uint8Array(1024), build([TYPES, REAL])]), 'misplaced'],
     [
@@ -421,16 +468,13 @@ describe('openZip reads', () => {
         expect(readAll(zip).get('word/document.xml')).toBe('<w:document>REAL</w:document>');
     });
 
-    // As Info-ZIP, LibreOffice and PowerPoint read them: POI's HowWeRefactor.pptx has a byte after its end record.
-    test('an end record with bytes after it or a comment past the end of the file', () => {
+    // As Info-ZIP, LibreOffice, PowerPoint and java.util.zip read them: POI's HowWeRefactor.pptx has a byte after its end record.
+    test('bytes after the end record', () => {
         const zip = build([TYPES, REAL]);
         const shapes = [
             Buffer.concat([zip, Buffer.from([0])]),
             Buffer.concat([zip, Buffer.from('trailing')]),
-            build([TYPES, REAL], { comment: Buffer.from('a comment') }).subarray(0, -1),
-            patched(zip, zip.length - 2, 1, 2),
-            patched(zip, zip.length - 2, 0xffff, 2),
-            Buffer.concat([build([TYPES, REAL], { zip64End: true }), Buffer.from([0])]),
+            Buffer.concat([build([TYPES, REAL], { comment: Buffer.from('a comment') }), Buffer.from([0])]),
         ];
         for (const shape of shapes) expect(readAll(shape)).toEqual(readAll(zip));
     });

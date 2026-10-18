@@ -51,8 +51,6 @@ type ZipEntry = {
 
 type Located = { entry: ZipEntry; dataStart: number };
 
-type Directory = { count: number; size: number; start: number; end: number };
-
 const END = 0x06054b50;
 const END64 = 0x06064b50;
 const END64_LOCATOR = 0x07064b50;
@@ -125,29 +123,28 @@ export function openZip(bytes: Uint8Array): ZipReader {
     const u64 = (at: number) => u32(at + 4) * 2 ** 32 + u32(at);
     const inside = (start: number, length: number, end: number) => start + length <= end;
 
-    // Where the directory an end record names starts and ends, through its ZIP64 record if it has one.
-    const directoryOf = (end: number): Directory => {
-        if (end >= 20 && u32(end - 20) === END64_LOCATOR) {
-            const end64 = u64(end - 12);
-            if (u32(end - 16) !== 0 || u32(end - 4) > 1) throw new ZipError('multi-disk');
-            if (!inside(end64, 56, end - 20) || u32(end64) !== END64) throw new ZipError('corrupt');
-            // The record runs up to its locator, so no bytes hide between them.
-            if (end64 + 12 + u64(end64 + 4) !== end - 20) throw new ZipError('misplaced');
-            if (u32(end64 + 16) !== 0 || u32(end64 + 20) !== 0 || u64(end64 + 24) !== u64(end64 + 32)) {
-                throw new ZipError('multi-disk');
-            }
-            return { count: u64(end64 + 32), size: u64(end64 + 40), start: u64(end64 + 48), end: end64 };
+    const end = findEnd(bytes, view);
+    let count = u16(end + 10);
+    let directorySize = u32(end + 12);
+    let directoryStart = u32(end + 16);
+    let directoryEnd = end;
+    if (end >= 20 && u32(end - 20) === END64_LOCATOR) {
+        const end64 = u64(end - 12);
+        if (u32(end - 16) !== 0 || u32(end - 4) > 1) throw new ZipError('multi-disk');
+        if (!inside(end64, 56, end - 20) || u32(end64) !== END64) throw new ZipError('corrupt');
+        // The record runs up to its locator, so no bytes hide between them.
+        if (end64 + 12 + u64(end64 + 4) !== end - 20) throw new ZipError('misplaced');
+        if (u32(end64 + 16) !== 0 || u32(end64 + 20) !== 0 || u64(end64 + 24) !== u64(end64 + 32)) {
+            throw new ZipError('multi-disk');
         }
-        const count = u16(end + 10);
+        count = u64(end64 + 32);
+        directorySize = u64(end64 + 40);
+        directoryStart = u64(end64 + 48);
+        directoryEnd = end64;
+    } else {
         if (u16(end + 4) !== 0 || u16(end + 6) !== 0 || u16(end + 8) !== count) throw new ZipError('multi-disk');
-        const directory = { count, size: u32(end + 12), start: u32(end + 16), end };
-        if (count === MAX16 || directory.size === MAX32 || directory.start === MAX32) {
-            throw new ZipError('missing-zip64');
-        }
-        return directory;
-    };
-
-    const { count, size: directorySize, start: directoryStart, end: directoryEnd } = findEnd(bytes, view, directoryOf);
+        if (count === MAX16 || directorySize === MAX32 || directoryStart === MAX32) throw new ZipError('missing-zip64');
+    }
     // The directory ends where the end record starts, and each entry takes at least 46 bytes of it.
     if (directoryStart + directorySize !== directoryEnd || count * 46 > directorySize) throw new ZipError('misplaced');
     if (count > MAX_ZIP_ENTRIES) throw new ZipError('too-many-entries');
@@ -215,34 +212,31 @@ export function openZip(bytes: Uint8Array): ZipReader {
     return new ZipReader(bytes, entries);
 }
 
-// The end record is the last in the file's final 22 + 65,535 bytes, as Info-ZIP and Office find it. Its comment
-// reaches the end of the file, or, as some real files have it, runs past the end or leaves bytes after it when
-// the directory it names ends where it starts. Another reader may take any such record for the archive, or the
-// last record whatever it names, so a second that could be the end, or any record after the end, is refused.
-function findEnd(bytes: Uint8Array, view: DataView, directoryOf: (end: number) => Directory): Directory {
-    const ends: number[] = [];
+// The end record is the last in the file's final 22 + 65,535 bytes, and its comment reaches the end of the file. As
+// Info-ZIP, Office and java.util.zip read some real files, one without ZIP64 may leave bytes after it when its own
+// fields put the directory right before it and the first entry at the start. Another reader may take any such record
+// for the archive, or the last signature whatever follows it, so a second end, or a signature after the end, is refused.
+function findEnd(bytes: Uint8Array, view: DataView): number {
+    const found: number[] = [];
     let last: number | undefined;
-    const lastStart = bytes.length - 22;
-    for (let at = lastStart; at >= Math.max(0, lastStart - MAX16); at--) {
+    for (let at = bytes.length - 4; at >= Math.max(0, bytes.length - 22 - MAX16); at--) {
         if (bytes[at] !== 0x50 || view.getUint32(at, true) !== END) continue;
         last ??= at;
-        if (at + 22 + view.getUint16(at + 20, true) === bytes.length || namesDirectoryBefore(at, directoryOf)) {
-            ends.push(at);
-        }
+        if (at + 22 > bytes.length) continue;
+        const commentEnd = at + 22 + view.getUint16(at + 20, true);
+        const directoryStart = view.getUint32(at + 16, true);
+        // java.util.zip's check, which it makes on these fields alone, so a ZIP64 archive gets no leeway.
+        const trailed =
+            commentEnd < bytes.length &&
+            directoryStart + view.getUint32(at + 12, true) === at &&
+            view.getUint32(directoryStart, true) === CENTRAL &&
+            view.getUint32(0, true) === LOCAL &&
+            (at < 20 || view.getUint32(at - 20, true) !== END64_LOCATOR);
+        if (commentEnd === bytes.length || trailed) found.push(at);
     }
-    if (ends.length === 0) throw new ZipError('no-end');
-    if (ends.length > 1 || ends[0] !== last) throw new ZipError('ambiguous-end');
-    return directoryOf(ends[0]);
-}
-
-function namesDirectoryBefore(end: number, directoryOf: (end: number) => Directory): boolean {
-    try {
-        const directory = directoryOf(end);
-        return directory.start + directory.size === directory.end;
-    } catch (error) {
-        if (error instanceof ZipError) return false;
-        throw error;
-    }
+    if (found.length === 0) throw new ZipError('no-end');
+    if (found.length > 1 || found[0] !== last) throw new ZipError('ambiguous-end');
+    return found[0];
 }
 
 function findExtra(
