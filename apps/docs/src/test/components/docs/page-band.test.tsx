@@ -11,7 +11,7 @@ installHappyDom();
 const Y = await import('yjs');
 const { act, createElement } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { DEFAULT_PAGE_SETUP } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_ROOTS, DEFAULT_PAGE_SETUP } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { useBandEditors, useDocMedia } = await import('../../../components/docs/doc-editor');
@@ -22,17 +22,20 @@ type Props = Parameters<typeof PageBands>[0];
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function render(doc: InstanceType<typeof Y.Doc>, props: Pick<Props, 'edge' | 'setup' | 'onEnter'>) {
+async function render(
+    doc: InstanceType<typeof Y.Doc>,
+    { editing = null, ...props }: Pick<Props, 'edge' | 'setup' | 'onEnter'> & { editing?: BandRoot | null },
+) {
     function Margin() {
         const editors = useBandEditors({
             media: useDocMedia(drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC })),
             yDoc: doc,
             provider: null,
             editable: true,
-            editing: null,
+            editing,
             onLeave: () => {},
         });
-        return createElement(PageBands, { editors, editing: null, controls: null, ...props });
+        return createElement(PageBands, { editors, editing, controls: null, ...props });
     }
     ({ unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Margin))));
     const margin = document.querySelector<HTMLElement>('[data-page-margin]');
@@ -83,20 +86,29 @@ test('the footer margin spans the paper to its bottom edge and ends the band 1.2
     ]);
 });
 
-test("with Different first page, page 1's header tops the margin and the other pages' footer leads its", async () => {
-    const doc = new Y.Doc();
-    for (const root of ['header', 'headerFirst'] as const) write(doc, root, root);
-    const setup = { ...DEFAULT_PAGE_SETUP, differentFirstPage: true };
-    const header = await render(doc, { edge: 'header', setup });
-    expect([...header.querySelectorAll('[data-page-band]')].map((b) => b.textContent)).toEqual([
-        'headerFirst',
-        'header',
-    ]);
-    await unmount();
+// Both variants side by side would read as one double header, so a margin shows what the long page's end prints until
+// one of its bands is edited. A band's text, without its rule's label.
+const shown = (margin: HTMLElement) =>
+    [...margin.querySelectorAll<HTMLElement>('[data-page-band]')]
+        .filter((b) => !b.hidden)
+        .map((b) => b.querySelector('.ProseMirror')?.textContent);
 
-    for (const root of ['footer', 'footerFirst'] as const) write(doc, root, root);
-    const footer = await render(doc, { edge: 'footer', setup });
-    expect([...footer.querySelectorAll('[data-page-band]')].map((b) => b.textContent)).toEqual([
+test("with Different first page, the top margin shows page 1's header and the bottom the other pages' footer", async () => {
+    const doc = new Y.Doc();
+    for (const root of BAND_ROOTS) write(doc, root, root);
+    const setup = { ...DEFAULT_PAGE_SETUP, differentFirstPage: true };
+    expect(shown(await render(doc, { edge: 'header', setup }))).toEqual(['headerFirst']);
+    await unmount();
+    expect(shown(await render(doc, { edge: 'footer', setup }))).toEqual(['footer']);
+});
+
+test("edited with Different first page, page 1's header tops the margin and the other pages' footer leads its", async () => {
+    const doc = new Y.Doc();
+    for (const root of BAND_ROOTS) write(doc, root, root);
+    const setup = { ...DEFAULT_PAGE_SETUP, differentFirstPage: true };
+    expect(shown(await render(doc, { edge: 'header', setup, editing: 'header' }))).toEqual(['headerFirst', 'header']);
+    await unmount();
+    expect(shown(await render(doc, { edge: 'footer', setup, editing: 'footerFirst' }))).toEqual([
         'footer',
         'footerFirst',
     ]);
@@ -104,7 +116,7 @@ test("with Different first page, page 1's header tops the margin and the other p
 
 test('a double-click enters the band under the pointer, or none in particular beside the bands', async () => {
     const doc = new Y.Doc();
-    write(doc, 'header', 'Acme');
+    write(doc, 'headerFirst', 'Acme');
     const onEnter = mock((_root: BandRoot | undefined, _at: { left: number; top: number }) => {});
     const margin = await render(doc, {
         edge: 'header',
@@ -112,13 +124,13 @@ test('a double-click enters the band under the pointer, or none in particular be
         onEnter,
     });
     await act(async () =>
-        band('header')
+        band('headerFirst')
             ?.querySelector('p')
             ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 30, clientY: 40 })),
     );
     await act(async () => margin.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
     expect(onEnter.mock.calls).toEqual([
-        ['header', { left: 30, top: 40 }],
+        ['headerFirst', { left: 30, top: 40 }],
         [undefined, { left: 0, top: 0 }],
     ]);
 });

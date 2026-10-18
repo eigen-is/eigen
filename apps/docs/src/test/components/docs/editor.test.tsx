@@ -4,6 +4,7 @@
 // Esc or a click in the body leaves. A viewer and a phone see the bands read-only, with no way in.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { TiptapEditorHTMLElement } from '@tiptap/core';
+import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -289,8 +290,16 @@ test('Insert › Page elements, Format › Headers and footers and a page-number
     await pick('In the footer');
     expect(doc.getXmlFragment('footer').toString()).toContain('<pagenumber kind="page">');
     expect(editing()).toEqual(['footer']);
-    // The panel is gone: the band is edited on the page.
-    expect(document.querySelector('[data-band]')).toBeNull();
+});
+
+test('with Different first page, a preset in the header edits page 1’s header, as a double-click does', async () => {
+    doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
+    await render(WRITER);
+    await openMenu('Insert');
+    await openSubmenu('Page elements');
+    await openSubmenu('Page numbers');
+    await pick('In the header');
+    expect(editing()).toEqual(['headerFirst']);
 });
 
 test('Esc leaves the band and puts the caret back in the body where it was', async () => {
@@ -313,6 +322,118 @@ test('the body stays editable while a band is edited, and a mousedown in it leav
 
     await act(async () => bodyView()?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
     expect(editing()).toEqual([]);
+});
+
+// A press that focuses nothing would take the caret out of the band and leave it edited, with Esc and typing reaching
+// nothing.
+test('a press beside the body and the band keeps the caret in the band', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    const press = (target: Element | null | undefined) =>
+        target?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    const page = document.querySelector('[data-document]');
+    expect([
+        press(page),
+        press(page?.parentElement),
+        press(margin('header')),
+        press(margin('header')?.querySelector('[data-band-label]')),
+        press(margin('footer')),
+    ]).toEqual([false, false, false, false, false]);
+    expect(editing()).toEqual(['header']);
+    expect(press(bandView('header')?.querySelector('p'))).toBe(true);
+});
+
+test('the dimmed body prints at full strength', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    expect(document.querySelector('.tiptap-wrapper')?.className).toContain('print:opacity-100');
+});
+
+test('a menu closed with Esc hands focus back to the band being edited, and Options to the band too', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    for (const menu of ['Format', 'Options']) {
+        await openMenu(menu);
+        await inBrowserFrames(() =>
+            document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+        );
+        expect(document.activeElement === bandView('header')).toBe(true);
+    }
+});
+
+test('Options › Page setup… keeps focus in the dialog it opens', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    await openMenu('Options');
+    await pick('Page setup…');
+    expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
+});
+
+// Y's undo manager moves the undone step onto the redo stack after the transaction that undid it, so with a step still
+// left to undo that transaction changes nothing the menu draws; only a focus or a selection after it redrew the menu.
+test('Redo is offered once one of a band’s two edits is undone, focus elsewhere', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    const header = bandView('header')?.editor;
+    if (!header) throw new Error('no header editor');
+    await act(async () => void header.commands.insertContent('Acme'));
+    yUndoPluginKey.getState(header.state)?.undoManager.stopCapturing();
+    await act(async () => void header.commands.insertContent(' Inc'));
+    await act(async () => bandView('header')?.blur());
+    await act(async () => void header.commands.undo());
+    expect(doc.getXmlFragment('header').toString()).toBe('<paragraph>Acme</paragraph>');
+    await openMenu('Edit');
+    const redo = [...document.querySelectorAll('[role="menuitem"]')].find((item) =>
+        item.textContent?.trim().startsWith('Redo'),
+    );
+    expect(redo?.hasAttribute('data-disabled')).toBe(false);
+});
+
+test('⌘F leaves the band: find searches the body', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    await inBrowserFrames(() => button(`Find in document (${formatForDisplay('Mod+F')})`)?.click());
+    expect(editing()).toEqual([]);
+});
+
+test('a click on a comment card leaves the band for the comment’s anchor in the body', async () => {
+    const stored = new Y.Map<unknown>();
+    stored.set('title', 'Check this');
+    doc.getMap('comments').set('c1', stored);
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    await render(WRITER);
+    await doubleClick('header');
+    await act(async () => button('Comments')?.click());
+    // The panel lists the anchors the body holds, read 200 ms after its last change.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
+    // The card is titled by its anchor's text.
+    const card = [...document.querySelectorAll<HTMLElement>('.line-clamp-2')].find(
+        (title) => title.textContent === 'Hello',
+    );
+    expect(card).toBeDefined();
+    await act(async () => card?.click());
+    expect(editing()).toEqual([]);
+});
+
+test('word count from a band counts the body, and gives focus back to the band', async () => {
+    write('default', 'one two three');
+    write('header', 'Acme');
+    await render(WRITER);
+    await doubleClick('header');
+    await openMenu('Tools');
+    await pick(`Word count${formatForDisplay('Mod+Shift+C')}`);
+    const words = [...document.querySelectorAll('[role="dialog"] dt')].find((dt) => dt.textContent === 'Words');
+    expect(words?.nextElementSibling?.textContent).toBe('3');
+    await inBrowserFrames(() => button('OK')?.click());
+    expect(document.activeElement === bandView('header')).toBe(true);
+});
+
+test('the table panel stays closed while a band is edited', async () => {
+    await render(WRITER);
+    await act(async () => void bodyView()?.editor?.commands.insertTable({ rows: 2, cols: 2 }));
+    expect(document.body.textContent).toContain('Columns');
+    await doubleClick('header');
+    expect(document.body.textContent).not.toContain('Columns');
 });
 
 // The trigger draws the paragraph's alignment, so its first icon names it.
@@ -389,6 +510,15 @@ test('Different first page stacks both headers, keeps what was typed in the othe
     expect([editing(), labels('footer')]).toEqual([['footer'], ['Footer']]);
 });
 
+test('a collaborator’s untick of Different first page hands page 1’s header over to the other pages’', async () => {
+    doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
+    await render(WRITER);
+    await doubleClick('header');
+    expect(editing()).toEqual(['headerFirst']);
+    await act(async () => void doc.getMap(PAGE_ROOT).set('differentFirstPage', false));
+    expect([editing(), labels('header')]).toEqual([['header'], ['Header']]);
+});
+
 test('a band emptied while it is edited stays on the page until left', async () => {
     write('header', 'Acme');
     await render(WRITER);
@@ -408,6 +538,7 @@ test('Options › Remove header empties the header and leaves it', async () => {
     await pick('Remove header');
     expect(doc.getXmlFragment('header').toString()).not.toContain('Acme');
     expect(editing()).toEqual([]);
+    expect(document.activeElement === bodyView()).toBe(true);
 });
 
 test('losing write access leaves the band', async () => {

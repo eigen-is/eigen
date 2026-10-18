@@ -18,6 +18,7 @@ import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, FileSliders, Hash, Trash2 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
+import { keepEditorFocus } from './editor-toolbar';
 import { PageNumberItems, type PageNumberPreset } from './page-numbers';
 import { PageSetupDialog } from './page-setup-dialog';
 
@@ -46,8 +47,9 @@ type PageBandsProps = {
 // One margin of the page and the bands in it, each drawn by its own live editor: the header above the first block, the
 // footer after the last. The margin's negative margins pull it over the page's padding to the paper's edges, so a
 // double-click anywhere in it reaches it, and its min-height gives the room back, so a band taller than the room left
-// by its 1.27 cm pushes the body, as in Word. A band shows with content, or while its margin is edited; with Different
-// first page, page 1's band sits at the paper's edge and the other pages' next to the body.
+// by its 1.27 cm pushes the body, as in Word. Not edited, a margin shows the band the long page's end prints, with
+// content: page 1's header, the other pages' footer. Edited, with Different first page, both stack, page 1's at the
+// paper's edge and the other pages' next to the body.
 export function PageBands({ edge, editors, setup, editing, onEnter, controls }: PageBandsProps) {
     const first = FIRST_PAGE_BAND[edge];
     const roots: BandRoot[] = edge === 'header' ? [first, edge] : [edge, first];
@@ -60,8 +62,11 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
         selector: ({ editor: e }) => bandHasContent(e.state.doc),
     });
     const edited = editing !== null && bandEdge(editing) === edge;
+    const printed = edge === 'header' && setup.differentFirstPage ? first : edge;
     const shows = (root: BandRoot) =>
-        (root === edge || setup.differentFirstPage) && (edited || (root === edge ? otherHasContent : firstHasContent));
+        edited
+            ? root === edge || setup.differentFirstPage
+            : root === printed && (root === edge ? otherHasContent : firstHasContent);
     const room = edge === 'header' ? setup.margin.top : setup.margin.bottom;
     const { left, right } = setup.margin;
     return (
@@ -93,13 +98,17 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
             }
         >
             {roots.map((root) => {
+                // Google's bar, across the paper. Beside the body it takes no room, so entering a band leaves the body
+                // where it was: it overlays the margin, and the body's top where the band leaves less room than the bar.
+                // Z 10 is in-content floating UI, above the dimmed body, which opacity paints after the header.
                 const rule = edited && shows(root) && (
                     <div
                         data-band-rule
                         className={cn(
-                            'flex items-center gap-3 border-dashed border-muted-foreground/50 py-1 text-xs',
-                            edge === 'header' ? 'border-b' : 'border-t',
+                            'relative z-10 flex h-9 cursor-default items-center gap-3 border-y border-dashed border-muted-foreground/50 bg-muted px-4 text-sm',
+                            root === edge && (edge === 'header' ? '-mb-9' : '-mt-9'),
                         )}
+                        style={{ marginLeft: `-${left}mm`, marginRight: `-${right}mm` }}
                     >
                         <span data-band-label className="font-medium">
                             {BAND_LABEL[root]}
@@ -117,7 +126,7 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
             })}
             {onEnter && !roots.some(shows) && (
                 <span
-                    className="pointer-events-none absolute text-xs text-muted-foreground invisible group-hover:visible pointer-coarse:visible"
+                    className="pointer-events-none absolute text-xs text-muted-foreground invisible pointer-fine:group-hover:visible"
                     style={
                         edge === 'header'
                             ? { top: `${BAND_DISTANCE_MM}mm`, left: `${left}mm` }
@@ -141,8 +150,7 @@ type BandControlsProps = {
     onRemove: () => void;
 };
 
-// Google's bar between a band and the body: Different first page and Options. A press on it keeps the caret in the
-// band.
+// The controls on Google's bar between a band and the body: Different first page and Options.
 export function BandControls({
     band,
     editor,
@@ -155,30 +163,25 @@ export function BandControls({
     const [pageSetupOpen, setPageSetupOpen] = useState(false);
     const differentFirstPageId = useId();
     return (
-        <div className="ml-auto flex items-center gap-3" onMouseDown={(e) => e.preventDefault()}>
-            <div className="flex items-center gap-1.5">
+        <div className="ml-auto flex items-center gap-4">
+            <div className="flex items-center gap-2">
                 <Checkbox
                     id={differentFirstPageId}
                     checked={setup.differentFirstPage}
                     onCheckedChange={(checked) => onDifferentFirstPage(checked === true)}
                 />
-                <Label htmlFor={differentFirstPageId} className="text-xs font-normal">
+                <Label htmlFor={differentFirstPageId} className="font-normal">
                     Different first page
                 </Label>
             </div>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-xs">
+                    <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-link hover:text-link">
                         Options
-                        <ChevronDown className="h-3 w-3" />
+                        <ChevronDown className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent
-                    align="end"
-                    onCloseAutoFocus={(e) => {
-                        if (editor.isFocused) e.preventDefault();
-                    }}
-                >
+                <DropdownMenuContent align="end" onCloseAutoFocus={keepEditorFocus(editor)}>
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
                             <Hash className="h-4 w-4 mr-2" /> Page numbers

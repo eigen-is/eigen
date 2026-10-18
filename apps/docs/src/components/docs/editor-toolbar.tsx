@@ -67,6 +67,15 @@ import { StylePicker } from './style-picker';
 import { ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
 import { WordCountDialog } from './word-count-dialog';
 
+// A closing menu hands focus to the editor the caret is in, whether a pick, Esc or a press outside closed it, rather than
+// back to its trigger, which would swallow the next keystrokes; a pick's own command focuses it a frame later. A dialog
+// the pick opened keeps focus, and a viewer's menu returns it to the trigger, as the editor can't take it.
+export const keepEditorFocus = (editor: Editor) => (e: Event) => {
+    if (!editor.isEditable) return;
+    e.preventDefault();
+    if (!document.activeElement?.closest('[role="dialog"]')) editor.commands.focus(null, { scrollIntoView: false });
+};
+
 type EditorToolbarProps = {
     // The editor the caret is in: the body's, or a band's while the band is edited.
     editor: Editor;
@@ -172,11 +181,7 @@ export const EditorToolbar = ({
         setLinkDialogOpen(false);
     };
 
-    // A menu item's editor command refocuses the editor a frame later, a band's too when the pick enters it; keep it
-    // there rather than let Radix restore focus to the menu trigger, which would swallow the next keystrokes.
-    const keepEditorFocus = (e: Event) => {
-        if (editor.isFocused) e.preventDefault();
-    };
+    const keepActiveEditorFocus = keepEditorFocus(editor);
 
     // A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's
     // copy and cut handlers (writeDocsClipboard, then ProseMirror's) write the clipboard as they would for the keys.
@@ -224,6 +229,7 @@ export const EditorToolbar = ({
                             importLabel="Import docx file…"
                             createLabel="New doc"
                             createType="doc"
+                            onCloseAutoFocus={keepActiveEditorFocus}
                         >
                             <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
                                 <FileSliders className="h-4 w-4 mr-2" /> Page setup…
@@ -239,7 +245,7 @@ export const EditorToolbar = ({
                             canRedo={canRedo}
                             onUndo={() => editor.chain().focus().undo().run()}
                             onRedo={() => editor.chain().focus().redo().run()}
-                            onCloseAutoFocus={keepEditorFocus}
+                            onCloseAutoFocus={keepActiveEditorFocus}
                             selectionItems={
                                 <>
                                     <DropdownMenuItem
@@ -276,7 +282,7 @@ export const EditorToolbar = ({
                                 <FormatMenu
                                     editor={editor}
                                     active={active}
-                                    keepEditorFocus={keepEditorFocus}
+                                    keepEditorFocus={keepActiveEditorFocus}
                                     setTextColor={setTextColor}
                                     setHighlightColor={setHighlightColor}
                                     clearFormatting={clearFormatting}
@@ -290,7 +296,7 @@ export const EditorToolbar = ({
                                 <InsertMenu
                                     editor={editor}
                                     active={active}
-                                    keepEditorFocus={keepEditorFocus}
+                                    keepEditorFocus={keepActiveEditorFocus}
                                     onLink={handleLinkOperation}
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}
@@ -300,7 +306,7 @@ export const EditorToolbar = ({
                             </>
                         )}
 
-                        {!isMobile && <ToolsMenu keepEditorFocus={keepEditorFocus} onWordCount={openWordCount} />}
+                        {!isMobile && <ToolsMenu keepEditorFocus={keepActiveEditorFocus} onWordCount={openWordCount} />}
                     </div>
                 }
                 center={
@@ -310,7 +316,7 @@ export const EditorToolbar = ({
                             <ToolbarSeparator />
 
                             {/* Heading / paragraph selector */}
-                            <StylePicker editor={editor} active={active} keepEditorFocus={keepEditorFocus} />
+                            <StylePicker editor={editor} active={active} keepEditorFocus={keepActiveEditorFocus} />
 
                             <ToolbarSeparator />
 
@@ -318,7 +324,7 @@ export const EditorToolbar = ({
                             <FontPicker
                                 value={active.fontName}
                                 onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
-                                onCloseAutoFocus={keepEditorFocus}
+                                onCloseAutoFocus={keepActiveEditorFocus}
                             />
 
                             <ToolbarSeparator />
@@ -422,7 +428,7 @@ export const EditorToolbar = ({
                                             </TooltipTrigger>
                                             <TooltipContent>Align</TooltipContent>
                                         </Tooltip>
-                                        <DropdownMenuContent onCloseAutoFocus={keepEditorFocus}>
+                                        <DropdownMenuContent onCloseAutoFocus={keepActiveEditorFocus}>
                                             <DropdownMenuRadioGroup value={active.alignment}>
                                                 {TEXT_ALIGNS.map((alignment) => {
                                                     const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
@@ -551,7 +557,12 @@ export const EditorToolbar = ({
                 onSetupChange={onPageSetupChange}
             />
 
-            <WordCountDialog editor={body} open={wordCountOpen} onOpenChange={setWordCountOpen} />
+            <WordCountDialog
+                editor={body}
+                open={wordCountOpen}
+                onOpenChange={setWordCountOpen}
+                onCloseAutoFocus={keepActiveEditorFocus}
+            />
 
             <RestartNumberingDialog
                 editor={editor}

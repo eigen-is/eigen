@@ -526,6 +526,28 @@ test.each([
     expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
+// Radix would hand focus back to the trigger, where the next keystrokes and ⌘Z reach nothing.
+test.each(['File', 'Edit', 'Format', 'Insert', 'Tools'])(
+    '%s closed with Esc gives focus back to the editor',
+    async (menu) => {
+        await render(1920, true);
+        await openMenu(menu);
+        await pickInBrowserFrames(async () => {
+            await act(async () =>
+                document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+            );
+        });
+        expect(document.activeElement === editor.view.dom).toBe(true);
+    },
+);
+
+test('a dialog a menu opens keeps focus', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    await pickInBrowserFrames(() => clickItem('Page orientation'));
+    expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
+});
+
 const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];
 
 const listItem = (text: string) => ({

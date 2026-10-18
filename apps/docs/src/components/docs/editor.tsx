@@ -1,9 +1,9 @@
 import type { Node } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
-import { EditorContent, useEditorState } from '@tiptap/react';
+import { EditorContent } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
-import { useCollabDoc } from '@workspace/lib/collab';
+import { useCollabDoc, useYjsUndoState } from '@workspace/lib/collab';
 import {
     findCardIdByChatName,
     useCommentFilter,
@@ -292,25 +292,18 @@ const TiptapEditor = ({
         edge === 'header' && pageSetup.differentFirstPage ? FIRST_PAGE_BAND.header : edge;
     const applyPreset = (preset: PageNumberPreset) => {
         applyPageNumberPreset(bands, preset, pageSetup, writeSetup);
-        enterBand(preset.band);
+        enterBand(entryBand(preset.band));
     };
     // An image goes where the caret is and settles into that editor: a band's lives as long as the doc, and the body's
     // is read again once the upload lands.
     const insertTarget = editingBand ? () => bands[editingBand] : () => editorRef.current;
 
-    // A page setup change is no editor transaction; it re-renders through usePageSetup, which reruns this selector. It
-    // reads the active editor, not the snapshot's, which stays the last editor until the new one's first transaction.
-    const { canUndo, canRedo } = useEditorState({
-        editor: activeEditor,
-        selector: () => {
-            const pluginState = yUndoPluginKey.getState(activeEditor.state);
-            const um = pluginState?.undoManager;
-            return {
-                canUndo: (um?.undoStack.length ?? 0) > 0,
-                canRedo: (um?.redoStack.length ?? 0) > 0,
-            };
-        },
-    });
+    // From the undo manager's own events: it moves an undone step onto the redo stack after the transaction that undid
+    // it, so an editor transaction reads the stacks too early.
+    const { canUndo, canRedo } = useYjsUndoState(
+        yUndoPluginKey.getState(activeEditor.state)?.undoManager ?? null,
+        canWrite,
+    );
 
     const handleAddComment = () => {
         if (!editor || !chatFolderId) return;
@@ -421,7 +414,8 @@ const TiptapEditor = ({
     );
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
+    // The figure and table panels follow the body's selection, so a band being edited closes them.
+    const showSidebar = !isMobile && (panel !== null || (canWrite && !editingBand && sidebarContext !== 'document'));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
@@ -565,17 +559,39 @@ const TiptapEditor = ({
                                         needsScale && 'overflow-x-hidden',
                                     )}
                                     onClick={(e) => {
-                                        if (e.target === scrollContainerRef.current) {
+                                        if (e.target === scrollContainerRef.current && !editingBand) {
                                             editor.commands.blur();
                                         }
                                     }}
+                                    // While a band is edited a press in the body leaves it, the caret where it landed,
+                                    // as in Google; a press anywhere else but the band would focus nothing, leaving
+                                    // the band edited with Esc and typing reaching nothing, so it keeps the caret.
+                                    // A portaled menu or dialog is the band's own.
+                                    onMouseDown={
+                                        editingBand
+                                            ? (e) => {
+                                                  const target = e.target;
+                                                  if (
+                                                      !(target instanceof Element) ||
+                                                      !e.currentTarget.contains(target)
+                                                  ) {
+                                                      return;
+                                                  }
+                                                  if (target.closest('[data-page-body]')) setEditingBand(null);
+                                                  else if (!bands[editingBand].view.dom.contains(target)) {
+                                                      e.preventDefault();
+                                                  }
+                                              }
+                                            : undefined
+                                    }
                                 >
                                     <div
                                         data-document="true"
                                         className={cn(
                                             // eigen-paper: the page always renders light, in dark mode too (globals.css)
-                                            // Rows: the header band, the body, the footer band.
-                                            'eigen-paper grid grid-rows-[auto_1fr_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
+                                            // Rows: the header band, the body, the footer band. Isolated, so a band's bar
+                                            // stays under the side panel.
+                                            'eigen-paper isolate grid grid-rows-[auto_1fr_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}
@@ -605,13 +621,12 @@ const TiptapEditor = ({
                                         />
                                         <EditorContent
                                             editor={editor}
-                                            // Dimmed and still editable while a band is edited: a press in it leaves the
-                                            // band, and the body puts the caret where it landed, as in Google.
+                                            data-page-body
+                                            // Dimmed and still editable while a band is edited; printed as it is.
                                             className={cn(
                                                 'row-start-2 h-full min-w-0 tiptap-wrapper',
-                                                editingBand && 'opacity-50',
+                                                editingBand && 'opacity-50 print:opacity-100',
                                             )}
-                                            onMouseDown={editingBand ? () => setEditingBand(null) : undefined}
                                         />
                                         <PageBands
                                             edge="footer"
