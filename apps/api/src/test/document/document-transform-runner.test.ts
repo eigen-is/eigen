@@ -185,12 +185,12 @@ describe('DocumentTransformRunner', () => {
         logSpy.mockRestore();
 
         expect(response.ok).toBe(true);
-        // The process-wide runner's background search extraction can log inside this window too.
-        const line = logged.find((l) => l.includes('[transform] job=') && l.includes('kind=export')) ?? '';
+        // The process-wide runner logs other files' jobs inside this window too; this job's warning marks its line.
+        const line =
+            logged.find((l) => l.includes('kind=export') && l.includes('warnings=corrupt-blobs-skipped:3')) ?? '';
         expect(line).toContain('format=html');
         expect(line).toMatch(/startupMs=\d+/);
         expect(line).toContain('peakRssBytes=1234');
-        expect(line).toContain('warnings=corrupt-blobs-skipped:3');
         await runner.close();
     });
 
