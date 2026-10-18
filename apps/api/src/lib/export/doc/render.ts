@@ -113,21 +113,40 @@ function renderChartNode(attrs: ChartAttrs): string {
     return renderFigureFrame(attrs, chartSvg(parseChartSpec(attrs.spec ?? ''), attrs));
 }
 
-// The note in place, its paragraphs as spans, as the editor's renderHTML writes it.
-function renderFootnoteNode(
-    node: Node,
-    renderElement: (props: { content: Node; parent?: Node }) => string | string[],
-): string {
+type RenderElement = (props: { content: Node; parent?: Node }) => string | string[];
+
+// On paper: the note in place, its paragraphs as spans, as the editor's renderHTML writes it, which the PDF floats to
+// its page's foot.
+function renderFootnoteSpans(node: Node, renderElement: RenderElement): string {
     let paragraphs = '';
     node.forEach((paragraph) => {
         let inline = '';
         paragraph.forEach((child) => {
-            const rendered = renderElement({ content: child, parent: paragraph });
-            inline += Array.isArray(rendered) ? rendered.join('') : rendered;
+            inline += [renderElement({ content: child, parent: paragraph })].flat().join('');
         });
         paragraphs += `<span data-type="${FOOTNOTE_PARAGRAPH}">${inline}</span>`;
     });
     return `<span class="footnote" data-type="footnote">${paragraphs}</span>`;
+}
+
+// On screen, as Google's HTML download writes them: each reference a superscript number linking to its note in a list
+// after the body, numbered as met, which is footnotesInOrder's order, and each note linking back.
+function footnoteList() {
+    const notes: string[] = [];
+    return {
+        reference: ({ node, renderElement }: { node: Node; renderElement: RenderElement }) => {
+            const number = notes.length + 1;
+            const paragraphs: string[] = [];
+            node.forEach((paragraph) => {
+                paragraphs.push([renderElement({ content: paragraph, parent: node })].flat().join(''));
+            });
+            const last = paragraphs.pop() ?? '';
+            const back = ` <a href="#fnref-${number}">↩</a></p>`;
+            notes.push(`<li id="fn-${number}">${paragraphs.join('')}${last.replace(/<\/p>$/, back)}</li>`);
+            return `<sup><a href="#fn-${number}" id="fnref-${number}">${number}</a></sup>`;
+        },
+        list: () => (notes.length > 0 ? `<section class="footnotes"><hr><ol>${notes.join('')}</ol></section>` : ''),
+    };
 }
 
 // Without the annotation, which no screen draws and the sanitizer would keep as text; the PDF's MathJax draws it too.
@@ -260,7 +279,8 @@ export function renderEquations(svgs?: ReadonlyMap<string, EquationDrawing>): ({
 }
 
 // The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds, but for the
-// PDF's small caps, its equations and its page numbers, which its stylesheet's counter() fills in.
+// PDF's small caps, its equations, its page numbers, which its stylesheet's counter() fills in, and its notes, which
+// the screen lists after the body.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
@@ -268,11 +288,13 @@ export function renderDocHtml(
         lazy?: boolean;
         synthesizeSmallCaps?: boolean;
         pageCounters?: boolean;
+        pageFootnotes?: boolean;
         equations?: ({ node }: { node: Node }) => string;
     },
 ): string {
     const content = inEditorMarkOrder(withTrailingBreaks(flattenNestedFootnotes(json)));
-    return renderToHTMLString({
+    const footnotes = options?.pageFootnotes ? undefined : footnoteList();
+    const html = renderToHTMLString({
         content,
         extensions: docExtensions(),
         options: {
@@ -282,7 +304,8 @@ export function renderDocHtml(
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
                 equation: options?.equations ?? renderEquations(),
-                footnote: ({ node, renderElement }) => renderFootnoteNode(node, renderElement),
+                footnote:
+                    footnotes?.reference ?? (({ node, renderElement }) => renderFootnoteSpans(node, renderElement)),
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
                 ...(options?.pageCounters && {
                     pageNumber: ({ node }) =>
@@ -291,6 +314,7 @@ export function renderDocHtml(
             },
         },
     });
+    return footnotes ? `${html}${footnotes.list()}` : html;
 }
 
 // Outside Eigen a root-relative href means nothing, and a protocol-relative one would open as file:.
