@@ -1,5 +1,5 @@
 import { MathError } from './error';
-import { LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
+import { BARE_ENVIRONMENTS, LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
 import { ACCENTS, COLOR_NAMES, MINUS, naryLimits, PRIME, SPACES } from './notation';
 import {
     bound,
@@ -410,7 +410,6 @@ class LatexReader {
         this.#attach(into, base, false, style, depth);
     }
 
-    // The sub- and superscript after an atom, in either order.
     #scripts(style: Style, subDepth: number, supDepth: number): { sub?: MathRow; sup?: MathRow } {
         const scripts: { sub?: MathRow; sup?: MathRow } = {};
         while (this.#isScriptAt(this.#pos)) {
@@ -639,7 +638,6 @@ class LatexReader {
         return this.#fence(table, environment.open, environment.close, depth);
     }
 
-    // One atom, without its scripts, into a row at `depth`.
     #atom(into: Piece[], style: Style, depth: number): void {
         bound(this.#budget, depth, 0);
         const token = this.#tokens[this.#pos];
@@ -931,12 +929,6 @@ function writeToken(node: MathToken, upright: boolean): string {
     return colored(node.color, font ? `\\${FONT_NAMES.get(font)}{${text}}` : text);
 }
 
-// In text TeX reads a run of spaces as one, so a run is written as control spaces.
-const escapeText = (text: string) =>
-    text.replace(/ {2,}|[\\^~{}%&#$_\u00A0]/g, (match) =>
-        match.startsWith(' ') ? '\\ '.repeat(match.length) : TEXT_ESCAPES[match],
-    );
-
 // A brace with a command and a label over or under it: \overbrace{…}^{…}.
 function isLabelledBrace(node: Extract<MathNode, { kind: 'limit' }>): boolean {
     const [brace] = node.base;
@@ -987,11 +979,6 @@ function isAtom(node: MathNode, upright: boolean): boolean {
         case 'table':
             return true;
     }
-}
-
-function writeBase(row: MathRow, upright: boolean): string {
-    const latex = writeRow(row, upright);
-    return row.length === 1 && isAtom(row[0], upright) ? latex : `{${latex}}`;
 }
 
 const isPrime = (node: MathNode) => node.kind === 'operator' && node.text === PRIME && !node.variant && !node.color;
@@ -1084,7 +1071,7 @@ function writeFenced(fenced: Extract<MathNode, { kind: 'fenced' }>, upright: boo
     const parts = node.parts.map((row) => writeRow(row, upright));
     const drawn = delimiters(node);
     if (!drawn) {
-        // Its characters as they are: no atom, so writeBase braces them as a base.
+        // Its characters as they are: no atom, so scripts brace them as a base.
         const plain = interleave(parts, [writeChar(node.separator)]);
         return joined([writeChar(node.open), ...plain, writeChar(node.close)]);
     }
@@ -1098,8 +1085,13 @@ function writeNode(node: MathNode, upright: boolean): string {
         case 'number':
         case 'operator':
             return writeToken(node, upright);
-        case 'text':
-            return colored(node.color, `\\text{${escapeText(node.text)}}`);
+        case 'text': {
+            // In text TeX reads a run of spaces as one, so a run is written as control spaces.
+            const text = node.text.replace(/ {2,}|[\\^~{}%&#$_\u00A0]/g, (match) =>
+                match.startsWith(' ') ? '\\ '.repeat(match.length) : TEXT_ESCAPES[match],
+            );
+            return colored(node.color, `\\text{${text}}`);
+        }
         case 'space':
             return `\\${SPACE_NAMES.get(node.width)}`;
         case 'fraction': {
@@ -1107,13 +1099,16 @@ function writeNode(node: MathNode, upright: boolean): string {
             // LaTeX has no skewed fraction: it is written upright.
             return node.line === 'none' ? `\\genfrac{}{}{0pt}{}${parts}` : `\\frac${parts}`;
         }
-        case 'scripts':
+        case 'scripts': {
             if (node.pre) {
                 const sup = node.sup ? writeRow(node.sup, upright) : '';
                 const sub = node.sub ? writeRow(node.sub, upright) : '';
                 return `\\prescript{${sup}}{${sub}}{${writeRow(node.base, upright)}}`;
             }
-            return `${writeBase(node.base, upright)}${writeScripts(node, upright)}`;
+            const base = writeRow(node.base, upright);
+            const atom = node.base.length === 1 && isAtom(node.base[0], upright);
+            return `${atom ? base : `{${base}}`}${writeScripts(node, upright)}`;
+        }
         case 'radical': {
             const degree = node.degree ? writeRow(node.degree, upright) : undefined;
             // TeX ends the optional argument at the first ] outside braces; KaTeX takes a leading group as all of it.
@@ -1165,7 +1160,7 @@ function writeNode(node: MathNode, upright: boolean): string {
             return name ? `\\${name}{${body}}` : `\\enclose{${node.notation.join(',')}}{${body}}`;
         }
         case 'table':
-            return writeTable(node, ENVIRONMENT_NAMES.get(`${node.layout}  `)!, upright);
+            return writeTable(node, BARE_ENVIRONMENTS[node.layout], upright);
     }
 }
 

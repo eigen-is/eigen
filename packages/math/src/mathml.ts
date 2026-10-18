@@ -139,13 +139,10 @@ function spaceOf(width = ''): MathSpace | undefined {
     return MATH_SPACES.find((space) => Math.abs(Number.parseFloat(SPACES[space].width) - em) < 0.01);
 }
 
-// The first child of a script element.
 const baseOf = (element: MathXmlElement | undefined) =>
     element && SCRIPT_SLOTS.has(nameOf(element) ?? '') ? elementsOf(element)[0] : undefined;
 
-// An accent, line or brace an mover or munder draws over its base, or undefined for a limit. An accent says so on the
-// element or its mo, a brace that it stretches; MathJax and Temml leave both to MathML's operator dictionary. Eigen
-// writes a limit's lone operator in an mrow, so it is neither.
+// MathJax and Temml leave accent and stretchy to the operator dictionary; Eigen wraps a limit's lone operator.
 function decorationOf(element: MathXmlElement | undefined): ((body: MathRow) => MathNode) | undefined {
     const position = is(element, 'mover') ? 'over' : is(element, 'munder') ? 'under' : undefined;
     const script = element && elementsOf(element)[1];

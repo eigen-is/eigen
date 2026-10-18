@@ -23,9 +23,9 @@ export const OMML_NAMESPACE = 'http://schemas.openxmlformats.org/officeDocument/
 export const WORDML_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 export const MARKUP_COMPATIBILITY_NAMESPACE = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 
-// ECMA-376's defaults for an absent property.
 // Unicode's hyphen: Word draws it as one, where a hyphen-minus in a math run is the minus operator.
 const HYPHEN = '\u2010';
+// ECMA-376's defaults for an absent property.
 const DEFAULT_ACCENT = '\u0302';
 const DEFAULT_BRACE = '⏟';
 const DEFAULT_NARY = '∫';
@@ -203,9 +203,9 @@ function readRun(row: RowBuilder, run: MathXmlElement, depth: number, numbered =
     const scr = valOf(childOf(math, OMML_NAMESPACE, 'scr'));
     const number = numbered ? text.indexOf('#') : -1;
     const shown = number < 0 ? text : text.slice(0, number);
-    // Without a style Word draws letters italic and the rest upright.
     // Word draws a hyphen-minus in a math run as the minus operator, in an upright run too; its U+2010 is a hyphen.
     const chars = shown.replaceAll('-', MINUS).replaceAll(HYPHEN, '-');
+    // Without a style Word draws letters italic and the rest upright.
     row.chars(chars, variantOf(sty ?? 'i', scr), variantOf(sty ?? 'p', scr), color);
     return number >= 0;
 }
