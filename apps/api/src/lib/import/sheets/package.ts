@@ -104,13 +104,10 @@ export function readBudget(): ReadBudget {
     };
 }
 
-// Bun has no streaming XML, and a tree costs about 100× its text (core/xml.ts), so the children of the part's root, or
-// of its child `container`, are parsed a batch of whole children at a time. A batch is parsed behind the part's prolog
-// and the start tags around the children, so prefixes bind and a DOCTYPE is still refused. The cut is checked, not
-// trusted: the part without the children must parse with a marker in their place, and every batch on its own, so a cut
-// anywhere but between two children, which a comment, CDATA or an instruction can hide, is a reason to parse the part
-// whole, and a part that won't parse whole is malformed XML; never a misread. The rest of the part is parsed first, so its other elements can be read before the
-// children are.
+// Bun has no streaming XML and a tree costs about 100× its text (core/xml.ts), so the children of the root, or of its
+// child `container`, are parsed a batch at a time behind the part's prolog and start tags, so prefixes bind and a
+// DOCTYPE is still refused. The cut is checked: the rest must parse with a marker in the children's place, and each
+// batch alone, else the part is parsed whole. The rest is parsed first, so it is read before the children.
 export function readInBatches(
     part: Uint8Array,
     container: string | undefined,

@@ -40,6 +40,8 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
     priority?: TransformPriority;
 };
 
+const TOO_LARGE_TO_INDEX = 'Document too large to index';
+
 async function runTransformRequest<R extends DocumentTransformRequest>(
     request: R,
     opts: TransformOptions & { captureMs?: number },
@@ -60,7 +62,7 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
         }
         // The search extract indexes it as nothing rather than running out again on every drain.
         if (response.error.code === 'out-of-memory' && request.kind === 'extract-text') {
-            throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
+            throw new ApiError(413, TOO_LARGE_TO_INDEX);
         }
         const what =
             request.kind === 'import' ? `${request.sourceFormat} import` : `${request.documentType} ${request.kind}`;

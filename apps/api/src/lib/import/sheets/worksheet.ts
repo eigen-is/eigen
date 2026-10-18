@@ -158,7 +158,7 @@ function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: 
         const location = xmlAttr(element, '', 'location');
         const rel = context.rels.get(xmlAttr(element, R_NS, 'id') ?? '');
         const target = rel?.external ? rel.target : undefined;
-        // Eigen's xlsx export (ExcelJS) writes an internal link as a location beside a relationship to `#` and the location.
+        // A relationship to `#` and the location, which ExcelJS writes beside an internal link, is the location.
         const link = mapHyperlink(
             target !== undefined && !target.startsWith('#')
                 ? `${target}${location ? `#${location}` : ''}`
