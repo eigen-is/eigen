@@ -1,6 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
-import { DEFAULT_PAGE_SETUP, pageBoxStyle } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, DOC_PROSE_CLASS, pageBoxStyle } from '@workspace/lib/docs/eigendoc';
 import { useTextPreview } from '@workspace/lib/drive';
 import { getPreviewMode, subjectInfo } from '@workspace/lib/file-subject';
 import { useMailTextPreview } from '@workspace/lib/mail';
@@ -267,7 +267,10 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefi
                     className="eigen-paper mx-auto bg-background"
                     style={pageBoxStyle(data.page ?? DEFAULT_PAGE_SETUP)}
                 >
-                    <div className="eigen-prose tiptap" dangerouslySetInnerHTML={{ __html: data.body }} />
+                    <div
+                        className={cn('eigen-prose tiptap', DOC_PROSE_CLASS)}
+                        dangerouslySetInnerHTML={{ __html: data.body }}
+                    />
                 </div>
             ) : data.mode === 'eigenslides' ? (
                 <div className="p-8 bg-muted/50 min-h-full">

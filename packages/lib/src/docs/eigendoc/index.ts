@@ -5,6 +5,7 @@ export {
     BAND_ROOTS,
     bandEdge,
     bandHasContent,
+    DOC_PROSE_CLASS,
     FIRST_PAGE_BAND,
     PAGE_BAND_CLASS,
 } from './bands';

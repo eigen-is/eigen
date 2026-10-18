@@ -666,7 +666,7 @@ describe('doc export — whitespace', () => {
             const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
             const html = new TextDecoder().decode(data);
             expect(html).toContain('<p>a  b</p>');
-            expect(html).toMatch(/<article class="eigen-prose tiptap"><p>/);
+            expect(html).toMatch(/<article class="eigen-prose tiptap eigen-doc"><p>/);
             expect(html).toContain('</p></article>');
         },
     );
@@ -1083,6 +1083,59 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         );
         const markers = await laidOut(html, "if 'marker' in tag and hasattr(box, 'text'): print(box.text.strip())");
         expect(markers).toEqual(['3.', 'v.', '4.', 'b.', 'c.', 'I.']);
+    }, 60_000);
+
+    // WeasyPrint gives a formatting context its whole width and moves it below a float it doesn't fit beside
+    // (avoid_collisions, layout/float.py), where Chrome narrows it: the PDF's list starts below the figure, never
+    // under it, where the editor's flows beside it (EXPORT.md).
+    test('a list after a left-wrapped figure starts below it, its markers clear of it', async () => {
+        const png = await sharp({ create: { width: 200, height: 300, channels: 3, background: '#888' } })
+            .png()
+            .toBuffer();
+        const figure = {
+            type: 'figure',
+            attrs: { src: `data:image/png;base64,${png.toString('base64')}`, width: 200, layout: 'wrap-left' },
+        };
+        const html = await pdfHtml(
+            { type: 'paragraph', content: [figure, { type: 'text', text: 'beside' }] },
+            orderedList({}, listItem('one', orderedList({}, listItem('a'))), listItem('two')),
+        );
+        const [image = '', ...markers] = await laidOut(
+            html,
+            "if tag == 'img': print(box.position_y + box.height)\n        if 'marker' in tag and type(box).__name__ == 'TextBox': print(box.position_y)",
+        );
+        expect(markers).toHaveLength(3);
+        for (const top of markers) expect(Number(top)).toBeGreaterThanOrEqual(Number(image));
+    }, 60_000);
+
+    // A Docs list is its own formatting context, which keeps its items' margins in: each item still follows the one
+    // above at one step, out of a nested list too, and the list's own margin is all there is after it.
+    test('nested lists step evenly from item to item, out of a nested list too', async () => {
+        const html = await pdfHtml(
+            orderedList(
+                {},
+                listItem(
+                    'one',
+                    orderedList({}, listItem('a', orderedList({}, listItem('i'), listItem('ii'))), listItem('b')),
+                ),
+                listItem('two'),
+            ),
+            paragraph('after'),
+        );
+        const lines = async (doc: string) => [
+            ...new Set(
+                (
+                    await laidOut(doc, "if type(box).__name__ == 'TextBox' and box.text.strip(): print(box.position_y)")
+                ).map((top) => Math.round(Number(top) * 100) / 100),
+            ),
+        ];
+        const [one = 0, a = 0, i = 0, ii = 0, b = 0, two = 0, after = 0] = await lines(html);
+        // A nested list opens 0.2em below its item; out of one, the step is an item's, where it was 5 px more.
+        expect(a - one).toBeCloseTo(i - a, 1);
+        expect(b - ii).toBeCloseTo(ii - i, 1);
+        expect(two - b).toBeCloseTo(ii - i, 1);
+        const [item = 0, next = 0] = await lines(await pdfHtml(orderedList({}, listItem('x')), paragraph('y')));
+        expect(after - two).toBeCloseTo(next - item, 0);
     }, 60_000);
 });
 

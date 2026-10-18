@@ -10,7 +10,13 @@ import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { formatDateTime } from '@workspace/lib/date';
-import { DEFAULT_PAGE_SETUP, type PageSetup, pageBoxStyle, pagePx } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    DOC_PROSE_CLASS,
+    type PageSetup,
+    pageBoxStyle,
+    pagePx,
+} from '@workspace/lib/docs/eigendoc';
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
@@ -237,7 +243,7 @@ const INTRINSIC_PAGE: Record<TextPreviewMode, IntrinsicPage | null> = {
 // <pre> rule paints a dark code-block background that is wrong for a whole-file code thumbnail.
 // A deck and a drawing need none: a compositor page carries its own box and its own paint.
 const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
-    eigendoc: 'eigen-prose tiptap',
+    eigendoc: `eigen-prose tiptap ${DOC_PROSE_CLASS}`,
     eigenslides: '',
     eigensheets: 'eigensheets-preview',
     eigenvector: '',

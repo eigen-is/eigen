@@ -1437,6 +1437,22 @@ describe('docx writer — tables', () => {
         ]);
     });
 
+    test("a header's vertical merge writes the header's grey on its covered cells too", async () => {
+        const tbl = only(
+            await tablesIn(
+                doc(
+                    table(
+                        tr(th({ colwidth: [100], rowspan: 2 }, p(text('H'))), th({ colwidth: [100] }, p(text('A')))),
+                        tr(td({ colwidth: [100] }, p(text('b')))),
+                    ),
+                ),
+            ),
+        );
+        expect(xmlOf(xmlChildren(tbl, W, 'tr')[1])).toBe(
+            `<w:tr><w:tc><w:tcPr><w:tcW w:w="1500" w:type="dxa"/><w:vMerge/>${SHADED}</w:tcPr><w:p/></w:tc>${cell(1500, run('b'))}</w:tr>`,
+        );
+    });
+
     test('a covered cell sits at its column, before the cells right of it, and spans as its merge does', async () => {
         const tbl = only(
             await tablesIn(

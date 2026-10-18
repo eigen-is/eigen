@@ -206,31 +206,6 @@
         padding-left: 1.5em;
     }
 
-    /* A list is its own formatting context, so beside a float it narrows as a whole and its markers stay clear of it. */
-    ul,
-    ol {
-        display: flow-root;
-    }
-
-    /* A list with no type of its own numbers by depth, as Google's default, 1. a. i. and again, over Word's nine
-       levels; a type the list stores is drawn on it and wins. The docx writer reads its levels from these. */
-    ol ol,
-    ol ol ol ol ol,
-    ol ol ol ol ol ol ol ol {
-        list-style-type: lower-alpha;
-    }
-
-    ol ol ol,
-    ol ol ol ol ol ol,
-    ol ol ol ol ol ol ol ol ol {
-        list-style-type: lower-roman;
-    }
-
-    ol ol ol ol,
-    ol ol ol ol ol ol ol {
-        list-style-type: decimal;
-    }
-
     li {
         line-height: 1.7;
     }
@@ -542,10 +517,9 @@
         margin-bottom: 1em;
     }
 
-    /* A restarted list runs on from the one before it at the items' own step, as Google's does: the last item's margin
-       is all that is left between them. */
+    /* A restarted list runs on from the one before it at the items' own step, as Google's does. */
     ol:has(+ ol) {
-        margin-bottom: 0;
+        margin-bottom: 0.25em;
     }
 
     ol + ol {
@@ -572,6 +546,46 @@
 /* A header's or footer's last block has no space after, as in Word's Header and Footer styles (PAGE_BAND_CLASS) */
 .eigen-prose.page-band > :last-child {
     margin-bottom: 0;
+}
+
+/* ===== Docs: the editor, its quick look and its exports carry .eigen-doc (DOC_PROSE_CLASS); mail and chat don't ===== */
+.eigen-doc {
+    /* A list is its own formatting context, so beside a float it narrows as a whole and its markers stay clear of it. */
+    ul,
+    ol {
+        display: flow-root;
+    }
+
+    /* The context keeps the margins of its first and last items in, where they would collapse with the list's own:
+       they go, so a list and a nested one space as their margins say. */
+    li:first-child,
+    li:first-child > :first-child {
+        margin-top: 0;
+    }
+
+    li:last-child,
+    li:last-child > :last-child {
+        margin-bottom: 0;
+    }
+
+    /* A list with no type of its own numbers by depth, as Google's default, 1. a. i. and again, over Word's nine
+       levels; a type the list stores is drawn on it and wins. The docx writer reads its levels from these. */
+    ol ol,
+    ol ol ol ol ol,
+    ol ol ol ol ol ol ol ol {
+        list-style-type: lower-alpha;
+    }
+
+    ol ol ol,
+    ol ol ol ol ol ol,
+    ol ol ol ol ol ol ol ol ol {
+        list-style-type: lower-roman;
+    }
+
+    ol ol ol ol,
+    ol ol ol ol ol ol ol {
+        list-style-type: decimal;
+    }
 }
 
 /* ===== Task lists — TipTap output ===== */

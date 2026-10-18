@@ -77,6 +77,27 @@ describe('counters', () => {
         ]);
     });
 
+    // eigen-prose.css counts the numbered lists around a list through a table, as the writer does.
+    test('a list in a table in a numbered item numbers by the lists around the table', async () => {
+        const indent = '<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>';
+        const numbering = [1, 2, 3]
+            .map((id) => {
+                const format = id === 2 ? 'lowerLetter' : 'decimal';
+                return `<w:abstractNum w:abstractNumId="${id}">${level(0, format, '%1.', indent)}</w:abstractNum><w:num w:numId="${id}"><w:abstractNumId w:val="${id}"/></w:num>`;
+            })
+            .join('');
+        const cell = `${numbered(2, 'a')}${plain('between')}${numbered(3, 'b')}`;
+        const body = `${numbered(1, 'One')}<w:tbl><w:tblPr><w:tblInd w:w="720" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>${cell}</w:tc></w:tr></w:tbl>`;
+        const json = (await importDocxBody(body, { numbering })).json;
+        expect(nodesOfType(json, 'table')).toHaveLength(1);
+        expect(nodesOfType(nodesOfType(json, 'listItem')[0] ?? {}, 'table')).toHaveLength(1);
+        expect(lists(json)).toEqual([
+            [1, null, 1],
+            [1, null, 1],
+            [1, '1', 1],
+        ]);
+    });
+
     // A plain object would read the prototype's constructor as a type.
     test('a format named after an object key is a decimal list', async () => {
         const numbering = `<w:abstractNum w:abstractNumId="1">${level(0, 'constructor', '%1.')}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="1"/></w:num>`;

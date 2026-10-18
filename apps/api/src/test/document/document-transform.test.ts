@@ -839,9 +839,10 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved again when one paragraph followed another at the space after the first alone and a list, quote or cell kept the spacing of the paragraphs it holds: the .eigen-prose > p + p and :is(li, blockquote, td, th) p rules, and nothing else.
 // All four moved again when headers and footers met paragraph format: the two sides' changes together, and nothing else.
 // Both doc HTML hashes moved again when a list became a flow-root and an untyped nested list numbered by depth: the ul, ol and ol ol rules of eigen-prose.css, and nothing else.
+// Both doc HTML hashes moved again when the list rules became Docs' own: the article's eigen-doc class, the .eigen-doc block with its first and last items' margins, and the restarted list's 0.25em, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'b5cfb0e1828d3122ebf9be60e964a0247ab8e71c133fb6a68d908186e03aeb28';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'b5cfb0e1828d3122ebf9be60e964a0247ab8e71c133fb6a68d908186e03aeb28';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'fc1b59f044efc0f329b138dec144fd556a56d21a06d2a58bb0f9c6331acc387b';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'fc1b59f044efc0f329b138dec144fd556a56d21a06d2a58bb0f9c6331acc387b';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'cbccd0e8bdcc6ca7cd54810e9c1e11fce1e89389744868b4dbec86e04cbb0dea';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';

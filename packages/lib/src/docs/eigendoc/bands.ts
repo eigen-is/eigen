@@ -29,6 +29,10 @@ export const BAND_EXCLUDED_NODES: ReadonlySet<string> = new Set([
 // Footer styles have none, so a one-line band sits on its distance from the edge.
 export const PAGE_BAND_CLASS = 'page-band';
 
+// Docs' prose, in the editor and its bands, quick look and the exports: eigen-prose.css draws its lists by it, which
+// a mail or chat editor's prose doesn't take.
+export const DOC_PROSE_CLASS = 'eigen-doc';
+
 // A band's distance from the paper's edge, Word's and Google's default: the page draws it there, and so do the PDF and
 // the docx.
 export const BAND_DISTANCE_MM = 12.7;

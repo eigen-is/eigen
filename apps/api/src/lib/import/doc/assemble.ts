@@ -514,6 +514,7 @@ function buildFlow(items: Item[]): JSONContent[] {
             const host = hostAt(item.indent);
             if (host) {
                 closeLists(stack.indexOf(host) + 1);
+                numberWithin(block, stack.filter((open) => open.kind === 'orderedList').length);
                 host.item.content?.push(block);
                 continue;
             }
@@ -633,6 +634,20 @@ function listType(para: Para, stack: Open[]): string | null {
     const type = LIST_TYPES.get(para.list?.format ?? '') ?? '1';
     const numbered = stack.filter((open) => open.kind === 'orderedList').length;
     return LIST_FORMATS.get(type) === untypedListFormat(numbered) ? null : type;
+}
+
+// A table's cells were read as flows of their own, so a list in one took its type at its depth there; in the list
+// item that holds the table, `numbered` lists more surround it.
+function numberWithin(node: JSONContent, numbered: number, depth = 0): void {
+    if (numbered === 0) return;
+    const ordered = node.type === 'orderedList';
+    if (ordered && node.attrs) {
+        const type = node.attrs['type'];
+        const format = typeof type === 'string' ? LIST_FORMATS.get(type) : untypedListFormat(depth);
+        node.attrs['type'] =
+            format === untypedListFormat(depth + numbered) ? null : (LIST_TYPES.get(format ?? '') ?? null);
+    }
+    for (const child of node.content ?? []) numberWithin(child, numbered, depth + (ordered ? 1 : 0));
 }
 
 // Lists nest by Word's level within one list; across lists by where the number starts, at or right of the open item's

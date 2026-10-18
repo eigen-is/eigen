@@ -3,6 +3,7 @@ import {
     BAND_DISTANCE_MM,
     BAND_ROOTS,
     type BandRoot,
+    DOC_PROSE_CLASS,
     PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
     type PageSetup,
@@ -83,8 +84,8 @@ export async function renderEigendocExport(
                 { synthesizeSmallCaps: pdf, pageCounters: pdf, equations },
             );
             return part === 'body'
-                ? `<article class="eigen-prose tiptap">${html}</article>`
-                : `<div class="band-${part}"><article class="eigen-prose tiptap ${PAGE_BAND_CLASS}">${html}</article></div>`;
+                ? `<article class="eigen-prose tiptap ${DOC_PROSE_CLASS}">${html}</article>`
+                : `<div class="band-${part}"><article class="eigen-prose tiptap ${DOC_PROSE_CLASS} ${PAGE_BAND_CLASS}">${html}</article></div>`;
         })
         .join('');
     const html = exportHtmlDocument({

@@ -230,6 +230,15 @@ describe('cell fill', () => {
         expect(await fillsOf(whole)).toEqual([['#000000', null]]);
     });
 
+    // nil is no shading at all, whatever fill it names.
+    test('a w:shd of nil is no fill, and a cell of nil in a filled table is none', async () => {
+        const nil = '<w:shd w:val="nil" w:fill="CFE2F3"/>';
+        expect(await fillsOf(table([row([cell('a', nil), cell('b')])]))).toEqual([[null, null]]);
+        expect(
+            await fillsOf(table([row([cell('a', nil), cell('b')])], '<w:shd w:val="clear" w:fill="000000"/>')),
+        ).toEqual([[null, '#000000']]);
+    });
+
     test('white and light grey text in a teal cell keep their color', async () => {
         const inner = [colored('white', 'FFFFFF'), colored('light', 'D9D9D9'), colored('grey', '808080')].join('');
         expect(await colorsOf(table([row([filledCell(inner, '008080'), cell('b')])]))).toEqual([
