@@ -12,6 +12,7 @@ import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { formatDateTime } from '@workspace/lib/date';
 import {
     DEFAULT_PAGE_SETUP,
+    DOC_PROSE_CLASS,
     normalStyleProperties,
     type PageSetup,
     pageBoxStyle,
@@ -243,7 +244,7 @@ const INTRINSIC_PAGE: Record<TextPreviewMode, IntrinsicPage | null> = {
 // <pre> rule paints a dark code-block background that is wrong for a whole-file code thumbnail.
 // A deck and a drawing need none: a compositor page carries its own box and its own paint.
 const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
-    eigendoc: 'eigen-prose tiptap',
+    eigendoc: `eigen-prose tiptap ${DOC_PROSE_CLASS}`,
     eigenslides: '',
     eigensheets: 'eigensheets-preview',
     eigenvector: '',

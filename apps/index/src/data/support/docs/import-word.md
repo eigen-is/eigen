@@ -44,7 +44,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Headings stay headings, and Word's Title and Subtitle styles become a Title and a Subtitle.
 - Numbered lists keep their numbers, the number they start at, and their style (1, a, A, i, or I). A list keeps counting across a page break, and a page break inside a list item stays in that item.
 - Checkboxes become a checklist, ticked or not.
-- Tables keep their merged cells and column widths. A table wider than the page shrinks to fit.
+- Tables keep their merged cells, column widths, and cell colors. A table wider than the page shrinks to fit.
 - Images keep their size and caption. An image that floats left or right of the text floats there in Eigen too.
 - Footnotes and endnotes become a numbered list at the end of the document, linked from the text.
 - The header and footer come across, with page numbers and page counts, and the first page's own header and footer when the Word file has them. An image that floats in a header or footer comes in on a line of its own.

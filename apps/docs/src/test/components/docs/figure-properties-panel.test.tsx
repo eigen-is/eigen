@@ -78,6 +78,33 @@ test('a Style toggle keeps the figure selected and lights the new layout', async
     expect(styleToggles().map((t) => t.getAttribute('aria-pressed'))).toEqual(['false', 'true', 'false']);
 });
 
+// A wrapped figure is at most half the column, or nothing wraps beside it: the switch shrinks it in the same write.
+test.each([
+    [500, 1, 'wrap-left', 300],
+    [500, 2, 'wrap-right', 300],
+    [250, 1, 'wrap-left', 250],
+])(
+    'a %d px figure wrapped by toggle %d is %s and %d px wide, in one transaction',
+    async (width, toggle, layout, fitted) => {
+        const editor = await mount({ width });
+        let transactions = 0;
+        editor.on('transaction', ({ transaction }) => {
+            if (transaction.docChanged) transactions++;
+        });
+
+        await act(async () => styleToggles()[toggle]?.click());
+
+        expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ layout, width: fitted });
+        expect(transactions).toBe(1);
+    },
+);
+
+test('a wrapped figure set on its own line keeps its width', async () => {
+    const editor = await mount({ width: 300, layout: 'wrap-left' });
+    await act(async () => styleToggles()[0]?.click());
+    expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ layout: 'block', width: 300 });
+});
+
 test.each([
     ['Alt text', 'alt', 'A chart'],
     ['Caption', 'caption', 'Figure 1'],

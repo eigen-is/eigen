@@ -14,6 +14,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 - **Normal text** — a document keeps its own normal text: font, size, colour, line spacing and paragraph spacing. Format → Paragraph styles → Normal text → **Update 'Normal text' to match** makes the text at the cursor the document's normal text, as in Google Docs. A Word file brings its own, so a 12 pt Times New Roman body imports at 12 pt in Source Serif 4 without a size or font on every word, and the Word download writes it back as the document's defaults
 - **Slide size** — File → **Page setup…** in Slides switches a presentation between Widescreen 16:9 and Standard 4:3. Content keeps its position, so after a switch to 16:9 what sat near the bottom of a 4:3 slide is hidden until you undo or switch back. A 4:3 presentation downloads on 4:3 pages
 - **Charts in Vector, Slides, Docs and Sheets** — Insert → **Chart** → Bar, Column, Line or Pie places a chart with sample data. The Chart panel sets its type, stacking (None, Standard or 100%), titles, legend, font, axis range, gridlines and colors, each color Automatic until you pick one, and **Edit data** (or a double-click) edits its numbers in a small spreadsheet with the keys of Sheets, which grows as you type past the data and takes cells pasted from a spreadsheet. In Docs a chart sits in the text like an image, wraps and aligns like one, shows its size in cm while you drag its handle, and appears in PDF and web page downloads; Word downloads leave it out for now and keep its caption. In Sheets, Insert → **Chart** charts the selected cells and follows them as they change: the **Chart editor** sets its data range and its look, its ⋮ menu downloads it as SVG, and the PDF and web page downloads and the Drive preview show it
+- **Table cell color** — in Docs, the table panel's **Fill** row and Format → Table → **Cell background color** color the selected cells. Word files keep cell colors both ways
 - **Equations in Docs** — Insert → **Equation** opens the Equation panel: type LaTeX (or paste MathML) with a live preview, or pick from Google's five symbol menus. **Display** puts an equation on a line of its own. Equations take comments, count in word count and search, and download to Word as Word equations
 - **Word import and PDF** — a Word file's equations come in as equations you can edit, and the PDF draws equations
 - **Paste equations** — an equation copied from Word for the web or a web page that shows math pastes into Docs as an equation you can edit
@@ -23,6 +24,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 ### Changed
 
 - **Print in Docs** — File → **Print** and ⌘P open the document as a PDF in a new tab to print from, so headers, footers and page numbers print. Offline, before your latest edits are saved, or when the PDF can't be made, Docs prints from the browser without them and says so
+- **Nested numbered lists** — a numbered list inside another numbers 1. a. i. by depth, as in Google Docs. A list set to 1. 2. 3. from now on stays decimal at any depth. In existing documents, a nested list that showed 1. 2. 3., whether set so or imported from Word, now shows a. or i.: choose Format → Bullets and numbering → Numbered list → **1. 2. 3.** in it again
 - **Image sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag an image's handle are in cm, as in Page setup
 - **Sheets export** — an Excel file draws in Inter, the font Sheets draws in, and its column widths match the grid
 
@@ -30,6 +32,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 - **Sheets copy and Tab** — copied cells paste into other apps as rows and columns, not one run of text, and Tab while typing in a cell confirms it and moves right (Shift+Tab left)
 - **Copy and paste in Sheets** — a pasted cell keeps its font, mapped to the bundled one: Times New Roman becomes Source Serif 4, where every font became Inter
+- **Docs images** — switching an image or chart to wrap text shrinks it to half the width of the text so text fits beside it, dragging an image's handle follows the pointer when the page is shown smaller, and a list beside a wrapped image keeps its bullets or numbers clear of it. A Word file's wrapped picture placed from the page's edge comes in on the side Word shows it
 - **Server** — a file too large for the server's memory to import, export, preview or index is refused instead of taking the server down. An import says Document too large or Spreadsheet too large
 
 ## [0.3.3] - 2026-10-13

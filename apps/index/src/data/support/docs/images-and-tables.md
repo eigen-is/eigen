@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, charts, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 You can insert images, charts, and tables anywhere in a document. Images can come from your device or from Drive. Charts start with sample data you then edit. Tables start as a 3×3 grid and you can grow them from there.
@@ -43,7 +43,7 @@ Click an image to select it. Resize handles appear at the edges. Drag a handle t
 On a wide screen, selecting an image also opens the **Image** panel on the right side of the editor. From there you can:
 
 - **Width**: type the image's width in centimeters and press Enter. The height follows, and the image stays between 2.6 cm and the width of the text (half of it for a floating image).
-- **Style**: set the image to sit on its own line (the default), float to the left, or float to the right with text wrapping around it.
+- **Style**: set the image to sit on its own line (the default), float to the left, or float to the right with text wrapping around it. An image wider than half the text shrinks to half when it starts to float, so the text has room beside it.
 - **Align**: when the image is on its own line, choose left, center, or right alignment.
 - **Alt**: add alternative text, which is used by screen readers and shown if the image fails to load.
 - **Cap**: add a caption that appears beneath the image.
@@ -88,7 +88,7 @@ A chart prints and downloads as a PDF or a web page. The Word file leaves it out
 
 Click inside the table. The **Table** panel opens on the right side of the editor (on a wide screen).
 
-The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Distribute columns**, **Merge cells**, **Unmerge cells**, and **Toggle header row**. The **Table** item is greyed out until your cursor is in a table.
+The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Distribute columns**, **Merge cells**, **Unmerge cells**, **Toggle header row**, and **Cell background color**. The **Table** item is greyed out until your cursor is in a table.
 
 **Add or remove columns**
 
@@ -107,6 +107,10 @@ Under **Rows**, click **Before** or **After** to add a row above or below the cu
 **Merge and unmerge cells**
 
 Select two or more cells, then click **Merge** under **Cells** to join them into one. Click **Unmerge** to divide a merged cell back into its original cells.
+
+**Color cells**
+
+Select one or more cells, then click the **Fill** row under **Cells** and pick a color. Choose **None** to take the color away. **Format → Table → Cell background color** does the same.
 
 **Toggle the header row**
 

@@ -135,6 +135,8 @@ Press Enter to add the next item, and press Enter on an empty item to end the li
 
 Open **Format**, then **Bullets and numbering**, then **Numbered list**, and choose one of five styles: **1. 2. 3.**, **a. b. c.**, **A. B. C.**, **i. ii. iii.**, or **I. II. III.** On a regular paragraph this starts a numbered list in that style. Inside a numbered list it changes the style of that list. The style of the list the cursor is in is marked.
 
+A numbered list inside another numbered list counts 1. a. i. by level, as in Google Docs: letters one level in, roman numerals two levels in, then numbers again. A list you choose a style for, **1. 2. 3.** included, keeps that style at any level.
+
 ### Restart numbering
 
 1. Click in the list item where the new count should begin.

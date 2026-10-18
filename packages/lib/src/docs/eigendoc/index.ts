@@ -5,6 +5,7 @@ export {
     BAND_ROOTS,
     bandEdge,
     bandHasContent,
+    DOC_PROSE_CLASS,
     FIRST_PAGE_BAND,
     PAGE_BAND_CLASS,
 } from './bands';
@@ -27,6 +28,7 @@ export {
     setFigureAttributes,
 } from './nodes/figure-frame';
 export { selectionFontSizes } from './nodes/font-size';
+export { listTypeOfStyle } from './nodes/ordered-list';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_KINDS, PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';
@@ -39,6 +41,7 @@ export {
     readParagraphFormat,
     selectionParagraphFormat,
 } from './nodes/paragraph-format';
+export { readCellBackground } from './nodes/table-cell';
 export type { TitleType } from './nodes/title';
 export type { NormalStyle } from './normal-style';
 export { DEFAULT_NORMAL_STYLE, normalStyleProperties, readNormalStyle, STYLE_ROOT } from './normal-style';

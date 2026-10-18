@@ -38,6 +38,17 @@ describe('prose css — the lookup', () => {
     });
 });
 
+// A mail or chat editor takes eigen-prose.css too, and its sent HTML numbers a nested list 1. 1. 1.
+describe("prose css — Docs' own rules", () => {
+    test("the depth numbering and the lists that contain their floats are only Docs'", () => {
+        expect(proseValue('.eigen-doc ol ol', 'list-style-type')).toBe('lower-alpha');
+        expect(proseValue('.eigen-doc ol ol ol', 'list-style-type')).toBe('lower-roman');
+        expect(proseValue('.eigen-doc ul', 'display')).toBe('flow-root');
+        expect(PROSE_CSS).not.toMatch(/\.(eigen-prose|tiptap) ol ol[^{]*\{[^}]*list-style-type/);
+        expect(PROSE_CSS).not.toMatch(/\.(eigen-prose|tiptap) (ul|ol)[^{]*\{[^}]*flow-root;/);
+    });
+});
+
 describe('canvas text css — the lookup', () => {
     test('the first rule, under the header comment, answers', () => {
         expect(canvasTextValue('.eigen-canvas-text p', 'margin')).toBe('0');

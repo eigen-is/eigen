@@ -3,7 +3,7 @@ import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
-import { selectionFontSizes, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
+import { readCellBackground, selectionFontSizes, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
 import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { canAnchorComment } from '../extensions/comment-mark';
 import { numberedListType, orderedListDepth } from '../list-numbering';
@@ -34,7 +34,7 @@ export type ToolbarState = {
     spaceAfter: boolean;
     bulletList: boolean;
     orderedList: boolean;
-    // The type of the numbered list the caret is in, decimal as '1'.
+    // The type of the numbered list the caret is in, decimal as '1', an untyped one's as it draws at its depth.
     orderedListType: string | undefined;
     taskList: boolean;
     link: boolean;
@@ -44,6 +44,8 @@ export type ToolbarState = {
     figure: boolean;
     canMergeCells: boolean;
     canSplitCell: boolean;
+    // The fill of the cell the selection starts in, '' for none.
+    cellBackground: string;
 };
 
 // Format › Table and the table panel enable Merge and Unmerge by these; each dry-runs its command, so only in a table.
@@ -55,6 +57,17 @@ export function selectCellCommands(
         canMergeCells: inTable && editor.can().mergeCells(),
         canSplitCell: inTable && editor.can().splitCell(),
     };
+}
+
+// Format › Table and the table panel show the fill of the cell the selection starts in, a cell selection's first.
+export function cellBackground(state: EditorState): string {
+    const { $from } = state.selection;
+    for (let depth = $from.depth; depth > 0; depth--) {
+        const node = $from.node(depth);
+        if (node.type.spec['tableRole'] === 'cell' || node.type.spec['tableRole'] === 'header_cell')
+            return readCellBackground(node.attrs['backgroundColor']) ?? '';
+    }
+    return '';
 }
 
 // Each check walks every node a range spans, some 20 per transaction, and a collaborator's edit or caret is one too.
@@ -121,7 +134,12 @@ export function useToolbarState(editor: Editor, normal: NormalStyle): ToolbarSta
                 bulletList: active('bulletList'),
                 orderedList: active('orderedList'),
                 orderedListType:
-                    listDepth === undefined ? undefined : numberedListType(selection.$from.node(listDepth)),
+                    listDepth === undefined
+                        ? undefined
+                        : numberedListType(
+                              selection.$from.node(listDepth),
+                              view?.nodeDOM(selection.$from.before(listDepth)),
+                          ),
                 taskList: active('taskList'),
                 link: active('link'),
                 selectionEmpty: selection.empty,
@@ -129,6 +147,7 @@ export function useToolbarState(editor: Editor, normal: NormalStyle): ToolbarSta
                 table,
                 figure: active('figure'),
                 ...selectCellCommands(editor, table),
+                cellBackground: table ? cellBackground(state) : '',
             };
         },
     });

@@ -1,8 +1,8 @@
 import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
-import type { FigureAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
-import { FigureNode, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
+import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { FigureNode, readFigureFrameAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
@@ -54,7 +54,7 @@ function FigureView(props: NodeViewProps) {
     const showPlaceholder = !src;
     const alt = node.attrs.alt || '';
     const isEditable = editor.isEditable;
-    const layout = (node.attrs.layout || 'block') as FigureLayout;
+    const layout = readFigureFrameAttrs(node.attrs).layout ?? 'block';
 
     // Re-arm the one-shot loader when the source changes so the author's width reset recomputes the ratio.
     useEffect(() => {
