@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { readParagraphFormat } from '@workspace/lib/docs/eigendoc';
 import { readStoredEquation } from '../../document/equation';
-import { CODE_BLOCK_LOOK, QUOTE_LOOK, TABLE_MARGIN, untypedListFormat } from '../../document/looks';
+import { BLOCK_MARGINS, CODE_BLOCK_LOOK, QUOTE_LOOK, TABLE_MARGIN, untypedListFormat } from '../../document/looks';
 import { LIST_FORMATS, LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
@@ -525,6 +525,8 @@ function buildFlow(items: Item[]): JSONContent[] {
         if (item.kind === 'block') {
             const host = item.itemAt === undefined ? undefined : quoteHost(item.itemAt);
             if (host) {
+                const around = stack.slice(0, stack.indexOf(host) + 1);
+                numberWithin(item.node, around.filter((open) => open.kind === 'orderedList').length);
                 host.item.content?.push(item.node);
                 continue;
             }
@@ -554,11 +556,9 @@ function buildFlow(items: Item[]): JSONContent[] {
             }
         }
         closeLists();
-        // The space Eigen draws above it anyway: none at the top, as the writer writes a first heading, a table's margin.
-        let above: number | undefined;
-        if (blocks.length === 0) above = 0;
-        else if (blocks.at(-1)?.type === 'table') above = TABLE_MARGIN;
-        blocks.push(textblockOf(item, 0, above));
+        // The space Eigen draws above it anyway: none at the top, as the writer writes a first heading, and below a
+        // block that ends in a table the gap the writer starts it with.
+        blocks.push(textblockOf(item, 0, blocks.length === 0 ? 0 : gapBelowTable(blocks.at(-1))));
     }
     flushCode();
     closeLists();
@@ -576,6 +576,25 @@ function holdsWrapped(item: JSONContent | undefined): boolean {
     return !!item?.content?.some((block) =>
         block.content?.some((node) => node.type === 'figure' && String(node.attrs?.['layout']).startsWith('wrap')),
     );
+}
+
+// The containers whose last block can be a table, with the margin the writer gives their last block.
+const CONTAINER_MARGINS = new Map([
+    ['bulletList', BLOCK_MARGINS.ul],
+    ['taskList', BLOCK_MARGINS.ul],
+    ['orderedList', BLOCK_MARGINS.ol],
+    ['blockquote', BLOCK_MARGINS.blockquote],
+    ['listItem', 0],
+    ['taskItem', 0],
+]);
+
+// A table holds no space after, so the writer starts the block below one with its margin, or with the larger margin of
+// a list or quote it ends, as withAfter gives that to the table.
+function gapBelowTable(block: JSONContent | undefined): number | undefined {
+    if (block?.type === 'table') return TABLE_MARGIN;
+    const margin = CONTAINER_MARGINS.get(block?.type ?? '');
+    const inner = margin === undefined ? undefined : gapBelowTable(block?.content?.at(-1));
+    return inner === undefined ? undefined : Math.max(inner, margin ?? 0);
 }
 
 // An unnumbered paragraph indented to an item's text continues the item; at no indent it ends the list.
@@ -636,8 +655,8 @@ function listType(para: Para, stack: Open[]): string | null {
     return LIST_FORMATS.get(type) === untypedListFormat(numbered) ? null : type;
 }
 
-// A table's cells were read as flows of their own, so a list in one took its type at its depth there; in the list
-// item that holds the table, `numbered` lists more surround it.
+// A table's cells and a quote were read as flows of their own, so a list in one took its type at its depth there; in
+// the list item that holds the table or quote, `numbered` lists more surround it.
 function numberWithin(node: JSONContent, numbered: number, depth = 0): void {
     if (numbered === 0) return;
     const ordered = node.type === 'orderedList';
