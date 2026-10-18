@@ -477,13 +477,30 @@
 
 /* ===== Prose-specific spacing (wider margins for reading) ===== */
 .eigen-prose {
+    /* A doc's paragraph that sets no format: line spacing 1.4 of Inter's 1.21 line, and 11 pt after
+       (DOCUMENT_PARAGRAPH_FORMAT, held to these by looks.test.ts). */
     p {
-        line-height: 1.7;
+        line-height: 1.694;
         margin-bottom: 1em;
     }
 
     & > * + * {
         margin-top: 0.75em;
+    }
+
+    /* A paragraph's space before is its own (DOCUMENT_PARAGRAPH_FORMAT's 0), so one follows another at the space after
+       the first alone, as in Word and Google Docs. */
+    & > p + p {
+        margin-top: 0;
+    }
+
+    /* Lists, quotes and table cells own the spacing of the paragraphs they hold, as the docx reader and writer take
+       it: a paragraph's own space before or after draws only where it stands in the doc itself. */
+    :is(li, blockquote, td, th) p {
+        /* biome-ignore lint/complexity/noImportantStyles: must beat the format's inline padding */
+        padding-top: 0 !important;
+        /* biome-ignore lint/complexity/noImportantStyles: must beat the format's inline margin */
+        margin-bottom: 0 !important;
     }
 
     a {

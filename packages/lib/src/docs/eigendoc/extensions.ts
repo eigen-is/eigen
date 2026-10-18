@@ -18,13 +18,12 @@ import { EigenFontSize } from './nodes/font-size';
 import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
 import { PageNumberNode } from './nodes/page-number';
+import { EigenParagraphFormat, PROSE_TEXTBLOCKS } from './nodes/paragraph-format';
 import { SmallMark } from './nodes/small-mark';
 import { SubtitleNode, TitleNode } from './nodes/title';
 
-// The textblocks that hold prose, which an alignment applies to; a code block holds code.
-export const PROSE_TEXTBLOCKS = ['paragraph', 'title', 'subtitle', 'heading'];
-
-export function getDocExtensions(options?: { lowlight?: unknown; exclude?: string[] }) {
+// textColumnWidth: the editor's text column in px, which a paragraph's indent stays within.
+export function getDocExtensions(options?: { lowlight?: unknown; exclude?: string[]; textColumnWidth?: () => number }) {
     const exclude = options?.exclude;
     const extensions = [
         StarterKit.configure({
@@ -53,6 +52,10 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         TitleNode,
         SubtitleNode,
         TextAlign.configure({ types: PROSE_TEXTBLOCKS }),
+        EigenParagraphFormat.configure({
+            types: PROSE_TEXTBLOCKS,
+            ...(options?.textColumnWidth && { textColumnWidth: options.textColumnWidth }),
+        }),
         FigureNode,
         ChartNode,
         EquationNode,

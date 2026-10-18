@@ -1109,3 +1109,82 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         });
     }, 60_000);
 });
+
+// D13: a paragraph's own spacing and indents, as Word and Google Docs draw them.
+(weasyPrint && python !== null ? describe : describe.skip)('doc export — paragraph format (WeasyPrint)', () => {
+    const formatted = (attrs: Record<string, unknown>, text = 'x'): JSONContent => ({
+        type: 'paragraph',
+        attrs,
+        content: [{ type: 'text', text }],
+    });
+    // The space between each paragraph's text and the next one's, in pt.
+    const gaps = async (...content: JSONContent[]) => {
+        const boxes = await laidOut(
+            await pdfHtml(...content),
+            "if tag in ('p', 'h2') and type(box).__name__ == 'BlockBox': print(box.content_box_y(), box.height)",
+        );
+        const spans = boxes.map((box) => box.split(' ').map(Number));
+        return spans.slice(1).map(([top], i) => {
+            const [previousTop, previousHeight] = spans[i];
+            return Math.round((top - previousTop - previousHeight) * 0.75 * 100) / 100;
+        });
+    };
+
+    test("paragraphs part by the space after the one above alone: 11 pt, none at 0, Eigen's look unchanged", async () => {
+        expect(
+            await gaps(
+                paragraph('a'),
+                paragraph('b'),
+                formatted({ spaceAfter: 0 }),
+                formatted({ spaceAfter: 0 }),
+                paragraph('c'),
+            ),
+        ).toEqual([11, 11, 0, 0]);
+    }, 60_000);
+
+    // CSS margins collapse to the larger; Word and Google Docs add the two.
+    test('a space before adds to the space after the paragraph above', async () => {
+        expect(
+            await gaps(
+                paragraph('a'),
+                formatted({ spaceBefore: 12 }),
+                formatted({ spaceAfter: 0 }),
+                formatted({ spaceBefore: 6 }),
+            ),
+        ).toEqual([23, 11, 6]);
+        // A heading's own space before replaces its style's.
+        const heading = {
+            type: 'heading',
+            attrs: { level: 2, spaceBefore: 6 },
+            content: [{ type: 'text', text: 'h' }],
+        };
+        expect(await gaps(paragraph('a'), heading)).toEqual([17]);
+    }, 60_000);
+
+    // A list owns the spacing of its items, as the docx writes it.
+    test("in a list item a stored space before or after draws nothing of the list's", async () => {
+        const item = (attrs: Record<string, unknown>) => ({
+            type: 'listItem',
+            content: [formatted(attrs)],
+        });
+        const plain = await gaps({ type: 'bulletList', content: [item({}), item({}), item({})] });
+        const stored = await gaps({
+            type: 'bulletList',
+            content: [item({ spaceAfter: 40 }), item({ spaceBefore: 40 }), item({})],
+        });
+        expect(stored).toEqual(plain);
+    }, 60_000);
+
+    // Word's w:left and w:hanging, Google's Left and Hanging: the body lines at Left, the first line hanging out of it.
+    test('a hanging indent draws the first line left of the body lines, which stand at the left indent', async () => {
+        const cm = (value: number) => (value / 2.54) * 72;
+        const html = await pdfHtml(formatted({ indentLeft: cm(2), indentFirstLine: -cm(1) }, 'word '.repeat(60)));
+        const lines = await laidOut(
+            html,
+            "if tag == 'article': print(box.content_box_x())\n        if type(box).__name__ == 'LineBox' and box.children: print(box.children[0].position_x)",
+        );
+        const [column, first, second] = lines.map(Number);
+        expect(Math.round(((first - column) * 0.75 * 2.54) / 0.72) / 100).toBe(1);
+        expect(Math.round(((second - column) * 0.75 * 2.54) / 0.72) / 100).toBe(2);
+    }, 60_000);
+});

@@ -2,7 +2,13 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName, readFontSize } from '@workspace/lib/constants/fonts';
+import {
+    DOCUMENT_LINE_RATIO,
+    EIGEN_FONT_NAMES,
+    EIGEN_FONTS,
+    getFontName,
+    readFontSize,
+} from '@workspace/lib/constants/fonts';
 import {
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
@@ -10,6 +16,7 @@ import {
     pageTwips,
     readFigureAttrs,
     readPageNumberKind,
+    readParagraphFormat,
     type TitleType,
 } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
@@ -52,6 +59,7 @@ import {
     proseTextLook,
     QUOTE_LOOK,
     SMALL_LOOK,
+    TABLE_MARGIN,
     TASK_DONE_LOOK,
     TITLE_LOOKS,
     TITLE_SELECTORS,
@@ -77,7 +85,7 @@ import {
     TWIPS_PER_PX,
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
-import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
+import { DOCX_FONT_FILES, type DocxFontFiles, fontLineHeight, sfntTables } from '../fonts';
 import { figureMediaKey } from './docx-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
@@ -251,25 +259,20 @@ const FONT_SLOTS = ['Regular', 'Bold', 'Italic', 'BoldItalic'] as const satisfie
 
 type FontSlot = (typeof FONT_SLOTS)[number];
 
-// Each family's font table entry and Word's line height, (usWinAscent + usWinDescent) / unitsPerEm, from its Regular.
+// Each family's font table entry, from its Regular.
 const FONT_ENTRIES = EIGEN_FONTS.map(({ name, category }) => {
     const files = DOCX_FONT_FILES.get(name);
-    const tables = files && sfntTables(fs.readFileSync(files.Regular));
-    const os2 = tables?.get('OS/2');
-    const head = tables?.get('head');
-    if (!os2 || !head) throw new Error(`no OS/2 or head table for ${name}`);
+    const os2 = files && sfntTables(fs.readFileSync(files.Regular)).get('OS/2');
+    if (!os2) throw new Error(`no OS/2 table for ${name}`);
     const hex32 = (offset: number) => os2.readUInt32BE(offset).toString(16).toUpperCase().padStart(8, '0');
     const sig = Object.entries({ usb0: 42, usb1: 46, usb2: 50, usb3: 54, csb0: 78, csb1: 82 }).map(
         ([field, offset]) => `w:${field}="${hex32(offset)}"`,
     );
     return {
         name,
-        lineHeight: (os2.readUInt16BE(74) + os2.readUInt16BE(76)) / head.readUInt16BE(18),
         properties: `<w:panose1 w:val="${os2.subarray(32, 42).toString('hex').toUpperCase()}"/><w:charset w:val="00"/><w:family w:val="${FONT_FAMILY[category]}"/><w:pitch w:val="${category === 'monospace' ? 'fixed' : 'variable'}"/><w:sig ${sig.join(' ')}/>`,
     };
 });
-
-const FONT_LINE_HEIGHT = new Map(FONT_ENTRIES.map(({ name, lineHeight }) => [name, lineHeight]));
 
 // MS Gothic draws the checkbox glyphs.
 function fontTableXml(checkboxes: boolean, embeds: Map<string, string>): string {
@@ -348,8 +351,8 @@ function styleFace(style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' |
 }
 
 // Word's auto line scales with the tallest face's own line height, CSS's unitless one with the largest size alone: a
-// paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
-function familyLine(style: StyleId | undefined, markFace: RunFace, faces: RunFace[]): number | undefined {
+// paragraph all in one family other than its mark's gets its line rescaled, unless the mark's taller.
+function familyLine(line: number, markFace: RunFace, faces: RunFace[]): number | undefined {
     const family = faces[0]?.family;
     if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
     let tallest = fontLineHeight(markFace.family) * markFace.size;
@@ -359,7 +362,7 @@ function familyLine(style: StyleId | undefined, markFace: RunFace, faces: RunFac
         largest = Math.max(largest, face.size);
     }
     const css = fontLineHeight(markFace.family) * largest;
-    return tallest === css ? undefined : Math.round((styleSpacing(style, 'line') * css) / tallest);
+    return tallest === css ? undefined : Math.round((line * css) / tallest);
 }
 
 // ── Properties, written in the ECMA-376 sequence: Word reports a child out of order as unreadable content ─────────
@@ -378,7 +381,7 @@ type ParagraphProps = {
     pBdr?: Partial<Record<(typeof BORDER_SIDES)[number], Border>>;
     shading?: string;
     spacing?: Spacing;
-    ind?: { left: number; right?: number; hanging?: number };
+    ind?: { left: number; right?: number; firstLine?: number; hanging?: number };
     contextualSpacing?: true;
     jc?: string;
     outlineLvl?: number;
@@ -436,7 +439,7 @@ function pPrXml(props: ParagraphProps): string {
         spacing &&
             `<w:spacing${spacing.before === undefined ? '' : ` w:before="${spacing.before}"`}${spacing.after === undefined ? '' : ` w:after="${spacing.after}"`}${spacing.line === undefined ? '' : ` w:line="${spacing.line}" w:lineRule="${spacing.exact ? 'exact' : 'auto'}"`}/>`,
         ind &&
-            `<w:ind w:left="${ind.left}"${ind.right === undefined ? '' : ` w:right="${ind.right}"`}${ind.hanging === undefined ? '' : ` w:hanging="${ind.hanging}"`}/>`,
+            `<w:ind w:left="${ind.left}"${ind.right === undefined ? '' : ` w:right="${ind.right}"`}${ind.firstLine === undefined ? '' : ` w:firstLine="${ind.firstLine}"`}${ind.hanging === undefined ? '' : ` w:hanging="${ind.hanging}"`}/>`,
         contextualSpacing && '<w:contextualSpacing/>',
         jc && `<w:jc w:val="${jc}"/>`,
         outlineLvl !== undefined && `<w:outlineLvl w:val="${outlineLvl}"/>`,
@@ -498,7 +501,13 @@ const TITLE_STYLES = [
 const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>([
     [
         'paragraph',
-        (node, context) => blocksOf(node.content ?? [], textProps({ jc: justification(node) }, context), context, true),
+        (node, context) =>
+            blocksOf(
+                node.content ?? [],
+                formatted(node, textProps({ jc: justification(node) }, context), context),
+                context,
+                true,
+            ),
     ],
     [
         'heading',
@@ -517,7 +526,12 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
                 context,
             );
             const upright = !!nodeLook('heading', level).italic;
-            return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
+            return blocksOf(
+                node.content ?? [],
+                formatted(node, props, context),
+                { ...context, blockPt: sizePt, upright },
+                true,
+            );
         },
     ],
     ...TITLE_STYLES.map(({ type, id }) => [type, titleOf(type, id)] as const),
@@ -595,7 +609,12 @@ function titleOf(type: TitleType, style: StyleId) {
         const props = textProps({ style, jc: justification(node) }, context);
         const { sizePt } = textMetrics(TITLE_SELECTORS[type]);
         const upright = !!nodeLook(type).italic;
-        return blocksOf(node.content ?? [], props, { ...context, blockPt: sizePt, upright }, true);
+        return blocksOf(
+            node.content ?? [],
+            formatted(node, props, context),
+            { ...context, blockPt: sizePt, upright },
+            true,
+        );
     };
 }
 
@@ -608,7 +627,11 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
     const flush = () => {
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
-        const line = familyLine(props.style, useFace(context.pkg, {}, props.style), faces);
+        const line = familyLine(
+            props.spacing?.line ?? styleSpacing(props.style, 'line'),
+            useFace(context.pkg, {}, props.style),
+            faces,
+        );
         let own = line === undefined ? props : { ...props, spacing: { ...props.spacing, line } };
         // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
         if (pieces.length > 0 && props.style && STYLES.get(props.style)?.pPr?.outlineLvl !== undefined)
@@ -761,6 +784,33 @@ function textProps(own: Pick<ParagraphProps, 'style' | 'spacing' | 'jc'>, contex
         spacing: own.spacing ?? (own.style || context.after === undefined ? undefined : { after: context.after }),
         ind: indentOf(style, context),
         jc: own.jc ?? context.align,
+    };
+}
+
+// A prose textblock's own format over what its style and container give it: its indent counts from the container's text.
+// An item, a quote and a cell own the spacing of what they hold, as the editor draws it.
+function formatted(node: JSONContent, props: ParagraphProps, context: Context): ParagraphProps {
+    const format = readParagraphFormat(node.attrs ?? {});
+    const spacing: Spacing = { ...props.spacing };
+    if (format.lineSpacing !== undefined)
+        spacing.line = autoLine(format.lineSpacing * DOCUMENT_LINE_RATIO * BODY.sizePt, BODY.sizePt, BODY.font);
+    if (context.quotes === 0 && context.after === undefined) {
+        if (format.spaceBefore !== undefined) spacing.before = twips(format.spaceBefore);
+        if (format.spaceAfter !== undefined) spacing.after = twips(format.spaceAfter);
+    }
+    const { indentLeft, indentRight, indentFirstLine } = format;
+    const indented = indentLeft !== undefined || indentRight !== undefined || indentFirstLine !== undefined;
+    return {
+        ...props,
+        spacing: Object.keys(spacing).length > 0 ? spacing : undefined,
+        ind: indented
+            ? {
+                  left: context.indent + twips(indentLeft ?? 0),
+                  right: indentRight === undefined ? undefined : twips(indentRight),
+                  firstLine: indentFirstLine !== undefined && indentFirstLine > 0 ? twips(indentFirstLine) : undefined,
+                  hanging: indentFirstLine !== undefined && indentFirstLine < 0 ? twips(-indentFirstLine) : undefined,
+              }
+            : props.ind,
     };
 }
 
@@ -1063,7 +1113,7 @@ const TABLE_LOOK = {
         vertical: twips(cssPt(boxSide(CELL_PADDING, 'top'), BODY.sizePt)),
         horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
     },
-    margin: twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt)),
+    margin: TABLE_MARGIN,
 };
 
 // ── Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback ─────────────────────────────────
@@ -1434,12 +1484,6 @@ function lineHeightPt(value: string, sizePt: number): number {
 // A multiple of the font's own line height, so the pitch is the CSS one: Google Docs reads every atLeast as single.
 function autoLine(linePt: number, sizePt: number, font: string): number {
     return Math.round((240 * linePt) / (sizePt * fontLineHeight(font)));
-}
-
-function fontLineHeight(font: string): number {
-    const lineHeight = FONT_LINE_HEIGHT.get(font);
-    if (lineHeight === undefined) throw new Error(`no line height for ${font}`);
-    return lineHeight;
 }
 
 // A length an element in the body text takes, in twips.

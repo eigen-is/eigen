@@ -9,6 +9,7 @@ import { parseOoxml } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip, type ZipReader } from '../../lib/core/zip';
 import { docSchema } from '../../lib/document/doc-schema';
+import { cssPt, QUOTE_LOOK, twips } from '../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
 import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
@@ -670,12 +671,12 @@ describe('docx writer — paragraphs and headings', () => {
                 p(text('h', { type: 'code' })),
             ),
         );
-        // 337 is 1.7 × 11 pt at Inter's 1.210; Source Serif 4 is 1.371, JetBrains Mono 1.32, Excalifont 1.26.
+        // 336 is line spacing 1.4 at Inter's 1.210; Source Serif 4 is 1.371, JetBrains Mono 1.32, Excalifont 1.26.
         // Mixed families keep the style's; inline code is smaller, so the mark's Inter stays the tallest.
         expect(xmlChildren(body, W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')))).toEqual([
             '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
-            '<w:pPr><w:spacing w:line="309" w:lineRule="auto"/></w:pPr>',
-            '<w:pPr><w:spacing w:line="324" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:spacing w:line="308" w:lineRule="auto"/></w:pPr>',
+            '<w:pPr><w:spacing w:line="323" w:lineRule="auto"/></w:pPr>',
             '<w:pPr><w:pStyle w:val="Heading1"/><w:spacing w:line="210" w:lineRule="auto"/></w:pPr>',
             '',
             '',
@@ -692,6 +693,102 @@ describe('docx writer — paragraphs and headings', () => {
             '',
             '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
         ]);
+    });
+});
+
+// D13: a prose textblock's own line spacing, spacing and indents, over its style's and its container's.
+describe('docx writer — paragraph format', () => {
+    const formatted = (attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent => ({
+        type: 'paragraph',
+        attrs,
+        content: content.length > 0 ? content : [text('x')],
+    });
+    const pPrOf = async (...blocks: JSONContent[]) =>
+        xmlChildren(await bodyOf(doc(...blocks)), W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')));
+
+    test.each([
+        [1, 240],
+        [1.15, 276],
+        [1.5, 360],
+        [2, 480],
+    ])('line spacing %p is an auto line of %p', async (lineSpacing, line) => {
+        expect(await pPrOf(formatted({ lineSpacing }))).toEqual([
+            `<w:pPr><w:spacing w:line="${line}" w:lineRule="auto"/></w:pPr>`,
+        ]);
+    });
+
+    test('space before and after in twips, an indent left, right and first line', async () => {
+        expect(
+            await pPrOf(
+                formatted({ spaceBefore: 12, spaceAfter: 0 }),
+                formatted({ indentLeft: 36, indentRight: 18, indentFirstLine: 18 }),
+                formatted({ indentLeft: 36, indentFirstLine: -36 }),
+                // Google's Left 2 cm with a hanging 1 cm: the body lines at 2 cm, the first line at 1 cm.
+                formatted({ indentLeft: 56.7, indentFirstLine: -28.35 }),
+                formatted({ indentRight: 9 }),
+            ),
+        ).toEqual([
+            '<w:pPr><w:spacing w:before="240" w:after="0"/></w:pPr>',
+            '<w:pPr><w:ind w:left="720" w:right="360" w:firstLine="360"/></w:pPr>',
+            '<w:pPr><w:ind w:left="720" w:hanging="720"/></w:pPr>',
+            '<w:pPr><w:ind w:left="1134" w:hanging="567"/></w:pPr>',
+            '<w:pPr><w:ind w:left="0" w:right="180"/></w:pPr>',
+        ]);
+    });
+
+    test("a heading's format goes on top of its style; in a quote an indent counts from the quote's text", async () => {
+        expect(
+            await pPrOf(
+                { type: 'heading', attrs: { level: 2, lineSpacing: 2, spaceAfter: 6 }, content: [text('h')] },
+                quote(formatted({ indentLeft: 36 })),
+            ),
+        ).toEqual([
+            // The first block's heading has no space above, as the editor's first child.
+            '<w:pPr><w:pStyle w:val="Heading2"/><w:spacing w:before="0" w:after="120" w:line="480" w:lineRule="auto"/></w:pPr>',
+            `<w:pPr><w:pStyle w:val="Quote"/><w:spacing w:after="${twips(cssPt(proseValue('.eigen-prose blockquote', 'margin-bottom'), 11))}"/><w:ind w:left="${QUOTE_LOOK.indent + 720}"/></w:pPr>`,
+        ]);
+    });
+
+    // A container owns the spacing of what it holds, as the editor draws it and the reader reads it.
+    test.each([
+        ['a list item', (block: JSONContent) => ul(li(block))],
+        ['a quote', (block: JSONContent) => quote(block)],
+        ['a table cell', (block: JSONContent) => table(tr(td({}, block)))],
+    ])(
+        "in %s a paragraph's space before and after is the container's, its line spacing and indent its own",
+        async (_, wrap) => {
+            const pPrs = async (block: JSONContent) =>
+                descendants(await bodyOf(doc(wrap(block))), W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')));
+            const own = { lineSpacing: 2, indentLeft: 36 };
+            const written = await pPrs(formatted({ ...own, spaceBefore: 12, spaceAfter: 6 }));
+            expect(written).toEqual(await pPrs(formatted(own)));
+            expect(written.join('')).toContain('w:line="480"');
+        },
+    );
+
+    // The writer scales a paragraph all in one other family by that family's line, as it does the style's.
+    test('a line spacing in another family is scaled by its line height', async () => {
+        const serif = { type: 'textStyle', attrs: { fontFamily: 'Source Serif 4' } };
+        const lineHeight = (family: string) => {
+            const tables = sfntTables(fs.readFileSync(DOCX_FONT_FILES.get(family)?.Regular ?? ''));
+            const os2 = tables.get('OS/2');
+            const head = tables.get('head');
+            if (!os2 || !head) throw new Error(`no metrics for ${family}`);
+            return (os2.readUInt16BE(74) + os2.readUInt16BE(76)) / head.readUInt16BE(18);
+        };
+        const line = Math.round((480 * lineHeight('Inter')) / lineHeight('Source Serif 4'));
+        expect(await pPrOf(formatted({ lineSpacing: 2 }, text('x', serif)))).toEqual([
+            `<w:pPr><w:spacing w:line="${line}" w:lineRule="auto"/></w:pPr>`,
+        ]);
+    });
+
+    test('a forged format writes within its bounds or not at all', async () => {
+        expect(
+            await pPrOf(
+                formatted({ lineSpacing: '2; x', spaceBefore: Number.NaN }),
+                formatted({ spaceAfter: 1e9, indentFirstLine: -1e9 }),
+            ),
+        ).toEqual(['', '<w:pPr><w:spacing w:after="8000"/><w:ind w:left="0" w:hanging="31680"/></w:pPr>']);
     });
 });
 
@@ -2513,10 +2610,10 @@ describe('docx writer — styles from the CSS', () => {
         expect(descendants(root, W, 'lang')).toEqual([]);
     });
 
-    test('a paragraph is .eigen-prose p: 1 em after, line height 1.7 as an auto multiple of Inter', async () => {
+    test("a paragraph is .eigen-prose p: 1 em after, Eigen's line spacing 1.4 as an auto line", async () => {
         const normal = style(await styles(), 'Normal');
         expect(w(normal, 'default')).toBe('1');
-        expect(spacingOf(normal)).toEqual([undefined, '220', '337', 'auto']);
+        expect(spacingOf(normal)).toEqual([undefined, '220', '336', 'auto']);
     });
 
     test('headings take their size, margins, line height and tracking from the CSS; h5 and h6 the body size', async () => {

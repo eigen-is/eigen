@@ -2,7 +2,7 @@ import { getAttributes, isActive } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
-import { selectionFontSizes } from '@workspace/lib/docs/eigendoc';
+import { selectionFontSizes, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
 import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { canAnchorComment } from '../extensions/comment-mark';
 import { numberedListType, orderedListDepth } from '../list-numbering';
@@ -22,6 +22,13 @@ export type ToolbarState = {
     underline: boolean;
     highlight: boolean;
     alignment: TextAlign | undefined;
+    // The line spacing every selected paragraph stores, none for a mix or an unset one.
+    lineSpacing: number | undefined;
+    // Whether a selected paragraph takes a space before or after: a list, a quote or a cell owns its own.
+    paragraphSpacing: boolean;
+    // Whether the selection's first paragraph draws space there, which Add or Remove space toggles.
+    spaceBefore: boolean;
+    spaceAfter: boolean;
     bulletList: boolean;
     orderedList: boolean;
     // The type of the numbered list the caret is in, decimal as '1'.
@@ -83,8 +90,10 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 });
             }
             const table = active('table');
-            // A heading's own size is read off the page, which an editor not yet mounted has none of.
-            const fontSizes = selectionFontSizes(state, editor.isDestroyed ? undefined : editor.view);
+            // A heading's own size and spacing are read off the page, which an editor not yet mounted has none of.
+            const view = editor.isDestroyed ? undefined : editor.view;
+            const fontSizes = selectionFontSizes(state, view);
+            const format = selectionParagraphFormat(state, view);
             const listDepth = orderedListDepth(selection.$from);
             return {
                 // A range of mixed styles, or of styled and Normal text, reads as none.
@@ -101,6 +110,10 @@ export function useToolbarState(editor: Editor): ToolbarState {
                 highlight: active('highlight'),
                 // An unaligned paragraph's textAlign is null and reads as left; a range of mixed alignments reads as none.
                 alignment: alignments.size === 1 ? [...alignments][0] : undefined,
+                lineSpacing: format.lineSpacing,
+                paragraphSpacing: format.spacing,
+                spaceBefore: format.drawn.spaceBefore > 0,
+                spaceAfter: format.drawn.spaceAfter > 0,
                 bulletList: active('bulletList'),
                 orderedList: active('orderedList'),
                 orderedListType:

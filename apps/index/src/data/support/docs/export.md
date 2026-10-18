@@ -36,6 +36,7 @@ A page break starts a new page in the PDF and the Word file. Equations show in a
 The PDF, the web page, and the Word file use the editor's spacing, including the space around images and tables. In the Word file:
 
 - The fonts your document uses are included, so it keeps its typeface on a computer that doesn't have them.
+- Paragraphs keep their line spacing, the space before and after them, and their indents. The first paragraph of a list item follows the list's indent.
 - Images keep their width, alignment, and caption. An image that floats left or right floats in the Word file too, with the text wrapping around it.
 - Numbered lists keep their numbers, and task lists keep their checkboxes, ticked or not.
 - Tables keep their column widths and borders, and a header row repeats on every page.

@@ -1,11 +1,13 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
+import { DOCUMENT_FONT, EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
 import { type PageSetup, pagePx, pageTwips, readPageSetup } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES } from '../../document/wordml';
+import { fontLineHeight } from '../../export/fonts';
 import { DOCUMENT_TOO_LARGE } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
@@ -20,6 +22,7 @@ import {
     markColor,
     mergePara,
     mergeRun,
+    type ParaProps,
     type Role,
     readParaProps,
     readRunProps,
@@ -310,6 +313,45 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             node: { type: 'text', text: list?.suffix === 'nothing' ? label : `${label} ` },
         });
 
+    // What the paragraph sets apart from the docx's Normal, or a heading, a title or a quote from its style, whose look
+    // is the node's. The writer scales the line of a paragraph all in one other family by that family's line, which
+    // this undoes, so a line Word draws as Normal's reads as none.
+    const base = role.kind === 'paragraph' ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
+    const autoLine = (para: ParaProps) => ((para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : undefined);
+    const line = autoLine(props);
+    const baseLine = autoLine(base);
+    const families = new Set(
+        texts.flatMap((piece) =>
+            piece.kind === 'node' && piece.node.text?.trim()
+                ? [piece.node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'] ?? DOCUMENT_FONT]
+                : [],
+        ),
+    );
+    const [family] = families;
+    const scale =
+        families.size === 1 && EIGEN_FONT_NAMES.includes(family)
+            ? fontLineHeight(family) / fontLineHeight(DOCUMENT_FONT)
+            : 1;
+    const lineSpacing =
+        line !== undefined &&
+        line !== baseLine &&
+        (baseLine === undefined || Math.round((line * scale) / 2.4) !== Math.round(baseLine / 2.4))
+            ? (line * scale) / 240
+            : undefined;
+    const before = props.before ?? 0;
+    const after = props.after ?? 0;
+    // A cell's paragraphs take their spacing from the cell.
+    const format = {
+        lineSpacing,
+        spaceBefore: scope.tables > 0 || before === (base.before ?? 0) ? undefined : before / 20,
+        spaceAfter: scope.tables > 0 || after === (base.after ?? 0) ? undefined : after / 20,
+    };
+    // An item's indent holds its number or checkbox.
+    const indent =
+        list || task
+            ? undefined
+            : { left: props.indLeft ?? 0, right: props.indRight ?? 0, firstLine: props.indFirst ?? 0 };
+
     const captionColor = markColor(CAPTION_LOOK.color);
     const markSize = direct.markSize ?? styles.run(styleId).size ?? 24;
     // A paragraph whose mark and text are hidden is not there at all.
@@ -361,6 +403,13 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
                         ),
                 ),
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
+            // Word spaces a split paragraph above its first line and below its last.
+            format: {
+                lineSpacing: format.lineSpacing,
+                spaceBefore: index === 0 ? format.spaceBefore : undefined,
+                spaceAfter: index === halves.length - 1 ? format.spaceAfter : undefined,
+            },
+            indent,
         };
         if (!numbered && list && !SIZED.has(role.kind)) para.list = { ...list, ilvl };
         if (!numbered && task) para.task = task;

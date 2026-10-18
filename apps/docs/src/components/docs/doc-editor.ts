@@ -228,7 +228,7 @@ export function docEditorOptions({
     const band = 'field' in target;
     const cardIds = band ? () => NO_CARDS : target.cardIds;
     // The page map, not the page on screen: an update that changes the content and the page together reaches the
-    // editor before React draws the new page. A band prints in the body's column.
+    // editor before React draws the new page. A band prints in the body's column. Tables and indents keep within it.
     const textColumnWidth = () => {
         const { width, margin } = pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
         return width - margin.left - margin.right;
@@ -238,6 +238,7 @@ export function docEditorOptions({
         extensions: [
             ...getDocExtensions({
                 lowlight,
+                textColumnWidth,
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
                     'figure',

@@ -1,12 +1,12 @@
 ---
 title: "Format text"
-description: "Apply bold, headings, lists, alignment, colors, fonts, and text sizes to text in a Docs document using the toolbar."
+description: "Apply bold, headings, lists, alignment, indents, line spacing, colors, fonts, and text sizes to text in a Docs document using the toolbar."
 type: how-to
 category: Editing
-tags: [docs, formatting, fonts, font size, headings, lists, numbering, color, alignment, caps]
+tags: [docs, formatting, fonts, font size, headings, lists, numbering, color, alignment, indent, line spacing, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font and its size, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.
@@ -93,6 +93,22 @@ Alignment applies to the whole paragraph the cursor is in, or to all paragraphs 
 - **Justified**: stretches each line to both margins, except the last line of the paragraph.
 
 Click the **Align** button in the toolbar, which shows the current alignment, and choose one. The current alignment is marked in the list. You can also open **Format**, then **Align and indent**, and choose **Left**, **Center**, **Right**, or **Justified**.
+
+## Indent a paragraph
+
+Open **Format**, then **Align and indent**, and choose **Increase indent** (Cmd+] / Ctrl+]) or **Decrease indent** (Cmd+[ / Ctrl+[). Each step moves the paragraph 1.27 cm. In a list, they move the item one level in or out instead.
+
+For an exact indent, choose **Indentation options…**. Set **Left** and **Right** in centimetres, and under **Special indent** choose **First line** to indent only the first line, or **Hanging** to start the first line that distance left of the others, with the distance beside it. **Left** is where the lines after the first one start. An indent stops at the right edge of the text. Click **Apply**.
+
+## Change line and paragraph spacing
+
+Open **Format**, then **Line & paragraph spacing**:
+
+- **Single**, **1.15**, **1.5**, or **Double** sets the space between the lines of a paragraph. The one the paragraph uses is marked. A paragraph you haven't changed uses the document's own spacing of 1.4, so none is marked.
+- **Add space before paragraph** and **Add space after paragraph** add 12 points above or below the paragraph. Where the paragraph has space there already, the item reads **Remove space before paragraph** or **Remove space after paragraph** and takes it away.
+- **Custom spacing…** sets the **Line spacing** and the space **Before** and **After** the paragraph in points. Click **Apply**.
+
+Each of these applies to the paragraph the cursor is in, or to every paragraph in the selection. In a list, a quote, or a table, the space before and after a paragraph is the list's, quote's, or table's own, so you can set only the line spacing there.
 
 ## Add a list
 

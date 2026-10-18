@@ -1,6 +1,6 @@
 export type { BandEdge, BandRoot } from './bands';
 export { BAND_EXCLUDED_NODES, BAND_ROOTS, bandEdge, bandHasContent, FIRST_PAGE_BAND } from './bands';
-export { getDocExtensions, PROSE_TEXTBLOCKS } from './extensions';
+export { getDocExtensions } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';
 export type { Caps } from './nodes/caps';
 export type { ChartAttrs } from './nodes/chart';
@@ -22,6 +22,14 @@ export { selectionFontSizes } from './nodes/font-size';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';
+export {
+    DOCUMENT_PARAGRAPH_FORMAT,
+    PARAGRAPH_FORMAT_KEYS,
+    PARAGRAPH_FORMAT_LIMITS,
+    PROSE_TEXTBLOCKS,
+    readParagraphFormat,
+    selectionParagraphFormat,
+} from './nodes/paragraph-format';
 export type { TitleType } from './nodes/title';
 export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {

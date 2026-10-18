@@ -58,8 +58,10 @@ import {
     Underline,
 } from 'lucide-react';
 import { useState } from 'react';
+import { CustomSpacingDialog } from './custom-spacing-dialog';
 import { ALIGNMENT_LOOK, FormatMenu } from './format-menu';
 import { useToolbarState } from './hooks/use-toolbar-state';
+import { IndentationOptionsDialog } from './indentation-options-dialog';
 import { InsertMenu } from './insert-menu';
 import type { PageNumberPreset } from './page-numbers';
 import { PageSetupDialog } from './page-setup-dialog';
@@ -142,6 +144,8 @@ export const EditorToolbar = ({
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     const [wordCountOpen, setWordCountOpen] = useState(false);
     const [restartNumberingOpen, setRestartNumberingOpen] = useState(false);
+    const [customSpacingOpen, setCustomSpacingOpen] = useState(false);
+    const [indentationOpen, setIndentationOpen] = useState(false);
     const active = useToolbarState(editor);
     // A range of mixed alignments checks no Align item, and its trigger draws Left's icon.
     const AlignmentIcon = ALIGNMENT_LOOK[active.alignment ?? 'left'].icon;
@@ -307,6 +311,8 @@ export const EditorToolbar = ({
                                     setHighlightColor={setHighlightColor}
                                     clearFormatting={clearFormatting}
                                     onRestartNumbering={() => setRestartNumberingOpen(true)}
+                                    onCustomSpacing={() => setCustomSpacingOpen(true)}
+                                    onIndentationOptions={() => setIndentationOpen(true)}
                                     onPageSetup={() => setPageSetupOpen(true)}
                                     onReplaceImage={onReplaceImage}
                                     onEnterBand={onEnterBand}
@@ -598,6 +604,10 @@ export const EditorToolbar = ({
                 open={restartNumberingOpen}
                 onOpenChange={setRestartNumberingOpen}
             />
+
+            <CustomSpacingDialog editor={editor} open={customSpacingOpen} onOpenChange={setCustomSpacingOpen} />
+
+            <IndentationOptionsDialog editor={editor} open={indentationOpen} onOpenChange={setIndentationOpen} />
 
             <ExportProgressDialog open={isExporting} />
 
