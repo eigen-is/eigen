@@ -123,3 +123,20 @@ describe('renderEigendocPreviewBody', () => {
         expect(previewOf({ type: 'doc', content: [{ type: 'paragraph' }] })).toBe('<p><br></p>');
     });
 });
+
+describe('renderEigendocPreviewBody — footnotes', () => {
+    test('a reference is a linked number and its note sits in the list after the body, as the HTML download draws it', () => {
+        const note = (text: string): JSONContent => ({
+            type: 'footnote',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+        });
+        const body = previewOf({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Claim' }, note('See Smith')] }],
+        });
+        expect(body).toContain('<sup><a href="#fn-1" id="fnref-1">1</a></sup>');
+        expect(body).toContain(
+            '<section class="footnotes"><hr><ol><li id="fn-1"><p>See Smith <a href="#fnref-1">↩</a></p></li></ol></section>',
+        );
+    });
+});

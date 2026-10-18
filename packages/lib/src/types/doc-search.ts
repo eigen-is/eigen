@@ -34,7 +34,7 @@ export type DocSearchController = {
     reveal(matchId: string): void;
 
     // Replace, in docs and sheets; slides and stickies leave it unset and stay search-only.
-    // canReplace = canWrite for the surface; unset/false → the bar hides the replace row and ⌥⌘F
+    // canReplace = canWrite for the surface; unset/false → the bar hides the replace row and ⇧⌘H
     // opens plain search.
     canReplace?: boolean;
     // Both methods perform the edit AND return the FRESH post-edit match list, which the provider

@@ -88,7 +88,8 @@ describe('docx fixtures', () => {
 
     test("docx4j load-and-save: notes, a table, the SVG as itself, majorBidi as the Arabic face and its chart's title", async () => {
         const { json, images, warnings } = await imported('docx4j-loadAndSave.docx');
-        expect(texts(json)).toContain('[1]');
+        // Its footnote and its endnote, each a note at its reference.
+        expect(nodesOfType(json, 'footnote').map((note) => texts(note).join(''))).toEqual(['Footnote', 'Endnote']);
         // G11: majorBidi with an empty a:cs is the theme's Arab face, Times New Roman, as the default bidi language is ar-SA.
         const fonts = nodesOfType(json, 'text')
             .filter((node) => node.text === 'Font (Times New Roman)')

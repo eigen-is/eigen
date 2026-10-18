@@ -24,6 +24,7 @@ import {
     PanelTop,
     SeparatorHorizontal,
     Sigma,
+    Superscript,
     Table,
 } from 'lucide-react';
 import { useRef } from 'react';
@@ -41,9 +42,13 @@ type InsertMenuProps = {
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
     onInsertEquation?: () => void;
+    onInsertFootnote?: () => void;
+    // A note holds paragraphs only, and no chart, whose panel follows the body.
+    inNote: boolean;
 };
 
-// What a band can't hold is missing from its editor's schema, and a command for a node the schema lacks throws.
+// What a band can't hold is missing from its editor's schema, and a command for a node the schema lacks throws. A note's
+// schema is the body's, so what a note can't hold is left out by hand.
 export function InsertMenu({
     editor,
     active,
@@ -52,20 +57,23 @@ export function InsertMenu({
     onInsertImage,
     onAddComment,
     onInsertEquation,
+    onInsertFootnote,
+    inNote,
     onEnterBand,
     onPageNumbers,
 }: InsertMenuProps) {
-    // The equation goes in once the menu has closed, or Radix would hand the focus back to the trigger, away from the
-    // new equation's field.
-    const insertEquationRef = useRef(false);
+    // An equation and a footnote go in once the menu has closed, or Radix would hand the focus back to the trigger,
+    // away from the new equation's field or note.
+    const afterCloseRef = useRef<(() => void) | null>(null);
     return (
         <ToolbarMenu
             label="Insert"
             onCloseAutoFocus={(e) => {
-                if (!insertEquationRef.current) return keepEditorFocus(e);
-                insertEquationRef.current = false;
+                const insert = afterCloseRef.current;
+                if (!insert) return keepEditorFocus(e);
+                afterCloseRef.current = null;
                 e.preventDefault();
-                onInsertEquation?.();
+                insert();
             }}
         >
             <DropdownMenuItem onClick={onLink}>
@@ -76,7 +84,7 @@ export function InsertMenu({
                     <ImagePlus className="h-4 w-4 mr-2" /> Image
                 </DropdownMenuItem>
             )}
-            {'chart' in editor.schema.nodes && (
+            {'chart' in editor.schema.nodes && !inNote && (
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
                         <ChartColumn className="h-4 w-4 mr-2" /> Chart
@@ -103,37 +111,41 @@ export function InsertMenu({
             {onInsertEquation && (
                 <DropdownMenuItem
                     onClick={() => {
-                        insertEquationRef.current = true;
+                        afterCloseRef.current = onInsertEquation;
                     }}
                 >
                     <Sigma className="h-4 w-4 mr-2" /> Equation
                 </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                <Minus className="h-4 w-4 mr-2" /> Horizontal rule
-            </DropdownMenuItem>
-            {'pageBreak' in editor.schema.nodes && (
+            {!inNote && (
+                <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+                    <Minus className="h-4 w-4 mr-2" /> Horizontal rule
+                </DropdownMenuItem>
+            )}
+            {'pageBreak' in editor.schema.nodes && !inNote && (
                 <DropdownMenuItem onClick={() => editor.chain().focus().setPageBreak().run()}>
                     <SeparatorHorizontal className="h-4 w-4 mr-2" /> Page break
                     <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
-            <DropdownMenuItem
-                onClick={() =>
-                    editor
-                        .chain()
-                        .focus()
-                        .insertTable({
-                            rows: 3,
-                            cols: 3,
-                            withHeaderRow: true,
-                        })
-                        .run()
-                }
-            >
-                <Table className="h-4 w-4 mr-2" /> Table
-            </DropdownMenuItem>
-            {'codeBlock' in editor.schema.nodes && (
+            {!inNote && (
+                <DropdownMenuItem
+                    onClick={() =>
+                        editor
+                            .chain()
+                            .focus()
+                            .insertTable({
+                                rows: 3,
+                                cols: 3,
+                                withHeaderRow: true,
+                            })
+                            .run()
+                    }
+                >
+                    <Table className="h-4 w-4 mr-2" /> Table
+                </DropdownMenuItem>
+            )}
+            {'codeBlock' in editor.schema.nodes && !inNote && (
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
                     <CodeXml className="h-4 w-4 mr-2" /> Code block
                 </DropdownMenuItem>
@@ -158,6 +170,18 @@ export function InsertMenu({
                                 <PageNumberItems editor={editor} onPreset={onPageNumbers} />
                             </DropdownMenuSubContent>
                         </DropdownMenuSub>
+                        {/* Google's Insert › Page elements › Footnote: none in a band, a code block or a note. */}
+                        {onInsertFootnote && (
+                            <DropdownMenuItem
+                                disabled={inNote || !active.canInsertFootnote}
+                                onClick={() => {
+                                    afterCloseRef.current = onInsertFootnote;
+                                }}
+                            >
+                                <Superscript className="h-4 w-4 mr-2" /> Footnote
+                                <DropdownMenuShortcut>{formatForDisplay('Mod+Alt+F')}</DropdownMenuShortcut>
+                            </DropdownMenuItem>
+                        )}
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
             )}

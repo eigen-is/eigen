@@ -12,6 +12,10 @@ installHappyDom();
 const mathml = writeMathml([{ kind: 'identifier', text: 'x' }], 'x');
 const equation = { type: 'equation', attrs: { mathml } };
 const figure = { type: 'figure', attrs: { mediaName: 'a.png' } };
+const footnote = {
+    type: 'footnote',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'n', marks: [{ type: 'italic' }] }] }],
+};
 
 function editorWith(content: object[]) {
     return new Editor({
@@ -59,6 +63,17 @@ test('a figure inserted with a mark loses the mark', () => {
     editor.destroy();
 });
 
+test("a footnote inserted with a mark loses the mark, and its note's text keeps its own", () => {
+    const editor = editorWith([{ type: 'text', text: 'a', marks: [{ type: 'bold' }] }]);
+    editor.commands.insertContentAt(2, { ...footnote, marks: [{ type: 'bold' }] });
+    expect(editor.state.doc.firstChild?.lastChild?.type.name).toBe('footnote');
+    expect(markedNodes(editor)).toEqual(['text', 'text']);
+    expect(editor.state.doc.firstChild?.lastChild?.firstChild?.firstChild?.marks.map((mark) => mark.type.name)).toEqual(
+        ['italic'],
+    );
+    editor.destroy();
+});
+
 // Typed as ProseMirror types a key, which gives the text the caret's marks: the marks of what landed at `pos`.
 const typeAt = (editor: Editor, pos: number, text: string) => {
     editor.commands.setTextSelection(pos);
@@ -68,16 +83,17 @@ const typeAt = (editor: Editor, pos: number, text: string) => {
 
 // ProseMirror reads the caret's marks off the node before it, which an atom never has; Google Docs keeps the run's.
 test.each([
-    ['equation', equation],
-    ['figure', figure],
-])('text typed right after an inline %s keeps the formatting of the run around it', (_name, atom) => {
+    ['equation', equation, 3],
+    ['figure', figure, 3],
+    ['footnote', footnote, 7],
+])('text typed right after an inline %s keeps the formatting of the run around it', (_name, atom, after) => {
     const bold = [{ type: 'bold' }, { type: 'italic' }];
     const editor = editorWith([
         { type: 'text', text: 'a', marks: bold },
         atom,
         { type: 'text', text: 'b', marks: bold },
     ]);
-    expect(typeAt(editor, 3, 'c')).toEqual(['bold', 'italic']);
+    expect(typeAt(editor, after, 'c')).toEqual(['bold', 'italic']);
     editor.destroy();
 });
 

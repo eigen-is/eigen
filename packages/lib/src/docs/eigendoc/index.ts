@@ -28,6 +28,15 @@ export {
     setFigureAttributes,
 } from './nodes/figure-frame';
 export { selectionFontSizes } from './nodes/font-size';
+export {
+    FOOTNOTE_PARAGRAPH,
+    FOOTNOTE_SELECTOR,
+    FootnoteNode,
+    flattenNestedFootnotes,
+    footnoteNumbers,
+    footnotesInOrder,
+    insertFootnote,
+} from './nodes/footnote';
 export { listTypeOfStyle } from './nodes/ordered-list';
 export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';

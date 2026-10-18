@@ -1,17 +1,22 @@
 import { bundledFontOfStack, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
-import { ITALIC_HEADING_SELECTOR, unwrapRenderedMath } from '@workspace/lib/docs/eigendoc';
+import { FOOTNOTE_SELECTOR, ITALIC_HEADING_SELECTOR, unwrapRenderedMath } from '@workspace/lib/docs/eigendoc';
 
 // Pasted HTML before the schema parses it: a drawn equation as its <math> alone, foreign fonts onto the bundled ones,
 // no font or size the doc draws already, images, charts and tables no wider than the column, no anchor for a comment
-// card this document lacks, and in an italic heading an upright run as the mark. normalFont: the doc's Normal font.
+// card this document lacks, in an italic heading an upright run as the mark, and no footnote where none goes.
+// normalFont: the doc's Normal font.
 export function cleanPastedHTML(
     html: string,
     maxWidth: number,
     cardIds: ReadonlySet<string>,
     normalFont: string,
+    footnotes = true,
 ): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     unwrapRenderedMath(doc.body);
+
+    // A band's schema has no footnote, whose note belongs to the body's text: its paragraphs would land as the band's.
+    if (!footnotes) for (const note of doc.querySelectorAll(FOOTNOTE_SELECTOR)) note.remove();
 
     for (const el of doc.querySelectorAll('[data-comment-id]')) {
         if (!cardIds.has(el.getAttribute('data-comment-id') ?? '')) el.removeAttribute('data-comment-id');

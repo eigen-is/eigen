@@ -852,7 +852,8 @@ const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efa
 // Both doc HTML hashes moved again when U5's Docs list rules met the doc's Normal: the two sides' changes together, and nothing else.
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '237e7e41cdbb9bbc9d6e61bf9a1a996078c194cd85d88b7512e085dcad329af2';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '237e7e41cdbb9bbc9d6e61bf9a1a996078c194cd85d88b7512e085dcad329af2';
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'cbccd0e8bdcc6ca7cd54810e9c1e11fce1e89389744868b4dbec86e04cbb0dea';
+// The docx hash is U9's: styles.xml gained Word's FootnoteText and FootnoteReference styles.
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';

@@ -267,6 +267,8 @@ describe('docx writer — package', () => {
         'docProps/core.xml',
         'word/document.xml',
         'word/_rels/document.xml.rels',
+        'word/footnotes.xml',
+        'word/_rels/footnotes.xml.rels',
         'word/styles.xml',
         'word/numbering.xml',
         'word/settings.xml',
@@ -300,6 +302,7 @@ describe('docx writer — package', () => {
         expect(Object.fromEntries(overrides)).toEqual({
             '/docProps/core.xml': 'application/vnd.openxmlformats-package.core-properties+xml',
             '/word/document.xml': `${wml}.document.main+xml`,
+            '/word/footnotes.xml': `${wml}.footnotes+xml`,
             '/word/styles.xml': `${wml}.styles+xml`,
             '/word/numbering.xml': `${wml}.numbering+xml`,
             '/word/settings.xml': `${wml}.settings+xml`,
@@ -327,13 +330,16 @@ describe('docx writer — package', () => {
     test('every style, numbering and drawing id the document uses is defined once', async () => {
         const zip = await unzip(buildAllFeaturesDocJson());
         const document = await part(zip, 'word/document.xml');
+        const notes = await part(zip, 'word/footnotes.xml');
         const stylesRoot = await part(zip, 'word/styles.xml');
         const styleIds = xmlChildren(stylesRoot, W, 'style').map((s) => w(s, 'styleId'));
         expect(new Set(styleIds).size).toBe(styleIds.length);
 
         const referenced = [
-            ...descendants(document, W, 'pStyle'),
-            ...descendants(document, W, 'rStyle'),
+            ...[document, notes].flatMap((root) => [
+                ...descendants(root, W, 'pStyle'),
+                ...descendants(root, W, 'rStyle'),
+            ]),
             ...descendants(stylesRoot, W, 'basedOn'),
             ...descendants(stylesRoot, W, 'next'),
         ].map((e) => w(e, 'val'));
@@ -393,6 +399,8 @@ describe('docx writer — package', () => {
             ],
             ['word/document.xml', 'w:document', document],
             ['word/_rels/document.xml.rels', 'Relationships', { xmlns: RELS }],
+            ['word/footnotes.xml', 'w:footnotes', document],
+            ['word/_rels/footnotes.xml.rels', 'Relationships', { xmlns: RELS }],
             ['word/styles.xml', 'w:styles', wml],
             ['word/numbering.xml', 'w:numbering', wml],
             ['word/settings.xml', 'w:settings', wml],
@@ -471,6 +479,120 @@ describe('docx writer — text', () => {
             await paragraphsOf(doc(p(text('Page '), page('page', { type: 'bold' }), text(' of '), page('pages')))),
         ).toEqual([`<w:p>${run('Page ')}${field('PAGE')}${run(' of ')}${field('NUMPAGES')}</w:p>`]);
         expect(await paragraphsOf(doc(p(page('chapter'))))).toEqual([`<w:p>${field('PAGE')}</w:p>`]);
+    });
+});
+
+describe('docx writer — footnotes', () => {
+    const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
+    const note = (...paragraphs: JSONContent[]): JSONContent => ({ type: 'footnote', content: paragraphs });
+    const REFERENCE = (id: number) =>
+        `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="${id}"/></w:r>`;
+    // Word's number at the note, then a space.
+    const NUMBER = `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>${run(' ')}`;
+    const TEXT = '<w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>';
+
+    async function notesOf(json: JSONContent): Promise<string[]> {
+        return xmlChildren(await part(await unzip(json), 'word/footnotes.xml'), W, 'footnote').map(xmlOf);
+    }
+
+    test('a reference is a footnoteReference run, numbered 1, 2, 3 as met', async () => {
+        expect(await paragraphsOf(doc(p(text('Claim'), note(p(text('A'))), text('.')), p(note(p(text('B'))))))).toEqual(
+            [`<w:p>${run('Claim')}${REFERENCE(1)}${run('.')}</w:p>`, `<w:p>${REFERENCE(2)}</w:p>`],
+        );
+    });
+
+    // Word's two separators, -1 and 0, then each note in FootnoteText, its number opening its first paragraph.
+    test("footnotes.xml holds Word's separators and each note's paragraphs, marks kept, a nested note as its text", async () => {
+        const nested = note(p(text('nested')));
+        const json = doc(
+            p(text('Claim'), note(p(text('See '), text('Smith', { type: 'bold' })), p(text('Two'), nested))),
+            p(text('Again'), note(p())),
+        );
+        const separator = (type: string, id: number) =>
+            `<w:footnote w:type="${type}" w:id="${id}"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:${type}/></w:r></w:p></w:footnote>`;
+        expect(await notesOf(json)).toEqual([
+            separator('separator', -1),
+            separator('continuationSeparator', 0),
+            `<w:footnote w:id="1"><w:p>${TEXT}${NUMBER}${run('See ')}<w:r><w:rPr><w:b/><w:bCs/></w:rPr><w:t xml:space="preserve">Smith</w:t></w:r></w:p><w:p>${TEXT}${run('Two')}${run(' ')}${run('nested')}</w:p></w:footnote>`,
+            `<w:footnote w:id="2"><w:p>${TEXT}${NUMBER}</w:p></w:footnote>`,
+        ]);
+    });
+
+    // Every paragraph of a note is Footnote Text, an image's own paragraph too, or it would draw at the Normal's spacing.
+    test("a note's image paragraph and the text around it are Footnote Text", async () => {
+        const chart = { type: 'figure', attrs: { mediaName: 'chart.png', width: 100 } };
+        const zip = await unzip(doc(p(text('Claim'), note(p(text('See'), chart, text('here'))))));
+        const paragraphs = xmlChildren(await part(zip, 'word/footnotes.xml'), W, 'footnote')
+            .slice(2)
+            .flatMap((footnote) => xmlChildren(footnote, W, 'p'));
+        expect(paragraphs.length).toBe(3);
+        for (const paragraph of paragraphs) expect(xmlOf(paragraph)).toContain('<w:pStyle w:val="FootnoteText"/>');
+    });
+
+    test('the notes part has its content type, a document relationship and its separators named in the settings', async () => {
+        const zip = await unzip(doc(p(text('Claim'), note(p(text('A'))))));
+        const types = await part(zip, '[Content_Types].xml');
+        const override = xmlChildren(types, CONTENT_TYPES, 'Override').find(
+            (o) => xmlAttr(o, '', 'PartName') === '/word/footnotes.xml',
+        );
+        expect(override && xmlAttr(override, '', 'ContentType')).toBe(`${WML}.footnotes+xml`);
+        const rels = xmlChildren(await part(zip, 'word/_rels/document.xml.rels'), RELS, 'Relationship');
+        expect(
+            rels.filter((rel) => xmlAttr(rel, '', 'Target') === 'footnotes.xml').map((rel) => xmlAttr(rel, '', 'Type')),
+        ).toEqual([`${R}/footnotes`]);
+        const settings = await part(zip, 'word/settings.xml');
+        expect(xmlOf(child(settings, 'footnotePr'))).toBe(
+            '<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>',
+        );
+        // In CT_Settings' order: after the tab stop, before compat.
+        expect(xmlElements(settings).map((element) => element.local)).toEqual([
+            'embedTrueTypeFonts',
+            'defaultTabStop',
+            'footnotePr',
+            'compat',
+        ]);
+        // The note's namespaces are the document's, m: included, as a note may hold an equation.
+        expect((await part(zip, 'word/footnotes.xml')).attributes).toEqual(
+            (await part(zip, 'word/document.xml')).attributes,
+        );
+    });
+
+    test('a doc without notes writes no notes part and names no separators', async () => {
+        const zip = await unzip(doc(p(text('Body'))));
+        expect(zip.entry('word/footnotes.xml')).toBeUndefined();
+        expect(child(await part(zip, 'word/settings.xml'), 'footnotePr')).toBeUndefined();
+    });
+
+    // As a band's: the image file is the package's, each part relates to it through its own rels.
+    test("a note's link and image resolve through the notes part's own relationships", async () => {
+        const chart = { type: 'figure', attrs: { mediaName: 'chart.png', width: 100 } };
+        const linked = {
+            type: 'text',
+            text: 'site',
+            marks: [{ type: 'link', attrs: { href: 'https://acme.example' } }],
+        };
+        const zip = await unzip(doc(p(chart, text('Claim'), note(p(linked, chart)))));
+        expect(zip.names().filter((path) => path.startsWith('word/media/'))).toEqual(['word/media/image1.png']);
+        const rels = xmlChildren(await part(zip, 'word/_rels/footnotes.xml.rels'), RELS, 'Relationship').map((rel) => [
+            xmlAttr(rel, '', 'Id'),
+            xmlAttr(rel, '', 'Target'),
+        ]);
+        expect(rels).toEqual([
+            ['rId1', 'media/image1.png'],
+            ['rId2', 'https://acme.example'],
+        ]);
+        expect(relationshipRefs(await part(zip, 'word/footnotes.xml')).sort()).toEqual(['rId1', 'rId2']);
+    });
+
+    // Google's and Word's: the note at 10 pt, single spaced with no space after, its number superscript.
+    test("the note's styles are Word's", async () => {
+        const all = await styles();
+        expect(xmlOf(style(all, 'FootnoteText'))).toBe(
+            '<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>',
+        );
+        expect(xmlOf(style(all, 'FootnoteReference'))).toBe(
+            '<w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>',
+        );
     });
 });
 

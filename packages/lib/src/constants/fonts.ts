@@ -28,6 +28,10 @@ export const DOCUMENT_FONT_SIZE = 11;
 // Small's: eigen-prose.css's small, in pt.
 export const SMALL_FONT_SIZE = 9;
 
+// A footnote's text, at Google's and Word's footnote size, in pt: the editor's notes (the Docs app's globals.css), the
+// exports' and the docx's Footnote Text.
+export const FOOTNOTE_FONT_SIZE = 10;
+
 // Google Docs' and Sheets' font sizes, in pt, both of which step by 1.
 export const MIN_FONT_SIZE = 1;
 export const MAX_FONT_SIZE = 400;

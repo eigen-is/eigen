@@ -356,6 +356,29 @@ export function buildAllFeaturesDocJson(): JSONContent {
             {
                 type: 'paragraph',
                 content: [
+                    { type: 'text', text: 'A claim with a note' },
+                    {
+                        type: 'footnote',
+                        content: [
+                            {
+                                type: 'paragraph',
+                                content: [
+                                    { type: 'text', text: 'See ' },
+                                    marked('the source', link),
+                                    { type: 'text', text: ', in ' },
+                                    marked('bold', { type: 'bold' }),
+                                    { type: 'text', text: '.' },
+                                ],
+                            },
+                            paragraph('A second paragraph of the note.'),
+                        ],
+                    },
+                    { type: 'text', text: '.' },
+                ],
+            },
+            {
+                type: 'paragraph',
+                content: [
                     { type: 'text', text: 'Half the sum is ' },
                     equation(writeMathml(GOLDEN_FRACTION, '\\frac{\\textcolor{#C00000}{a}+b}{2}')),
                     { type: 'text', text: ', and the squares add up to' },
