@@ -325,8 +325,9 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const shaped = chain.find((link) => link.geometry !== undefined);
     const geometry = shaped?.geometry ?? 'rect';
     const kind = PRESET_KINDS.get(geometry);
+    const native = kind !== undefined || geometry === 'pie';
     const linear = LINES.has(geometry);
-    const outline = kind || linear || geometry === 'pie' ? undefined : outlineOf(shaped?.geom, geometry, placed);
+    const outline = native || linear ? undefined : outlineOf(shaped?.geom, geometry, placed);
     const body = childOf(shape, P_NS, 'txBody');
     const lines = linesOf(chain, walk, style);
     const source = body && {
@@ -343,7 +344,6 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const { box } = placed;
     const textBox = text && source ? turned(box, verticalTurnOf(source, lost)) : box;
     // What the canvas never draws loses nothing: a line's fill, a dropped outline's paint, a path's unpainted part.
-    const native = kind !== undefined || geometry === 'pie';
     const lostIf = (drawn: boolean) => (drawn ? lost : UNDRAWN);
     const paint = {
         fill: fillOf(chain, walk, { group, style, box, lost: lostIf(native || !!outline?.some((g) => g.filled)) }),
@@ -361,8 +361,8 @@ function readShape(walk: Walk, leaf: Leaf): void {
             fill: TRANSPARENT_FILL_JSON,
             corners: 'straight',
         });
-    const shapeAndText = (kind: NewVectorElement) => {
-        if (painted) push(walk, { ...box, ...paint, ...kind });
+    const shapeAndText = (drawn: NewVectorElement) => {
+        if (painted) push(walk, { ...box, ...paint, ...drawn });
         textOnTop();
     };
     if (kind?.type === 'rectangle' && kind.corners === 'straight') {
@@ -376,10 +376,10 @@ function readShape(walk: Walk, leaf: Leaf): void {
     } else if (outline) {
         const paths = pathsOf(outline, box, paint);
         for (const element of paths) push(walk, element);
-        // A path has no arrowheads: a bent or curved connector's are lost.
+        // A path has no arrowheads, and PowerPoint draws a line's ends only on an open one: a connector's, an arc's.
         const ends = [arrowheadOf(lines.lns, 'headEnd'), arrowheadOf(lines.lns, 'tailEnd')];
-        if (ends.some((end) => end !== 'none') && paths.some((path) => path.strokeColor !== TRANSPARENT_COLOR))
-            lost('shapes-simplified');
+        const open = paint.strokeColor !== TRANSPARENT_COLOR && outline.some((g) => g.stroked && !g.closed);
+        if (open && ends.some((end) => end !== 'none')) lost('shapes-simplified');
         textOnTop();
     } else {
         // A custGeom or preset past the path caps or the read's budget, or a preset no definition names.

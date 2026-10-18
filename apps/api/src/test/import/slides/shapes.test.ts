@@ -436,6 +436,18 @@ describe('kinds', () => {
         expect(deck.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
     });
 
+    test('a closed path loses no arrowheads, as PowerPoint draws a line end only on an open one', () => {
+        const ln = `<a:ln w="12700">${solid('0000FF')}<a:tailEnd type="triangle"/></a:ln>`;
+        const open = (closed: boolean) =>
+            custGeom(
+                `<a:path w="2" h="2" fill="none"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="2" y="0"/></a:lnTo><a:lnTo><a:pt x="2" y="2"/></a:lnTo>${closed ? '<a:close/>' : ''}</a:path>`,
+            );
+        const lost = (closed: boolean) =>
+            deckOf({ slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: `${open(closed)}${ln}` }) }] }).warnings;
+        expect(lost(true)).toEqual([]);
+        expect(lost(false)).toEqual([{ code: 'shapes-simplified', count: 1 }]);
+    });
+
     test('a custGeom past the caps or empty, or a preset no definition names, keeps its text and says so', () => {
         const deck = deckOf({
             slides: [
