@@ -132,5 +132,8 @@ export async function htmlToPdf(html: string | Uint8Array, zoom = 1): Promise<Bu
         throw new ApiError(500, 'PDF generation failed');
     }
 
+    // WeasyPrint's logger has no handler, so a render that succeeds writes to stderr only when the script falls back.
+    if (result.stderr.trim()) console.warn('[export] WeasyPrint:', result.stderr.trim());
+
     return Buffer.from(result.stdout);
 }

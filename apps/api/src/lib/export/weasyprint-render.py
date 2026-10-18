@@ -35,7 +35,7 @@ BAND_PROBE = """
 # spacing included, as the editor measures it. A probe of the bands alone measures page 1's, which may print bands of
 # its own, and the other pages', so the doc lays out once; None when every band fits. A full-page letterhead overflows
 # its margin rather than take the page. The probe reads WeasyPrint's layout, so a WeasyPrint that moved it grows no
-# margin rather than failing every PDF export.
+# margin rather than failing every PDF export, and says so in one line on stderr.
 def band_margins(html):
     try:
         from weasyprint.formatting_structure.boxes import MarginBox
@@ -69,7 +69,9 @@ def band_margins(html):
             f'{selector} {{ margin-top: {top}px !important; margin-bottom: {bottom}px !important; }}'
             for selector, (top, bottom) in zip(('@page :first', '@page'), margins)
         )
-    except (AttributeError, ImportError):
+    except (AttributeError, ImportError) as error:
+        reason = f'{type(error).__name__}: {error}'
+        print(f'band_margins: WeasyPrint layout moved, bands grow no margin ({reason})', file=sys.stderr)
         return None
 
 
