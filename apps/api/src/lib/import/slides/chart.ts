@@ -1,7 +1,7 @@
 import { FLAT_CHART_PAINT, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
 import type { VectorElementPatch } from '@workspace/lib/vector';
 import type { DrawingTheme } from '../../core/drawingml';
-import { A_NS, C_NS, R_NS } from '../../core/ooxml';
+import { A_NS, alternativeFor, C_NS, isAlternateContent, R_NS } from '../../core/ooxml';
 import { chartColors, readChart } from '../../core/ooxml-chart';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import { colorOf, mutedColor, textColorOf } from './inherit';
@@ -73,13 +73,18 @@ const CHART_NAMES = new Map([
     ['surface3DChart', '3-D Surface'],
 ]);
 
+// readChart's choice of an mc:AlternateContent, by the chart vocabulary's prefixes.
+const alternative = alternativeFor(new Set(['c', 'a', 'r']));
+
 // What the box says was there: two plots are a combo, a plot of no kind PowerPoint names is none. The part's elements
 // are charged already, so its plot area is scanned directly.
 function chartName(root: XmlElement): string {
     const chart = childOf(root, C_NS, 'chart');
     const plotArea = chart && childOf(chart, C_NS, 'plotArea');
     const groups = plotArea
-        ? xmlElements(plotArea).filter((element) => element.ns === C_NS && element.local.endsWith('Chart'))
+        ? xmlElements(plotArea)
+              .flatMap((element) => (isAlternateContent(element) ? alternative(element) : [element]))
+              .filter((element) => element.ns === C_NS && element.local.endsWith('Chart'))
         : [];
     if (groups.length > 1) return 'Combo';
     const [group] = groups;

@@ -22,6 +22,7 @@ import {
 
 const OPTIONS = { maxMediaBytes: 35 * 1024 * 1024 };
 const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
 const CHART_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
 const chartType = (path: string, type = CHART_TYPE) => `<Override PartName="/${path}" ContentType="${type}"/>`;
 
@@ -230,6 +231,15 @@ describe('a chart left as a box', () => {
             [plot('stockChart'), 'Stock'],
             [plot('surface3DChart'), '3-D Surface'],
             [`${plot('barChart', '<c:barDir val="col"/>')}${plot('lineChart')}`, 'Combo'],
+            // A plot in mc:AlternateContent is the choice the chart reader reads, else the fallback.
+            [
+                `<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="c">${plot('areaChart')}</mc:Choice></mc:AlternateContent>`,
+                'Area',
+            ],
+            [
+                `<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="c14">${plot('lineChart')}</mc:Choice><mc:Fallback>${plot('radarChart')}</mc:Fallback></mc:AlternateContent>`,
+                'Radar',
+            ],
         ];
         for (const [inner, name] of cases)
             expect(boxOf(deckWith(chartSpace(inner))).html).toBe(`<p>${name} chart not imported</p>`);
