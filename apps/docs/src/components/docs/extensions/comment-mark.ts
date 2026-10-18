@@ -4,7 +4,8 @@ import type { EditorState } from '@tiptap/pm/state';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
-import { CommentMarkSchema, equationText } from '@workspace/lib/docs/eigendoc';
+import type { FigureFrameNode } from '@workspace/lib/docs/eigendoc';
+import { CommentMarkSchema, isFigureFrameNode, readEquation } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
@@ -21,8 +22,8 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// A node whose schema gives it a commentCardId, an image or an equation, holds its card there: the Yjs binding persists
-// a mark only on text.
+// A node whose schema gives it a commentCardId, an image, a chart or an equation, holds its card there: the Yjs binding
+// persists a mark only on text.
 const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.['commentCardId'] !== undefined;
 
 // The card a node anchors: by attribute, or on text as the comment mark.
@@ -39,7 +40,7 @@ function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: numbe
     return anchors;
 }
 
-// A new card anchors by attribute on an image or an equation selected alone, else as the mark on the range's text.
+// A new card anchors by attribute on an image, a chart or an equation selected alone, else as the mark on the range's text.
 export function addCommentAnchor(editor: Editor, { from, to }: { from: number; to: number }, cardId: string): void {
     const node = editor.state.doc.nodeAt(from);
     if (node && anchorsByAttribute(node) && to === from + node.nodeSize) {
@@ -84,13 +85,15 @@ export function selectCommentAnchor(editor: Editor, cardId: string): void {
     selected.scrollIntoView().run();
 }
 
-// A comment on an image alone has no text to quote, so the image reads as "Image", and an equation with no text as
-// "Equation". The callback replaces every leaf's own text, so any other leaf reads as its leafText.
+const QUOTE_WORDS: Record<FigureFrameNode, string> = { figure: 'Image', chart: 'Chart' };
+
+// A comment on an image or a chart alone has no text to quote, so it reads as "Image" or "Chart", and an equation with
+// no text as "Equation". The callback replaces every leaf's own text, so any other leaf reads as its leafText.
 export function commentAnchorText(doc: Node, from: number, to: number): string {
     return doc
         .textBetween(from, to, ' ', (leaf) => {
-            if (leaf.type.name === 'figure') return 'Image';
-            if (leaf.type.name === 'equation') return equationText(leaf) || 'Equation';
+            if (isFigureFrameNode(leaf.type.name)) return QUOTE_WORDS[leaf.type.name];
+            if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text || 'Equation';
             return leaf.type.spec.leafText?.(leaf) ?? '';
         })
         .slice(0, 100);
@@ -102,24 +105,18 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
         const cardId = nodeCommentCardId(node);
         if (cardId) {
             const end = pos + node.nodeSize;
-
-            // An image's node view paints the corner mark from this spec, resolved or not, like a
-            // commented canvas element.
-            if (node.type.name === 'figure') {
-                decorations.push(Decoration.node(pos, end, {}, { commentColor: meta.colorMap.get(cardId) }));
-            } else if (meta.resolvedIds.has(cardId)) {
-                // Resolved comments: no decoration, keep default highlight appearance.
-                // Resolved status is visible in the sidebar (checkmark icon + filter).
-            } else {
-                const color = meta.colorMap.get(cardId);
-                if (color) {
-                    decorations.push(
-                        Decoration.inline(pos, end, {
-                            class: 'comment-colored',
-                            style: `background-color:${lightenColor(color, 0.25)}`,
-                        }),
-                    );
-                }
+            const color = meta.colorMap.get(cardId);
+            // An image's, a chart's or an equation's node view paints the corner mark from this spec, resolved or not,
+            // like a commented canvas element.
+            if (anchorsByAttribute(node)) decorations.push(Decoration.node(pos, end, {}, { commentColor: color }));
+            // Text, and an equation among it, is highlighted until resolved; the sidebar shows a resolved one.
+            if (!isFigureFrameNode(node.type.name) && !meta.resolvedIds.has(cardId) && color) {
+                decorations.push(
+                    Decoration.inline(pos, end, {
+                        class: 'comment-colored',
+                        style: `background-color:${lightenColor(color, 0.25)}`,
+                    }),
+                );
             }
         }
     });

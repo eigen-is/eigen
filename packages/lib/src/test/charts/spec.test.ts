@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
     chartColor,
+    chartSearchText,
     exceedsInlineGridLimits,
     fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,
@@ -87,6 +88,21 @@ describe('sampleChartSpec', () => {
     });
 });
 
+describe('chartSearchText', () => {
+    test("a chart's titles, series names and categories, a line each; none for a spec that doesn't parse", () => {
+        expect(chartSearchText(sampleChartSpec('line')).split('\n')).toEqual([
+            'Points scored',
+            'Period 1',
+            'Period 2',
+            'Team 1',
+            'Team 2',
+            'Team 3',
+            'Team 4',
+        ]);
+        expect(chartSearchText(null)).toBe('');
+    });
+});
+
 describe('palette', () => {
     const palette = EIGEN_ACCENT_COLORS_SHUFFLED.map(({ value }) => value);
 
@@ -135,6 +151,18 @@ describe('parseChartSpec', () => {
         expect(parseChartSpec(stored({ valueAxis: { min: 'Infinity', gridlines: 1, format: 3 } }))?.valueAxis).toEqual(
             valueAxis,
         );
+        expect(
+            parseChartSpec(stored({ categoryAxis: { title: 'T', visible: 0, reversed: 'yes' } }))?.categoryAxis,
+        ).toEqual({ title: 'T', visible: true, reversed: false });
+        expect(parseChartSpec(stored({ valueAxis: { visible: null } }))?.valueAxis.visible).toBe(true);
+    });
+
+    test('a hidden or reversed axis reads back as stored', () => {
+        const spec = chart({
+            categoryAxis: { title: '', visible: false, reversed: true },
+            valueAxis: { ...chart().valueAxis, visible: false },
+        });
+        expect(parseChartSpec(JSON.stringify(spec))).toEqual(spec);
     });
 
     test('the font is one of the Eigen fonts, and reads Inter when missing or anything else', () => {
@@ -217,7 +245,7 @@ describe('parseChartSpec', () => {
             JSON.stringify(
                 chart({
                     title: long,
-                    categoryAxis: { title: long },
+                    categoryAxis: { ...chart().categoryAxis, title: long },
                     data: { source: 'inline', categories: [long], series: [{ ...style, name: long, values: [1] }] },
                 }),
             ),

@@ -10,7 +10,8 @@ import { renderInDocument } from '../../render-in-document';
 installHappyDom();
 
 const session = { user: { id: 'owner-1' } };
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => session, useIsGuest: () => false }));
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 
 const { createElement } = await import('react');
 const { EventDetailCard } = await import('../../../components/calendar/event-detail-card');

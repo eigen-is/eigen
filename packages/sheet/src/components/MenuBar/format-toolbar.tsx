@@ -1,6 +1,7 @@
+import { nextFontSize } from '@workspace/lib/constants/fonts';
 import { cellFontName, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
-import { ColorPickerButton } from '@workspace/ui/components/media';
+import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic } from 'lucide-react';
 import { useContext } from 'react';
@@ -15,7 +16,6 @@ import {
     handleTextSize,
 } from '../../state';
 import { useAnchorCell } from '../FormatDialogs/useAnchorCell';
-import { FontSizeStepper } from './font-size-stepper';
 
 // Quick-format controls mirrored from the docs toolbar, driving the exact same
 // handlers as the Format menu — an extra surface, not a replacement. The menu bar's
@@ -38,6 +38,11 @@ export function FormatToolbar() {
     const fontSize = Number(cell?.fs) || settings.defaultFontSize;
     const bold = Number(cell?.bl) === 1;
     const italic = Number(cell?.it) === 1;
+    const setFontSize = (size: number) => {
+        setContext((ctx) => {
+            handleTextSize(ctx, refs.cellInput.current!, size);
+        });
+    };
 
     return (
         <div className="hidden @[1360px]:flex items-center gap-0.5">
@@ -54,11 +59,8 @@ export function FormatToolbar() {
 
             <FontSizeStepper
                 value={fontSize}
-                onChange={(size) => {
-                    setContext((ctx) => {
-                        handleTextSize(ctx, refs.cellInput.current!, size);
-                    });
-                }}
+                onChange={setFontSize}
+                onStep={(by) => setFontSize(nextFontSize(fontSize, by))}
             />
 
             <ToolbarSeparator />

@@ -11,9 +11,9 @@ import {
     type VectorElement,
     type VectorElementPatch,
 } from '@workspace/lib/vector';
+import { sealed } from '@workspace/ui/components/properties-panel';
 import type * as Y from 'yjs';
 import type { ZOp } from '../../properties-panel/z-order';
-import { sealed } from './use-canvas-doc';
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
 // NON-selected elements, so a non-contiguous multi-selection collapses into one clean gap

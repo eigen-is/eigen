@@ -3,7 +3,7 @@ import { Editor, getSchema } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
-import { writeMathml } from '@workspace/math';
+import { readLatex, writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { AtomMarks } from '../../../../components/docs/extensions/atom-marks';
 import {
@@ -38,12 +38,15 @@ function anchors(doc: Node): [string, string | null, string | null][] {
     return result;
 }
 
-test('a comment on an equation anchors by its attribute and quotes its LaTeX, or "Equation" without one', () => {
-    const doc = schema.nodeFromJSON(docOf(equation('x^2', 'card-1')));
+test('a comment on an equation anchors by its attribute and quotes its linear form, or "Equation" when empty', () => {
+    const typed = '\\frac{x}{2}';
+    const doc = schema.nodeFromJSON(
+        docOf({ type: 'equation', attrs: { mathml: writeMathml(readLatex(typed), typed), commentCardId: 'card-1' } }),
+    );
     const node = doc.firstChild?.firstChild;
     expect(node && nodeCommentCardId(node)).toBe('card-1');
-    expect(commentAnchorText(doc, 0, doc.content.size)).toBe('x^2');
-    const bare = schema.nodeFromJSON(docOf(equation()));
+    expect(commentAnchorText(doc, 0, doc.content.size)).toBe('x/2');
+    const bare = schema.nodeFromJSON(docOf({ type: 'equation', attrs: { mathml: '' } }));
     expect(commentAnchorText(bare, 0, bare.content.size)).toBe('Equation');
 });
 

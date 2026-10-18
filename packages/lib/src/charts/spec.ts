@@ -62,8 +62,8 @@ function defaultPresentation(type: ChartType): Omit<ChartSpec, 'type' | 'data'> 
         title: '',
         legend: type === 'pie' ? 'none' : 'top',
         blanks: 'gap',
-        categoryAxis: { title: '' },
-        valueAxis: { title: '', min: null, max: null, gridlines: true, format: null },
+        categoryAxis: { title: '', visible: true, reversed: false },
+        valueAxis: { title: '', min: null, max: null, gridlines: true, format: null, visible: true },
         sliceColors: [],
         fontFamily: DEFAULT_CHART_FONT,
     };
@@ -96,6 +96,21 @@ export function sampleChartSpec(type: ChartType): ChartSpec {
 
 export function exceedsChartSpecBytes(value: string): boolean {
     return new TextEncoder().encode(value).length > MAX_CHART_SPEC_BYTES;
+}
+
+// What a search finds a chart by: its titles, series names and inline categories, a line each.
+export function chartSearchText(spec: ChartSpec | null): string {
+    if (!spec) return '';
+    const { data } = spec;
+    return [
+        spec.title,
+        spec.categoryAxis.title,
+        spec.valueAxis.title,
+        ...data.series.flatMap((series) => (typeof series.name === 'string' ? [series.name] : [])),
+        ...(data.source === 'inline' ? data.categories : []),
+    ]
+        .filter((text) => text !== '')
+        .join('\n');
 }
 
 // Takes the stored string, like the fill and points codecs, so the size limit is measured on what peers store.
@@ -134,13 +149,18 @@ function chartSpec(v: unknown): ChartSpec {
         title: text(str(prop(spec, 'title'), defaults.title)),
         legend: oneOf(prop(spec, 'legend'), LEGEND_POSITIONS, defaults.legend),
         blanks: oneOf(prop(spec, 'blanks'), CHART_BLANKS, defaults.blanks),
-        categoryAxis: { title: text(str(prop(categoryAxis, 'title'), defaults.categoryAxis.title)) },
+        categoryAxis: {
+            title: text(str(prop(categoryAxis, 'title'), defaults.categoryAxis.title)),
+            visible: bool(prop(categoryAxis, 'visible'), defaults.categoryAxis.visible),
+            reversed: bool(prop(categoryAxis, 'reversed'), defaults.categoryAxis.reversed),
+        },
         valueAxis: {
             title: text(str(prop(valueAxis, 'title'), defaults.valueAxis.title)),
             min: ordered ? min : null,
             max: ordered ? max : null,
             gridlines: bool(prop(valueAxis, 'gridlines'), defaults.valueAxis.gridlines),
             format: typeof format === 'string' ? text(format) : defaults.valueAxis.format,
+            visible: bool(prop(valueAxis, 'visible'), defaults.valueAxis.visible),
         },
         sliceColors: slices.map((v) => color(v, null)),
         fontFamily: fontFamily(prop(spec, 'fontFamily'), defaults.fontFamily),

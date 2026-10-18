@@ -1,19 +1,19 @@
 ---
 title: "Format text"
-description: "Apply bold, headings, lists, alignment, colors, and fonts to text in a Docs document using the toolbar."
+description: "Apply bold, headings, lists, alignment, colors, fonts, and text sizes to text in a Docs document using the toolbar."
 type: how-to
 category: Editing
-tags: [docs, formatting, fonts, headings, lists, numbering, color, alignment, caps]
+tags: [docs, formatting, fonts, font size, headings, lists, numbering, color, alignment, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
-Docs has a full formatting toolbar above the editor. You can change the font, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.
+Docs has a full formatting toolbar above the editor. You can change the font and its size, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.
 
 The toolbar is visible whenever you have write access to the document. If you can only view, the toolbar is hidden.
 
-On a narrower window the toolbar shows fewer formatting buttons, and on a small screen none. Everything on this page is also in the **Format** menu in the toolbar, which works on any screen.
+On a narrower window the toolbar shows fewer formatting buttons, and on a small screen none. Everything on this page except typing a text size is also in the **Format** menu in the toolbar, which works on any screen.
 
 ## Choose a font
 
@@ -25,6 +25,15 @@ Click the font name in the toolbar, or open **Format**, then **Font**. A dropdow
 - **Excalifont** (a hand-drawn style)
 
 Click the name you want. The change applies to the selected text. If nothing is selected, it applies to new text you type from that point.
+
+## Change the text size
+
+The size box sits between the font name and **Bold**. It shows the size of the selected text in points, such as 11 for normal text. When the selection mixes sizes, the box is empty.
+
+- Click **Decrease font size** (the minus button) or **Increase font size** (the plus button) to make the text one point smaller or larger. In a selection that mixes sizes, each part changes by one point.
+- To set a size, click the box, type a size from 1 to 400, such as 14 or 10.5, and press Enter. Press Escape to leave the size as it was.
+
+You can also open **Format**, then **Text**, then **Size**, and choose **Increase font size** (Cmd+Shift+. / Ctrl+Shift+.) or **Decrease font size** (Cmd+Shift+, / Ctrl+Shift+,).
 
 ## Apply a paragraph style
 
@@ -48,7 +57,7 @@ Select the text you want to change, then click the button in the toolbar:
 
 Each button is a toggle. Click it again on the same selection to remove the style. When the cursor is inside styled text, the button appears highlighted, so you can see what is active.
 
-For more styles, open **Format**, then **Text**. Next to **Bold**, **Italic**, and **Underline** it has **Strikethrough**, **Superscript**, **Subscript**, **Inline code**, and **Small** (renders the text at a smaller size inline). Choose a style again on the same selection to remove it.
+For more styles, open **Format**, then **Text**. Next to **Bold**, **Italic**, and **Underline** it has **Strikethrough**, **Superscript**, **Subscript**, and **Inline code**. Choose a style again on the same selection to remove it.
 
 ## Set text in capitals
 

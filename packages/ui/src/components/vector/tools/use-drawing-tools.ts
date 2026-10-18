@@ -35,10 +35,10 @@ import {
     type VectorElementPatch,
     type VectorLinearElement,
 } from '@workspace/lib/vector';
+import { sealed } from '@workspace/ui/components/properties-panel';
 import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
-import { sealed } from '../hooks/use-canvas-doc';
 import type { VectorTool } from '../hooks/use-tool';
 import { FocusIndicators, FocusPointHandles, SnapDots } from './arrow-affordances';
 import {

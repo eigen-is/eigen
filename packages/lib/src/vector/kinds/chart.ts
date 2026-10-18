@@ -1,6 +1,6 @@
 // spec, not the barrel: the barrel's layout reaches this kind through geometry, and defineKind calls
 // defaults while the module loads.
-import { exceedsChartSpecBytes, parseChartSpec, sampleChartSpec } from '../../charts/spec';
+import { chartSearchText, exceedsChartSpecBytes, parseChartSpec, sampleChartSpec } from '../../charts/spec';
 import { hitTestBox } from '../geometry';
 import { rectOutline } from '../outline';
 import { DEFAULT_ELEMENT_PROPS, type VectorChartElement } from '../types';
@@ -45,20 +45,7 @@ export const chartKind = defineKind<VectorChartElement>({
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) => rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, 0, inflate),
     render: (el) => ({ svg: renderChartSvg(el) }),
-    searchText: (el) => {
-        const spec = parseChartSpec(el.chart);
-        if (!spec) return '';
-        const { data } = spec;
-        return [
-            spec.title,
-            spec.categoryAxis.title,
-            spec.valueAxis.title,
-            ...data.series.flatMap((series) => (typeof series.name === 'string' ? [series.name] : [])),
-            ...(data.source === 'inline' ? data.categories : []),
-        ]
-            .filter((text) => text !== '')
-            .join('\n');
-    },
+    searchText: (el) => chartSearchText(parseChartSpec(el.chart)),
     // The font its labels draw in; the placeholder adds none.
     fontFamilies: (el) => chartLayout(el)?.labels.map((label) => label.fontFamily) ?? [],
     toShapes: chartToElements,

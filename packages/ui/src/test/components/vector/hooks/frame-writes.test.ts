@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_FRAME_BACKGROUND, parseBinding, readVectorFromDoc, serializeBinding } from '@workspace/lib/vector';
 import * as Y from 'yjs';
+import { sealed } from '../../../../components/properties-panel/property-gesture';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
@@ -9,7 +10,6 @@ import {
     updateFramesInDoc,
     updateMetaInDoc,
 } from '../../../../components/vector/hooks/frame-writes';
-import { sealed } from '../../../../components/vector/hooks/use-canvas-doc';
 
 function docWithFrames(n: number): { doc: Y.Doc; ids: string[] } {
     const doc = new Y.Doc();
