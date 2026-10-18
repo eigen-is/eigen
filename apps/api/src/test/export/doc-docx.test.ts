@@ -2623,6 +2623,21 @@ describe('docx writer — headers and footers', () => {
         expect(xmlElements(await part(zip, 'word/footer2.xml')).map(xmlOf)).toEqual(['<w:p/>']);
     });
 
+    // As the editor and the PDF draw it (PAGE_BAND_CLASS), and as Word's Header and Footer styles have none.
+    test("a band's last block has no space after", async () => {
+        const zip = await unzip(doc(p(text('Body'))), undefined, undefined, undefined, {
+            header: doc(p(text('Acme')), p(text('Site'))),
+            footer: doc(table(tr(td({}, p(text('x')))))),
+        });
+        expect(xmlElements(await part(zip, 'word/header1.xml')).map(xmlOf)).toEqual([
+            `<w:p>${run('Acme')}</w:p>`,
+            `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr>${run('Site')}</w:p>`,
+        ]);
+        expect(xmlOf(xmlElements(await part(zip, 'word/footer1.xml')).at(-1))).toBe(
+            '<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:before="0"/></w:pPr></w:p>',
+        );
+    });
+
     test('a doc with no bands writes no band parts and no titlePg', async () => {
         const zip = await unzip(doc(p(text('Body'))), undefined, undefined, {
             ...DEFAULT_PAGE_SETUP,

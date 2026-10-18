@@ -21,7 +21,7 @@ The one-shot transform process ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)
 | Outcome | Status |
 |---|---|
 | WeasyPrint not installed, older than 68 or its import past 5 s (PDF only) | 501 naming the minimum and how to install it |
-| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or a bare 500 with its traceback in the log |
+| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or a bare 500 with its traceback in the log. A SIGSEGV, which WeasyPrint 68 hits now and then in a glib thread while renders run side by side, renders once more in what is left of the 60 s, unless the first took over half |
 | Transform runner saturated | 503, never a main-thread fallback |
 | Empty deck or empty drawing | 400 |
 
@@ -73,7 +73,7 @@ A code block's language rides a hidden paragraph style of its own, `Code Block (
 
 ## A band is a docx part with relationships of its own
 
-The header and the footer are parts of their own, `header1.xml` and `footer1.xml`, written by the body's block writer in the body's column, and page 1's beside them when the page differs, with `w:titlePg` in the section; a page-1 band the doc lacks is an empty part, as Word writes one. A part resolves the `r:id`s it uses through its own relationships part (`relsPathOf`, `core/opc.ts`), so a header's image or link has its own relationship, while the image file is written once for the package. The `Package` walk carries the relationships of the part it writes (`pkg.part`), and drawing ids stay the package's, so no two collide. A part's root declares the document's namespaces, `m:` included, as a band may hold an equation. The section's header and footer distance is the bands' 1.27 cm (`BAND_DISTANCE_MM`), or a narrower margin.
+The header and the footer are parts of their own, `header1.xml` and `footer1.xml`, written by the body's block writer in the body's column, and page 1's beside them when the page differs, with `w:titlePg` in the section; a page-1 band the doc lacks is an empty part, as Word writes one. A part resolves the `r:id`s it uses through its own relationships part (`relsPathOf`, `core/opc.ts`), so a header's image or link has its own relationship, while the image file is written once for the package. The `Package` walk carries the relationships of the part it writes (`pkg.part`), and drawing ids stay the package's, so no two collide. A part's root declares the document's namespaces, `m:` included, as a band may hold an equation. The section's header and footer distance is the bands' 1.27 cm (`BAND_DISTANCE_MM`), or a narrower margin. A band's last block is written with no space after, as the editor and the PDF draw it (`PAGE_BAND_CLASS`) and as Word's Header and Footer styles have none, so a one-line footer stands one line high.
 
 ## Caps cross the docx as Word's toggles
 

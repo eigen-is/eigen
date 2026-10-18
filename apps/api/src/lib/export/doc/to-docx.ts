@@ -139,7 +139,7 @@ export async function eigendocToDocx(
         for (const [index, [type, band]] of written.entries()) {
             pkg.part = { relationships: [], hyperlinks: new Map(), images: new Map() };
             const path = `word/${edge}${index + 1}.xml`;
-            const content = band ? blocksXml(blocksOf(band.content ?? [], {}, flow, false)) : '<w:p/>';
+            const content = band ? blocksXml(withoutAfter(blocksOf(band.content ?? [], {}, flow, false))) : '<w:p/>';
             bandParts.push([
                 path,
                 `<${BAND_TAGS[edge]} ${DOCUMENT_NAMESPACES}>${content}</${BAND_TAGS[edge]}>`,
@@ -828,6 +828,18 @@ function withAfter(blocks: Block[], after: number): Block[] {
         return blocks;
     if (after <= (last.props.spacing?.after ?? styleSpacing(last.props.style, 'after'))) return blocks;
     return [...blocks.slice(0, -1), { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after } } }];
+}
+
+// A band's last block has no space after, as the editor and the PDF draw it (PAGE_BAND_CLASS) and as Word's Header and
+// Footer styles have none.
+function withoutAfter(blocks: Block[]): Block[] {
+    const last = blocks.at(-1);
+    if (!last || ('table' in last && last.float)) return blocks;
+    if ('table' in last) return [...blocks.slice(0, -1), { ...last, after: 0 }];
+    return [
+        ...blocks.slice(0, -1),
+        { ...last, props: { ...last.props, spacing: { ...last.props.spacing, after: 0 } } },
+    ];
 }
 
 function withBefore(paragraph: Paragraph, before: number): Paragraph {

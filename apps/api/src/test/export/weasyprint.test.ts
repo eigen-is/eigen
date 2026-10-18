@@ -94,6 +94,28 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
         expect(stderr).toContain('Traceback');
     });
 
+    test('a render that segfaults renders once more', async () => {
+        const { outcomes, stderr } = await exportWithStubPython(
+            'echo 70.0; exit 0',
+            `if [ ! -e "$0.crashed" ]; then : > "$0.crashed"; kill -SEGV $$; fi\nprintf '%%PDF-'`,
+        );
+        expect(outcomes).toEqual([{ pdf: '%PDF-' }]);
+        expect(stderr).toContain('SIGSEGV');
+    });
+
+    test('a render that segfaults twice answers a bare 500', async () => {
+        const { outcomes } = await exportWithStubPython('echo 70.0; exit 0', 'kill -SEGV $$');
+        expect(outcomes).toEqual([{ status: 500, message: 'PDF generation failed' }]);
+    });
+
+    test('a render that fails otherwise renders no more', async () => {
+        const { outcomes } = await exportWithStubPython(
+            'echo 70.0; exit 0',
+            `if [ -e "$0.failed" ]; then printf '%%PDF-'; exit 0; fi\n: > "$0.failed"; exit 1`,
+        );
+        expect(outcomes).toEqual([{ status: 500, message: 'PDF generation failed' }]);
+    });
+
     // `exec`, so the timeout kills the sleep itself and nothing holds the probe's stdout open.
     test('a probe that hangs answers 501 and the next export probes again', async () => {
         const { outcomes } = await exportWithStubPython(
