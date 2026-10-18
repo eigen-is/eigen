@@ -636,6 +636,57 @@ describe('pptx shapes', () => {
         expect(srgb(first(first(closed, P, 'spPr'), A, 'solidFill')).val).toBe('00FF00');
     });
 
+    test("a path is its box's custGeom, each command its DrawingML one in EMU; an open path fills none", () => {
+        const fill = serializeFill({ type: 'solid', color: '#00ff00', style: 'cross-hatch' });
+        const zip = pptx(
+            sceneOf([
+                element('path', {
+                    index: 'a0',
+                    path: 'M 0 0 L 1 0 C 1 0.5 0.5 1 0 1 Z M 0.25 0.25 Q 0.5 0.75 0.75 0.25 Z',
+                    closed: true,
+                    fill,
+                    strokeColor: '#0000ff',
+                    strokeWidth: 2,
+                }),
+                element('path', { index: 'a1', path: 'M 0 0 L 0.5 1 L 1 0', closed: false, fill }),
+            ]),
+        );
+        const [closed, open] = shapes(zip);
+        expect(geometry(closed)).toBe('custom');
+        const path = first(closed, A, 'path');
+        expect([attr(path, 'w'), attr(path, 'h'), attr(path, 'fill')]).toEqual([
+            String(200 * EMU),
+            String(100 * EMU),
+            undefined,
+        ]);
+        expect(xmlElements(path).map((command) => command.local)).toEqual([
+            'moveTo',
+            'lnTo',
+            'cubicBezTo',
+            'close',
+            'moveTo',
+            'quadBezTo',
+            'close',
+        ]);
+        const points = (command: string) =>
+            descendants(first(path, A, command), A, 'pt').map((pt) => [Number(attr(pt, 'x')), Number(attr(pt, 'y'))]);
+        expect(points('cubicBezTo')).toEqual([
+            [200 * EMU, 50 * EMU],
+            [100 * EMU, 100 * EMU],
+            [0, 100 * EMU],
+        ]);
+        expect(points('quadBezTo')).toEqual([
+            [100 * EMU, 75 * EMU],
+            [150 * EMU, 25 * EMU],
+        ]);
+        // A hatched fill writes solid, as every kind's does.
+        expect(srgb(first(first(closed, P, 'spPr'), A, 'solidFill')).val).toBe('00FF00');
+        expect(srgb(first(closed, A, 'ln')).val).toBe('0000FF');
+        expect(attr(first(open, A, 'path'), 'fill')).toBe('none');
+        expect(xmlChild(first(open, P, 'spPr'), A, 'noFill')).toBeDefined();
+        expect(descendants(open, A, 'close')).toHaveLength(0);
+    });
+
     // Past what a spread into Math.max takes: about 500k arguments in a Worker, 640k on the main thread.
     test('a looping freehand stroke of 700k points writes its fill and its ink', () => {
         const raster = Array.from({ length: 700_000 }, (_, i) => [i % 1000, Math.floor(i / 1000)]);
