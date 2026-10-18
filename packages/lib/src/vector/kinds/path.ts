@@ -8,9 +8,9 @@ import {
     pointsBounds,
     rotatePoint,
 } from '../geometry';
-import { polylineOutline, scaledPathCommands } from '../outline';
+import { clamp, nearestPoint, polylineOutline, scaledPathCommands } from '../outline';
 import type { VectorPathElement } from '../types';
-import { defineKind } from './kind';
+import { boxAnchorPoints, defineKind } from './kind';
 import { bool, fillField, parseNormalizedPath } from './read-fields';
 import { isBordered, renderRoughShape } from './render-utils';
 
@@ -80,6 +80,14 @@ export const pathKind = defineKind<VectorPathElement>({
         const outer = outerContour(sampled(el).subpaths);
         if (!el.closed) return polylineOutline(outer);
         return { kind: 'polygon', corners: grownRing(outer, inflate) };
+    },
+    // The box's side midpoints moved onto the outer contour, so a snap dot sits where an arrow docks.
+    anchorPoints: (el) => {
+        const outer = outerContour(sampled(el).subpaths);
+        const center = boxCenter(el);
+        return boxAnchorPoints(el).map((m) =>
+            rotatePoint(nearestOnPolyline(outer, rotatePoint(m, center, -el.angle)), center, el.angle),
+        );
     },
     paintsNothing: (el) => !isBordered(el) && (!el.closed || isTransparentFill(parseFill(el.fill))),
     render: (el) => ({ svg: renderRoughShape(el) }),
@@ -168,6 +176,18 @@ function signedArea(ring: Point[]): number {
         sum += a.x * b.y - b.x * a.y;
     }
     return sum;
+}
+
+function nearestOnPolyline(points: Point[], to: Point): Point {
+    const feet = points.slice(1).map((b, i) => {
+        const a = points[i];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const len2 = dx * dx + dy * dy;
+        const t = len2 === 0 ? 0 : clamp(((to.x - a.x) * dx + (to.y - a.y) * dy) / len2, 0, 1);
+        return { x: a.x + t * dx, y: a.y + t * dy };
+    });
+    return nearestPoint([points[0], ...feet], to);
 }
 
 function outerContour(subpaths: Point[][]): Point[] {

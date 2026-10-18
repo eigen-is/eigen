@@ -382,6 +382,29 @@ describe('path outline and docking', () => {
         });
     });
 
+    test('the snap anchors sit on the contour, nearest each side midpoint of the box', () => {
+        const anchors = ELEMENT_KINDS.path.anchorPoints(box(TRIANGLE));
+        expect(anchors).toEqual([
+            { x: 150, y: 150 },
+            { x: 100, y: 200 },
+            { x: 0, y: 100 },
+            { x: 50, y: 50 },
+        ]);
+        const turned = ELEMENT_KINDS.path.anchorPoints(box(TRIANGLE, { angle: 90 }));
+        // the triangle turned a quarter about its center: its right angle now sits top-left
+        for (const [p, q] of turned.map((p, i) => [p, rotatePoint(anchors[i], { x: 100, y: 100 }, 90)])) {
+            expect(p.x).toBeCloseTo(q.x, 9);
+            expect(p.y).toBeCloseTo(q.y, 9);
+        }
+    });
+
+    test('an anchor lands on a curve, not on its chord or its box', () => {
+        // a low bump from the bottom corners, its crest halfway up the box
+        const top = ELEMENT_KINDS.path.anchorPoints(box('M 0 1 Q 0.5 0 1 1 Z', { width: 400, height: 100 }))[3];
+        expect(top.x).toBeCloseTo(200, 6);
+        expect(top.y).toBeCloseTo(50, 1);
+    });
+
     // A straight arrow from `from` to an anchor inside the path, bound at its end.
     const dock = (el: VectorPathElement, from: Point, anchor: Point): Point => {
         const x = Math.min(from.x, anchor.x);
