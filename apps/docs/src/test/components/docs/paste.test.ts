@@ -164,6 +164,23 @@ test.each([
     ]);
 });
 
+// D13: Google Docs writes its body's line height and margins on every paragraph, which would read as a format typed
+// text lacks; another app's paragraph CSS is its own look, so a paste takes the doc's.
+test("a paragraph pasted from Google Docs takes the doc's spacing and indents", () => {
+    const html =
+        '<b id="docs-internal-guid-1"><p dir="ltr" style="line-height:1.38;margin-top:0pt;margin-bottom:0pt;margin-left:36pt;text-indent:-18pt"><span style="font-size:11pt">a</span></p></b>';
+    const formats: Record<string, unknown>[] = [];
+    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+        if (node.type.name === 'paragraph')
+            formats.push(
+                Object.fromEntries(
+                    Object.entries(node.attrs).filter(([key, value]) => key !== 'textAlign' && value !== null),
+                ),
+            );
+    });
+    expect(formats).toEqual([{}]);
+});
+
 // A docs copy pasted back through ProseMirror's own HTML, the way a docs editor reads it.
 describe('a docs copy pastes back as it was copied', () => {
     const figure = {
@@ -179,6 +196,17 @@ describe('a docs copy pastes back as it was copied', () => {
             [paragraph(text('a')), paragraph(figure), paragraph(text('b'))],
         ],
         ['a figure between text keeps its paragraph whole', [paragraph(text('a'), figure, text('b'))]],
+        [
+            'a heading and a paragraph keep their spacing and indents',
+            [
+                { type: 'heading', attrs: { level: 2, spaceBefore: 6, indentLeft: 36 }, content: [text('a')] },
+                {
+                    type: 'paragraph',
+                    attrs: { lineSpacing: 1.15, spaceAfter: 0, indentFirstLine: -18 },
+                    content: [text('b')],
+                },
+            ],
+        ],
     ])('%s', (_name, content) => {
         const source = new Editor({ extensions: getDocExtensions(), content: { type: 'doc', content } });
         const { dom } = source.view.serializeForClipboard(source.state.doc.slice(0, source.state.doc.content.size));
