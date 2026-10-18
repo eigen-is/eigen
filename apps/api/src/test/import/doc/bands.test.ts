@@ -146,19 +146,95 @@ describe('docx import — headers and footers', () => {
         expect(warnings).toContainEqual({ code: 'band-images-unanchored', count: 1 });
     });
 
-    // A band's schema holds none of them: a Title-styled header line is a paragraph, a code block its lines.
-    test("the nodes a band's schema leaves out are flattened to their text", async () => {
-        const { bands } = await docxWith([
+    // A full-page letterhead or a watermark lies behind the text from the header; as a block it would push the body away.
+    test('a band drops a picture behind the text and a VML picture, with a warning', async () => {
+        const behind = GOLDEN_DOCX_IMAGE_RUN.replace('<wp:inline>', '<wp:anchor behindDoc="1">').replace(
+            '</wp:inline>',
+            '</wp:anchor>',
+        );
+        const inFront = behind.replace('behindDoc="1"', 'behindDoc="0"');
+        const watermark = `<w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml" style="width:400pt;height:600pt"><v:imagedata r:id="rId4"/></v:shape></w:pict></w:r>`;
+        const { bands, images, warnings } = await docxWith([
             {
                 id: 'h1',
                 kind: 'header',
-                xml: `${paragraph(run('Annual report'), '<w:pStyle w:val="Title"/>')}${paragraph(`${run('a')}<w:r><w:br w:type="page"/></w:r>${run('b')}`)}`,
+                xml: paragraph(`${behind}${watermark}${inFront}${run('Acme')}`),
+                rels: `<Relationship Id="rId4" Type="${REL}/image" Target="media/pixel.png"/>`,
             },
         ]);
+        expect(nodesOfType(bands.header ?? {}, 'figure')).toHaveLength(1);
+        expect(texts(bands.header)).toEqual(['Acme']);
+        expect(images).toHaveLength(1);
+        expect(warnings).toContainEqual({ code: 'band-content-dropped', count: 2 });
+        expect(warnings).toContainEqual({ code: 'band-images-unanchored', count: 1 });
+    });
+
+    // The notes list is the body's, so a [n] in a band would link nowhere.
+    test('a note reference in a band is dropped, with a warning', async () => {
+        const { json, bands, warnings } = await docxWith([
+            {
+                id: 'f1',
+                kind: 'footer',
+                xml: paragraph(`${run('Source')}<w:r><w:footnoteReference w:id="1"/></w:r>`),
+            },
+        ]);
+        expect(texts(bands.footer)).toEqual(['Source']);
+        expect(texts(json)).toEqual(['Body']);
+        expect(warnings).toContainEqual({ code: 'band-content-dropped', count: 1 });
+    });
+
+    test("a reference whose relationship isn't a header's or a footer's is no band", async () => {
+        const docx = await buildDocxWithBody(
+            `${paragraph(run('Body'))}<w:sectPr><w:headerReference w:type="default" r:id="h1"/></w:sectPr>`,
+            {
+                rels: `<Relationship Id="h1" Type="${REL}/footnotes" Target="h1.xml"/>`,
+                media: {
+                    'word/media/pixel.png': new Uint8Array(),
+                    'word/h1.xml': new TextEncoder().encode(
+                        `<w:hdr ${BAND_NAMESPACES}>${paragraph(run('Acme'))}</w:hdr>`,
+                    ),
+                },
+            },
+        );
+        expect(docxToPmJson(Buffer.from(docx)).bands).toEqual({});
+    });
+
+    test('evenAndOddHeaders off is no even-page warning', async () => {
+        const { warnings } = await docxWith(
+            [
+                { id: 'h1', kind: 'header', xml: paragraph(run('Odd')) },
+                { id: 'h2', kind: 'header', type: 'even', xml: paragraph(run('Even')) },
+            ],
+            { settings: '<w:evenAndOddHeaders w:val="0"/>' },
+        );
+        expect(warnings.map(({ code }) => code)).not.toContain('even-bands-dropped');
+    });
+
+    // A field's code shows nothing, a simple field in it included.
+    test("a PAGE simple field inside another field's code is no page number", async () => {
+        const nested = `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> IF </w:instrText></w:r><w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple><w:r><w:instrText xml:space="preserve"> = 1 "x" "y" </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run('x')}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+        const { bands } = await docxWith([{ id: 'f1', kind: 'footer', xml: paragraph(nested) }]);
+        expect(nodesOfType(bands.footer ?? {}, 'pageNumber')).toEqual([]);
+        expect(texts(bands.footer)).toEqual(['x']);
+    });
+
+    // A band's schema holds none of them: a Title-styled header line is a paragraph, a code block its lines.
+    test("the nodes a band's schema leaves out are flattened to their text, with a warning", async () => {
+        const { bands, warnings } = await docxWith(
+            [
+                {
+                    id: 'h1',
+                    kind: 'header',
+                    xml: `${paragraph(run('Annual report'), '<w:pStyle w:val="Title"/>')}${paragraph(`${run('a')}<w:r><w:br w:type="page"/></w:r>${run('b')}`)}`,
+                },
+            ],
+            { styles: '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/></w:style>' },
+        );
         expect(nodesOfType(bands.header ?? {}, 'title')).toEqual([]);
         expect(nodesOfType(bands.header ?? {}, 'pageBreak')).toEqual([]);
         // The break goes, as in a note: a band isn't paged.
         expect(texts(bands.header)).toEqual(['Annual report', 'ab']);
+        expect(warnings).toContainEqual({ code: 'blocks-flattened', count: 1 });
     });
 });
 

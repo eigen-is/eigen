@@ -11,7 +11,7 @@ import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assem
 import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
-import { alternative, type DocxPackage, descendants, onOff, type Part, twipsOf, w, wChild } from './package';
+import { alternative, type DocxPackage, descendants, type Part, twipsOf, w, wChild } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import {
     type DocxRunProps,
@@ -58,6 +58,8 @@ export type Reader = {
     pagesDropped: number;
     // Pictures a band anchored, which it holds as block figures.
     bandAnchors: number;
+    // What a band drops: a picture behind the text or a VML one, a letterhead or a watermark, and a note reference.
+    bandDropped: number;
     publicOrigin: string | undefined;
 };
 
@@ -80,7 +82,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
     const size = sectionPage(sectPr);
-    const page = { ...size, differentFirstPage: onOff(wChild(sectPr, 'titlePg')) === true };
+    const page = { ...size, differentFirstPage: pkg.titlePg };
     const px = pagePx(page);
     const twips = pageTwips(page);
     return {
@@ -106,6 +108,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
             (section) => section !== sectPr && !isDeepStrictEqual(sectionPage(section), size),
         ).length,
         bandAnchors: 0,
+        bandDropped: 0,
         publicOrigin,
     };
 }

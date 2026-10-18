@@ -73,14 +73,21 @@ export function readDocx(
         const pkg = readPackage(buffer);
         const reader = createReader(pkg, options.publicOrigin);
         const content = readDocument(reader);
+        let refused = 0;
         // A band's schema holds none of BAND_EXCLUDED_NODES: each keeps its text.
+        const withoutExcluded = (node: JSONContent): JSONContent[] => {
+            if (!BAND_EXCLUDED_NODES.has(node.type ?? '')) {
+                return [node.content ? { ...node, content: node.content.flatMap(withoutExcluded) } : node];
+            }
+            refused++;
+            return asParagraphs(node);
+        };
         const bandContent = BAND_ROOTS.flatMap((root): [BandRoot, JSONContent[]][] => {
             const part = pkg.bands[root];
             return part ? [[root, readBand(reader, part).flatMap(withoutExcluded)]] : [];
         });
         const { weight, text } = sizeOf([...content, ...bandContent.flatMap(([, blocks]) => blocks)]);
         if (weight > MAX_DOCX_WEIGHT || text > MAX_DOCX_TEXT) throw new ApiError(413, DOCUMENT_TOO_LARGE);
-        let refused = 0;
         // A block the schema refuses keeps its text as paragraphs, so a reader slip never fails the import.
         const checked = (blocks: JSONContent[]) => {
             const kept = blocks.flatMap((block) => {
@@ -124,6 +131,7 @@ export function readDocx(
         if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
         if (pkg.evenBands > 0) warnings.push({ code: 'even-bands-dropped', count: pkg.evenBands });
         if (reader.bandAnchors > 0) warnings.push({ code: 'band-images-unanchored', count: reader.bandAnchors });
+        if (reader.bandDropped > 0) warnings.push({ code: 'band-content-dropped', count: reader.bandDropped });
         return { doc, bands, page: reader.page, images, warnings };
     } catch (error) {
         throw importError(error);
@@ -178,13 +186,6 @@ function fits(block: JSONContent): boolean {
         if (isOutOfMemory(error)) throw error;
         return false;
     }
-}
-
-const BAND_EXCLUDED = new Set<string>(BAND_EXCLUDED_NODES);
-
-function withoutExcluded(node: JSONContent): JSONContent[] {
-    if (BAND_EXCLUDED.has(node.type ?? '')) return asParagraphs(node);
-    return [node.content ? { ...node, content: node.content.flatMap(withoutExcluded) } : node];
 }
 
 function asParagraphs(block: JSONContent): JSONContent[] {

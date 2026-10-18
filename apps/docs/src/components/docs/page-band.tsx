@@ -65,6 +65,8 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
             ? root === edge || setup.differentFirstPage
             : root === printed && (root === edge ? otherHasContent : firstHasContent);
     const room = edge === 'header' ? setup.margin.top : setup.margin.bottom;
+    // At a margin narrower than its distance a band sits on the margin's edge, as the PDF and the docx put it.
+    const distance = Math.min(BAND_DISTANCE_MM, room);
     const { left, right } = setup.margin;
     return (
         <div
@@ -78,9 +80,7 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
                 margin:
                     edge === 'header' ? `-${room}mm -${right}mm 0 -${left}mm` : `0 -${right}mm -${room}mm -${left}mm`,
                 padding:
-                    edge === 'header'
-                        ? `${BAND_DISTANCE_MM}mm ${right}mm 0 ${left}mm`
-                        : `0 ${right}mm ${BAND_DISTANCE_MM}mm ${left}mm`,
+                    edge === 'header' ? `${distance}mm ${right}mm 0 ${left}mm` : `0 ${right}mm ${distance}mm ${left}mm`,
                 minHeight: `${room}mm`,
             }}
             onDoubleClick={
@@ -122,8 +122,8 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
                     className="pointer-events-none absolute text-xs text-muted-foreground invisible pointer-fine:group-hover:visible"
                     style={
                         edge === 'header'
-                            ? { top: `${BAND_DISTANCE_MM}mm`, left: `${left}mm` }
-                            : { bottom: `${BAND_DISTANCE_MM}mm`, left: `${left}mm` }
+                            ? { top: `${distance}mm`, left: `${left}mm` }
+                            : { bottom: `${distance}mm`, left: `${left}mm` }
                     }
                 >
                     Double-click to add a {edge}

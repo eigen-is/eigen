@@ -3,6 +3,7 @@ import {
     BAND_DISTANCE_MM,
     BAND_ROOTS,
     type BandRoot,
+    PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
     type PageSetup,
     pageStylesheet,
@@ -56,15 +57,17 @@ export async function renderEigendocExport(
     }
     const dataUriMap = toDataUriMap(media);
     const pdf = htmlExportMode(format) === 'pdf';
-    const prose = (content: JSONContent) =>
-        `<article class="eigen-prose tiptap">${renderDocHtml(
+    const prose = (content: JSONContent, className = 'eigen-prose tiptap') =>
+        `<article class="${className}">${renderDocHtml(
             withAbsoluteLinks(content, publicOrigin),
             (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
             { synthesizeSmallCaps: pdf, pageCounters: pdf },
         )}</article>`;
     const band = (root: BandRoot) => {
         const content = bands[root];
-        return content ? `<div class="band-${root}">${prose(content)}</div>` : '';
+        return content
+            ? `<div class="band-${root}">${prose(content, `eigen-prose tiptap ${PAGE_BAND_CLASS}`)}</div>`
+            : '';
     };
     // Browsers ignore running(), so the download shows each band where the long page does: page 1's header on top, the
     // other pages' footer at the end.
@@ -73,7 +76,7 @@ export async function renderEigendocExport(
         : `${band(page.differentFirstPage ? 'headerFirst' : 'header')}${prose(json)}${band('footer')}`;
     const html = exportHtmlDocument({
         title,
-        css: `${PROSE_CSS}${printExtras(page)}${pdf ? bandsCss(page) : ''}`,
+        css: `${PROSE_CSS}${printExtras(page)}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings: [] };

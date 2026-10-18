@@ -89,7 +89,8 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
                 const instr = w(element, 'instr') ?? '';
                 const kind = pageNumberKind(instr);
                 if (kind) {
-                    context.pieces.push({ kind: 'node', node: { type: 'pageNumber', attrs: { kind } } });
+                    if (!reader.fields.at(-1)?.inCode)
+                        context.pieces.push({ kind: 'node', node: { type: 'pageNumber', attrs: { kind } } });
                     break;
                 }
                 const link = hyperlinkField(reader, instr);
@@ -186,6 +187,11 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                 break;
             case 'footnoteReference':
             case 'endnoteReference': {
+                // The notes list is the body's, so a band's [n] would link nowhere.
+                if (context.scope.story === 'band') {
+                    reader.bandDropped++;
+                    break;
+                }
                 const type = child.local === 'footnoteReference' ? 'footnote' : 'endnote';
                 const id = w(child, 'id') ?? '';
                 const key = `${type}-${id}`;

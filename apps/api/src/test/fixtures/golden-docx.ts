@@ -146,10 +146,10 @@ const WORDPROCESSING = 'application/vnd.openxmlformats-officedocument.wordproces
 // A header or footer part, word/<id>.xml, the final section names by its id; rels are its own relationships.
 export type DocxBand = { id: string; kind: 'header' | 'footer'; type?: string; xml: string; rels?: string };
 
-// The golden package with a body, a final section naming each band, its sectPr content and settings.xml's.
+// The golden package with a body, a final section naming each band, its sectPr content, settings.xml's and styles.
 export async function buildDocxWithBands(
     bands: DocxBand[],
-    options: { sectPr?: string; settings?: string; body?: string } = {},
+    options: { sectPr?: string; settings?: string; body?: string; styles?: string } = {},
 ): Promise<ArrayBuffer> {
     const encode = (text: string) => new TextEncoder().encode(text);
     const references = bands
@@ -168,6 +168,7 @@ export async function buildDocxWithBands(
         media['word/settings.xml'] = encode(`<w:settings ${BAND_NAMESPACES}>${options.settings}</w:settings>`);
     const body = options.body ?? '<w:p><w:r><w:t>Body</w:t></w:r></w:p>';
     return buildDocxWithBody(`${body}<w:sectPr>${references}${options.sectPr ?? ''}</w:sectPr>`, {
+        styles: options.styles,
         rels: [
             ...bands.map(
                 ({ id, kind }) => `<Relationship Id="${id}" Type="${RELATIONSHIP}/${kind}" Target="${id}.xml"/>`,

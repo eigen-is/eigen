@@ -55,6 +55,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 
 - Comments aren't imported. The commented text stays.
 - A Word file with different headers or footers for even and odd pages comes in with the odd pages' ones on every page.
+- A watermark, or a picture that sits behind the text from the header, such as a full-page letterhead, is left out. So is a footnote mark in a header or footer.
 - Tracked changes come in as if you had accepted them all.
 - Line spacing and indents follow Eigen's own.
 - A SmartArt graphic comes in as its text, one paragraph per shape, and a chart as its title only.

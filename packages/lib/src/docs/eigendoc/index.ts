@@ -6,6 +6,7 @@ export {
     bandEdge,
     bandHasContent,
     FIRST_PAGE_BAND,
+    PAGE_BAND_CLASS,
 } from './bands';
 export { getDocExtensions, PROSE_TEXTBLOCKS } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';

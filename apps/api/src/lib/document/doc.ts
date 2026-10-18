@@ -30,8 +30,6 @@ export function readEigendocPage(doc: Y.Doc): PageSetup {
 // The bands that print, each as the body's JSON: one with content only, a first-page one only when page 1 differs.
 export type EigendocBands = Partial<Record<BandRoot, JSONContent>>;
 
-const BAND_EXCLUDED = new Set<string>(BAND_EXCLUDED_NODES);
-
 // A band's schema holds none of BAND_EXCLUDED_NODES, so only a forged peer writes one, and no render or writer sees it.
 export function readEigendocBands(doc: Y.Doc): EigendocBands {
     const firstPage: readonly BandRoot[] = readEigendocPage(doc).differentFirstPage
@@ -39,7 +37,10 @@ export function readEigendocBands(doc: Y.Doc): EigendocBands {
         : Object.values(FIRST_PAGE_BAND);
     const without = (node: JSONContent): JSONContent =>
         node.content
-            ? { ...node, content: node.content.filter((child) => !BAND_EXCLUDED.has(child.type ?? '')).map(without) }
+            ? {
+                  ...node,
+                  content: node.content.filter((child) => !BAND_EXCLUDED_NODES.has(child.type ?? '')).map(without),
+              }
             : node;
     const bands: EigendocBands = {};
     for (const root of BAND_ROOTS) {

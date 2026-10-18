@@ -830,9 +830,10 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved again when a chart's inline SVG took its fit from eigen-prose.css: the .figure svg rule, and nothing else.
 // The deck pdf-html hash moved when a printed page lost its scene wrapper and each layer took its place as top and left, the rotation alone a transform, at 1:1 so its @page is 1920 wide: those styles, and nothing else.
 // The deck html and pdf-html hashes moved when canvas-text.css gave an empty paragraph its line: that rule and its comment, and nothing else.
+// Both doc HTML hashes moved again when a header's or footer's last block lost its space after: the .page-band rule, and nothing else (a doc without bands prints no band stylesheet).
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '22224ab3ec35b9d07dffc7e8a50fca8423433d747cffa158faa735916b60dfa4';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8a2617e2aceabe9f5f5ce32fb9e00061b97d5a53218b70c8e89f8de68cb07d32';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '6983b73c0ba1cdd5d205b89ef1c22e5233732b1f05f035646802291fb4b18575';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '6983b73c0ba1cdd5d205b89ef1c22e5233732b1f05f035646802291fb4b18575';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'a2310368cd450f8d94c039e39460d9551214a8d64dbf2b4d16ad2a5035840f92';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
