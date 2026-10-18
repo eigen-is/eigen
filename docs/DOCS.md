@@ -117,6 +117,14 @@ A preset puts a right-aligned page number below what the band holds, or in place
 
 Browser print hides the bands, and the PDF, the HTML download, quick look and the docx draw none ([ROADMAP.md](ROADMAP.md)).
 
+## Print is the server's PDF, in a tab of its own
+
+File › Print and ⌘P print the PDF export, as Google prints from a PDF, because only WeasyPrint lays a doc out in pages: browser print of the editor's one long page has no page to put a header, a footer or a page number on. `usePrintPdf` (`packages/lib/src/core/drive/hooks/use-print-pdf.ts`) opens a blank tab before its first await, because a popup blocker allows a new tab only inside the click or key press. It then fetches the export and points the tab at a blob URL of it, where the browser's PDF viewer prints. A hidden iframe would print with no tab, but Android Chrome can't print a PDF in one, Safari does it unreliably, and the page can't tell whether it printed. The blob URL lives until the tab closes, so a reload of the tab still finds the PDF. The hook polls for the close, as a tab that navigated away runs none of the opener's listeners.
+
+The server prints what it has stored. So a tab that is offline or holds edits the server hasn't acknowledged ([COLLAB.md](COLLAB.md#unacknowledged-edits-guard-the-tab)) prints in the browser instead, through `printDocument`, and so do a blocked tab and a failed export, such as the 501 of a server without WeasyPrint ([EXPORT.md](EXPORT.md#weasyprint-fetches-only-data-uris)). A toast says the headers and footers are left out, and a tab opened for a PDF that failed closes again.
+
+`EigenApp` binds ⌘P on the document to `printDocument`, for every app. The docs toolbar binds its own on `<html>`, which a keydown reaches before the document, and the hotkey stops the event there. Two bindings on one target would both fire, and the hotkey library's `replace` would drop the global one for good once the editor unmounts. `editor-toolbar.test.tsx` pins both.
+
 ## A page number is a field that shows #
 
 The `pageNumber` node (`packages/lib/src/docs/eigendoc/nodes/page-number.ts`) is an inline atom whose `kind` is `page` or `pages`. `readPageNumberKind` reads it on parse and on render, so any other value is a page number. It is inline because Google's Page count goes anywhere text goes, the body included (Insert › Page elements › Page numbers › Page count). Its HTML is a `span[data-type="page-number"]` holding `#`, and `#` is also its text for a search, a quoted comment anchor or a copy's text item, so no digit shows that a page never had. The editor draws it as a grey chip and names the kind in a tooltip. Word count counts no word for it.
