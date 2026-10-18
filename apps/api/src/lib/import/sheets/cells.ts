@@ -4,7 +4,7 @@ import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/
 import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
-import { withoutFuturePrefixes } from '../../document/spreadsheetml';
+import { DAY_MS, DAYS_1904, EXCEL_EPOCH_MS, withoutFuturePrefixes } from '../../document/spreadsheetml';
 import { IMPORT_MESSAGES, TOO_MANY_CELLS } from '../messages';
 import { type SharedString, stringOf, textOf } from './strings';
 import { type Look, NO_LOOK, type ThemePalette } from './styles';
@@ -12,13 +12,6 @@ import { cellKey, type PlacedCell } from './worksheet';
 
 // A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula and look, the
 // borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column numbers.
-
-// Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
-export const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
-export const DAY_MS = 86_400_000;
-
-// A 1904 workbook counts its days from 1904-01-01, 1,462 days after the 1900 system's day 0.
-export const DAYS_1904 = 1462;
 
 const MAX_FORMULA_LENGTH = 8192;
 
@@ -157,7 +150,9 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
     if (value !== undefined) {
         cell.v = value;
         if (typeof value === 'number') {
-            cell.m = date ? dateDisplay(value, look.numFmt) : numberDisplay(value, look.numFmt);
+            // numfmt renders a bare serial under General as a number, so a date without a format it can draw shows as
+            // m/d/yyyy.
+            cell.m = date ? update(look.numFmt ?? 'm/d/yyyy', value) : numberDisplay(value, look.numFmt);
             if (!look.aligned) cell.ht = 2;
         } else cell.m = typeof value === 'boolean' ? booleanDisplay(value) : value;
     }
@@ -200,11 +195,6 @@ function formulaOf(
     if (!anchor?.text || anchor.text.length > MAX_FORMULA_LENGTH) return undefined;
     context.chargeCopy(anchor.text.length);
     return functionCopy(anchor.text, r - anchor.r, c - anchor.c);
-}
-
-// numfmt renders a bare serial under General as a number, so a date without a format numfmt can draw shows as m/d/yyyy.
-function dateDisplay(serial: number, numFmt: string | undefined): string {
-    return update(numFmt ?? 'm/d/yyyy', serial);
 }
 
 const DECIMAL = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;

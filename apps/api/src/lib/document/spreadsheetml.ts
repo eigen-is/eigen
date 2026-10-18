@@ -1,6 +1,58 @@
 // Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
 // format shares is core/ooxml.ts.
 
+// Day 0 of Excel's 1900 date system is 1899-12-30, as Lotus 1-2-3 counted a 29 February 1900 that never was.
+export const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
+export const DAY_MS = 86_400_000;
+// A 1904 workbook counts its days from 1904-01-01, 1,462 days after the 1900 system's day 0.
+export const DAYS_1904 = 1462;
+
+// Excel's default row height in points: a row of it has no height of its own.
+export const DEFAULT_ROW_HEIGHT_PT = 15.75;
+
+// A number as a rule's operand holds it, unquoted; anything else is a reference, a function or a quoted string.
+export const NUMERIC = /^-?(?:\d+(?:\.\d*)?|\.\d+)$/;
+
+type DvOperator =
+    | 'between'
+    | 'notBetween'
+    | 'equal'
+    | 'notEqual'
+    | 'greaterThan'
+    | 'lessThan'
+    | 'greaterThanOrEqual'
+    | 'lessThanOrEqual';
+
+// A data validation's operator and the engine's type2 for it (DataVerificationRule), one list both ways; a date rule
+// words its comparisons as the date dialog does.
+const DV_COMMON_OPERATORS: [DvOperator, string][] = [
+    ['between', 'between'],
+    ['notBetween', 'notBetween'],
+    ['equal', 'equal'],
+    ['notEqual', 'notEqualTo'],
+];
+const DV_OPERATORS: [DvOperator, string][] = [
+    ...DV_COMMON_OPERATORS,
+    ['greaterThan', 'moreThanThe'],
+    ['lessThan', 'lessThan'],
+    ['greaterThanOrEqual', 'greaterOrEqualTo'],
+    ['lessThanOrEqual', 'lessThanOrEqualTo'],
+];
+const DV_DATE_OPERATORS: [DvOperator, string][] = [
+    ...DV_COMMON_OPERATORS,
+    ['greaterThan', 'laterThan'],
+    ['lessThan', 'earlierThan'],
+    ['greaterThanOrEqual', 'noEarlierThan'],
+    ['lessThanOrEqual', 'noLaterThan'],
+];
+
+export const DV_OPERATOR = new Map<string, string>(DV_OPERATORS);
+export const DV_DATE_OPERATOR = new Map<string, string>(DV_DATE_OPERATORS);
+export const DV_XLSX_OPERATOR = new Map<string, DvOperator>(DV_OPERATORS.map(([operator, type2]) => [type2, operator]));
+export const DV_XLSX_DATE_OPERATOR = new Map<string, DvOperator>(
+    DV_DATE_OPERATORS.map(([operator, type2]) => [type2, operator]),
+);
+
 // The functions Excel added after 2007, which a file stores as `_xlfn.NAME`, so an Excel that lacks one shows #NAME?
 // rather than misreading it. Excel reads one without the prefix as an unknown name, so the writer must add it back.
 const FUTURE_FUNCTIONS = new Set([

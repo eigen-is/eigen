@@ -11,7 +11,14 @@ import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/shee
 import { iscelldata, parseA1Range, toA1 } from '@workspace/sheet/engine';
 import { isOn, SML_NS, X14_NS, XM_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
-import { DAY_MS, DAYS_1904, EXCEL_EPOCH_MS } from './cells';
+import {
+    DAY_MS,
+    DAYS_1904,
+    DV_DATE_OPERATOR,
+    DV_OPERATOR,
+    EXCEL_EPOCH_MS,
+    NUMERIC,
+} from '../../document/spreadsheetml';
 import { colorOf, type DxfLook, dxfLook, resolveColor, type ThemePalette } from './styles';
 import { cellKey } from './worksheet';
 
@@ -70,20 +77,20 @@ export function readRules(
         for (const block of blocks) {
             const rules = rulesOf(block);
             if (rules.length === 0) continue;
-            const sqref = sqrefOf(block) ?? '';
-            let count = 0;
-            for (const _range of rangesOf(sqref, context)) count++;
-            if (count === 0) continue;
-            // Every rule holds all the block's ranges, which a sqref can repeat by the million: each rule is charged
-            // them before it is read, and they are built after the first charge.
-            let ranges: SingleRange[] | undefined;
+            // Every rule holds all the block's ranges, which a sqref can repeat by the million: a range is charged once
+            // for each rule before it is built.
+            const ranges: SingleRange[] = [];
+            for (const range of rangesOf(sqrefOf(block) ?? '', context)) {
+                context.charge(rules.length, 0);
+                ranges.push(range);
+            }
+            if (ranges.length === 0) continue;
             for (const rule of rules) {
                 const formulas = formulasOf(rule).map(xmlText);
                 context.charge(
-                    count,
+                    0,
                     formulas.reduce((text, formula) => text + formula.length, 0),
                 );
-                ranges ??= [...rangesOf(sqref, context)];
                 // A comparison with a date in a 1904 workbook counts from 1904, as its cells' serials did.
                 const days = context.dates.has(cellKey(ranges[0].row[0], ranges[0].column[0])) ? DAYS_1904 : 0;
                 const format = mapCfRule(rule, formulas, lookOf(rule), ranges, context.palette, days);
@@ -291,13 +298,9 @@ function unquoteXlsxLiteral(txt: string): string | null {
     return txt.slice(1, -1).replace(/""/g, '"');
 }
 
-// cellIs operands arrive as raw formula text: numeric literals, quoted strings, or
-// refs/functions (→ null, handled via the formula-rule fallback). Quoted percent strings
-// like "5%" come from Google Sheets exports that serialize a percent-format threshold as
-// text — coerce them to the numeric form the engine's comparisons expect.
-const NUMERIC = /^-?(?:\d+(?:\.\d*)?|\.\d+)$/;
-
-export function parseCfLiteral(operand: string): string | null {
+// A cellIs operand's literal, a number or a quoted string; null for a reference or a function, which compares in a
+// formula. A quoted percent ("5%"), as Google Sheets writes a percent threshold, is the number the engine compares.
+function parseCfLiteral(operand: string): string | null {
     const txt = operand.trim();
     if (NUMERIC.test(txt)) return txt;
     const inner = unquoteXlsxLiteral(txt);
@@ -307,9 +310,9 @@ export function parseCfLiteral(operand: string): string | null {
 }
 
 // A containsText rule's text, from the formula Excel stores for it: NOT(ISERROR(SEARCH("<text>",<topLeftRef>))).
-function extractSearchText(formula: string | number | undefined): string | null {
-    if (formula == null) return null;
-    const match = String(formula).match(/^NOT\(ISERROR\(SEARCH\("(.*)",/);
+function extractSearchText(formula: string | undefined): string | null {
+    if (formula === undefined) return null;
+    const match = formula.match(/^NOT\(ISERROR\(SEARCH\("(.*)",/);
     return match ? match[1].replace(/""/g, '"') : null;
 }
 
@@ -322,26 +325,6 @@ const DV_TYPE = new Map([
     ['decimal', 'number'],
     ['textLength', 'text_length'],
     ['date', 'date'],
-]);
-
-// xlsx operator → engine type2 (see DataVerificationRule in @workspace/lib/sheets).
-export const DV_OPERATOR = new Map([
-    ['between', 'between'],
-    ['notBetween', 'notBetween'],
-    ['equal', 'equal'],
-    ['notEqual', 'notEqualTo'],
-    ['greaterThan', 'moreThanThe'],
-    ['lessThan', 'lessThan'],
-    ['greaterThanOrEqual', 'greaterOrEqualTo'],
-    ['lessThanOrEqual', 'lessThanOrEqualTo'],
-]);
-
-export const DV_DATE_OPERATOR = new Map([
-    ...DV_OPERATOR,
-    ['greaterThan', 'laterThan'],
-    ['lessThan', 'earlierThan'],
-    ['greaterThanOrEqual', 'noEarlierThan'],
-    ['lessThanOrEqual', 'noLaterThan'],
 ]);
 
 // Column-wide validations ("D2:D1048576") are common in real workbooks, while the grid
@@ -413,8 +396,8 @@ function mapDataValidation(
 // else is kept as a live range ref when valid — getDropdownList resolves refs (incl.
 // quoted cross-sheet names) natively, so source edits keep propagating. Defined names
 // are dropped program-wide; a garbage one-option dropdown is worse than no rule.
-export function listSource(raw: unknown): string | null {
-    if (typeof raw !== 'string' || raw.length === 0) return null;
+function listSource(raw: string | undefined): string | null {
+    if (!raw) return null;
     const inner = unquoteXlsxLiteral(raw);
     if (inner != null) return inner.length > 0 ? inner : null;
     const ref = raw.startsWith('=') ? raw.slice(1) : raw;

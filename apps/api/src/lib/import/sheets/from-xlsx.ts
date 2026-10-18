@@ -2,20 +2,17 @@ import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/she
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { cellWrapsText, DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
-import { SML_NS } from '../../core/ooxml';
 import { optional } from '../../core/opc';
-import { xmlAttr, xmlChild } from '../../core/xml';
+import { DEFAULT_ROW_HEIGHT_PT } from '../../document/spreadsheetml';
 import { IMPORT_MESSAGES, importError, ONLY_CHART_SHEETS, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
 import { readBudget, readInBatches, readPackage } from './package';
 import { readRules } from './rules';
 import { readSharedStrings } from './strings';
-import { readDxfs, readLooks, themePalette } from './styles';
+import { defaultFontName, readDxfs, readLooks, themePalette } from './styles';
 import { digitWidthOf, readWorksheet } from './worksheet';
 
 // xlsx bytes → Eigen's sheets, straight from the SpreadsheetML. Runs in the transform process.
-
-const DEFAULT_ROW_HEIGHT_PT = 15.75;
 
 // A cell costs about 480 B in the sheets alone, and recalc and the snapshot copy it: the cells emitted count, merged and
 // validated ones among them, and every sheet's span, so a tiny file can't declare far-apart cells whose grid recalc
@@ -46,10 +43,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
         const looks = readLooks(book.styles, palette);
         const strings = readSharedStrings(book.sharedStrings, palette, budget);
         const dxfs = readDxfs(book.styles, palette);
-        const fonts = book.styles && xmlChild(book.styles, SML_NS, 'fonts');
-        const font = fonts && xmlChild(fonts, SML_NS, 'font');
-        const fontName = font && xmlChild(font, SML_NS, 'name');
-        const digitWidth = digitWidthOf(fontName && xmlAttr(fontName, '', 'val'));
+        const digitWidth = digitWidthOf(defaultFontName(book.styles));
         const emitted = { cells: 0, text: 0, span: 0, slots: 0, translated: 0 };
         const charge = (cells: number, text: number) => {
             emitted.cells += cells;
@@ -107,7 +101,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
             const rowlen: NonNullable<SheetConfig['rowlen']> = {};
             for (const [r, height] of tallest) rowlen[r] = Math.round(height);
             for (const [r, points] of grid.heights)
-                if (points !== DEFAULT_ROW_HEIGHT_PT) rowlen[r] = Math.round(points * (4 / 3));
+                if (points !== DEFAULT_ROW_HEIGHT_PT) rowlen[r] = Math.round(points * PT_TO_PX);
             const config: SheetConfig = { ...worksheet.config };
             if (Object.keys(rowlen).length > 0) config.rowlen = rowlen;
             if (Object.keys(grid.rowhidden).length > 0) config.rowhidden = grid.rowhidden;

@@ -297,7 +297,7 @@ describe('a conditional format', () => {
         ]);
     });
 
-    test("each rule is charged the block's ranges and its formulas before it is built, kept or not", () => {
+    test('each range is charged once for each rule before it is built, and each rule its formulas, kept or not', () => {
         const { charged } = read(
             cf(
                 'A1:A5 C1 nowhere E1:F2',
@@ -306,8 +306,11 @@ describe('a conditional format', () => {
             ),
         );
         expect(charged).toEqual([
-            { cells: 3, text: 4 },
-            { cells: 3, text: 0 },
+            { cells: 2, text: 0 },
+            { cells: 2, text: 0 },
+            { cells: 2, text: 0 },
+            { cells: 0, text: 4 },
+            { cells: 0, text: 0 },
         ]);
         const refusal = new Error('over budget');
         expect(() =>
@@ -328,8 +331,7 @@ describe('a conditional format', () => {
         read(cf('A1:A5 nowhere C1', '<cfRule type="expression" priority="1"><formula>1</formula></cfRule>'), {
             chargeElements,
         });
-        // Counted, then built.
-        expect(references).toBe(6);
+        expect(references).toBe(3);
         references = 0;
         const list = (sqref: string) =>
             dv(`<dataValidation type="list" sqref="${sqref}"><formula1>"a"</formula1></dataValidation>`);

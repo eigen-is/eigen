@@ -178,7 +178,7 @@ describe('Sheets xlsx export', () => {
         expect(byCoord.get('1:0')?.ct).toEqual({ fa: '0.00%', t: 'n' });
         // Number/currency masks round-trip byte-for-byte; a date mask's month token is
         // canonicalised to the Google convention on re-import (`m` → `M`), which numfmt
-        // renders identically (see normalizeMonthMinuteTokens in from-xlsx).
+        // renders identically (see normalizeMonthMinuteTokens in import/sheets/styles.ts).
         expect(byCoord.get('2:0')?.ct).toEqual({ fa: 'M/d/yyyy', t: 'd' });
         expect(byCoord.get('2:0')?.v).toBe(45366);
     });

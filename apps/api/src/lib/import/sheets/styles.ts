@@ -19,7 +19,7 @@ import { IMPORT_MESSAGES } from '../messages';
 export type ThemePalette = string[];
 
 // An rgb, else a theme colour and its tint.
-export type XlsxColor = { argb?: string; theme?: number; tint?: number };
+type XlsxColor = { argb?: string; theme?: number; tint?: number };
 
 export type Look = {
     // The keys every cell of the format carries.
@@ -147,6 +147,14 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
             border: borders[id('borderId')],
         };
     });
+}
+
+// The workbook's default font, the first, which a column width counts in.
+export function defaultFontName(styleSheet: XmlElement | undefined): string | undefined {
+    const fonts = styleSheet && xmlChild(styleSheet, SML_NS, 'fonts');
+    const font = fonts && xmlChild(fonts, SML_NS, 'font');
+    const name = font && xmlChild(font, SML_NS, 'name');
+    return name && xmlAttr(name, '', 'val');
 }
 
 // What a conditional format paints: its font's colour and its fill's.
@@ -325,17 +333,10 @@ export function themePalette(theme: XmlElement | undefined): ThemePalette {
     return palette;
 }
 
-// Excel/ECMA-376 uses one format code (`m`/`M`, case-insensitively) for BOTH month and
-// minute, resolved by context — minute when a run sits next to hours/seconds, month
-// otherwise. numfmt (our renderer) resolves it the same way, so an imported `dd/mm/yyyy`
-// DISPLAYS correctly. But the custom date/time dialog's tokenizer follows the Google
-// convention (uppercase `M` month, lowercase `m` minute, case-significant), so a stored
-// lowercase `mm` month shows a "Minute" chip — and editing that chip writes minute tokens
-// into a month position. Canonicalise every `m`/`M` run to the Google convention at import,
-// applying the exact same context classification numfmt uses, so the stored case matches the
-// render and only the case of `m`/`M` ever changes. Bit flags mirror numfmt's dateChunks:
-// only HOUR/SEC (a preceding one makes a run a minute) and MIN (a following seconds resolves
-// a deferred month) participate; every other date token is a size-0 adjacency breaker.
+// Excel writes month and minute both as `m`, told apart by what sits beside it, and numfmt reads it so. The format
+// dialog follows Google (`M` month, `m` minute), so a stored month `mm` would edit as minutes: each run is recased by
+// numfmt's own rule (dateChunks), so only the case changes and the display never does. Only hours and seconds, which
+// make a run a minute, and minutes, which a later seconds resolves, take part; every other date token breaks the run.
 const DATE_HOUR = 1;
 const DATE_MIN = 2;
 const DATE_SEC = 4;
@@ -491,7 +492,7 @@ function normalizeSectionMonthMinute(section: string): string {
     return out.join('');
 }
 
-export function normalizeMonthMinuteTokens(numFmt: string): string {
+function normalizeMonthMinuteTokens(numFmt: string): string {
     if (!/[mM]/.test(numFmt)) return numFmt;
     return splitFormatSections(numFmt).map(normalizeSectionMonthMinute).join(';');
 }
