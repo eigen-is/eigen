@@ -1,7 +1,8 @@
 import { getAttributes, isActive } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
-import { DOCUMENT_FONT, getFontName } from '@workspace/lib/constants/fonts';
+import { getFontName } from '@workspace/lib/constants/fonts';
+import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { readCellBackground, selectionFontSizes, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
 import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { canAnchorComment } from '../extensions/comment-mark';
@@ -12,6 +13,8 @@ export type ToolbarState = {
     // The paragraph style's name, none for Normal text.
     paragraphStyle: string | undefined;
     mixedStyles: boolean;
+    // Whether the selection starts in a plain paragraph, the one block Update 'Normal text' to match reads.
+    inParagraph: boolean;
     fontName: string;
     // In pt, none for a range of mixed sizes.
     fontSize: number | undefined;
@@ -22,7 +25,7 @@ export type ToolbarState = {
     underline: boolean;
     highlight: boolean;
     alignment: TextAlign | undefined;
-    // The line spacing every selected paragraph stores, none for a mix or an unset one.
+    // The line spacing every selected paragraph stores or takes from the Normal, none for a mix or an unset heading.
     lineSpacing: number | undefined;
     // Whether a selected paragraph takes a space before or after: a list, a quote or a cell owns its own.
     paragraphSpacing: boolean;
@@ -72,8 +75,8 @@ const MAX_READ_RANGE = 10_000;
 
 // useEditor re-renders on no transaction, so the toolbar subscribes to what it draws, and a caret move updates it. The
 // selector reads the editor passed in, not the snapshot's: the toolbar follows a band's editor while it is edited, and
-// the snapshot keeps the last editor until the new one's first transaction.
-export function useToolbarState(editor: Editor): ToolbarState {
+// the snapshot keeps the last editor until the new one's first transaction. Unformatted text reads as the doc's Normal.
+export function useToolbarState(editor: Editor, normal: NormalStyle): ToolbarState {
     return useEditorState({
         editor,
         selector: () => {
@@ -105,15 +108,16 @@ export function useToolbarState(editor: Editor): ToolbarState {
             const table = active('table');
             // A heading's own size and spacing are read off the page, which an editor not yet mounted has none of.
             const view = editor.isDestroyed ? undefined : editor.view;
-            const fontSizes = selectionFontSizes(state, view);
-            const format = selectionParagraphFormat(state, view);
+            const fontSizes = selectionFontSizes(state, view, normal);
+            const format = selectionParagraphFormat(state, view, normal);
             const listDepth = orderedListDepth(selection.$from);
             return {
                 // A range of mixed styles, or of styled and Normal text, reads as none.
                 paragraphStyle: styles.size === 1 ? [...styles][0] : undefined,
                 mixedStyles: styles.size > 1,
+                inParagraph: selection.$from.parent.type.name === 'paragraph',
                 // getFontName also collapses the full stack a not-yet-normalized doc still carries.
-                fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || DOCUMENT_FONT,
+                fontName: getFontName(getAttributes(state, 'textStyle')['fontFamily'] || '') || normal.font,
                 fontSize: fontSizes.size === 1 ? [...fontSizes][0] : undefined,
                 color: getAttributes(state, 'textStyle')['color'] || '',
                 highlightColor: active('highlight') ? getAttributes(state, 'highlight')['color'] || '' : '',

@@ -4,13 +4,15 @@ import {
     BAND_ROOTS,
     type BandRoot,
     DOC_PROSE_CLASS,
+    type NormalStyle,
+    normalStyleProperties,
     PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
     type PageSetup,
     pageStylesheet,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
-import { readEigendocBands, readEigendocFromDoc, readEigendocPage } from '../../document/doc';
+import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
@@ -54,13 +56,14 @@ export async function renderEigendocExport(
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const json = readEigendocFromDoc(doc);
     const page = readEigendocPage(doc);
+    const style = readEigendocStyle(doc);
     const bands = readEigendocBands(doc);
     if (format === 'docx') {
         const { eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
         const pasted = await pastedFigureMedia([json, ...Object.values(bands)]);
         const docxMedia = await withSvgFallbacks([...media, ...pasted]);
         return {
-            data: toTransferableBuffer(await eigendocToDocx(json, bands, page, docxMedia, title, publicOrigin)),
+            data: toTransferableBuffer(await eigendocToDocx(json, bands, page, style, docxMedia, title, publicOrigin)),
             warnings: [],
         };
     }
@@ -81,7 +84,7 @@ export async function renderEigendocExport(
             const html = renderDocHtml(
                 withAbsoluteLinks(content, publicOrigin),
                 (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-                { synthesizeSmallCaps: pdf, pageCounters: pdf, equations },
+                { ...(pdf && { smallCapsFont: style.font }), pageCounters: pdf, equations },
             );
             return part === 'body'
                 ? `<article class="eigen-prose tiptap ${DOC_PROSE_CLASS}">${html}</article>`
@@ -90,7 +93,7 @@ export async function renderEigendocExport(
         .join('');
     const html = exportHtmlDocument({
         title,
-        css: `${PROSE_CSS}${printExtras(page)}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
+        css: `${PROSE_CSS}${printExtras(page, style)}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings: [] };
@@ -143,10 +146,11 @@ ${page.differentFirstPage ? '@page :first { @top-center { content: element(heade
 `;
 }
 
-function printExtras(page: PageSetup): string {
+function printExtras(page: PageSetup, style: NormalStyle): string {
+    const normal = Object.entries(normalStyleProperties(style)).map(([name, value]) => `${name}: ${value};`);
     return `
 /* The docs page as the editor draws it; on paper @page draws the margins */
-${pageStylesheet(page, '.page')}
+${pageStylesheet(page, '.page')}${normal.length > 0 ? `\n.page { ${normal.join(' ')} }` : ''}
 
 /* Minimal Tailwind preflight — reset browser defaults that conflict with eigen-prose */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

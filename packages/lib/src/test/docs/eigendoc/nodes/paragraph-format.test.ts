@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createDocument, Editor, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
 import {
+    DEFAULT_NORMAL_STYLE,
     DOCUMENT_PARAGRAPH_FORMAT,
     getDocExtensions,
     readParagraphFormat,
@@ -277,19 +278,26 @@ describe('paragraph format commands', () => {
 });
 
 describe('selectionParagraphFormat', () => {
-    const formatAt = (content: JSONContent, from: number, to = from) => {
+    const formatAt = (content: JSONContent, from: number, to = from, normal = DEFAULT_NORMAL_STYLE) => {
         const editor = mount(content);
         editor.commands.setTextSelection({ from, to });
-        const format = selectionParagraphFormat(editor.state, editor.view);
+        const format = selectionParagraphFormat(editor.state, editor.view, normal);
         editor.destroy();
         return format;
     };
 
-    test("an unset paragraph draws Eigen's look and stores no line spacing", () => {
+    // Eigen's own 1.4 is no preset, so Single, 1.15, 1.5 and Double tick none for it.
+    test("an unset paragraph draws the doc's Normal, Eigen's look by default", () => {
         expect(formatAt(docOf(p('a')), 1)).toEqual({
-            lineSpacing: undefined,
+            lineSpacing: 1.4,
             spacing: true,
             drawn: DOCUMENT_PARAGRAPH_FORMAT,
+        });
+        const word = { ...DEFAULT_NORMAL_STYLE, lineSpacing: 1.15, spaceBefore: 3, spaceAfter: 10 };
+        expect(formatAt(docOf(p('a'), p('b', { lineSpacing: 1.15 })), 1, 4, word)).toEqual({
+            lineSpacing: 1.15,
+            spacing: true,
+            drawn: { ...DOCUMENT_PARAGRAPH_FORMAT, lineSpacing: 1.15, spaceBefore: 3, spaceAfter: 10 },
         });
     });
 
@@ -307,7 +315,7 @@ describe('selectionParagraphFormat', () => {
         expect(formatAt(doc, at, 1000).spacing).toBe(true);
     });
 
-    test('a shared line spacing reads as it, a mix or an unset one as none; the first block is what draws', () => {
+    test("a shared line spacing reads as it, a mix with the Normal's as none; the first block is what draws", () => {
         const doc = docOf(p('a', { lineSpacing: 1.15, spaceBefore: 6 }), p('b', { lineSpacing: 1.15 }), p('c'));
         expect(formatAt(doc, 1, 4)).toEqual({
             lineSpacing: 1.15,

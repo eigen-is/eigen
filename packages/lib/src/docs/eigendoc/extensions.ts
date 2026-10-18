@@ -22,9 +22,16 @@ import { EigenParagraphFormat, PROSE_TEXTBLOCKS } from './nodes/paragraph-format
 import { SmallMark } from './nodes/small-mark';
 import { EigenTableCell, EigenTableHeader } from './nodes/table-cell';
 import { SubtitleNode, TitleNode } from './nodes/title';
+import type { NormalStyle } from './normal-style';
 
-// textColumnWidth: the editor's text column in px, which a paragraph's indent stays within.
-export function getDocExtensions(options?: { lowlight?: unknown; exclude?: string[]; textColumnWidth?: () => number }) {
+// textColumnWidth: the editor's text column in px, which a paragraph's indent stays within. normalStyle: the doc's
+// Normal, which unsized text draws at.
+export function getDocExtensions(options?: {
+    lowlight?: unknown;
+    exclude?: string[];
+    textColumnWidth?: () => number;
+    normalStyle?: () => NormalStyle;
+}) {
     const exclude = options?.exclude;
     const extensions = [
         StarterKit.configure({
@@ -46,7 +53,7 @@ export function getDocExtensions(options?: { lowlight?: unknown; exclude?: strin
         TextStyle,
         Color,
         EigenFontFamily,
-        EigenFontSize,
+        EigenFontSize.configure(options?.normalStyle && { normalStyle: options.normalStyle }),
         TextCaps,
         TaskList,
         TaskItem.configure({ nested: true }),

@@ -1,4 +1,4 @@
-import type { PageSetup } from '@workspace/lib/docs/eigendoc';
+import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError, isOutOfMemory } from '../../core/errors';
@@ -172,8 +172,8 @@ export function toTransformError(err: unknown): TransformError {
     };
 }
 
-// A doc's preview carries its page, which quick look and the hero draw it on.
-export type PreviewResult = { body: string; page?: PageSetup };
+// A doc's preview carries its page and its Normal, which quick look and the hero draw it on and in.
+export type PreviewResult = { body: string; page?: PageSetup; style?: NormalStyle };
 // Body text for the content index, already capped by the extractor — small like a
 // preview body.
 export type ExtractTextResult = { text: string };
@@ -181,9 +181,14 @@ export type ExportWorkerResult = { data: ArrayBuffer };
 // UTF-8 bytes of the lean Sheet[] JSON — the main thread commits the string
 // without parsing it.
 export type SheetsImportWorkerResult = { snapshotJson: ArrayBuffer };
-// A ready Yjs update plus the images extracted from the docx and its page: the main thread
-// only commits the update and the page and writes the media through Mount.
-export type DocImportWorkerResult = { update: ArrayBuffer; page: PageSetup; images: TransformMedia[] };
+// A ready Yjs update plus the images extracted from the docx, its page and its Normal: the main thread
+// only commits the update, the page and the Normal and writes the media through Mount.
+export type DocImportWorkerResult = {
+    update: ArrayBuffer;
+    page: PageSetup;
+    style: NormalStyle;
+    images: TransformMedia[];
+};
 // A pptx's update plus its pictures: the main thread only applies the update and writes the media through Mount.
 export type SlidesImportWorkerResult = { update: ArrayBuffer; images: TransformMedia[] };
 
@@ -262,6 +267,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
               snapshotJson?: unknown;
               update?: unknown;
               page?: unknown;
+              style?: unknown;
               images?: unknown;
           }
         | undefined;
@@ -279,6 +285,8 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
                         r?.update instanceof ArrayBuffer &&
                         typeof r.page === 'object' &&
                         r.page !== null &&
+                        typeof r.style === 'object' &&
+                        r.style !== null &&
                         Array.isArray(r.images) &&
                         r.images.every(isTransformMedia)
                     );

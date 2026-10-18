@@ -33,6 +33,7 @@ export { PAGE_BREAK_CLASS } from './nodes/page-break';
 export type { PageNumberKind } from './nodes/page-number';
 export { PAGE_NUMBER_KINDS, PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/page-number';
 export {
+    cssLineHeight,
     DOCUMENT_PARAGRAPH_FORMAT,
     PARAGRAPH_FORMAT_KEYS,
     PARAGRAPH_FORMAT_LIMITS,
@@ -42,6 +43,8 @@ export {
 } from './nodes/paragraph-format';
 export { readCellBackground } from './nodes/table-cell';
 export type { TitleType } from './nodes/title';
+export type { NormalStyle } from './normal-style';
+export { DEFAULT_NORMAL_STYLE, normalStyleProperties, readNormalStyle, STYLE_ROOT } from './normal-style';
 export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {
     cmText,

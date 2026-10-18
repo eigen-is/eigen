@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1847 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1853 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -528,7 +528,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (419)
+## Types (420)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -567,6 +567,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FigureFrameAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FigureFrameNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FigureLayout` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
+| `NormalStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
 | `PageMargin` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `PageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -952,7 +953,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (931)
+## Utilities & constants (936)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1292,6 +1293,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHART_MAX_SIDE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `chartSvg` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `cmText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `cssLineHeight` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
+| `DEFAULT_NORMAL_STYLE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
 | `DEFAULT_PAGE_SETUP` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `DOC_PROSE_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `DOCUMENT_PARAGRAPH_FORMAT` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
@@ -1308,6 +1311,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `MIN_TEXT_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mmToPx` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `normalStyleProperties` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
 | `PAGE_BAND_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `PAGE_BREAK_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-break.ts |
 | `PAGE_NUMBER_KINDS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
@@ -1330,12 +1334,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readEquation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
 | `readFigureAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `readFigureFrameAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
+| `readNormalStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
 | `readPageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `readPageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
 | `selectionFontSizes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/font-size.ts |
 | `selectionParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
 | `setFigureAttributes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
+| `STYLE_ROOT` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
 | `unwrapRenderedMath` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
 | `downloadBlob` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `downloadDriveFile` | `@workspace/lib/download` | packages/lib/src/core/download.ts |

@@ -22,7 +22,7 @@ The sections run from the server to the screen: what each kind of file previews 
 |---|---|---|
 | An image | A WebP of at most 2560 px, or an SVG as it is | `/preview` |
 | Video, audio, PDF | A redirect to the original bytes, served inline | `/preview` → `/embed` |
-| Text, code, markdown, an Eigen document | JSON `{ body, mode }`, an HTML body the client renders, and a doc's `page` | `/text-preview` |
+| Text, code, markdown, an Eigen document | JSON `{ body, mode }`, an HTML body the client renders, and a doc's `page` and `style` | `/text-preview` |
 | A `.vcf`, `.eml`, `.ics` | JSON of the cards, the message or the events | `/{vcard,eml,ics}-preview` |
 | An image or a video, in a list | A 512 px WebP thumbnail, made on upload | `/thumb/:fileName` |
 
@@ -143,7 +143,7 @@ The build decodes strict UTF-8 and parses no more cards than an import accepts. 
 
 The overlay and the drive hero render a body with `dangerouslySetInnerHTML`, with no iframe and no shadow root, so it takes the app's styles. Text and documents sit in `.eigen-prose` (`packages/ui/src/styles/eigen-prose.css`), which the docs editor shares.
 
-A doc sits on the page it stores, in quick look and in the drive hero: its preview carries the page beside the body (`TextPreviewResult.page`, stored with the body in the cache), and the box comes from `pageBoxStyle` ([DOCS.md](DOCS.md#a-doc-stores-its-page-in-a-page-map-beside-its-content)). The hero puts markdown, plain text and code on the default docs page, so every text thumbnail is a miniature of a printed page, margins included. A mail part's text preview never has a page. A doc's page carries `.eigen-paper` (`packages/ui/src/styles/globals.css`), which pins the light palette as it does on the editor's page, so in dark mode a doc previews on the light paper it is edited on. The dark prose rules in `eigen-prose.css` skip anything inside it. Markdown and plain text are not paper and follow the theme.
+A doc sits on the page it stores, in quick look and in the drive hero: its preview carries the page beside the body (`TextPreviewResult.page`, stored with the body in the cache), and the box comes from `pageBoxStyle` ([DOCS.md](DOCS.md#a-doc-stores-its-page-in-a-page-map-beside-its-content)). Its text draws in the doc's Normal the same way: `TextPreviewResult.style`, set on the page as `normalStyleProperties` ([DOCS.md](DOCS.md#a-doc-stores-its-normal-text-in-a-style-map-beside-its-page)). The hero puts markdown, plain text and code on the default docs page, so every text thumbnail is a miniature of a printed page, margins included. A mail part's text preview never has a page. A doc's page carries `.eigen-paper` (`packages/ui/src/styles/globals.css`), which pins the light palette as it does on the editor's page, so in dark mode a doc previews on the light paper it is edited on. The dark prose rules in `eigen-prose.css` skip anything inside it. Markdown and plain text are not paper and follow the theme.
 
 Two bodies bring their own box. A deck and a drawing are compositor pages composed at `CANVAS_PREVIEW_WIDTH`, so the hero scales them from a known width with no wrapper class. A sheet is a bare grid whose floating images sit at declared pixels, so `.eigensheets-preview` in `globals.css` undoes the two app rules that would move the grid under them.
 

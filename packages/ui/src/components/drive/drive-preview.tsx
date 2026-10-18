@@ -13,6 +13,7 @@ import { formatDateTime } from '@workspace/lib/date';
 import {
     DEFAULT_PAGE_SETUP,
     DOC_PROSE_CLASS,
+    normalStyleProperties,
     type PageSetup,
     pageBoxStyle,
     pagePx,
@@ -294,6 +295,8 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                     transform: `scale(${scale})`,
                     transformOrigin: 'top left',
                     ...(page ? { width: `${page.widthPx}px`, padding: page.padding } : null),
+                    // A doc's Normal, which its text draws in.
+                    ...(data.style && normalStyleProperties(data.style)),
                 }}
                 dangerouslySetInnerHTML={{ __html: data.body }}
             />
