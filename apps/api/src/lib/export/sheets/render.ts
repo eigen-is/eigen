@@ -28,6 +28,7 @@ import {
     evaluateConditionalFormat,
     FormulaEngine,
     renderSheetChartSvg,
+    richText,
     withCfRanges,
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
@@ -450,6 +451,8 @@ ${withOverlay(table, tableWidth, minRow, minCol)}
 
 function getCellDisplay(v: Cell | null): string {
     if (!v) return '';
+    const rich = richText(v);
+    if (rich !== undefined) return escapeHtml(rich);
     if (v.m != null) return escapeHtml(String(v.m));
     if (v.v == null) return '';
     if (typeof v.v === 'boolean') return booleanDisplay(v.v);
@@ -672,7 +675,7 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
 
 function hasVisibleContent(v: Cell | null): boolean {
     if (!v) return false;
-    if (v.v != null || v.m != null) return true;
+    if (v.v != null || v.m != null || richText(v) !== undefined) return true;
     if (v.bg || v.fc) return true;
     if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1) return true;
     if (v.mc && 'rs' in v.mc) return true; // merge anchor

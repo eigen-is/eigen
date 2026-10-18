@@ -1,4 +1,5 @@
 import { DependencyIndex } from './dependency-index';
+import { richText } from './format';
 import { ERROR_REF, Parser } from './parser';
 import { ERROR_VALUE } from './parser/error';
 import { dateToSerial } from './parser/helper/number';
@@ -20,6 +21,8 @@ export function isFormula(value: unknown): boolean {
 
 function getCellValue(cell: Cell | null | undefined): unknown {
     if (cell == null) return undefined;
+    const rich = richText(cell);
+    if (rich !== undefined) return rich;
     if (cell.ct?.t === 'n') {
         const n = Number(cell.v);
         return Number.isNaN(n) ? cell.v : n;

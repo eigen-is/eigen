@@ -48,6 +48,13 @@ function useCount(out: RenderOut, cls: string): number {
     return (out.html.match(new RegExp(`class="(?:sheet )?${cls}"`, 'g')) ?? []).length;
 }
 
+describe('Sheets HTML export — rich text', () => {
+    test("a rich-text cell shows its runs' text", () => {
+        const rich: Cell = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Rich', bl: 1 }, { v: ' text' }] } };
+        expect(renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: rich }])], NO_MEDIA).html).toContain('>Rich text<');
+    });
+});
+
 describe('Sheets HTML export — class-based styles', () => {
     test('emits zero inline style attributes; every style is a document class', () => {
         const sheet: Sheet = {

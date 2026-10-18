@@ -101,6 +101,7 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
             const empty =
                 !placed &&
                 cell.v === undefined &&
+                cell.ct?.s === undefined &&
                 cell.f === undefined &&
                 cell.bg === undefined &&
                 cell.fc === undefined;
@@ -149,6 +150,12 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         if (context.date1904) value += DAYS_1904;
     }
     const cell: FortuneCell = { ...look.cell };
+    // A rich string's text is its runs', as the editor keeps one: neither `v` nor `m` holds it.
+    const runs = typeof string === 'object' && value ? runsOf(string.runs, look.font, context) : undefined;
+    if (runs) {
+        cell.ct = { fa: look.fa ?? 'General', t: 'inlineStr', s: runs };
+        return cell;
+    }
     if (value !== undefined) {
         cell.v = value;
         if (typeof value === 'number') {
@@ -168,10 +175,8 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
             : typeof value === 'boolean'
               ? 'b'
               : 's';
-    const runs = typeof string === 'object' && value ? runsOf(string.runs, look.font, context) : undefined;
     // Fortune-sheet always pairs `t` with `fa`, General when the cell has no format.
-    if (runs) cell.ct = { fa: look.fa ?? 'General', t: 'inlineStr', s: runs };
-    else if (t || look.fa) cell.ct = { fa: look.fa ?? 'General', ...(t && { t }) };
+    if (t || look.fa) cell.ct = { fa: look.fa ?? 'General', ...(t && { t }) };
     return cell;
 }
 

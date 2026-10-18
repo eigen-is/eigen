@@ -243,7 +243,8 @@ describe('each cap', () => {
     // One shared string is copied into every cell that names it: 2,000 cells of a 1 MB rich string reached 9.7 GB.
     test('text past its cap is too large at no cost', () => {
         const text = 'a'.repeat(1_000_000);
-        const cells = Math.ceil(MAX_TEXT / (2 * text.length)) + 1;
+        // A rich cell holds its text once, in its runs.
+        const cells = Math.ceil(MAX_TEXT / text.length) + 1;
         const result = measuredImport(
             xlsx({ data: rowsOf(cells, (r) => `<c r="A${r}" t="s"><v>0</v></c>`) }, [
                 sst(`<si><r><t>${text}</t></r><r><t>b</t></r></si>`),

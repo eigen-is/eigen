@@ -1,5 +1,5 @@
 import { isNil } from 'es-toolkit/compat';
-import { parseCellInput } from './format';
+import { parseCellInput, richText } from './format';
 import type { FormulaEngine } from './formula-engine';
 import { functionCopy } from './formula-shift';
 import type { CellMatrix, CellResolver, CompiledFormula, ConditionalFormatRule, SingleRange } from './types';
@@ -55,7 +55,8 @@ export function createCfFormulaEvaluator(
 // Returns the cell's display value at (r, c). Mirrors the "v" attribute path of
 // state-side getCellValue, simplified for the conditional-format evaluator.
 function cellValueAt(data: CellMatrix, r: number, c: number) {
-    return data[r]?.[c]?.v ?? null;
+    const cell = data[r]?.[c];
+    return (cell && richText(cell)) ?? cell?.v ?? null;
 }
 
 // Merge a partial cell style into the map, creating the entry if absent. The CF evaluator

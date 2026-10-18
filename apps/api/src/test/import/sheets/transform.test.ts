@@ -1,5 +1,5 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
-import type { Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import * as engine from '@workspace/sheet/engine';
 import { ZipReader } from '../../../lib/core/zip';
 import { SERVER_RECALC_BUDGET } from '../../../lib/document/sheets';
@@ -72,5 +72,23 @@ describe("the formulas' ranges", () => {
         } finally {
             mock.module('@workspace/sheet/engine', () => original);
         }
+    });
+});
+
+// A rich-text cell keeps its text in its runs alone, so the import's recalc reads it there.
+describe('an imported rich-text cell', () => {
+    test('is read by a formula through its runs', () => {
+        const xlsx = xlsxFixture({
+            sheets: [
+                {
+                    data: '<row r="1"><c r="A1" t="inlineStr"><is><r><rPr><b/></rPr><t>Rich</t></r><r><t> text</t></r></is></c><c r="B1" t="str"><f>A1&amp;"!"</f><v>stale</v></c></row>',
+                },
+            ],
+        });
+        const { snapshotJson } = importXlsxToSheetsSnapshot(toTransferableBuffer(Buffer.from(xlsx)));
+        const [sheet] = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
+        const cell = (c: number) => sheet.celldata?.find((entry) => entry.r === 0 && entry.c === c)?.v;
+        expect(cell(0)).toEqual({ ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Rich', bl: 1 }, { v: ' text' }] } });
+        expect(cell(1)?.v).toBe('Rich text!');
     });
 });

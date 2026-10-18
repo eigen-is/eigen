@@ -230,6 +230,19 @@ describe('extractCollabText', () => {
     // The cap is a byte budget: the extracted body is cloned to the main thread and
     // inserted into FTS, so it must hold for one huge leaf and for text where a
     // character is not a byte.
+    test("eigensheets: a rich-text cell indexes its runs' text", async () => {
+        const doc = new Y.Doc();
+        const rich = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Findable', bl: 1 }, { v: ' runs' }] } };
+        seedSheetsDoc(
+            doc,
+            [{ id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata: [{ r: 0, c: 0, v: rich }] }],
+            [],
+        );
+        const { text } = await extractCollabText('eigensheets', doc);
+        expect(text).toContain('Findable runs');
+        doc.destroy();
+    });
+
     test('the cap bounds the extracted body', async () => {
         const doc = new Y.Doc();
         const cell = 'z'.repeat(1000);

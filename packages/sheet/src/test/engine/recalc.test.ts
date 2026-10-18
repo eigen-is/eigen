@@ -25,6 +25,17 @@ type SheetWithChain = Sheet & { calcChain?: { r: number; c: number; id: string }
 // ── recalcSheets ────────────────────────────────────────────────────────────
 
 describe('engine/recalc — recalcSheets', () => {
+    // A rich-text cell keeps its text in its runs alone, as the editor writes one and the xlsx import too.
+    test('a formula reads a rich-text cell as its runs, before and after an edit of them', () => {
+        const rich = (...runs: string[]): Cell => ({
+            ct: { fa: 'General', t: 'inlineStr', s: runs.map((v) => ({ v, bl: 1 })) },
+        });
+        const before = recalcSheets([sheet('s1', 'Sheet1', [[rich('Hello ', 'world'), formula('=A1&"!"')]])]);
+        expect(before[0].data![0][1]?.v).toBe('Hello world!');
+        const after = recalcSheets([sheet('s1', 'Sheet1', [[rich('Bye'), formula('=A1&"!"')]])]);
+        expect(after[0].data![0][1]?.v).toBe('Bye!');
+    });
+
     test('chained dependencies evaluate in order', () => {
         // A1=1 (literal), B1==A1+1, C1==B1+1 → 2, 3
         const sheets = [sheet('s1', 'Sheet1', [[num(1), formula('=A1+1'), formula('=B1+1')]])];

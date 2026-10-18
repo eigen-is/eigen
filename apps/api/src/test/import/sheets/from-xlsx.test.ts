@@ -71,8 +71,6 @@ describe('the reader', () => {
             '0_0': text('Name'),
             '0_1': text(' padded '),
             '0_2': {
-                v: 'Rich text',
-                m: 'Rich text',
                 ct: {
                     fa: 'General',
                     t: 'inlineStr',
@@ -167,7 +165,7 @@ describe('the reader', () => {
             '0_0': { bl: 1, it: 1, fs: 14, ff: 'Inter', fc: '#1F4E79', bg: '#FFFF00', v: 'Name' },
             '0_1': { un: 1, cl: 1, fs: 20, ff: 'Source Serif 4', fc: '#335693', bg: '#DBDBDB', ht: 0, vt: 0, tb: '2' },
             '0_2': { fs: 9, ff: 'JetBrains Mono', fc: '#F4B183', bg: '#00B050', ht: 2, vt: 1, rt: 45, m: '50.00%' },
-            '1_1': { bl: 1, it: 1, fs: 14, v: 'Rich text' },
+            '1_1': { bl: 1, it: 1, fs: 14, ct: { t: 'inlineStr' } },
             '1_2': { ht: 1, rt: 'vertical', ct: { fa: '@' } },
         });
         // A styled cell with no value keeps its look.

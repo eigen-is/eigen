@@ -21,6 +21,11 @@ export function inlineStringText(ct: CellType): string {
     return (ct.s ?? []).map((run) => run.v ?? '').join('');
 }
 
+// A cell's text when it is rich text, so every reader of a value or a display reads one source; undefined otherwise.
+export function richText(cell: Cell): string | undefined {
+    return cell.ct?.t === 'inlineStr' && cell.ct.s?.length ? inlineStringText(cell.ct) : undefined;
+}
+
 export function parseCellInput(value: string | number | boolean): [string, CellType, string | number | boolean] {
     const text = String(value);
     let m = '';

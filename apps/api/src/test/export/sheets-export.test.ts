@@ -1151,10 +1151,10 @@ describe('Sheets xlsx export — inline rich text', () => {
             color: { argb: 'FF0080FF' },
         });
 
-        // The runs come back with their looks, the text beside them.
+        // The runs come back with their looks, holding the text alone.
         const rt = await roundTrip(sheets);
         const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
-        expect(a1?.v?.v).toBe('Hello world');
+        expect(a1?.v?.v).toBeUndefined();
         expect(a1?.v?.ct).toMatchObject({
             t: 'inlineStr',
             s: [
@@ -1465,11 +1465,11 @@ describe('Sheets xlsx export — hyperlinks', () => {
         expect(runs[1].text).toBe('docs');
         expect(runs[1].font).toMatchObject({ color: { argb: 'FF0000FF' } });
 
-        // Importer round-trip: the concatenated text and the link both survive.
+        // Importer round-trip: the runs and the link both survive.
         const rt = xlsxToSheets(buffer);
         expect(rt[0].hyperlink).toEqual({ '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/docs' } });
         const a1 = (rt[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
-        expect(a1?.v?.v).toBe('Eigen docs');
+        expect(a1?.v?.ct?.s?.map((run) => run.v).join('')).toBe('Eigen docs');
         expect(a1?.v?.hl).toEqual({ r: 0, c: 0, id: 'sheet-0' });
     });
 });

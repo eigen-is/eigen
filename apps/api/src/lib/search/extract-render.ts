@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { ElementKindRegistry, VectorElement } from '@workspace/lib/vector';
+import type { richText } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 import type { readStoredEquation } from '../document/equation';
 import type { ExtractTextJob, TransformWarning } from '../document/transform/protocol';
@@ -68,13 +69,14 @@ function collectProseMirrorText(
     return out.parts.join(' ');
 }
 
-function collectSheetsText(sheets: Sheet[], cap: number): string {
+// `textOf` rides in from the caller's dynamic import of the sheet engine, as `kinds` does below.
+function collectSheetsText(sheets: Sheet[], textOf: typeof richText, cap: number): string {
     const out: CappedText = { parts: [], bytes: 0 };
     for (const sheet of sheets) {
         for (const cd of sheet.celldata ?? []) {
             const cell = cd.v;
             if (!cell) continue;
-            const display = cell.m ?? cell.v;
+            const display = textOf(cell) ?? cell.m ?? cell.v;
             if (display == null) continue;
             if (!appendCapped(out, String(display), cap)) return out.parts.join(' ');
         }
@@ -118,11 +120,14 @@ export async function extractCollabText(
             return { text, warnings: [] };
         }
         case 'eigensheets': {
-            const { readSheetsFromDoc } = await import('../document/sheets');
+            const [{ readSheetsFromDoc }, engine] = await Promise.all([
+                import('../document/sheets'),
+                import('@workspace/sheet/engine'),
+            ]);
             // No recalc: the index serves stored values — a legacy never-computed
             // workbook must not cost a full recalc inside the 30s extract deadline.
             const { sheets } = readSheetsFromDoc(doc, { recalc: false });
-            return { text: collectSheetsText(sheets, CONTENT_INDEX_MAX_BYTES), warnings: [] };
+            return { text: collectSheetsText(sheets, engine.richText, CONTENT_INDEX_MAX_BYTES), warnings: [] };
         }
         case 'eigenslides':
         case 'eigenvector': {
