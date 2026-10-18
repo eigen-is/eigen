@@ -26,7 +26,7 @@ import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/core/zip';
 import { commitEigendocImport, readEigendocFromDoc, readEigendocPage } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
-import { MAX_RECALC_DEPENDENCY_BLOCKS, readSheetsFromDoc } from '../../lib/document/sheets';
+import { readSheetsFromDoc, SERVER_RECALC_BUDGET } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import {
     type DocumentTransformRequest,
@@ -296,13 +296,13 @@ describe('document transform (eigensheets preview)', () => {
         }
     });
 
-    test("the export's recalc runs under the server's dependency budget", () => {
+    test("the export's recalc runs under the server's budget", () => {
         const original = { ...engine };
-        const budgets: (number | undefined)[] = [];
+        const budgets: unknown[] = [];
         mock.module('@workspace/sheet/engine', () => ({
             ...original,
-            recalcSheets: (sheets: Sheet[], options?: { maxDependencyBlocks?: number }) => {
-                budgets.push(options?.maxDependencyBlocks);
+            recalcSheets: (sheets: Sheet[], options?: { maxDependencyBlocks?: number; maxCellsRead?: number }) => {
+                budgets.push(options);
                 return original.recalcSheets(sheets, options);
             },
         }));
@@ -313,7 +313,7 @@ describe('document transform (eigensheets preview)', () => {
             ];
             doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             expect(readSheetsFromDoc(doc).sheets[0].celldata?.[0]?.v?.v).toBe(2);
-            expect(budgets).toEqual([MAX_RECALC_DEPENDENCY_BLOCKS]);
+            expect(budgets).toEqual([SERVER_RECALC_BUDGET]);
         } finally {
             mock.module('@workspace/sheet/engine', () => original);
         }

@@ -2,7 +2,7 @@ import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
 import * as engine from '@workspace/sheet/engine';
 import { ZipReader } from '../../../lib/core/zip';
-import { MAX_RECALC_DEPENDENCY_BLOCKS } from '../../../lib/document/sheets';
+import { SERVER_RECALC_BUDGET } from '../../../lib/document/sheets';
 import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { importXlsxToSheetsSnapshot } from '../../../lib/import/sheets/transform';
 import { build, stored } from '../../fixtures/raw-zip';
@@ -51,16 +51,16 @@ describe('a throw reading the xlsx', () => {
     });
 });
 
-// The import's recalc is the server's, under its dependency budget: past it the recalc fails, and the import keeps
-// Excel's values uncomputed (document-transform.test.ts).
+// The import's recalc is the server's, under its budget: past it the recalc fails, and the import keeps Excel's values
+// uncomputed (document-transform.test.ts).
 describe("the formulas' ranges", () => {
-    test('the recalc runs under the dependency budget', () => {
+    test("the recalc runs under the server's budget", () => {
         const original = { ...engine };
-        const budgets: (number | undefined)[] = [];
+        const budgets: unknown[] = [];
         mock.module('@workspace/sheet/engine', () => ({
             ...original,
-            recalcSheets: (sheets: Sheet[], options?: { maxDependencyBlocks?: number }) => {
-                budgets.push(options?.maxDependencyBlocks);
+            recalcSheets: (sheets: Sheet[], options?: { maxDependencyBlocks?: number; maxCellsRead?: number }) => {
+                budgets.push(options);
                 return original.recalcSheets(sheets, options);
             },
         }));
@@ -68,7 +68,7 @@ describe("the formulas' ranges", () => {
             importXlsxToSheetsSnapshot(
                 toTransferableBuffer(xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1"><f>1+1</f></c></row>' }] })),
             );
-            expect(budgets).toEqual([MAX_RECALC_DEPENDENCY_BLOCKS]);
+            expect(budgets).toEqual([SERVER_RECALC_BUDGET]);
         } finally {
             mock.module('@workspace/sheet/engine', () => original);
         }

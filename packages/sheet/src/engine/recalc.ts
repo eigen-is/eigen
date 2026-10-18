@@ -542,10 +542,14 @@ function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): Form
     return { row: [r0, r1], column: [c0, c1], sheetId: dep.sheetId };
 }
 
-// `maxDependencyBlocks` bounds what the formulas' ranges cost the dependency index (dependencyBlocks): past it the
-// recalc throws before it evaluates, so many ranges over a large sheet can't cost seconds and gigabytes. The server
-// passes one for an untrusted workbook; without it there is no bound.
-export function recalcSheets(sheets: Sheet[], { maxDependencyBlocks = Number.POSITIVE_INFINITY } = {}): Sheet[] {
+// `maxDependencyBlocks` bounds what the formulas' ranges cost the dependency index (dependencyBlocks), and
+// `maxCellsRead` what their evaluation reads (each range read, cut to its sheet, costs its cells): past either the
+// recalc throws before the work, so many ranges over a large sheet can't cost minutes and gigabytes. The server passes
+// both for an untrusted workbook; without them there is no bound.
+export function recalcSheets(
+    sheets: Sheet[],
+    { maxDependencyBlocks = Number.POSITIVE_INFINITY, maxCellsRead = Number.POSITIVE_INFINITY } = {},
+): Sheet[] {
     // 1. Materialize a working view: dense data per sheet, id/name index.
     const working: WorkingSheet[] = [];
     const indexById = new Map<string, number>();
@@ -630,13 +634,18 @@ export function recalcSheets(sheets: Sheet[], { maxDependencyBlocks = Number.POS
     //    execFunctionGlobalData cache (checked before the resolver), so a
     //    downstream cell reads its upstream result. Volatiles are frozen. Each
     //    cell is guarded so one poisoned formula never aborts the pass.
-    const engine = new FormulaEngine();
+    const engine = new FormulaEngine({ maxCellsRead });
     // Resolver over the working sheets: mirrors createArrayResolver's persisted
     // shape but reads the live `data` matrices we mutate during the ordered pass.
     const resolver = createArrayResolver(
         working.map((w) => ({ id: w.id, name: w.name, data: w.data, calculationChain: [], dynamicArrayCompute: [] })),
     );
+    // A read past the budget fails its formula, which the pass would carry on past: it stops at the next.
+    const overRead = () => {
+        if (engine.cellsRead > maxCellsRead) throw new RangeError('Formula ranges read past the cell budget');
+    };
     for (const info of order) {
+        overRead();
         if (isVolatileFormula(info.calc_funcStr)) continue;
         try {
             const result = engine.evaluate(info.calc_funcStr, info.id, resolver);
@@ -666,6 +675,7 @@ export function recalcSheets(sheets: Sheet[], { maxDependencyBlocks = Number.POS
             // cached value in place.
         }
     }
+    overRead();
 
     // 6. Sync celldata from the computed data + stamp calcChain.
     return finalize(working, sheets, calcChainBySheet);

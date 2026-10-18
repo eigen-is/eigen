@@ -194,7 +194,7 @@ The docx reader opens its package with `openPackage` (`apps/api/src/lib/core/opc
 
 ## An imported sheet is stored as computed
 
-The transform runs `recalcSheets` and encodes the snapshot as computed, so no later read recalcs it. A recalc failure, formula ranges past the server's dependency budget among them ([SHEETS.md](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)), stores the parsed values uncomputed with a warning, and the first export recalcs them. The importer keeps three rules:
+The transform runs `recalcSheets` and encodes the snapshot as computed, so no later read recalcs it. A recalc failure, formula ranges past the server's budget on what they index or read among them ([SHEETS.md](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)), stores the parsed values uncomputed with a warning, and the first export recalcs them. The importer keeps three rules:
 
 - `ct.fa` is always paired with `ct.t`, `'General'` when Excel reports no number format. Without an `fa`, date serials and percents render as raw numbers.
 - A formula cell's `f` keeps its leading `=` (`=SUM(A1:A3)`), the form a sheet stores; the xlsx writer strips it. A function Excel added after 2007 is stored as `_xlfn.IFNA(…)`; the reader drops the prefix so the engine recomputes it, and the writer adds it back for the functions `document/spreadsheetml.ts` lists, since Excel reads a bare `IFNA` as an unknown name.

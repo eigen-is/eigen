@@ -1,6 +1,6 @@
 import { encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
-import { MAX_RECALC_DEPENDENCY_BLOCKS } from '../../document/sheets';
+import { SERVER_RECALC_BUDGET } from '../../document/sheets';
 import { type TransformWarning, toTransferableText } from '../../document/transform/protocol';
 import { xlsxToSheets } from './from-xlsx';
 
@@ -24,11 +24,11 @@ export function importXlsxToSheetsSnapshot(data: ArrayBuffer): {
 // calcChain and keeps the read-path gate from firing for imported docs. The
 // importer's cached values are usually Excel's own, so this mainly reconciles
 // divergence; a recalc failure must not block the import, so the parsed sheets go
-// in uncomputed and an export recalcs them, under the same dependency budget. recalcSheets syncs the computed values
+// in uncomputed and an export recalcs them, under the same budget. recalcSheets syncs the computed values
 // into `celldata`, and the encoder drops the dense `data` matrix it also returns.
 function recalcImportedSheets(sheets: Sheet[], warnings: TransformWarning[]): { sheets: Sheet[]; computed: boolean } {
     try {
-        return { sheets: recalcSheets(sheets, { maxDependencyBlocks: MAX_RECALC_DEPENDENCY_BLOCKS }), computed: true };
+        return { sheets: recalcSheets(sheets, SERVER_RECALC_BUDGET), computed: true };
     } catch (err) {
         warnings.push({ code: 'recalc-failed', message: err instanceof Error ? err.message : String(err) });
         return { sheets, computed: false };

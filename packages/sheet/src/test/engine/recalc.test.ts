@@ -261,6 +261,28 @@ describe('engine/recalc — recalcSheets', () => {
         expect(recalcSheets(sheets, { maxDependencyBlocks: 3 })[0].data![0][1]?.v).toBe(1);
     });
 
+    test('past its budget of cells read a recalc throws, before it reads them', () => {
+        // SUM(A1:A3) reads 3 cells, SUM(A1:A2) 2.
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=SUM(A1:A3)')],
+                [num(2), formula('=SUM(A1:A2)')],
+                [num(3), null],
+            ]),
+        ];
+        expect(() => recalcSheets(sheets, { maxCellsRead: 4 })).toThrow(RangeError);
+        // A formula failing on the budget keeps its cached value, which must not let the pass carry on.
+        const cached = [
+            sheet('s1', 'Sheet1', [
+                [num(1), formula('=SUM(A1:A2)', num(9))],
+                [num(2), null],
+            ]),
+        ];
+        expect(() => recalcSheets(cached, { maxCellsRead: 1 })).toThrow(RangeError);
+        const out = recalcSheets(sheets, { maxCellsRead: 5 });
+        expect([out[0].data![0][1]?.v, out[0].data![1][1]?.v]).toEqual([6, 3]);
+    });
+
     test('a range past the sheets is charged and indexed for the cells they hold', () => {
         // A1 reads C1 through the whole grid's range, so C1 computes first; the range costs the one block the sheet spans.
         const sheets = [
