@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import { readFontSize } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
@@ -1298,7 +1298,8 @@ const NUMBER_LABEL = /^\s*(?:\d+(?:\.\d+)*[.)]?|\(?(?:[a-z]+|[A-Z]+)[.)])\s/;
 
 type Place = { depth: number; table: boolean; quote: boolean; align?: unknown };
 
-export function auditImported(json: JSONContent): Tally {
+// normalFont: the doc's Normal font, which a word without a font mark draws in.
+export function auditImported(json: JSONContent, normalFont = DOCUMENT_FONT): Tally {
     const tally = newTally();
     const textblock = (node: JSONContent, align: unknown) => {
         const spans: Span[] = [];
@@ -1335,7 +1336,9 @@ export function auditImported(json: JSONContent): Tally {
             const value = inline.text ?? '';
             const marks = inline.marks ?? [];
             const features: Feature[] = [];
-            let font: string | undefined;
+            const family = marks.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'];
+            const font = fontMark(typeof family === 'string' ? family : normalFont);
+            if (font) features.push('font');
             for (const mark of marks) {
                 const attrs = mark.attrs ?? {};
                 const feature = MARK_FEATURES.get(mark.type);
@@ -1343,8 +1346,6 @@ export function auditImported(json: JSONContent): Tally {
                 if (mark.type !== 'textStyle') continue;
                 const color = attrs['color'];
                 if (typeof color === 'string' && color && cssColorToHex(color) !== '000000') features.push('color');
-                font = typeof attrs['fontFamily'] === 'string' ? fontMark(attrs['fontFamily']) : undefined;
-                if (font) features.push('font');
                 if (readFontSize(attrs['fontSize']) !== undefined) features.push('size');
                 if (attrs['caps'] === 'all') features.push('caps');
                 if (attrs['caps'] === 'small') features.push('smallCaps');
@@ -1687,7 +1688,7 @@ type WorkerRequest =
 type WorkerReply =
     | { kind: 'loaded' }
     | { kind: 'audited'; source: SourceTally; ms: number }
-    | { kind: 'imported'; json: JSONContent; images: number; ms: number }
+    | { kind: 'imported'; json: JSONContent; font: string; images: number; ms: number }
     | { kind: 'failed'; error: string; ms: number };
 
 // What a request comes to: the worker's reply, or the worker cut at the cap or gone.
@@ -1842,7 +1843,7 @@ export async function runAudit(options: {
             ]);
             const source = audited.kind === 'audited' ? audited.source : undefined;
             const sourceError = source ? undefined : 'error' in audited ? audited.error : audited.kind;
-            const imported = outcome.kind === 'imported' ? auditImported(outcome.json) : newTally();
+            const imported = outcome.kind === 'imported' ? auditImported(outcome.json, outcome.font) : newTally();
             const result: FileResult = {
                 file,
                 bytes: size,
@@ -1913,10 +1914,12 @@ if (!Bun.isMainThread) {
                 return;
             }
             if (!importer) throw new Error('no importer loaded');
-            const { json, images } = await importer(Buffer.from(request.bytes));
+            // An importer from before the doc's Normal returns no style: its text draws in the document font.
+            const { json, images, style } = await importer(Buffer.from(request.bytes));
             postMessage({
                 kind: 'imported',
                 json,
+                font: style?.font ?? DOCUMENT_FONT,
                 images: images.length,
                 ms: performance.now() - started,
             } satisfies WorkerReply);

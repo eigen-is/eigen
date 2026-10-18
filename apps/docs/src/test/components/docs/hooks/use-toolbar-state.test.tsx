@@ -7,7 +7,7 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor } = await import('@tiptap/react');
-const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_NORMAL_STYLE, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { useToolbarState } = await import('../../../../components/docs/hooks/use-toolbar-state');
 
 let unmount = async () => {};
@@ -36,8 +36,14 @@ const editor = new Editor({
 });
 
 let seen: ReturnType<typeof useToolbarState>[] = [];
-function Probe({ of = editor }: { of?: typeof editor }) {
-    seen.push(useToolbarState(of));
+function Probe({
+    of = editor,
+    normal = DEFAULT_NORMAL_STYLE,
+}: {
+    of?: typeof editor;
+    normal?: typeof DEFAULT_NORMAL_STYLE;
+}) {
+    seen.push(useToolbarState(of, normal));
     return null;
 }
 
@@ -53,6 +59,22 @@ test('a caret move alone updates what the toolbar draws', async () => {
 
     await act(async () => editor.commands.setTextSelection(14));
     expect(seen.at(-1)).toMatchObject({ bold: false, fontName: 'Inter', paragraphStyle: 'Heading 2' });
+});
+
+// Google's toolbar shows Normal text's font and size where the text sets none, and its line spacing ticks.
+test("unformatted text reads as the doc's Normal, and a new Normal reaches the toolbar", async () => {
+    editor.commands.setTextSelection(3);
+    ({ unmount } = await renderInDocument(createElement(Probe)));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Inter', fontSize: 11, lineSpacing: 1.4 });
+
+    const word = { ...DEFAULT_NORMAL_STYLE, font: 'Source Serif 4', size: 12, lineSpacing: 1.15 };
+    await unmount();
+    ({ unmount } = await renderInDocument(createElement(Probe, { normal: word })));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', fontSize: 12, lineSpacing: 1.15 });
+
+    // A heading draws its own size and line, which no CSS here gives.
+    await act(async () => editor.commands.setTextSelection(14));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', lineSpacing: undefined });
 });
 
 test('a caret move that changes nothing drawn renders nothing', async () => {

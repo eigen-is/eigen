@@ -3,6 +3,7 @@ import type { Node, ResolvedPos } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { DOCUMENT_LINE_RATIO } from '../../../constants/fonts';
+import type { NormalStyle } from '../normal-style';
 import { MAX_PAPER_MM } from '../page';
 
 // The textblocks that hold prose, which an alignment and a paragraph format apply to; a code block holds code.
@@ -50,6 +51,9 @@ export const PARAGRAPH_FORMAT_LIMITS: Record<ParagraphFormatKey, { min: number; 
     indentFirstLine: { min: -MAX_INDENT, max: MAX_INDENT },
 };
 
+// A line spacing as CSS draws it: CSS can't know the fonts of a paragraph's runs, so a multiple of Inter's line.
+export const cssLineHeight = (multiple: number) => Math.round(multiple * DOCUMENT_LINE_RATIO * 10_000) / 10_000;
+
 // Each attribute's HTML, its unit's step (Word's twentieths of a point for a length) and its CSS. Space before is
 // padding, so it adds to the space after the block above as in Word and Google Docs, where margins would collapse, and
 // it replaces a heading's own margin above.
@@ -57,7 +61,7 @@ const FORMAT: Record<ParagraphFormatKey, { data: string; perUnit: number; css: (
     lineSpacing: {
         data: 'data-line-spacing',
         perUnit: 100,
-        css: (value) => `line-height: ${Math.round(value * DOCUMENT_LINE_RATIO * 10_000) / 10_000}`,
+        css: (value) => `line-height: ${cssLineHeight(value)}`,
     },
     spaceBefore: { data: 'data-space-before', perUnit: 20, css: (value) => `margin-top: 0pt; padding-top: ${value}pt` },
     spaceAfter: { data: 'data-space-after', perUnit: 20, css: (value) => `margin-bottom: ${value}pt` },
@@ -88,10 +92,11 @@ const SPACING_KEYS: ParagraphFormatKey[] = ['spaceBefore', 'spaceAfter'];
 
 const ownsSpacing = (doc: Node, pos: number) => doc.resolve(pos).depth === 0;
 
-// What a block draws where it stores nothing: a paragraph Eigen's look, a heading, the title and the subtitle their own
-// from eigen-prose.css, read off the page; in a container no space around it.
-function drawnFormat(block: Node, dom: globalThis.Node | null, spaced: boolean): ParagraphFormat {
-    const own = { ...DOCUMENT_PARAGRAPH_FORMAT };
+// What a block draws where it stores nothing: a paragraph the doc's Normal, a heading, the title and the subtitle their
+// own from eigen-prose.css, read off the page; in a container no space around it.
+function drawnFormat(block: Node, dom: globalThis.Node | null, spaced: boolean, normal: NormalStyle): ParagraphFormat {
+    const { lineSpacing, spaceBefore, spaceAfter } = normal;
+    const own = { ...DOCUMENT_PARAGRAPH_FORMAT, lineSpacing, spaceBefore, spaceAfter };
     if (block.type.name !== 'paragraph' && dom instanceof HTMLElement) {
         const style = getComputedStyle(dom);
         const px = (value: string) => Number.parseFloat(value);
@@ -105,11 +110,13 @@ function drawnFormat(block: Node, dom: globalThis.Node | null, spaced: boolean):
     return { ...own, ...readParagraphFormat(block.attrs), ...(!spaced && { spaceBefore: 0, spaceAfter: 0 }) };
 }
 
-// The line spacing every prose textblock of a selection stores, none for a mix or an unset one, whether any takes a
-// space before or after, and what its first one draws, as Google's menus and dialogs read it.
+// The line spacing every prose textblock of a selection stores, or as a paragraph takes the doc's Normal's, none for a
+// mix or an unset heading, whether any takes a space before or after, and what its first one draws, as Google's menus
+// and dialogs read it.
 export function selectionParagraphFormat(
     state: EditorState,
     view: EditorView | undefined,
+    normal: NormalStyle,
 ): { lineSpacing: number | undefined; spacing: boolean; drawn: ParagraphFormat } {
     const spacings = new Set<number | undefined>();
     let spacing = false;
@@ -118,14 +125,17 @@ export function selectionParagraphFormat(
         state.doc.nodesBetween($from.pos, $to.pos, (node, pos) => {
             if (!PROSE_TEXTBLOCKS.includes(node.type.name)) return;
             first ??= { node, pos };
-            spacings.add(readParagraphFormat(node.attrs).lineSpacing);
+            spacings.add(
+                readParagraphFormat(node.attrs).lineSpacing ??
+                    (node.type.name === 'paragraph' ? normal.lineSpacing : undefined),
+            );
             spacing ||= ownsSpacing(state.doc, pos);
         });
     return {
         lineSpacing: spacings.size === 1 ? [...spacings][0] : undefined,
         spacing,
         drawn: first
-            ? drawnFormat(first.node, view ? view.nodeDOM(first.pos) : null, ownsSpacing(state.doc, first.pos))
+            ? drawnFormat(first.node, view ? view.nodeDOM(first.pos) : null, ownsSpacing(state.doc, first.pos), normal)
             : { ...DOCUMENT_PARAGRAPH_FORMAT },
     };
 }

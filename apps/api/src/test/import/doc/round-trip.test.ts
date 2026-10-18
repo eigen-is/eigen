@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { readOmml, writeMathml } from '@workspace/math';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/core/ooxml';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
@@ -124,6 +124,7 @@ describe('the all-features doc', () => {
             buildAllFeaturesDocJson(),
             {},
             DEFAULT_PAGE_SETUP,
+            DEFAULT_NORMAL_STYLE,
             buildAllFeaturesDocMedia(),
             'All features',
             ORIGIN,
@@ -144,7 +145,7 @@ describe('the page', () => {
         };
         const source = buildAllFeaturesDocJson();
         const { page: read } = docxToPmJson(
-            Buffer.from(await eigendocToDocx(source, {}, page, [], 'Letter', undefined)),
+            Buffer.from(await eigendocToDocx(source, {}, page, DEFAULT_NORMAL_STYLE, [], 'Letter', undefined)),
         );
         expect(read.width).toBe(279.4);
         expect(read.height).toBe(215.9);
@@ -182,6 +183,7 @@ describe('the page', () => {
             { type: 'doc', content: [p('Body')] },
             bands,
             { ...DEFAULT_PAGE_SETUP, differentFirstPage: true },
+            DEFAULT_NORMAL_STYLE,
             [],
             'Bands',
             undefined,
@@ -191,6 +193,56 @@ describe('the page', () => {
         expect(Object.keys(read)).toEqual(['header', 'footer', 'headerFirst']);
         for (const root of ['header', 'footer', 'headerFirst'] as const)
             expect(stored(read[root] ?? {})).toEqual(stored(docSchema().nodeFromJSON(bands[root]).toJSON()));
+    });
+});
+
+describe('the Normal', () => {
+    // Every key apart from Eigen's.
+    const normal = {
+        font: 'Source Serif 4',
+        size: 12,
+        lineSpacing: 1,
+        spaceBefore: 6,
+        spaceAfter: 0,
+        color: '#000000',
+    };
+
+    test("docDefaults and the Normal style come back as the doc's Normal, and what sets a paragraph or a run apart stays", async () => {
+        const text = (value: string, marks?: Mark[]): JSONContent => ({ type: 'text', text: value, marks });
+        const source = docSchema()
+            .nodeFromJSON({
+                type: 'doc',
+                content: [
+                    { type: 'paragraph', content: [text('Plain')] },
+                    { type: 'paragraph', attrs: { lineSpacing: 1.5, spaceAfter: 12 }, content: [text('Spaced')] },
+                    {
+                        type: 'paragraph',
+                        content: [
+                            text('Sans', [{ type: 'textStyle', attrs: { fontFamily: 'Inter' } }]),
+                            text(' big', [{ type: 'textStyle', attrs: { fontSize: 14 } }]),
+                        ],
+                    },
+                ],
+            })
+            .toJSON();
+        // A header is a part of its own over the same styles.xml, so its text draws in the Normal with no marks either.
+        const header = { type: 'doc', content: [{ type: 'paragraph', content: [text('Acme')] }] };
+        const { json, bands, style } = docxToPmJson(
+            Buffer.from(await eigendocToDocx(source, { header }, DEFAULT_PAGE_SETUP, normal, [], 'Word', undefined)),
+        );
+        expect(style).toEqual(normal);
+        expect(stored(json)).toEqual(stored(source));
+        expect(stored(bands['header'] ?? {})).toEqual(stored(docSchema().nodeFromJSON(header).toJSON()));
+    });
+
+    test("Eigen's own Normal comes back as the default", async () => {
+        const source = buildAllFeaturesDocJson();
+        const { style } = docxToPmJson(
+            Buffer.from(
+                await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Eigen', undefined),
+            ),
+        );
+        expect(style).toEqual(DEFAULT_NORMAL_STYLE);
     });
 });
 
@@ -210,7 +262,7 @@ describe("the math package's corpus equations", () => {
             )
             .join('');
         const { json } = await importDocxBody(input);
-        const docx = await eigendocToDocx(json, {}, DEFAULT_PAGE_SETUP, [], 'Equations', ORIGIN);
+        const docx = await eigendocToDocx(json, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Equations', ORIGIN);
         const document = parseOoxml(openZip(new Uint8Array(docx)).read('word/document.xml') ?? '');
         const body = document && xmlChild(document, W_NS, 'body');
         if (!body) throw new Error('no w:body');
@@ -264,7 +316,9 @@ const tasks = (...items: JSONContent[][]) => ({
 async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent; json: JSONContent }> {
     const source = docSchema().nodeFromJSON({ type: 'doc', content }).toJSON();
     const { json } = docxToPmJson(
-        Buffer.from(await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, [], 'Nested', undefined)),
+        Buffer.from(
+            await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Nested', undefined),
+        ),
     );
     return { source, json };
 }

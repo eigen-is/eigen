@@ -5,6 +5,7 @@ import {
     BAND_ROOTS,
     type BandRoot,
     bandHasContent,
+    type NormalStyle,
     type PageSetup,
     PROSE_TEXTBLOCKS,
 } from '@workspace/lib/docs/eigendoc';
@@ -43,12 +44,13 @@ export function docxToPmJson(
     json: JSONContent;
     bands: Partial<Record<BandRoot, JSONContent>>;
     page: PageSetup;
+    style: NormalStyle;
     images: DocxImage[];
     warnings: TransformWarning[];
 } {
-    const { doc, bands, page, images, warnings } = readDocx(buffer, options);
+    const { doc, bands, page, style, images, warnings } = readDocx(buffer, options);
     const json = Object.fromEntries(Object.entries(bands).map(([root, band]) => [root, band.toJSON()]));
-    return { json: doc.toJSON(), bands: json, page, images, warnings };
+    return { json: doc.toJSON(), bands: json, page, style, images, warnings };
 }
 
 export function readDocx(
@@ -58,6 +60,7 @@ export function readDocx(
     doc: Node;
     bands: Partial<Record<BandRoot, Node>>;
     page: PageSetup;
+    style: NormalStyle;
     images: DocxImage[];
     warnings: TransformWarning[];
 } {
@@ -124,7 +127,7 @@ export function readDocx(
         if (pkg.evenBands > 0) warnings.push({ code: 'even-bands-dropped', count: pkg.evenBands });
         if (reader.bandAnchors > 0) warnings.push({ code: 'band-images-unanchored', count: reader.bandAnchors });
         if (reader.bandDropped > 0) warnings.push({ code: 'band-content-dropped', count: reader.bandDropped });
-        return { doc, bands, page: reader.page, images, warnings };
+        return { doc, bands, page: reader.page, style: reader.normal, images, warnings };
     } catch (error) {
         throw importError(error);
     }

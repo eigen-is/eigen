@@ -5,13 +5,15 @@ import {
     type BandRoot,
     FOOTNOTE_PARAGRAPH,
     footnotesInOrder,
+    type NormalStyle,
+    normalStyleProperties,
     PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
     type PageSetup,
     pageStylesheet,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
-import { readEigendocBands, readEigendocFromDoc, readEigendocPage } from '../../document/doc';
+import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
@@ -56,13 +58,14 @@ export async function renderEigendocExport(
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const json = readEigendocFromDoc(doc);
     const page = readEigendocPage(doc);
+    const style = readEigendocStyle(doc);
     const bands = readEigendocBands(doc);
     if (format === 'docx') {
         const { eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
         const pasted = await pastedFigureMedia([json, ...Object.values(bands)]);
         const docxMedia = await withSvgFallbacks([...media, ...pasted]);
         return {
-            data: toTransferableBuffer(await eigendocToDocx(json, bands, page, docxMedia, title, publicOrigin)),
+            data: toTransferableBuffer(await eigendocToDocx(json, bands, page, style, docxMedia, title, publicOrigin)),
             warnings: [],
         };
     }
@@ -83,7 +86,7 @@ export async function renderEigendocExport(
             const html = renderDocHtml(
                 withAbsoluteLinks(content, publicOrigin),
                 (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-                { synthesizeSmallCaps: pdf, pageCounters: pdf, pageFootnotes: pdf, equations },
+                { ...(pdf && { smallCapsFont: style.font }), pageCounters: pdf, pageFootnotes: pdf, equations },
             );
             return part === 'body'
                 ? `<article class="eigen-prose tiptap">${html}</article>`
@@ -93,7 +96,7 @@ export async function renderEigendocExport(
     const notes = footnotesInOrder(json).length > 0 ? (pdf ? PAGE_FOOTNOTES_CSS : FOOTNOTE_LIST_CSS) : '';
     const html = exportHtmlDocument({
         title,
-        css: `${PROSE_CSS}${printExtras(page)}${notes}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
+        css: `${PROSE_CSS}${printExtras(page, style)}${notes}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings: [] };
@@ -163,7 +166,7 @@ const PAGE_FOOTNOTES_CSS = `
     line-height: normal;
     letter-spacing: normal;
     text-transform: none;
-    color: #${BODY.color};
+    color: var(--doc-color, #${BODY.color});
 }
 .footnote::footnote-marker { content: counter(footnote) ' '; vertical-align: super; font-size: ${FOOTNOTE_LOOK.sizePt * 0.75}pt; }
 .footnote > [data-type="${FOOTNOTE_PARAGRAPH}"] { display: block; }
@@ -183,10 +186,11 @@ const FOOTNOTE_LIST_CSS = `
 .footnotes hr { width: 144pt; margin: 2em 0 1em; }
 `;
 
-function printExtras(page: PageSetup): string {
+function printExtras(page: PageSetup, style: NormalStyle): string {
+    const normal = Object.entries(normalStyleProperties(style)).map(([name, value]) => `${name}: ${value};`);
     return `
 /* The docs page as the editor draws it; on paper @page draws the margins */
-${pageStylesheet(page, '.page')}
+${pageStylesheet(page, '.page')}${normal.length > 0 ? `\n.page { ${normal.join(' ')} }` : ''}
 
 /* Minimal Tailwind preflight — reset browser defaults that conflict with eigen-prose */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

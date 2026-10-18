@@ -19,7 +19,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import { type MathRow, writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
-import { BODY, nodeLook, QUOTE_LOOK } from '../../document/looks';
+import { nodeLook, QUOTE_LOOK } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { hasSmallCaps } from '../fonts';
 import { SVG_LIMIT } from '../math-svg';
@@ -227,8 +227,9 @@ const SYNTHESIZED_SMALL_CAPS_SIZE = '0.7em';
 const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' });
 
 // WeasyPrint draws small caps only from a font's own smcp glyphs and fakes none, so where the face has none
-// (hasSmallCaps) the PDF writes a small-caps text's lowercase as smaller capitals.
-function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) => string {
+// (hasSmallCaps) the PDF writes a small-caps text's lowercase as smaller capitals. Text without a font mark draws in
+// the doc's Normal font.
+function renderTextSynthesizingSmallCaps(doc: Node, normalFont: string): ({ node }: { node: Node }) => string {
     const quoted = new Set<Node>();
     // A node that draws italic draws an italic mark upright.
     const upright = new Set<Node>();
@@ -244,7 +245,7 @@ function renderTextSynthesizingSmallCaps(doc: Node): ({ node }: { node: Node }) 
         const style = node.marks.find((mark) => mark.type.name === 'textStyle')?.attrs;
         if (style?.['caps'] !== 'small') return escapeHtml(text);
         const font = style['fontFamily'];
-        const family = typeof font === 'string' ? getFontName(font) : BODY.font;
+        const family = typeof font === 'string' ? getFontName(font) : normalFont;
         const marked = node.marks.some((mark) => mark.type.name === 'italic');
         const italic = upright.has(node) ? !marked : (QUOTE_LOOK.italic && quoted.has(node)) || marked;
         if (hasSmallCaps(family, italic ? 'italic' : 'normal')) return escapeHtml(text);
@@ -279,14 +280,14 @@ export function renderEquations(svgs?: ReadonlyMap<string, EquationDrawing>): ({
 }
 
 // The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds, but for the
-// PDF's small caps, its equations, its page numbers, which its stylesheet's counter() fills in, and its notes, which
-// the screen lists after the body.
+// PDF's small caps, synthesized where the font has none, its equations, its page numbers, which its stylesheet's
+// counter() fills in, and its notes, which the screen lists after the body.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
     options?: {
         lazy?: boolean;
-        synthesizeSmallCaps?: boolean;
+        smallCapsFont?: string;
         pageCounters?: boolean;
         pageFootnotes?: boolean;
         equations?: ({ node }: { node: Node }) => string;
@@ -306,7 +307,9 @@ export function renderDocHtml(
                 equation: options?.equations ?? renderEquations(),
                 footnote:
                     footnotes?.reference ?? (({ node, renderElement }) => renderFootnoteSpans(node, renderElement)),
-                ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
+                ...(options?.smallCapsFont && {
+                    text: renderTextSynthesizingSmallCaps(content, options.smallCapsFont),
+                }),
                 ...(options?.pageCounters && {
                     pageNumber: ({ node }) =>
                         `<span data-type="page-number" data-kind="${readPageNumberKind(node.attrs['kind'])}"></span>`,

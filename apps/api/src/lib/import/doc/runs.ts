@@ -448,7 +448,7 @@ function marksOf(
         const code =
             isMonospaceFont(font, reader.fontTable) && (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
         if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font };
-        const fontFamily = fontMark(font, reader.fontTable);
+        const fontFamily = fontMark(font, reader.fontTable, reader.normal.font);
         const fontSize = fontSizeOf(complex);
         const textStyle: Marks =
             color || fontFamily || caps || fontSize

@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { DEFAULT_PAGE_SETUP, PARAGRAPH_FORMAT_KEYS, pagePx, readPageSetup } from '@workspace/lib/docs/eigendoc';
+import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
+import {
+    DEFAULT_NORMAL_STYLE,
+    DEFAULT_PAGE_SETUP,
+    PARAGRAPH_FORMAT_KEYS,
+    pagePx,
+    readPageSetup,
+} from '@workspace/lib/docs/eigendoc';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../../lib/document/looks';
+import { fontLineHeight } from '../../../lib/export/fonts';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.
@@ -1015,5 +1023,65 @@ describe('paragraph format', () => {
                 ),
             ),
         ).toEqual([{ lineSpacing: 5, spaceBefore: 400, indentRight: 1584 }]);
+    });
+});
+
+describe('the Normal', () => {
+    // Word 2007's Normal in a Times body at 12 pt, grey: what Word draws a paragraph that sets nothing in.
+    const TIMES = [
+        '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr></w:rPrDefault>',
+        '<w:pPrDefault><w:pPr><w:spacing w:after="200" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>',
+        '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:before="60"/></w:pPr><w:rPr><w:color w:val="333333"/><w:sz w:val="24"/></w:rPr></w:style>',
+    ].join('');
+    // Its line as the multiple CSS draws Word's pitch at, in Source Serif 4's line, as a paragraph's.
+    const TIMES_LINE =
+        Math.round(((1.15 * fontLineHeight('Source Serif 4')) / fontLineHeight(DOCUMENT_FONT)) * 100) / 100;
+
+    test("docDefaults and the Normal style are the doc's Normal: the font through the font map, size, line, spacing, colour", async () => {
+        const { style } = await importDocxBody(paragraph(run('Body')), { styles: TIMES });
+        expect(style).toEqual({
+            font: 'Source Serif 4',
+            size: 12,
+            lineSpacing: TIMES_LINE,
+            spaceBefore: 3,
+            spaceAfter: 10,
+            color: '#333333',
+        });
+    });
+
+    test('a 12 pt body imports with no size, font or colour mark and no paragraph format', async () => {
+        const { json } = await importDocxBody(
+            `${paragraph(run('One'))}${paragraph(run('Two', '<w:sz w:val="24"/><w:color w:val="333333"/>'), '<w:spacing w:before="60" w:after="200" w:line="276" w:lineRule="auto"/>')}`,
+            { styles: TIMES },
+        );
+        expect(marksOfType(json, 'textStyle')).toEqual([]);
+        for (const node of nodesOfType(json, 'paragraph')) expect(node.attrs).toMatchObject(UNFORMATTED);
+    });
+
+    test("a run in another bundled font is marked, the document font's included, and one Eigen can't draw draws in Inter", async () => {
+        const font = (name: string) => `<w:rFonts w:ascii="${name}" w:hAnsi="${name}"/>`;
+        const { json } = await importDocxBody(
+            paragraph(
+                `${run('Times')}${run('Arial', font('Arial'))}${run('Courier', font('Courier New'))}${run('Unknown', font('Zapfino Pro'))}`,
+            ),
+            { styles: TIMES },
+        );
+        expect(marksOfType(json, 'textStyle').map(({ text, attrs }) => [text, attrs['fontFamily']])).toEqual([
+            ['Arial', 'Inter'],
+            ['Courier', 'JetBrains Mono'],
+            ['Unknown', 'Inter'],
+        ]);
+    });
+
+    test("a docx without docDefaults or a Normal style is Word's: 10 pt, single, nothing around, Eigen's font and colour", async () => {
+        const { style } = await importDocxBody(paragraph(run('Body')), { styles: '' });
+        expect(style).toEqual({ ...DEFAULT_NORMAL_STYLE, size: 10, lineSpacing: 1, spaceAfter: 0 });
+    });
+
+    test('a hostile Normal is bounded as a stored one is', async () => {
+        const { style } = await importDocxBody(paragraph(run('Body')), {
+            styles: '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="9999"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="99999999" w:line="99999" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>',
+        });
+        expect(style).toMatchObject({ size: 400, lineSpacing: 5, spaceAfter: 400 });
     });
 });
