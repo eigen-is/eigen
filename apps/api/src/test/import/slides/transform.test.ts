@@ -13,8 +13,9 @@ import * as Y from 'yjs';
 import { appendSlidesUpdateToYjs, writeSlidesUpdateToYjs } from '../../../lib/document/slides';
 import { type SlidesImportJob, toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { runImportToSlidesUpdate } from '../../../lib/document/transform/run-transform';
+import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
 import { importPptxToSlidesUpdate } from '../../../lib/import/slides/transform';
-import { box, buildPptx, cxn, graphicFrame, PIXEL_PNG, para, pic, rel, solid, sp, xfrm } from '../../fixtures/pptx';
+import { box, buildPptx, cxn, graphicFrame, PIXEL_PNG, PX, para, pic, rel, solid, sp, xfrm } from '../../fixtures/pptx';
 
 // pptx bytes → the transform's update → the deck writer: what a deck holds after a Convert and after an Import.
 
@@ -35,7 +36,8 @@ const PPTX = buildPptx({
                 cxn({
                     xfrm: box(600, 300, 300, 0),
                     ln: `<a:ln w="12700">${solid('0000FF')}<a:tailEnd type="arrow"/></a:ln>`,
-                }),
+                }) +
+                sp({ xfrm: box(1000, 300, 200, 200), geom: 'star5', spPr: solid('FFCC00') }),
         },
         {
             bg: `<p:bgPr>${solid('FFFFFF')}</p:bgPr>`,
@@ -68,8 +70,9 @@ describe('a pptx converted to a deck', () => {
             'richtext',
             'rectangle',
             'arrow',
+            'path',
         ]);
-        const [logo, title, shape, arrow] = byFrame(scene.elements, one.id);
+        const [logo, title, shape, arrow, star] = byFrame(scene.elements, one.id);
         expect(logo).toMatchObject({ x: 1800, y: 0, width: 120, height: 60, corners: 'straight', roughness: 0 });
         expect(title).toMatchObject({
             type: 'richtext',
@@ -89,6 +92,13 @@ describe('a pptx converted to a deck', () => {
             startArrowhead: 'none',
             strokeColor: '#0000ff',
             strokeWidth: 2,
+        });
+        expect(star).toMatchObject({
+            path: presetGeometry('star5', undefined, 200 * PX, 200 * PX)?.[0].path,
+            closed: true,
+            roughness: 0,
+            strokeColor: 'transparent',
+            fill: expect.stringContaining('#ffcc00'),
         });
 
         const [secondLogo, image, table] = byFrame(scene.elements, two.id);
@@ -164,7 +174,7 @@ describe('a pptx converted to a deck', () => {
         const scene = readVectorFromDoc(doc);
         expect(scene.frames.map((frame) => frame.name)).toEqual(['Mine', 'Welcome', '']);
         expect(scene.elements[0]).toMatchObject({ id: 'own', frameId: 'mine' });
-        expect(scene.elements).toHaveLength(8);
+        expect(scene.elements).toHaveLength(9);
     });
 
     test('a hostile extent is held to the canvas range by the deck writer', () => {

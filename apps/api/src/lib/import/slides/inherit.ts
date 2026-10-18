@@ -37,9 +37,9 @@ export type Placeholder = PlaceholderKey & { properties: ShapeProperties };
 // each lookup costs its element's children, and every slide shape that inherits it would look again.
 export type ShapeProperties = {
     xfrm: Xfrm | undefined;
-    // The preset's or custGeom's name, and the a:prstGeom a pie's angles are in.
+    // The preset's name or custGeom, and the a:prstGeom or a:custGeom that draws it.
     geometry: string | undefined;
-    preset: XmlElement | undefined;
+    geom: XmlElement | undefined;
     fill: XmlElement | undefined;
     ln: XmlElement | undefined;
     style: XmlElement | undefined;
@@ -182,15 +182,12 @@ export function propertiesOf(shape: XmlElement): ShapeProperties {
     const spPr = childOf(shape, P_NS, 'spPr');
     const body = childOf(shape, P_NS, 'txBody');
     const preset = spPr && childOf(spPr, A_NS, 'prstGeom');
+    const custom = !preset && spPr ? childOf(spPr, A_NS, 'custGeom') : undefined;
     return {
         // spPr's a:xfrm, or a graphic frame's own p:xfrm.
         xfrm: readXfrm(spPr ? childOf(spPr, A_NS, 'xfrm') : childOf(shape, P_NS, 'xfrm')),
-        geometry: preset
-            ? xmlAttr(preset, '', 'prst')
-            : spPr && childOf(spPr, A_NS, 'custGeom')
-              ? 'custGeom'
-              : undefined,
-        preset,
+        geometry: preset ? xmlAttr(preset, '', 'prst') : custom && 'custGeom',
+        geom: preset ?? custom,
         fill: fillIn(spPr),
         ln: spPr && childOf(spPr, A_NS, 'ln'),
         style: childOf(shape, P_NS, 'style'),

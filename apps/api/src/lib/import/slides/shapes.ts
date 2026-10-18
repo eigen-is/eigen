@@ -1,8 +1,10 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
     type Arrowhead,
+    isTransparentColor,
     type NewVectorElement,
     normalizeAngle,
+    parseFill,
     SLIDES_STYLE_DEFAULTS,
     type StrokeStyle,
     type StyleDefaults,
@@ -17,6 +19,8 @@ import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { PRESENTATION_TOO_LARGE } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
+import { type CustomGeometry, closedPath, customGeometry, mirroredPath } from './custom-geometry';
+import { DEGREE, evaluateGuides, type Guides, guideListOf } from './guides';
 import {
     decorationsOf,
     elementGradientAngle,
@@ -40,8 +44,9 @@ import {
     textColorOf,
     type Xfrm,
 } from './inherit';
-import { cachedBy, charge, childOf, childrenOf, prefixedAttrOf } from './lookup';
+import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
 import { alternative, blipMedia, type DeckWalk, emu, type Lost, type Part } from './package';
+import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
 
 // A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
@@ -319,6 +324,9 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const { theme } = walk.inheritance;
     const shaped = chain.find((link) => link.geometry !== undefined);
     const geometry = shaped?.geometry ?? 'rect';
+    const kind = PRESET_KINDS.get(geometry);
+    const linear = LINES.has(geometry);
+    const outline = kind || linear || geometry === 'pie' ? undefined : outlineOf(shaped?.geom, geometry, placed);
     const body = childOf(shape, P_NS, 'txBody');
     const lines = linesOf(chain, walk, style);
     const source = body && {
@@ -334,11 +342,12 @@ function readShape(walk: Walk, leaf: Leaf): void {
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
     const textBox = text && source ? turned(box, verticalTurnOf(source, lost)) : box;
-    // What the canvas never draws loses nothing: a line's fill, a dropped outline's paint.
-    const lostIf = (drawn: Set<string>) => (drawn.has(geometry) ? lost : UNDRAWN);
+    // What the canvas never draws loses nothing: a line's fill, a dropped outline's paint, a path's unpainted part.
+    const native = kind !== undefined || geometry === 'pie';
+    const lostIf = (drawn: boolean) => (drawn ? lost : UNDRAWN);
     const paint = {
-        fill: fillOf(chain, walk, { group, style, box, lost: lostIf(OUTLINED) }),
-        ...strokeOf(lines, walk, lostIf(STROKED)),
+        fill: fillOf(chain, walk, { group, style, box, lost: lostIf(native || !!outline?.some((g) => g.filled)) }),
+        ...strokeOf(lines, walk, lostIf(native || linear || !!outline?.some((g) => g.stroked))),
     };
     const painted = paint.fill !== TRANSPARENT_FILL_JSON || paint.strokeColor !== TRANSPARENT_COLOR;
     // A text box is the rectangle itself; any other shape carries its text in an unpainted box on top.
@@ -356,33 +365,82 @@ function readShape(walk: Walk, leaf: Leaf): void {
         if (painted) push(walk, { ...box, ...paint, ...kind });
         textOnTop();
     };
-    switch (geometry) {
-        case 'rect':
-            if (text) push(walk, { type: 'richtext', ...textBox, ...text, ...paint, corners: 'straight' });
-            else if (painted) push(walk, { type: 'rectangle', ...box, ...paint, corners: 'straight' });
-            break;
-        case 'roundRect':
-            shapeAndText({ type: 'rectangle', corners: 'curved' });
-            break;
-        case 'ellipse':
-            shapeAndText({ type: 'ellipse' });
-            break;
-        case 'diamond':
-            shapeAndText({ type: 'diamond', corners: 'straight' });
-            break;
-        case 'pie':
-            shapeAndText({ type: 'pie', ...pieAngles(shaped?.preset, placed) });
-            break;
-        case 'line':
-        case 'straightConnector1':
-            if (paint.strokeColor !== TRANSPARENT_COLOR) push(walk, lineOf(placed, paint, lines.lns));
-            textOnTop();
-            break;
-        default:
-            // Other presets and custGeom: the text stays, the outline is X4b's.
-            if (painted) lost('shapes-simplified');
-            textOnTop();
+    if (kind?.type === 'rectangle' && kind.corners === 'straight') {
+        if (text) push(walk, { type: 'richtext', ...textBox, ...text, ...paint, corners: 'straight' });
+        else if (painted) push(walk, { type: 'rectangle', ...box, ...paint, corners: 'straight' });
+    } else if (kind) shapeAndText(kind);
+    else if (geometry === 'pie') shapeAndText({ type: 'pie', ...pieAngles(shaped?.geom, placed) });
+    else if (linear) {
+        if (paint.strokeColor !== TRANSPARENT_COLOR) push(walk, lineOf(placed, paint, lines.lns));
+        textOnTop();
+    } else if (outline) {
+        for (const element of pathsOf(outline, box, paint)) push(walk, element);
+        textOnTop();
+    } else {
+        // A custGeom or preset past the path caps or the read's budget, or a preset no definition names.
+        if (painted) lost('shapes-simplified');
+        textOnTop();
     }
+}
+
+const LINES = new Set(['line', 'straightConnector1']);
+
+const outlines = cachedBy<string, CustomGeometry[] | undefined>();
+
+// A custGeom's or preset's paths in the shape's own extents, its guides' w and h, mirrored as it lands; worked out once
+// for its geometry however many slides show it.
+function outlineOf(
+    geom: XmlElement | undefined,
+    geometry: string,
+    { xfrm, mirrored }: Placed,
+): CustomGeometry[] | undefined {
+    if (!geom) return undefined;
+    return outlines(geom, `${xfrm.cx} ${xfrm.cy} ${mirrored}`, () => {
+        const found =
+            geometry === 'custGeom'
+                ? customGeometry(geom, xfrm.cx, xfrm.cy)
+                : presetGeometry(geometry, childOf(geom, A_NS, 'avLst'), xfrm.cx, xfrm.cy);
+        return mirrored ? found?.map((g) => ({ ...g, path: mirroredPath(g.path) })) : found;
+    });
+}
+
+// Each geometry a path at the shape's box: a filled one in the shape's fill, shaded where it says, a stroked one in its
+// line. A filled path with an open subpath fills it closed, as PowerPoint does, and strokes it open beside.
+function pathsOf(outline: CustomGeometry[], box: Box, paint: { fill: string } & Stroke): NewVectorElement[] {
+    const paths: NewVectorElement[] = [];
+    const { fill: shapeFill, ...stroke } = paint;
+    for (const { path, closed, filled, stroked, shade } of outline) {
+        const fill = filled ? shadedFill(shapeFill, shade) : TRANSPARENT_FILL_JSON;
+        const line = stroked ? stroke : NO_STROKE;
+        const fills = fill !== TRANSPARENT_FILL_JSON;
+        if (!fills && line.strokeColor === TRANSPARENT_COLOR) continue;
+        if (closed || !fills) paths.push({ type: 'path', ...box, path, closed, fill, ...line });
+        else {
+            paths.push({ type: 'path', ...box, path: closedPath(path), closed: true, fill, ...NO_STROKE });
+            if (line.strokeColor !== TRANSPARENT_COLOR)
+                paths.push({ type: 'path', ...box, path, closed: false, fill: TRANSPARENT_FILL_JSON, ...line });
+        }
+    }
+    return paths;
+}
+
+// A shading path's fill, the shape's blended toward white or black, a gradient's at both ends.
+function shadedFill(fill: string, shade: number | undefined): string {
+    if (shade === undefined) return fill;
+    const paint = parseFill(fill);
+    if (paint.type === 'solid') return serializeFill({ ...paint, color: shaded(paint.color, shade) });
+    return serializeFill({ ...paint, from: shaded(paint.from, shade), to: shaded(paint.to, shade) });
+}
+
+// Each sRGB channel of a #rrggbb or #rrggbbaa, its alpha kept, as LibreOffice shades.
+function shaded(color: string, shade: number): string {
+    if (isTransparentColor(color)) return color;
+    const channels = [1, 3, 5].map((at) => {
+        const channel = Number.parseInt(color.slice(at, at + 2), 16);
+        const blended = shade > 0 ? channel + (255 - channel) * shade : channel * (1 + shade);
+        return Math.round(blended).toString(16).padStart(2, '0');
+    });
+    return `#${channels.join('')}${color.slice(7)}`;
 }
 
 // A box turned about its centre: a quarter turn, or three, swaps its sides.
@@ -393,8 +451,6 @@ function turned(box: Box, turn: number): Box {
     return { x: cx - width / 2, y: cy - height / 2, width, height, angle: normalizeAngle(box.angle + turn) };
 }
 
-const OUTLINED = new Set(['rect', 'roundRect', 'ellipse', 'diamond', 'pie']);
-const STROKED = new Set([...OUTLINED, 'line', 'straightConnector1']);
 const UNDRAWN: Lost = () => {};
 
 // The title's text, one line, for the frame's name.
@@ -460,33 +516,27 @@ function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
 // A pie's adj1 and adj2 are angles on the ellipse as drawn in its own box; the kind's are its box-normalized circle's,
 // which a group's scale leaves alone.
 function pieAngles(preset: XmlElement | undefined, placed: Placed): { startAngle: number; sweepAngle: number } {
-    const list = preset && childOf(preset, A_NS, 'avLst');
-    const guides = list ? guidesOf(list) : new Map<string, number>();
     const { cx: width, cy: height } = placed.xfrm;
+    const list = preset && childOf(preset, A_NS, 'avLst');
+    const guides =
+        list && pieGuides(list, `${width} ${height}`, () => evaluateGuides(width, height, guideListOf(list)));
+    const degrees = (name: string, fallback: number) => {
+        const value = guides?.get(name);
+        return value === undefined ? fallback : value / DEGREE;
+    };
     const parametric = (visual: number) => {
         const r = (visual * Math.PI) / 180;
         return normalizeAngle((Math.atan2(width * Math.sin(r), height * Math.cos(r)) * 180) / Math.PI);
     };
-    const start = parametric(guides.get('adj1') ?? 0);
-    const end = parametric(guides.get('adj2') ?? 270);
+    const start = parametric(degrees('adj1', 0));
+    const end = parametric(degrees('adj2', 270));
     const sweep = normalizeAngle(end - start) || 360;
     // A mirrored slice runs the other way round its box.
     return { startAngle: placed.mirrored ? normalizeAngle(180 - start - sweep) : start, sweepAngle: sweep };
 }
 
-const guideValues = cachedBy<null, Map<string, number>>();
-
-// An avLst's guides in degrees, read once however many shapes its placeholder places.
-function guidesOf(list: XmlElement): Map<string, number> {
-    return guideValues(list, null, () => {
-        const guides = new Map<string, number>();
-        for (const gd of childrenOf(list, A_NS, 'gd')) {
-            const [, value] = xmlAttr(gd, '', 'fmla')?.match(/^val\s+(-?\d+)$/) ?? [];
-            if (value !== undefined) guides.set(xmlAttr(gd, '', 'name') ?? '', Number(value) / 60_000);
-        }
-        return guides;
-    });
-}
+// A pie's avLst evaluated once for its extents, however many shapes its placeholder places.
+const pieGuides = cachedBy<string, Guides | undefined>();
 
 function lineOf(placed: Placed, stroke: Stroke, lns: XmlElement[]): NewVectorElement {
     const { start, end } = placed;

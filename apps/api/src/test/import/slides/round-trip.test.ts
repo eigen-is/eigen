@@ -9,6 +9,7 @@ import {
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
     serializeFill,
+    TRANSPARENT_FILL,
     type VectorElement,
     writeElementInDoc,
     writeFrameInDoc,
@@ -20,8 +21,7 @@ import { eigenslidesToPptx } from '../../../lib/export/slides/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { PIXEL_PNG } from '../../fixtures/pptx';
 
-// A deck exported to .pptx and read back: what the writer states, the reader reads the same. A rounded diamond and a
-// painted rounded text box are left out: the writer draws both as custGeom, whose outline the reader drops.
+// A deck exported to .pptx and read back: what the writer states, the reader reads the same.
 
 const FRAME = { width: 1920, height: 1080 };
 
@@ -113,11 +113,11 @@ const ELEMENTS: NewVectorElement[] = [
 
 const BACKGROUND: BackgroundFill = { type: 'gradient', from: '#102030', to: '#f0e0d0', angle: 135 };
 
-function roundTrip() {
+function roundTrip(elements = ELEMENTS) {
     const doc = new Y.Doc();
     writeFrameInDoc(doc, { id: 'f1', index: 'a0', ...FRAME, background: serializeBackgroundFill(BACKGROUND) });
-    const keys = generateNKeysBetween(null, null, ELEMENTS.length);
-    for (const [i, element] of ELEMENTS.entries())
+    const keys = generateNKeysBetween(null, null, elements.length);
+    for (const [i, element] of elements.entries())
         writeElementInDoc(doc, { ...element, frameId: 'f1' }, keys[i], SLIDES_STYLE_DEFAULTS, `el-${i}`);
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
     const media = [{ name: 'pic.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG.slice()) }];
@@ -226,5 +226,116 @@ describe('a deck exported and read back', () => {
         expect(deck.media).toHaveLength(1);
         expect(new Uint8Array(deck.media[0].data)).toEqual(PIXEL_PNG);
         expect(slide.elements.at(-1)).toMatchObject({ mediaName: deck.media[0].name, objectFit: 'fill' });
+    });
+});
+
+// A path's numbers, each within 0.0001 of the unit box's.
+function expectPath(found: unknown, wanted: string) {
+    const tokens = (path: string) => path.split(' ');
+    const [back, sent] = [tokens(String(found)), tokens(wanted)];
+    expect(back.map((token) => /[A-Z]/.test(token) && token)).toEqual(
+        sent.map((token) => /[A-Z]/.test(token) && token),
+    );
+    for (const [i, token] of sent.entries())
+        if (!/[A-Z]/.test(token)) expect(Math.abs(Number(back[i]) - Number(token))).toBeLessThanOrEqual(0.0001);
+}
+
+describe('paths exported and read back', () => {
+    const solid = serializeFill({ type: 'solid', color: '#336699', style: 'solid' });
+    const PATHS: NewVectorElement[] = [
+        {
+            type: 'path',
+            x: 100,
+            y: 100,
+            width: 400,
+            height: 300,
+            angle: 10,
+            // Clockwise, its hole the other way round, as the reader winds a contour inside another.
+            path: 'M 0 0 L 1 0 C 1 0.3333 1.05 0.6667 1 1 L 0 1 Z M 0.25 0.25 Q 0.2 0.5 0.25 0.75 L 0.75 0.75 L 0.75 0.25 Z',
+            closed: true,
+            fill: solid,
+            strokeColor: '#222222',
+            strokeWidth: 3,
+            strokeStyle: 'dashed',
+        },
+        {
+            type: 'path',
+            x: 600,
+            y: 100,
+            width: 300,
+            height: 120,
+            angle: 0,
+            path: 'M 0 0 C 0.3 1 0.7 1 1 0 L 1 0.5',
+            closed: false,
+            strokeColor: '#c0504d',
+            strokeWidth: 2,
+        },
+        {
+            type: 'path',
+            x: 1000,
+            y: 100,
+            width: 200,
+            height: 400,
+            angle: 0,
+            path: 'M 0.5 0 L 1 1 L 0 1 Z',
+            closed: true,
+            fill: gradient('#ff0000', '#0000ff', 60),
+        },
+    ];
+    const ROUNDED: NewVectorElement[] = [
+        { type: 'diamond', x: 100, y: 600, width: 300, height: 200, angle: 0, corners: 'curved', fill: solid },
+        {
+            type: 'richtext',
+            x: 600,
+            y: 600,
+            width: 400,
+            height: 200,
+            angle: 0,
+            html: '<p>Rounded</p>',
+            corners: 'curved',
+            fill: solid,
+        },
+    ];
+    const { sent, deck } = roundTrip([...PATHS, ...ROUNDED]);
+    const [slide] = deck.slides;
+
+    test('come back as paths of the same geometry, box, paint and stroke', () => {
+        expect(deck.warnings).toEqual([]);
+        for (const [i, element] of sent.slice(0, PATHS.length).entries()) {
+            const found = slide.elements[i];
+            if (element.type !== 'path') throw new Error('not a path');
+            expect(found).toMatchObject({
+                type: 'path',
+                closed: element.closed,
+                strokeColor: element.strokeColor,
+                strokeStyle: element.strokeStyle,
+            });
+            expectPath(found.path, element.path);
+            for (const field of ['x', 'y', 'width', 'height'] as const) expectPx(found[field], element[field]);
+            expectDegrees(found.angle, element.angle);
+            if (element.strokeColor !== 'transparent') expectPx(found.strokeWidth, element.strokeWidth);
+            const [fill, back] = [parseFill(element.fill), parseFill(String(found.fill))];
+            if (fill.type === 'gradient' && back.type === 'gradient') {
+                expectDegrees(back.angle, fill.angle);
+                expect([back.from, back.to]).toEqual([fill.from, fill.to]);
+            } else expect(back).toEqual(element.closed ? fill : TRANSPARENT_FILL);
+        }
+    });
+
+    test('a rounded diamond and a painted rounded text box, which the writer draws as custGeom, come back as paths', () => {
+        const [diamond, box, text] = slide.elements.slice(PATHS.length);
+        expect(slide.elements).toHaveLength(PATHS.length + 3);
+        expect(diamond).toMatchObject({ type: 'path', closed: true, fill: solid });
+        expect(String(diamond.path)).toMatch(/^M [^MZ]* C [^MZ]* Z$/);
+        expect(box).toMatchObject({ type: 'path', closed: true, fill: solid });
+        expect(text).toMatchObject({ type: 'richtext', html: '<p>Rounded</p>' });
+        for (const [found, element] of [
+            [diamond, ROUNDED[0]],
+            [box, ROUNDED[1]],
+            [text, ROUNDED[1]],
+        ] as const) {
+            expectPx(found.x, Number(element.x));
+            expectPx(found.width, Number(element.width));
+        }
     });
 });

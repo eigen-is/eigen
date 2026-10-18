@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { type NewVectorElement, SLIDE_SIZES } from '@workspace/lib/vector';
+import * as customGeometryModule from '../../../lib/import/slides/custom-geometry';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
+import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
 import { MAX_GROUP_DEPTH } from '../../../lib/import/slides/shapes';
 import {
     box,
@@ -36,6 +38,10 @@ const elementsOf = (shapes: string, fixture: Partial<PptxFixture> = {}): NewVect
 const element = (shapes: string, fixture: Partial<PptxFixture> = {}) => elementsOf(shapes, fixture)[0];
 
 const FILLED = solid('FF0000');
+
+const custGeom = (paths: string) => `<a:custGeom><a:avLst/><a:gdLst/><a:pathLst>${paths}</a:pathLst></a:custGeom>`;
+const TRIANGLE =
+    '<a:path w="2" h="2"><a:moveTo><a:pt x="1" y="0"/></a:moveTo><a:lnTo><a:pt x="2" y="2"/></a:lnTo><a:lnTo><a:pt x="0" y="2"/></a:lnTo><a:close/></a:path>';
 
 function expectBox(found: NewVectorElement | undefined, x: number, y: number, width: number, height: number) {
     expect(found?.x).toBeCloseTo(x, 6);
@@ -321,18 +327,127 @@ describe('kinds', () => {
         expect(stacked.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
     });
 
-    test('another preset or a custGeom keeps its text, drops its outline, and says so', () => {
+    test('a preset with no kind of its own, or a custGeom, is a path at its box in its paint, its text on top', () => {
         const deck = deckOf({
             slides: [
                 {
                     shapes:
-                        sp({ xfrm: box(0, 0, 10, 10), geom: 'rightArrow', spPr: FILLED, text: para('Next') }) +
+                        sp({
+                            xfrm: box(10, 20, 200, 100),
+                            geom: 'rightArrow',
+                            spPr: `${FILLED}<a:ln w="12700">${solid('00FF00')}</a:ln>`,
+                            text: para('Next'),
+                        }) + sp({ xfrm: box(0, 0, 10, 20), spPr: `${custGeom(TRIANGLE)}${FILLED}` }),
+                },
+            ],
+        });
+        const [arrow, text, triangle] = deck.slides[0].elements;
+        expect(arrow).toMatchObject({
+            type: 'path',
+            path: presetGeometry('rightArrow', undefined, 200 * PX, 100 * PX)?.[0].path,
+            closed: true,
+            strokeColor: '#00ff00',
+        });
+        expectBox(arrow, 10, 20, 200, 100);
+        expect(JSON.parse(String(arrow.fill))).toMatchObject({ type: 'solid', color: '#ff0000' });
+        expect(text).toMatchObject({ type: 'richtext', html: '<p>Next</p>', strokeColor: 'transparent' });
+        expectBox(text, 10, 20, 200, 100);
+        expect(triangle).toMatchObject({ type: 'path', path: 'M 0.5 0 L 1 1 L 0 1 Z', closed: true });
+        expect(deck.slides[0].elements).toHaveLength(3);
+        expect(deck.warnings).toEqual([]);
+    });
+
+    test('the flowchart presets PowerPoint draws as a rectangle, an ellipse or a diamond are those kinds', () => {
+        const [process, connector, decision] = elementsOf(
+            sp({ xfrm: box(0, 0, 10, 10), geom: 'flowChartProcess', spPr: FILLED, text: para('Step') }) +
+                sp({ xfrm: box(0, 0, 10, 10), geom: 'flowChartConnector', spPr: FILLED }) +
+                sp({ xfrm: box(0, 0, 10, 10), geom: 'flowChartDecision', spPr: FILLED }),
+        );
+        expect(process).toMatchObject({ type: 'richtext', html: '<p>Step</p>', corners: 'straight' });
+        expect(JSON.parse(String(process.fill))).toMatchObject({ color: '#ff0000' });
+        expect([connector.type, decision.type, decision.corners]).toEqual(['ellipse', 'diamond', 'straight']);
+    });
+
+    test("a shading path fills in the shape's fill blended toward black or white, its alpha kept; a line has no fill", () => {
+        const square =
+            '<a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="1" y="0"/></a:lnTo><a:lnTo><a:pt x="1" y="1"/></a:lnTo><a:close/>';
+        const paths = ['darken', 'lightenLess', 'none'].map(
+            (fill) => `<a:path w="1" h="1" fill="${fill}"${fill === 'none' ? '' : ' stroke="0"'}>${square}</a:path>`,
+        );
+        const translucent = '<a:solidFill><a:srgbClr val="FF0000"><a:alpha val="50000"/></a:srgbClr></a:solidFill>';
+        const found = elementsOf(
+            sp({
+                xfrm: box(0, 0, 10, 10),
+                spPr: `${custGeom(paths.join(''))}${translucent}<a:ln>${solid('0000FF')}</a:ln>`,
+            }),
+        );
+        expect(found.map((path) => [JSON.parse(String(path.fill)).color, path.strokeColor])).toEqual([
+            ['#99000080', 'transparent'],
+            ['#ff333380', 'transparent'],
+            ['transparent', '#0000ff'],
+        ]);
+    });
+
+    test('a filled path left open fills closed and strokes open beside; unfilled, it only strokes', () => {
+        const open = custGeom(
+            '<a:path w="2" h="2"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="2" y="0"/></a:lnTo><a:lnTo><a:pt x="2" y="2"/></a:lnTo></a:path>',
+        );
+        const line = `<a:ln>${solid('0000FF')}</a:ln>`;
+        const [fill, stroke] = elementsOf(sp({ xfrm: box(0, 0, 10, 10), spPr: `${open}${FILLED}${line}` }));
+        expect(fill).toMatchObject({ path: 'M 0 0 L 1 0 L 1 1 Z', closed: true, strokeColor: 'transparent' });
+        expect(stroke).toMatchObject({ path: 'M 0 0 L 1 0 L 1 1', closed: false, strokeColor: '#0000ff' });
+        expect(JSON.parse(String(stroke.fill))).toMatchObject({ color: 'transparent' });
+        const unfilled = elementsOf(sp({ xfrm: box(0, 0, 10, 10), spPr: `${open}<a:noFill/>${line}` }));
+        expect(unfilled.map((path) => [path.path, path.closed])).toEqual([['M 0 0 L 1 0 L 1 1', false]]);
+    });
+
+    test('a flipped path mirrors its points across its box: flipH as it is turned, flipV half a turn more', () => {
+        const corner = custGeom(
+            '<a:path w="2" h="2"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="2" y="0"/></a:lnTo><a:lnTo><a:pt x="0" y="2"/></a:lnTo><a:close/></a:path>',
+        );
+        const flipped = (attributes: string) =>
+            deckOf({ slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10, attributes), spPr: `${corner}${FILLED}` }) }] });
+        const pathAndAngle = (attributes: string) => {
+            const [found] = flipped(attributes).slides[0].elements;
+            return [found.path, found.angle];
+        };
+        expect(pathAndAngle('')).toEqual(['M 0 0 L 1 0 L 0 1 Z', 0]);
+        expect(pathAndAngle(' flipH="1"')).toEqual(['M 1 0 L 0 0 L 1 1 Z', 0]);
+        expect(pathAndAngle(' flipV="1"')).toEqual(['M 1 0 L 0 0 L 1 1 Z', 180]);
+        expect(pathAndAngle(' flipH="1" flipV="1"')).toEqual(['M 0 0 L 1 0 L 0 1 Z', 180]);
+        expect(flipped(' flipH="1"').warnings).toEqual([]);
+    });
+
+    test('a custGeom past the caps or empty, or a preset no definition names, keeps its text and says so', () => {
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes:
+                        sp({ xfrm: box(0, 0, 10, 10), geom: 'notAPreset', spPr: FILLED, text: para('Next') }) +
                         sp({ xfrm: box(0, 0, 10, 10), spPr: `<a:custGeom/>${FILLED}` }),
                 },
             ],
         });
         expect(deck.slides[0].elements.map((found) => [found.type, found.html])).toEqual([['richtext', '<p>Next</p>']]);
         expect(deck.warnings).toContainEqual({ code: 'shapes-simplified', count: 2 });
+    });
+
+    test("a layout placeholder's custGeom converts once for every slide that shows it, each still drawn", () => {
+        const convert = spyOn(customGeometryModule, 'customGeometry');
+        try {
+            const placeholder = (spPr: string) =>
+                sp({ ph: '<p:ph type="body" idx="1"/>', xfrm: box(0, 0, 10, 20), spPr, text: para('x') });
+            const deck = deckOf({
+                layouts: [{ shapes: placeholder(`${custGeom(TRIANGLE)}${FILLED}`) }],
+                slides: [{ shapes: placeholder('') }, { shapes: placeholder('') }, { shapes: placeholder('') }],
+            });
+            expect(deck.slides.map((slide) => slide.elements.map((found) => found.type))).toEqual(
+                Array(3).fill(['path', 'richtext']),
+            );
+            expect(convert).toHaveBeenCalledTimes(1);
+        } finally {
+            convert.mockRestore();
+        }
     });
 
     test('a shape with neither fill nor line nor text draws nothing', () => {
