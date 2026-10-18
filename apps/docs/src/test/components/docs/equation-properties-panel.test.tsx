@@ -1,7 +1,8 @@
 // The Equation panel edits a draft of the selected equation's LaTeX: the preview draws the draft, Enter or a blur
 // writes it when it parses, Enter returning to the document after the equation, and Escape drops it. A draft that
 // doesn't parse is never written and shows where the reader stopped. `\name` and a space give the command's braces,
-// and a symbol menu inserts its command at the field's caret.
+// and a symbol menu inserts its command at the field's caret. A draft that starts with <math is MathML, read as a stored
+// one is.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -12,7 +13,7 @@ const { act, createElement, createRef } = await import('react');
 const { Editor } = await import('@tiptap/react');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { NodeSelection } = await import('@tiptap/pm/state');
-const { MATHML_NAMESPACE, readLatex, writeMathml } = await import('@workspace/math');
+const { MATH_LIMITS, MATHML_NAMESPACE, readLatex, writeMathml } = await import('@workspace/math');
 const { Equation } = await import('../../../components/docs/extensions/equation');
 const { EquationPropertiesPanel } = await import('../../../components/docs/equation-properties-panel');
 
@@ -187,6 +188,45 @@ test('a draft that does not parse is never written, and shows its error where th
     // The draft stays for the user to finish, and the preview shows the equation as it stands.
     expect(field().value).toBe('\\frac{a');
     expect(preview()?.querySelector('msup')).not.toBeNull();
+});
+
+test('MathML in the field previews and writes its tree, the LaTeX of its tree the annotation', async () => {
+    const editor = await mount();
+    await type(
+        `  <math xmlns="${MATHML_NAMESPACE}"><mfrac><mi>a</mi><msup><mi>b</mi><mn>2</mn></msup></mfrac></math>\n`,
+    );
+    expect(field().getAttribute('aria-invalid')).toBe('false');
+    expect(preview()?.querySelector('mfrac')).not.toBeNull();
+    await act(async () => field().blur());
+
+    expect(stored(editor)?.['mathml']).toBe(typed('\\frac{a}{b^{2}}'));
+    expect(field().value).toBe('\\frac{a}{b^{2}}');
+});
+
+test("MathML with LaTeX of its own writes that LaTeX, and with LaTeX the reader refuses its tree's", async () => {
+    const editor = await mount();
+    await type(writeMathml(readLatex('\\frac12'), '\\frac12'));
+    await act(async () => field().blur());
+    expect(stored(editor)?.['mathml']).toBe(typed('\\frac12'));
+
+    await type(writeMathml(readLatex('y'), '\\nosuch'));
+    await act(async () => field().blur());
+    expect(stored(editor)?.['mathml']).toBe(typed('y'));
+});
+
+test.each([
+    ['unclosed', '<math><mi>x</mi>'],
+    ['past the length bound', `<math><mi>x</mi>${' '.repeat(MATH_LIMITS.mathmlLength)}</math>`],
+])('MathML %s is never written and shows an error', async (_, draft) => {
+    const editor = await mount();
+    await type(draft);
+    await key('Enter');
+    await act(async () => field().blur());
+
+    expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
+    expect(field().getAttribute('aria-invalid')).toBe('true');
+    expect(document.getElementById(field().getAttribute('aria-describedby') ?? '')?.textContent).toContain('MathML');
+    expect(field().value).toBe(draft);
 });
 
 test.each([
