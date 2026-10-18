@@ -5,7 +5,7 @@ import { A_NS, C_NS, R_NS } from '../../core/ooxml';
 import { readChart } from '../../core/ooxml-chart';
 import { type XmlElement, xmlElements } from '../../core/xml';
 import { colorOf, mutedColor, textColorOf } from './inherit';
-import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
+import { affords, cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
 import type { DeckWalk, Part } from './package';
 
 // A graphic frame's chart: its c:chartSpace part through the core chart reader, from the caches, which hold every
@@ -26,19 +26,22 @@ export const CHART_PAINT = {
     roughness: FLAT_CHART_PAINT.roughness,
 } satisfies VectorElementPatch;
 
-const read = cachedBy<DrawingTheme, FrameChart>();
+const read = cachedBy<DrawingTheme, FrameChart | undefined>();
 
 // The chart a:graphicData names through the relationships of the part it is in; none when the part is missing, of
-// another type or doesn't parse. A part is read once for each colour map it is painted with, however many frames on
-// however many slides name it.
+// another type, doesn't parse or costs more work than the read has left. A part is read once for each colour map it is
+// painted with, however many frames on however many slides name it.
 export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors: DrawingTheme): FrameChart | undefined {
     const reference = childOf(data, C_NS, 'chart');
     const root = deck.pkg.chart(from, reference && prefixedAttrOf(reference, R_NS, 'id'));
     return (
         root &&
         read(root, colors, () => {
-            // Read again for every colour map a slide paints it with, so each read is charged its elements.
-            charge(nodesIn(root));
+            // Read again for every colour map a slide paints it with, so each read is charged its elements; one the
+            // budget can't cover costs only its box, as a docx's chart past a cap does.
+            const nodes = nodesIn(root);
+            if (!affords(nodes)) return undefined;
+            charge(nodes);
             const answer = readChart(root, { theme: colors, data: 'cache' });
             if (!('spec' in answer)) return answer;
             const color = textColorIn(root, colors);

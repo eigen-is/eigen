@@ -2,7 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
 import { A_NS, P_NS, parseOoxml, R_NS } from '../../../lib/core/ooxml';
 import { type XmlElement, xmlAttr } from '../../../lib/core/xml';
-import { childOf, childrenOf, firstChildOf, prefixedAttrOf, withWorkBudget } from '../../../lib/import/slides/lookup';
+import {
+    affords,
+    charge,
+    childOf,
+    childrenOf,
+    firstChildOf,
+    prefixedAttrOf,
+    withWorkBudget,
+} from '../../../lib/import/slides/lookup';
 import { countVisits, NS } from '../../fixtures/pptx';
 
 // The reader's lookups into an element: a layout's, master's or theme's is looked into again by everything inheriting
@@ -62,6 +70,17 @@ describe('a lookup', () => {
             childOf(few, A_NS, 'defRPr');
             childrenOf(few, A_NS, 'x');
             firstChildOf(few, isFill);
+        });
+    });
+
+    test('answers whether the work left covers an amount, charging nothing', () => {
+        withWorkBudget(10, () => {
+            expect(affords(10)).toBe(true);
+            expect(affords(11)).toBe(false);
+            charge(4);
+            expect(affords(6)).toBe(true);
+            expect(affords(7)).toBe(false);
+            charge(6);
         });
     });
 

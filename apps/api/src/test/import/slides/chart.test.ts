@@ -1,9 +1,21 @@
 import { describe, expect, test } from 'bun:test';
 import { parseChartSpec } from '@workspace/lib/charts';
 import { TRANSPARENT_COLOR } from '@workspace/lib/vector';
-import { readPptx } from '../../../lib/import/slides/from-pptx';
+import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
-import { buildPptx, graphicFrame, groupXfrm, grp, NS, type PptxFixture, PX, rel } from '../../fixtures/pptx';
+import {
+    box,
+    buildPptx,
+    graphicFrame,
+    groupXfrm,
+    grp,
+    NS,
+    type PptxFixture,
+    PX,
+    para,
+    rel,
+    sp,
+} from '../../fixtures/pptx';
 
 // A graphic frame's chart: its part read through the core chart reader into a chart element, or the box saying what
 // was there.
@@ -280,9 +292,44 @@ describe('bounds', () => {
             files: { 'ppt/charts/chart1.xml': part },
         });
         const started = performance.now();
-        // Read for each map, the part took a minute.
-        expect(() => readPptx(pptx, OPTIONS)).toThrow('This presentation is too large to import');
+        // Read for each map, the part took a minute; once the work left can't cover a read, the rest are boxes.
+        const deck = readPptx(pptx, OPTIONS);
         expect(performance.now() - started).toBeLessThan(3000);
+        expect(deck.slides[0].elements[0]?.type).toBe('chart');
+        expect(deck.slides[399].elements[0]).toMatchObject({ type: 'richtext', html: '<p>Chart not imported</p>' });
+    });
+
+    test("a chart the read's work left can't cover is left as its box, and the rest of the deck reads", () => {
+        // A master's run read again for each of ten colour maps spends all but 200,000 of the budget.
+        const master = sp({
+            xfrm: box(0, 0, 1, 1),
+            txBox: true,
+            text: `<a:p><a:r><a:t>${'x'.repeat(MAX_PPTX_WORK / 10 - 20_000)}</a:t></a:r></a:p>`,
+        });
+        const slots = ['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
+        const heavy = COLUMN.replace('<c:idx val="0"/>', `<c:idx val="0"/>${'<c:x/>'.repeat(260_000)}`);
+        const deck = readPptx(
+            buildPptx({
+                masters: [{ shapes: master }],
+                slides: slots.map((slot, i) => ({
+                    shapes:
+                        i === 9
+                            ? `${frame()}${sp({ xfrm: box(0, 400, 600, 100), txBox: true, text: para('After') })}`
+                            : '',
+                    rels: i === 9 ? rel('rId5', 'chart', '../charts/chart1.xml') : '',
+                    after: `<p:clrMapOvr><a:overrideClrMapping bg1="${slot}" tx1="dk1" bg2="lt2"/></p:clrMapOvr>`,
+                })),
+                types: chartType('ppt/charts/chart1.xml'),
+                files: { 'ppt/charts/chart1.xml': heavy },
+            }),
+            OPTIONS,
+        );
+        expect(deck.slides).toHaveLength(10);
+        const [text, chart, after] = deck.slides[9].elements;
+        expect(text?.html).toStartWith('<p>xxx');
+        expect(chart).toMatchObject({ type: 'richtext', html: '<p>Chart not imported</p>' });
+        expect(after?.html).toContain('After');
+        expect(deck.warnings).toEqual([{ code: 'charts-dropped', count: 1 }]);
     });
 
     test('many slides naming one large chart part read it once', () => {

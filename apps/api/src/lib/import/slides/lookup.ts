@@ -29,6 +29,11 @@ export function charge(units: number): void {
     if (workLeft < 0) throw new ApiError(413, PRESENTATION_TOO_LARGE);
 }
 
+// Whether the read under way can still do this much, charging nothing: what may be left out, a chart, asks first.
+export function affords(units: number): boolean {
+    return workLeft >= units;
+}
+
 // A value derived from an element once for each key.
 export function cachedBy<K, V>(): (element: XmlElement, key: K, derive: () => V) => V {
     const cache = new WeakMap<XmlElement, Map<K, { value: V }>>();
