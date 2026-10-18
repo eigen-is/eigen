@@ -544,6 +544,11 @@
     }
 }
 
+/* A header's or footer's last block has no space after, as in Word's Header and Footer styles (PAGE_BAND_CLASS) */
+.eigen-prose.page-band > :last-child {
+    margin-bottom: 0;
+}
+
 /* ===== Task lists — TipTap output ===== */
 /* Top-level rather than nested under .eigen-prose/.tiptap so static HTML
    renderers (e.g. NoteCard description thumbnail) get the styling without

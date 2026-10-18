@@ -11,7 +11,7 @@ installHappyDom();
 const Y = await import('yjs');
 const { act, createElement } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { BAND_ROOTS, DEFAULT_PAGE_SETUP } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_ROOTS, DEFAULT_PAGE_SETUP, PAGE_BAND_CLASS } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { useBandEditors, useDocMedia } = await import('../../../components/docs/doc-editor');
@@ -84,6 +84,24 @@ test('the footer margin spans the paper to its bottom edge and ends the band 1.2
         '0px 15mm 12.7mm 10mm',
         '25.4mm',
     ]);
+});
+
+// As in the PDF and the docx: a band never sits inside the body's column.
+test('at a margin narrower than 1.27 cm a band sits on the margin', async () => {
+    const setup = { ...DEFAULT_PAGE_SETUP, margin: { top: 10, right: 15, bottom: 8, left: 10 } };
+    const header = await render(new Y.Doc(), { edge: 'header', setup });
+    expect(header.style.padding).toBe('10mm 15mm 0px 10mm');
+    await unmount();
+    const footer = await render(new Y.Doc(), { edge: 'footer', setup });
+    expect(footer.style.padding).toBe('0px 15mm 8mm 10mm');
+});
+
+// eigen-prose.css drops the last block's space after on PAGE_BAND_CLASS, as the export's bands carry it too.
+test("a band's editor carries the page band class", async () => {
+    const doc = new Y.Doc();
+    write(doc, 'header', 'Acme');
+    await render(doc, { edge: 'header', setup: DEFAULT_PAGE_SETUP });
+    expect(band('header')?.querySelector('.ProseMirror')?.classList.contains(PAGE_BAND_CLASS)).toBe(true);
 });
 
 // Both variants side by side would read as one double header, so a margin shows what the long page's end prints until

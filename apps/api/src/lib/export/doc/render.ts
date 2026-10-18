@@ -11,6 +11,7 @@ import {
     PROSE_TEXTBLOCKS,
     readChartAttrs,
     readFigureAttrs,
+    readPageNumberKind,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import { type MathRow, writeMathml } from '@workspace/math';
@@ -228,15 +229,30 @@ function smaller(capitals: string): string {
     return capitals && `<span style="font-size: ${SYNTHESIZED_SMALL_CAPS_SIZE}">${escapeHtml(capitals)}</span>`;
 }
 
-// The export's and the preview's one render of a doc's body, unsanitized: the DOM the editor holds, but for the PDF's
-// small caps and equations.
+// One export's equations, the body's and its bands' spending one budget: the PDF's SVG drawings, else the MathML in the
+// editor's span, whose rule lays a displayed one out on its line as the editor does.
+export function renderEquations(svgs?: ReadonlyMap<string, EquationDrawing>): ({ node }: { node: Node }) => string {
+    if (svgs) return renderBudgetedEquations((_attrs, key) => svgs.get(key), SVG_LIMIT);
+    return renderBudgetedEquations((attrs) => {
+        const { row, display } = readStoredEquation(attrs);
+        const data = display ? ' data-display="block"' : '';
+        return equationDrawing(`<span class="equation"${data}>${equationMathml(row, display)}</span>`);
+    }, MATHML_LIMIT);
+}
+
+// The export's and the preview's one render of a doc's body or band, unsanitized: the DOM the editor holds, but for the
+// PDF's small caps, its equations and its page numbers, which its stylesheet's counter() fills in.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
-    options?: { lazy?: boolean; synthesizeSmallCaps?: boolean; svgEquations?: ReadonlyMap<string, EquationDrawing> },
+    options?: {
+        lazy?: boolean;
+        synthesizeSmallCaps?: boolean;
+        pageCounters?: boolean;
+        equations?: ({ node }: { node: Node }) => string;
+    },
 ): string {
     const content = inEditorMarkOrder(withTrailingBreaks(json));
-    const svgs = options?.svgEquations;
     return renderToHTMLString({
         content,
         extensions: docExtensions(),
@@ -246,17 +262,12 @@ export function renderDocHtml(
                 taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
-                // In the editor's span, whose rule lays a displayed one out on its line as the editor does.
-                equation: svgs
-                    ? renderBudgetedEquations((_attrs, key) => svgs.get(key), SVG_LIMIT)
-                    : renderBudgetedEquations((attrs) => {
-                          const { row, display } = readStoredEquation(attrs);
-                          const data = display ? ' data-display="block"' : '';
-                          return equationDrawing(
-                              `<span class="equation"${data}>${equationMathml(row, display)}</span>`,
-                          );
-                      }, MATHML_LIMIT),
+                equation: options?.equations ?? renderEquations(),
                 ...(options?.synthesizeSmallCaps && { text: renderTextSynthesizingSmallCaps(content) }),
+                ...(options?.pageCounters && {
+                    pageNumber: ({ node }) =>
+                        `<span data-type="page-number" data-kind="${readPageNumberKind(node.attrs['kind'])}"></span>`,
+                }),
             },
         },
     });

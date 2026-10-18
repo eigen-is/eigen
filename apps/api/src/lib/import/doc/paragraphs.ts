@@ -59,14 +59,18 @@ export type Reader = {
     columnPx: number;
     // Earlier sections whose page differs from it.
     pagesDropped: number;
+    // Pictures a band anchored, which it holds as block figures.
+    bandAnchors: number;
+    // What a band drops: a picture behind the text or a VML one, a letterhead or a watermark, and a note reference.
+    bandDropped: number;
     publicOrigin: string | undefined;
 };
 
-// Per part: its relationships, whether its breaks page, the tables around it, the table style, the cell's width in px
-// and whether the text sits on a fill the schema drops.
+// Per part: its relationships, the story it tells (only the body's breaks page, and only the body's pictures float), the
+// tables around it, the table style, the cell's width in px and whether the text sits on a fill the schema drops.
 export type Scope = {
     part: Part;
-    inNote: boolean;
+    story: 'body' | 'note' | 'band';
     tables: number;
     tableRun?: DocxRunProps;
     room?: number;
@@ -80,7 +84,8 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const styles = new Styles(pkg.styles, theme);
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
-    const page = sectionPage(sectPr);
+    const size = sectionPage(sectPr);
+    const page = { ...size, differentFirstPage: pkg.titlePg };
     const px = pagePx(page);
     const twips = pageTwips(page);
     return {
@@ -103,8 +108,10 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         columnTwips: twips.width - twips.margin.left - twips.margin.right,
         columnPx: Math.floor(px.width - px.margin.left - px.margin.right),
         pagesDropped: descendants(pkg.document.root, W_NS, 'sectPr').filter(
-            (section) => section !== sectPr && !isDeepStrictEqual(sectionPage(section), page),
+            (section) => section !== sectPr && !isDeepStrictEqual(sectionPage(section), size),
         ).length,
+        bandAnchors: 0,
+        bandDropped: 0,
         publicOrigin,
     };
 }
@@ -135,11 +142,21 @@ export function readDocument(reader: Reader): JSONContent[] {
     const body = wChild(reader.pkg.document.root, 'body');
     if (!body) return [];
     const blocks = build(
-        readBlocks(reader, xmlElements(body), { part: reader.pkg.document, inNote: false, tables: 0 }),
+        readBlocks(reader, xmlElements(body), { part: reader.pkg.document, story: 'body', tables: 0 }),
     );
     const notes = readNotes(reader);
     if (notes.length > 0) blocks.push({ type: 'orderedList', attrs: { start: 1, type: null }, content: notes });
     return blocks;
+}
+
+// A header or footer part's blocks, read as the body's are, through the part's own relationships.
+// A band's last block draws no space after (PAGE_BAND_CLASS), so one the docx sets there isn't kept.
+export function readBand(reader: Reader, part: Part): JSONContent[] {
+    reader.fields.length = 0;
+    const blocks = build(readBlocks(reader, xmlElements(part.root), { part, story: 'band', tables: 0 }));
+    const last = blocks.at(-1);
+    if (last?.attrs?.['spaceAfter'] == null) return blocks;
+    return [...blocks.slice(0, -1), { ...last, attrs: { ...last.attrs, spaceAfter: null } }];
 }
 
 // Notes as Eigen holds them: a [n] reference, and at the end one numbered list with a back link per note.
@@ -163,7 +180,7 @@ function readNotes(reader: Reader): JSONContent[] {
         const note = byType[ref.type].get(ref.id);
         if (!part || !note) continue;
         reader.fields.length = 0;
-        const blocks = build(readBlocks(reader, xmlElements(note), { part, inNote: true, tables: 0 }));
+        const blocks = build(readBlocks(reader, xmlElements(note), { part, story: 'note', tables: 0 }));
         if (blocks[0]?.type === 'paragraph') trimStart(blocks[0].content ?? []);
         const back: JSONContent[] = [
             { type: 'text', text: ' ' },
@@ -357,7 +374,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // A paragraph whose mark and text are hidden is not there at all.
     const markHidden = direct.markHidden ?? styles.run(styleId).vanish ?? false;
     const items: Item[] = [];
-    if (props.pageBreakBefore && !scope.inNote) items.push({ kind: 'break' });
+    if (props.pageBreakBefore && scope.story === 'body') items.push({ kind: 'break' });
     const split = halves.length > 1;
     let numbered = false;
     for (const [index, half] of halves.entries()) {
@@ -436,7 +453,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         } else if (item.kind === 'table') item.indent += indLeft;
         items.push(item);
     }
-    if (props.sectionBreak && !scope.inNote) items.push({ kind: 'break' });
+    if (props.sectionBreak && scope.story === 'body') items.push({ kind: 'break' });
     return items;
 }
 

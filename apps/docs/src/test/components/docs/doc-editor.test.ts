@@ -87,10 +87,9 @@ test("a band's schema has every mark of the body's and its nodes but BAND_EXCLUD
     const doc = new Y.Doc();
     const page = body(doc);
     const header = mount(doc, HEADER);
-    const excluded: readonly string[] = BAND_EXCLUDED_NODES;
     expect(Object.keys(header.schema.marks)).toEqual(Object.keys(page.schema.marks));
     expect(Object.keys(header.schema.nodes)).toEqual(
-        Object.keys(page.schema.nodes).filter((name) => !excluded.includes(name)),
+        Object.keys(page.schema.nodes).filter((name) => !BAND_EXCLUDED_NODES.has(name)),
     );
 });
 
