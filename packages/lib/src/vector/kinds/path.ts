@@ -14,6 +14,8 @@ const CURVE_TOLERANCE = 0.5;
 const MAX_CURVE_STEPS = 64;
 // SVG's default stroke-miterlimit: a grown vertex moves at most this many times the inflate.
 const MITER_LIMIT = 4;
+// The angle one chord of a grown corner's arc turns, in radians: it sags 0.13 units at an inflate of 15.
+const JOIN_STEP = Math.PI / 12;
 
 export const pathKind = defineKind<VectorPathElement>({
     type: 'path',
@@ -154,8 +156,10 @@ function outerContour(subpaths: Point[][]): Point[] {
     return outer;
 }
 
-// Every edge moved `inflate` outward (inward when negative): each vertex moves along its miter, which
-// for a curve's dense samples follows the offset curve. A vertex sharper than MITER_LIMIT stops there.
+// Every edge moved `inflate` outward (inward when negative), so a point of the result lies `inflate` off the
+// contour, as the binding gap means. Where two moved edges part, an arc about the vertex joins them (a
+// miter would put a sharp tip's dock far past the gap); where they overlap they meet at the miter, held at
+// MITER_LIMIT where the contour nearly doubles back.
 function grownRing(ring: Point[], inflate: number): Point[] {
     const points = ring.filter((p, i) => {
         const next = ring[(i + 1) % ring.length];
@@ -168,10 +172,25 @@ function grownRing(ring: Point[], inflate: number): Point[] {
         const len = Math.hypot(b.x - a.x, b.y - a.y);
         return { x: (sign * (b.y - a.y)) / len, y: (sign * (a.x - b.x)) / len };
     };
-    return points.map((p, i) => {
-        const n1 = normal(points[(i + points.length - 1) % points.length], p);
-        const n2 = normal(p, points[(i + 1) % points.length]);
+    const out: Point[] = [];
+    points.forEach((p, i) => {
+        const prev = points[(i + points.length - 1) % points.length];
+        const next = points[(i + 1) % points.length];
+        const n1 = normal(prev, p);
+        const n2 = normal(p, next);
+        const turn = (p.x - prev.x) * (next.y - p.y) - (p.y - prev.y) * (next.x - p.x);
+        if (turn * sign * inflate > 0) {
+            const from = Math.atan2(n1.y, n1.x);
+            const sweep = Math.atan2(n1.x * n2.y - n1.y * n2.x, n1.x * n2.x + n1.y * n2.y);
+            const steps = Math.ceil(Math.abs(sweep) / JOIN_STEP);
+            for (let s = 0; s <= steps; s++) {
+                const a = from + (sweep * s) / steps;
+                out.push({ x: p.x + Math.cos(a) * inflate, y: p.y + Math.sin(a) * inflate });
+            }
+            return;
+        }
         const k = Math.max(1 + n1.x * n2.x + n1.y * n2.y, 2 / MITER_LIMIT ** 2);
-        return { x: p.x + ((n1.x + n2.x) * inflate) / k, y: p.y + ((n1.y + n2.y) * inflate) / k };
+        out.push({ x: p.x + ((n1.x + n2.x) * inflate) / k, y: p.y + ((n1.y + n2.y) * inflate) / k });
     });
+    return out;
 }

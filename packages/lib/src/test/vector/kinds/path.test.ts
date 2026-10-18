@@ -11,7 +11,7 @@ import {
 } from '../../../vector/geometry';
 import { capabilitiesOf, ELEMENT_FIELDS, ELEMENT_KINDS, isBindable, storedFields } from '../../../vector/kinds';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parseNormalizedPath } from '../../../vector/kinds/read-fields';
-import { outlineContains, scaleNormalizedPath } from '../../../vector/outline';
+import { type OutlineShape, outlineContains, outlineDistance, scaleNormalizedPath } from '../../../vector/outline';
 import { readVectorFromDoc } from '../../../vector/read-vector';
 import { serializeBinding, type VectorPathElement } from '../../../vector/types';
 import { arrow, byIdOf, path } from '../element-factories';
@@ -267,19 +267,29 @@ describe('path outline and docking', () => {
         expect(capabilitiesOf(open)).toMatchObject({ fill: false, bindable: false, strokeOptional: false });
     });
 
-    test('the outline is the outer contour, grown by the inflate', () => {
+    test('the outline is the outer contour, every point of it the inflate off the edge', () => {
         const outline = ELEMENT_KINDS.path.outline(box(FRAME, { x: 10, y: 20 }), 5);
-        expect(outline).toEqual({
+        if (outline.kind !== 'polygon') throw new Error('a closed path outlines as a polygon');
+        const square: OutlineShape = {
             kind: 'polygon',
             corners: [
-                { x: 5, y: 15 },
-                { x: 215, y: 15 },
-                { x: 215, y: 225 },
-                { x: 5, y: 225 },
+                { x: 10, y: 20 },
+                { x: 210, y: 20 },
+                { x: 210, y: 220 },
+                { x: 10, y: 220 },
             ],
-        });
+        };
+        for (const p of outline.corners) expect(outlineDistance(square, p)).toBeCloseTo(5, 9);
         // the hole is the path's own business: an arrow docks on the outside
         expect(outlineContains(outline, { x: 110, y: 120 })).toBe(true);
+    });
+
+    test('a sharp tip grows by the inflate, not by its miter', () => {
+        // a spike 20 wide and 200 tall: its tip's miter would reach 60 units past it
+        const spike = box('M 0 1 L 0.5 0 L 1 1 Z', { width: 20 });
+        const outline = ELEMENT_KINDS.path.outline(spike, 6);
+        if (outline.kind !== 'polygon') throw new Error('a closed path outlines as a polygon');
+        expect(Math.min(...outline.corners.map((p) => p.y))).toBeCloseTo(-6, 9);
     });
 
     test('a shrunk outline keeps only what lies deeper than the inset', () => {
