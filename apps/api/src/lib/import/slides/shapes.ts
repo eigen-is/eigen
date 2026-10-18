@@ -75,9 +75,8 @@ const DROPPED = {
 type Dropped = keyof typeof DROPPED;
 
 // A chart the reader can't draw as the file does says which kind it was, and its title.
-function droppedChart({ title, type }: { title: string; type: string }): string[] {
-    const kind = type.replace(/Chart$/, '').replace(/([a-z])([A-Z0-9])/g, '$1 $2');
-    const label = kind ? `${kind[0].toUpperCase()}${kind.slice(1)} chart not imported` : DROPPED.chart.label;
+function droppedChart({ title, name }: { title: string; name: string }): string[] {
+    const label = name ? `${name} chart not imported` : DROPPED.chart.label;
     return title ? [label, title] : [label];
 }
 

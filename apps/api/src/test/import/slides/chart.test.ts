@@ -201,10 +201,29 @@ describe('a chart left as a box', () => {
         const deck = deckWith(SCATTER);
         expect(boxOf(deck)).toEqual({ type: 'richtext', html: '<p>Scatter chart not imported</p><p>Spread</p>' });
         expect(deck.warnings).toEqual([{ code: 'charts-dropped', count: 1 }]);
-        const bar3D = chartSpace(
-            `<c:bar3DChart><c:barDir val="col"/><c:grouping val="percentStacked"/>${ser(0, 'S', [1, 2, 3])}</c:bar3DChart>`,
-        );
-        expect(boxOf(deckWith(bar3D)).html).toBe('<p>Bar 3D chart not imported</p>');
+    });
+
+    test("the box names the kind as PowerPoint's Insert Chart does, a bar plot by its direction", () => {
+        const plot = (local: string, inner = '') =>
+            `<c:${local}>${inner}<c:grouping val="percentStacked"/>${ser(0, 'S', [1, 2, 3])}</c:${local}>`;
+        const cases: [string, string][] = [
+            [plot('barChart', '<c:barDir val="col"/>'), 'Column'],
+            [plot('barChart', '<c:barDir val="bar"/>'), 'Bar'],
+            [plot('bar3DChart', '<c:barDir val="col"/>'), '3-D Column'],
+            [plot('bar3DChart', '<c:barDir val="bar"/>'), '3-D Bar'],
+            [plot('ofPieChart', '<c:ofPieType val="pie"/>'), 'Pie of pie'],
+            [plot('ofPieChart', '<c:ofPieType val="bar"/>'), 'Bar of pie'],
+            [plot('doughnutChart'), 'Doughnut'],
+            [plot('area3DChart'), '3-D Area'],
+            [plot('radarChart'), 'Radar'],
+            [plot('bubbleChart'), 'Bubble'],
+            [plot('stockChart'), 'Stock'],
+            [plot('surface3DChart'), '3-D Surface'],
+            [`${plot('barChart', '<c:barDir val="col"/>')}${plot('lineChart')}`, 'Combo'],
+        ];
+        for (const [inner, name] of cases)
+            expect(boxOf(deckWith(chartSpace(inner))).html).toBe(`<p>${name} chart not imported</p>`);
+        expect(boxOf(deckWith(chartSpace(plot('futureChart')))).html).toBe('<p>Chart not imported</p>');
     });
 
     test("a box writes in the slide's tx1 and outlines in a muted version, so it reads on a dark theme", () => {

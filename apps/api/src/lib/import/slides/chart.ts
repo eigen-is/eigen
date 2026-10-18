@@ -3,7 +3,7 @@ import type { VectorElementPatch } from '@workspace/lib/vector';
 import type { DrawingTheme } from '../../core/drawingml';
 import { A_NS, C_NS, R_NS } from '../../core/ooxml';
 import { readChart } from '../../core/ooxml-chart';
-import { type XmlElement, xmlElements } from '../../core/xml';
+import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import { colorOf, mutedColor, textColorOf } from './inherit';
 import { affords, cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
 import type { DeckWalk, Part } from './package';
@@ -15,7 +15,7 @@ import type { DeckWalk, Part } from './package';
 // can't draw as the file does.
 export type FrameChart =
     | { chart: string; color: string; strokeColor: string }
-    | { unsupported: { title: string; type: string } };
+    | { unsupported: { title: string; name: string } };
 
 // Painted as a document's and a sheet's charts are, in Inter, unfilled as PowerPoint's plot area; coloured as the slide.
 export const CHART_PAINT = {
@@ -43,11 +43,49 @@ export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors:
             if (!affords(nodes)) return undefined;
             charge(nodes);
             const answer = readChart(root, { theme: colors, data: 'cache' });
-            if (!('spec' in answer)) return answer;
+            if (!('spec' in answer)) return { unsupported: { title: answer.unsupported.title, name: chartName(root) } };
             const color = textColorIn(root, colors);
             return { chart: JSON.stringify(answer.spec), color, strokeColor: mutedColor(color) };
         })
     );
+}
+
+// PowerPoint's names for a plot's kind, a bar plot's by its c:barDir and an of-pie plot's by its c:ofPieType.
+const CHART_NAMES = new Map([
+    ['areaChart', 'Area'],
+    ['area3DChart', '3-D Area'],
+    ['barChart col', 'Column'],
+    ['barChart bar', 'Bar'],
+    ['bar3DChart col', '3-D Column'],
+    ['bar3DChart bar', '3-D Bar'],
+    ['bubbleChart', 'Bubble'],
+    ['doughnutChart', 'Doughnut'],
+    ['lineChart', 'Line'],
+    ['line3DChart', '3-D Line'],
+    ['ofPieChart pie', 'Pie of pie'],
+    ['ofPieChart bar', 'Bar of pie'],
+    ['pieChart', 'Pie'],
+    ['pie3DChart', '3-D Pie'],
+    ['radarChart', 'Radar'],
+    ['scatterChart', 'Scatter'],
+    ['stockChart', 'Stock'],
+    ['surfaceChart', 'Surface'],
+    ['surface3DChart', '3-D Surface'],
+]);
+
+// What the box says was there: two plots are a combo, a plot of no kind PowerPoint names is none. The part's elements
+// are charged already, so its plot area is scanned directly.
+function chartName(root: XmlElement): string {
+    const chart = childOf(root, C_NS, 'chart');
+    const plotArea = chart && childOf(chart, C_NS, 'plotArea');
+    const groups = plotArea
+        ? xmlElements(plotArea).filter((element) => element.ns === C_NS && element.local.endsWith('Chart'))
+        : [];
+    if (groups.length > 1) return 'Combo';
+    const [group] = groups;
+    if (!group) return '';
+    const option = childOf(group, C_NS, 'barDir') ?? childOf(group, C_NS, 'ofPieType');
+    return CHART_NAMES.get(option ? `${group.local} ${xmlAttr(option, '', 'val')}` : group.local) ?? '';
 }
 
 // c:txPr's colour, else the slide's tx1.
