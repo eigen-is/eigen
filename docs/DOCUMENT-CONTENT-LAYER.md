@@ -1,10 +1,10 @@
 # Document Content Layer
 
-> **TLDR:** The server reads Eigen documents to export them, preview them and index them for search, and writes docs and sheets to import a file into them. `apps/api/src/lib/document/` holds a reader for every Eigen document type and a writer for docs and sheets. The heavy readers run in a child process, off the API's event loop, and import parses its file there too. **The writers replace, they don't merge**: an import into a document someone is editing discards their pending work, and nothing checks for an open session first.
+> **TLDR:** The server reads Eigen documents to export them, preview them and index them for search, and writes docs, sheets and decks to import a file into them. `apps/api/src/lib/document/` holds a reader for every Eigen document type and a writer for docs, sheets and decks. The heavy readers run in a child process, off the API's event loop, and import parses its file there too. **The docs and sheets writers replace, they don't merge**: an import into a document someone is editing discards their pending work, and nothing checks for an open session first. The deck writer appends, so a pptx imported into a deck adds its slides.
 
 Most of the time the server does not look inside a document. A collab document is Yjs data that the browsers edit, and the server only relays and stores it ([COLLAB.md](COLLAB.md)). Four features need the content as content. Export turns a document into a file such as DOCX, XLSX, PDF or SVG ([EXPORT.md](EXPORT.md)). Preview renders what Drive shows of a file before it is opened ([PREVIEWS.md](PREVIEWS.md)). Search pulls the text out for its content index ([SEARCH.md](SEARCH.md)). Import turns a `.docx` into a doc or an `.xlsx` into a sheet, either a new one or by replacing an existing one's content.
 
-A reader turns a stored document into plain data: a doc into ProseMirror JSON (the editor's document tree), a sheet into its cells, a slide deck or drawing into a scene of elements. A writer goes the other way, for docs and sheets only.
+A reader turns a stored document into plain data: a doc into ProseMirror JSON (the editor's document tree), a sheet into its cells, a slide deck or drawing into a scene of elements. A writer goes the other way, for docs, sheets and slide decks.
 
 A collab document is stored as compressed Yjs blobs in the `data.db` of its container, the Drive folder that holds the document. Materializing it means applying those blobs to a fresh `Y.Doc` in memory, and that costs CPU in proportion to the document's size. So the heavy work runs in a transform process, a separate Bun process that keeps it off the event loop every other request shares ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). The main thread copies the blobs out, and the transform builds the `Y.Doc` and runs the reader. A transform has no Mount, the object through which Drive reaches a mount's files and databases ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)). That is why a reader takes a `Y.Doc` and never a Mount. A stickies board is small and a chat is not Yjs at all, so those two readers run on the main thread, and only search uses them.
 
@@ -16,7 +16,8 @@ Two details surprise people: capture leaves the database open, because a live se
 |---|---|---|---|
 | `.eigendoc` | `readEigendocFromDoc`, `readEigendocPage` (`doc.ts`) | ProseMirror `JSONContent`, the `PageSetup` | `commitEigendocImport` |
 | `.eigensheets` | `readSheetsFromDoc` (`sheets.ts`) | `{ sheets, recalcError }` | `writeSheetsSnapshotToYjs` |
-| `.eigenslides`, `.eigenvector` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` | none |
+| `.eigenslides` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` | `writeSlidesUpdateToYjs`, `appendSlidesUpdateToYjs` (`slides.ts`), for the pptx import |
+| `.eigenvector` | `readVectorFromDoc` | `VectorScene` | none |
 | `.eigenstickies` | `readStickiesContent` (`stickies.ts`, main thread) | card and column text | none |
 | `.eigenchat` | `readChatContent` (`chat.ts`, main thread) | the newest messages as text | none |
 
@@ -24,7 +25,7 @@ The caller captures the blobs with `captureCollabSource`, and the transform hand
 
 ## The canvas reader lives in packages/lib
 
-`readVectorFromDoc` serves both canvas types and reaches the API over the React-free `./vector` subpath. The editor and the server share it because it is the scene's trust boundary ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). Slides and drawings have no writer, so a canvas can't be imported.
+`readVectorFromDoc` serves both canvas types and reaches the API over the React-free `./vector` subpath. The editor and the server share it because it is the scene's trust boundary ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). The deck writer reads its update back through it before writing, and writes through the same package's `write-vector.ts` ([SLIDES.md](SLIDES.md#the-deck-writer-appends-and-never-rewrites-the-deck)). A drawing has no writer.
 
 ## Capture leaves the database open
 
@@ -44,11 +45,13 @@ These two serve only the search extract, and both are cheap. `readStickiesConten
 
 Only the export read recalcs, and only a workbook nobody computed ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). A recalc that throws falls back to the replayed values and reports `recalcError`, so an export never fails on it.
 
-## The writers replace, they don't merge
+## The docs and sheets writers replace, they don't merge
 
 `writeSheetsSnapshotToYjs` sets `state.snapshot` and clears `ops` in one transaction. `commitEigendocImport` clears the `default` fragment and the header and footer fragments, applies a prepared Yjs update and sets the page keys, in one transaction; clearing first is what makes an import a replacement ([EXPORT.md](EXPORT.md#a-docx-import-replaces-the-document)). The import's transform builds that update itself (`apps/api/src/lib/import/doc/transform.ts`). The import path hands both writers what the transform produced, so the main thread never parses the file ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-transform-succeeds)).
 
 Both write into the live `CollabDocument`, so the change persists and reaches connected editors like any edit, and a sheet editor remounts on the new snapshot. But nothing merges. The sheet ops a peer made since the last flush are cleared with the rest, and a peer's unsynced typing inside a deleted paragraph has nowhere to land. `convertToDocument` writes into a document it has just created, so no one can be editing it. `importIntoDocument` writes into an existing one, and `Drive` has no check for an open session. The live-safe writers are open work in [ROADMAP.md](ROADMAP.md).
+
+The deck writers append instead: every slide and element they write is a new record under a fresh id, and nothing the deck holds is rewritten, so a live editor keeps its slides, its undo stack and its comments ([SLIDES.md](SLIDES.md#the-deck-writer-appends-and-never-rewrites-the-deck)).
 
 ## See also
 

@@ -159,7 +159,7 @@ export function getFontSet(format: CellStyle | null | undefined, defaultFontSize
     fontAttr.push(!format?.bl ? 'normal' : 'bold');
 
     // font-size
-    fontAttr.push(`${format?.fs ? Math.ceil(format.fs) : defaultFontSize}pt`);
+    fontAttr.push(`${format?.fs || defaultFontSize}pt`);
 
     return `${fontAttr.join(' ')} "${cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name}",${FALLBACK_FAMILIES}`;
 }

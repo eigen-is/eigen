@@ -3,12 +3,24 @@ import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
 import { readStoredEquation } from '../../lib/document/equation';
 
 const x: MathRow = [{ kind: 'identifier', text: 'x' }];
-const empty = { row: [], latex: undefined, mathml: `<math xmlns="${MATHML_NAMESPACE}"></math>`, display: false };
+const empty = {
+    row: [],
+    latex: undefined,
+    mathml: `<math xmlns="${MATHML_NAMESPACE}"></math>`,
+    text: '',
+    display: false,
+};
 
 describe('readStoredEquation', () => {
     test("reads a stored equation through Bun's parser", () => {
         const mathml = writeMathml(x, 'x');
-        expect(readStoredEquation({ mathml, display: true })).toEqual({ row: x, latex: 'x', mathml, display: true });
+        expect(readStoredEquation({ mathml, display: true })).toEqual({
+            row: x,
+            latex: 'x',
+            mathml,
+            text: 'x',
+            display: true,
+        });
     });
 
     // The browser's DOMParser reports these in the document, Bun's parser throws: both read as an empty equation.

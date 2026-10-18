@@ -1,4 +1,10 @@
-import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_FONT_SIZE, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import {
+    SHEET_COLUMN_HEADER_HEIGHT,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_FONT_SIZE,
+    SHEET_DEFAULT_ROW_HEIGHT,
+    SHEET_ROW_HEADER_WIDTH,
+} from '@workspace/lib/sheets';
 import { isNil, sortBy } from 'es-toolkit/compat';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
@@ -52,6 +58,8 @@ export type Context = {
     insertedImgs?: Image[];
     editingInsertedImgs?: Image;
     activeImg?: string;
+    // The selected chart on the current sheet, and whether its editor sidebar is open.
+    activeChart?: { id: string; editor: boolean };
     presences?: Presence[];
     // Transient find highlight state (UI-only, never persisted/synced — like
     // formulaRangeHighlight; filterPatch drops non-sheets[*] patches).
@@ -273,8 +281,8 @@ export function defaultContext(refs: RefValues): Context {
         toolbarHeight: 41,
         infobarHeight: 57,
         calculatebarHeight: 29,
-        rowHeaderWidth: 46,
-        columnHeaderHeight: 20,
+        rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
+        columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
         cellMainSrollBarSize: 12,
         tableContentSize: [0, 0],
 

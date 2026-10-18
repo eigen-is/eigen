@@ -1,0 +1,229 @@
+// The Chart panel edits the selected chart's spec and frame through the doc's own undo manager: each change one undo
+// step, a typed title too, and Edit data's Save one write.
+import { afterEach, expect, test } from 'bun:test';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { renderInDocument } from '@workspace/ui/test/render-in-document';
+
+installHappyDom();
+
+const Y = await import('yjs');
+const { act, createElement, useState } = await import('react');
+const { Editor, EditorContent } = await import('@tiptap/react');
+const { default: Collaboration } = await import('@tiptap/extension-collaboration');
+const { parseChartSpec } = await import('@workspace/lib/charts');
+const { getFontFamily } = await import('@workspace/lib/constants/fonts');
+const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { Chart } = await import('../../../components/docs/extensions/chart');
+const { createDocUndoManager } = await import('../../../components/docs/page-setup');
+const { ChartDataEditor, ChartPropertiesPanel } = await import('../../../components/docs/chart-properties-panel');
+
+let unmount = async () => {};
+afterEach(() => unmount());
+
+const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+
+// A collab editor holding one inserted chart, selected, its panel and its Edit data dialog mounted as the editor
+// mounts them. Every write past the insert would be its own undo step but for a hold, as captureTimeout is 0.
+async function mount() {
+    const doc = new Y.Doc();
+    const undoManager = createDocUndoManager(doc);
+    const editor = new Editor({
+        extensions: [
+            ...getDocExtensions({ exclude: ['chart'] }),
+            Chart,
+            Collaboration.configure({ document: doc, yUndoOptions: { undoManager } }),
+        ],
+    });
+    editor.commands.insertChart('column');
+    undoManager.stopCapturing();
+    undoManager.captureTimeout = 0;
+    function Host() {
+        const [open, setOpen] = useState(false);
+        return createElement(
+            'div',
+            null,
+            createElement('div', { 'data-document': '' }, createElement(EditorContent, { editor })),
+            createElement(ChartPropertiesPanel, { editor, undoManager, onEditData: () => setOpen(true) }),
+            open && createElement(ChartDataEditor, { editor, undoManager, onClose: () => setOpen(false) }),
+        );
+    }
+    const rendered = await renderInDocument(createElement(Host));
+    unmount = async () => {
+        await rendered.unmount();
+        editor.destroy();
+    };
+    const spec = () => parseChartSpec(editor.state.doc.nodeAt(1)?.attrs.spec ?? '');
+    return { editor, undoManager, spec };
+}
+
+const dialog = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+const button = (scope: ParentNode | undefined, label: string) => {
+    const found = [...(scope?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+        (el) => el.textContent?.trim() === label,
+    );
+    if (!found) throw new Error(`no ${label} button`);
+    return found;
+};
+const click = (target: HTMLElement) =>
+    act(async () => {
+        target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+// A row's control sits beside its label span.
+const row = (label: string) => {
+    const span = [...document.querySelectorAll('span.w-14')].find((s) => s.textContent?.trim() === label);
+    const control = span?.nextElementSibling;
+    if (!(control instanceof HTMLElement)) throw new Error(`no "${label}" row`);
+    return control;
+};
+const choose = async (label: string, option: string) => {
+    const trigger = row(label).querySelector('[data-slot="select-trigger"]');
+    await act(async () => {
+        trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const list = [...document.querySelectorAll('[data-slot="select-content"]')].at(-1);
+    const item = [...(list?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])].find(
+        (el) => el.textContent?.trim() === option,
+    );
+    if (!item) throw new Error(`no "${option}" option under "${label}"`);
+    await act(async () => {
+        item.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+};
+// The grid opens on A1, as a sheet does, so B2 is selected before it is typed in.
+const typeInB2 = async (value: string) => {
+    const b2 = dialog()?.querySelector('[role="row"][aria-rowindex="3"] > [aria-colindex="3"]');
+    await act(async () => {
+        b2?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    });
+    await type(dialog()?.querySelector<HTMLInputElement>('input[data-cell-editor]'), value);
+};
+const type = (input: HTMLInputElement | null | undefined, value: string) =>
+    act(async () => {
+        if (!input) throw new Error('no field to type in');
+        input.focus();
+        setValue?.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+// A keydown on the field, returned so the test can see whether the browser's own handling of it was prevented.
+const press = async (input: HTMLInputElement | null, init: KeyboardEventInit) => {
+    const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
+    await act(async () => {
+        input?.dispatchEvent(event);
+    });
+    return event;
+};
+
+test('a title typed into the panel is one undo step, and the chart stays selected', async () => {
+    const { editor, undoManager, spec } = await mount();
+    const input = document.querySelector<HTMLInputElement>('input[placeholder="Chart title"]');
+    for (const typed of ['G', 'Go', 'Goa', 'Goal']) await type(input, typed);
+    await act(async () => {
+        input?.dispatchEvent(new Event('focusout', { bubbles: true }));
+    });
+    expect(spec()?.title).toBe('Goal');
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
+
+    undoManager.undo();
+    expect(spec()?.title).toBe('Points scored');
+});
+
+// The field still holds the caret after typing, so ⌘Z reaches the field, not the editor's keymap. The browser's own
+// field undo would walk the text back a character at a time, writing each one.
+const fieldTitle = {
+    'Chart title': (spec: ReturnType<typeof parseChartSpec>) => spec?.title,
+    'Horizontal axis title': (spec: ReturnType<typeof parseChartSpec>) => spec?.categoryAxis?.title,
+    'Vertical axis title': (spec: ReturnType<typeof parseChartSpec>) => spec?.valueAxis?.title,
+};
+for (const [placeholder, read] of Object.entries(fieldTitle)) {
+    test(`⌘Z in the ${placeholder} field takes the typed text back as one step, and ⇧⌘Z puts it back`, async () => {
+        const { spec } = await mount();
+        const input = document.querySelector<HTMLInputElement>(`input[placeholder="${placeholder}"]`);
+        const before = read(spec());
+        for (const typed of ['G', 'Go', 'Goa', 'Goal']) await type(input, typed);
+        expect(read(spec())).toBe('Goal');
+
+        const undo = await press(input, { key: 'z', metaKey: true });
+        expect(undo.defaultPrevented).toBe(true);
+        expect(read(spec())).toBe(before);
+        expect(input?.value).toBe(before ?? '');
+
+        const redo = await press(input, { key: 'z', metaKey: true, shiftKey: true });
+        expect(redo.defaultPrevented).toBe(true);
+        expect(read(spec())).toBe('Goal');
+        expect(input?.value).toBe('Goal');
+    });
+}
+
+test("a font picked in the Font row is one undo step, and the chart's labels draw in it", async () => {
+    const { undoManager, spec } = await mount();
+    expect(spec()?.fontFamily).toBe('Inter');
+    const label = [...document.querySelectorAll('span.w-14')].find((span) => span.textContent?.trim() === 'Font');
+    const trigger = label?.nextElementSibling?.querySelector('button[aria-haspopup="menu"]');
+    await act(async () => {
+        trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+    });
+    const serif = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (item) => item.textContent === 'Source Serif 4',
+    );
+    if (!serif) throw new Error('no Source Serif 4 in the Font menu');
+    await click(serif);
+    expect(spec()?.fontFamily).toBe('Source Serif 4');
+    const fonts = new Set(
+        [...document.querySelectorAll('[data-document] svg text')].map((t) => t.getAttribute('font-family')),
+    );
+    expect(fonts).toEqual(new Set([getFontFamily('Source Serif 4')]));
+
+    undoManager.undo();
+    expect(spec()?.fontFamily).toBe('Inter');
+});
+
+test("a Style toggle wraps the chart in one undo step and lights it, the spec's rows untouched", async () => {
+    const { editor, undoManager, spec } = await mount();
+    const before = spec();
+    // The Style toggles, own line, wrap left and wrap right, are the panel's first.
+    const wrapLeft = document.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')[1];
+    expect(wrapLeft.getAttribute('aria-pressed')).toBe('false');
+    await click(wrapLeft);
+    expect(editor.state.doc.nodeAt(1)?.attrs.layout).toBe('wrap-left');
+    expect(wrapLeft.getAttribute('aria-pressed')).toBe('true');
+    expect(spec()).toEqual(before);
+
+    undoManager.undo();
+    expect(editor.state.doc.nodeAt(1)?.attrs.layout).toBe('block');
+});
+
+test("the sample's colors are Automatic, and a picked color and a Stacking pick are one undo step each", async () => {
+    const { undoManager, spec } = await mount();
+    expect(row('Period 1').textContent).toBe('Automatic');
+    expect(row('Period 2').textContent).toBe('Automatic');
+
+    await click(row('Period 2').querySelector('button') ?? document.body);
+    const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
+    if (!swatch) throw new Error('the color popover has no swatch');
+    await click(swatch);
+    const picked = spec();
+    expect(picked?.data.series.map((series) => series.color)).toEqual([null, swatch.title]);
+    undoManager.undo();
+    expect(spec()?.data.series.map((series) => series.color)).toEqual([null, null]);
+
+    await choose('Stacking', '100%');
+    expect(spec()?.stacking).toBe('percent');
+    undoManager.undo();
+    expect(spec()?.stacking).toBe('none');
+});
+
+test('Edit data saves the grid as one undo step', async () => {
+    const { undoManager, spec } = await mount();
+    await click(button(document.body, 'Edit data'));
+    await typeInB2('7');
+    await click(button(dialog(), 'Save'));
+    const saved = spec();
+    expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);
+    expect(dialog()).toBeUndefined();
+
+    undoManager.undo();
+    const undone = spec();
+    expect(undone?.data.source === 'inline' && undone.data.series[0].values[0]).toBe(42);
+});

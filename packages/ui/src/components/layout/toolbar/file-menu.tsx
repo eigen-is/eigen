@@ -50,6 +50,8 @@ type FileMenuProps = {
     createIcon?: LucideIcon;
     createType: EigenDocType;
     children?: ReactNode;
+    // An editor that takes focus back once the menu closes passes its keep-focus handler.
+    onCloseAutoFocus?: (event: Event) => void;
 };
 
 export function FileMenu({
@@ -63,6 +65,7 @@ export function FileMenu({
     createIcon: CreateIcon = FileText,
     createType,
     children,
+    onCloseAutoFocus,
 }: FileMenuProps) {
     const [createOpen, setCreateOpen] = useState(false);
     const [openPickerOpen, setOpenPickerOpen] = useState(false);
@@ -89,7 +92,7 @@ export function FileMenu({
 
     return (
         <>
-            <ToolbarMenu label="File">
+            <ToolbarMenu label="File" onCloseAutoFocus={onCloseAutoFocus}>
                 {/* Section 1: Create & Open */}
                 <DropdownMenuItem onClick={() => setCreateOpen(true)}>
                     <CreateIcon className="h-4 w-4 mr-2" /> {createLabel}

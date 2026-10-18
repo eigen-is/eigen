@@ -13,7 +13,9 @@ mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useDriveViewPreferences: () => ({ sortKey: 'name', sortDir: 'asc' }),
 }));
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => ({ user: { id: 'owner-1' } }) }));
+const session = { user: { id: 'owner-1' } };
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
 mock.module('../../../components/drive/drive-browser', () => ({ DriveBrowser: () => null }));
 
 const { act, createElement } = await import('react');

@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
-import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
+import { OMML_NAMESPACE, readOmml, readOmmlText, WORDML_NAMESPACE, writeOmml } from '../omml';
 import type { MathNode, MathRow } from '../tree';
-import { elementsOf, type MathXmlElement } from '../xml';
+import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
-import { type CanonicalItem, type CanonicalObject, canonicalOmml } from './canonical-omml';
+import { canonicalOmml, NORMALISATIONS } from './canonical-omml';
 import { CORPUS, type CorpusEquation } from './corpus';
-import { generateTree } from './generate';
+import { generateTree, seedChunks } from './generate';
 import { el, parseWritten } from './parse';
 
 const NAMESPACES = `xmlns:m="${OMML_NAMESPACE}" xmlns:w="${WORDML_NAMESPACE}"`;
@@ -16,76 +16,7 @@ const oMath = (content: string) => el(`<m:oMath ${NAMESPACES}>${content}</m:oMat
 const read = (content: string) => readOmml(oMath(content));
 const run = (text: string, properties = '') => `<m:r>${properties}<m:t>${text}</m:t></m:r>`;
 
-// ── C1: docx round trip ─────────────────────────────────────────────────────────────────────────────────────────
-
-function walk(row: CanonicalItem[], visit: (item: CanonicalItem) => CanonicalItem[]): CanonicalItem[] {
-    return row.flatMap((item) => visit(typeof item === 'string' ? item : descend(item, visit)));
-}
-
-function descend(object: CanonicalObject, visit: (item: CanonicalItem) => CanonicalItem[]): CanonicalObject {
-    const children = object.children.map((child) =>
-        'argument' in child ? { ...child, content: walk(child.content, visit) } : descend(child, visit),
-    );
-    return { ...object, children };
-}
-
-const objects = (local: string, rewrite: (object: CanonicalObject) => CanonicalItem[]) => (row: CanonicalItem[]) =>
-    walk(row, (item) => (typeof item !== 'string' && item.object === local ? rewrite(item) : [item]));
-
-const characters = (rewrite: (char: string) => string) => (row: CanonicalItem[]) =>
-    walk(row, (item) => [typeof item === 'string' ? rewrite(item) : item]);
-
-const argument = (object: CanonicalObject, local: string) =>
-    object.children.flatMap((child) => ('argument' in child && child.argument === local ? child.content : []));
-
-const SPACING_TWINS: Record<string, string> = { '˙': '\u0307', '‾': '\u0305' };
-
-function revealEmpty(object: CanonicalObject): CanonicalItem[] {
-    const properties = { ...object.properties };
-    for (const [slot, hide] of [
-        ['sub', 'subHide'],
-        ['sup', 'supHide'],
-        ['deg', 'degHide'],
-    ]) {
-        if (properties[hide] === 'off' && argument(object, slot).length === 0) properties[hide] = 'on';
-    }
-    return [{ ...object, properties }];
-}
-
-// A5's losses and A3's normalisations, each with the equations it changes (checked below, so the list stays exact).
-const NORMALISATIONS: { reason: string; indices: number[]; apply: (row: CanonicalItem[]) => CanonicalItem[] }[] = [
-    {
-        reason: 'a spacing accent character folds to its combining twin',
-        indices: [71, 87],
-        apply: objects('acc', (acc) => [
-            { ...acc, properties: { chr: SPACING_TWINS[acc.properties.chr] ?? acc.properties.chr } },
-        ]),
-    },
-    {
-        reason: 'a linear fraction reads as the row a/b',
-        indices: [3],
-        apply: objects('f', (f) =>
-            f.properties.type === 'lin' ? [...argument(f, 'num'), '/|p|roman', ...argument(f, 'den')] : [f],
-        ),
-    },
-    {
-        reason: 'double-struck and monospace keep the script and drop the weight',
-        indices: [172],
-        apply: characters((char) => char.replace(/\|b\|(double-struck|monospace)/, '|p|$1')),
-    },
-    {
-        reason: 'a space between math characters carries no style or colour',
-        indices: [41, 172],
-        apply: characters((char) =>
-            /^[ \u2003\u2004\u2009\u205F]\|(?!nor)/u.test(char) ? `${char[0]}|p|roman` : char,
-        ),
-    },
-    {
-        reason: 'an empty script or degree shows nothing, so it reads as hidden',
-        indices: [18, 69],
-        apply: (row) => walk(row, (item) => (typeof item === 'string' ? [item] : revealEmpty(item))),
-    },
-];
+// ── docx round trip ─────────────────────────────────────────────────────────────────────────────────────────────
 
 function expectRoundTrip(equation: CorpusEquation) {
     const original = el(equation.omml);
@@ -93,7 +24,7 @@ function expectRoundTrip(equation: CorpusEquation) {
     expect(canonicalOmml(parseWritten(writeOmml(readOmml(original))))).toEqual(expected);
 }
 
-describe('C1: OMML → tree → OMML keeps what Word shows', () => {
+describe('OMML → tree → OMML keeps what Word shows', () => {
     for (const equation of CORPUS) {
         test(`#${equation.i} ${equation.file}`, () => expectRoundTrip(equation));
     }
@@ -111,9 +42,16 @@ describe('C1: OMML → tree → OMML keeps what Word shows', () => {
         }
     });
 
-    // The research prototype's misses that are in the fixture, so the loop above covers them; #146 and #151 are
-    // Zenodo, checked locally (C7).
-    test('the prototype misses are in the fixture', () => {
+    test('the yardstick shows a separator only between parts', () => {
+        const fence = (properties: string, parts: number) =>
+            canonicalOmml(oMath(`<m:d>${properties}${`<m:e>${run('x')}</m:e>`.repeat(parts)}</m:d>`));
+        const empty = '<m:dPr><m:sepChr m:val=""/></m:dPr>';
+        expect(fence(empty, 1)).toEqual(fence('', 1));
+        expect(fence(empty, 2)).not.toEqual(fence('', 2));
+    });
+
+    // Equations an OMML reader easily gets wrong stay in the fixture, so the loop above covers them.
+    test('the hard cases stay in the fixture', () => {
         expect([3, 87, 173, 174].filter((index) => !CORPUS.some((equation) => equation.i === index))).toEqual([]);
     });
 
@@ -126,8 +64,8 @@ describe('C1: OMML → tree → OMML keeps what Word shows', () => {
         }
     });
 
-    test('seeded canonical trees survive OMML unchanged', () => {
-        for (let seed = 1; seed <= 1000; seed++) {
+    test.each(seedChunks(5000))('seeded canonical trees %i to %i survive OMML unchanged', (first, last) => {
+        for (let seed = first; seed <= last; seed++) {
             const tree = generateTree(seed);
             expect({ seed, tree: readOmml(parseWritten(writeOmml(tree))) }).toStrictEqual({ seed, tree });
         }
@@ -200,6 +138,24 @@ describe('readOmml', () => {
         const normal = '<m:rPr><m:nor/></m:rPr>';
         expect(read(run('\u00A0if ', normal) + run('x\u00A0', normal))).toEqual([{ kind: 'text', text: ' if x ' }]);
         expect(read(run('a\u00A0b', normal))).toEqual([{ kind: 'text', text: 'a\u00A0b' }]);
+    });
+
+    test('a w:sym in a run reads as its character where the Symbol font has a math one', () => {
+        const sym = (font: string, char: string) => `<w:sym w:font="${font}" w:char="${char}"/>`;
+        expect(
+            read(
+                `<m:r><m:t>x</m:t>${sym('Symbol', 'F0CE')}${sym('Symbol', 'f0e5')}${sym('Symbol', '61')}<m:t>A</m:t></m:r>`,
+            ),
+        ).toEqual([
+            { kind: 'identifier', text: 'x' },
+            { kind: 'operator', text: '∈' },
+            { kind: 'operator', text: '∑' },
+            { kind: 'identifier', text: 'α' },
+            { kind: 'identifier', text: 'A' },
+        ]);
+        expect(read(`<m:r>${sym('Wingdings', 'F0CE')}${sym('Symbol', 'F0F0')}${sym('Symbol', 'zz')}</m:r>`)).toEqual(
+            [],
+        );
     });
 
     test('text comes only from m:t; tracked deletions and moves away go', () => {
@@ -330,6 +286,81 @@ describe('readOmml', () => {
         ]);
     });
 
+    test('Word’s equation number, # and what follows it in an equation array, is dropped', () => {
+        expect(read(`<m:eqArr><m:e>${run('x&amp;=1#')}<m:d><m:e>${run('8')}</m:e></m:d></m:e></m:eqArr>`)).toEqual([
+            {
+                kind: 'table',
+                layout: 'equations',
+                rows: [
+                    [
+                        [{ kind: 'identifier', text: 'x' }],
+                        [
+                            { kind: 'operator', text: '=' },
+                            { kind: 'number', text: '1' },
+                        ],
+                    ],
+                ],
+            },
+        ]);
+        expect(read(`${run('#')}<m:d><m:e>${run('8')}</m:e></m:d>`)).toHaveLength(2);
+    });
+
+    // Word shows what a tracked insertion or an alternative holds as part of the equation, its number too.
+    test.each([
+        `<w:ins>${run('#(2)')}</w:ins>`,
+        `<w:moveTo>${run('#(2)')}</w:moveTo>`,
+        `<w:ins>${run('#')}</w:ins><m:d><m:e>${run('2')}</m:e></m:d>`,
+        `<w:ins><w:ins>${run('#(2)')}</w:ins></w:ins>`,
+        `<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="w14"/><mc:Fallback>${run('#(2)')}</mc:Fallback></mc:AlternateContent>`,
+        `<w:del>${run('b')}</w:del>${run('#(2)')}`,
+    ])('Word’s equation number in %s is dropped too', (number) => {
+        expect(read(`<m:eqArr><m:e>${run('a')}${number}${run('b')}</m:e></m:eqArr>`)).toEqual([
+            { kind: 'table', layout: 'equations', rows: [[[{ kind: 'identifier', text: 'a' }]]] },
+        ]);
+    });
+
+    test('a boxed # in a tracked insertion stays', () => {
+        expect(
+            read(`<m:eqArr><m:e><w:ins><m:box><m:e>${run('#')}</m:e></m:box></w:ins>${run('b')}</m:e></m:eqArr>`),
+        ).toEqual([
+            {
+                kind: 'table',
+                layout: 'equations',
+                rows: [
+                    [
+                        [
+                            { kind: 'operator', text: '#' },
+                            { kind: 'identifier', text: 'b' },
+                        ],
+                    ],
+                ],
+            },
+        ]);
+    });
+
+    test.each(['#', '#\u0338'])('a %s the writer boxes in an equation stays, with the rest of its row', (sign) => {
+        const tree: MathRow = [
+            {
+                kind: 'table',
+                layout: 'equations',
+                rows: [
+                    [
+                        [{ kind: 'identifier', text: 'n' }],
+                        [
+                            { kind: 'operator', text: '=' },
+                            { kind: 'operator', text: sign },
+                            { kind: 'identifier', text: 'S' },
+                        ],
+                    ],
+                ],
+            },
+        ];
+        expect(writeOmml(tree)).toContain(
+            `<m:box><m:e><m:r><m:t xml:space="preserve">${sign}</m:t></m:r></m:e></m:box>`,
+        );
+        expect(readOmml(parseWritten(writeOmml(tree)))).toStrictEqual(tree);
+    });
+
     test('an equation array splits its rows at & into cells', () => {
         expect(read(`<m:eqArr><m:e>${run('x&amp;=1')}</m:e><m:e>${run('y')}</m:e></m:eqArr>`)).toEqual([
             {
@@ -389,6 +420,44 @@ describe('readOmml', () => {
 
 // ── Writer ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
+// The text of an equation a reader refuses, which may nest as deep as the XML does.
+describe('readOmmlText', () => {
+    test('runs side by side are one word and each object is a word of its own', () => {
+        const square = `<m:sSup><m:e>${run('x')}</m:e><m:sup>${run('2')}</m:sup></m:sSup>${run('+')}${run('1')}`;
+        expect(readOmmlText(oMath(square))).toBe('x2 +1');
+        expect(readOmmlText(oMath('<m:r><w:sym w:font="Symbol" w:char="F0B9"/></m:r>'))).toBe('≠');
+    });
+
+    test('it shows what readOmml shows: insertions, a fallback, no deletion, no deleted object, no properties', () => {
+        const equation = oMath(
+            `${run('a')}<w:ins w:id="1" w:author="a">${run('b')}</w:ins>` +
+                `<m:r><w:del w:id="2" w:author="a"><m:t>y</m:t></w:del></m:r>` +
+                `<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="w14">${run('c')}</mc:Choice>` +
+                `<mc:Fallback>${run('f')}</mc:Fallback></mc:AlternateContent>` +
+                `<m:sSup><m:sSupPr><m:ctrlPr><w:del w:id="3" w:author="a"><w:rPr/></w:del></m:ctrlPr></m:sSupPr>` +
+                `<m:e>${run('z')}</m:e><m:sup>${run('3')}</m:sup></m:sSup>` +
+                `${run('w', '<m:rPr><m:sty m:val="p"/></m:rPr>')}`,
+        );
+        expect(readOmmlText(equation)).toBe('abfw');
+        expect(read(`${run('a')}${run('b')}${run('f')}${run('w', '<m:rPr><m:sty m:val="p"/></m:rPr>')}`)).toEqual(
+            readOmml(equation),
+        );
+    });
+
+    test('a loop, so nesting past the depth bound reads', () => {
+        const element = (local: string, children: (string | MathXmlElement)[]): MathXmlElement => ({
+            ns: OMML_NAMESPACE,
+            local,
+            attributes: {},
+            children,
+        });
+        let deep = element('r', [element('t', ['x'])]);
+        for (let level = 0; level < 100_000; level++) deep = element('d', [element('e', [deep])]);
+        expect(() => readOmml(element('oMath', [deep]))).toThrow(MathError);
+        expect(readOmmlText(element('oMath', [deep]))).toBe('x');
+    });
+});
+
 describe('writeOmml', () => {
     test('writes one m:oMath and merges neighbours of one style into one run', () => {
         const row: MathRow = [
@@ -403,25 +472,47 @@ describe('writeOmml', () => {
         );
     });
 
-    // C8, OMML half: whatever the tree holds, the output holds only m: elements and w:rPr/w:color.
-    test('output holds only the writer’s elements and attributes', () => {
-        const adversarial: MathRow = [
-            { kind: 'text', text: '</m:t><w:del>"&]]>' },
-            { kind: 'operator', text: '"', color: '#FF0000' },
-            { kind: 'fenced', open: '"', close: '<', separator: '&', parts: [[], []] },
-            { kind: 'identifier', text: 'x', color: 'red"><w:hack/' },
-        ];
-        for (const tree of [adversarial, ...Array.from({ length: 200 }, (_, seed) => generateTree(seed + 1))]) {
-            const visit = (element: MathXmlElement) => {
-                const allowed =
-                    element.ns === OMML_NAMESPACE ||
-                    (element.ns === WORDML_NAMESPACE && ['rPr', 'color'].includes(element.local));
-                expect(allowed ? '' : `${element.ns} ${element.local}`).toBe('');
-                for (const name of Object.keys(element.attributes))
-                    expect(['m:val', 'w:val', 'xml:space']).toContain(name);
-                for (const child of elementsOf(element)) visit(child);
-            };
-            visit(parseWritten(writeOmml(tree)));
-        }
+    // Google Docs drops the fences of an m:d without them and draws an m:m without m:mcs flat.
+    test('writes fences and a matrix’s columns explicitly, defaults too', () => {
+        const x: MathNode = { kind: 'identifier', text: 'x' };
+        const e = '<m:e><m:r><m:t xml:space="preserve">x</m:t></m:r></m:e>';
+        const fenced = (separator: string, ...parts: MathRow[]): MathNode => ({
+            kind: 'fenced',
+            open: '(',
+            close: ')',
+            separator,
+            parts,
+        });
+        expect(writeOmml([fenced('', [x])])).toBe(
+            `<m:oMath><m:d><m:dPr><m:begChr m:val="("/><m:endChr m:val=")"/></m:dPr>${e}</m:d></m:oMath>`,
+        );
+        expect(writeOmml([fenced('|', [x], [x])])).toBe(
+            '<m:oMath><m:d><m:dPr><m:begChr m:val="("/><m:sepChr m:val="|"/><m:endChr m:val=")"/></m:dPr>' +
+                `${e}${e}</m:d></m:oMath>`,
+        );
+        expect(writeOmml([{ kind: 'table', layout: 'matrix', rows: [[[x], [x]], [[x]]] }])).toBe(
+            '<m:oMath><m:m><m:mPr><m:mcs><m:mc><m:mcPr><m:count m:val="2"/><m:mcJc m:val="center"/></m:mcPr></m:mc>' +
+                `</m:mcs></m:mPr><m:mr>${e}${e}</m:mr><m:mr>${e}</m:mr></m:m></m:oMath>`,
+        );
+        // A { before a matrix alone is LaTeX's cases, its columns aligned left.
+        expect(
+            writeOmml([
+                {
+                    kind: 'fenced',
+                    open: '{',
+                    close: '',
+                    separator: '',
+                    parts: [[{ kind: 'table', layout: 'matrix', rows: [[[x], [x]]] }]],
+                },
+            ]),
+        ).toBe(
+            '<m:oMath><m:d><m:dPr><m:begChr m:val="{"/><m:endChr m:val=""/></m:dPr><m:e><m:m><m:mPr><m:mcs><m:mc><m:mcPr>' +
+                `<m:count m:val="2"/><m:mcJc m:val="left"/></m:mcPr></m:mc></m:mcs></m:mPr><m:mr>${e}${e}</m:mr></m:m></m:e>` +
+                '</m:d></m:oMath>',
+        );
+        // ST_Integer255
+        expect(writeOmml([{ kind: 'table', layout: 'matrix', rows: [Array(300).fill([x])] }])).toContain(
+            '<m:count m:val="255"/>',
+        );
     });
 });

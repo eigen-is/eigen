@@ -1,6 +1,7 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
+import type { BandEdge } from '@workspace/lib/docs/eigendoc';
 import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { ToolbarMenu } from '@workspace/ui';
 import {
@@ -15,6 +16,8 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import {
+    AArrowDown,
+    AArrowUp,
     ALargeSmall,
     AlignCenter,
     AlignJustify,
@@ -50,10 +53,10 @@ import {
     TypeOutline,
     Underline,
 } from 'lucide-react';
-import type { BandRequest } from './headers-footers-panel';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
-import { PARAGRAPH_STYLES } from './paragraph-styles';
+import { PageNumberItems, type PageNumberPreset } from './page-numbers';
+import { paragraphStylesIn } from './paragraph-styles';
 import { TABLE_ACTION_ICONS } from './table-action-icons';
 
 // Format › Align and indent and the icon row's Align dropdown name each alignment alike.
@@ -83,7 +86,8 @@ type FormatMenuProps = {
     onRestartNumbering: () => void;
     onPageSetup: () => void;
     onReplaceImage: () => void;
-    onOpenBand?: (request: BandRequest) => void;
+    onEnterBand?: (edge: BandEdge) => void;
+    onPageNumbers?: (preset: PageNumberPreset) => void;
 };
 
 export const FormatMenu = ({
@@ -96,7 +100,8 @@ export const FormatMenu = ({
     onRestartNumbering,
     onPageSetup,
     onReplaceImage,
-    onOpenBand,
+    onEnterBand,
+    onPageNumbers,
 }: FormatMenuProps) => (
     <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuSub>
@@ -122,11 +127,23 @@ export const FormatMenu = ({
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleSubscript().run()}>
                     <Subscript className="h-4 w-4 mr-2" /> Subscript
                 </DropdownMenuItem>
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                        <ALargeSmall className="h-4 w-4 mr-2" /> Size
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                        <DropdownMenuItem onClick={() => editor.chain().focus().stepFontSize(1).run()}>
+                            <AArrowUp className="h-4 w-4 mr-2" /> Increase font size
+                            <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+.')}</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => editor.chain().focus().stepFontSize(-1).run()}>
+                            <AArrowDown className="h-4 w-4 mr-2" /> Decrease font size
+                            <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+,')}</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCode().run()}>
                     <Code className="h-4 w-4 mr-2" /> Inline code
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleSmall().run()}>
-                    <ALargeSmall className="h-4 w-4 mr-2" /> Small
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCaps('small').run()}>
                     <CaseSensitive className="h-4 w-4 mr-2" /> Small caps
@@ -176,7 +193,7 @@ export const FormatMenu = ({
                 <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
                     <Pilcrow className="mr-2 h-4 w-4" /> Normal text
                 </DropdownMenuItem>
-                {PARAGRAPH_STYLES.map(({ name, type, attrs, icon: Icon }) => (
+                {paragraphStylesIn(editor.schema).map(({ name, type, attrs, icon: Icon }) => (
                     <DropdownMenuItem
                         key={name}
                         onClick={() => editor.chain().focus().toggleNode(type, 'paragraph', attrs).run()}
@@ -251,14 +268,19 @@ export const FormatMenu = ({
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
-        {onOpenBand && (
+        {onEnterBand && onPageNumbers && (
             <>
-                <DropdownMenuItem onClick={() => onOpenBand({ band: 'header' })}>
+                <DropdownMenuItem onClick={() => onEnterBand('header')}>
                     <PanelTop className="h-4 w-4 mr-2" /> Headers and footers
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onOpenBand({ section: 'pageNumbers' })}>
-                    <Hash className="h-4 w-4 mr-2" /> Page numbers
-                </DropdownMenuItem>
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                        <Hash className="h-4 w-4 mr-2" /> Page numbers
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                        <PageNumberItems editor={editor} onPreset={onPageNumbers} />
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
             </>
         )}
         <DropdownMenuItem onClick={onPageSetup}>

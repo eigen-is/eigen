@@ -1,24 +1,34 @@
 # Slides
 
-> **TLDR:** A deck is a set of slides that people edit together and then present. Underneath, it is a canvas document whose pages are fixed 16:9 frames, drawn by the canvas engine ([CANVAS.md](CANVAS.md)). `apps/slides/src/components/slides/` is a thin shell over the engine's `CanvasEditor`: it adds the slide rail, present mode, the slide background panel and the slide counter.
+> **TLDR:** A deck is a set of slides that people edit together and then present. Underneath, it is a canvas document whose pages are frames of one size per deck, 16:9 or 4:3, drawn by the canvas engine ([CANVAS.md](CANVAS.md)). `apps/slides/src/components/slides/` is a thin shell over the engine's `CanvasEditor`: it adds the slide rail, present mode, the slide background panel and the slide counter.
 
 A deck is a `.eigenslides` file. Each slide is a frame: one page of the canvas, stored in the `frames` map of the deck's Yjs document ([COLLAB.md](COLLAB.md)). Every element on the deck sits on one frame and stores its position relative to it. The shell mounts the canvas in frame mode, which shows only the active slide, fitted to the screen. Everything else (elements, tools, keymap, clipboard, rich text, comments, ⌘F, previews, export) is the engine's.
 
-So the shell adds only what the engine has no word for: a deck as an ordered list of slides. Three things in it surprise people:
+So the shell adds only what the engine has no word for: a deck as an ordered list of slides. Four things in it surprise people:
 
 - The first writer to open an empty deck seeds it, under fixed ids ([§ The first writer seeds an empty deck](#the-first-writer-seeds-an-empty-deck)).
 - A reorder rewrites one key ([§ A reorder rewrites one key](#a-reorder-rewrites-one-key)).
 - A background reaches other slides only through an explicit Apply ([§ A background reaches other slides only through Apply](#a-background-reaches-other-slides-only-through-apply)).
+- The deck writer, which a pptx Convert and Import slides… write through, appends an update under fresh ids and never rewrites what the deck holds ([§ The deck writer appends and never rewrites the deck](#the-deck-writer-appends-and-never-rewrites-the-deck)).
+- A slide size change moves no element, so a 4:3 deck switched to 16:9 hides what sits below the new edge ([§ A deck has one slide size, and a change moves nothing](#a-deck-has-one-slide-size-and-a-change-moves-nothing)).
 
 ## A slide is a frame, and the shell adds only the deck's words
 
-A slide is a `VectorFrame` (`packages/lib/src/vector/frames.ts`): an id, a fractional `index`, a name and a serialized `BackgroundFill`. Its size is a constant, and its elements carry its `frameId` ([CANVAS.md](CANVAS.md#every-stored-field-is-a-scalar)). Every element kind works on a slide. `SLIDES_STYLE_DEFAULTS` (flat, solid, Inter) decides only how a new element looks.
+A slide is a `VectorFrame` (`packages/lib/src/vector/frames.ts`): an id, a fractional `index`, a name and a serialized `BackgroundFill`. Its size is the deck's slide size, and its elements carry its `frameId` ([CANVAS.md](CANVAS.md#every-stored-field-is-a-scalar)). Every element kind works on a slide. `SLIDES_STYLE_DEFAULTS` (flat, solid, Inter) decides only how a new element looks.
 
-The shell mounts `CanvasEditor` with `viewport="frame"`, so the slide always fits its space, with no zoom and no free pan ([CANVAS.md](CANVAS.md#frame-mode-always-shows-the-whole-page)). It fills the shared `CanvasToolbar`'s two host slots: `insertItems` with New slide and `centerItems` with Present. The engine has no notion of slides, so the slide menu (New slide above or below, Duplicate, Delete) lives in the shell. It opens from a rail thumbnail and from a right-click on empty canvas (`onEmptyContextMenu`). The last slide can't be deleted. A phone gets the deck view-only, with no rail ([MOBILE.md](MOBILE.md)).
+The shell mounts `CanvasEditor` with `viewport="frame"`, so the slide always fits its space, with no zoom and no free pan ([CANVAS.md](CANVAS.md#frame-mode-always-shows-the-whole-page)). It fills the shared `CanvasToolbar`'s three host slots: `fileItems` with Page setup, `insertItems` with New slide and `centerItems` with Present. The engine has no notion of slides, so the slide menu (New slide above or below, Duplicate, Delete) lives in the shell. It opens from a rail thumbnail and from a right-click on empty canvas (`onEmptyContextMenu`). The last slide can't be deleted. A phone gets the deck view-only, with no rail ([MOBILE.md](MOBILE.md)).
+
+## A deck has one slide size, and a change moves nothing
+
+A deck is 16:9 or 4:3. The size is one key, `slideSize` in the deck's `meta` root, and `SLIDE_SIZES` in `packages/lib/src/vector/frames.ts` is the one table of what each means: 16:9 is 1920×1080 and 4:3 is 1920×1440. Both keep the width, as Google's 10-inch slides do. So a switch from 16:9, the size every new deck opens at, to 4:3 adds a band at the bottom and hides nothing, and the export and preview scales, which divide by `FRAME_WIDTH`, hold for both. A frame stores no size of its own: the reader reads the key through `oneOf`, so a missing, unknown or forged value reads as 16:9, and stamps the size on every `VectorFrame`. Everything downstream reads `frame.width` and `frame.height`: the editor's fit, snap and off-page guard, the rail, present mode, the export and the preview. `nearestSlideSize` maps a page of any size to the closer of the two by shape, for an importer.
+
+File → **Page setup…** (`page-setup-dialog.tsx`) offers the two under Google's names, Widescreen 16:9 and Standard 4:3, and a viewer or a phone sees it read-only. Until the user picks, the open dialog shows the deck's size as it is now, a peer's change included, and OK writes only a pick that differs from it, so an untouched OK never overwrites a peer. A change is one `updateMeta` write, sealed, so it is one undo step, and `meta` is in the deck's version-restore roots. Elements keep their stored position and size, as in Google Slides. A switch from 4:3 to 16:9 therefore clips whatever sits below y = 1080, on the canvas, the rail, in present mode and the exports. It is not deleted: ⌘A and a marquee still reach it, and undo or switching back shows it again. Rescaling or re-centering the content would rewrite every element, a bigger write than a page change should be.
+
+The size arrives as a new frame extent with the same frame id, whether this tab or a peer wrote it. `useViewport` re-fits on a change of the extent as it does on a frame switch; without that, the old zoom would stay and cut off the bottom of a slide that grew. The rail's drag card takes the dragged frame's ratio. The drive hero is a fixed 16:9 box, so a 4:3 first slide narrows to the hero's height there (`.drive-preview-hero .page-fit` in `globals.css`).
 
 ## The first writer seeds an empty deck
 
-Nothing server-side writes a container's initial Yjs content, so the first writer to open an empty deck adds a title slide (`seed-deck.ts`). It writes in one transaction under its own origin, so ⌘Z can't empty the deck. It tests the live Y.Doc, not React state, so a second effect pass adds nothing. The frame and the title box use fixed ids, so two people opening the same empty deck at once converge on one title slide instead of two.
+Creating a deck writes no Yjs content, so the first writer to open an empty deck adds a title slide (`seed-deck.ts`). It writes in one transaction under its own origin, so ⌘Z can't empty the deck. It tests the live Y.Doc, not React state, so a second effect pass adds nothing. The frame and the title box use fixed ids, so two people opening the same empty deck at once converge on one title slide instead of two.
 
 The reader reads only `elements`, `frames` and `meta`. A deck with no frames is empty whatever other roots it holds, so a deck stored in an older format opens as a new one and gets seeded. That follows the pre-1.0 rule of no backward compatibility for stored formats ([ROADMAP.md](ROADMAP.md)).
 
@@ -46,9 +56,17 @@ The background panel (`slide-background-panel.tsx`) mounts in the engine panel's
 
 A background is a `BackgroundFill` (`packages/lib/src/types/background.ts`): solid, a two-stop linear gradient, or an image sized `cover` or `contain`. `getBackgroundStyle` renders it on the canvas, the rail and in present mode, and `backgroundCss` renders it on the server, so a gradient prints the way it looks. An image is copied into the container's `media/` folder and stored by name ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)).
 
+## The deck writer appends and never rewrites the deck
+
+The server has a deck writer for the pptx import, `apps/api/src/lib/document/slides.ts`, which appends a Yjs update into a deck: Convert to Slides on a `.pptx` in Drive, and File → Import slides… in an open deck ([EXPORT.md](EXPORT.md#a-pptx-import-adds-slides-and-leaves-a-box-where-it-cant-draw)). The update is untrusted, so the writer first reads it back through the reader in a scratch doc: a record the reader would heal or drop for a hostile peer is healed or dropped here, and only the clean scene is written ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). The caller bounds the update's size and record count, and hands it media names that are already free in the deck's `media/` folder, since the writer stores them as given.
+
+The write appends in one transaction. Every slide and element gets a fresh id and an index after the deck's topmost, in the update's own order. Element frame ids and arrow bindings are remapped to the new ids, and an imported element starts with no comment cards. Nothing already in the deck is cleared or rewritten, because an open tab's undo stack and its comments point at those Y.Maps. The work is linear in the update's records.
+
+`writeSlidesUpdateToYjs` fills a brand-new deck (Convert), so it also writes the update's `meta`, whose `slideSize` is the one nearest the file's. A file with no slides leaves that deck with none, and the first writer to open it seeds it like a new one, so there is one empty-deck path. `appendSlidesUpdateToYjs` adds slides to a deck someone works in, so it leaves that deck's `meta` alone, and answers how many slides it added: none means the file had none, which Import slides… says instead of adding nothing silently.
+
 ## Export and preview render the pages the canvas draws
 
-The server compositor (`apps/api/src/lib/export/canvas/`) turns each frame into one page of positioned layers, the boxes the live canvas gives each element. The HTML and PDF export print those pages at half scale ([EXPORT.md](EXPORT.md#a-deck-prints-each-frame-at-half-scale)), and the drive preview renders the first slides of the same pages ([PREVIEWS.md](PREVIEWS.md#an-eigen-document-previews-a-slice-off-the-event-loop)). Search indexes a deck through the canvas collector ([SEARCH.md](SEARCH.md)).
+The server compositor (`apps/api/src/lib/export/canvas/`) turns each frame into one page of positioned layers, the boxes the live canvas gives each element. The HTML and PDF export print those pages at half scale ([EXPORT.md](EXPORT.md#a-deck-prints-each-frame-at-half-scale)), and the drive preview renders the first slides of the same pages ([PREVIEWS.md](PREVIEWS.md#an-eigen-document-previews-a-slice-off-the-event-loop)). The pptx export writes each frame as a slide of DrawingML shapes from the scene itself, because PowerPoint needs shapes it can edit, not positioned HTML ([EXPORT.md](EXPORT.md#a-decks-pptx-is-written-from-the-scene-one-drawingml-shape-per-element)). Search indexes a deck through the canvas collector ([SEARCH.md](SEARCH.md)).
 
 ## See also
 

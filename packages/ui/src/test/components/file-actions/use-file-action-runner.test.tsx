@@ -31,7 +31,9 @@ mock.module('@workspace/lib/calendar', () => ({
 
 // One object, not a fresh literal per call: the save picker's defaults effect takes `user` as a dep.
 const session = { user: { id: 'owner-1' } };
+const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({
+    ...realAuth,
     useAuth: () => session,
     useIsGuest: () => false,
 }));

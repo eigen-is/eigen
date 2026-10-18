@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
     DEFAULT_ELEMENT_PROPS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
+    SLIDE_SIZES,
     solidFill,
     type VectorFrame,
     type VectorShapeElement,
@@ -15,8 +14,7 @@ const frame = (over: Partial<VectorFrame> = {}): VectorFrame => ({
     id: 'f1',
     index: 'a0',
     name: 'Slide 1',
-    width: FRAME_WIDTH,
-    height: FRAME_HEIGHT,
+    ...SLIDE_SIZES['16:9'],
     background: '',
     ...over,
 });

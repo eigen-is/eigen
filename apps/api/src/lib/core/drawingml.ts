@@ -8,7 +8,8 @@ import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } 
 export type ColorScheme = ReadonlyMap<string, string>;
 // What a schemeClr names to the slot it shows: bg1, tx1, bg2 and tx2 are mapped, the slots name themselves.
 export type ColorMap = ReadonlyMap<string, string>;
-export type DrawingTheme = { scheme: ColorScheme; map: ColorMap };
+// phClr: the colour the fillRef, lnRef or bgRef supplies when a style matrix entry is painted, '#rrggbb' or '#rrggbbaa'.
+export type DrawingTheme = { scheme: ColorScheme; map: ColorMap; phClr?: string };
 
 // A theme's slots in a:clrScheme's order.
 export const SCHEME_SLOTS: readonly string[] = [
@@ -90,6 +91,7 @@ function baseColor(element: XmlElement, theme: DrawingTheme): Rgba | null | unde
         case 'sysClr':
             return hexRgba(attr('lastClr'));
         case 'schemeClr': {
+            if (attr('val') === 'phClr') return placeholderRgba(theme.phClr);
             const slot = theme.map.get(attr('val') ?? '');
             return hexRgba(slot && theme.scheme.get(slot)?.slice(1));
         }
@@ -120,6 +122,13 @@ function hexRgba(hex: string | undefined): Rgba | undefined {
     return [(value >> 16) / 255, ((value >> 8) & 0xff) / 255, (value & 0xff) / 255, 1];
 }
 
+// The placeholder keeps its alpha, which the entry's own alpha replaces.
+function placeholderRgba(color: string | undefined): Rgba | undefined {
+    const [, rgb, alpha] = color?.match(/^#([0-9a-f]{6})([0-9a-f]{2})?$/i) ?? [];
+    const rgba = hexRgba(rgb);
+    return rgba && alpha ? [rgba[0], rgba[1], rgba[2], Number.parseInt(alpha, 16) / 255] : rgba;
+}
+
 // CSS colour keywords ECMA-376 has no preset for.
 const NOT_PRESETS = new Set(['transparent', 'rebeccapurple']);
 
@@ -133,7 +142,7 @@ function presetRgba(name: string | undefined): Rgba | undefined {
 }
 
 // ST_Percentage: thousandths of a percent, or Strict's '50%'; as a fraction.
-function percent(value: string | undefined): number | undefined {
+export function percent(value: string | undefined): number | undefined {
     const trimmed = value?.trim();
     if (!trimmed) return undefined;
     const fraction = trimmed.endsWith('%') ? Number(trimmed.slice(0, -1)) / 100 : Number(trimmed) / 100000;

@@ -89,3 +89,52 @@ test('redoing a move of a chart a peer deleted drops the entry', async () => {
     expect(charts()).toEqual({});
     expect(sent.length).toBe(before);
 });
+
+test('writes inside a panel gesture undo and redo as one step, and the next write stands alone', async () => {
+    const { step, charts } = await mountWorkbook();
+    let id = '';
+    await step((w) => {
+        id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
+    });
+    const titled = (title: string) => ({ ...sampleChartSpec('column'), title });
+    let release = () => {};
+    await step((w) => {
+        release = w.beginGesture();
+    });
+    for (const title of ['S', 'Sc', 'Sco']) await step((w) => w.setChartSpec(id, titled(title)));
+    release();
+    await step((w) => w.setChartSpec(id, titled('Score')));
+    const title = () => JSON.parse(charts()?.[id]?.spec ?? '{}').title;
+
+    await step((w) => w.undo());
+    expect(title()).toBe('Sco');
+    await step((w) => w.undo());
+    expect(title()).toBe('Points scored');
+    await step((w) => w.redo());
+    expect(title()).toBe('Sco');
+});
+
+test('a field typed key by key in a gesture keeps one forward and one inverse write in its undo entry', async () => {
+    const { sent, step, charts } = await mountWorkbook();
+    let id = '';
+    await step((w) => {
+        id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
+    });
+    const typed = 'Points scored by each team, month by month';
+    let release = () => {};
+    await step((w) => {
+        release = w.beginGesture();
+    });
+    for (let i = 1; i <= 40; i += 1) {
+        await step((w) => w.setChartSpec(id, { ...sampleChartSpec('column'), title: typed.slice(0, i) }));
+    }
+    release();
+    const title = () => JSON.parse(charts()?.[id]?.spec ?? '{}').title;
+
+    await step((w) => w.undo());
+    expect(title()).toBe('Points scored');
+    expect(sent.at(-1)).toHaveLength(1);
+    await step((w) => w.redo());
+    expect(title()).toBe(typed.slice(0, 40));
+    expect(sent.at(-1)).toHaveLength(1);
+});

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import type { Cell, ConditionalFormatRule, Sheet, SheetImage } from '@workspace/lib/sheets';
+import { sampleChartSpec } from '@workspace/lib/charts';
+import type { Cell, ConditionalFormatRule, Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
@@ -931,7 +933,8 @@ describe('Sheets HTML export — floating images', () => {
             [withImages([{ id: 'img_1', mediaName: 'chart.png', x: 120, y: 40, width: 200, height: 150 }])],
             MEDIA,
         );
-        const [wrapper] = classesFor(out, 'position:relative;width:');
+        // The box reaches the image's far corner, so the next sheet starts below it.
+        const [wrapper] = classesFor(out, 'position:relative;width:320px;min-height:190px');
         expect(useCount(out, wrapper)).toBe(1);
         const [image] = classesFor(out, 'left:120px;top:40px;width:200px;height:150px');
         expect(image).toBeDefined();
@@ -1037,5 +1040,88 @@ describe('Sheets HTML export — floating images', () => {
         expect(html).toContain(`src="${url}"`);
         expect(sanitizeExportHtml(html, { allowedRefs: new Set([url]) })).toContain(url);
         expect(sanitizeExportHtml(html)).not.toContain(url);
+    });
+});
+
+// A chart draws as the painter's inline SVG in the same overlay, its range read from the materialized sheets.
+describe('Sheets HTML export — charts', () => {
+    const cells = [
+        { r: 0, c: 0, v: { v: 'Team', m: 'Team' } },
+        { r: 0, c: 1, v: { v: 'Points', m: 'Points' } },
+        { r: 1, c: 0, v: { v: 'Ajax', m: 'Ajax' } },
+        { r: 1, c: 1, v: { v: 42, m: '42' } },
+        { r: 2, c: 0, v: { v: 'PSV', m: 'PSV' } },
+        { r: 2, c: 1, v: { v: 65, m: '65' } },
+    ];
+    const ref = (sheetId: string, row: [number, number], column: [number, number]): CellRangeRef => ({
+        sheetId,
+        row,
+        column,
+    });
+
+    function chartOn(sheetId: string, box = { x: 120, y: 40, width: 400, height: 300 }): SheetChart {
+        const spec = sampleChartSpec('column');
+        return {
+            id: 'c1',
+            index: 'a0',
+            ...box,
+            spec: JSON.stringify({
+                ...spec,
+                title: 'Points scored',
+                data: {
+                    source: 'range',
+                    categories: ref(sheetId, [1, 2], [0, 0]),
+                    series: [
+                        {
+                            name: ref(sheetId, [0, 0], [1, 1]),
+                            values: ref(sheetId, [1, 2], [1, 1]),
+                            color: '#2a78d6',
+                            markers: false,
+                            smooth: false,
+                        },
+                    ],
+                },
+            }),
+        };
+    }
+
+    // The table holds the same strings, so labels are looked for inside the svg.
+    const svgOf = (html: string) => html.slice(html.indexOf('<svg'), html.indexOf('</svg>'));
+
+    const sheetWithChart = (): Sheet => ({ ...makeSheet(cells), id: 'data', charts: { c1: chartOn('data') } });
+
+    test('draws each chart as inline SVG at its stored box, with the labels its cells hold', () => {
+        const out = renderSheetsHtml([sheetWithChart()], NO_MEDIA);
+        const [box] = classesFor(out, 'position:absolute;left:120px;top:40px;width:400px;height:300px;background:#fff');
+        expect(box).toBeDefined();
+        expect(out.html).toContain(
+            `<div class="${box}"><svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"`,
+        );
+        for (const label of ['>Points scored<', '>Ajax<', '>PSV<', '>Points<'])
+            expect(svgOf(out.html)).toContain(label);
+    });
+
+    test('a chart reads its range from another sheet', () => {
+        const chartSheet: Sheet = {
+            name: 'Charts',
+            id: 'charts',
+            charts: { c1: chartOn('data', { x: 0, y: 0, width: 300, height: 200 }) },
+        };
+        const out = renderSheetsHtml([chartSheet, { ...makeSheet(cells), id: 'data', name: 'Data' }], NO_MEDIA);
+        expect(svgOf(out.html)).toContain('>Ajax<');
+    });
+
+    test('the page reaches a chart parked past the used range', () => {
+        const sheet: Sheet = {
+            ...sheetWithChart(),
+            charts: { c1: chartOn('data', { x: 600, y: 300, width: 100, height: 50 }) },
+        };
+        expect(getSheetContentSize(sheet)).toEqual({ width: 700, height: 350 });
+    });
+
+    test('the chart survives the document sanitizer', () => {
+        const doc = sheetsHtmlDocument({ title: 'T', sheets: [sheetWithChart()], mediaUrls: NO_MEDIA, mode: 'pdf' });
+        expect(svgOf(doc)).toContain('>Ajax<');
+        expect(svgOf(doc)).toContain('<path d="M0 0 L');
     });
 });

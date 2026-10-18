@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, images, pictures, media]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 145
-updated: 2026-09-29
+updated: 2026-10-13
 ---
 
 You can put a picture on top of a spreadsheet. It floats over the grid rather than living inside a cell, and you move and size it with the mouse or with the panel on the right.
@@ -46,6 +46,6 @@ If the comments panel is open, it takes the same space. Close it to get the imag
 
 <div class="eigen-callout">
 
-Images live in the spreadsheet itself. They are not included when you download it as Excel, PDF, or a web page, and they do not appear in the preview of the file in Drive. The grid and its values come through in full.
+Images live in the spreadsheet itself. They appear in the PDF and web page downloads and in the preview of the file in Drive, but they are not included when you download the spreadsheet as Excel.
 
 </div>

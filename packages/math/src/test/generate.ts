@@ -1,14 +1,14 @@
 import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
-import { MATH_ENCLOSURES, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
+import { defaultVariant, MATH_ENCLOSURES, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
 import { canonicalIssue } from './canonical';
 
-// Seeded canonical trees for the round-trip contracts: every node kind and field, text that needs escaping,
-// characters beyond the BMP. Skewed fractions, every brace character and every fence stay in: only LaTeX loses them.
+// Seeded canonical trees for the round-trip contracts: every node kind and field, text that needs escaping, characters
+// beyond the BMP. Skewed fractions, every brace character and every fence stay in: only LaTeX loses them.
 
-type Random = () => number;
+export type Random = () => number;
 
 // mulberry32: small, seedable, good enough to spread choices.
-function seeded(seed: number): Random {
+export function seeded(seed: number): Random {
     let state = seed;
     return () => {
         state = (state + 0x6d2b79f5) | 0;
@@ -18,14 +18,25 @@ function seeded(seed: number): Random {
     };
 }
 
-const pick = <T>(random: Random, items: readonly T[]): T => items[Math.floor(random() * items.length)];
+// Seeds 1 to `seeds` in chunks of 1,000, a test each, so no test nears bun's 5 s timeout under a full check's load.
+export const seedChunks = (seeds: number): [number, number][] =>
+    Array.from({ length: Math.ceil(seeds / 1000) }, (_, index) => [
+        index * 1000 + 1,
+        Math.min((index + 1) * 1000, seeds),
+    ]);
 
-const LETTERS = ['x', 'y', 'Z', 'α', 'Ω', 'ж', 'ℏ', 'h', 'R'];
-const WORDS = ['sin', 'dx', 'lim', 'если'];
+export const pick = <T>(random: Random, items: readonly T[]): T => items[Math.floor(random() * items.length)];
+
+// Marked tokens and slashed relations too, as readers compose them: x\u0338 stays, = and U+0338 compose to ≠.
+const LETTERS = ['x', 'y', 'Z', 'α', 'Ω', 'Γ', 'ж', 'ℏ', 'h', 'R', 'x\u0338', 'Γ\u0338'];
+// A hyphen between the letters of an upright word is a hyphen, as \operatorname draws it.
+const WORDS = ['sin', 'dx', 'lim', 'если', 'arg-max'];
 const NUMBERS = ['0', '42', '3.14'];
 // `&` stays out of an equations cell, where it is the cell break.
 const OPERATORS = [
     '&',
+    '#',
+    '#\u0338',
     '+',
     '−',
     '=',
@@ -48,6 +59,12 @@ const OPERATORS = [
     '.',
     '∂',
     '∇',
+    '≠',
+    '≢',
+    '⪯\u0338',
+    '∑\u0338',
+    '2\u0338',
+    '′\u0338',
 ];
 const TEXTS = ['if', 'a < b & c', ' edge ', 'x\u00A0y', ']]>', 'non-BMP 😀', 'javascript:alert(1)', '"quoted"'];
 const COLORS = [undefined, undefined, undefined, '#FF0000', '#000000', '#0A0B0C'];
@@ -61,13 +78,15 @@ function token(random: Random): MathNode {
     const color = pick(random, COLORS);
     const variant = random() < 0.3 ? pick(random, MATH_VARIANTS) : undefined;
     switch (pick(random, ['letter', 'word', 'number', 'operator'] as const)) {
-        case 'letter':
+        case 'letter': {
+            const text = pick(random, LETTERS);
             return {
                 kind: 'identifier',
-                text: pick(random, LETTERS),
-                variant: variant === 'italic' ? undefined : variant,
+                text,
+                variant: variant === defaultVariant('identifier', text) ? undefined : variant,
                 color,
             };
+        }
         case 'word':
             return { kind: 'identifier', text: pick(random, WORDS), color };
         case 'number':
@@ -95,6 +114,11 @@ function row(random: Random, depth: number, nonEmpty = false, equationCell = fal
         if (canonicalIssue([...nodes.slice(-2), next], equationCell) === undefined) nodes.push(next);
     }
     return nodes;
+}
+
+// Often one token: a base is where MathML's reader looks for a large operator.
+function base(random: Random, depth: number): MathRow {
+    return random() < 0.5 ? [token(random)] : row(random, depth);
 }
 
 function optional(random: Random, depth: number): MathRow | undefined {
@@ -137,7 +161,7 @@ function node(random: Random, depth: number): MathNode {
         case 'scripts': {
             const sub = optional(random, inner);
             const sup = sub ? optional(random, inner) : row(random, inner, true);
-            return { kind: 'scripts', base: row(random, inner), sub, sup, pre: random() < 0.3 ? true : undefined };
+            return { kind: 'scripts', base: base(random, inner), sub, sup, pre: random() < 0.3 ? true : undefined };
         }
         case 'radical':
             return { kind: 'radical', body: row(random, inner), degree: optional(random, inner) };
@@ -162,21 +186,21 @@ function node(random: Random, depth: number): MathNode {
         case 'function':
             return { kind: 'function', name: row(random, inner), body: row(random, inner) };
         case 'accent':
-            return { kind: 'accent', accent: pick(random, ACCENT_CHARS), body: row(random, inner) };
+            return { kind: 'accent', accent: pick(random, ACCENT_CHARS), body: base(random, inner) };
         case 'line':
-            return { kind: 'line', position: pick(random, ['over', 'under'] as const), body: row(random, inner) };
+            return { kind: 'line', position: pick(random, ['over', 'under'] as const), body: base(random, inner) };
         case 'brace':
             return {
                 kind: 'brace',
                 char: pick(random, BRACE_CHARS),
                 position: pick(random, ['over', 'under'] as const),
-                body: row(random, inner),
+                body: base(random, inner),
             };
         case 'limit':
             return {
                 kind: 'limit',
                 position: pick(random, ['over', 'under'] as const),
-                base: row(random, inner),
+                base: base(random, inner),
                 limit: row(random, inner),
             };
         case 'enclose':

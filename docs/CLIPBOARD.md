@@ -18,7 +18,7 @@ An item is `text`, `image` or `elements`. Geometry (`width`, `height`, `angle`) 
 
 Text and image items carry no position: each app pastes at its own caret, cell or viewport center. The `elements` item is the exception, because a canvas paste lands relative to where it was copied from.
 
-`EigenClipboardTypography` is exactly the ten fields a canvas rich-text box stores, the widest set any consumer can place. The canvas writes and applies all ten. Docs maps the six it has nodes and marks for (font family, color, alignment, bold, italic, underline or strike), and sheets reads none. `fontFamily` is the `EIGEN_FONTS` name, not a CSS stack. The `text` is plain, so per-run marks do not survive.
+`EigenClipboardTypography` is exactly the ten fields a canvas rich-text box stores, the widest set any consumer can place. The canvas writes and applies all ten. Docs maps the six it has nodes and marks for (font family, color, alignment, bold, italic, underline or strike), and sheets reads none. `fontFamily` is the `EIGEN_FONTS` name, not a CSS stack. The `text` is plain, so per-run marks do not survive. No item holds an equation: a docs copy that writes the payload puts one in its text item as its linear form ([DOCS.md](DOCS.md#an-equations-text-is-its-linear-form-and-the-find-bar-skips-it)), so a slide or a cell gets `x/2`, never the equation.
 
 ## Both dimensions are mandatory
 
@@ -55,6 +55,8 @@ The download runs as the pasting user, with credentials. A user who cannot read 
 | Canvas (`packages/ui/src/components/vector/hooks/use-canvas-clipboard.ts`) | Native elements, then the SVG, then OS files, then plain text as a text box |
 
 Docs claims text items only when `hasRichHtmlBeyondMarker` says the HTML is just the marker. A sheets range rides as marker plus a real `<table>`, which ProseMirror turns into a docs table.
+
+A copied equation rides `text/html` as its `<math>`, with its LaTeX as the annotation, and `text/plain` as its linear form. A paste of a `<math>`, Eigen's, a web page's or Word for the web's, reaches ProseMirror's own paste and parses as an equation ([DOCS.md](DOCS.md#every-reader-of-an-equation-goes-through-readequation)). A light editor (a comment card's description, a mail, a slide's text box) has no equation node, so its paste reads each `<math>` as its linear form (`mathAsText`, `packages/lib/src/docs/eigendoc/nodes/equation-paste.ts`), where ProseMirror would keep the text of every token and of the LaTeX annotation. That module imports neither the equation node nor the LaTeX reader, so a light editor's bundle, such as the mail route's, holds neither. Google Docs' clipboard holds plain text runs and no math, so a Google equation pastes as text. Word desktop's HTML is unread ([ROADMAP.md](ROADMAP.md)).
 
 ## Sheets serves its own copies from memory
 

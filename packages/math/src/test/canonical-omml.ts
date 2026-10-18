@@ -1,9 +1,9 @@
 import { OMML_NAMESPACE, WORDML_NAMESPACE } from '../omml';
 import { attribute, elementsOf, type MathXmlElement, textOf } from '../xml';
 
-// C1's yardstick, written apart from the reader: an equation as Word shows it. Objects nest with their properties
-// resolved to Word's defaults; every character carries its text and effective style, so run boundaries don't count.
-// Only properties the tree keeps are compared; A5 lists what is dropped.
+// The OMML round trip's yardstick, written apart from the reader: an equation as Word shows it. Objects nest with their
+// properties resolved to Word's defaults; every character carries its text and effective style, so run boundaries don't
+// count. Only properties the tree keeps are compared; MATH.md lists what is dropped.
 
 export type CanonicalItem = string | CanonicalObject;
 export type CanonicalObject = { object: string; properties: Record<string, string>; children: CanonicalChild[] };
@@ -83,6 +83,9 @@ function properties(element: MathXmlElement): Record<string, string> {
     }
     if (element.local === 'nary' && resolved.limLoc === '')
         resolved.limLoc = /[∫-∳⨋-⨜]/u.test(resolved.chr) ? 'subSup' : 'undOvr';
+    // A separator shows only between parts.
+    if (element.local === 'd' && shown(elementsOf(element)).filter((part) => isM(part, 'e')).length < 2)
+        resolved.sepChr = DEFAULTS.d.sepChr;
     return resolved;
 }
 
@@ -108,3 +111,80 @@ function canonicalRow(elements: MathXmlElement[]): CanonicalItem[] {
 export function canonicalOmml(oMath: MathXmlElement): CanonicalItem[] {
     return canonicalRow(elementsOf(oMath));
 }
+
+// ── The round trip's normalisations ────────────────────────────────────────────────────────────────────────────
+
+function walk(row: CanonicalItem[], visit: (item: CanonicalItem) => CanonicalItem[]): CanonicalItem[] {
+    return row.flatMap((item) => visit(typeof item === 'string' ? item : descend(item, visit)));
+}
+
+function descend(object: CanonicalObject, visit: (item: CanonicalItem) => CanonicalItem[]): CanonicalObject {
+    const children = object.children.map((child) =>
+        'argument' in child ? { ...child, content: walk(child.content, visit) } : descend(child, visit),
+    );
+    return { ...object, children };
+}
+
+const objects = (local: string, rewrite: (object: CanonicalObject) => CanonicalItem[]) => (row: CanonicalItem[]) =>
+    walk(row, (item) => (typeof item !== 'string' && item.object === local ? rewrite(item) : [item]));
+
+const eachCharacter = (rewrite: (char: string) => string) => (row: CanonicalItem[]) =>
+    walk(row, (item) => [typeof item === 'string' ? rewrite(item) : item]);
+
+const argument = (object: CanonicalObject, local: string) =>
+    object.children.flatMap((child) => ('argument' in child && child.argument === local ? child.content : []));
+
+const SPACING_TWINS: Record<string, string> = { '˙': '\u0307', '‾': '\u0305' };
+
+function revealEmpty(object: CanonicalObject): CanonicalItem[] {
+    const properties = { ...object.properties };
+    for (const [slot, hide] of [
+        ['sub', 'subHide'],
+        ['sup', 'supHide'],
+        ['deg', 'degHide'],
+    ]) {
+        if (properties[hide] === 'off' && argument(object, slot).length === 0) properties[hide] = 'on';
+    }
+    return [{ ...object, properties }];
+}
+
+// What Word loses and the canonical form folds, each with the equations it changes: omml.test.ts keeps the list exact.
+export const NORMALISATIONS: { reason: string; indices: number[]; apply: (row: CanonicalItem[]) => CanonicalItem[] }[] =
+    [
+        {
+            reason: 'a spacing accent character folds to its combining twin',
+            indices: [71, 87],
+            apply: objects('acc', (acc) => [
+                { ...acc, properties: { chr: SPACING_TWINS[acc.properties.chr] ?? acc.properties.chr } },
+            ]),
+        },
+        {
+            reason: 'a linear fraction reads as the row a/b',
+            indices: [3],
+            apply: objects('f', (f) =>
+                f.properties.type === 'lin' ? [...argument(f, 'num'), '/|p|roman', ...argument(f, 'den')] : [f],
+            ),
+        },
+        {
+            reason: 'double-struck and monospace keep the script and drop the weight',
+            indices: [172],
+            apply: eachCharacter((char) => char.replace(/\|b\|(double-struck|monospace)/, '|p|$1')),
+        },
+        {
+            reason: 'a space between math characters carries no style or colour',
+            indices: [41, 172],
+            apply: eachCharacter((char) =>
+                /^[ \u2003\u2004\u2009\u205F]\|(?!nor)/u.test(char) ? `${char[0]}|p|roman` : char,
+            ),
+        },
+        {
+            reason: 'an operator hyphen-minus reads as the minus sign U+2212',
+            indices: [12, 43, 44, 56, 57, 60, 61, 63, 79, 80, 83, 90, 91, 156, 158, 159, 160],
+            apply: eachCharacter((char) => (/^-\|(?!nor)/.test(char) ? `\u2212${char.slice(1)}` : char)),
+        },
+        {
+            reason: 'an empty script or degree shows nothing, so it reads as hidden',
+            indices: [18, 69],
+            apply: (row) => walk(row, (item) => (typeof item === 'string' ? [item] : revealEmpty(item))),
+        },
+    ];

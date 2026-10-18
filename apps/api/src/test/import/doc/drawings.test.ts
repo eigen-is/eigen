@@ -208,7 +208,7 @@ describe('captions', () => {
         const { json } = await importDocxBody(`${paragraph(figure)}${next}`, { styles: `${BODY}${STYLES}` });
         return [
             nodesOfType(json, 'figure')[0]?.attrs?.['caption'],
-            marksOfType(json, 'small').map((mark) => mark.text),
+            marksOfType(json, 'textStyle').map((mark) => [mark.text, mark.attrs['fontSize']]),
         ];
     };
 
@@ -238,8 +238,11 @@ describe('captions', () => {
         expect(await captionOf(GOLDEN_DOCX_IMAGE_RUN, line('Figure 1', look))).toEqual(['Figure 1', []]);
     });
 
-    test('a small line after a block figure, not in the caption look, is a paragraph in small', async () => {
-        expect(await captionOf(GOLDEN_DOCX_IMAGE_RUN, line('Note', '<w:sz w:val="16"/>'))).toEqual([null, ['Note']]);
+    test('a small line after a block figure, not in the caption look, is a paragraph in its size', async () => {
+        expect(await captionOf(GOLDEN_DOCX_IMAGE_RUN, line('Note', '<w:sz w:val="16"/>'))).toEqual([
+            null,
+            [['Note', 8]],
+        ]);
     });
 
     // A figure's caption is plain text; a Caption line no figure takes is a paragraph like any other.
@@ -253,9 +256,9 @@ describe('captions', () => {
                 styles: `${BODY}${WORD_CAPTION}`,
             });
             expect(nodesOfType(json, 'text').map((node) => [node.text, node.marks?.map((mark) => mark.type)])).toEqual([
-                ['Table 1', ['textStyle', 'bold', 'italic', 'small']],
+                ['Table 1', ['textStyle', 'bold', 'italic']],
             ]);
-            expect(marksOfType(json, 'textStyle')[0]?.attrs?.['color']).toBe('#44546a');
+            expect(marksOfType(json, 'textStyle')[0]?.attrs).toMatchObject({ color: '#44546a', fontSize: 9 });
         });
 
         test('a Caption paragraph after a block figure is its caption, nothing left behind', async () => {

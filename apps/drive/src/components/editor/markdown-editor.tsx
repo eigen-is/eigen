@@ -7,6 +7,7 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import Typography from '@tiptap/extension-typography';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { mathAsText } from '@workspace/lib/docs/eigendoc';
 import { downloadBlob } from '@workspace/lib/download';
 import { Column, ConfirmDialog } from '@workspace/ui';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
@@ -104,6 +105,8 @@ export function MarkdownEditor({
     const editor = useEditor({
         extensions: useMarkdownExtensions(content),
         content,
+        // No equation node: a pasted equation reads as its linear text.
+        editorProps: { transformPastedHTML: mathAsText },
         onUpdate: () => {
             markDirty();
         },

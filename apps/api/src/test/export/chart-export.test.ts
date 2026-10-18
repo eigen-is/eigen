@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import {
     baseDefaultsFor,
+    DEFAULT_SCENE_META,
     ELEMENT_KINDS,
     elementLayer,
     elementToSvg,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
     layerInnerHtml,
+    SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
     type StyleDefaults,
     sceneToSvg,
@@ -17,7 +17,7 @@ import {
 } from '@workspace/lib/vector';
 import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
-import { renderEigenslidesExport } from '../../lib/export/canvas/transform';
+import { renderEigenslidesHtml } from '../../lib/export/canvas/transform';
 import { toXmlDocument } from '../../lib/export/sanitize';
 import { renderEigenvectorExport } from '../../lib/export/vector/transform';
 import { seedVectorDoc } from '../fixtures/golden-documents';
@@ -28,7 +28,8 @@ import { seedVectorDoc } from '../fixtures/golden-documents';
 const TITLE = 'Q1 <draft> & more';
 
 function chartElement(style: StyleDefaults, over: Partial<VectorChartElement> = {}): VectorChartElement {
-    const spec = sampleChartSpec('column');
+    // In the host's font, as Insert → Chart places one.
+    const spec = { ...sampleChartSpec('column'), fontFamily: style.fontFamily };
     return {
         ...baseDefaultsFor('chart', style),
         ...ELEMENT_KINDS.chart.defaults(style),
@@ -55,10 +56,11 @@ function docOf(scene: VectorScene): Y.Doc {
 
 const decode = (data: ArrayBuffer): string => new TextDecoder().decode(data);
 
-// The layer bodies of a compositor document, as the browser's HTML parser serializes them.
-function layerBodies(html: string): string[] {
+// The layer bodies of a compositor document, as the browser's HTML parser serializes them. A screen page
+// holds its layers in a scene box; a PDF page holds them straight in the page box (renderPrintPage).
+function layerBodies(html: string, layers: string): string[] {
     const { document } = new JSDOM(html).window;
-    return [...document.querySelectorAll('.canvas-page > div > div')].map((layer) => layer.innerHTML);
+    return [...document.querySelectorAll(layers)].map((layer) => layer.innerHTML);
 }
 
 function asParsed(fragment: string): string {
@@ -70,7 +72,7 @@ function asParsed(fragment: string): string {
 
 describe('a chart in the canvas exports', () => {
     const chart = chartElement(VECTOR_STYLE_DEFAULTS);
-    const scene: VectorScene = { elements: [chart], frames: [], meta: { background: 'transparent' } };
+    const scene: VectorScene = { elements: [chart], frames: [], meta: DEFAULT_SCENE_META };
 
     test('the SVG download keeps the chart as drawn: shapes and text, no foreignObject', () => {
         const svg = decode(renderEigenvectorExport(docOf(scene), 'svg', 'Drawing', []).data);
@@ -79,7 +81,8 @@ describe('a chart in the canvas exports', () => {
         const body = drawn.slice(drawn.indexOf('>') + 1, drawn.lastIndexOf('</svg>'));
         expect(body.startsWith('<g transform="translate(40 60)">')).toBe(true);
         expect(svg).toContain(body);
-        expect(svg).not.toContain('foreignObject');
+        // canvas-text.css rides along in the <defs>, and its comments name one
+        expect(svg).not.toContain('<foreignObject');
         expect(svg).toContain('Q1 &lt;draft&gt; &amp; more</text>');
         expect(svg).toContain('font-weight="600"');
         expect(svg).toContain('transform="rotate(-90 ');
@@ -92,7 +95,7 @@ describe('a chart in the canvas exports', () => {
         const html = decode(renderEigenvectorExport(docOf(scene), 'pdf-html', 'Drawing', []).data);
         const layer = elementLayer(chart);
         if (!layer) throw new Error('a chart always draws');
-        const bodies = layerBodies(html);
+        const bodies = layerBodies(html, '.canvas-page > div');
         expect(bodies).toEqual([asParsed(layerInnerHtml(layer.content))]);
         // WeasyPrint draws SVG text and ignores a foreignObject (the stylesheet's comments name one).
         expect(bodies[0]).toContain('Q1 &lt;draft&gt; &amp; more</text>');
@@ -103,15 +106,13 @@ describe('a chart in the canvas exports', () => {
         const slide = chartElement(SLIDES_STYLE_DEFAULTS, { frameId: 'frame-1' });
         const deck: VectorScene = {
             elements: [slide],
-            frames: [
-                { id: 'frame-1', index: 'a0', name: '', background: '', width: FRAME_WIDTH, height: FRAME_HEIGHT },
-            ],
-            meta: { background: 'transparent' },
+            frames: [{ id: 'frame-1', index: 'a0', name: '', background: '', ...SLIDE_SIZES['16:9'] }],
+            meta: DEFAULT_SCENE_META,
         };
-        const html = decode(renderEigenslidesExport(docOf(deck), 'html', 'Deck', []).data);
+        const html = decode(renderEigenslidesHtml(docOf(deck), 'html', 'Deck', []).data);
         const layer = elementLayer(slide);
         if (!layer) throw new Error('a chart always draws');
-        expect(layerBodies(html)).toEqual([asParsed(layerInnerHtml(layer.content))]);
+        expect(layerBodies(html, '.canvas-page > div > div')).toEqual([asParsed(layerInnerHtml(layer.content))]);
         expect(elementToSvg(slide)).toContain('font-family="&apos;Inter&apos;, sans-serif"');
     });
 });

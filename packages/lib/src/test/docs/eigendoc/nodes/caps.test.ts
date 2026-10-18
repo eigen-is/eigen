@@ -92,7 +92,7 @@ describe('caps commands', () => {
         editor.commands.setTextSelection({ from: 1, to: 5 });
         editor.commands.unsetCaps();
         expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
-            { type: 'textStyle', attrs: { color: null, fontFamily: 'Source Serif 4', caps: null } },
+            { type: 'textStyle', attrs: { color: null, fontFamily: 'Source Serif 4', fontSize: null, caps: null } },
         ]);
         editor.destroy();
     });

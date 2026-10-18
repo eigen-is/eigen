@@ -1,20 +1,26 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { sampleChartSpec } from '@workspace/lib/charts';
+import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     baseDefaultsFor,
+    DEFAULT_SCENE_META,
     ELEMENT_KINDS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
+    SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
     solidFill,
     type VectorRichTextElement,
+    writeElementInDoc,
+    writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
+import { parseOoxml } from '../../lib/core/ooxml';
+import { openZip } from '../../lib/core/zip';
 import { exportDocument } from '../../lib/export/export-document';
 import { getHome } from '../../lib/home/get-home';
-import { seedVectorDoc } from '../fixtures/golden-documents';
-import { driveGet, drivePost, getTestContext } from '../setup';
+import { seedDocumentMedia, seedVectorDoc } from '../fixtures/golden-documents';
+import { driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // End-to-end guard for the download/print surface: a collaborator can put arbitrary strings
 // in the schemaless canvas scene, so the assembled HTML export must neutralize an attribute-breakout
@@ -124,12 +130,11 @@ describe('deck export — assembled HTML surface', () => {
                     id: 'f1',
                     index: 'a0',
                     name: '',
-                    width: FRAME_WIDTH,
-                    height: FRAME_HEIGHT,
+                    ...SLIDE_SIZES['16:9'],
                     background: serializeBackgroundFill({ type: 'solid', color: '#ffffff' }),
                 },
             ],
-            meta: { background: 'transparent' },
+            meta: DEFAULT_SCENE_META,
         });
 
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
@@ -159,4 +164,87 @@ describe('deck export — assembled HTML surface', () => {
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
         await expect(exportDocument(mount, path, 'html')).rejects.toThrow('The deck is empty');
     });
+});
+
+describe('deck export — pptx', () => {
+    test('a deck with text, a PNG, an SVG and a chart writes a package whose every part parses', async () => {
+        const ctx = await getTestContext();
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, 'default', 'root');
+        const deckPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            'default',
+            `folder/${root.id}/create/slides`,
+            { fileName: 'Office deck' },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument('default', deckPath.id);
+        collab.doc.transact(() => {
+            writeFrameInDoc(collab.doc, { id: 'f1', index: 'a0' });
+            const on = { frameId: 'f1', x: 100, y: 100, width: 400, height: 300, seed: 1 };
+            writeElementInDoc(
+                collab.doc,
+                {
+                    type: 'richtext',
+                    ...on,
+                    html: '<p>Quarter <a href="javascript:alert(1)">bad</a> <a href="https://example.com/q">good</a></p>',
+                },
+                'a0',
+                SLIDES_STYLE_DEFAULTS,
+                'text',
+            );
+            writeElementInDoc(
+                collab.doc,
+                { type: 'image', ...on, mediaName: 'photo.png' },
+                'a1',
+                SLIDES_STYLE_DEFAULTS,
+            );
+            writeElementInDoc(
+                collab.doc,
+                { type: 'image', ...on, mediaName: 'drawing.svg' },
+                'a2',
+                SLIDES_STYLE_DEFAULTS,
+            );
+            writeElementInDoc(
+                collab.doc,
+                { type: 'chart', ...on, chart: JSON.stringify(sampleChartSpec('pie')) },
+                'a3',
+                SLIDES_STYLE_DEFAULTS,
+            );
+        });
+        const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
+        await seedDocumentMedia(mount, path, 'photo.png', TEST_PNG_BYTES);
+        const svg =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20"/></svg>';
+        await seedDocumentMedia(mount, path, 'drawing.svg', new TextEncoder().encode(svg), 'image/svg+xml');
+
+        const result = await exportDocument(mount, path, 'pptx');
+        expect([result.contentType, result.fileName]).toEqual([PPTX_MIME, 'Office deck.pptx']);
+
+        const zip = openZip(result.data);
+        for (const name of zip.names().filter((n) => n.endsWith('.xml') || n.endsWith('.rels'))) {
+            expect([name, parseOoxml(zip.read(name) ?? new Uint8Array()) !== null]).toEqual([name, true]);
+        }
+        // The PNG re-encoded from its source, the SVG as itself beside the PNG the transform draws from it.
+        expect(zip.names().filter((n) => n.startsWith('ppt/media/'))).toEqual([
+            'ppt/media/image1.png',
+            'ppt/media/image2.png',
+            'ppt/media/image2.svg',
+        ]);
+        const signature = (name: string) =>
+            Buffer.from(zip.read(name) ?? [])
+                .subarray(1, 4)
+                .toString();
+        expect([signature('ppt/media/image1.png'), signature('ppt/media/image2.png')]).toEqual(['PNG', 'PNG']);
+        expect(new TextDecoder().decode(zip.read('ppt/media/image2.svg'))).toContain('<rect');
+
+        const slide = new TextDecoder().decode(zip.read('ppt/slides/slide1.xml'));
+        const rels = new TextDecoder().decode(zip.read('ppt/slides/_rels/slide1.xml.rels'));
+        expect(slide).toContain('Quarter');
+        // The chart arrives as its shapes, a pie's slices among them.
+        expect(slide).toContain('prst="pie"');
+        // The scene's rich-text filter keeps a javascript: link out of the file.
+        expect(rels).toContain('https://example.com/q');
+        expect(`${slide}${rels}`).not.toMatch(/javascript:/i);
+    }, 120_000);
 });

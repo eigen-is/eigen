@@ -39,19 +39,6 @@ export function rgbToHex(color: string): string {
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
-// column index: number to letter
-export function indexToColumnChar(n: number) {
-    const orda = 'a'.charCodeAt(0);
-    const ordz = 'z'.charCodeAt(0);
-    const len = ordz - orda + 1;
-    let s = '';
-    while (n >= 0) {
-        s = String.fromCharCode((n % len) + orda) + s;
-        n = Math.floor(n / len) - 1;
-    }
-    return s.toUpperCase();
-}
-
 export function getSheetIndex(ctx: Context, id: string) {
     for (let i = 0; i < ctx.sheets.length; i += 1) {
         if (ctx.sheets[i]?.id === id) {

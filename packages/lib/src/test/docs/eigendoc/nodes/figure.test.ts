@@ -27,6 +27,11 @@ describe('figure HTML', () => {
     test('an uncommented figure writes no comment id', () => {
         expect(generateHTML(figureDoc({ mediaName: 'a.png' }), extensions)).not.toContain('data-comment-id');
     });
+
+    // A peer writes any value, and a copy serializes the node.
+    test('a caption that is not a string renders none, never throwing', () => {
+        expect(generateHTML(figureDoc({ mediaName: 'a.png', caption: 3 }), extensions)).not.toContain('figcaption');
+    });
 });
 
 describe('figure parse', () => {

@@ -6,10 +6,10 @@ category: Basics
 tags: [slides, presentation, editing, text, images]
 related: [slides/get-started, slides/add-slides, slides/insert-content]
 order: 20
-updated: 2026-09-18
+updated: 2026-10-13
 ---
 
-Create a presentation in Slides, place text and images onto a 16:9 canvas, and adjust everything from the properties panel on the right.
+Create a presentation in Slides, place text and images on its slides, and adjust everything from the properties panel on the right.
 
 ## Create a new presentation
 
@@ -25,7 +25,7 @@ You can also create a presentation while you already have one open. Click **File
 The editor has three areas:
 
 - **Slide panel** on the left: numbered thumbnails of every slide. Click a thumbnail to switch to that slide.
-- **Canvas** in the center: the editing surface for the active slide at 1920×1080 pixels.
+- **Canvas** in the center: the editing surface for the active slide, at 1920×1080 pixels, or 1920×1440 in a 4:3 presentation.
 - **Properties panel** on the right: reflects whatever you have selected. With nothing selected it shows the slide background. With an object selected it shows that object's properties.
 
 ## Add a text box
@@ -68,6 +68,18 @@ The properties panel also has an **Arrange** section with the same buttons, show
 ## Change the slide background
 
 With no object selected, the properties panel shows the background for the active slide. You can set a solid color, a gradient, or an image. Use the **Apply to** dropdown to choose **This slide**, **This and following**, or **All slides**, then click **Apply**.
+
+## Change the slide size
+
+A presentation is **Widescreen 16:9** or **Standard 4:3**, and all its slides share that size. A new presentation starts at 16:9.
+
+1. Click **File** in the toolbar and choose **Page setup…**.
+2. Pick **Widescreen 16:9** or **Standard 4:3**.
+3. Click **OK**.
+
+Everything on your slides keeps its position and size. Going from 16:9 to 4:3 adds empty space at the bottom of each slide. Going from 4:3 to 16:9 makes each slide shorter, so anything near the bottom can fall outside the slide and is hidden. It isn't deleted: undo the change, or switch back to 4:3, and it shows again.
+
+If you can only view the presentation, **Page setup…** shows its size without letting you change it.
 
 ## Undo and redo
 

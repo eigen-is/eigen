@@ -1,4 +1,4 @@
-import type { Node } from '@tiptap/pm/model';
+import type { Node, Schema } from '@tiptap/pm/model';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     Heading,
@@ -23,7 +23,7 @@ type ParagraphStyle = {
 // Format › Paragraph styles and the style picker list these after Normal text, in Google Docs' order. The picker
 // previews each as the editor draws it: the title largest, the subtitle in grey, the heading sizes stepping down, and
 // Heading 5 and 6 at the body's weight in grey, Heading 6 in italic.
-export const PARAGRAPH_STYLES: ParagraphStyle[] = [
+const PARAGRAPH_STYLES: ParagraphStyle[] = [
     { name: 'Title', type: 'title', icon: Heading, preview: 'text-2xl' },
     { name: 'Subtitle', type: 'subtitle', icon: LetterText, preview: 'text-base text-muted-foreground' },
     { name: 'Heading 1', type: 'heading', attrs: { level: 1 }, icon: Heading1, preview: 'text-xl font-medium' },
@@ -51,4 +51,9 @@ export function paragraphStyleOf(node: Node): ParagraphStyle | undefined {
     return PARAGRAPH_STYLES.find(
         ({ type, attrs }) => type === node.type.name && (!attrs || attrs.level === node.attrs['level']),
     );
+}
+
+// The styles an editor's schema holds: a band's has no title or subtitle, and a command for a node it lacks throws.
+export function paragraphStylesIn(schema: Schema): ParagraphStyle[] {
+    return PARAGRAPH_STYLES.filter(({ type }) => type in schema.nodes);
 }

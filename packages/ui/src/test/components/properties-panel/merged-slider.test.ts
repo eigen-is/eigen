@@ -6,7 +6,7 @@ const window = installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { holdCapture } = await import('../../../components/vector/hooks/use-canvas-doc');
+const { holdCapture } = await import('../../../components/properties-panel/property-gesture');
 const { MergedSlider } = await import('../../../components/properties-panel/merged-slider');
 const { PropertyGestureContext } = await import('../../../components/properties-panel/property-gesture');
 

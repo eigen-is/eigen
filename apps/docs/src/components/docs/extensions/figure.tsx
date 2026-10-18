@@ -1,22 +1,22 @@
-import type { Node as PMNode } from '@tiptap/pm/model';
-import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/state';
-import { Mapping } from '@tiptap/pm/transform';
+import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeViewProps } from '@tiptap/react';
-import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
+import { ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { FigureNode, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
-import { CommentIndicator } from '@workspace/ui/components/comments';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
-import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
-import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { textColumnWidth } from './text-column';
+import {
+    clampFigureWidth,
+    FigureFrame,
+    type FigureFrameOptions,
+    figureFramePlugins,
+    figureMaxWidth,
+    useFigureResize,
+} from './figure-frame';
 
-// The figure's resize floor (px).
-const FIGURE_MIN_WIDTH = 100;
 // The width a figure draws at when neither it nor its page gives one (px).
 const FIGURE_DEFAULT_WIDTH = 400;
 // What Shift and each arrow key do to a selected figure's width (px).
@@ -25,38 +25,15 @@ const FIGURE_RESIZE_KEYS = Object.keys(FIGURE_RESIZE_STEPS)
     .map((key) => `Shift+${key}`)
     .join(' ');
 
-// The text column, or half of it for a wrapped figure: the widest a resize makes it.
-export function figureMaxWidth(figure: Node | null, layout: FigureLayout | null) {
-    const fullWidth = textColumnWidth(figure) ?? Infinity;
-    return layout === 'wrap-left' || layout === 'wrap-right' ? fullWidth * 0.5 : fullWidth;
-}
+const fitFigureWidth = (next: Box, maxWidth: number) => clampFigureWidth(next.width, maxWidth);
 
-// The width a grip, Shift and an arrow, or the Image panel's Width field writes.
-export function clampFigureWidth(width: number, maxWidth: number) {
-    return Math.round(Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width)));
-}
-
-export type FigureOptions = {
-    // The host decides whether a menu opens, so an image with no rows keeps the browser's own.
-    onContextMenu: (node: PMNode, pos: number, event: React.MouseEvent) => void;
-    onOpenComment: (cardId: string) => void;
-};
-
-function FigureView({ node, selected, editor, extension, getPos, decorations }: NodeViewProps) {
-    const { onContextMenu, onOpenComment }: FigureOptions = extension.options;
-    const commentCardId: string | null = node.attrs.commentCardId;
-    const commentColor: string | undefined = decorations.find((d) => 'commentColor' in d.spec)?.spec.commentColor;
+function FigureView(props: NodeViewProps) {
+    const { node, selected, editor, getPos } = props;
     const imageRef = useRef<HTMLImageElement>(null);
     const containerRef = useRef<HTMLSpanElement>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
     const imageProcessed = useRef(false);
-    // Live preview width during an ObjectTransform drag — never a node write until onCommit.
-    const [previewWidth, setPreviewWidth] = useState<number | null>(null);
-    // First onTransform of a gesture is the de-facto start (ObjectTransform has no onStart): latch
-    // it so getMaxWidth is measured ONCE per drag (a forced layout is too costly per move).
-    const transformStarted = useRef(false);
-    const gestureMaxWidth = useRef(Number.POSITIVE_INFINITY);
 
     const { resolveMediaUrl, isMediaMissing } = useMediaResolver();
 
@@ -72,8 +49,6 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
     );
 
     const width = node.attrs.width;
-    const alignment = node.attrs.alignment || 'center';
-    const caption = node.attrs.caption || '';
     const mediaName: string = node.attrs.mediaName ?? '';
     const src = resolveMediaUrl(mediaName) || node.attrs.src || '';
     const showPlaceholder = !src;
@@ -87,27 +62,14 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
         setAspectRatio(null);
     }, [mediaName]);
 
-    // Safety net: ObjectTransform's Escape-cancel and no-move-click paths fire no onCommit, so a
-    // leftover preview width would otherwise stick. Any pointerup drops it and re-arms the latch.
-    // Scoped to the transform-chrome window (selected + editable) so at most one figure in the
-    // document holds these global listeners; teardown also clears, so a deselect mid-gesture can't
-    // strand a stale preview.
-    useEffect(() => {
-        if (!(selected && isEditable)) return;
-        const clear = () => {
-            transformStarted.current = false;
-            setPreviewWidth((p) => (p === null ? p : null));
-        };
-        document.addEventListener('pointerup', clear);
-        document.addEventListener('pointercancel', clear);
-        return () => {
-            document.removeEventListener('pointerup', clear);
-            document.removeEventListener('pointercancel', clear);
-            clear();
-        };
-    }, [selected, isEditable]);
-
     const getMaxWidth = useCallback(() => figureMaxWidth(containerRef.current, layout), [layout]);
+    const commitWidth = useCallback((next: number) => setAttributes({ width: next }), [setAttributes]);
+    const resize = useFigureResize({
+        active: selected && isEditable,
+        getMaxWidth,
+        fit: fitFigureWidth,
+        commit: commitWidth,
+    });
 
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;
@@ -146,133 +108,56 @@ function FigureView({ node, selected, editor, extension, getPos, decorations }: 
         });
     }, [getMaxWidth, node.attrs.width, setAttributes]);
 
-    // ObjectTransform seam. The figure is a DOM box in screen space, so scene units ARE screen px:
-    // the ring insets over the img (shrink-wrapped by the relative wrapper) and the pointer delta is
-    // an identity mapping. Height derives from the ratio — the figure stores width only.
-    const boxToStyle = useCallback((): React.CSSProperties => ({ inset: 0 }), []);
-    const screenDeltaToScene = useCallback((dx: number, dy: number) => ({ dx, dy }), []);
-
-    const handleTransform = useCallback(
-        (next: Box) => {
-            if (!transformStarted.current) {
-                transformStarted.current = true;
-                // Measured once per gesture (see latch note); a hidden surface reports <=0, which the
-                // clampFigureWidth floor wins over.
-                gestureMaxWidth.current = getMaxWidth();
-            }
-            setPreviewWidth(clampFigureWidth(next.width, gestureMaxWidth.current));
-        },
-        [getMaxWidth],
-    );
-
-    const handleCommit = useCallback(
-        (next: Box) => {
-            transformStarted.current = false;
-            setPreviewWidth(null);
-            setAttributes({ width: clampFigureWidth(next.width, gestureMaxWidth.current) });
-        },
-        [setAttributes],
-    );
-
-    const displayWidth = previewWidth ?? width;
+    const displayWidth = resize.preview ?? width;
     // A picture no browser draws (WMF, EMF) shows its alt text, which a small width squeezes, so its box takes 10rem,
     // or all its container gives: a fixed minimum would push a narrow table cell wider. The wrapper takes it too, as a
     // wrapped figure floats and shrinks to fit. With no alt text the image would draw 0 px tall, so it keeps a line.
     const failed = failedSrc === src;
     // Mount the shared transform chrome only once we have a resolvable px box (loaded, sized,
     // editable, not a pending placeholder). Otherwise a selected figure shows the plain ring.
+    // Height derives from the ratio: the figure stores width only.
     const box: Box | null =
         selected && isEditable && !showPlaceholder && aspectRatio && displayWidth
             ? { x: 0, y: 0, width: displayWidth, height: displayWidth / aspectRatio, angle: 0 }
             : null;
 
     return (
-        <NodeViewWrapper
-            as="span"
-            ref={containerRef}
-            className={cn('figure', failed && 'min-w-[min(10rem,100%)]')}
-            data-layout={layout}
-            data-alignment={alignment}
-            data-drag-handle=""
-            draggable={isEditable}
-            style={{ cursor: isEditable ? 'grab' : undefined }}
-            // ProseMirror never sees a node view's right-click (stopEvent), so the figure asks here.
-            onContextMenu={(e: React.MouseEvent) => {
-                const pos = getPos();
-                if (pos !== undefined) onContextMenu(node, pos, e);
-            }}
+        <FigureFrame
+            {...props}
+            containerRef={containerRef}
+            box={box}
+            resizeMode="aspect"
+            onTransform={resize.onTransform}
+            onCommit={resize.onCommit}
+            label="Resize image"
+            keyShortcuts={FIGURE_RESIZE_KEYS}
+            className={cn(failed && 'min-w-[min(10rem,100%)]')}
         >
-            {/* Relative wrapper shrink-wraps the img so the inset-0 ObjectTransform ring
-                lands exactly on the image box. When no transform mounts (placeholder,
-                read-only, pre-load), the same ring shows via the class. It takes no focus: the
-                editor's keymap resizes the selected figure, and a press stays free to start a drag. */}
-            <div
-                className={cn(
-                    'relative',
-                    failed && 'min-w-[min(10rem,100%)]',
-                    selected && !box && 'eigen-selection-ring',
-                )}
-                role={selected && isEditable ? 'group' : undefined}
-                aria-label={selected && isEditable ? 'Resize image' : undefined}
-                aria-keyshortcuts={selected && isEditable ? FIGURE_RESIZE_KEYS : undefined}
-            >
-                {showPlaceholder ? (
-                    <div style={{ width: `${displayWidth || FIGURE_DEFAULT_WIDTH}px`, aspectRatio: '16 / 10' }}>
-                        <ImagePlaceholder missing={isMediaMissing(mediaName)} />
-                    </div>
-                ) : (
-                    <img
-                        ref={imageRef}
-                        src={src}
-                        alt={alt}
-                        className={cn('max-w-full block', failed && 'min-w-full min-h-10 bg-muted')}
-                        style={{
-                            width: displayWidth ? `${displayWidth}px` : undefined,
-                            aspectRatio: aspectRatio ?? undefined,
-                        }}
-                        onLoad={handleImageLoad}
-                        onError={() => setFailedSrc(src)}
-                        draggable={false}
-                        decoding="async"
-                    />
-                )}
-                {box && (
-                    <ObjectTransform
-                        box={box}
-                        boxToStyle={boxToStyle}
-                        screenDeltaToScene={screenDeltaToScene}
-                        showRotate={false}
-                        resizeMode="aspect"
-                        // Default minSize (1): in aspect mode the component floors BOTH dims,
-                        // which would inflate wide images (a 100 floor on a 4:1 banner's height
-                        // forces width 400). The width-only [100, maxWidth] clamp is the host's,
-                        // clampFigureWidth.
-                        onTransform={handleTransform}
-                        onCommit={handleCommit}
-                    />
-                )}
-                {/* After the transform, so its NE grip never covers the mark. A button, so
-                    ProseMirror leaves its press alone (no node select); a prevented press keeps
-                    focus in the editor and starts no drag of the figure. */}
-                {commentCardId && (
-                    <button
-                        type="button"
-                        className="absolute top-0 right-0"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => onOpenComment(commentCardId)}
-                        aria-label="Open comment"
-                        title="Open comment"
-                    >
-                        <CommentIndicator color={commentColor} className="block" />
-                    </button>
-                )}
-            </div>
-            {caption && <span className="figcaption">{caption}</span>}
-        </NodeViewWrapper>
+            {showPlaceholder ? (
+                <div style={{ width: `${displayWidth || FIGURE_DEFAULT_WIDTH}px`, aspectRatio: '16 / 10' }}>
+                    <ImagePlaceholder missing={isMediaMissing(mediaName)} />
+                </div>
+            ) : (
+                <img
+                    ref={imageRef}
+                    src={src}
+                    alt={alt}
+                    className={cn('max-w-full block', failed && 'min-w-full min-h-10 bg-muted')}
+                    style={{
+                        width: displayWidth ? `${displayWidth}px` : undefined,
+                        aspectRatio: aspectRatio ?? undefined,
+                    }}
+                    onLoad={handleImageLoad}
+                    onError={() => setFailedSrc(src)}
+                    draggable={false}
+                    decoding="async"
+                />
+            )}
+        </FigureFrame>
     );
 }
 
-export const Figure = FigureNode.extend<FigureOptions>({
+export const Figure = FigureNode.extend<FigureFrameOptions>({
     addOptions() {
         return { onContextMenu: () => {}, onOpenComment: () => {} };
     },
@@ -300,52 +185,7 @@ export const Figure = FigureNode.extend<FigureOptions>({
         );
     },
     addProseMirrorPlugins() {
-        const name = this.name;
-        return [
-            new Plugin({
-                key: new PluginKey('figureClickBeside'),
-                props: {
-                    // A block figure's box is the column's width, so a click in the empty space beside the image lands
-                    // on the box: it puts the caret on that side, where ProseMirror would select the node.
-                    handleClickOn(view, _pos, node, nodePos, event, direct) {
-                        const box = view.nodeDOM(nodePos)?.firstChild;
-                        if (!direct || node.type.name !== name || event.target !== box || !(box instanceof Element))
-                            return false;
-                        const image = box.firstElementChild?.getBoundingClientRect();
-                        if (!image) return false;
-                        const at = event.clientX < image.left + image.width / 2 ? nodePos : nodePos + node.nodeSize;
-                        view.focus();
-                        view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, at)));
-                        return true;
-                    },
-                },
-            }),
-            new Plugin({
-                key: new PluginKey('figureDragOut'),
-                // A figure dragged out of a paragraph of its own takes the paragraph with it, where the
-                // paragraph's parent can do without it. ProseMirror's drop moves the selected node.
-                appendTransaction(transactions, oldState, newState) {
-                    const dragged = oldState.selection;
-                    if (
-                        !transactions.some((tr) => tr.getMeta('uiEvent') === 'drop') ||
-                        !(dragged instanceof NodeSelection) ||
-                        dragged.node.type.name !== name
-                    )
-                        return null;
-                    const mapping = new Mapping();
-                    for (const tr of transactions) mapping.appendMapping(tr.mapping);
-                    const $start = newState.doc.resolve(mapping.map(dragged.$from.before(), 1));
-                    const paragraph = $start.nodeAfter;
-                    if (
-                        !paragraph?.isTextblock ||
-                        paragraph.content.size > 0 ||
-                        !$start.parent.canReplace($start.index(), $start.index() + 1)
-                    )
-                        return null;
-                    return newState.tr.delete($start.pos, $start.pos + paragraph.nodeSize);
-                },
-            }),
-        ];
+        return figureFramePlugins(this.name);
     },
     addNodeView() {
         // TipTap skips the re-render when only decorations change, and the comment mark's color

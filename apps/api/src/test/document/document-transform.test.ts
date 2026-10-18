@@ -7,8 +7,10 @@ import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspa
 import {
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SHEETS,
+    DRIVE_TYPE_SLIDES,
     type DrivePath,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
@@ -66,7 +68,6 @@ import {
     seedDocumentMedia,
     seedEigendoc,
     seedVectorDoc,
-    withoutEquations,
 } from '../fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
@@ -851,13 +852,18 @@ describe('document transform (xlsx import)', () => {
 // Both doc HTML hashes moved again when a numbered list right after another ran on at the items' step: the two ol + ol rules, and nothing else.
 // Both doc HTML hashes moved again when docs gained the title and subtitle: their two rules and their place in the clear-floats list, and nothing else. The docx hash moved with them: the Title and Subtitle styles in styles.xml, and nothing else.
 // Both doc HTML hashes moved again when the grey of Heading 5, 6 and the subtitle became one rule and the print extras lost the dead text-align classes and the clear-floats list eigen-prose.css carries: those lines, and nothing else.
+// Both doc HTML hashes moved again when a chart's inline SVG took its fit from eigen-prose.css: the .figure svg rule, and nothing else.
+// The deck pdf-html hash moved when a printed page lost its scene wrapper and each layer took its place as top and left, the rotation alone a transform, at 1:1 so its @page is 1920 wide: those styles, and nothing else.
+// The deck html and pdf-html hashes moved when canvas-text.css gave an empty paragraph its line: that rule and its comment, and nothing else.
+// Both doc HTML hashes moved again when the PDF drew equations as SVG, scaled down to the column: the three .math-svg rules in the print extras and their comment, and nothing else.
+// Both doc HTML hashes moved again when a displayed equation took its line in the exports as in the editor: the .math-svg[data-display] rule and its comment in the print extras, the + br rule gone, and eigen-prose.css's .equation[data-display] rule scoped to .eigen-prose with its comment, and nothing else.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '8df15bfdd7a544f422177b422b46871e679d20669f29c11f61758eef8d0e7b9d';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '429d5834736bd9cbb904c8f627ebcaa04b2e543c02c35e722c11cb9de4fe5393';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '429d5834736bd9cbb904c8f627ebcaa04b2e543c02c35e722c11cb9de4fe5393';
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'bb25cd1e2163fb2bb069c5bf414283446fb84eb5fa382cec73af1fd7c32b838f';
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'd5d43916d2df3b5c85bbeea6a7273527aa6838fa8a48012ba369005ce5e3050c';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '8e95237c637e358447508983b2fb27d3d7a20dd81a6622c976d188e57f7c61e4';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
@@ -1200,14 +1206,16 @@ describe('document transform (docx round trip)', () => {
     }
 
     // The words of every text block and caption, in no order: a floating figure's caption moves before its paragraph.
-    // A page number is its field's cached 1, which the reader keeps as text.
+    // A break or an equation ends a word; a page number is its field's cached 1, which the reader keeps as text.
     function words(json: JSONContent): string[] {
         const chunks: string[] = [];
         const walk = (node: JSONContent) => {
             const caption = node.attrs?.['caption'];
             if (node.type === 'figure' && typeof caption === 'string') chunks.push(caption);
             const inline =
-                node.content?.filter((child) => ['text', 'hardBreak', 'pageNumber'].includes(child.type ?? '')) ?? [];
+                node.content?.filter((child) =>
+                    ['text', 'hardBreak', 'equation', 'pageNumber'].includes(child.type ?? ''),
+                ) ?? [];
             const textOf = (child: JSONContent) => (child.type === 'pageNumber' ? '1' : (child.text ?? ' '));
             if (inline.length > 0) chunks.push(inline.map(textOf).join(''));
             for (const child of node.content ?? []) walk(child);
@@ -1296,7 +1304,7 @@ describe('document transform (docx round trip)', () => {
 
     // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
     test('the all-features doc comes back with all its text, its links into Eigen root-relative', async () => {
-        const original = withoutEquations(buildAllFeaturesDocJson());
+        const original = buildAllFeaturesDocJson();
         const { json, images } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);
@@ -1353,7 +1361,7 @@ describe('document transform (eigenslides)', () => {
     }, 120_000);
 
     test('pdf-html export matches the pinned golden bytes', async () => {
-        // The PDF arm keeps each page unscaled on its own sheet; only the screen arm wraps a page
+        // The PDF arm lays each page out at 1:1 on its own sheet; only the screen arm wraps a page
         // in the container-query fit box.
         const html = await runDocumentExport(
             { documentType: 'eigenslides', format: 'pdf-html' },
@@ -1537,16 +1545,26 @@ describe('document transform (docx import)', () => {
 
 // openZip refuses an archive past the byte cap anyway, so a file that large is refused before it is read or copied
 // to the transform process, in its format's words.
+// A convert checks write on the destination folder before anything else it pays for.
+const WRITABLE_DRIVE = { canWrite: async () => true } as unknown as Drive;
+// Import slides… opens the deck for its frame, which a refused import must not pay for either.
+const UNOPENED_DRIVE = {
+    getCollabDocument: () => {
+        throw new Error('a refused import opened the document');
+    },
+} as unknown as Drive;
+
 describe('document transform (input bound)', () => {
     test.each([
         [DRIVE_TYPE_SHEETS, DRIVE_MIME_SHEETS, IMPORT_MESSAGES.xlsx.tooLarge],
         [DRIVE_TYPE_DOC, DRIVE_MIME_DOC, IMPORT_MESSAGES.docx.tooLarge],
+        [DRIVE_TYPE_SLIDES, DRIVE_MIME_SLIDES, IMPORT_MESSAGES.pptx.tooLarge],
     ])('an import past the byte cap into a %s is 413 and never runs', async (type, mimeType, message) => {
         const runSpy = spyOn(documentTransformRunner, 'run');
         try {
             const upload = Buffer.allocUnsafe(MAX_DECOMPRESSED_BYTES + 1);
             const path = { id: 'too-large', type, mimeType } as DrivePath;
-            const error = await importIntoDocument({} as unknown as Drive, path, upload, {} as unknown as User).catch(
+            const error = await importIntoDocument(UNOPENED_DRIVE, path, upload, {} as unknown as User).catch(
                 (reason: unknown) => reason,
             );
             expect(error).toMatchObject({ status: 413, message });
@@ -1568,13 +1586,9 @@ describe('document transform (input bound)', () => {
                 },
             } as unknown as Mount;
             const path = { id: 'too-large', parentId: 'parent', name, size: MAX_DECOMPRESSED_BYTES + 1 } as DrivePath;
-            const error = await convertToDocument(
-                {} as unknown as Drive,
-                mount,
-                path,
-                target,
-                {} as unknown as User,
-            ).catch((reason: unknown) => reason);
+            const error = await convertToDocument(WRITABLE_DRIVE, mount, path, target, {} as unknown as User).catch(
+                (reason: unknown) => reason,
+            );
             expect(error).toMatchObject({ status: 413, message });
         },
     );
@@ -1593,7 +1607,7 @@ describe('document transform (input bound)', () => {
             'eigensheets',
             {} as unknown as User,
         ).catch((reason: unknown) => reason);
-        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to sheets' });
+        expect(error).toMatchObject({ status: 400, message: 'Only .xlsx files can be converted to Sheets' });
     });
 });
 
@@ -1656,17 +1670,17 @@ describe('document transform (admission)', () => {
                 throw new Error('a refused import copied the upload');
             },
         });
-        const drive = {} as unknown as Drive;
         const user = {} as unknown as User;
 
         for (const target of [
             { type: DRIVE_TYPE_SHEETS, mimeType: DRIVE_MIME_SHEETS },
             { type: DRIVE_TYPE_DOC, mimeType: DRIVE_MIME_DOC },
+            { type: DRIVE_TYPE_SLIDES, mimeType: DRIVE_MIME_SLIDES },
         ]) {
             const refuse = refuseAdmissionOnce();
             let error: unknown;
             try {
-                await importIntoDocument(drive, { id: 'refused', ...target } as DrivePath, upload, user);
+                await importIntoDocument(UNOPENED_DRIVE, { id: 'refused', ...target } as DrivePath, upload, user);
             } catch (err) {
                 error = err;
             } finally {
@@ -1689,7 +1703,7 @@ describe('document transform (admission)', () => {
         const refuse = refuseAdmissionOnce();
         let error: unknown;
         try {
-            await convertToDocument({} as unknown as Drive, mount, path, 'eigensheets', user);
+            await convertToDocument(WRITABLE_DRIVE, mount, path, 'eigensheets', user);
         } catch (err) {
             error = err;
         } finally {

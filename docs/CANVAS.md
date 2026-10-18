@@ -1,6 +1,6 @@
 # Canvas Engine
 
-> **TLDR:** A drawing and a slide deck are the same thing underneath: a page of elements (shapes, lines, arrows, text boxes, images, freehand strokes) that people place freely and edit together. One engine stores, draws and edits both. `packages/lib/src/vector/` is the half without React, which the server runs too. `packages/ui/src/components/vector/` is the editor, `CanvasEditor`. The Vector app mounts it as an infinite canvas, and the Slides app shows one fixed 16:9 page at a time ([SLIDES.md](SLIDES.md)).
+> **TLDR:** A drawing and a slide deck are the same thing underneath: a page of elements (shapes, lines, arrows, text boxes, images, freehand strokes) that people place freely and edit together. One engine stores, draws and edits both. `packages/lib/src/vector/` is the half without React, which the server runs too. `packages/ui/src/components/vector/` is the editor, `CanvasEditor`. The Vector app mounts it as an infinite canvas, and the Slides app shows one slide-sized page at a time ([SLIDES.md](SLIDES.md)).
 
 A drawing is a `.eigenvector` file and a deck is a `.eigenslides` file. Both are collab documents ([COLLAB.md](COLLAB.md)): the content is a Yjs document that every open editor holds a copy of, and the server relays and stores the changes. Both use the same three roots in it. `elements` holds one small map per element: its type, position, size, rotation, colors, and whatever that type needs, such as the points of a line or the HTML of a text box. `frames` holds the slides of a deck. A frame is one page of fixed size, and an element on a slide names its frame. Only a deck writes frames, so a drawing has none. `meta` holds the background.
 
@@ -12,7 +12,7 @@ Drawing is the same on screen and on the server. Each element becomes one layer:
 
 Two more terms come back often. A host is the app that mounts `CanvasEditor` and decides how new elements look: the Vector app or the Slides app. Frame mode is how Slides mounts the canvas: it shows the active frame only, fitted to the screen.
 
-The sections cover the stored fields, the reader, kinds, layers, arrows that stay attached to shapes (bindings), elbow arrows, the viewport, frame mode, undo, text editing, Escape and touch. Three things in them surprise people:
+The sections cover the stored fields, the reader, the writer, kinds, layers, arrows that stay attached to shapes (bindings), elbow arrows, the viewport, frame mode, undo, text editing, Escape and touch. Three things in them surprise people:
 
 - The reader's repairs live only in the scene it returns. A repaired field is stored only when a later write sets that same field ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
 - One discrete op, such as a delete or a panel change, is one undo step ([§ One discrete op is one undo step](#one-discrete-op-is-one-undo-step)).
@@ -26,15 +26,19 @@ An element is a flat Yjs map of scalars and strings (`packages/lib/src/vector/ty
 
 A missing `roughness` reads as 0, so an old element stays crisp. A missing `seed` reads as 1, because roughjs picks a random seed for 0 and would redraw the jitter on every render.
 
-A frame's size is the `FRAME_WIDTH`/`FRAME_HEIGHT` constant (1920x1080) and is never stored. An element with a `frameId` stores `x`/`y` relative to the frame origin, so frame mode needs no coordinate translation. Elements may overhang; the frame clips them.
+A frame's size is the deck's slide size, `meta.slideSize` read through `SLIDE_SIZES` (1920×1080 or 1920×1440), and is never stored on the frame ([SLIDES.md](SLIDES.md#a-deck-has-one-slide-size-and-a-change-moves-nothing)). An element with a `frameId` stores `x`/`y` relative to the frame origin, so frame mode needs no coordinate translation. Elements may overhang; the frame clips them.
 
 A rich-text box's `html` is one scalar, so two people typing in one box resolve last-writer-wins for the whole box ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
 
 ## The reader is the trust boundary
 
-`readVectorFromDoc` (`read-vector.ts`) turns a Y.Doc into a `VectorScene`. It needs only yjs, so the API's transform process runs it too. Each kind's `read` validates its own fields: enums, clamps, string caps, color tokens. Then it repairs what a concurrent merge can leave: colliding fractional indices get fresh ones, an element whose `frameId` names no frame moves to the first frame, and a binding to a missing shape is dropped. The repair lives only in the returned scene. Nothing writes it back: `updateElements` writes only the fields it is given, so a repaired field is stored only when a later write sets that same field. It can't sanitize rich-text `html`, which needs a DOM, so the layers that render it do ([§ One layer per element](#one-layer-per-element-on-the-canvas-and-on-the-server)).
+`readVectorFromDoc` (`read-vector.ts`) turns a Y.Doc into a `VectorScene`. It is React-free, so the API's transform process runs it too. Each kind's `read` validates its own fields: enums, clamps, string caps, color tokens. Then it repairs what a concurrent merge can leave: colliding fractional indices get fresh ones, an element whose `frameId` names no frame moves to the first frame, and a binding to a missing shape is dropped. The repair lives only in the returned scene. Nothing writes it back: `updateElements` writes only the fields it is given, so a repaired field is stored only when a later write sets that same field. It can't sanitize rich-text `html`, which needs a DOM, so the layers that render it do ([§ One layer per element](#one-layer-per-element-on-the-canvas-and-on-the-server)). It does keep `html` as stored only when one linear tag scan finds it editor-shaped: LightEditor tags in plain syntax with at most 8 attributes each, every end tag closing the innermost open element, no block or `<li>` inside an open `<p>`, `<li>` only directly in a list, no `<a>` in an `<a>`, and at most `MAX_HTML_DEPTH` elements deep. Anything else, a comment, another tag or a single stray close, flattens the whole box to one paragraph per line of its text, still inside the byte cap. That text is `stripTagsServer`'s, which drops a `<script>`, `<style>`, `<title>`, `<noscript>` or `<iframe>` with its content (`RAW_TEXT_DROP_TAGS`), so their code never shows as a line. That includes a box the LightEditor itself nested past the cap, say a fully marked list about 30 levels deep: it keeps its text and loses all its formatting. jsdom pays per ancestor for every node it inserts, so 3,000 nested list levels held the export sanitizer for 30 s; and where the parser closes what a body left open, the formatting elements it popped stay on its active list and are rebuilt for every later paragraph, so 64 KiB of those held it for 17 s under the depth cap.
 
 A pasted clipboard record goes through the same `readElementFromFields`, so a forged clipboard is exactly as safe as a hostile peer write.
+
+## One writer stores what the reader reads
+
+`write-vector.ts` is the one writer of the stored shape. `writeElementInDoc` lays the kind's defaults under the host's style table, then the caller's fields, and stores them through the `ELEMENT_FIELDS` allow-list. `writeFrameInDoc` does the same through `FRAME_FIELDS`. The editor, the deck seeder, the demo seeder and the server's deck writer all write through it, so a page they write cannot drift from one a user drew. `writeElementInDoc` takes an optional id and keeps a seed the caller gives, and a frame carries its own id: the seeders pass fixed ones so two peers converge on one record and a reseed writes the same bytes. Both join a caller's live transaction, so the caller's origin and its one-update guarantee hold. Like the reader it is React-free, so the API runs it.
 
 ## A kind is one registry entry
 
@@ -50,6 +54,18 @@ The `pie` kind is a sector of the ellipse its box inscribes, like OOXML's `pie`.
 
 The `chart` kind holds one chart's stored spec, kept as stored, and draws it as the canvas's own shapes plus SVG text, each shape through its own kind ([CHARTS.md](CHARTS.md)). Its fill is its background and its stroke its axes. No tool draws one either: Insert → Chart places Google's sample at the viewport center (`CanvasHandle.insertChart`), 640 × 400 on a drawing and 1200 × 675 on a slide.
 
+## A path is stored in its unit box
+
+The `path` kind is a free contour of lines and Bézier curves, what a pptx `custGeom` draws. `path` holds absolute `M`, `L`, `C`, `Q` and `Z` commands in the unit box, numbers from 0 to 1 across the element's width and height. A resize writes only `width` and `height`: a line or a freehand stroke stores scene units and rewrites every point on every resize, which drifts and can't stretch one axis cleanly. `scaledPathCommands` (`outline.ts`) is the one mapping to the local frame at the box size, rounded as it is drawn: render writes it out as the SVG `d` (`scaleNormalizedPath`), and the hit test, the outline, the bounds and the anchors read the same list, so none of them can disagree with what is drawn. `closed` says whether it fills. An open path only strokes, so it offers no fill, no None stroke and no binding (`capabilitiesOf`).
+
+The reader's `parseNormalizedPath` (`kinds/read-fields.ts`) accepts absolute `M`, `L`, `C`, `Q` and `Z` in SVG number syntax, separated by ASCII space, tab, CR, LF or comma, or by nothing where SVG allows it (`M0,0L1 0C.5.5 1 1 1 1`). It stores one canonical string: numbers rounded to 4 decimals and clamped to [-2, 3], so control points may overshoot the box but a 1e15 never reaches roughjs or a viewBox. Anything else drops the element: another command (`H`, `V`, `S`, `T`, `A`), a relative one, a wrong count of numbers, a number that is not finite, a subpath that doesn't start with `M`, any other character (an NBSP or U+2028 among them, so a valid path is ASCII and its length is its bytes), more than `MAX_PATH_COMMANDS` commands, or more than `MAX_PATH_BYTES` before or after canonicalizing. The cap holds after canonicalizing too, because a stored path must read back. `closed` reads false for a path without a `Z`.
+
+The canvas fills a path nonzero, the SVG default that browsers and WeasyPrint draw, and roughjs hatches it even-odd. The two rules agree on a hole only when the hole is wound opposite to the ring around it, so a hole is drawn oppositely wound, and an importer must orient its subpaths that way: two rings wound the same way fill solid but hatch with a hole. The pptx importer winds each subpath by how deep it nests among the others ([EXPORT.md](EXPORT.md#a-shape-no-kind-draws-is-a-path-from-its-drawingml-geometry)). The hit test uses nonzero, as the fill does.
+
+A closed path is hit inside whatever its fill, as a rectangle, ellipse or pie is; an open path is hit on its stroke only. Hit test, outline, bounds and anchors sample each curve into chords within a fixed tolerance, with a cap on chords per curve so a path stretched to the coordinate cap stays cheap. The samples are cached per element object, because hover hit-tests every element and docking outlines every candidate on each pointer move; an edit makes a new object, so the cache never goes stale. The bounds are the samples rotated as drawn plus half the stroke, because a control point may pull a curve past the box: the export viewBox, the marquee and the selection ring read them, and the hit test rejects a probe outside them first. The snap and dock anchors are the points of the outer contour nearest the box's side midpoints, so the dots sit on the drawn edge.
+
+The outline is the outer contour, the subpath with the largest area, with every edge moved out by the binding gap and an arc round each corner, so an arrow docks the gap off the drawn edge, never in a hole and never far out past a sharp tip, where a miter would put it. In a slot or notch narrower than twice the gap the two moved walls cross, so the grown outline self-intersects and parts of the slot and its mouth fall outside it: an arrow aimed into the slot can dock in it, nearer the walls than the gap. There is no cheap exact fix, since a true offset needs a polygon union of the moved edges. No tool draws a path.
+
 ## Capabilities are asked of the element
 
 `capabilitiesOf(el)` answers what an element supports: fill, hatch, dash, corners, bindable, how it is created. The panel, the tools and the binding code gate on it, never on a type list. It takes the element, not the kind, because some answers depend on geometry: an open line or freehand stroke has nothing to fill until its path closes.
@@ -62,7 +78,7 @@ The `chart` kind holds one chart's stored spec, kept as stored, and draws it as 
 
 The live layer is positioned with `transform: translate() rotate()`, never `left`/`top`, because the browser snaps a box origin to whole pixels but not a transform. `ElementLayer`'s memo compares the scalar fields, so a pan reruns nothing. A kind draws in its local frame, so its body (`layerContent`) never reads `x`, `y`, `angle` or `opacity`: the layer keeps the body across a change to those alone and moves only the box (`placeLayer`), so a drag never reruns rough path generation or a chart's layout. An elbow arrow also depends on its two bound shapes, so the memo compares those two rather than routing, which costs 50x more. A derived elbow route is local to the arrow's origin, so that body redraws when the arrow itself moves.
 
-Rich text carries the class `eigen-canvas-text` everywhere, backed by `packages/ui/src/styles/canvas-text.css`, because list markers and link underlines are out of reach of an inline style. `html` arrives verbatim from any peer or a forged paste, so `ElementLayer` and the paste path both run `sanitizeToLightEditorHtml`.
+Rich text carries the class `eigen-canvas-text` everywhere, backed by `packages/ui/src/styles/canvas-text.css`, because list markers and link underlines are out of reach of an inline style. The app imports it, and the export document and the SVG download embed it. It also gives an empty `<p></p>` one line (`min-height: 1lh`, which WeasyPrint reads too): the stored html of a blank line carries no `<br>`, so outside the editor, whose `<p>` ProseMirror fills with a trailing `<br>`, the line would collapse. `html` arrives verbatim from any peer or a forged paste, so `ElementLayer` and the paste path both run `sanitizeToLightEditorHtml`.
 
 Gradients carry nine stops sampled in OKLab (`packages/lib/src/background/gradient.ts`), because browsers and WeasyPrint blend two stops in sRGB, through a muddy gray.
 
@@ -70,7 +86,7 @@ Gradients carry nine stops sampled in OKLab (`packages/lib/src/background/gradie
 
 An arrow is the one kind that depends on other elements. Its math lives in `packages/lib/src/vector/` (`geometry.ts`, `outline.ts`, `elbow-route.ts`, `elbow-pins.ts`), its handles in `packages/ui/src/components/vector/tools/`.
 
-An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, the pie, the chart, rich text and images.
+An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, the pie, a closed path, the chart, rich text and images.
 
 There is no stored reverse index. `arrowsBoundTo` derives "which arrows dock on this shape" in memory, so there is no second write to keep consistent. A binding to a missing or unbindable shape is dropped on read and never written ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
 
@@ -116,7 +132,7 @@ Anything that must be exact mid-gesture reads the ref: scene conversion, hit-tes
 
 ## Frame mode always shows the whole page
 
-Frame mode fits the page on open, on every resize and on every frame switch (`fitFrameViewport` in `packages/lib/src/vector/viewport.ts`). The zoom is the fit's, never the user's: `settle` (`packages/ui/src/components/vector/hooks/use-viewport.ts`), which every gesture write passes through, restores it, so wheel zoom and pinch do nothing and a pan settles back.
+Frame mode fits the page on open, on every resize, on every frame switch and on every change of the page's size (`fitFrameViewport` in `packages/lib/src/vector/viewport.ts`). The zoom is the fit's, never the user's: `settle` (`packages/ui/src/components/vector/hooks/use-viewport.ts`), which every gesture write passes through, restores it, so wheel zoom and pinch do nothing and a pan settles back.
 
 The page card's border is drawn in the screen-space chrome at 1 px. A border inside the scaled scene layer fails, because the browser floors `border-width` to whole px: at a 0.57 fit it becomes a blurry, drifting hairline.
 
@@ -130,7 +146,7 @@ In frame mode, rendering, hit testing, marquee, snap, select-all and the keyboar
 
 ## One discrete op is one undo step
 
-`Y.UndoManager` merges everything within 500 ms. So every discrete op (delete, duplicate, z-order, a panel row, a frame op) runs through `sealed()` (`hooks/use-canvas-doc.ts`), which stops capturing on both sides. A gesture that writes as it goes (the opacity slider, a typed number, a run of arrow-key nudges) takes `holdCapture()` instead. It holds the window open until the gesture ends, and `sealed` stands down inside it. The panel publishes the hold on `PropertyGestureContext`, so every number input is one step without threading it.
+`Y.UndoManager` merges everything within 500 ms. So every discrete op (delete, duplicate, z-order, a panel row, a frame op) runs through `sealed()` (`packages/ui/src/components/properties-panel/property-gesture.ts`), which stops capturing on both sides. A gesture that writes as it goes (the opacity slider, a typed number, a run of arrow-key nudges) takes `holdCapture()` instead. It holds the window open until the gesture ends, and `sealed` stands down inside it. The panel publishes the hold on `PropertyGestureContext`, so every number input is one step without threading it.
 
 Fixups that must never be undone write under a non-null origin, which the UndoManager does not track: the image's pending-to-real media name swap, the sweep of abandoned upload placeholders, a text box re-fit caused by someone else, the deck's seed. They still sync to peers. The comments map is outside the undo scope, so ⌘Z never resurrects a card. It is not one of the declared `yjsRoots` either, so a version restore from before a card's delete brings back the element's `commentCardIds` but not the card. The canvas draws no mark for an id whose card is gone.
 
@@ -158,7 +174,7 @@ On the canvas Escape goes to the innermost active mode: rich-text editing, then 
 
 `ObjectTransform` (`packages/ui/src/components/transform/`) is the resize and rotate chrome for the canvas, docs figures and sheets images. Its `snapBox` applies on resize only. `snap.ts` takes its threshold in the box's units, so a zoomable host passes `SNAP_SCREEN_THRESHOLD / zoom` to keep the radius constant on screen. A rotated box's axis-aligned edges don't match what the user sees, so it snaps by center only. The aspect lock (`useAspectLock`) starts on for images and remembers a toggle per element while the editor is mounted.
 
-Every panel row is a `PropertyRow` over the shared controls in `packages/ui/src/components/properties-panel/`, never a bespoke control. With nothing selected a host may add its own rows (`emptySection`), because only it knows those words.
+Every panel row is a `PropertyRow` over the shared controls in `packages/ui/src/components/properties-panel/`, never a bespoke control. A checkbox is a `PropertyCheckbox` instead, its label beside the box across the row, because a box's label says what it turns on and outruns the label column. With nothing selected a host may add its own rows (`emptySection`), because only it knows those words.
 
 ## See also
 

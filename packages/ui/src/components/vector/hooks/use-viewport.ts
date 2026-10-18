@@ -39,9 +39,11 @@ const zoomAt = (v: CanvasViewport, nextZoom: number, px: number, py: number): Ca
 
 type UseViewportOptions = {
     // 'frame' bounds the canvas to one page: it always shows the whole page — fitted on open, re-fitted
-    // on every container resize and frame switch — with the zoom LOCKED to that fit, so there is no
-    // user zoom and, following from the clamp, no free pan either.
+    // on every container resize, frame switch and size change — with the zoom LOCKED to that fit, so
+    // there is no user zoom and, following from the clamp, no free pan either.
     mode?: 'infinite' | 'frame';
+    // The page's size. A new size re-fits like a frame switch: the deck's slide size changed, here or at
+    // a peer, and the old fit would crop the page.
     frame?: Extent;
     // Re-fit when this changes (the active frame's id).
     resetKey?: string;
@@ -168,10 +170,10 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
     }, [containerExtent, set]);
 
     // Opening view: the scene origin at the container center (infinite), or the frame letterboxed
-    // (frame mode, re-run on every `resetKey` change so a frame switch resets the pan). Waits for a
-    // real size: a mobile comment deep link mounts the canvas inside a hidden wrapper, which measures
-    // 0 until the pane closes. Frame mode keeps observing — a letterboxed page must stay letterboxed
-    // across a resize; infinite mode centers once and disconnects.
+    // (frame mode, re-run on every `resetKey` change so a frame switch resets the pan, and on every
+    // change of the frame's size). Waits for a real size: a mobile comment deep link mounts the canvas
+    // inside a hidden wrapper, which measures 0 until the pane closes. Frame mode keeps observing — a
+    // letterboxed page must stay letterboxed across a resize; infinite mode centers once and disconnects.
     useLayoutEffect(() => {
         const el = containerRef.current;
         if (!el) return;
@@ -190,7 +192,7 @@ export function useViewport({ mode = 'infinite', frame, resetKey = '' }: UseView
         });
         observer.observe(el);
         return () => observer.disconnect();
-    }, [mode, resetKey, fitFrame, set]);
+    }, [mode, resetKey, frame?.width, frame?.height, fitFrame, set]);
 
     const clientToScene = useCallback((clientX: number, clientY: number) => {
         const rect = containerRef.current?.getBoundingClientRect();

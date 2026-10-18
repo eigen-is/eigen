@@ -1,17 +1,17 @@
 // A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
 // Tools reaches everyone, viewers included.
-import { afterEach, expect, mock, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 const window = installHappyDom();
 
 const { act, createElement } = await import('react');
-const { formatForDisplay } = await import('@tanstack/react-hotkeys');
+const { formatForDisplay, getHotkeyManager } = await import('@tanstack/react-hotkeys');
 const { Editor } = await import('@tiptap/react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { CommandPaletteProvider } = await import('@workspace/ui');
@@ -27,14 +27,29 @@ const editor = new Editor({
 });
 
 const onReplaceImage = mock(() => {});
-const onOpenBand = mock((_request: unknown) => {});
+const onEnterBand = mock((_band: unknown) => {});
+const onPageNumbers = mock((_preset: unknown) => {});
 
-async function render(width: number, canWrite: boolean) {
+async function render(
+    width: number,
+    canWrite: boolean,
+    {
+        active = editor,
+        onInsertEquation,
+        sync = { offline: false, unsyncedEdits: false },
+    }: {
+        active?: typeof editor;
+        onInsertEquation?: () => void;
+        sync?: { offline: boolean; unsyncedEdits: boolean };
+    } = {},
+) {
     window.happyDOM.setViewport({ width, height: 1000 });
     const toolbar = createElement(EditorToolbar, {
-        editor,
+        editor: active,
+        body: editor,
         canWrite,
-        offline: false,
+        onInsertEquation,
+        ...sync,
         storageUnavailable: false,
         canUndo: false,
         canRedo: false,
@@ -43,7 +58,8 @@ async function render(width: number, canWrite: boolean) {
         onAccessDialogOpen: () => {},
         onImageUpload: () => {},
         onReplaceImage,
-        onOpenBand,
+        onEnterBand,
+        onPageNumbers,
         path: drivePath({ name: 'Notes', mimeType: DRIVE_MIME_DOC }),
     });
     const router = createRouter({
@@ -97,7 +113,7 @@ async function openSubmenu(label: string) {
     });
 }
 
-const SHORT_ROW = ['Normal text', 'Inter', 'Bold', 'Italic', 'Underline'];
+const SHORT_ROW = ['Normal text', 'Inter', 'Decrease font size', 'Increase font size', 'Bold', 'Italic', 'Underline'];
 const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', 'Insert image'];
 const FULL_ROW = [...MIDDLE_ROW, 'Align', 'Bulleted list', 'Numbered list', 'Checklist', 'Clear formatting'];
 
@@ -115,12 +131,12 @@ test('a writer on a phone gets File, Edit, Format and Insert, and no Tools', asy
 
 test.each([
     [1920, FULL_ROW],
-    [1400, FULL_ROW],
-    [1399, MIDDLE_ROW],
-    [1200, MIDDLE_ROW],
-    [1199, SHORT_ROW],
-    [1000, SHORT_ROW],
-    [999, []],
+    [1490, FULL_ROW],
+    [1489, MIDDLE_ROW],
+    [1270, MIDDLE_ROW],
+    [1269, SHORT_ROW],
+    [1090, SHORT_ROW],
+    [1089, []],
     [390, []],
 ])('at %ipx the icon row holds its first controls in priority order', async (width, row) => {
     await render(width, true);
@@ -129,7 +145,7 @@ test.each([
 
 // Text color, highlight and quote leave the row at some width too, so a menu must reach them at every width.
 test.each(
-    [1920, 1300, 1000, 390].flatMap((width) => [
+    [1920, 1400, 1090, 390].flatMap((width) => [
         [width, 'Text', ['Text color', 'Highlight color']],
         [width, 'Paragraph styles', ['Quote']],
     ]),
@@ -162,7 +178,7 @@ test("Format's submenus follow Google Docs' names and order", async () => {
     ]);
 });
 
-test('Format › Text puts the Eigen-only marks after the scripts and capitalisation last', async () => {
+test('Format › Text puts Size after the scripts as Google does, then inline code, and capitalisation last', async () => {
     await render(1920, true);
     await openMenu('Format');
     await openSubmenu('Text');
@@ -173,14 +189,79 @@ test('Format › Text puts the Eigen-only marks after the scripts and capitalisa
         'Strikethrough',
         'Superscript',
         'Subscript',
+        'Size',
         'Inline code',
-        'Small',
         'Small caps',
         expect.stringMatching(/^All caps/),
         '—',
         'Text color',
         'Highlight color',
     ]);
+});
+
+// A step replaces Small, which the schema keeps so a doc that holds it keeps its text, and no menu offers.
+test("Format › Text › Size steps the size, with Google's keys", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'fine', marks: [{ type: 'small' }] }] }],
+    });
+    editor.commands.setTextSelection({ from: 1, to: 5 });
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Text');
+    await openSubmenu('Size');
+    expect(openMenuEntries()).toEqual([
+        `Increase font size${formatForDisplay('Mod+Shift+.')}`,
+        `Decrease font size${formatForDisplay('Mod+Shift+,')}`,
+    ]);
+    const increase = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+        item.textContent?.trim().startsWith('Increase font size'),
+    );
+    await act(async () => increase?.click());
+    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
+        { type: 'textStyle', attrs: { color: null, fontFamily: null, fontSize: 10, caps: null } },
+    ]);
+});
+
+// Google's "− [11] +" sits between the font and Bold.
+test("the size box shows the selection's size, and a typed size replaces Small", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'body ' },
+                    { type: 'text', text: 'fine', marks: [{ type: 'small' }] },
+                ],
+            },
+        ],
+    });
+    editor.commands.setTextSelection(3);
+    await render(1920, true);
+    const box = () => document.querySelector<HTMLInputElement>('input[aria-label="Font size"]');
+    expect(box()?.value).toBe('11');
+    await act(async () => editor.commands.setTextSelection({ from: 6, to: 10 }));
+    expect(box()?.value).toBe('9');
+    await act(async () => editor.commands.setTextSelection({ from: 1, to: 10 }));
+    expect(box()?.value).toBe('');
+
+    await act(async () => {
+        const input = box();
+        if (!input) return;
+        input.focus();
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '14');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => box()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    expect(editor.getJSON().content?.[0]?.content).toEqual([
+        {
+            type: 'text',
+            text: 'body fine',
+            marks: [{ type: 'textStyle', attrs: { color: null, fontFamily: null, fontSize: 14, caps: null } }],
+        },
+    ]);
+    expect(box()?.value).toBe('14');
 });
 
 test('Format › Paragraph styles lists Normal text, Title, Subtitle, Heading 1 to 6 and then Quote, as Google does', async () => {
@@ -393,16 +474,22 @@ test('Format › Image › Replace image opens the picker the image panel opens'
     expect(onReplaceImage).toHaveBeenCalledTimes(1);
 });
 
-test.each([
-    ['Headers and footers', { band: 'header' }],
-    ['Page numbers', { section: 'pageNumbers' }],
-])('Format › %s opens the Headers and footers panel on %p', async (item, request) => {
-    onOpenBand.mockClear();
+test('Format › Headers and footers puts the caret in the header', async () => {
+    onEnterBand.mockClear();
     await render(1920, true);
     await openMenu('Format');
-    await clickItem(item);
-    expect(onOpenBand.mock.calls).toEqual([[request]]);
+    await clickItem('Headers and footers');
+    expect(onEnterBand.mock.calls).toEqual([['header']]);
 });
+
+const PAGE_NUMBER_ENTRIES = [
+    'In the header',
+    'In the header, not on the first page',
+    'In the footer',
+    'In the footer, not on the first page',
+    '—',
+    'Page count',
+];
 
 test("Insert › Page elements holds Header, Footer and Google's page number presets with Page count", async () => {
     await render(1920, true);
@@ -410,46 +497,73 @@ test("Insert › Page elements holds Header, Footer and Google's page number pre
     await openSubmenu('Page elements');
     expect(openMenuEntries()).toEqual(['Header', 'Footer', 'Page numbers']);
     await openSubmenu('Page numbers');
-    expect(openMenuEntries()).toEqual([
-        'In the header',
-        'In the header, not on the first page',
-        'In the footer',
-        'In the footer, not on the first page',
-        '—',
-        'Page count',
-    ]);
+    expect(openMenuEntries()).toEqual(PAGE_NUMBER_ENTRIES);
+});
+
+test('Format › Page numbers holds the same presets', async () => {
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Page numbers');
+    expect(openMenuEntries()).toEqual(PAGE_NUMBER_ENTRIES);
 });
 
 test.each([
-    ['Header', { band: 'header' }],
-    ['Footer', { band: 'footer' }],
-])('Insert › Page elements › %s opens the panel on that band', async (item, request) => {
-    onOpenBand.mockClear();
+    ['Header', 'header'],
+    ['Footer', 'footer'],
+])('Insert › Page elements › %s puts the caret in the %s', async (item, band) => {
+    onEnterBand.mockClear();
     await render(1920, true);
     await openMenu('Insert');
     await openSubmenu('Page elements');
     await clickItem(item);
-    expect(onOpenBand.mock.calls).toEqual([[request]]);
+    expect(onEnterBand.mock.calls).toEqual([[band]]);
 });
 
-test('a page number preset opens the panel on its band with the preset, and Page count goes in at the caret', async () => {
+test('a page number preset goes to the editor, and Page count goes in at the caret', async () => {
     editor.commands.setContent(ONE_PARAGRAPH);
     editor.commands.setTextSelection(2);
-    onOpenBand.mockClear();
+    onPageNumbers.mockClear();
     await render(1920, true);
     await openMenu('Insert');
     await openSubmenu('Page elements');
     await openSubmenu('Page numbers');
     await clickItem('In the footer, not on the first page');
-    expect(onOpenBand.mock.calls).toEqual([
-        [{ band: 'footer', preset: expect.objectContaining({ band: 'footer', onFirstPage: false }) }],
-    ]);
+    expect(onPageNumbers.mock.calls).toEqual([[expect.objectContaining({ band: 'footer', onFirstPage: false })]]);
 
     await openMenu('Insert');
     await openSubmenu('Page elements');
     await openSubmenu('Page numbers');
     await clickItem('Page count');
     expect(editor.getJSON().content?.[0]?.content?.at(-1)).toEqual({ type: 'pageNumber', attrs: { kind: 'pages' } });
+});
+
+// A command the schema lacks is a TypeError, so the menus ask the editor they act on what it holds.
+test("in a band, Insert, Format and the style picker offer only what the band's schema holds", async () => {
+    const band = new Editor({ extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }) });
+    await render(1920, true, { active: band });
+    await openMenu('Insert');
+    expect(menuItems().filter((item) => item?.startsWith('Page break') || item === 'Code block')).toEqual([]);
+    expect(menuItems()).toContain('Table');
+
+    await openMenu('Format');
+    await openSubmenu('Paragraph styles');
+    expect(openMenuEntries()).toEqual([
+        'Normal text',
+        'Heading 1',
+        'Heading 2',
+        'Heading 3',
+        'Heading 4',
+        'Heading 5',
+        'Heading 6',
+        '—',
+        'Quote',
+    ]);
+
+    await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await openMenu('Normal text');
+    expect(menuItems()).not.toContain('Title');
+    expect(menuItems()).not.toContain('Subtitle');
+    band.destroy();
 });
 
 // Google has Format › Page orientation beside File › Page setup; both open the one dialog.
@@ -490,19 +604,26 @@ test.each([
     expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
-// The panel puts the caret in the band a frame after the pick, as Tiptap does in the body.
-test('a pick that opens a band leaves focus in the band', async () => {
-    const band = document.body.appendChild(document.createElement('div'));
-    band.setAttribute('data-band', 'header');
-    const caret = band.appendChild(document.createElement('div'));
-    caret.tabIndex = 0;
-    onOpenBand.mockImplementationOnce(() => requestAnimationFrame(() => caret.focus()));
+// Radix would hand focus back to the trigger, where the next keystrokes and ⌘Z reach nothing.
+test.each(['File', 'Edit', 'Format', 'Insert', 'Tools'])(
+    '%s closed with Esc gives focus back to the editor',
+    async (menu) => {
+        await render(1920, true);
+        await openMenu(menu);
+        await pickInBrowserFrames(async () => {
+            await act(async () =>
+                document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+            );
+        });
+        expect(document.activeElement === editor.view.dom).toBe(true);
+    },
+);
+
+test('a dialog a menu opens keeps focus', async () => {
     await render(1920, true);
-    await openMenu('Insert');
-    await openSubmenu('Page elements');
-    await pickInBrowserFrames(() => clickItem('Header'));
-    expect(document.activeElement === caret).toBe(true);
-    band.remove();
+    await openMenu('Format');
+    await pickInBrowserFrames(() => clickItem('Page orientation'));
+    expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
 });
 
 const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];
@@ -819,4 +940,97 @@ test.each([
     await pickInBrowserFrames(() => clickItem(`${label}${formatForDisplay(shortcut)}`));
     expect(execCommand.mock.calls).toEqual([[command]]);
     expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+// Where Google's Insert › Symbols › Equation sits relative to the chart and the line. The equation goes in once the menu
+// has closed, so Radix hands the focus to no trigger after the new equation's field has taken it.
+test('Insert › Equation follows Chart and inserts once the menu has closed', async () => {
+    const onInsertEquation = mock(() => {});
+    await render(1920, true, { onInsertEquation });
+    await openMenu('Insert');
+    expect(openMenuEntries().slice(0, 5)).toEqual(['Link', 'Image', 'Chart', 'Equation', 'Horizontal rule']);
+
+    await clickItem('Equation');
+    expect(onInsertEquation).not.toHaveBeenCalled();
+    // Radix calls onCloseAutoFocus in a timeout its unmount sets, which under load a single tick can precede.
+    for (let tick = 0; tick < 50 && onInsertEquation.mock.calls.length === 0; tick++) {
+        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+    }
+    expect(onInsertEquation).toHaveBeenCalledTimes(1);
+});
+
+// A phone has no panel to edit one in, and a band being edited none that follows it.
+test('Insert has no Equation without a way to edit it', async () => {
+    await render(1920, true);
+    await openMenu('Insert');
+    expect(openMenuEntries()).not.toContain('Equation');
+});
+
+// Print is the server's PDF in a tab of its own, so the headers and footers print; browser print is the fallback.
+describe('Print', () => {
+    const opened: string[] = [];
+    const browserPrint = mock(() => {});
+    const pressModP = () =>
+        act(async () => {
+            const isMac = /mac/i.test(`${navigator.platform} ${navigator.userAgent}`);
+            document.body.dispatchEvent(
+                new KeyboardEvent('keydown', {
+                    bubbles: true,
+                    key: 'p',
+                    code: 'KeyP',
+                    metaKey: isMac,
+                    ctrlKey: !isMac,
+                }),
+            );
+        });
+
+    beforeEach(() => {
+        opened.length = 0;
+        browserPrint.mockClear();
+        // A tab waiting on a PDF that never comes; the PDF's own lifecycle is usePrintPdf's test.
+        window.open = ((url: string) => {
+            opened.push(url);
+            return { closed: false, close: () => {}, location: { href: '' } };
+        }) as unknown as typeof window.open;
+        globalThis.fetch = (() => new Promise(() => {})) as unknown as typeof fetch;
+        Object.assign(window, { print: browserPrint });
+    });
+
+    test('File › Print opens the PDF tab', async () => {
+        await render(1920, false);
+        await openMenu('File');
+        await clickItem('Print');
+        expect(opened).toEqual(['']);
+        expect(browserPrint).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['offline', { offline: true, unsyncedEdits: false }],
+        ['with unsynced edits', { offline: false, unsyncedEdits: true }],
+    ])('%s, File › Print is browser print', async (_, sync) => {
+        await render(1920, true, { sync });
+        await openMenu('File');
+        await clickItem('Print');
+        expect(opened).toEqual([]);
+        expect(browserPrint).toHaveBeenCalledTimes(1);
+    });
+
+    // EigenApp binds ⌘P on the document for every app; this stands in for it.
+    test("⌘P in Docs opens the PDF tab and never reaches EigenApp's ⌘P, which takes it again once Docs is gone", async () => {
+        const globalPrint = mock(() => {});
+        const global = getHotkeyManager().register('Mod+P', globalPrint);
+        try {
+            await render(1920, true);
+            await pressModP();
+            expect(opened).toEqual(['']);
+            expect(globalPrint).not.toHaveBeenCalled();
+
+            await unmount();
+            await pressModP();
+            expect(opened).toEqual(['']);
+            expect(globalPrint).toHaveBeenCalledTimes(1);
+        } finally {
+            global.unregister();
+        }
+    });
 });

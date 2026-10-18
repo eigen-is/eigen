@@ -156,14 +156,17 @@ describe('chartToElements', () => {
         }
     });
 
-    test('a label box is rich text in the label font, aligned by its anchor, with no paint of its own', () => {
-        const el = chart({ id: 'c1', chart: specJson('column', { title: 'A < B & "C"' }), fontFamily: 'Inter' });
+    test('a label box is rich text in the spec font, aligned by its anchor, with no paint of its own', () => {
+        const el = chart({
+            id: 'c1',
+            chart: specJson('column', { title: 'A < B & "C"', fontFamily: 'Source Serif 4' }),
+        });
         const title = labelsOf(chartToElements(el)).find((box) => box.fontWeight === 'bold');
         if (!title) throw new Error('expected a bold title');
         expect(title).toMatchObject({
             html: '<p>A &lt; B &amp; &quot;C&quot;</p>',
             textAlign: 'center',
-            fontFamily: 'Inter',
+            fontFamily: 'Source Serif 4',
             color: el.color,
             padding: 0,
             fill: serializeFill(TRANSPARENT_FILL),

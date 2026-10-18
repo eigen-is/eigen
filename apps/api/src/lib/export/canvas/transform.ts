@@ -1,4 +1,4 @@
-import { FRAME_WIDTH, type MediaResolver, readVectorFromDoc, round } from '@workspace/lib/vector';
+import { type MediaResolver, readVectorFromDoc, round } from '@workspace/lib/vector';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
@@ -7,7 +7,6 @@ import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import {
     type DocumentExportFormat,
-    type HtmlExportMode,
     htmlExportMode,
     type TransformMedia,
     type TransformWarning,
@@ -16,36 +15,33 @@ import {
 import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { type CanvasPage, framePages, renderCanvasPage, renderFittedPage } from './render';
+import { type CanvasPage, DECK_SCALE, framePages, renderFittedPage, renderPrintPage } from './render';
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
 // PDF all leave through here, so there is one @page rule, one font block and one reset instead of a
 // copy per document type. Runs inside the transform Worker (worker.ts owns execution; the main-thread
 // orchestration lives in export-document.ts): no Mount, no preview cache.
-//
-// 16:9 landscape page: 254mm x 142.875mm ~ 960 x 540 px at 96dpi. A frame is 1920x1080, so a deck
-// prints at scale 0.5 — a @page of 1920px would be a 20-inch sheet.
-const DECK_PAGE_WIDTH = 960;
-const DECK_SCALE = DECK_PAGE_WIDTH / FRAME_WIDTH;
 
-export function canvasHtmlDocument(opts: {
-    title: string;
-    pages: CanvasPage[];
-    scale: number;
-    mode: HtmlExportMode;
-    resolveMedia?: MediaResolver;
-}): string {
-    const { title, pages, scale, mode, resolveMedia } = opts;
+// A screen document scales its pages; a PDF document has no scale to take, because it lays each page out
+// at 1:1 and htmlToPdf's zoom scales it onto the sheet (DECK_SCALE says why).
+type CanvasDocumentOptions = { title: string; pages: CanvasPage[]; resolveMedia?: MediaResolver } & (
+    | { mode: 'screen'; scale: number }
+    | { mode: 'pdf' }
+);
+
+export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
+    const { title, pages, mode, resolveMedia } = opts;
     // The screen document wraps each fixed-size page in the shared fit box, so a downloaded deck reads
     // on a phone; the layers inside stay in scene pixels because that is what packages/lib authors.
     // The PDF document has no viewport to be responsive to — WeasyPrint gives each page a sheet — so
-    // its pages stay unscaled and unwrapped.
+    // its pages stay unwrapped, laid out where they print (renderPrintPage).
+    const scale = opts.mode === 'pdf' ? 1 : opts.scale;
     const rendered = pages.map((page) =>
-        mode === 'pdf' ? renderCanvasPage(page, scale, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
+        mode === 'pdf' ? renderPrintPage(page, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
     );
-    // Every page in a document is the same size (frames are constant; a drawing has one page), and it
-    // is rounded exactly as renderCanvasPage rounds the page box — a sheet a fraction narrower than
-    // its content is an extra blank page in WeasyPrint. Callers guarantee at least one page.
+    // Every page in a document is the same size (a deck has one slide size; a drawing has one page), and it
+    // is rounded exactly as the page box is — a sheet a fraction narrower than its content is an extra
+    // blank page in WeasyPrint. Callers guarantee at least one page.
     const width = round(pages[0].width * scale);
     const height = round(pages[0].height * scale);
     // A rich-text box's raw HTML was filtered at the scene; the builder sanitizes the assembled body. No ADD_TAGS: the
@@ -60,8 +56,8 @@ export function canvasHtmlDocument(opts: {
     });
 }
 
-// Materialized doc + prepared media → export bytes for a deck: one page per frame.
-export function renderEigenslidesExport(
+// Materialized doc + prepared media → a deck's HTML or PDF document: one page per frame.
+export function renderEigenslidesHtml(
     doc: Y.Doc,
     format: DocumentExportFormat,
     title: string,
@@ -74,13 +70,11 @@ export function renderEigenslidesExport(
     const pages = framePages(sanitizeSceneHtml(readVectorFromDoc(doc)), resolveMedia);
     // Nothing to print, and nothing to size a page from.
     if (pages.length === 0) throw new ApiError(400, 'The deck is empty');
-    const html = canvasHtmlDocument({
-        title,
-        pages,
-        scale: DECK_SCALE,
-        mode: htmlExportMode(format),
-        resolveMedia,
-    });
+    const html = canvasHtmlDocument(
+        htmlExportMode(format) === 'pdf'
+            ? { title, pages, mode: 'pdf', resolveMedia }
+            : { title, pages, mode: 'screen', scale: DECK_SCALE, resolveMedia },
+    );
     return { data: toTransferableText(html), warnings: [] };
 }
 

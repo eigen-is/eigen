@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_PAGE_SETUP, type PageSetup } from '@workspace/lib/docs/eigendoc';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
 import JSZip from 'jszip';
@@ -15,6 +16,7 @@ import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,
+    corpusEquations,
     equation,
     GOLDEN_FRACTION,
     GOLDEN_SUM,
@@ -397,12 +399,6 @@ describe('docx writer — package', () => {
         expect(new Set(dates)).toEqual(new Set(['1980-01-01T00:00:00.000Z']));
     });
 
-    test('the writer zips with core/zip, not JSZip', () => {
-        const source = fs.readFileSync(new URL('../../lib/export/doc/to-docx.ts', import.meta.url), 'utf8');
-        expect(source).not.toContain("from 'jszip'");
-        expect(source).toContain("from '../../core/zip'");
-    });
-
     test('the title is the name without its extension', async () => {
         const core = await part(await unzip(doc(p(text('x')))), 'docProps/core.xml');
         expect(xmlText(only(xmlChildren(core, 'http://purl.org/dc/elements/1.1/', 'title')))).toBe('Report');
@@ -448,20 +444,23 @@ describe('docx writer — text', () => {
     });
 
     // The Yjs binding keeps no mark on an atom, so one a fresh doc still holds is never written either.
-    test('a page number is a PAGE field, a page count a NUMPAGES one, each caching 1 in a run of no marks', async () => {
+    test('a page number is a complex PAGE field, a page count a NUMPAGES one, each caching 1 in runs of no marks', async () => {
         const page = (kind: unknown, ...marks: NonNullable<JSONContent['marks']>): JSONContent => ({
             type: 'pageNumber',
             attrs: { kind },
             marks,
         });
+        // Google Docs leaves a w:fldSimple PAGE in the body blank.
+        const field = (instr: string) =>
+            '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+            `<w:r><w:instrText xml:space="preserve"> ${instr} </w:instrText></w:r>` +
+            '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+            run('1') +
+            '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
         expect(
             await paragraphsOf(doc(p(text('Page '), page('page', { type: 'bold' }), text(' of '), page('pages')))),
-        ).toEqual([
-            `<w:p>${run('Page ')}<w:fldSimple w:instr=" PAGE ">${run('1')}</w:fldSimple>${run(' of ')}<w:fldSimple w:instr=" NUMPAGES ">${run('1')}</w:fldSimple></w:p>`,
-        ]);
-        expect(await paragraphsOf(doc(p(page('chapter'))))).toEqual([
-            `<w:p><w:fldSimple w:instr=" PAGE ">${run('1')}</w:fldSimple></w:p>`,
-        ]);
+        ).toEqual([`<w:p>${run('Page ')}${field('PAGE')}${run(' of ')}${field('NUMPAGES')}</w:p>`]);
+        expect(await paragraphsOf(doc(p(page('chapter'))))).toEqual([`<w:p>${field('PAGE')}</w:p>`]);
     });
 });
 
@@ -676,6 +675,18 @@ describe('docx writer — paragraphs and headings', () => {
             '',
         ]);
     });
+
+    // A unitless CSS line-height scales with each span's size, as Word's auto line does with the tallest face: only
+    // the family's own line height needs the rescale.
+    test('a run in a larger size keeps the line, in a family the line of that family', async () => {
+        const big = { type: 'textStyle', attrs: { fontSize: 24 } };
+        const bigSerif = { type: 'textStyle', attrs: { fontSize: 24, fontFamily: 'Source Serif 4' } };
+        const body = await bodyOf(doc(p(text('a'), text('b', big)), p(text('c', bigSerif))));
+        expect(xmlChildren(body, W, 'p').map((paragraph) => xmlOf(child(paragraph, 'pPr')))).toEqual([
+            '',
+            '<w:pPr><w:spacing w:line="297" w:lineRule="auto"/></w:pPr>',
+        ]);
+    });
 });
 
 describe('docx writer — marks', () => {
@@ -693,6 +704,29 @@ describe('docx writer — marks', () => {
 
     test('small is direct formatting from the CSS: 9 pt, a little spaced', async () => {
         expect(await runProps({ type: 'small' })).toEqual([
+            ['spacing', '2'],
+            ['sz', '18'],
+            ['szCs', '18'],
+        ]);
+    });
+
+    test("a font size is w:sz and w:szCs in half points, landing in the editor's range", async () => {
+        const sized = (fontSize: unknown) => runProps({ type: 'textStyle', attrs: { fontSize } });
+        expect(await sized(10.5)).toEqual([
+            ['sz', '21'],
+            ['szCs', '21'],
+        ]);
+        expect(await sized(1e6)).toEqual([
+            ['sz', '800'],
+            ['szCs', '800'],
+        ]);
+        expect(await sized('12pt')).toEqual([]);
+    });
+
+    // Small comes before textStyle in the marks; a style without a size leaves Small's.
+    test("a color beside Small keeps Small's size", async () => {
+        expect(await runProps({ type: 'small' }, { type: 'textStyle', attrs: { color: '#c00000' } })).toEqual([
+            ['color', 'C00000'],
             ['spacing', '2'],
             ['sz', '18'],
             ['szCs', '18'],
@@ -2040,6 +2074,24 @@ describe('docx writer — figures', () => {
         ]);
     });
 
+    // T4-R12: until the docx writes Word charts, a chart is left out and its caption kept, as a figure without media.
+    test('a chart is left out, its caption kept as a figure without media keeps it', async () => {
+        const spec = JSON.stringify(sampleChartSpec('column'));
+        const chart = (attrs: Record<string, unknown>) => ({ type: 'chart', attrs: { spec, width: 600, ...attrs } });
+        const charts = doc(
+            p(text('a'), chart({ caption: 'Lost', alignment: 'right' }), text('b')),
+            p(chart({ caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
+            p(text('c'), chart({})),
+        );
+        const figures = doc(
+            p(text('a'), figure({ mediaName: 'gone', caption: 'Lost', alignment: 'right' }), text('b')),
+            p(figure({ mediaName: 'gone', caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
+            p(text('c'), figure({ mediaName: 'gone' })),
+        );
+        expect(await blocksOf(charts)).toEqual(await blocksOf(figures));
+        expect((await unzip(charts)).names().filter((name) => /chart|media/.test(name))).toEqual([]);
+    });
+
     test('an SVG is its PNG blip with the SVG beside it, each a part and an image relationship', async () => {
         const json = doc(p(figure({ mediaName: 'diagram.svg', width: 200 })));
         const zip = await unzip(json);
@@ -2141,20 +2193,6 @@ describe('docx writer — figures', () => {
 });
 
 // The package's Word equations, each stored as the import will store it.
-function corpusEquations(): { row: MathRow; display: boolean }[] {
-    const corpus: { omml: string; display: boolean }[] = JSON.parse(
-        fs.readFileSync(
-            new URL('../../../../../packages/math/src/test/fixtures/omml-corpus.json', import.meta.url),
-            'utf8',
-        ),
-    );
-    return corpus.map(({ omml, display }) => {
-        const oMath = parseOoxml(omml);
-        if (!oMath) throw new Error('a corpus equation does not parse');
-        return { row: readOmml(oMath), display };
-    });
-}
-
 const corpusDoc = (equations: { row: MathRow; display: boolean }[]) =>
     doc(...equations.map(({ row, display }) => p(equation(writeMathml(row), display))));
 

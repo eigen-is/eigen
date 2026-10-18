@@ -5,14 +5,17 @@ import type { Mount } from '../mount';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { getScreenPreview, isScreenPreviewRedirect } from '../preview/preview-cache';
 import { generateImagePreview } from '../shared/thumbnails';
-import { encodeDocxImage, WEBP_SCAN_BYTES } from './doc/docx-image';
+import { encodeOfficeImage, WEBP_SCAN_BYTES } from './office-image';
+
+// The formats an Office reader opens, which take a PNG or JPEG from the source file.
+const OFFICE_FORMATS = new Set<ExportTransformJob['format']>(['docx', 'pptx']);
 
 // Main-thread media preparation for doc/slides exports: the screen-res preview of
 // every media child, as exact buffers the transform process gets a copy of (an SVG's
 // sanitizing, base64 and the data: URIs happen there). All Mount I/O — and the globally capped thumbnail
 // path behind getScreenPreview — stays here: the transform never receives a Mount
-// and never spawns thumbnail Workers. A docx takes PNG or JPEG from the source file
-// instead, since Word for the web and Google Docs show no WebP, with the thumbnail
+// and never spawns thumbnail Workers. A docx or pptx takes PNG or JPEG from the source file
+// instead, since Word and PowerPoint for the web and Google Docs show no WebP, with the thumbnail
 // Worker's width and height for its extent.
 export async function collectExportMedia(
     mount: Mount,
@@ -21,16 +24,17 @@ export async function collectExportMedia(
     signal?: AbortSignal,
 ): Promise<ExportMedia[]> {
     const media = await listDocumentMedia(mount, drivePath);
-    if (format !== 'docx') {
+    if (!OFFICE_FORMATS.has(format)) {
         const prepared = await Promise.all([...media].map(([name, file]) => prepareMedia(mount, name, file)));
         return prepared.filter((item) => item !== null);
     }
-    // A docx re-encodes every image, uncached, on the thumbnail semaphore uploads and previews share: one at a time, so
-    // one export holds at most one of its slots, and none once the client is gone (the runner then cancels the job).
+    // An Office export re-encodes every image, uncached, on the thumbnail semaphore uploads and previews share: one at a
+    // time, so one export holds at most one of its slots, and none once the client is gone (the runner then cancels the
+    // job).
     const prepared: ExportMedia[] = [];
     for (const [name, file] of media) {
         if (signal?.aborted) break;
-        const item = await prepareDocxMedia(mount, name, file);
+        const item = await prepareOfficeMedia(mount, name, file);
         if (item) prepared.push(item);
     }
     return prepared;
@@ -46,7 +50,7 @@ async function prepareMedia(mount: Mount, name: string, file: DrivePath): Promis
     return { name, contentType: result.contentType, data: toTransferableBuffer(result.data) };
 }
 
-async function prepareDocxMedia(mount: Mount, name: string, file: DrivePath): Promise<ExportMedia | null> {
+async function prepareOfficeMedia(mount: Mount, name: string, file: DrivePath): Promise<ExportMedia | null> {
     const mime = file.mimeType || '';
     if (mime === 'image/svg+xml') return prepareMedia(mount, name, file);
     // What getScreenPreview shows as an image, and nothing else.
@@ -55,7 +59,7 @@ async function prepareDocxMedia(mount: Mount, name: string, file: DrivePath): Pr
     if (!source) return null;
     // From the source, never the lossy WebP preview.
     const webp = mime === 'image/webp' ? await mount.readBytes(file.id, WEBP_SCAN_BYTES) : null;
-    return encodeDocxImage(name, mime, webp && Buffer.from(webp), (options) =>
+    return encodeOfficeImage(name, mime, webp && Buffer.from(webp), (options) =>
         generateImagePreview(source, mime, file.name, '', file.id, options),
     );
 }

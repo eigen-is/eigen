@@ -24,18 +24,15 @@ type PropertiesPanelProps = {
     children: ReactNode;
     // Fixed title bar, pixel-matched to the comments/activity Column toolbar (h-12 + ToolbarTitle).
     title?: ReactNode;
-    // Buttons at the title bar's right end, as the comments panel's Close.
-    actions?: ReactNode;
     className?: string;
 };
 
-export function PropertiesPanel({ title, actions, children, className }: PropertiesPanelProps) {
+export function PropertiesPanel({ title, children, className }: PropertiesPanelProps) {
     return (
         <div className={cn('w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden', className)}>
             {title && (
                 <div className="h-12 flex items-center app-gutter-x shrink-0 border-b">
                     <ToolbarTitle>{title}</ToolbarTitle>
-                    {actions && <div className="ml-auto flex items-center gap-1">{actions}</div>}
                 </div>
             )}
             {/* min-h-0: the auto minimum would otherwise hold this at the full panel height, hanging the title bar's worth of content below the clip. */}

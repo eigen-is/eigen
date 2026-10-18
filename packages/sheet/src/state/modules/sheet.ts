@@ -46,6 +46,8 @@ export function changeSheet(
 
     cancelNormalSelected(ctx);
     ctx.dataVerificationDropDownList = false;
+    ctx.activeImg = undefined;
+    ctx.activeChart = undefined;
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
     const record = ctx.sheetScrollRecord[id];

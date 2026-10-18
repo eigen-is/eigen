@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { ACCENTS, COMBINING_ACCENTS, fromAlphanumeric, LINES, toAlphanumeric } from '../notation';
+import { ACCENTS, COMBINING_ACCENTS, FENCES, fromAlphanumeric, LINES, toAlphanumeric } from '../notation';
 import { MATH_VARIANTS } from '../tree';
 
 test('alphanumerics map both ways, Letterlike holes included', () => {
@@ -26,4 +26,10 @@ test('each accent has its own spacing character, never the line’s', () => {
     expect(new Set(spacing).size).toBe(spacing.length);
     expect(spacing).not.toContain(LINES.over);
     for (const [combining, char] of ACCENTS) expect(COMBINING_ACCENTS.get(char)).toBe(combining);
+});
+
+// An editor's Unicode normalisation turns U+2329 and U+232A into U+3008 and U+3009, so the source escapes them.
+test('the fences hold Word’s angle brackets, U+2329 and U+232A, not the CJK ones', () => {
+    expect(FENCES.has('\u2329') && FENCES.has('\u232A')).toBe(true);
+    expect(FENCES.has('\u3008') || FENCES.has('\u3009')).toBe(false);
 });

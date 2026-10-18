@@ -12,7 +12,7 @@ This doc governs how the apps behave on a phone, a tablet and a touch screen. Re
 | 769 to 1024px | `useIsTablet` | the sidebar is a `w-16` rail (`SidebarProps.condensed`) |
 | from 1025px | `useIsDesktop` | the full `w-64` sidebar and every column side by side |
 
-An editor toolbar folds its format rows into its menus on its own, wider gate, `useIsCompactToolbar` (1200px). Docs folds its icon row from the right beside the File, Edit, Format, Insert and Tools menus, which a writer always sees (a viewer gets File, Edit and Tools): the whole row from 1400px, style to image from 1200px, style to underline from 1000px, none below. It is density only and says nothing about touch. A phone folds Docs' Tools menu into the share cluster's kebab (`mobileMenuItems`), because five menus and the offline badge overflow a 360px screen.
+An editor toolbar folds its format rows into its menus on its own, wider gate, `useIsCompactToolbar` (1200px). Docs folds its icon row from the right beside the File, Edit, Format, Insert and Tools menus, which a writer always sees (a viewer gets File, Edit and Tools): the whole row from 1490px, style to image from 1270px, style to underline from 1090px, none below. It is density only and says nothing about touch. A phone folds Docs' Tools menu into the share cluster's kebab (`mobileMenuItems`), because five menus and the offline badge overflow a 360px screen.
 
 Touch affordances never key on width. An iPad in landscape gets the desktop layout but has no hover, and a narrow desktop window has a mouse. So a hover-revealed action rests visible under `pointer-coarse:` ([LAYOUT.md](LAYOUT.md#hover-revealed-affordances-rest-visible-on-touch)), long-press arms only for a `touch` pointer, and Drive's Move to trash confirms first on a coarse pointer, where there is no hover cue and a mis-tap is easy.
 
@@ -30,7 +30,7 @@ Anything that acts on a `display: none` subtree does nothing: a reveal scroll do
 
 ## Docs panels need 769px and shift the page before they shrink it
 
-The docs comment, activity and properties panels render whenever the viewport is not a phone. With a panel open, the page first slides left by its overlap with the panel and scales down only when the slack runs out. The shift keeps the text column clear, not the page, so a wide table or a full-bleed figure may tuck under the panel in that band. That is by design. From 769px a writer who selects a figure or a table gets its properties panel opened for them.
+The docs comment, activity and properties panels render whenever the viewport is not a phone. With a panel open, the page first slides left by its overlap with the panel and scales down only when the slack runs out. The shift keeps the text column clear, not the page, so a wide table or a full-bleed figure may tuck under the panel in that band. That is by design. From 769px a writer who selects a figure, a chart or a table gets its properties panel opened for them. A phone has no form of these panels: Format › Table and Format › Image hold what a table and an image need, but a chart's Edit data, caption and layout have no way in on a phone ([DOCS.md](DOCS.md#the-properties-panels-follow-the-selection-on-desktop-only)).
 
 ## A phone views canvas documents, never edits them
 

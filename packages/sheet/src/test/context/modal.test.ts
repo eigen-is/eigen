@@ -4,7 +4,13 @@
 // top-left margin instead of being pushed off the opposite edge.
 
 import { describe, expect, it } from 'bun:test';
-import { clampToViewport, VIEWPORT_MARGIN } from '../../context/modal';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
+
+// The module pulls in Radix, whose layout-effect shim picks a no-op when it first evaluates without a
+// document, and later test files in this process would inherit it.
+installHappyDom();
+
+const { clampToViewport, VIEWPORT_MARGIN } = await import('../../context/modal');
 
 const VIEWPORT = { width: 1200, height: 800 };
 

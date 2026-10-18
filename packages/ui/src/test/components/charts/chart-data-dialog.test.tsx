@@ -20,6 +20,7 @@ const style = { markers: false, smooth: false };
 
 type InlineSpec = ChartSpec & { data: InlineChartData };
 
+// The sample: series Period 1 and Period 2 across row 1, Team 1 to Team 4 down column A.
 function sample(type: 'column' | 'pie' = 'column'): InlineSpec {
     const spec = sampleChartSpec(type);
     if (spec.data.source !== 'inline') throw new Error('the sample is inline');
@@ -42,6 +43,8 @@ function grid(seriesCount: number, rows: number): InlineSpec {
     };
 }
 
+type KeyOptions = { shiftKey?: boolean; metaKey?: boolean };
+
 let cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
     for (const cleanup of cleanups) await cleanup();
@@ -54,16 +57,20 @@ async function open(spec: InlineSpec) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
-    await act(async () => {
-        root.render(
-            createElement(ChartDataDialog, {
-                spec,
-                open: true,
-                onOpenChange: (next: boolean) => openChanges.push(next),
-                onSave: (next: ChartSpec) => saved.push(next),
-            }),
-        );
-    });
+    // A rerender is the host's spec changing under the open dialog, a peer's edit.
+    const rerender = async (next: InlineSpec) => {
+        await act(async () => {
+            root.render(
+                createElement(ChartDataDialog, {
+                    spec: next,
+                    open: true,
+                    onOpenChange: (change: boolean) => openChanges.push(change),
+                    onSave: (change: ChartSpec) => saved.push(change),
+                }),
+            );
+        });
+    };
+    await rerender(spec);
     cleanups.push(async () => {
         await act(async () => root.unmount());
         container.remove();
@@ -74,46 +81,98 @@ async function open(spec: InlineSpec) {
         if (!found) throw new Error('the dialog is not open');
         return found;
     };
-    const table = () => {
-        const found = dialog().querySelector('table');
-        if (!found) throw new Error('the dialog has no grid');
+    const find = (selector: string) => {
+        const found = dialog().querySelector<HTMLElement>(selector);
+        if (!found) throw new Error(`nothing matches ${selector}`);
         return found;
     };
-    // Grid coordinates: row 0 is the series names, column 0 the category names.
-    const cell = (row: number, column: number) => {
-        const input = table().rows[row]?.cells[column]?.querySelector('input');
-        if (!input) throw new Error(`no input at ${row}, ${column}`);
-        return input;
+    // Grid coordinates, as the sheet shows them less one: row 0 is the series names (row 1), column 0
+    // the categories (column A).
+    const cell = (row: number, column: number) =>
+        find(`[role="row"][aria-rowindex="${row + 2}"] > [aria-colindex="${column + 2}"]`);
+    const columnHeader = (label: string) =>
+        [...dialog().querySelectorAll<HTMLElement>('[role="columnheader"]')].find((el) => el.textContent === label);
+    const rowHeader = (label: string) =>
+        [...dialog().querySelectorAll<HTMLElement>('[role="rowheader"]')].find((el) => el.textContent === label);
+    const editor = () => {
+        const found = dialog().querySelector('input');
+        if (!found) throw new Error('the grid has no cell editor');
+        return found;
     };
-    const size = () => ({
-        series: table().rows[0].querySelectorAll('input').length,
-        rows: table().rows.length - 1,
-    });
-    const type = async (row: number, column: number, value: string) => {
-        const input = cell(row, column);
+    // The grid's size as shown: the header strip, then the sheet's rows, the trailing one included.
+    const shown = () => {
+        const gridEl = find('[role="grid"]');
+        return {
+            rows: Number(gridEl.getAttribute('aria-rowcount')) - 1,
+            columns: Number(gridEl.getAttribute('aria-colcount')) - 1,
+        };
+    };
+    // happy-dom lays nothing out, so a test sets the scroller's height and scroll offset itself.
+    const scroll = async (scrollTop: number, clientHeight: number) => {
+        const el = find('[role="grid"]').parentElement;
+        if (!el) throw new Error('the grid has no scroller');
+        Object.defineProperty(el, 'clientHeight', { configurable: true, value: clientHeight });
+        Object.defineProperty(el, 'scrollTop', { configurable: true, value: scrollTop, writable: true });
+        await act(async () => el.dispatchEvent(new Event('scroll')));
+    };
+    const highlighted = (role: 'columnheader' | 'rowheader') =>
+        [...dialog().querySelectorAll<HTMLElement>(`[role="${role}"][aria-selected="true"]`)].map(
+            (el) => el.textContent,
+        );
+
+    const key = async (name: string, { shiftKey = false, metaKey = false }: KeyOptions = {}) => {
+        const event = new KeyboardEvent('keydown', { key: name, shiftKey, metaKey, bubbles: true, cancelable: true });
+        await act(async () => editor().dispatchEvent(event));
+        return event.defaultPrevented;
+    };
+    // What a keystroke the browser types into the focused editor looks like to React.
+    const type = async (value: string) => {
+        const input = editor();
         await act(async () => {
-            input.focus();
             setValue?.call(input, value);
             input.dispatchEvent(new Event('input', { bubbles: true }));
         });
     };
-    const paste = async (row: number, column: number, text: string) => {
-        const input = cell(row, column);
-        const event = new Event('paste', { bubbles: true, cancelable: true });
-        Object.assign(event, { clipboardData: { getData: (kind: string) => (kind === 'text/plain' ? text : '') } });
-        await act(async () => input.dispatchEvent(event));
+    const mouseDown = async (target: HTMLElement | undefined, shiftKey = false) => {
+        if (!target) throw new Error('no target');
+        await act(async () =>
+            target.dispatchEvent(
+                new MouseEvent('mousedown', { bubbles: true, cancelable: true, shiftKey, buttons: 1 }),
+            ),
+        );
+    };
+    const doubleClick = async (target: HTMLElement) => {
+        await act(async () => target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+    };
+    const select = (row: number, column: number) => mouseDown(cell(row, column));
+    const clipboardEvent = (kind: 'copy' | 'paste', data: Record<string, string>) => {
+        const event = new Event(kind, { bubbles: true, cancelable: true });
+        Object.assign(event, {
+            clipboardData: {
+                getData: (format: string) => data[format] ?? '',
+                setData: (format: string, value: string) => {
+                    data[format] = value;
+                },
+            },
+        });
+        return event;
+    };
+    const paste = async (row: number, column: number, data: Record<string, string>) => {
+        await select(row, column);
+        await act(async () => editor().dispatchEvent(clipboardEvent('paste', data)));
+    };
+    const copy = async () => {
+        const data: Record<string, string> = {};
+        await act(async () => editor().dispatchEvent(clipboardEvent('copy', data)));
+        return data;
     };
     const button = (label: string) => {
         const found = [...dialog().querySelectorAll<HTMLButtonElement>('button')].find(
-            (el) => el.textContent?.trim() === label || el.getAttribute('aria-label') === label,
+            (el) => el.textContent?.trim() === label,
         );
         if (!found) throw new Error(`no "${label}" button`);
         return found;
     };
-    const buttons = (label: string) =>
-        [...dialog().querySelectorAll<HTMLButtonElement>('button')].filter(
-            (el) => el.getAttribute('aria-label') === label,
-        );
     const click = async (target: HTMLButtonElement) => {
         await act(async () => target.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     };
@@ -124,118 +183,113 @@ async function open(spec: InlineSpec) {
         if (last.data.source !== 'inline') throw new Error('Save wrote range data');
         return { ...last, data: last.data };
     };
-    return { saved, openChanges, dialog, cell, size, type, paste, button, buttons, click, save };
+    return {
+        saved,
+        openChanges,
+        rerender,
+        dialog,
+        cell,
+        columnHeader,
+        rowHeader,
+        editor,
+        shown,
+        scroll,
+        highlighted,
+        key,
+        type,
+        mouseDown,
+        doubleClick,
+        select,
+        paste,
+        copy,
+        button,
+        click,
+        save,
+    };
 }
 
-describe('ChartDataDialog', () => {
-    test("opens on the chart's data: series across, categories down", async () => {
+describe('ChartDataDialog: the grid', () => {
+    test("opens as a sheet of the chart's data: series across row 1, categories down column A", async () => {
         const dialog = await open(sample());
-        expect(dialog.size()).toEqual({ series: 2, rows: 4 });
-        expect([dialog.cell(0, 1).value, dialog.cell(0, 2).value]).toEqual(['Period 1', 'Period 2']);
-        expect(dialog.cell(1, 0).value).toBe('Team 1');
-        expect(dialog.cell(1, 1).value).toBe('42');
+        expect([dialog.cell(0, 1).textContent, dialog.cell(0, 2).textContent]).toEqual(['Period 1', 'Period 2']);
+        expect(dialog.cell(1, 0).textContent).toBe('Team 1');
+        expect(dialog.cell(1, 1).textContent).toBe('42');
+        expect(dialog.cell(0, 0).textContent).toBe('');
+        // Every column a series can go in, A to M, and a trailing row to grow into.
+        expect(dialog.shown()).toEqual({ rows: 6, columns: INLINE_GRID_MAX_SERIES + 1 });
+        expect(dialog.columnHeader('M')).toBeDefined();
+        expect(dialog.columnHeader('N')).toBeUndefined();
+        expect(dialog.rowHeader('6')).toBeDefined();
+        // A1 is selected, as a sheet opens.
+        expect(dialog.editor().getAttribute('aria-label')).toBe('A1');
     });
 
-    test('Save writes the edited grid once; an emptied cell is a gap', async () => {
+    test('empty rows fill the view and more come as it scrolls, up to the category limit', async () => {
         const dialog = await open(sample());
-        await dialog.type(1, 1, '12.5');
-        await dialog.type(2, 2, '');
-        await dialog.type(0, 1, 'First half');
-        await dialog.type(3, 0, 'Blues');
-        const spec = await dialog.save();
-        expect(dialog.saved).toHaveLength(1);
-        expect(spec.data.series[0]).toMatchObject({ name: 'First half', values: [12.5, 65, 38, 80] });
-        expect(spec.data.series[1].values).toEqual([58, null, 71, 63]);
-        expect(spec.data.categories).toEqual(['Team 1', 'Team 2', 'Blues', 'Team 4']);
-        expect(spec.title).toBe('Points scored');
-        expect(dialog.openChanges).toEqual([false]);
+        await dialog.scroll(0, 400);
+        // Two views' worth of 20px rows, so there is always more to scroll into.
+        expect(dialog.shown()).toEqual({ rows: 40, columns: INLINE_GRID_MAX_SERIES + 1 });
+        await dialog.scroll(400, 400);
+        expect(dialog.shown().rows).toBe(60);
+        await dialog.scroll(10_000, 400);
+        expect(dialog.shown().rows).toBe(INLINE_GRID_MAX_CATEGORIES + 1);
     });
 
-    test('a value that is not a number is flagged and keeps Save off', async () => {
+    test('the cell editor names the cell and what it holds; the corner is a column header', async () => {
         const dialog = await open(sample());
-        await dialog.type(1, 1, 'lots');
-        expect(dialog.cell(1, 1).getAttribute('aria-invalid')).toBe('true');
-        expect(dialog.button('Save').disabled).toBe(true);
-        await dialog.type(1, 1, '7');
-        expect(dialog.button('Save').disabled).toBe(false);
+        await dialog.select(1, 1);
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B2: 42');
+        await dialog.select(5, 1);
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B6');
+        const corner = dialog.dialog().querySelector('[role="row"][aria-rowindex="1"] > :first-child');
+        expect(corner?.getAttribute('role')).toBe('columnheader');
     });
 
-    test('Cancel closes and writes nothing', async () => {
+    test('the selected cell highlights its row and column headers; Shift extends a range', async () => {
         const dialog = await open(sample());
-        await dialog.type(1, 1, '99');
+        await dialog.select(2, 1);
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B3: 65');
+        expect(dialog.highlighted('columnheader')).toEqual(['B']);
+        expect(dialog.highlighted('rowheader')).toEqual(['3']);
+        await dialog.key('ArrowRight', { shiftKey: true });
+        await dialog.key('ArrowDown', { shiftKey: true });
+        expect(dialog.highlighted('columnheader')).toEqual(['B', 'C']);
+        expect(dialog.highlighted('rowheader')).toEqual(['3', '4']);
+        await dialog.mouseDown(dialog.cell(4, 0), true);
+        expect(dialog.highlighted('columnheader')).toEqual(['A', 'B']);
+        expect(dialog.highlighted('rowheader')).toEqual(['3', '4', '5']);
+    });
+
+    // The header of the categories column, as in Google.
+    test('A1 shows the category axis title and types it', async () => {
+        const dialog = await open({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Teams' } });
+        expect(dialog.cell(0, 0).textContent).toBe('Teams');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('A1: Teams');
+        await dialog.type('Squads');
+        await dialog.key('Enter');
+        expect(dialog.cell(0, 0).textContent).toBe('Squads');
+        expect((await dialog.save()).categoryAxis.title).toBe('Squads');
+    });
+
+    test("Save leaves a peer's category axis title alone when A1 did not change", async () => {
+        const dialog = await open({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Teams' } });
+        await dialog.rerender({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Squads' } });
+        await dialog.select(1, 1);
+        await dialog.type('7');
+        expect((await dialog.save()).categoryAxis.title).toBe('Squads');
+    });
+
+    test('Save writes the grid once, Cancel nothing', async () => {
+        const dialog = await open(sample());
         await dialog.click(dialog.button('Cancel'));
         expect(dialog.saved).toEqual([]);
         expect(dialog.openChanges).toEqual([false]);
-    });
 
-    test('a new row is an empty category with gaps and a slice color; a new column a palette-colored series', async () => {
-        const dialog = await open(sample('pie'));
-        await dialog.click(dialog.button('Add row'));
-        await dialog.click(dialog.button('Add column'));
-        expect(dialog.size()).toEqual({ series: 2, rows: 5 });
-        const spec = await dialog.save();
-        expect(spec.data.categories.at(-1)).toBe('');
-        expect(spec.data.series[0].values.at(-1)).toBeNull();
-        expect(spec.data.series[1]).toEqual({ ...style, color: chartColor(1), name: '', values: Array(5).fill(null) });
-        expect(spec.sliceColors).toEqual([0, 1, 2, 3, 4].map(chartColor));
-    });
-
-    test('removing a row takes its slice color with it; removing a column its series', async () => {
-        const pie = { ...sample('pie'), sliceColors: ['#000001', '#000002', '#000003', '#000004'] };
-        const dialog = await open(pie);
-        await dialog.click(dialog.buttons('Remove row')[1]);
-        const spec = await dialog.save();
-        expect(spec.data.categories).toEqual(['Team 1', 'Team 3', 'Team 4']);
-        expect(spec.sliceColors).toEqual(['#000001', '#000003', '#000004']);
-
-        const columns = await open(sample());
-        await columns.click(columns.buttons('Remove column')[0]);
-        expect((await columns.save()).data.series.map((series) => series.name)).toEqual(['Period 2']);
-    });
-
-    test('pasted tab-separated text fills the grid from the cell and grows it', async () => {
-        const dialog = await open(sample());
-        await dialog.paste(1, 1, '1\t2\t3\n4\t5\t6\n7\t8\t9\n10\t11\t12\n13\t14\t15\n');
-        expect(dialog.size()).toEqual({ series: 3, rows: 5 });
-        await dialog.paste(0, 1, 'A\tB\tC');
-        await dialog.paste(1, 0, 'North\r\nSouth');
-        const spec = await dialog.save();
-        expect(spec.data.series.map((series) => series.name)).toEqual(['A', 'B', 'C']);
-        expect(spec.data.series[2]).toMatchObject({ color: chartColor(2), values: [3, 6, 9, 12, 15] });
-        expect(spec.data.categories).toEqual(['North', 'South', 'Team 3', 'Team 4', '']);
-    });
-
-    test('a paste stops at the series and category limits and says so', async () => {
-        const dialog = await open(sample());
-        const names = Array.from({ length: INLINE_GRID_MAX_SERIES + 3 }, (_, i) => `S${i}`).join('\t');
-        await dialog.paste(0, 1, names);
-        expect(dialog.size().series).toBe(INLINE_GRID_MAX_SERIES);
-        expect(dialog.dialog().textContent).toContain("Some pasted cells didn't fit");
-
-        const rows = await open(grid(1, 2));
-        await rows.paste(1, 1, Array.from({ length: INLINE_GRID_MAX_CATEGORIES + 5 }, (_, i) => i).join('\n'));
-        expect(rows.size().rows).toBe(INLINE_GRID_MAX_CATEGORIES);
-    });
-
-    test('Add column and Add row stop at the series, category and total limits', async () => {
-        const wide = await open(grid(INLINE_GRID_MAX_SERIES, 2));
-        expect(wide.button('Add column').disabled).toBe(true);
-        expect(wide.button('Add row').disabled).toBe(false);
-
-        const tall = await open(grid(1, INLINE_GRID_MAX_CATEGORIES));
-        expect(tall.button('Add row').disabled).toBe(true);
-        expect(tall.button('Add column').disabled).toBe(false);
-
-        // 11 × 180 = 1,980 cells; one more series would be 2,160, past the 2,000-point limit.
-        const full = await open(grid(11, 180));
-        expect(full.button('Add column').disabled).toBe(true);
-        expect(full.button('Add row').disabled).toBe(false);
-    });
-
-    test('a pasted label is cut to the label limit', async () => {
-        const dialog = await open(sample());
-        await dialog.paste(0, 1, `${'x'.repeat(MAX_CHART_LABEL_LENGTH + 50)}\tB`);
-        expect((await dialog.save()).data.series[0].name).toHaveLength(MAX_CHART_LABEL_LENGTH);
+        const again = await open(sample());
+        const spec = await again.save();
+        expect(again.saved).toHaveLength(1);
+        expect(spec.data).toEqual(sample().data);
+        expect(spec.title).toBe('Points scored');
     });
 
     test('a chart past the grid limits opens read-only with a note', async () => {
@@ -246,5 +300,317 @@ describe('ChartDataDialog', () => {
         expect([...dialog.dialog().querySelectorAll('button')].map((el) => el.textContent?.trim())).not.toContain(
             'Save',
         );
+    });
+});
+
+describe('ChartDataDialog: the keyboard is Sheets', () => {
+    test('typing replaces the cell; Enter commits and moves down', async () => {
+        const dialog = await open(sample());
+        await dialog.select(1, 1);
+        await dialog.type('7');
+        await dialog.type('75');
+        expect(dialog.editor().value).toBe('75');
+        expect(await dialog.key('Enter')).toBe(true);
+        expect(dialog.cell(1, 1).textContent).toBe('75');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B3: 65');
+        expect(dialog.editor().value).toBe('');
+        expect((await dialog.save()).data.series[0].values).toEqual([75, 65, 38, 80]);
+    });
+
+    test('Tab commits and moves right, Shift+Tab left; arrows move', async () => {
+        const dialog = await open(sample());
+        await dialog.select(0, 1);
+        await dialog.type('First half');
+        await dialog.key('Tab');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('C1: Period 2');
+        await dialog.type('Second half');
+        await dialog.key('Tab', { shiftKey: true });
+        expect(dialog.editor().getAttribute('aria-label')).toBe('B1: First half');
+        await dialog.key('ArrowDown');
+        await dialog.key('ArrowLeft');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('A2: Team 1');
+        const spec = await dialog.save();
+        expect(spec.data.series.map((series) => series.name)).toEqual(['First half', 'Second half']);
+    });
+
+    test('an arrow commits a typed cell and moves', async () => {
+        const dialog = await open(sample());
+        await dialog.select(1, 0);
+        await dialog.type('Blues');
+        await dialog.key('ArrowDown');
+        expect(dialog.cell(1, 0).textContent).toBe('Blues');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('A3: Team 2');
+    });
+
+    test('F2 and a double-click edit in place, keeping the value', async () => {
+        const dialog = await open(sample());
+        await dialog.select(1, 1);
+        await dialog.key('F2');
+        expect(dialog.editor().value).toBe('42');
+        // In place, an arrow moves the caret, not the cell.
+        expect(await dialog.key('ArrowLeft')).toBe(false);
+        await dialog.type('420');
+        await dialog.key('Enter');
+        expect(dialog.cell(1, 1).textContent).toBe('420');
+
+        await dialog.doubleClick(dialog.cell(2, 2));
+        expect(dialog.editor().value).toBe('47');
+        expect(dialog.editor().getAttribute('aria-label')).toBe('C3: 47');
+    });
+
+    test('Escape cancels the edit and leaves the dialog open; a second Escape closes it', async () => {
+        const dialog = await open(sample());
+        await dialog.select(1, 1);
+        await dialog.type('99');
+        await dialog.key('Escape');
+        expect(dialog.openChanges).toEqual([]);
+        expect(dialog.cell(1, 1).textContent).toBe('42');
+        expect(dialog.editor().value).toBe('');
+        await dialog.key('Escape');
+        expect(dialog.openChanges).toEqual([false]);
+    });
+
+    test('Delete and Backspace clear the selected cells to gaps', async () => {
+        const dialog = await open(sample());
+        await dialog.select(1, 1);
+        await dialog.key('ArrowDown', { shiftKey: true });
+        await dialog.key('ArrowRight', { shiftKey: true });
+        await dialog.key('Delete');
+        await dialog.select(1, 0);
+        await dialog.key('Backspace');
+        const spec = await dialog.save();
+        expect(spec.data.series[0].values).toEqual([null, null, 38, 80]);
+        expect(spec.data.series[1].values).toEqual([null, null, 71, 63]);
+        expect(spec.data.categories).toEqual(['', 'Team 2', 'Team 3', 'Team 4']);
+    });
+
+    test('a row header selects the row, and Delete removes it with its slice color', async () => {
+        const pie = { ...sample('pie'), sliceColors: ['#000001', '#000002', '#000003', '#000004'] };
+        const dialog = await open(pie);
+        await dialog.mouseDown(dialog.rowHeader('3'));
+        expect(dialog.highlighted('columnheader')).toEqual(
+            Array.from({ length: INLINE_GRID_MAX_SERIES + 1 }, (_, i) => String.fromCharCode(65 + i)),
+        );
+        await dialog.key('Delete');
+        const spec = await dialog.save();
+        expect(spec.data.categories).toEqual(['Team 1', 'Team 3', 'Team 4']);
+        expect(spec.sliceColors).toEqual(['#000001', '#000003', '#000004']);
+    });
+
+    test('a column header selects the column, and Delete removes its series', async () => {
+        const dialog = await open(sample());
+        await dialog.mouseDown(dialog.columnHeader('B'));
+        expect(dialog.highlighted('rowheader')).toEqual(['1', '2', '3', '4', '5', '6']);
+        await dialog.key('Delete');
+        expect((await dialog.save()).data.series.map((series) => series.name)).toEqual(['Period 2']);
+    });
+
+    test('⌘C copies the selection as TSV and an HTML table', async () => {
+        const dialog = await open(sample());
+        await dialog.select(0, 0);
+        await dialog.key('ArrowRight', { shiftKey: true });
+        await dialog.key('ArrowDown', { shiftKey: true });
+        const data = await dialog.copy();
+        expect(data['text/plain']).toBe('\tPeriod 1\nTeam 1\t42');
+        expect(data['text/html']).toBe(
+            '<table><tr><td></td><td>Period 1</td></tr><tr><td>Team 1</td><td>42</td></tr></table>',
+        );
+    });
+});
+
+describe('ChartDataDialog: growing the grid', () => {
+    test('typing in the trailing row adds a category with gaps and an automatic slice color', async () => {
+        const dialog = await open(sample('pie'));
+        await dialog.select(5, 0);
+        await dialog.type('Team 5');
+        await dialog.key('Enter');
+        expect(dialog.shown().rows).toBe(7);
+        expect(dialog.editor().getAttribute('aria-label')).toBe('A7');
+        const spec = await dialog.save();
+        expect(spec.data.categories.at(-1)).toBe('Team 5');
+        expect(spec.data.series[0].values.at(-1)).toBeNull();
+        expect(spec.sliceColors).toEqual([null, null, null, null, null]);
+    });
+
+    test('typing in the trailing column adds a series in an automatic color', async () => {
+        const dialog = await open(sample());
+        await dialog.select(2, 3);
+        await dialog.type('5');
+        await dialog.key('Enter');
+        const spec = await dialog.save();
+        expect(spec.data.series[2]).toEqual({
+            ...style,
+            color: null,
+            name: '',
+            values: [null, 5, null, null],
+        });
+    });
+
+    test('a trailing cell left empty adds nothing', async () => {
+        const dialog = await open(sample());
+        await dialog.select(5, 0);
+        await dialog.key('F2');
+        await dialog.key('Enter');
+        expect(dialog.shown().rows).toBe(6);
+        expect((await dialog.save()).data.categories).toHaveLength(4);
+    });
+
+    test('typing further down adds the rows between as gaps', async () => {
+        const dialog = await open(sample());
+        await dialog.scroll(0, 400);
+        await dialog.select(9, 0);
+        await dialog.type('Team 9');
+        await dialog.key('Enter');
+        const spec = await dialog.save();
+        expect(spec.data.categories).toEqual(['Team 1', 'Team 2', 'Team 3', 'Team 4', '', '', '', '', 'Team 9']);
+        expect(spec.data.series[0].values.slice(4)).toEqual([null, null, null, null, null]);
+    });
+
+    test('no row past the category limit, and a value past the total limit says it was left out', async () => {
+        const tall = await open(grid(1, INLINE_GRID_MAX_CATEGORIES));
+        expect(tall.shown()).toEqual({ rows: INLINE_GRID_MAX_CATEGORIES + 1, columns: INLINE_GRID_MAX_SERIES + 1 });
+
+        // 11 × 180 = 1,980 cells; a twelfth series would be 2,160, past the 2,000-point limit.
+        const full = await open(grid(11, 180));
+        await full.select(1, 12);
+        await full.type('5');
+        await full.key('Enter');
+        expect(full.cell(1, 12).textContent).toBe('');
+        expect(full.dialog().textContent).toContain('The chart holds up to 12 series');
+        expect((await full.save()).data.series).toHaveLength(11);
+    });
+
+    test('a value that is not a number is flagged and keeps Save off', async () => {
+        const dialog = await open(sample());
+        await dialog.select(1, 1);
+        await dialog.type('lots');
+        await dialog.key('Enter');
+        expect(dialog.cell(1, 1).getAttribute('aria-invalid')).toBe('true');
+        expect(dialog.button('Save').disabled).toBe(true);
+        expect(dialog.dialog().textContent).toContain('Values must be numbers.');
+        await dialog.select(1, 1);
+        await dialog.type('7');
+        await dialog.key('Enter');
+        expect(dialog.button('Save').disabled).toBe(false);
+
+        // Save with such a value still open flags it rather than writing it.
+        await dialog.select(2, 2);
+        await dialog.type('many');
+        await dialog.click(dialog.button('Save'));
+        expect(dialog.saved).toEqual([]);
+        expect(dialog.cell(2, 2).getAttribute('aria-invalid')).toBe('true');
+    });
+});
+
+describe('ChartDataDialog: numbers as Sheets shows them', () => {
+    test('grouping, a leading currency symbol and a trailing percent read as numbers', async () => {
+        const dialog = await open(sample());
+        await dialog.paste(1, 1, { 'text/plain': '$1,234.00\n1,234\n12%\n-€5.5' });
+        expect(dialog.button('Save').disabled).toBe(false);
+        expect((await dialog.save()).data.series[0].values).toEqual([1234, 1234, 0.12, -5.5]);
+    });
+
+    test('a percent is its share without float noise, and an exponent reads', async () => {
+        const dialog = await open(sample());
+        // 33.3 / 100 is 0.33299999999999996 in floating point.
+        await dialog.paste(1, 1, { 'text/plain': '33.3%\n1.5E3\n-2e-2' });
+        expect((await dialog.save()).data.series[0].values.slice(0, 3)).toEqual([0.333, 1500, -0.02]);
+    });
+
+    test('anything else is still flagged', async () => {
+        for (const text of ['1,23', '12%%', '$', '1.2.3', '12 apples', '%5', '0x10', '0b11', '$0x10', '0x10%']) {
+            const dialog = await open(sample());
+            await dialog.paste(1, 1, { 'text/plain': text });
+            expect(dialog.button('Save').disabled).toBe(true);
+        }
+    });
+});
+
+describe('ChartDataDialog: paste fits the grid', () => {
+    test('pasted TSV fills from the active cell and grows the grid', async () => {
+        const dialog = await open(sample());
+        await dialog.paste(1, 1, { 'text/plain': '1\t2\t3\n4\t5\t6\n7\t8\t9\n10\t11\t12\n13\t14\t15\n' });
+        expect(dialog.shown().rows).toBe(7);
+        await dialog.paste(0, 1, { 'text/plain': 'A\tB\tC' });
+        await dialog.paste(1, 0, { 'text/plain': 'North\r\nSouth' });
+        const spec = await dialog.save();
+        expect(spec.data.series.map((series) => series.name)).toEqual(['A', 'B', 'C']);
+        expect(spec.data.series[2]).toMatchObject({ color: null, values: [3, 6, 9, 12, 15] });
+        expect(spec.data.categories).toEqual(['North', 'South', 'Team 3', 'Team 4', '']);
+    });
+
+    test("a spreadsheet's HTML table pastes when its plain text has no tabs", async () => {
+        const dialog = await open(sample());
+        await dialog.paste(0, 0, {
+            'text/plain': 'MonthNorthJan10',
+            'text/html': '<table><tr><td></td><td>North</td></tr><tr><td>Jan</td><td>10</td></tr></table>',
+        });
+        const spec = await dialog.save();
+        expect(spec.data.series[0]).toMatchObject({ name: 'North', values: [10, 65, 38, 80] });
+        expect(spec.data.categories[0]).toBe('Jan');
+    });
+
+    test("a Docs table pastes as its HTML table, not as its plain text's lines", async () => {
+        const dialog = await open(sample());
+        await dialog.paste(0, 1, {
+            'text/plain': 'North\n\nSouth\n\n1\n\n2',
+            'text/html':
+                '<table><tbody><tr><th><p>North</p></th><th><p>South</p></th></tr><tr><td><p>1</p></td><td><p>2</p></td></tr></tbody></table>',
+        });
+        const spec = await dialog.save();
+        expect(spec.data.series.map((series) => series.name)).toEqual(['North', 'South']);
+        expect(spec.data.series.map((series) => series.values[0])).toEqual([1, 2]);
+    });
+
+    test('lines of plain text with no table paste down a column', async () => {
+        const dialog = await open(sample());
+        await dialog.paste(1, 0, { 'text/plain': 'North\nSouth' });
+        expect((await dialog.save()).data.categories.slice(0, 2)).toEqual(['North', 'South']);
+    });
+
+    test('a pasted corner header titles the category axis, and shows in A1', async () => {
+        const dialog = await open({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Teams' } });
+        await dialog.paste(0, 0, { 'text/plain': 'Month\tNorth\nJan\t10' });
+        expect(dialog.cell(0, 0).textContent).toBe('Month');
+        const spec = await dialog.save();
+        expect(spec.categoryAxis.title).toBe('Month');
+        expect(spec.data.series[0]).toMatchObject({ name: 'North', values: [10, 65, 38, 80] });
+    });
+
+    test('a single value pastes into the selected cell', async () => {
+        const dialog = await open(sample());
+        await dialog.paste(1, 1, { 'text/plain': '12' });
+        expect(dialog.cell(1, 1).textContent).toBe('12');
+    });
+
+    test('a paste stops at the limits and says how much it held', async () => {
+        const dialog = await open(sample());
+        const names = Array.from({ length: INLINE_GRID_MAX_SERIES + 3 }, (_, i) => `S${i}`).join('\t');
+        await dialog.paste(0, 1, { 'text/plain': names });
+        expect(dialog.shown().columns).toBe(INLINE_GRID_MAX_SERIES + 1);
+        expect(dialog.dialog().textContent).toContain('Pasted 1 row × 15 columns; the chart holds up to 12 series');
+
+        const rows = await open(grid(1, 2));
+        const values = Array.from({ length: INLINE_GRID_MAX_CATEGORIES + 5 }, (_, i) => i).join('\n');
+        await rows.paste(1, 1, { 'text/plain': values });
+        expect(rows.shown().rows).toBe(INLINE_GRID_MAX_CATEGORIES + 1);
+        expect(rows.dialog().textContent).toContain('Pasted 205 rows × 1 column;');
+    });
+
+    // Past what a spread call holds (Chrome stops near 125,000 arguments, Bun near a million).
+    test('a paste of a million rows fills what fits and says how much it held', async () => {
+        const dialog = await open(sample());
+        const values = Array.from({ length: 1_000_000 }, (_, i) => `${i}\t${i}`).join('\n');
+        await dialog.paste(1, 1, { 'text/plain': values });
+        expect(dialog.dialog().textContent).toContain('Pasted 1,000,000 rows × 2 columns;');
+        const spec = await dialog.save();
+        expect(spec.data.categories).toHaveLength(INLINE_GRID_MAX_CATEGORIES);
+        expect(spec.data.series[0].values.slice(0, 2)).toEqual([0, 1]);
+    });
+
+    test('a pasted label is cut to the label limit', async () => {
+        const dialog = await open(sample());
+        await dialog.paste(0, 1, { 'text/plain': `${'x'.repeat(MAX_CHART_LABEL_LENGTH + 50)}\tB` });
+        expect((await dialog.save()).data.series[0].name).toHaveLength(MAX_CHART_LABEL_LENGTH);
     });
 });

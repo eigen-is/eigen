@@ -39,7 +39,7 @@ export function importSnapshot(response: DocumentTransformResponse): string {
 }
 
 export function importDocUpdate(response: DocumentTransformResponse): DocImportWorkerResult {
-    if (!response.ok || !('update' in response.result)) {
+    if (!response.ok || !('update' in response.result) || !('page' in response.result)) {
         throw new Error(`expected a document update, got ${JSON.stringify(response)}`);
     }
     return response.result;

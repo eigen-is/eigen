@@ -1,6 +1,7 @@
-# Renders the HTML on stdin to a PDF on stdout. WeasyPrint's own fetcher opens any URL the HTML names, from the API
-# host, and an export embeds everything it needs as a data: URI, so this one opens data: URIs and refuses the rest:
-# http(s), file:, a path, any other scheme. Needs WeasyPrint 68, the first with the URLFetcher class.
+# Renders the HTML on stdin to a PDF on stdout, scaled by the zoom in the first argument, 1 without one. WeasyPrint's
+# own fetcher opens any URL the HTML names, from the API host, and an export embeds everything it needs as a data: URI,
+# so this one opens data: URIs and refuses the rest: http(s), file:, a path, any other scheme. Needs WeasyPrint 68, the
+# first with the URLFetcher class.
 import sys
 
 import weasyprint
@@ -14,4 +15,5 @@ class DataFetcher(weasyprint.urls.URLFetcher):
         return super().fetch(url, headers)
 
 
-weasyprint.HTML(file_obj=sys.stdin.buffer, encoding='utf-8', url_fetcher=DataFetcher()).write_pdf(sys.stdout.buffer)
+html = weasyprint.HTML(file_obj=sys.stdin.buffer, encoding='utf-8', url_fetcher=DataFetcher())
+html.write_pdf(sys.stdout.buffer, zoom=float(sys.argv[1]) if len(sys.argv) > 1 else 1)

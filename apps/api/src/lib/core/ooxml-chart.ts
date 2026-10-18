@@ -1,10 +1,19 @@
-import { chartColor, chartLabel, MAX_CHART_POINTS, MAX_CHART_SERIES, parseChartSpec } from '@workspace/lib/charts';
+import {
+    chartColor,
+    chartLabel,
+    DEFAULT_CHART_FONT,
+    MAX_CHART_POINTS,
+    MAX_CHART_SERIES,
+    parseChartSpec,
+} from '@workspace/lib/charts';
+import { bundledFont } from '@workspace/lib/constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import {
     type CellRangeRef,
     CHART_BLANKS,
     type ChartSeriesStyle,
     type ChartSpec,
+    type ChartStacking,
     type ChartType,
     type LegendPosition,
 } from '@workspace/lib/types/chart';
@@ -19,7 +28,8 @@ import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, x
 // docx and pptx draw from the caches, which hold every value; an xlsx's refs name its own sheets, by the importer's ids.
 export type ChartSource = 'cache' | { ranges: (sheetName: string) => string | undefined };
 
-export type ChartRead = { spec: ChartSpec } | { unsupported: { title: string; type: string } };
+// name is PowerPoint's for the chart's type, as Insert Chart lists it (Clustered Column, Pie of Pie, Combo), or none.
+export type ChartRead = { spec: ChartSpec } | { unsupported: { title: string; name: string } };
 
 const TYPES = new Map<string, ChartType>([
     ['barChart', 'column'],
@@ -28,6 +38,13 @@ const TYPES = new Map<string, ChartType>([
     ['line3DChart', 'line'],
     ['pieChart', 'pie'],
     ['pie3DChart', 'pie'],
+]);
+
+const STACKING_BY_GROUPING = new Map<string, ChartStacking>([
+    ['clustered', 'none'],
+    ['standard', 'none'],
+    ['stacked', 'stacked'],
+    ['percentStacked', 'percent'],
 ]);
 
 const LEGEND_BY_POSITION = new Map<string, LegendPosition>([
@@ -52,17 +69,24 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
     const plotArea = child(chart, 'plotArea');
     const groups = elements(plotArea).filter((element) => element.ns === C_NS && element.local.endsWith('Chart'));
     const title = chartTitle(chart, groups);
-    const override = child(root, 'clrMapOvr');
-    const colors = override ? { scheme: theme.scheme, map: readColorMap(override) } : theme;
+    const colors = chartColors(root, theme);
     try {
         const [group] = groups;
         if (!group || groups.length > 1) unsupported();
-        const spec = parseChartSpec(JSON.stringify({ ...chartSpec(chart, plotArea, group, colors, data), title }));
+        const spec = parseChartSpec(
+            JSON.stringify({ ...chartSpec(chart, plotArea, group, colors, data), title, fontFamily: chartFont(root) }),
+        );
         if (spec) return { spec };
     } catch (error) {
         if (error !== UNSUPPORTED) throw error;
     }
-    return { unsupported: { title, type: groups.length > 0 ? chartLabel(groups[0].local) : '' } };
+    return { unsupported: { title, name: chartName(groups) } };
+}
+
+// The host's colours through the part's own c:clrMapOvr, which replaces the host's map.
+export function chartColors(root: XmlElement, theme: DrawingTheme): DrawingTheme {
+    const override = child(root, 'clrMapOvr');
+    return override ? { scheme: theme.scheme, map: readColorMap(override) } : theme;
 }
 
 function chartSpec(
@@ -71,14 +95,13 @@ function chartSpec(
     group: XmlElement,
     colors: DrawingTheme,
     data: ChartSource,
-): Omit<ChartSpec, 'title'> {
+): Omit<ChartSpec, 'title' | 'fontFamily'> {
     const kind = TYPES.get(group.local) ?? unsupported();
     const type = kind === 'column' && val(child(group, 'barDir')) === 'bar' ? 'bar' : kind;
     const grouping = val(child(group, 'grouping')) ?? (type === 'line' ? 'standard' : 'clustered');
-    const stacked = type !== 'line' && type !== 'pie' && grouping === 'stacked';
-    if (type === 'line' ? grouping !== 'standard' : !stacked && !['clustered', 'standard'].includes(grouping)) {
-        unsupported();
-    }
+    // A pie has no grouping; the spec draws no stacked line.
+    const stacking = type === 'line' && grouping !== 'standard' ? undefined : STACKING_BY_GROUPING.get(grouping);
+    if (!stacking) unsupported();
     const valueAxes = children(plotArea, 'valAx');
     const categoryAxes = [...children(plotArea, 'catAx'), ...children(plotArea, 'dateAx')];
     const [valueAxis] = valueAxes;
@@ -87,9 +110,12 @@ function chartSpec(
     const orientation = (axis: XmlElement | undefined) => val(child(child(axis, 'scaling'), 'orientation'));
     if (valueAxes.length > 1 || categoryAxes.length > 1 || child(scaling, 'logBase')) unsupported();
     if (orientation(valueAxis) === 'maxMin') unsupported();
-    // Excel's minMax category axis runs from the origin, so up a bar chart's side; a spec lists a bar chart's
-    // categories top down, and a column or line chart's left to right.
+    // Excel's minMax category axis runs from the origin, so up a bar chart's side, where Google's runs down it. The
+    // spec turns the whole axis rather than the data, since Excel's turns each category's series with it.
     const reversed = (type === 'bar') !== (orientation(categoryAxis) === 'maxMin');
+    // A deleted axis, or one whose tick labels are none, shows no labels.
+    const visible = (axis: XmlElement | undefined) =>
+        flag(child(axis, 'delete')) !== true && val(child(axis, 'tickLblPos')) !== 'none';
 
     const all = children(group, 'ser');
     if (all.length > MAX_CHART_SERIES) unsupported();
@@ -127,20 +153,21 @@ function chartSpec(
     const blanks = child(chart, 'dispBlanksAs');
     const presentation = {
         type,
-        stacked,
+        stacking,
         legend: legendPosition(child(chart, 'legend')),
         // CT_DispBlanksAs: present without a val is zero.
         blanks: CHART_BLANKS.find((option) => option === (blanks ? (val(blanks) ?? 'zero') : 'gap')) ?? 'gap',
-        categoryAxis: { title: axisTitle(categoryAxis) },
+        categoryAxis: { title: axisTitle(categoryAxis), visible: visible(categoryAxis), reversed },
         valueAxis: {
             title: axisTitle(valueAxis),
             min: numberOf(val(child(scaling, 'min'))),
             max: numberOf(val(child(scaling, 'max'))),
             gridlines: child(valueAxis, 'majorGridlines') !== undefined,
             format: format && format !== 'General' ? chartLabel(format) : null,
+            visible: visible(valueAxis),
         },
     };
-    const slices = (total: number): string[] => {
+    const slices = (total: number): ChartSpec['sliceColors'] => {
         if (type !== 'pie' || !first) return [];
         if (total > MAX_CHART_POINTS) unsupported();
         const points = new Map<number, string>();
@@ -165,25 +192,21 @@ function chartSpec(
         const labels = cachedPoints(cache).map(label);
         const longest = values.reduce((most, points) => Math.max(most, points.length), 0);
         const length = Math.max(labels.length, longest);
-        const turned = <T>(points: T[], blank: T): T[] =>
-            reversed ? Array.from({ length }, (_, i) => points[length - 1 - i] ?? blank) : points;
         return {
             ...presentation,
             sliceColors: slices(length),
             data: {
                 source: 'inline',
-                categories: turned(categories ? labels : Array.from({ length }, (_, i) => String(i + 1)), ''),
+                categories: categories ? labels : Array.from({ length }, (_, i) => String(i + 1)),
                 series: series.map((ser, i) => ({
                     ...style(ser),
                     name: seriesName(ser),
-                    values: turned(values[i], null),
+                    values: values[i],
                 })),
             },
         };
     }
 
-    // A range can't be read backwards.
-    if (reversed) unsupported();
     // A literal has no cells to name; an empty c:cat or c:val names none.
     const range = (source: XmlElement | undefined): CellRangeRef | null => {
         const ref = child(source, 'numRef') ?? child(source, 'strRef') ?? child(source, 'multiLvlStrRef');
@@ -219,6 +242,74 @@ function chartSpec(
             }),
         },
     };
+}
+
+const GROUPINGS = new Map([
+    ['stacked', 'Stacked'],
+    ['percentStacked', '100% Stacked'],
+]);
+
+// PowerPoint's name for a plot's groups: a group's kind with its depth, direction, grouping, markers, lines or
+// wireframe; a volume bar group with a stock group is one stock chart, any other two groups a combo.
+function chartName(groups: XmlElement[]): string {
+    const kinds = groups.map((group) => group.local).join(' ');
+    const stock = (group: XmlElement) =>
+        children(group, 'ser').length === 4 ? 'Open-High-Low-Close' : 'High-Low-Close';
+    if (kinds === 'barChart stockChart') return `Volume-${stock(groups[1])}`;
+    const [group] = groups;
+    if (!group || groups.length > 1) return group ? 'Combo' : '';
+    const words = (...parts: (string | false | undefined)[]) => parts.filter(Boolean).join(' ');
+    const option = (local: string) => val(child(group, local));
+    const grouping = GROUPINGS.get(option('grouping') ?? '');
+    const depth = group.local.includes('3D') && '3-D';
+    const [first] = children(group, 'ser');
+    const symbol = val(child(child(first, 'marker'), 'symbol'));
+    const markers = (auto: boolean) => (symbol ? symbol !== 'none' : auto);
+    const direction = option('barDir') === 'bar' ? 'Bar' : 'Column';
+    switch (group.local) {
+        case 'barChart':
+        case 'bar3DChart':
+            if (depth && option('grouping') === 'standard') return `3-D ${direction}`;
+            return words(depth, grouping ?? 'Clustered', direction);
+        case 'lineChart':
+            return words(grouping, 'Line', flag(child(group, 'marker')) !== false && markers(true) && 'with Markers');
+        case 'line3DChart':
+            return '3-D Line';
+        case 'areaChart':
+        case 'area3DChart':
+            return words(depth, grouping, 'Area');
+        case 'pieChart':
+            return 'Pie';
+        case 'pie3DChart':
+            return '3-D Pie';
+        case 'doughnutChart':
+            return 'Doughnut';
+        case 'ofPieChart':
+            return option('ofPieType') === 'bar' ? 'Bar of Pie' : 'Pie of Pie';
+        case 'scatterChart': {
+            // Excel writes lineMarker for every scatter it makes: its series say which it is.
+            const style = option('scatterStyle') ?? 'marker';
+            const shape = child(first, 'spPr');
+            const line = shape && xmlChild(shape, A_NS, 'ln');
+            const lines = line ? !xmlChild(line, A_NS, 'noFill') : style !== 'marker' && style !== 'none';
+            if (!lines) return 'Scatter';
+            const smooth = flag(child(first, 'smooth')) ?? style.startsWith('smooth');
+            const marked = markers(style === 'lineMarker' || style === 'smoothMarker');
+            return words('Scatter with', smooth ? 'Smooth' : 'Straight', 'Lines', marked && 'and Markers');
+        }
+        case 'bubbleChart':
+            return flag(child(group, 'bubble3D')) ? '3-D Bubble' : 'Bubble';
+        case 'radarChart':
+            if (option('radarStyle') === 'filled') return 'Filled Radar';
+            return words('Radar', markers(option('radarStyle') === 'marker') && 'with Markers');
+        case 'stockChart':
+            return stock(group);
+        case 'surfaceChart':
+        case 'surface3DChart':
+            return words(flag(child(group, 'wireframe')) && 'Wireframe', depth ? '3-D Surface' : 'Contour');
+        default:
+            return '';
+    }
 }
 
 // Excel's: no title of its own shows the only series' name unless the auto title was deleted; a title element with no
@@ -319,6 +410,14 @@ function cellOf(ref: string | undefined): [number, number] | undefined {
 }
 
 // An element's children in the chart namespace, an mc:AlternateContent read as the choice this reader understands.
+// The chart-wide text properties' Latin typeface, as a bundled font; a theme font (+mn-lt) or an unbundled one is the default.
+function chartFont(root: XmlElement): string {
+    let latin = child(root, 'txPr');
+    for (const local of ['p', 'pPr', 'defRPr', 'latin']) latin = latin && xmlChild(latin, A_NS, local);
+    const typeface = latin && xmlAttr(latin, '', 'typeface');
+    return (typeface && bundledFont(typeface)) ?? DEFAULT_CHART_FONT;
+}
+
 function elements(element: XmlElement | undefined): XmlElement[] {
     if (!element) return [];
     return xmlElements(element).flatMap((item) => (isAlternateContent(item) ? alternative(item) : [item]));

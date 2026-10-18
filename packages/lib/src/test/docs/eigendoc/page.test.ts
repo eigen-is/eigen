@@ -3,9 +3,11 @@ import * as Y from 'yjs';
 import { restoreYjsDoc } from '../../../core/collab/yjs-utils';
 import type { PageSetup } from '../../../docs/eigendoc';
 import {
+    cmText,
     DEFAULT_PAGE_SETUP,
     MIN_TEXT_MM,
     matchPaperSize,
+    mmToPx,
     PAGE_ROOT,
     PAPER_SIZES,
     pageBoxStyle,
@@ -13,6 +15,8 @@ import {
     pageRecord,
     pageStylesheet,
     pageTwips,
+    pxToMm,
+    readCm,
     readPageSetup,
 } from '../../../docs/eigendoc';
 import { EIGEN_DOC_TYPE_INFO } from '../../../types/drive';
@@ -238,5 +242,41 @@ describe('the stored page', () => {
         restoreYjsDoc(live, Y.encodeStateAsUpdate(old), EIGEN_DOC_TYPE_INFO.doc.yjsRoots);
         expect(readPageSetup(live.getMap(PAGE_ROOT).toJSON())).toEqual(DEFAULT_PAGE_SETUP);
         expect(live.getXmlFragment('default').length).toBe(1);
+    });
+});
+
+describe('cm fields', () => {
+    test('2.54 cm is 96 px, both ways, unrounded', () => {
+        expect(mmToPx(25.4)).toBe(96);
+        expect(pxToMm(96)).toBe(25.4);
+        expect(mmToPx(10)).toBeCloseTo(37.7952756, 6);
+        expect(pxToMm(300)).toBeCloseTo(79.375, 9);
+    });
+
+    test('cmText rounds mm to the given cm decimals and drops trailing zeros', () => {
+        expect(cmText(pxToMm(300), 1)).toBe('7.9');
+        expect(cmText(pxToMm(96), 1)).toBe('2.5');
+        expect(cmText(100, 1)).toBe('10');
+        expect(cmText(20, 2)).toBe('2');
+        // Google shows 0.75 in as 1.91 cm.
+        expect(cmText(19.05, 2)).toBe('1.91');
+        expect(cmText(19.05, 1)).toBe('1.9');
+    });
+
+    test('readCm is the typed cm in mm, to 0.01 mm, and NaN for no number', () => {
+        expect(readCm('1.91')).toBe(19.1);
+        expect(readCm(' 7.5 ')).toBe(75);
+        expect(readCm('2.54')).toBe(25.4);
+        expect(readCm('')).toBeNaN();
+        expect(readCm('  ')).toBeNaN();
+        expect(readCm('abc')).toBeNaN();
+        // A number field's value never holds a comma, so none is read as a decimal point.
+        expect(readCm('7,5')).toBeNaN();
+    });
+
+    test('a width shown in cm and typed back lands within a px of where it was', () => {
+        for (const px of [100, 200, 300, 333, 600]) {
+            expect(Math.abs(mmToPx(readCm(cmText(pxToMm(px), 1))) - px)).toBeLessThan(2);
+        }
     });
 });

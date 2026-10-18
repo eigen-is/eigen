@@ -1,9 +1,9 @@
 import { EIGEN_FONTS, type EigenFont } from '../constants/fonts';
 import { getFontMetrics } from '../vector/font-metrics';
+import { SHEET_DEFAULT_FONT_SIZE } from './defaults';
 
-// What a cell with no `ff` or `fs` draws in, in the editor and in the xlsx export.
+// What a cell with no `ff` draws in, in the editor and in the xlsx export.
 export const SHEET_DEFAULT_FONT: EigenFont = EIGEN_FONTS[0];
-export const SHEET_DEFAULT_FONT_SIZE = 10;
 
 // The default font's widest digit in whole pixels at 96 dpi: an xlsx column width counts these
 // (ECMA-376 Part 1 § 18.3.1.13), so the reader and the writer convert through it.

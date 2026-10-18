@@ -1,12 +1,12 @@
 import { isNil, last } from 'es-toolkit/compat';
 import { type Context, getFlowdata } from '../context';
 import {
-    cancelActiveImgItem,
     cellFocus,
     cellTextBox,
     checkboxChange,
     createFormulaRangeSelect,
     createRangeHightlight,
+    deselectFloatingObject,
     functionHTMLGenerate,
     getCellDataVerification,
     isCheckboxClick,
@@ -69,7 +69,7 @@ export function handleCellAreaMouseDown(
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    cancelActiveImgItem(ctx, globalCache);
+    deselectFloatingObject(ctx, globalCache);
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;
     const mouseY = e.pageY - rect.top - window.scrollY;

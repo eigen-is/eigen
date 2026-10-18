@@ -1,6 +1,6 @@
+import { columnIndexToLabel, columnLabelToIndex } from '@workspace/lib/sheets';
+
 export {
-    columnIndexToLabel,
-    columnLabelToIndex,
     extractLabel,
     quoteSheetName,
     rowIndexToLabel,
@@ -9,14 +9,7 @@ export {
     unquoteSheetName,
 } from './parser/helper/cell';
 
-import {
-    columnIndexToLabel,
-    columnLabelToIndex,
-    rowIndexToLabel,
-    rowLabelToIndex,
-    SHEET_NAME_PREFIX,
-    unquoteSheetName,
-} from './parser/helper/cell';
+import { rowIndexToLabel, rowLabelToIndex, SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
 
 export type CellRef = { col: number; row: number };
 

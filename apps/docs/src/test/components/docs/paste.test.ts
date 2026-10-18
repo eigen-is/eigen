@@ -71,6 +71,63 @@ describe('paste keeps caps', () => {
     });
 });
 
+// Google Docs writes a size on every span, its body's 11 pt and a heading's own included, which the doc draws already.
+describe('paste keeps a size the doc does not draw', () => {
+    const pastedSizes = (html: string) => {
+        const sizes: [string, unknown][] = [];
+        createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+            if (node.isText)
+                sizes.push([
+                    node.text ?? '',
+                    node.marks.find((mark) => mark.type.name === 'textStyle')?.attrs['fontSize'] ?? null,
+                ]);
+        });
+        return sizes;
+    };
+
+    test("the body's 11 pt is no size, another one is", () => {
+        expect(
+            pastedSizes(
+                '<p><span style="font-size:11pt">body </span><span style="font-size:14pt">big </span><span style="font-size:16px">px</span></p>',
+            ),
+        ).toEqual([
+            ['body ', null],
+            ['big ', 14],
+            ['px', 12],
+        ]);
+    });
+
+    test("another app's heading draws at the doc's heading size", () => {
+        expect(
+            pastedSizes('<b id="docs-internal-guid-1"><h1 dir="ltr"><span style="font-size:20pt">Plan</span></h1></b>'),
+        ).toEqual([['Plan', null]]);
+    });
+
+    test("a docs copy keeps its sizes, the body's in a heading included", () => {
+        const sized = (text: string, fontSize: number) => ({
+            type: 'text',
+            text,
+            marks: [{ type: 'textStyle', attrs: { fontSize } }],
+        });
+        const source = new Editor({
+            extensions: getDocExtensions(),
+            content: {
+                type: 'doc',
+                content: [
+                    { type: 'heading', attrs: { level: 1 }, content: [sized('big', 30), sized('body', 11)] },
+                    { type: 'paragraph', content: [sized('fine', 9)] },
+                ],
+            },
+        });
+        const { dom } = source.view.serializeForClipboard(source.state.doc.slice(0, source.state.doc.content.size));
+        expect(pastedSizes(dom.innerHTML)).toEqual([
+            ['big', 30],
+            ['body', 11],
+            ['fine', 9],
+        ]);
+    });
+});
+
 // Google Docs spells its italic Heading 6 on every run, and a run in it set upright as font-style normal. Heading 6
 // draws an italic mark upright, so the upright run is the mark and the italic one plain.
 test('an upright run in a pasted Google Docs Heading 6 is italic, its italic runs are not', () => {
@@ -134,6 +191,20 @@ describe('a docs copy pastes back as it was copied', () => {
     });
 });
 
+test('a pasted chart wider than the column shrinks to it, keeping its shape', () => {
+    const html =
+        '<p><span class="chart" data-chart="{}" data-width="1200" data-height="742"></span>' +
+        '<span class="chart" data-chart="{}" data-width="400" data-height="300"></span></p>';
+    const sizes: unknown[][] = [];
+    createDocument(cleanPastedHTML(html, 600, new Set()), schema).descendants((node) => {
+        if (node.type.name === 'chart') sizes.push([node.attrs.width, node.attrs.height]);
+    });
+    expect(sizes).toEqual([
+        [600, 371],
+        [400, 300],
+    ]);
+});
+
 // A cut keeps its comment because the card stays in the document's map; another document's card is not there.
 test('paste keeps the comment anchors this document has cards for and strips the rest', () => {
     const html =
@@ -152,4 +223,15 @@ test('paste keeps the comment anchors this document has cards for and strips the
         ['a.png', 'here', undefined],
         ['b.png', null, undefined],
     ]);
+});
+
+// The schema's reading of each <math> is the equation node's (packages/lib's equation tests); here only that the paste
+// drops a drawn equation's glyphs first.
+test("a KaTeX equation's drawn glyphs are not pasted beside its <math>", () => {
+    const math =
+        '<math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>x</mi><annotation encoding="application/x-tex">x</annotation></semantics></math>';
+    const drawn = `<span class="katex"><span class="katex-mathml">${math}</span><span class="katex-html" aria-hidden="true"><span class="mord mathnormal">x</span></span></span>`;
+    expect(cleanPastedHTML(`<p>a ${drawn} b</p>`, 600, new Set())).toBe(
+        cleanPastedHTML(`<p>a ${math} b</p>`, 600, new Set()),
+    );
 });

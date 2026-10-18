@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
+import * as math from '@workspace/math';
 import { ApiError } from '../../../lib/core/errors';
+import { M_NS } from '../../../lib/core/ooxml';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
@@ -11,8 +13,8 @@ import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-t
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
 import { LIST_LEVELS } from '../../../lib/document/wordml';
 import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
-import { docxToPmJson, MAX_DOCX_TEXT, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/from-docx';
-import { MAX_DOCX_PIECES } from '../../../lib/import/doc/package';
+import { docxToPmJson, MAX_DOCX_TEXT } from '../../../lib/import/doc/from-docx';
+import { CHARS_PER_UNIT, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
@@ -66,12 +68,14 @@ const texts = (json: JSONContent) => nodesOfType(json, 'text').map((node) => nod
 // The notes list closes the document, one item per note.
 const notes = (json: JSONContent) => (json.content?.at(-1)?.content ?? []).map((item) => texts(item).join(''));
 
-// A process of its own with a deadline, for a file that could hold the reader in a loop.
+// A process of its own with a deadline, for a file that could hold the reader in a loop. Bun.write, not console.log:
+// once a module reads process.stdout (lib0 does, so anything that reaches yjs), a console.log into the pipe ends at
+// 64 KB when the process exits.
 function importInChild(docx: ArrayBuffer, timeout: number): JSONContent {
     const script = `
         const { docxToPmJson } = await import(process.env.READER);
         const { json } = docxToPmJson(Buffer.from(await Bun.stdin.arrayBuffer()));
-        console.log(JSON.stringify(json));
+        await Bun.write(Bun.stdout, JSON.stringify(json));
     `;
     const child = Bun.spawnSync([process.execPath, '-e', script], {
         env: { ...process.env, READER: Bun.resolveSync('../../../lib/import/doc/from-docx', import.meta.dir) },
@@ -457,6 +461,23 @@ describe('output budget', () => {
         const result = measuredImport(await buildDocxWithBody(linked(10_000), { rels: linkTo(href) }), 'transform');
         expect([result.status, result.message]).toEqual([413, 'Document too large']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
+    }, 30_000);
+
+    // A space in m:t writes 26 characters of MathML: these 22 KB zipped built 400M characters, 1.07 GB, before the weigh.
+    test('MathML past the budget is 413 once the budget and one equation are written', async () => {
+        const space = `<m:oMath><m:r><m:t xml:space="preserve">a${' '.repeat(3990)}a</m:t></m:r></m:oMath>`;
+        const docx = await buildDocxWithBody(`<w:p xmlns:m="${M_NS}">${space.repeat(3870)}</w:p>`);
+        const writes = spyOn(math, 'writeMathml');
+        try {
+            const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
+            expect([error.status, error.message]).toEqual([413, 'Document too large']);
+            const written = writes.mock.results.map(({ value }) => String(value).length);
+            expect(written.reduce((sum, length) => sum + length, 0)).toBeLessThanOrEqual(
+                MAX_DOCX_WEIGHT * CHARS_PER_UNIT + Math.max(...written),
+            );
+        } finally {
+            writes.mockRestore();
+        }
     }, 30_000);
 });
 
@@ -993,6 +1014,22 @@ describe('figures and media', () => {
         }
     });
 
+    test('an equation in a block the schema refuses stays in its line', async () => {
+        const refuses = spyOn(docSchema(), 'nodeFromJSON').mockImplementationOnce(() => {
+            throw new RangeError('refused');
+        });
+        const math = `<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><m:r><m:t>x</m:t></m:r></m:oMath>`;
+        try {
+            const { json, warnings } = await importDocxBody(
+                `${paragraph(`${run('So ')}${math}`)}${paragraph(run('After.'))}`,
+            );
+            expect(json.content?.[0]?.content?.map((node) => node.type)).toEqual(['text', 'equation']);
+            expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
+        } finally {
+            refuses.mockRestore();
+        }
+    });
+
     test('a part of a type no image has is not stored: the figure goes, its caption stays', async () => {
         const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
         const { json, images } = await importDocxBody(
@@ -1121,8 +1158,9 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
 });
 
 // The transform process's memory limit is Linux's alone, the backstop past the budgets. At 1 GiB of data segment the child
-// has about 0.35 GB to use, which the honest document outgrows: the limit ends it with a crash, never the kernel's OOM
-// killer, whose SIGKILL the job line would show.
+// has 0.35 to 0.7 GB to use, by architecture; empty paragraphs just under the tag budget cost the reader about 2.2 GB
+// before the weight refuses them, so the limit ends it with a crash, never the kernel's OOM killer, whose SIGKILL the job
+// line would show.
 describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the memory of the transform process', () => {
     test('is 413, ended by the memory limit', async () => {
         const runner = documentTransformRunner as unknown as { memoryLimitKiB: number };
@@ -1131,7 +1169,7 @@ describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the m
         const logSpy = spyOn(console, 'log');
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
-            const docx = await buildDocxWithBody(await honestBody());
+            const docx = await buildDocxWithBody('<w:p/>'.repeat(Math.floor(0.98 * MAX_PACKAGE_XML_TAGS)));
             const job = {
                 kind: 'import',
                 sourceFormat: 'docx',

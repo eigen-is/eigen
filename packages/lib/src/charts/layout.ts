@@ -4,7 +4,6 @@
 
 import type {
     ChartBox,
-    ChartData,
     ChartLabel,
     ChartLayout,
     ChartLayoutInput,
@@ -26,7 +25,7 @@ import type {
     VectorRectangleElement,
 } from '../vector/types';
 import { chartColor } from './spec';
-import { nice, tickStep, ticks } from './ticks';
+import { formatPercentTick, nice, tickStep, ticks } from './ticks';
 
 // Every line a chart draws in place of a plot.
 export const CHART_MESSAGES = {
@@ -38,13 +37,12 @@ export const CHART_MESSAGES = {
     tooManyPoints: 'Too much data for a chart',
 };
 
-// The one paint of a chart in a document or a sheet, which store none: Google's flat look in Inter on
-// the page's own background. strokeColor draws the baseline at full strength and the gridlines faint
+// The one paint of a chart in a document or a sheet, which store none: Google's flat look on the page's
+// own background, in the spec's font. strokeColor draws the baseline at full strength and the gridlines faint
 // (GRIDLINE_OPACITY), so a mid gray gives a clear baseline and Google's light gridlines. strokeWidth is
 // every shape's line; 2 is Google's series line width, so a line series reads at page scale, and it
-// widens a bar by only 1px a side.
+// lengthens a bar by only 1px an end.
 export const FLAT_CHART_PAINT: ChartPaint = {
-    fontFamily: 'Inter',
     color: '#202124',
     background: serializeFill(TRANSPARENT_FILL),
     strokeColor: '#757575',
@@ -79,6 +77,9 @@ const MIN_LABELED_SLICE = 0.05;
 const PIE_EDGE_WIDTH = 1;
 // Keeps sums and spans finite whatever a cell holds; nothing plots past it anyway.
 const MAX_VALUE = 1e100;
+// d3 ticks a step under one by its inverse, which overflows near the smallest double, so a span under
+// this lays out as a zero span.
+const MIN_SPAN = 1e-300;
 const ELLIPSIS = '…';
 
 type Frame = { left: number; top: number; right: number; bottom: number };
@@ -88,6 +89,7 @@ type Anchor = ChartLabel['anchor'];
 type Context = {
     id: string;
     paint: ChartPaint;
+    fontFamily: string;
     width: number;
     height: number;
     fontSize: number;
@@ -98,9 +100,10 @@ type Context = {
 };
 
 type LegendItem = { name: string; color: string };
+type PaintedSeries = InlineChartSeries & { color: string };
 
 export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput): ChartLayout {
-    const ctx = context(box);
+    const ctx = context(box, spec.fontFamily);
     const background = backgroundShapes(ctx);
     const message = (text: string): ChartLayout => ({ shapes: background, labels: messageLabel(ctx, text) });
 
@@ -112,7 +115,9 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
             return value === null ? null : Math.min(MAX_VALUE, Math.max(-MAX_VALUE, value));
         }),
     );
+    if (values.every((row) => row.every((value) => value === null))) return message(CHART_MESSAGES.noData);
     const categories = Array.from({ length: count }, (_, i) => data.categories[i] ?? '');
+    const series = data.series.map((s, i) => ({ ...s, color: s.color ?? chartColor(i) }));
 
     if (spec.type === 'pie') {
         const slices = values[0];
@@ -124,35 +129,36 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     const items: LegendItem[] =
         spec.type === 'pie'
             ? categories.map((name, i) => ({ name, color: sliceColor(spec, i) }))
-            : data.series.map((series) => ({ name: series.name, color: series.color }));
+            : series.map(({ name, color }) => ({ name, color }));
     const legend = placeLegend(ctx, spec.legend, items, frame);
     frame = legend.frame;
 
     const plot =
         spec.type === 'pie'
             ? layoutPie(ctx, spec, categories, values[0], frame)
-            : layoutCartesian(ctx, spec, { categories, series: data.series }, values, frame, formatTick);
+            : layoutCartesian(ctx, spec, categories, series, values, frame, formatTick);
     if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
 }
 
 // The chart's background and one centered line instead of a plot, as a chart with nothing to plot draws.
-export function layoutChartMessage(box: ChartBox, text: string): ChartLayout {
-    const ctx = context(box);
+export function layoutChartMessage(box: ChartBox, text: string, fontFamily: string): ChartLayout {
+    const ctx = context(box, fontFamily);
     return { shapes: backgroundShapes(ctx), labels: messageLabel(ctx, text) };
 }
 
-function context({ id, width: w, height: h, paint }: ChartBox): Context {
+function context({ id, width: w, height: h, paint }: ChartBox, fontFamily: string): Context {
     const width = Math.max(0, w);
     const height = Math.max(0, h);
     const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, TEXT_SCALE * Math.min(width, height)));
     return {
         id,
         paint,
+        fontFamily,
         width,
         height,
         fontSize,
-        lineHeight: getLineHeightPx(paint.fontFamily, fontSize),
+        lineHeight: getLineHeightPx(fontFamily, fontSize),
         pad: fontSize,
         gap: fontSize / 2,
         labels: [],
@@ -184,11 +190,12 @@ function placeTitle(ctx: Context, title: string): Frame {
     const text = fit(ctx, title, frame.right - frame.left, size, true);
     if (text === '') return frame;
     ctx.labels.push(label(ctx, text, ctx.width / 2, frame.top, 'middle', { fontSize: size, bold: true }));
-    return { ...frame, top: frame.top + getLineHeightPx(ctx.paint.fontFamily, size) + ctx.gap };
+    return { ...frame, top: frame.top + getLineHeightPx(ctx.fontFamily, size) + ctx.gap };
 }
 
 // A swatch and its name per item: top and bottom wrap centered rows, left and right a column centered on
-// the room left. Rows or items past the room are dropped rather than squeezing the plot away.
+// the room left. Items past the room are dropped rather than squeezing the plot away, and a "+N" after
+// the last one kept counts them.
 function placeLegend(
     ctx: Context,
     position: ChartSpec['legend'],
@@ -226,16 +233,29 @@ function placeLegend(
         });
         const maxRows = Math.max(1, Math.floor(((frame.bottom - frame.top) * LABEL_SHARE) / lh));
         const kept = rows.slice(0, maxRows);
+        const widthsOf = (row: number[], tail: string) => [
+            ...row.map((i) => indent + measure(ctx, fitted[i])),
+            ...(tail === '' ? [] : [measure(ctx, tail)]),
+        ];
+        const lineWidth = (widths: number[]) =>
+            widths.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, widths.length - 1);
+        const last = kept[kept.length - 1];
+        const shown = () => kept.reduce((sum, row) => sum + row.length, 0);
+        let more = kept.length < rows.length ? `+${items.length - shown()}` : '';
+        while (more !== '' && last.length > 0 && lineWidth(widthsOf(last, more)) > room) {
+            last.pop();
+            more = `+${items.length - shown()}`;
+        }
         const top = position === 'top' ? frame.top : frame.bottom - kept.length * lh;
         kept.forEach((row, r) => {
-            const widths = row.map((i) => indent + measure(ctx, fitted[i]));
-            let x =
-                (frame.left + frame.right) / 2 -
-                (widths.reduce((sum, width) => sum + width, 0) + spacing * (row.length - 1)) / 2;
+            const tail = row === last ? more : '';
+            const widths = widthsOf(row, tail);
+            let x = (frame.left + frame.right) / 2 - lineWidth(widths) / 2;
             row.forEach((i, k) => {
                 place(items[i], i, fitted[i], x, top + r * lh);
                 x += widths[k] + spacing;
             });
+            if (tail !== '') ctx.labels.push(label(ctx, tail, x, top + r * lh, 'start'));
         });
         const used = kept.length * lh + gap;
         return {
@@ -246,14 +266,16 @@ function placeLegend(
 
     const room = (frame.right - frame.left) * LABEL_SHARE - indent;
     const fitted = items.map((item) => fit(ctx, item.name, room, ctx.fontSize, false));
-    const columnWidth = indent + Math.max(...fitted.map((text) => measure(ctx, text)));
     const fits = Math.max(0, Math.floor((frame.bottom - frame.top) / lh));
-    const kept = items.slice(0, fits);
-    const top = (frame.top + frame.bottom - kept.length * lh) / 2;
+    const kept = items.length > fits ? items.slice(0, fits - 1) : items;
+    const more = kept.length < items.length && fits > 0 ? `+${items.length - kept.length}` : '';
+    const columnWidth = indent + Math.max(measure(ctx, more), ...fitted.map((text) => measure(ctx, text)));
+    const top = (frame.top + frame.bottom - (kept.length + (more === '' ? 0 : 1)) * lh) / 2;
     const x = position === 'left' ? frame.left : frame.right - columnWidth;
     kept.forEach((item, i) => {
         place(item, i, fitted[i], x, top + i * lh);
     });
+    if (more !== '') ctx.labels.push(label(ctx, more, x + indent, top + kept.length * lh, 'start'));
     const used = columnWidth + 2 * gap;
     return {
         shapes,
@@ -264,37 +286,55 @@ function placeLegend(
 type ValueAxis = { lo: number; hi: number; ticks: number[]; texts: string[]; widths: number[] };
 
 // Column and line chart a vertical value axis left of a horizontal band axis; bar turns both. The axis
-// left of the plot takes its title turned -90°, the one below takes it upright.
+// left of the plot takes its title turned -90°, the one below takes it upright. A hidden axis gives its labels'
+// room to the plot and draws no line, the baseline being the category axis's; its title and the gridlines stay.
+// A 100% stack plots shares and labels its ticks as percents, whatever the source cells' format; its min
+// and max are shares too, Excel's c:min and c:max (1 is 100%).
 function layoutCartesian(
     ctx: Context,
     spec: ChartSpec,
-    data: ChartData,
-    values: (number | null)[][],
+    categories: string[],
+    series: PaintedSeries[],
+    stored: (number | null)[][],
     frame: Frame,
-    formatTick: ChartLayoutInput['formatTick'],
+    sourceFormat: ChartLayoutInput['formatTick'],
 ): ChartShape[] | null {
     const { lineHeight: lh, gap, fontSize } = ctx;
     const horizontal = spec.type === 'bar';
-    const stacked = spec.stacked && spec.type !== 'line';
-    const extent = valueExtent(values, stacked, spec.blanks === 'zero');
+    const stacked = spec.stacking !== 'none' && spec.type !== 'line';
+    const percent = stacked && spec.stacking === 'percent';
+    const values = percent ? shares(stored) : stored;
+    const formatTick = percent ? formatPercentTick : sourceFormat;
+    const [low, high] = valueExtent(values, stacked, spec.blanks === 'zero', spec.type !== 'line');
+    // Float sums can run a hair past ±100%, which nice ends would round up a whole step.
+    const extent: [number, number] = percent ? [Math.max(-1, low), Math.min(1, high)] : [low, high];
     const [sideTitle, bottomTitle] = horizontal
         ? [spec.categoryAxis.title, spec.valueAxis.title]
         : [spec.valueAxis.title, spec.categoryAxis.title];
     const sideReserve = sideTitle === '' ? 0 : lh + gap;
     const bottomReserve = bottomTitle === '' ? 0 : lh + gap;
-    const count = data.categories.length;
+    const count = categories.length;
+    const showNames = spec.categoryAxis.visible;
+    const showTicks = spec.valueAxis.visible;
+    const reversed = spec.categoryAxis.reversed;
+    // A bar chart's names sit centered on their bands, so thin bands keep half a line in from the plot's ends.
+    const edge = horizontal && showNames ? lh / 2 : 0;
 
     let plot: Frame;
     let axis: ValueAxis;
     let categoryLabels: ChartLabel[];
     if (horizontal) {
         const top = frame.top;
-        const bottom = frame.bottom - bottomReserve - gap - lh;
-        const band = bandScale(count, top, bottom);
+        const bottom = showTicks ? frame.bottom - bottomReserve - gap - lh : frame.bottom - bottomReserve;
+        const band = bandScale(count, top, bottom, reversed, edge);
         const every = Math.max(1, Math.ceil(lh / band.step));
         const room = (frame.right - frame.left - sideReserve) * LABEL_SHARE;
-        const names = data.categories.map((name, i) => (i % every === 0 ? fit(ctx, name, room, fontSize, false) : ''));
-        const left = frame.left + sideReserve + Math.max(0, ...names.map((name) => measure(ctx, name))) + gap;
+        const fitted = showNames
+            ? categories.map((name, i) => (i % every === 0 ? fit(ctx, name, room, fontSize, false) : ''))
+            : [];
+        const left = showNames
+            ? frame.left + sideReserve + Math.max(0, ...fitted.map((name) => measure(ctx, name))) + gap
+            : frame.left + sideReserve;
         // Fewer ticks until their labels stop touching, each try as many as the last one's widest pair has
         // room for; the end labels overhang the plot by half a label.
         let n = Math.min(
@@ -304,6 +344,10 @@ function layoutCartesian(
         for (;;) {
             axis = valueAxis(spec, extent, n, formatTick, ctx);
             const { lo, hi, widths } = axis;
+            if (!showTicks) {
+                plot = { left, top, right: frame.right, bottom };
+                break;
+            }
             plot = {
                 left: Math.max(left, frame.left + widths[0] / 2),
                 top,
@@ -315,12 +359,14 @@ function layoutCartesian(
             if (n <= 2 || axis.ticks.every((t, i) => i === 0 || (t - axis.ticks[i - 1]) * perUnit >= needs[i])) break;
             n = Math.max(2, Math.min(n - 1, Math.floor((plot.right - plot.left) / Math.max(...needs))));
         }
-        categoryLabels = names.flatMap((name, i) =>
+        categoryLabels = fitted.flatMap((name, i) =>
             name === '' ? [] : [label(ctx, name, plot.left - gap, band.center(i) - lh / 2, 'end')],
         );
     } else {
-        const top = frame.top + lh / 2;
-        const estimate = frame.bottom - bottomReserve - gap - lh - top;
+        // The end tick labels overhang the plot by half a line, below it only where no names sit.
+        const top = frame.top + (showTicks ? lh / 2 : 0);
+        const floor = frame.bottom - bottomReserve - (showTicks && !showNames ? lh / 2 : 0);
+        const estimate = (showNames ? floor - gap - lh : floor) - top;
         axis = valueAxis(
             spec,
             extent,
@@ -328,15 +374,11 @@ function layoutCartesian(
             formatTick,
             ctx,
         );
-        const left = frame.left + sideReserve + Math.max(...axis.widths) + gap;
-        const placed = placeCategoryLabels(
-            ctx,
-            data.categories,
-            bandScale(count, left, frame.right),
-            frame,
-            bottomReserve,
-        );
-        plot = { left, top, right: frame.right, bottom: frame.bottom - bottomReserve - placed.height };
+        const left = showTicks ? frame.left + sideReserve + Math.max(...axis.widths) + gap : frame.left + sideReserve;
+        const placed = showNames
+            ? placeCategoryLabels(ctx, categories, bandScale(count, left, frame.right, reversed), frame, bottomReserve)
+            : { labels: [], height: 0 };
+        plot = { left, top, right: frame.right, bottom: floor - placed.height };
         categoryLabels = placed.labels.map((placedLabel) => ({ ...placedLabel, y: placedLabel.y + plot.bottom + gap }));
     }
     const minPlot = 2 * fontSize;
@@ -362,22 +404,28 @@ function layoutCartesian(
               ];
         return { ...line(ctx, key, ends, ctx.paint.strokeColor, 'sharp', opacity), strokeStyle: ctx.paint.strokeStyle };
     };
-    const band = horizontal ? bandScale(count, plot.top, plot.bottom) : bandScale(count, plot.left, plot.right);
+    const band = horizontal
+        ? bandScale(count, plot.top, plot.bottom, reversed, edge)
+        : bandScale(count, plot.left, plot.right, reversed);
     const zero = Math.min(hi, Math.max(lo, 0));
     const shapes: ChartShape[] = [];
 
     axis.ticks.forEach((t, i) => {
         const at = scale(t);
-        ctx.labels.push(
-            horizontal
-                ? label(ctx, axis.texts[i], at, plot.bottom + gap, 'middle')
-                : label(ctx, axis.texts[i], plot.left - gap, at - lh / 2, 'end'),
-        );
-        if (spec.valueAxis.gridlines && t !== zero) shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
+        if (showTicks) {
+            ctx.labels.push(
+                horizontal
+                    ? label(ctx, axis.texts[i], at, plot.bottom + gap, 'middle')
+                    : label(ctx, axis.texts[i], plot.left - gap, at - lh / 2, 'end'),
+            );
+        }
+        // The baseline draws zero's line; without it a gridline does, as Office keeps its 0 line.
+        if (spec.valueAxis.gridlines && (t !== zero || !showNames))
+            shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
     });
-    if (spec.type === 'line') shapes.push(...lineMarks(ctx, spec, data.series, values, band, scale));
-    else shapes.push(...barMarks(ctx, spec, data.series, values, band, scale, horizontal, stacked));
-    shapes.push(rule('baseline', scale(zero)));
+    if (spec.type === 'line') shapes.push(...lineMarks(ctx, spec, series, values, band, scale));
+    else shapes.push(...barMarks(ctx, spec, series, values, band, scale, horizontal, stacked));
+    if (showNames) shapes.push(rule('baseline', scale(zero)));
 
     const side = fit(ctx, sideTitle, plot.bottom - plot.top, fontSize, false);
     if (side !== '')
@@ -387,11 +435,16 @@ function layoutCartesian(
     return shapes;
 }
 
-// The data's range, zero included (bars grow from it; Google's line charts start there too). Stacks
-// sum positives and negatives apart.
-function valueExtent(values: (number | null)[][], stacked: boolean, zeroBlanks: boolean): [number, number] {
-    let lo = 0;
-    let hi = 0;
+// The data's range, zero included for bars, which grow from it; a line's axis fits its data, as Excel's
+// and Google's do, unless the line is flat. Stacks sum positives and negatives apart.
+function valueExtent(
+    values: (number | null)[][],
+    stacked: boolean,
+    zeroBlanks: boolean,
+    zeroBased: boolean,
+): [number, number] {
+    let lo = zeroBased ? 0 : Number.POSITIVE_INFINITY;
+    let hi = zeroBased ? 0 : Number.NEGATIVE_INFINITY;
     const categories = values[0].length;
     for (let c = 0; c < categories; c++) {
         let up = 0;
@@ -407,13 +460,28 @@ function valueExtent(values: (number | null)[][], stacked: boolean, zeroBlanks: 
                 lo = Math.min(lo, value);
             }
         }
-        hi = Math.max(hi, up);
-        lo = Math.min(lo, down);
+        if (stacked) {
+            hi = Math.max(hi, up);
+            lo = Math.min(lo, down);
+        }
     }
-    return lo === hi ? [0, 1] : [lo, hi];
+    if (!(hi - lo >= MIN_SPAN)) {
+        lo = Math.min(lo, 0);
+        hi = Math.max(hi, 0);
+    }
+    return hi - lo >= MIN_SPAN ? [lo, hi] : [0, 1];
 }
 
-// Nice ends unless min or max pins one; ticks from d3 over the final domain.
+// Each value as its share of its category's absolute sum (Excel's percentStacked, Plot's normalize), so
+// positives and negatives together span 100%. A category summing to zero has no shares and draws no bar.
+function shares(values: (number | null)[][]): (number | null)[][] {
+    const totals = values[0].map((_, c) => values.reduce((sum, row) => sum + Math.abs(row[c] ?? 0), 0));
+    return values.map((row) => row.map((value, c) => (value === null || totals[c] === 0 ? null : value / totals[c])));
+}
+
+// Nice ends unless min or max pins one; ticks from d3 over the final domain. d3 takes the count as a
+// hint and can hand back half as many again, so a count that overshoots MAX_TICK_COUNT asks again for
+// fewer, which steps up to the next nice step.
 function valueAxis(
     spec: ChartSpec,
     [low, high]: [number, number],
@@ -421,28 +489,47 @@ function valueAxis(
     formatTick: ChartLayoutInput['formatTick'],
     ctx: Context,
 ): ValueAxis {
-    let [lo, hi] = nice(low, high, count);
     const { min, max } = spec.valueAxis;
-    if (min !== null) lo = min;
-    if (max !== null) hi = max;
-    if (lo >= hi) {
-        const span = high - low;
-        if (min !== null) hi = lo + span;
-        else lo = hi - span;
+    for (let n = count; ; n--) {
+        let [lo, hi] = nice(low, high, n);
+        if (min !== null) lo = min;
+        if (max !== null) hi = max;
+        if (lo >= hi) {
+            const span = high - low;
+            if (min !== null) hi = lo + span;
+            else lo = hi - span;
+        }
+        // Pins too close to tick, or past a double's precision at their size, give way to the data's domain.
+        if (!(hi - lo >= MIN_SPAN)) [lo, hi] = nice(low, high, n);
+        const values = ticks(lo, hi, n);
+        if (values.length > MAX_TICK_COUNT && n > 1) continue;
+        const step = tickStep(lo, hi, n);
+        const texts = values.map((value) => formatTick(value, step));
+        return { lo, hi, ticks: values, texts, widths: texts.map((text) => measure(ctx, text)) };
     }
-    const values = ticks(lo, hi, count);
-    const step = tickStep(lo, hi, count);
-    const texts = values.map((value) => formatTick(value, step));
-    return { lo, hi, ticks: values, texts, widths: texts.map((text) => measure(ctx, text)) };
 }
 
-type Band = { step: number; width: number; start: (i: number) => number; center: (i: number) => number };
+type Band = {
+    step: number;
+    width: number;
+    reversed: boolean;
+    start: (i: number) => number;
+    center: (i: number) => number;
+};
 
-function bandScale(count: number, from: number, to: number): Band {
-    const step = (to - from) / Math.max(1, count - BAND_PADDING + 2 * BAND_PADDING);
+// Bands from `from` to `to`, the first at `from` unless reversed. The end bands' centers keep at least `edge` in
+// from the ends, the range inset where thin bands would put them closer.
+function bandScale(count: number, from: number, to: number, reversed = false, edge = 0): Band {
+    const span = Math.max(1, count - BAND_PADDING + 2 * BAND_PADDING);
+    // The first band's center, in steps from the range's start.
+    const first = (1 + BAND_PADDING) / 2;
+    const length = to - from;
+    const inset =
+        span > 2 * first && (first * length) / span < edge ? (edge * span - first * length) / (span - 2 * first) : 0;
+    const step = (length - 2 * inset) / span;
     const width = step * (1 - BAND_PADDING);
-    const start = (i: number) => from + step * BAND_PADDING + i * step;
-    return { step, width, start, center: (i) => start(i) + width / 2 };
+    const start = (i: number) => from + inset + step * BAND_PADDING + (reversed ? count - 1 - i : i) * step;
+    return { step, width, reversed, start, center: (i) => start(i) + width / 2 };
 }
 
 // Upright and centered under their bands while they fit; else turned -45° and ellipsized to the room
@@ -482,7 +569,7 @@ function placeCategoryLabels(
 function barMarks(
     ctx: Context,
     spec: ChartSpec,
-    series: InlineChartSeries[],
+    series: PaintedSeries[],
     values: (number | null)[][],
     band: Band,
     scale: (v: number) => number,
@@ -493,6 +580,9 @@ function barMarks(
     const ups: number[] = [];
     const downs: number[] = [];
     const slot = stacked ? band.width : band.width / series.length;
+    // An outline straddles its bar's edges, so a bar narrows by its outline to keep its slot, and side by
+    // side bars meet outline to outline; a slot thinner than two outlines thins the outline.
+    const stroke = Math.min(ctx.paint.strokeWidth, slot / 2);
     series.forEach((s, si) => {
         const fill = serializeFill({ type: 'solid', color: s.color, style: ctx.paint.fillStyle });
         values[si].forEach((stored, c) => {
@@ -506,11 +596,13 @@ function barMarks(
             }
             const a = scale(from);
             const b = scale(from + value);
-            const offset = band.start(c) + (stacked ? 0 : si * slot);
+            // A reversed axis turns the band too, so the first series sits where the axis starts.
+            const position = band.reversed ? series.length - 1 - si : si;
+            const offset = band.start(c) + (stacked ? 0 : position * slot) + stroke / 2;
             const box = horizontal
-                ? { x: Math.min(a, b), y: offset, width: Math.abs(b - a), height: slot }
-                : { x: offset, y: Math.min(a, b), width: slot, height: Math.abs(b - a) };
-            shapes.push(rectangle(ctx, `bar:${si}:${c}`, box, s.color, fill));
+                ? { x: Math.min(a, b), y: offset, width: Math.abs(b - a), height: slot - stroke }
+                : { x: offset, y: Math.min(a, b), width: slot - stroke, height: Math.abs(b - a) };
+            shapes.push({ ...rectangle(ctx, `bar:${si}:${c}`, box, s.color, fill), strokeWidth: stroke });
         });
     });
     return shapes;
@@ -521,7 +613,7 @@ function barMarks(
 function lineMarks(
     ctx: Context,
     spec: ChartSpec,
-    series: InlineChartSeries[],
+    series: PaintedSeries[],
     values: (number | null)[][],
     band: Band,
     scale: (v: number) => number,
@@ -654,7 +746,7 @@ function cap(offset: number, direction: number, limit: number): number {
 }
 
 function measure(ctx: Context, text: string, fontSize = ctx.fontSize, bold = false): number {
-    return measureLabel(text, ctx.paint.fontFamily, fontSize, bold);
+    return measureLabel(text, ctx.fontFamily, fontSize, bold);
 }
 
 // The text as is when it fits, else its longest prefix that fits with an ellipsis, else ''.
@@ -685,7 +777,7 @@ function label(
         x,
         y,
         anchor,
-        fontFamily: ctx.paint.fontFamily,
+        fontFamily: ctx.fontFamily,
         fontSize: options.fontSize ?? ctx.fontSize,
         bold: options.bold ?? false,
         color: ctx.paint.color,

@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { readVectorFromDoc } from '@workspace/lib/vector';
 import { JSDOM } from 'jsdom';
+import * as Y from 'yjs';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
-import { EXPORT_CSP } from '../../lib/export/sanitize';
+import { EXPORT_CSP, sanitizeSceneHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import {
@@ -194,6 +196,56 @@ describe('Eigenvector export — rich-text HTML sanitization', () => {
     }, 120_000);
 });
 
+describe('Eigenvector export — rich-text nesting', () => {
+    const sanitizeRead = (html: string): string => {
+        const scene = buildGoldenVectorScene();
+        const doc = new Y.Doc();
+        seedVectorDoc(doc, {
+            ...scene,
+            elements: scene.elements.map((el) => (el.type === 'richtext' ? { ...el, html } : el)),
+        });
+        const text = sanitizeSceneHtml(readVectorFromDoc(doc)).elements.find((el) => el.type === 'richtext');
+        return text?.type === 'richtext' ? text.html : '';
+    };
+    const fill = (prefix: string, unit: string) =>
+        prefix + unit.repeat(Math.floor((64 * 1024 - prefix.length) / unit.length));
+    const ems = Array.from({ length: 61 }, (_, i) => `<em a=${i}>`).join('');
+    const marks = Array.from({ length: 62 }, (_, i) => `<${['em', 'strong', 'u', 's'][i % 4]} t=${i}>`).join('');
+
+    // jsdom walks every ancestor of each node it inserts, so this body took seconds per parse uncapped.
+    test('a list a peer nested 3,000 deep reaches the sanitizer flattened, every x kept', () => {
+        const start = performance.now();
+        const html = sanitizeRead(`${'<ul><li>x'.repeat(3_000)}${'</li></ul>'.repeat(3_000)}`);
+        expect(performance.now() - start).toBeLessThan(1_000);
+        expect(html).toBe(`<p>${'x'.repeat(3_000)}</p>`);
+    });
+
+    // Under the depth cap, but the parser closes what the body leaves open, so formatting elements stay on its
+    // active list and every later paragraph rebuilds them: 64 KiB of these held jsdom 10–17 s.
+    test.each([
+        ['a mismatched </p>', fill(`<p>${ems}</p>`, '<p>x</p>')],
+        ['a <p> in an open <p>', fill(`<p>${ems}<p>x</p>`, '<p>x</p>')],
+        ['an <li> in an open <li>', fill(`<ul><li>${ems}<li>x</li>`, '<li>x</li>')],
+        ['empty paragraphs with a <br>', fill(`<p>${marks}</p>`, '<p><br></p>')],
+    ])('%s sanitizes in linear time, its text kept', (_, body) => {
+        const start = performance.now();
+        const html = sanitizeRead(body);
+        // 8,000 flattened paragraphs parse in about 0.5 s; the drift held jsdom 8–17 s.
+        expect(performance.now() - start).toBeLessThan(2_000);
+        expect(html).not.toContain('<em');
+        expect(html.replace(/<[^>]*>/g, '')).toBe(body.replace(/<[^>]*>/g, ''));
+    });
+
+    test('hostile markup stays inert, flattened or kept', () => {
+        const flattened = sanitizeRead('<div>&lt;img src=x onerror=alert(1)&gt;<img src=x onerror=alert(2)></div>');
+        expect(flattened).toBe('<p>&lt;img src=x onerror=alert(1)&gt;</p>');
+        const kept = sanitizeRead('<p><a href="javascript:alert(1)" onclick="alert(2)">x</a></p>');
+        expect(kept).not.toContain('javascript:');
+        expect(kept).not.toContain('onclick');
+        expect(kept).toContain('x');
+    });
+});
+
 describe('Eigenvector export — the .svg download is XML', () => {
     test('void tags and entities in a rich-text box come out as well-formed XML', async () => {
         // A .svg file is parsed by an XML parser (browser, Inkscape, librsvg), where an unclosed <br>
@@ -243,7 +295,8 @@ describe('Eigenvector export — the pdf-html document (what WeasyPrint is hande
         // The page is the document body's only child, and every <svg> in it is one layer's own
         // viewport — the old arm put the whole drawing in a single root <svg> with a viewBox.
         expect(html).toContain('<body>\n    <div class="canvas-page"');
-        expect(html).toContain('transform-origin:0 0');
+        // The page prints at 1:1, so no transform sits above a layer (canvas-pdf.test.ts says why).
+        expect(html).not.toContain('transform:scale');
         const svgs = (html.match(/<svg\b/g) ?? []).length;
         const layerViewports = (html.match(/<div style="position:absolute[^"]*"><svg\b/g) ?? []).length;
         expect(svgs).toBeGreaterThan(1);

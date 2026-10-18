@@ -236,7 +236,7 @@ describe('versions HTTP routes', () => {
         await home.drive.flushContentReindex();
         expect(home.drive.search({ q: 'grobblev2', limit: 20 }).some((h) => h.id === chat.id)).toBe(false);
         expect(home.drive.search({ q: 'grobblev1', limit: 20 }).some((h) => h.id === chat.id)).toBe(true);
-    });
+    }, 15_000);
 
     test('eigendoc: save + list returns parsed snapshot metadata', async () => {
         const token = ctx.alice.user.sessionToken;

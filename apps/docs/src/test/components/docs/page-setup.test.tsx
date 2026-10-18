@@ -64,7 +64,7 @@ test('⌘Z takes back a page setup change as its own step, then the typing befor
     editor.destroy();
 });
 
-// The Headers and footers panel's checkbox writes it as OK writes the page, so ⌘Z takes it back on its own.
+// A band's Different first page box writes it as OK writes the page, so ⌘Z takes it back on its own.
 test('Different first page is a page key, and turning it on is an undo step of the body', () => {
     const { doc, undoManager, editor } = mount();
     editor.commands.insertContent('Hello');

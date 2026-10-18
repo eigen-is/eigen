@@ -1,8 +1,9 @@
-import type { ChartSpec } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { applyPatches, produce } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import type { SetContextOptions } from '../../context';
+import { type ChartRangeRefusal, setUpChartRange } from '../../engine/chart-range';
 import { RowColError } from '../../engine/rowcol';
 import type { Cell } from '../../engine/types';
 import {
@@ -11,6 +12,7 @@ import {
     type ChartBox,
     type Context,
     collectMatches,
+    createContextResolver,
     createFilterOptions,
     deleteChart,
     deleteRowCol,
@@ -37,6 +39,7 @@ import {
     type SearchHighlight,
     type SearchResult,
     type Settings,
+    setChartDataRange,
     setChartSpec,
     setSearchHighlights,
     updateChartBox,
@@ -185,6 +188,23 @@ export function generateAPIs(
             setContext((draftCtx) => reorderChart(draftCtx, id, direction)),
 
         deleteChart: (id: string) => setContext((draftCtx) => deleteChart(draftCtx, id)),
+
+        // Sets the range up, or says why it holds no chart and writes nothing.
+        setChartDataRange: (id: string, ref: CellRangeRef): ChartRangeRefusal | undefined => {
+            const setup = setUpChartRange(ref, createContextResolver(context));
+            if (typeof setup === 'string') return setup;
+            setContext((draftCtx) => setChartDataRange(draftCtx, id, ref));
+        },
+
+        // Opens one undo step for a panel edit and returns its release (PropertyGestureContext).
+        beginGesture: () => {
+            const gesture = {};
+            const cache = context.getRefs().globalCache;
+            cache.undoGesture = gesture;
+            return () => {
+                if (cache.undoGesture === gesture) cache.undoGesture = undefined;
+            };
+        },
 
         undo: handleUndo,
         redo: handleRedo,

@@ -9,7 +9,8 @@ import { installHappyDom } from '../../happy-dom';
 installHappyDom();
 
 const session = { user: { id: 'owner-1' } };
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => session, useIsGuest: () => false }));
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { act, createElement } = await import('react');

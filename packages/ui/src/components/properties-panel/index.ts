@@ -8,7 +8,16 @@ export { MergedSelect, numToStr } from './merged-select';
 export { MergedSlider } from './merged-slider';
 export { getMergedValue, isMixed, type MergedValue, MIXED } from './merged-value';
 export { PROPERTIES_PANEL_WIDTH_PX, PropertiesPanel, PropertyRow, PropertySection } from './properties-panel';
-export { type BeginGesture, PropertyGestureContext, useHeldGesture } from './property-gesture';
+export { PropertyCheckbox } from './property-checkbox';
+export {
+    type BeginGesture,
+    holdCapture,
+    PropertyGestureContext,
+    type PropertyHistory,
+    PropertyHistoryContext,
+    sealed,
+    useHeldGesture,
+} from './property-gesture';
 export { PropertyNumberInput } from './property-number-input';
 export { PropertyTextInput } from './property-text-input';
 export { PropertyToggle } from './property-toggle';

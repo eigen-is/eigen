@@ -1,0 +1,163 @@
+import { parseChartSpec } from '@workspace/lib/charts';
+import { columnIndexToLabel } from '@workspace/lib/sheets';
+import type { ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
+import { Button } from '@workspace/ui/components/button';
+import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
+import { Input } from '@workspace/ui/components/input';
+import {
+    PropertiesPanel,
+    PropertyCheckbox,
+    PropertyGestureContext,
+    PropertyRow,
+    PropertySection,
+} from '@workspace/ui/components/properties-panel';
+import { Table } from 'lucide-react';
+import { type RefObject, useState } from 'react';
+import { rowIndexToLabel } from '../../engine/a1-notation';
+import {
+    CHART_RANGE_REFUSALS,
+    type ChartRange,
+    chartRangeData,
+    chartRangeOf,
+    chartRangeText,
+    parseChartRangeText,
+} from '../../engine/chart-range';
+import type { ChartEditorState } from '../../state';
+import type { WorkbookInstance } from '../Workbook';
+
+type ChartEditorPanelProps = {
+    editor: ChartEditorState;
+    workbook: RefObject<WorkbookInstance | null>;
+};
+
+// Google's Chart editor: Setup (the data range and how it reads) over the shared Customise rows. Every
+// change is one write of the chart's spec, a typed field one undo step for the whole edit.
+export function ChartEditorPanel({ editor, workbook }: ChartEditorPanelProps) {
+    const [dataOpen, setDataOpen] = useState(false);
+    const spec = parseChartSpec(editor.chart.spec);
+    if (!spec) return null;
+    const { data } = spec;
+    const write = (next: ChartSpec) => workbook.current?.setChartSpec(editor.chart.id, next);
+    const beginGesture = () => workbook.current?.beginGesture() ?? (() => {});
+    return (
+        <PropertiesPanel title="Chart editor">
+            <PropertyGestureContext.Provider value={beginGesture}>
+                {data.source === 'range' && (
+                    <SetupSection editor={editor} spec={spec} data={data} workbook={workbook} onChange={write} />
+                )}
+                <ChartEditor
+                    spec={spec}
+                    onChange={write}
+                    categories={editor.categories}
+                    seriesNames={editor.seriesNames}
+                >
+                    {data.source === 'inline' && (
+                        <>
+                            <Button variant="outline" size="sm" className="w-full" onClick={() => setDataOpen(true)}>
+                                <Table /> Edit data
+                            </Button>
+                            <ChartDataDialog
+                                spec={{ ...spec, data }}
+                                open={dataOpen}
+                                onOpenChange={setDataOpen}
+                                onSave={write}
+                            />
+                        </>
+                    )}
+                </ChartEditor>
+            </PropertyGestureContext.Provider>
+        </PropertiesPanel>
+    );
+}
+
+type SetupSectionProps = ChartEditorPanelProps & {
+    spec: ChartSpec;
+    data: RangeChartData;
+    onChange: (spec: ChartSpec) => void;
+};
+
+function SetupSection({ editor, spec, data, workbook, onChange }: SetupSectionProps) {
+    const { chart, sheets, sheetId } = editor;
+    const range = chartRangeOf(data);
+    const text = range ? chartRangeText(range.ref, sheets, sheetId) : '';
+    // While focused the field shows its draft, so a peer's write never moves the caret.
+    const [draft, setDraft] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const commit = () => {
+        if (draft === null || draft.trim() === text) return setError(null);
+        const ref = parseChartRangeText(draft, sheets, sheetId);
+        if (!ref) return setError('Enter a range such as A1:D10');
+        const refusal = workbook.current?.setChartDataRange(chart.id, ref);
+        setError(refusal ? CHART_RANGE_REFUSALS[refusal] : null);
+    };
+
+    // The three toggles re-derive the refs from the same block, each series keeping its style.
+    const setup = (patch: Partial<ChartRange>) => {
+        if (!range) return;
+        const next = chartRangeData({ ...range, ...patch }, data.series);
+        if (next) onChange({ ...spec, data: next });
+    };
+
+    const firstRow = range ? rowIndexToLabel(range.ref.row[0]) : '1';
+    const firstColumn = range ? columnIndexToLabel(range.ref.column[0]) : 'A';
+    const inRows = range?.seriesInRows === true;
+    const toggles: { label: string; checked: boolean; patch: (checked: boolean) => Partial<ChartRange> }[] = [
+        { label: 'Switch rows/columns', checked: inRows, patch: (checked) => ({ seriesInRows: checked }) },
+        inRows
+            ? {
+                  label: `Use column ${firstColumn} as headers`,
+                  checked: range?.headerColumn === true,
+                  patch: (checked) => ({ headerColumn: checked }),
+              }
+            : {
+                  label: `Use row ${firstRow} as headers`,
+                  checked: range?.headerRow === true,
+                  patch: (checked) => ({ headerRow: checked }),
+              },
+        inRows
+            ? {
+                  label: `Use row ${firstRow} as labels`,
+                  checked: range?.headerRow === true,
+                  patch: (checked) => ({ headerRow: checked }),
+              }
+            : {
+                  label: `Use column ${firstColumn} as labels`,
+                  checked: range?.headerColumn === true,
+                  patch: (checked) => ({ headerColumn: checked }),
+              },
+    ];
+
+    return (
+        <PropertySection title="Setup">
+            <PropertyRow label="Data range">
+                <Input
+                    className="h-7 text-xs"
+                    aria-label="Data range"
+                    aria-invalid={error !== null}
+                    value={draft ?? text}
+                    placeholder="A1:D10"
+                    onFocus={() => setDraft(text)}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') commit();
+                    }}
+                    onBlur={() => {
+                        commit();
+                        setDraft(null);
+                    }}
+                />
+            </PropertyRow>
+            {error && <p className="text-xs text-destructive">{error}</p>}
+            {toggles.map(({ label, checked, patch }) => (
+                <PropertyCheckbox
+                    key={label}
+                    label={label}
+                    checked={checked}
+                    disabled={!range}
+                    onCheckedChange={(next) => setup(patch(next))}
+                />
+            ))}
+        </PropertySection>
+    );
+}

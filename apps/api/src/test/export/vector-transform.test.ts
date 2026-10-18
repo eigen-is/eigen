@@ -28,4 +28,13 @@ describe('renderEigenvectorExport', () => {
         expect(svg).not.toContain('<table');
         expect(svg).toContain('hi');
     });
+
+    // A standalone SVG has none of the app's CSS, so it carries the rules an inline style cannot reach:
+    // list markers, paragraph spacing, and the line a blank paragraph takes.
+    test('carries the canvas text rules, so a blank line keeps its height', () => {
+        const svg = svgWithRichText('<p>a</p><p></p><p>b</p>');
+        expect(svg).toContain('<p>a</p><p></p><p>b</p>');
+        expect(svg).toContain('.eigen-canvas-text p:empty');
+        expect(svg).toContain('.eigen-canvas-text p + p');
+    });
 });

@@ -64,7 +64,7 @@ async function renderExport(
             return renderEigendocExport(doc, request.format, request.title, media, request.publicOrigin);
         }
         case 'eigenslides': {
-            const { renderEigenslidesExport } = await import('../../export/canvas/transform');
+            const { renderEigenslidesExport } = await import('../../export/slides/transform');
             return renderEigenslidesExport(doc, request.format, request.title, media);
         }
         case 'eigenvector': {
@@ -91,6 +91,11 @@ async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): P
         case 'docx': {
             const { importDocxToEigendocUpdate } = await import('../../import/doc/transform');
             const { warnings, ...result } = importDocxToEigendocUpdate(request.data, request.publicOrigin);
+            return { ok: true, result, warnings };
+        }
+        case 'pptx': {
+            const { importPptxToSlidesUpdate } = await import('../../import/slides/transform');
+            const { warnings, ...result } = importPptxToSlidesUpdate(request.data, request);
             return { ok: true, result, warnings };
         }
     }

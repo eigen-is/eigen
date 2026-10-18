@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
+import { readFontSize } from '@workspace/lib/constants/fonts';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
@@ -53,7 +54,7 @@ import {
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
-import { SMALL_PRINT } from '../lib/import/doc/runs';
+import { isBodySizedRun } from '../lib/import/doc/paragraphs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
 
 const FEATURES = [
@@ -78,7 +79,7 @@ const FEATURES = [
     ['color', 'Text color (words)'],
     ['highlight', 'Highlight (words)'],
     ['font', 'Font family (words)'],
-    ['small', 'Small text (words)'],
+    ['size', 'Font size (words)'],
     ['caps', 'All caps (words)'],
     ['smallCaps', 'Small caps (words)'],
     ['code', 'Inline code (words)'],
@@ -111,6 +112,7 @@ const FEATURES = [
     ['alignRight', 'Right-aligned paragraphs'],
     ['alignJustify', 'Justified paragraphs'],
     ['footnotes', 'Footnote and endnote references'],
+    ['equations', 'Equations'],
 ] as const;
 
 export type Feature = (typeof FEATURES)[number][0];
@@ -227,7 +229,7 @@ const MARKS = new Set<Feature>([
     'color',
     'highlight',
     'font',
-    'small',
+    'size',
     'caps',
     'smallCaps',
     'code',
@@ -447,7 +449,9 @@ function hyperlinkField(instr: string): Link | undefined {
 type Scope = { chain: Chain; float: boolean; cell: boolean; note: boolean; fields: Field[] };
 
 // styleRuns: the paragraph style's run formatting even where a structure takes runs' place, as no node draws a font or
-// capitals. weightRuns: what bold and size read, as a heading draws its own and leaves its style's other formatting.
+// capitals. weightRuns: what bold reads, as a heading draws its own and leaves its style's other formatting. sizeRuns:
+// the size a run's stands out from, a heading's or a title's style's, which draws its own, or else the body's, as in a
+// heading the reader reads as body text.
 // drawn: the color and italic the paragraph's node draws, a heading level's or a title's, which are no mark and from
 // which a run set apart is one: an upright run in a heading that draws italic is the italic mark it came from.
 type Inline = {
@@ -456,6 +460,7 @@ type Inline = {
     runs: XmlElement[];
     styleRuns: XmlElement[];
     weightRuns: XmlElement[];
+    sizeRuns: XmlElement[];
     drawn: { color?: string; italic?: true };
     marks: boolean;
     link?: Link;
@@ -777,13 +782,32 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         return !color || color === 'AUTO' ? '000000' : color;
     };
     const sizeOf = (sources: XmlElement[]) => Number(val(first(sources, 'sz')) ?? 20);
+    const sizeCsOf = (sources: XmlElement[]) => Number(val(first(sources, 'szCs')) ?? sizeOf(sources));
     // What a run in a plain paragraph looks like: the text a mark stands out from.
     const { runs: plain, indent } = paragraphLook(undefined);
-    const base = {
-        color: colorOf(plain),
-        size: sizeOf(plain),
-        sizeCs: Number(val(first(plain, 'szCs')) ?? sizeOf(plain)),
-        indent,
+    const base = { color: colorOf(plain), indent };
+    // The reader draws a heading or a title of only body-sized runs as body text.
+    const isBodySized = (p: XmlElement, headingRuns: XmlElement[]) => {
+        const faces = descendants(p, W_NS, 'r').flatMap((run) => {
+            const rPr = child(run, 'rPr');
+            const characterRuns = styles
+                .chain(val(child(rPr, 'rStyle')) ?? styles.character)
+                .flatMap((style) => child(style, 'rPr') ?? []);
+            const sources = [...(rPr ? [rPr] : []), ...characterRuns, ...headingRuns];
+            const direct = (local: string) => {
+                const size = val(child(rPr, local));
+                return size === undefined ? undefined : Number(size);
+            };
+            const text = xmlChildren(run, W_NS, 't').map(runText).join('');
+            return facesOf(text, fontsOf(sources), scriptOf(sources))
+                .filter((face) => face.text.trim())
+                .map(({ complex }) =>
+                    complex
+                        ? isBodySizedRun(direct('szCs'), sizeCsOf(headingRuns), sizeCsOf(plain))
+                        : isBodySizedRun(direct('sz'), sizeOf(headingRuns), sizeOf(plain)),
+                );
+        });
+        return faces.length > 0 && faces.every(Boolean);
     };
 
     const runLook = (rPr: XmlElement | undefined, context: Inline): RunLook => {
@@ -817,12 +841,10 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         const shading = first(sources, 'shd');
         const fill = shading && xmlAttr(shading, W_NS, 'fill')?.toUpperCase();
         const faces = [...direct, ...characterRuns, ...context.styleRuns];
-        const sized = [...direct, ...characterRuns, ...context.weightRuns];
-        const sizeCs = val(first(sized, 'szCs'));
-        const shape = (bold: string, italic: string, small: boolean): [Feature, boolean][] => [
+        const shape = (bold: string, italic: string, sized: boolean): [Feature, boolean][] => [
             ['bold', toggle(bold, context.weightRuns)],
             ['italic', toggle(italic) !== !!context.drawn.italic],
-            ['small', small],
+            ['size', sized],
         ];
         const common: [Feature, boolean][] = [
             ['underline', underline !== undefined && underline !== 'none'],
@@ -842,11 +864,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
         return {
             hidden: toggle('vanish'),
             code: chain.some((style) => CODE_STYLES.has(styleName(style))),
-            marks: set([...shape('b', 'i', sizeOf(sized) <= base.size * SMALL_PRINT), ...common]),
-            complexMarks: set([
-                ...shape('bCs', 'iCs', sizeCs !== undefined && Number(sizeCs) <= base.sizeCs * SMALL_PRINT),
-                ...common,
-            ]),
+            marks: set([...shape('b', 'i', sizeOf(faces) !== sizeOf(context.sizeRuns)), ...common]),
+            complexMarks: set([...shape('bCs', 'iCs', sizeCsOf(faces) !== sizeCsOf(context.sizeRuns)), ...common]),
             fonts: fontsOf(faces),
             script: scriptOf(sources),
         };
@@ -916,12 +935,25 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             blocks(box, { ...context.scope, chain: newChain(), fields: [] });
     };
 
+    // An equation is no text: a word boundary, as on the imported side. An m:oMathPara holds its equations directly.
+    const isMath = (node: XmlElement) => node.ns === M_NS && (node.local === 'oMath' || node.local === 'oMathPara');
+    const equations = (node: XmlElement, context: Inline) => {
+        const count = node.local === 'oMath' ? 1 : xmlChildren(node, M_NS, 'oMath').length;
+        if (visible(context.scope)) add(tally, 'equations', count);
+        space(context);
+    };
+
     const runContent = (container: XmlElement, look: RunLook, context: Inline) => {
         const { fields } = context.scope;
         for (const node of xmlElements(container)) {
             if (node.ns === MC_NS && node.local === 'AlternateContent') {
                 const choice = alternative(node);
                 if (choice) runContent(choice, look, context);
+                continue;
+            }
+            // CT_R holds no math, but the reader reads it there.
+            if (isMath(node)) {
+                equations(node, context);
                 continue;
             }
             if (node.ns !== W_NS) continue;
@@ -994,16 +1026,8 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
                 if (choice) inline(choice, context);
                 continue;
             }
-            if (node.ns === M_NS && node.local === 't') {
-                if (visible(context.scope)) text(xmlText(node), context, undefined);
-                continue;
-            }
-            // An equation's objects and runs are words of their own, as the reader reads math as text.
-            if (node.ns === M_NS && node.local === 'oMath') {
-                for (const part of xmlElements(node)) {
-                    inline(part, context);
-                    space(context);
-                }
+            if (isMath(node)) {
+                equations(node, context);
                 continue;
             }
             if (node.ns !== W_NS) {
@@ -1057,9 +1081,12 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             caption ||
             scope.note ||
             descendants(element, W14_NS, 'checkbox').length > 0;
-        const numbered = look.numId && look.numId !== '0' ? numberItem(look.numId, look.ilvl) : undefined;
+        const { numId } = look;
+        const listed = numId !== undefined && numId !== '0';
+        const numbered = listed ? numberItem(numId, look.ilvl) : undefined;
         // A heading can't stand in an Eigen list: Word shows its number as text, which survives as text or not at all.
         const label = look.heading !== undefined && numbered?.ordered ? numbered.label : undefined;
+        const sized = (look.heading !== undefined || !!look.title) && (listed || !isBodySized(element, look.runs));
         const current: Paragraph = {
             spans: [...(label ? [{ text: label, marks: [] }] : []), ...chain.carry],
             image: false,
@@ -1100,6 +1127,7 @@ export function auditSource(bytes: ArrayBuffer | Uint8Array): Tally & { elements
             runs: structural && look.heading === undefined ? defaults : look.runs,
             styleRuns: look.runs,
             weightRuns: structural ? defaults : look.runs,
+            sizeRuns: sized ? look.runs : plain,
             drawn: look.heading ? nodeLook('heading', look.heading) : nodeLook(look.title ?? 'paragraph'),
             marks: !look.code && !caption,
         });
@@ -1257,7 +1285,8 @@ const MARK_FEATURES = new Map<string | undefined, Feature>([
     ['subscript', 'subscript'],
     ['superscript', 'superscript'],
     ['highlight', 'highlight'],
-    ['small', 'small'],
+    // The editor draws Small at its size, which the writer writes.
+    ['small', 'size'],
     ['code', 'code'],
     ['link', 'link'],
 ]);
@@ -1290,6 +1319,7 @@ export function auditImported(json: JSONContent): Tally {
                 else figure = true;
                 continue;
             }
+            if (inline.type === 'equation') add(tally, 'equations');
             if (inline.type !== 'text') {
                 space();
                 continue;
@@ -1317,6 +1347,7 @@ export function auditImported(json: JSONContent): Tally {
                 if (typeof color === 'string' && color && cssColorToHex(color) !== '000000') features.push('color');
                 font = typeof attrs['fontFamily'] === 'string' ? fontMark(attrs['fontFamily']) : undefined;
                 if (font) features.push('font');
+                if (readFontSize(attrs['fontSize']) !== undefined) features.push('size');
                 if (attrs['caps'] === 'all') features.push('caps');
                 if (attrs['caps'] === 'small') features.push('smallCaps');
             }
@@ -1525,7 +1556,7 @@ function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
         '',
         '## Features',
         '',
-        `Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark, a link to a bookmark alone counting as no link, its link style drawn but in a table of contents; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; small text words at most ${SMALL_PRINT * 100}% of its size, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.`,
+        `Source is what Word shows: the body, footnotes, endnotes and text boxes, with paragraph and character styles resolved through basedOn and docDefaults, deleted text, field instructions and hidden text left out. Marks count the words they touch, a word carrying every mark any of its characters does, so run splitting can't skew them. A complex script character, or any in a run marked right to left, reads its bold, italic and size from bCs, iCs and szCs, as Word draws it. Formatting a structure draws (a heading's weight and size, a quote's, a note's or a task's paragraph style, a link's character style in the link look) belongs to the structure, not to a mark, a link to a bookmark alone counting as no link, its link style drawn but in a table of contents; a heading style's color, italic or underline is its words' mark. Font family counts words whose font, the paragraph style's included, maps to a bundled font other than the document font (a Times body is Source Serif 4 on every word, a Calibri or unknown one none), kept only in that font; font size words in another size than it, text color words in another color. All caps and small caps count the words Word draws them on, the paragraph style's included, as no structure draws capitals; all caps wins over both. A quote is a paragraph with a left border alone or a quote style; a rule an empty paragraph with a bottom border alone, outside a run of paragraphs sharing its borders, which Word draws as one box. Ordered lists split where Word's numbers don't follow on, and a list's items carry the numbers Word shows. A heading Word numbers is no list item: it is a numbered heading whose number Word shows as text, kept when an imported heading reads the same line, number first. Text, marks, item numbers and numbered headings match as multisets of words, numbers and lines: kept is what matches over the source, invented what the import holds with no match in the source. Every other feature keeps each file's min(imported, source) and invents its max(0, imported − source). A crash or timeout keeps and invents nothing.`,
         '',
         'Not resolved: table styles (a header row a table style makes bold), the mc:Fallback of a choice Word reads, `w:sym` symbols, the preview picture of an embedded object (`w:object`), the text of a SmartArt and the title of a chart, which live in parts of their own, headers, footers and comments.',
         '',

@@ -18,11 +18,13 @@ import {
     hitThresholdScreen,
     isBindable,
     linearLocalToScene,
+    type NewVectorElement,
     normalizeLinear,
     type PinPatch,
     type Point,
     parseBinding,
     parsePoints,
+    randomSeed,
     renormalize,
     type StyleDefaults,
     serializePressures,
@@ -30,13 +32,13 @@ import {
     type VectorArrowElement,
     type VectorBindableElement,
     type VectorElement,
+    type VectorElementPatch,
     type VectorLinearElement,
 } from '@workspace/lib/vector';
+import { sealed } from '@workspace/ui/components/properties-panel';
 import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
-import { randomSeed } from '../hooks/element-writes';
-import { type NewVectorElement, sealed, type VectorElementPatch } from '../hooks/use-canvas-doc';
 import type { VectorTool } from '../hooks/use-tool';
 import { FocusIndicators, FocusPointHandles, SnapDots } from './arrow-affordances';
 import {

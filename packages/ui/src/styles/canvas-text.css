@@ -13,6 +13,13 @@
     margin-top: 0.5em;
 }
 
+/* A blank line is stored as an empty paragraph, which lays out 0 tall; the editor shows it one line
+   tall only through ProseMirror's trailing break, which the stored html does not carry. No angle
+   brackets in this file: the SVG download embeds it in an XML style element. */
+.eigen-canvas-text p:empty {
+    min-height: 1lh;
+}
+
 .eigen-canvas-text ul,
 .eigen-canvas-text ol {
     padding-left: 1.5em;

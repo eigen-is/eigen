@@ -1,11 +1,11 @@
-// Row and column header strips: white cell backgrounds, sequence labels, and
+// Row and column header strips: header backgrounds, sequence labels, and
 // the separator lines (hidden rows/columns get a doubled separator).
 
+import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { type Context, getSheetConfig } from '../context';
 import { defaultFont, getMeasureText } from '../modules/text';
-import { indexToColumnChar } from '../utils';
+import { canvasColors } from './colors';
 import { colEndX, colStartX, HALF_PIXEL, headerVisibleRange, rowEndY, rowStartY } from './geometry';
-import { defaultStyle } from './types';
 
 export function drawRowHeader(
     sheetCtx: Context,
@@ -22,9 +22,9 @@ export function drawRowHeader(
 
     renderCtx.clearRect(0, offsetTop, sheetCtx.rowHeaderWidth - 1, drawHeight);
 
+    const colors = canvasColors(renderCtx.canvas);
     renderCtx.font = defaultFont(sheetCtx.defaultFontSize);
-    renderCtx.textBaseline = defaultStyle.textBaseline;
-    renderCtx.fillStyle = defaultStyle.fillStyle;
+    renderCtx.textBaseline = 'middle';
 
     const { start: rowStart, end: rowEnd } = headerVisibleRange(sheetCtx.visibledatarow, scrollHeight, drawHeight);
 
@@ -56,14 +56,14 @@ export function drawRowHeader(
         }
 
         if (rowhidden?.[r] == null) {
-            renderCtx.fillStyle = '#ffffff';
+            renderCtx.fillStyle = colors.headerBackground;
             renderCtx.fillRect(
                 0,
                 startY + offsetTop + firstOffset,
                 sheetCtx.rowHeaderWidth - 1,
                 endY - startY + 1 + lastOffset - firstOffset,
             );
-            renderCtx.fillStyle = '#000000';
+            renderCtx.fillStyle = colors.headerText;
 
             // Row header sequence number
             const textMetrics = getMeasureText(r + 1, renderCtx);
@@ -80,7 +80,7 @@ export function drawRowHeader(
         renderCtx.lineTo(sheetCtx.rowHeaderWidth - 2 + HALF_PIXEL, endY + offsetTop - 2);
         renderCtx.lineWidth = 1;
 
-        renderCtx.strokeStyle = defaultStyle.strokeStyle;
+        renderCtx.strokeStyle = colors.gridLine;
         renderCtx.stroke();
         renderCtx.closePath();
 
@@ -138,9 +138,9 @@ export function drawColumnHeader(
     renderCtx.scale(sheetCtx.devicePixelRatio, sheetCtx.devicePixelRatio);
     renderCtx.clearRect(offsetLeft, 0, drawWidth, sheetCtx.columnHeaderHeight - 1);
 
+    const colors = canvasColors(renderCtx.canvas);
     renderCtx.font = defaultFont(sheetCtx.defaultFontSize);
-    renderCtx.textBaseline = defaultStyle.textBaseline;
-    renderCtx.fillStyle = defaultStyle.fillStyle;
+    renderCtx.textBaseline = 'middle';
 
     const { start: colStart, end: colEnd } = headerVisibleRange(sheetCtx.visibledatacolumn, scrollWidth, drawWidth);
 
@@ -155,7 +155,7 @@ export function drawColumnHeader(
         const startX = colStartX(sheetCtx.visibledatacolumn, c, scrollWidth);
         const endX = colEndX(sheetCtx.visibledatacolumn, c, scrollWidth);
 
-        const columnLabel = indexToColumnChar(c);
+        const columnLabel = columnIndexToLabel(c);
         // Triggered before column header cell render; return false to skip
         if (
             sheetCtx.hooks.beforeRenderColumnHeaderCell?.(
@@ -171,9 +171,9 @@ export function drawColumnHeader(
         }
 
         if (colhidden?.[c] == null) {
-            renderCtx.fillStyle = '#ffffff';
+            renderCtx.fillStyle = colors.headerBackground;
             renderCtx.fillRect(startX + offsetLeft - 1, 0, endX - startX, sheetCtx.columnHeaderHeight - 1);
-            renderCtx.fillStyle = '#000000';
+            renderCtx.fillStyle = colors.headerText;
 
             // Column header sequence number
             const textMetrics = getMeasureText(columnLabel, renderCtx);
@@ -190,7 +190,7 @@ export function drawColumnHeader(
             renderCtx.moveTo(endX + offsetLeft - 4 + HALF_PIXEL, 0);
             renderCtx.lineTo(endX + offsetLeft - 4 + HALF_PIXEL, sheetCtx.columnHeaderHeight - 2);
             renderCtx.lineWidth = 1;
-            renderCtx.strokeStyle = defaultStyle.strokeStyle;
+            renderCtx.strokeStyle = colors.gridLine;
             renderCtx.closePath();
             renderCtx.stroke();
         } else if (colhidden == null || colhidden[c] == null) {
@@ -199,7 +199,7 @@ export function drawColumnHeader(
             renderCtx.lineTo(endX + offsetLeft - 2 + HALF_PIXEL, sheetCtx.columnHeaderHeight - 2);
 
             renderCtx.lineWidth = 1;
-            renderCtx.strokeStyle = defaultStyle.strokeStyle;
+            renderCtx.strokeStyle = colors.gridLine;
             renderCtx.closePath();
             renderCtx.stroke();
         }

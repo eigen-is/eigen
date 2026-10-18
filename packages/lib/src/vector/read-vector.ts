@@ -1,18 +1,18 @@
 // Materialize a vector container's Y.Doc into a plain VectorScene — the one reader for every canvas
-// document (a drawing and a deck alike). Worker-safe (yjs only). Every field is a scalar or string, so
-// primitive reads suffice even when the server hydrates values via Y.applyUpdate.
+// document (a drawing and a deck alike). React-free, so the API's transform process runs it. Every field
+// is a scalar or string, so primitive reads suffice even when the server hydrates values via Y.applyUpdate.
 // Per-kind field validation lives in the registry (kinds/); this module owns the scene-level passes.
 
 import type * as Y from 'yjs';
 import { parseBackgroundFill, serializeBackgroundFill } from './fill';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
-import { FRAME_HEIGHT, FRAME_WIDTH, type VectorFrame } from './frames';
+import { SLIDE_SIZE_KEYS, SLIDE_SIZES, type SlideSize, type VectorFrame } from './frames';
 import { ELEMENT_KINDS, isBindable, isVectorElementType } from './kinds';
 import {
-    cleanStr,
     color,
     coord,
     isYMapLike,
+    labelText,
     num,
     oneOf,
     roughness,
@@ -35,13 +35,15 @@ import {
     type VectorElementType,
     type VectorScene,
 } from './types';
+import type { Extent } from './viewport';
 
 export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const elementsMap = doc.getMap('elements');
     const framesMap = doc.getMap('frames');
     const metaMap = doc.getMap('meta');
 
-    const frames = readFrames(framesMap);
+    const slideSize = readSlideSize(doc);
+    const frames = readFrames(framesMap, SLIDE_SIZES[slideSize]);
     const elements: VectorElement[] = [];
     for (const value of elementsMap.values()) {
         const el = readElementFromFields(value);
@@ -56,12 +58,17 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const ordered = syncInvalidIndices(orderByFractionalIndex(elements));
 
     const background = color(metaMap.get('background'), DEFAULT_SCENE_META.background);
-    return { elements: ordered, frames, meta: { background } };
+    return { elements: ordered, frames, meta: { background, slideSize } };
 }
 
-// Frames are ordered by fractional index like elements, and heal the same way. Every frame is
-// 16:9, so the size is the constant, never a stored field.
-function readFrames(framesMap: Y.Map<unknown>): VectorFrame[] {
+// The deck's slide size alone, for a writer that fits what it adds to the deck's frames.
+export function readSlideSize(doc: Y.Doc): SlideSize {
+    return oneOf(doc.getMap('meta').get('slideSize'), SLIDE_SIZE_KEYS, DEFAULT_SCENE_META.slideSize);
+}
+
+// Frames are ordered by fractional index like elements, and heal the same way. Every frame takes the
+// deck's slide size, never a stored field of its own.
+function readFrames(framesMap: Y.Map<unknown>, size: Extent): VectorFrame[] {
     const frames: VectorFrame[] = [];
     for (const value of framesMap.values()) {
         if (!isYMapLike(value)) continue;
@@ -70,9 +77,9 @@ function readFrames(framesMap: Y.Map<unknown>): VectorFrame[] {
         frames.push({
             id,
             index: str(value.get('index'), ''),
-            name: cleanStr(value.get('name'), ''),
-            width: FRAME_WIDTH,
-            height: FRAME_HEIGHT,
+            name: labelText(value.get('name')),
+            width: size.width,
+            height: size.height,
             background: serializeBackgroundFill(parseBackgroundFill(str(value.get('background'), ''))),
         });
     }

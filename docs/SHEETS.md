@@ -151,6 +151,14 @@ Once built, the map is kept current cell by cell. Local writers register what th
 
 A typed number is stored as a number in `v`, unless the cell is text-formatted. Pasted plain text goes through the same `setCellValue` parse as typing. A formula's text result stays text (`=TEXT(5,"000")` is `"005"`). Copying a General number writes 15 significant digits (`copiedNumberText`), not the 11-character display, so a paste elsewhere keeps the precision.
 
+## A copy puts the cells on text/plain as TSV
+
+A range copy writes three flavors: the HTML table with the cells' styles, the Eigen clipboard payload, and TSV on `text/plain` with tabs between cells and newlines between rows. `rangeValueToClipboard` (`state/modules/selection.ts`) builds the table and the TSV in one pass over the same cells, each cell's display text with General numbers at 15 digits. A cell holding a tab, a line break or a leading quote is quoted and its quotes doubled, as Google writes it, through `cellsToTsv` in `@workspace/lib/clipboard`; a quote inside text stays as it is, so `12" pizza` pastes as typed. The Eigen text item carries the same cells unquoted, tabs and newlines between them, because Docs reads it as text rather than as TSV. The plain text is what a paste into a text field, a chart's Edit data grid or another app without an HTML reader gets, so it has to keep the grid's shape. The plain-text paste in Sheets itself splits on tabs and newlines and doesn't unquote, so a quoted multi-line cell pasted as plain text lands split ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
+
+## Enter and Tab commit an edit and move on
+
+While a cell is open, Enter commits it and moves down, and Tab commits and moves right, Shift+Tab left, as in Google Sheets. Both go through `commitEdit` (`state/events/keyboard.ts`), which writes the cell and collapses the selection to it before the move. A visible formula suggestion takes Tab first and stops it, so Tab picks the function instead of committing.
+
 ## Conditional formats evaluate headless
 
 `evaluateConditionalFormat(rules, data, options?)` (`engine/conditional-format.ts`) returns the `"r_c"`-keyed style map the canvas paints, and the HTML export calls it too ([§ The export paints conditional formats with the grid's evaluator](#the-export-paints-conditional-formats-with-the-grids-evaluator)). Without an evaluator, formula rules are skipped. Both callers pass the same one, `createCfFormulaEvaluator`.
@@ -189,7 +197,27 @@ A sheet whose formulas the op moved too is still written back whole, and its who
 
 `resolveRangeChartData` (`engine/chart-data.ts`) turns a range chart into the categories and series the layout draws, through a `CellResolver`, so the editor and the server read the same cells. A value is the cell's computed `v` when it is a finite number and a gap otherwise. A label or series name is the cell's display text `m`, the string the grid shows, or a rich-text cell's runs joined, since such a cell has neither `m` nor `v`. A name ref reads its first cell. A chart with no categories counts them 1, 2, … up to its longest series.
 
-A ref that is null, names a missing sheet or spans several rows and several columns at once is a `'ref'` error, which the chart shows as Excel's #REF. More points than `MAX_CHART_POINTS` is `'too-many-points'`. Both are decided from the refs before a cell is read, so selecting a whole column costs nothing. Hidden rows and columns are read like visible ones, while Excel and Google skip them by default.
+A series whose values ref is null, deleted with its rows or columns, is left out and the rest draw, as Google does; it keeps its color in the spec, so an undo brings it back as it was. An automatic color resolves by the series' index in the spec before that, so the series after a deleted one keep the colors the editor shows them in. No series left, or a ref that names a missing sheet or spans several rows and several columns at once, is a `'ref'` error, which the chart shows as Excel's #REF. More points than `MAX_CHART_POINTS` is `'too-many-points'`. Both are decided from the refs before a cell is read, so selecting a whole column costs nothing. Hidden rows and columns are read like visible ones, while Excel and Google skip them by default ([ROADMAP](ROADMAP.md)).
+
+`renderSheetChartSvg` (same file) is the chart the editor's overlay and the export both draw: the box, the resolved data, and value ticks through `numberDisplay` in the axis's own format or else the first value cell's, Google's "From source data", so a percent column gets percent ticks.
+
+## A chart's Setup is a block of cells, derived to refs and read back from them
+
+The spec stores a ref per series, so a row insert can shift each one the way Excel shifts a chart's series. Google's Setup instead describes one block of cells: series down its columns or along its rows, and whether its first row and first column hold names. That block is a `ChartRange` (`engine/chart-range.ts`). `chartRangeData` derives the refs from it, and `chartRangeOf` reads it back by deriving both orientations and comparing with the stored refs. Refs no block derives, an imported chart's or one a deleted row nulled, have no Setup to show until a range is typed. The flags name the block's own first row and column, so Switch rows/columns keeps them: a text first row names the series down columns and the categories along rows.
+
+Insert → Chart and a typed data range set a block up the same way (`suggestChartRange`): text in the first row or first column makes it names, the corner cell counting for neither, and series run down the columns unless the block has more data columns than rows. Insert also charts the table around a single selected cell (Excel's current region, `currentRegion`), titles the chart after its series ("North, South and East"), names the horizontal axis after the corner cell when that heads the categories, and places a 600 × 371 column chart below the block with its editor open. `setUpChartRange` refuses a block of more than `MAX_CHART_SERIES` series, which `parseChartSpec` would read back as null, and one of more values than `MAX_CHART_POINTS`, which the chart would only draw as too much data. The values are counted from the refs, the fewest a block can hold before its cells set it up, so a typed whole column reads nothing. `currentRegion` grows each edge as far as it goes before trying the next and stops past `MAX_CHART_POINTS`, so a cell in a 10,000-row table reads a few thousand cells and is refused. Insert says why in an alert and the editor under the field, one message per reason (`CHART_RANGE_REFUSALS`).
+
+## A chart on the grid redraws only when a cell matrix it reads changes
+
+`ChartBoxs` (`components/ChartBoxs/`) draws the current sheet's charts beside the images, from the same box fields. Every component under the workbook context re-renders on every context change, a selection or a drag included, so `chartSvg` (`state/modules/chart.ts`) keeps one drawing per chart record and the `data` matrices of the sheets its refs name. immer replaces the matrix whose cells an edit touched, so an edit feeding a chart redraws it on the next render and nothing else does. The key is the matrix, not the sheet: the API's `setSelection` and a sheet switch write the per-client `selections` onto the sheet object. `packages/sheet/src/test/components/ChartBoxs/chart-boxes.test.tsx` counts the redraws.
+
+The selected chart is `ctx.activeChart`, per client, so `filterPatch` drops it. A click selects, a drag moves and the `ObjectTransform` ring resizes, each gesture one write. Delete goes through `clearSelectedContents`, the branch a selected image takes, and Escape is the chart's own keydown. Clicking a cell, a header or another sheet's tab deselects through `deselectFloatingObject`, and `changeSheet` drops the selection too, because the chart belongs to the sheet left behind. Only the selected chart is `touch-none`, so a finger on any other chart pans the grid, and a `pointercancel`, the browser taking a touch for a pan, ends a move without writing it. Download chart → SVG puts the painter's SVG on white, as the export draws it. It names the chart's font without embedding it, because the font files are bundled into the server's export only.
+
+## The Chart editor is the app's sidebar, and a typed edit is one undo step
+
+The Workbook reports the chart whose editor is open through `onChartEditorChange`, as it reports the active image, and the app mounts `ChartEditorPanel` where the image panel goes. The state is memoized: the app passes a fresh `hooks` object on every render, which re-fires the reporting effect, and a fresh state each time would re-render the app without end. The panel writes through the Workbook API: `setChartSpec`, and `setChartDataRange` for a typed range, which needs the cells to set the block up.
+
+The shared editor writes a typed title on every keystroke inside a gesture ([CHARTS.md](CHARTS.md#one-chart-editor-edits-a-spec-and-the-host-writes-it)). The Workbook's `beginGesture` opens `undoGesture`, and `setContextWithProduce` merges every write made under it into the last undo entry, so one ⌘Z takes the whole title back while peers still see it as it is typed. A write that replaces the field the entry's last write replaced overwrites that patch and adds no inverse, so the entry holds the first old spec and the latest new one, not one spec per keystroke.
 
 ## A tick box is a validation rule, and the value is its state
 
@@ -223,7 +251,7 @@ Clicking a tick box while composing `=IF(` inserts the cell's reference and noth
 
 A comment (top-right), an invalid value and a forced string (top-left) are all drawn by `drawCellIndicator` at `cellIndicatorRect`. The size is `CELL_INDICATOR_SIZE` in `packages/lib/src/constants/comment-indicator.ts`, which the canvas apps' `CommentIndicator` reads too, so a comment mark looks the same in every app. Filled and empty cells reach the same painter. A comment triangle takes its card's color, and red when the card has none.
 
-Canvas colors are hardcoded light, because the grid is paper and doesn't re-theme ([RENDERING.md](../packages/sheet/RENDERING.md#theming-the-light-pinned-surface)).
+The grid's colors are light-only CSS variables in ui's `globals.css`, read by the canvas and by the chart Edit data grid; the canvas's other colors are hardcoded light, because the grid is paper and doesn't re-theme ([RENDERING.md](../packages/sheet/RENDERING.md#theming-the-light-pinned-surface)).
 
 ## A glyph outranks the selection handles
 
@@ -276,7 +304,11 @@ A sheet with images wraps its table in a `position:relative` box and emits one a
 
 The stored coordinates are grid pixels from A1, while the table starts at the used range. So the overlay subtracts the rows and columns above and left of that window. An image above or left of the used range pulls the window back to where the image starts, so the offset never goes negative and the page covers the image.
 
-An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export drops images, an open [ROADMAP](ROADMAP.md) row.
+An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export drops images and charts, an open [ROADMAP](ROADMAP.md) row.
+
+## Charts draw in the same overlay as inline SVG
+
+`renderFloatingObjects` (`export/sheets/render.ts`) draws a sheet's images, then its charts in their paint order, as the editor stacks them. A chart is `renderSheetChartSvg`, the editor's own drawing, in a white box at its stored geometry, so the gridlines stop at it as they do on screen. Its ranges read through the render's resolver over every loaded sheet, so a chart on one tab can chart another. The export reads them after the gated recalc and the preview from the stored values. A chart counts like an image for the page size and the window's origin. The overlay's box reaches the farthest image or chart, so the next sheet and the preview's truncated notice start below them, and the preview clips the box to its budget window. The SVG is plain shapes and text, which the sanitizer keeps and WeasyPrint draws ([CHARTS.md](CHARTS.md#the-painter-draws-each-shape-with-its-own-kind-and-the-labels-as-svg-text)).
 
 ## Some xlsx round-trip drifts are decisions
 

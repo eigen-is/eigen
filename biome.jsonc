@@ -132,7 +132,7 @@
       }
     },
     {
-      // math is a leaf below lib that the browser, Bun, Workers and Node run unchanged: it imports no package and no runtime API.
+      // math is a leaf below lib that the browser, Bun, Workers and Node run unchanged: it imports no package; its tsconfig holds no runtime API.
       "includes": ["packages/math/**", "!packages/math/src/test/**"],
       "linter": {
         "rules": {
@@ -155,23 +155,6 @@
                     "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
                   }
                 ]
-              }
-            },
-            // bun-types declares these, and the package tsconfig keeps it for the tests, so tsc lets them through.
-            "noRestrictedGlobals": {
-              "level": "error",
-              "options": {
-                "deniedGlobals": {
-                  "Bun": "math is a leaf: no Bun API (see ARCHITECTURE.md § Dependency direction).",
-                  "process": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
-                  "Buffer": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
-                  "setImmediate": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
-                  "require": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
-                  "global": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
-                  "__dirname": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
-                  "__filename": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction).",
-                  "module": "math is a leaf: no Node API (see ARCHITECTURE.md § Dependency direction)."
-                }
               }
             }
           }

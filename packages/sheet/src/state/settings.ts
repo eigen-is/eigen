@@ -1,5 +1,6 @@
 import type { useCommentLifecycle } from '@workspace/lib/comments';
-import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import type { SheetChart } from '@workspace/lib/sheets';
+import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_DEFAULT_FONT_SIZE, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -20,6 +21,16 @@ export type CommentInfo = {
     card: CommentCard;
     entry: CommentEntry | undefined;
     indicatorColor: string | null;
+};
+
+// The chart whose editor sidebar is open, on the current sheet; every sheet's name, for its data range; and
+// the categories and series names its range resolves to, which name a pie's slices and the series rows.
+export type ChartEditorState = {
+    chart: SheetChart;
+    sheetId: string;
+    sheets: { id: string; name: string }[];
+    categories: string[];
+    seriesNames: string[];
 };
 
 export type Hooks = {
@@ -141,6 +152,9 @@ export type Hooks = {
     // committed), so the app can mount/refresh its image properties panel. `null` when nothing is
     // active.
     onActiveImageChange?: (image: Image | null) => void;
+    // Fired when a chart's editor opens or closes and while it is open, as the chart or the sheet names
+    // change, so the app can mount its chart editor sidebar.
+    onChartEditorChange?: (editor: ChartEditorState | null) => void;
 };
 
 export type Settings = {
@@ -182,8 +196,8 @@ export const defaultSettings: Required<Settings> = {
     devicePixelRatio: 0, // device pixel ratio; higher value gives sharper rendering, 0 means auto
     allowEdit: true, // whether to allow editing in the frontend
     forceCalculation: false, // force formula recalculation; may cause performance issues with many formulas, use with caution
-    rowHeaderWidth: 46,
-    columnHeaderHeight: 20,
+    rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
+    columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
     defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
     sheetTabContextMenu: [
         'delete',

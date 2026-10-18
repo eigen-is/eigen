@@ -18,6 +18,26 @@ export const EIGEN_FONTS: EigenFont[] = [
 // A doc's text draws in it without a font mark, so a paste or an import gives it none.
 export const DOCUMENT_FONT = EIGEN_FONTS[0].name;
 
+// A doc's text draws at it without a size mark: eigen-prose.css's body, in pt.
+export const DOCUMENT_FONT_SIZE = 11;
+
+// Small's: eigen-prose.css's small, in pt.
+export const SMALL_FONT_SIZE = 9;
+
+// Google Docs' and Sheets' font sizes, in pt, both of which step by 1.
+export const MIN_FONT_SIZE = 1;
+export const MAX_FONT_SIZE = 400;
+
+// Any peer, paste or file writes a size, so only a finite number is one; it lands in the range, in Word's half points.
+export function readFontSize(value: unknown): number | undefined {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(value * 2) / 2));
+}
+
+export function nextFontSize(size: number, by: 1 | -1): number {
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size + by));
+}
+
 // The vocabulary a stored `fontFamily` must be one of — a name, never a CSS stack. Readers validate
 // against this so an unrecognised value falls back instead of reaching a CSS declaration.
 export const EIGEN_FONT_NAMES: readonly string[] = EIGEN_FONTS.map((f) => f.name);

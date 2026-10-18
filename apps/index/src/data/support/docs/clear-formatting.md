@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, formatting, text]
 related: [docs/format-text]
 order: 60
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 When text has accumulated bold, italic, color, font changes, or other styles you no longer want, you can strip them all in one step rather than toggling each one off individually.
@@ -15,7 +15,7 @@ When text has accumulated bold, italic, color, font changes, or other styles you
 
 Clearing formatting removes two kinds of style at once:
 
-- **Inline marks**: bold, italic, underline, strikethrough, inline code, superscript, subscript, small, all caps, small caps, text color, and highlight.
+- **Inline marks**: bold, italic, underline, strikethrough, inline code, superscript, subscript, font size, all caps, small caps, text color, and highlight.
 - **Block styles**: titles, subtitles, headings, blockquotes, code blocks, and lists. These are converted to normal paragraphs.
 
 Links are also removed as part of the inline marks. If you want to keep a link, remove it separately first using the **Remove link** button.

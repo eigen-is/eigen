@@ -4,18 +4,29 @@
 
 import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { ChartSpec, ChartType } from '@workspace/lib/types/chart';
-import { convertToShapes, type Point, type VectorElement } from '@workspace/lib/vector';
+import {
+    convertToShapes,
+    type NewVectorElement,
+    type Point,
+    type StyleDefaults,
+    type VectorElement,
+} from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
 import { Shapes, Table } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { NewVectorElement } from '../hooks/use-canvas-doc';
 import type { KindEditDialogProps, KindPanelSectionProps } from './index';
 
-// Google's defaults: a drawing's chart, and a chart filling most of a 1920 × 1080 slide.
+// Google's defaults: a drawing's chart, and a chart filling most of a 16:9 slide (1920 × 1080).
 const NEW_CHART_SIZE = { infinite: { width: 640, height: 400 }, frame: { width: 1200, height: 675 } };
 
-export function newChartElement(type: ChartType, center: Point, viewport: 'infinite' | 'frame'): NewVectorElement {
+// In the host's font, which the spec carries from then on.
+export function newChartElement(
+    type: ChartType,
+    center: Point,
+    viewport: 'infinite' | 'frame',
+    style: StyleDefaults,
+): NewVectorElement {
     const { width, height } = NEW_CHART_SIZE[viewport];
     return {
         type: 'chart',
@@ -23,7 +34,7 @@ export function newChartElement(type: ChartType, center: Point, viewport: 'infin
         y: center.y - height / 2,
         width,
         height,
-        chart: JSON.stringify(sampleChartSpec(type)),
+        chart: JSON.stringify({ ...sampleChartSpec(type), fontFamily: style.fontFamily }),
     };
 }
 

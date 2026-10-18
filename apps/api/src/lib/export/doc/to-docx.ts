@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName, readFontSize } from '@workspace/lib/constants/fonts';
 import {
+    type FigureAttrs,
+    isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     type PageSetup,
     pageTwips,
@@ -14,23 +16,8 @@ import {
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import { writeOmml } from '@workspace/math';
-import {
-    A_NS,
-    ASVG_NS,
-    CONTENT_TYPES_NS,
-    CORE_PROPERTIES_NS,
-    DC_NS,
-    EMU_PER_PX,
-    M_NS,
-    MC_NS,
-    PACKAGE_RELATIONSHIPS_NS,
-    PIC_NS,
-    R_NS,
-    W_NS,
-    W14_NS,
-    WP_NS,
-} from '../../core/ooxml';
-import { writeZip } from '../../core/zip';
+import { A_NS, ASVG_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../core/ooxml';
+import { type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import { readStoredEquation } from '../../document/equation';
 import {
@@ -58,7 +45,7 @@ import {
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
-import type { ExportMedia } from '../../document/transform/protocol';
+import { type ExportMedia, toTransferableBuffer } from '../../document/transform/protocol';
 import {
     BORDER_SIDES,
     CHECKBOX_GLYPHS,
@@ -76,19 +63,17 @@ import {
     TWIPS_PER_PX,
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
+import { splitDataUri } from '../../shared/data-uri';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
-import { figureMediaKey } from './docx-image';
+import { encodeOfficeImage, OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
-
-// An SVG's PNG fallback is drawn and read inside the Worker, so it never crosses the boundary on ExportMedia.
-export type DocxMedia = ExportMedia & { png?: ArrayBuffer };
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,
     setup: PageSetup,
-    media: DocxMedia[],
+    media: OfficeMedia[],
     title: string,
     publicOrigin: string | undefined,
 ): Promise<Uint8Array> {
@@ -117,42 +102,73 @@ export async function eigendocToDocx(
     const body = blocksXml(blocksOf(json.content ?? [], {}, flow, false));
     const fonts = embeddedFonts(pkg.faces);
 
-    const parts: [path: string, xml: string, contentType?: string][] = [
-        ['_rels/.rels', relationshipsXml(PACKAGE_RELATIONSHIPS)],
-        [
-            'docProps/core.xml',
-            `<cp:coreProperties xmlns:cp="${CORE_PROPERTIES_NS}" xmlns:dc="${DC_NS}"><dc:title>${escapeXml(stripEigenExtension(title))}</dc:title></cp:coreProperties>`,
-            'application/vnd.openxmlformats-package.core-properties+xml',
-        ],
-        [
-            'word/document.xml',
-            `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page)}</w:body></w:document>`,
-            `${WML}.document.main+xml`,
-        ],
-        ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
-        ['word/styles.xml', stylesXml(pkg.languages), `${WML}.styles+xml`],
-        ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
-        ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
-        ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
-        ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
-    ];
-    const overrides = parts.map(([path, , contentType]) =>
-        contentType ? `<Override PartName="/${path}" ContentType="${contentType}"/>` : '',
-    );
-
-    return writeZip([
-        {
-            name: '[Content_Types].xml',
-            data: `${XML_DECLARATION}<Types xmlns="${CONTENT_TYPES_NS}">${DEFAULT_CONTENT_TYPES}${overrides.join('')}</Types>`,
+    return writePackage({
+        main: 'word/document.xml',
+        title: stripEigenExtension(title),
+        defaults: {
+            ...OFFICE_IMAGE_CONTENT_TYPES,
+            odttf: 'application/vnd.openxmlformats-officedocument.obfuscatedFont',
         },
-        ...parts.map(([name, xml]) => ({ name, data: `${XML_DECLARATION}${xml}` })),
-        ...fonts.files.map(([name, data]) => ({ name, data })),
-        ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
-    ]);
+        parts: [
+            [
+                'word/document.xml',
+                `<w:document ${DOCUMENT_NAMESPACES}><w:body>${body}${sectionXml(page)}</w:body></w:document>`,
+                `${WML}.document.main+xml`,
+            ],
+            ['word/_rels/document.xml.rels', relationshipsXml(pkg.relationships)],
+            ['word/styles.xml', stylesXml(pkg.languages), `${WML}.styles+xml`],
+            ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
+            ['word/settings.xml', SETTINGS_XML, `${WML}.settings+xml`],
+            ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
+            ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
+        ],
+        files: [
+            ...fonts.files.map(([name, data]) => ({ name, data })),
+            ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
+        ],
+    });
+}
+
+// The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
+// under that src. A media name holds no `/`, so the two never meet.
+function figureMediaKey({ mediaName, src }: FigureAttrs): string | null {
+    return mediaName ?? (src && splitDataUri(src) ? src : null);
+}
+
+// A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
+// here, once, through the encode a media file takes; an SVG through the sanitizer the main thread's media took.
+export async function pastedFigureMedia(json: JSONContent): Promise<ExportMedia[]> {
+    const pasted = new Map<string, { mediaType: string | null; base64: string }>();
+    const visit = (node: JSONContent) => {
+        if (node.type === 'figure') {
+            const attrs = readFigureAttrs(node.attrs ?? {});
+            const key = figureMediaKey(attrs);
+            if (key && key === attrs.src) {
+                const split = splitDataUri(key);
+                if (split) pasted.set(key, split);
+            }
+        }
+        for (const child of node.content ?? []) visit(child);
+    };
+    visit(json);
+    if (pasted.size === 0) return [];
+    const { sharpResize } = await import('../../shared/sharp-resize');
+    const media: ExportMedia[] = [];
+    for (const [src, { mediaType, base64 }] of pasted) {
+        const data = Buffer.from(base64, 'base64');
+        if (mediaType === 'image/svg+xml') {
+            media.push({ name: src, contentType: mediaType, data: toTransferableBuffer(data) });
+            continue;
+        }
+        const item = await encodeOfficeImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
+        if (item) media.push(item);
+    }
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { sanitizeExportMedia } = await import('../sanitize');
+    return sanitizeExportMedia(media);
 }
 
 const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
-const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
 const DOCUMENT_NAMESPACES = [
     `xmlns:w="${W_NS}"`,
@@ -166,33 +182,6 @@ const DOCUMENT_NAMESPACES = [
     'mc:Ignorable="w14"',
 ].join(' ');
 
-const DEFAULT_CONTENT_TYPES = [
-    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
-    '<Default Extension="xml" ContentType="application/xml"/>',
-    '<Default Extension="png" ContentType="image/png"/>',
-    '<Default Extension="jpeg" ContentType="image/jpeg"/>',
-    '<Default Extension="svg" ContentType="image/svg+xml"/>',
-    '<Default Extension="odttf" ContentType="application/vnd.openxmlformats-officedocument.obfuscatedFont"/>',
-].join('');
-
-type Relationship = { type: string; target: string; external?: true };
-
-const PACKAGE_RELATIONSHIPS: Relationship[] = [
-    { type: `${R_NS}/officeDocument`, target: 'word/document.xml' },
-    {
-        type: `${PACKAGE_RELATIONSHIPS_NS}/metadata/core-properties`,
-        target: 'docProps/core.xml',
-    },
-];
-
-function relationshipsXml(relationships: Relationship[]): string {
-    const items = relationships.map(
-        ({ type, target, external }, index) =>
-            `<Relationship Id="rId${index + 1}" Type="${type}" Target="${escapeXml(target)}"${external ? ' TargetMode="External"' : ''}/>`,
-    );
-    return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
-}
-
 // What one export accumulates as it walks, each hyperlink target, image, shared bullet numbering and face once.
 type Package = {
     relationships: Relationship[];
@@ -204,7 +193,7 @@ type Package = {
     bullets: Map<number, number>;
     checkboxes: boolean;
     languages: Set<string>;
-    media: Map<string, DocxMedia>;
+    media: Map<string, OfficeMedia>;
     images: Map<string, Image>;
     files: [path: string, data: ArrayBuffer][];
     drawings: number;
@@ -346,14 +335,19 @@ function styleFace(style: StyleId | undefined): Pick<RunProps, 'font' | 'bold' |
     return face;
 }
 
-// Word's auto line scales with the tallest face, CSS's doesn't: a paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
+// Word's auto line scales with the tallest face's own line height, CSS's unitless one with the largest size alone: a
+// paragraph all in one family other than its mark's gets rescaled, unless the mark's taller.
 function familyLine(style: StyleId | undefined, markFace: RunFace, faces: RunFace[]): number | undefined {
     const family = faces[0]?.family;
     if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
-    const mark = fontLineHeight(markFace.family) * markFace.size;
-    let tallest = mark;
-    for (const face of faces) tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
-    return tallest === mark ? undefined : Math.round((styleSpacing(style, 'line') * mark) / tallest);
+    let tallest = fontLineHeight(markFace.family) * markFace.size;
+    let largest = markFace.size;
+    for (const face of faces) {
+        tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
+        largest = Math.max(largest, face.size);
+    }
+    const css = fontLineHeight(markFace.family) * largest;
+    return tallest === css ? undefined : Math.round((styleSpacing(style, 'line') * css) / tallest);
 }
 
 // ── Properties, written in the ECMA-376 sequence: Word reports a child out of order as unreadable content ─────────
@@ -611,7 +605,8 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         inline = [];
     };
     for (const [index, node] of nodes.entries()) {
-        if (node.type === 'figure') {
+        // A chart writes as a figure without media, its caption alone, until the docx writes Word charts (T4-R12).
+        if (isFigureFrameNode(node.type)) {
             // A wrapped figure floats before the paragraph that holds it; a block one breaks the paragraph.
             const figure = figureOf(node, context);
             if (inline.length > 0 && figure.some((block) => !('float' in block))) flush();
@@ -622,7 +617,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
             continue;
         }
         // In Word a display equation is a paragraph of its own: it splits its textblock as a block figure does.
-        if (node.type === 'equation' && readStoredEquation(node.attrs ?? {}).display) {
+        if (node.type === 'equation' && node.attrs?.['display'] === true) {
             if (inline.length > 0) flush();
             inline.push(node);
             flush();
@@ -1064,11 +1059,6 @@ const TABLE_LOOK = {
 // One image part and relationship per media name; an SVG's PNG is its blip, the SVG its extension.
 type Image = { rId: string; svgRId?: string; part: string; width: number; height: number };
 
-const RASTER_EXTENSIONS = new Map([
-    ['image/png', 'png'],
-    ['image/jpeg', 'jpeg'],
-]);
-
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 function figureOf(node: JSONContent, context: Context): Block[] {
     const attrs = readFigureAttrs(node.attrs ?? {});
@@ -1256,15 +1246,21 @@ const INLINES = new Map<
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
-    // Word lays out the page and updates the field; 1 is what a reader without fields shows. The run takes no marks:
-    // the Yjs binding stores none on an atom, so a reloaded doc holds none.
+    // A complex field, as Word writes it: Google Docs leaves a w:fldSimple PAGE in the body blank. Word lays out the
+    // page and updates the field; 1 is what a reader without fields shows. Every run of the field gets the result's
+    // look, and none takes marks: the Yjs binding stores none on an atom, so a reloaded doc holds none.
     [
         'pageNumber',
-        (node, linked, context, style, faces) => {
-            const field = PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])];
-            const run = runXml(textXml('1'), {}, linked, context, style, faces);
-            return `<w:fldSimple w:instr=" ${field} ">${run}</w:fldSimple>`;
-        },
+        (node, linked, context, style, faces) =>
+            [
+                '<w:fldChar w:fldCharType="begin"/>',
+                `<w:instrText xml:space="preserve"> ${PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])]} </w:instrText>`,
+                '<w:fldChar w:fldCharType="separate"/>',
+                textXml('1'),
+                '<w:fldChar w:fldCharType="end"/>',
+            ]
+                .map((content) => runXml(content, {}, linked, context, style, faces))
+                .join(''),
     ],
     // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
     // math zone, as the editor draws an empty box.
@@ -1354,13 +1350,16 @@ const MARKS = new Map<string, (attrs: Record<string, unknown>, context: Context)
     ],
     [
         'textStyle',
-        ({ color, fontFamily, caps }) => {
+        ({ color, fontFamily, fontSize, caps }) => {
             const name = typeof fontFamily === 'string' ? getFontName(fontFamily) : undefined;
+            const size = readFontSize(fontSize);
             return {
                 color: colorOf(color),
                 font: name && EIGEN_FONT_NAMES.includes(name) ? name : undefined,
                 caps: caps === 'all' || undefined,
                 smallCaps: caps === 'small' || undefined,
+                // Only a size of its own, or it would unset Small's before it.
+                ...(size !== undefined && { size: halfPoints(size) }),
             };
         },
     ],
@@ -1401,10 +1400,7 @@ function hyperlinkOf(node: JSONContent, publicOrigin: string | undefined): Hyper
     // Gated after the strip, or a character XML can't hold could hide a scheme; trimmed as a URL parser trims.
     const kept = stripNonXmlChars(href).replace(/^[\t\n\r ]+|[\t\n\r ]+$/g, '');
     if (!kept || !isAllowedUri(kept)) return undefined;
-    // What a URI reference can't hold; `%` stays, so an encoded href encodes no further.
-    const target = absoluteHref(kept, publicOrigin).replace(/[^A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]/gu, (character) =>
-        encodeURIComponent(character),
-    );
+    const target = uriReference(absoluteHref(kept, publicOrigin));
     const title = attrs?.['title'];
     return { target, tooltip: typeof title === 'string' && title ? title : undefined };
 }

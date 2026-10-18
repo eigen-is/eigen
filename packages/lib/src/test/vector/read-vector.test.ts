@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { Window } from 'happy-dom';
 import * as Y from 'yjs';
+import { escapeHtml } from '../../core/html';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
+import { SLIDE_SIZES } from '../../vector/frames';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
-import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES } from '../../vector/kinds/read-fields';
+import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES, MAX_HTML_DEPTH } from '../../vector/kinds/read-fields';
 import { readVectorFromDoc } from '../../vector/read-vector';
 import {
     DEFAULT_CORNERS,
@@ -43,7 +46,7 @@ describe('readVectorFromDoc', () => {
         });
         const scene = readVectorFromDoc(doc);
         expect(scene.elements.map((e) => e.id)).toEqual(['first', 'second']);
-        expect(scene.meta).toEqual({ background: '#ffffff' });
+        expect(scene.meta).toEqual({ background: '#ffffff', slideSize: '16:9' });
     });
 
     test('applies defaults for missing fields and ignores foreign keys', () => {
@@ -143,7 +146,7 @@ describe('readVectorFromDoc', () => {
     test('empty doc yields an empty scene with default meta', () => {
         const scene = readVectorFromDoc(new Y.Doc());
         expect(scene.elements).toEqual([]);
-        expect(scene.meta).toEqual({ background: 'transparent' });
+        expect(scene.meta).toEqual(DEFAULT_SCENE_META);
     });
 
     test('materializes a linear element with points and roundness', () => {
@@ -278,6 +281,127 @@ describe('readVectorFromDoc', () => {
         const html = el.type === 'richtext' ? el.html : '';
         expect(new TextEncoder().encode(html).length).toBeLessThanOrEqual(64 * 1024);
         expect(html).toBe('☃'.repeat(Math.floor((64 * 1024) / 3)));
+    });
+
+    describe('html nesting', () => {
+        const readHtml = (html: string): string => {
+            const [el] = readVectorFromDoc(
+                docWith((elements) => writeElement(elements, 't', { type: 'richtext', index: 'a0', html })),
+            ).elements;
+            return el.type === 'richtext' ? el.html : '';
+        };
+        // What a DOM parse of the body builds: jsdom pays per element for every ancestor it has.
+        const parse = (html: string) => new new Window().DOMParser().parseFromString(html, 'text/html').body;
+        const depth = (node: { children: ArrayLike<unknown> }): number => {
+            let deepest = 0;
+            for (const child of Array.from(node.children) as { children: ArrayLike<unknown> }[]) {
+                deepest = Math.max(deepest, 1 + depth(child));
+            }
+            return deepest;
+        };
+
+        test.each([2_000, 3_000])('%i nested list levels read in linear time, flattened, every x kept', (levels) => {
+            const html = `${'<ul><li>x'.repeat(levels)}${'</li></ul>'.repeat(levels)}`;
+            const start = performance.now();
+            const read = readHtml(html);
+            expect(performance.now() - start).toBeLessThan(200);
+            expect(read).toBe(`<p>${'x'.repeat(levels)}</p>`);
+        });
+
+        // 29 list levels around a paragraph with every mark and a link: exactly MAX_HTML_DEPTH elements.
+        const listLevels = (MAX_HTML_DEPTH - 6) / 2;
+        const atCap =
+            Array.from({ length: listLevels }, (_, i) => `<ul><li><p>level<br>${i}</p>`).join('') +
+            '<p><strong><em><u><s><a target="_blank" rel="noopener noreferrer" href="https://eigen.is?a=1&amp;b=2">deep</a></s></u></em></strong></p>' +
+            '</li></ul>'.repeat(listLevels);
+
+        test('an editor body at the cap reads byte-identical', () => {
+            expect(depth(parse(atCap))).toBe(MAX_HTML_DEPTH);
+            expect(readHtml(atCap)).toBe(atCap);
+        });
+
+        test('a typical editor body reads byte-identical', () => {
+            const editor =
+                '<p>Plan &amp; <strong>bold</strong> <em>it</em> <u>u</u> <s>s</s><br>next</p><blockquote><p>quote</p></blockquote>' +
+                '<ol start="3" type="a"><li><p>a</p><ul><li><p>b</p></li></ul></li><li><p></p></li></ol>' +
+                '<p><a target="_blank" rel="noopener noreferrer" href="https://eigen.is">link</a> 1 &lt; 2 &gt; 0</p>';
+            expect(readHtml(editor)).toBe(editor);
+        });
+
+        test('one element past the cap flattens the box to paragraphs, its text kept', () => {
+            const read = readHtml(`<blockquote>${atCap}</blockquote>`);
+            expect(read).toBe(
+                `${Array.from({ length: listLevels }, (_, i) => `<p>level</p><p>${i}</p>`).join('')}<p>deep</p>`,
+            );
+        });
+
+        // Bodies under the depth cap whose parse a scan would not follow tag for tag: the parser closes an open
+        // <p> or <li> or a mismatched end tag, so formatting elements stay on its active list and every later
+        // paragraph rebuilds them. 64 KiB of these cost jsdom 10–17 s.
+        const fill = (prefix: string, unit: string) =>
+            prefix + unit.repeat(Math.floor((64 * 1024 - prefix.length) / unit.length));
+        const ems = Array.from({ length: 61 }, (_, i) => `<em a=${i}>`).join('');
+        const marks = Array.from({ length: 62 }, (_, i) => `<${['em', 'strong', 'u', 's'][i % 4]} t=${i}>`).join('');
+        const drift: [string, string, string][] = [
+            ['a mismatched </p>', fill(`<p>${ems}</p>`, '<p>x</p>'), 'x'],
+            ['a <p> in an open <p>', fill(`<p>${ems}<p>x</p>`, '<p>x</p>'), 'x'],
+            ['an <li> in an open <li>', fill(`<ul><li>${ems}<li>x</li>`, '<li>x</li>'), 'x'],
+            ['empty paragraphs with a <br>', fill(`<p>${marks}</p>`, '<p><br></p>'), ''],
+        ];
+
+        test.each(drift)('%s flattens to paragraphs of its text', (_, html, line) => {
+            const read = readHtml(html);
+            expect(read).toMatch(/^(<p>[^<]*<\/p>)+$/);
+            expect(parse(read).textContent).toBe(parse(html).textContent);
+            if (line) expect(read.split('</p>').every((p) => p === '' || p === `<p>${line}`)).toBe(true);
+        });
+
+        // Anything not editor-shaped flattens whole: other tags, comments, odd syntax, stray or implied closes.
+        test.each([
+            ['a <table> that opens a <tbody> and <tr>', '<table><td>x'.repeat(2_000), 'x'.repeat(2_000)],
+            ['a comment', '<p><!-- note -->x</p>', 'x'],
+            ['stray close tags', '<ul><li></b></i>x', 'x'],
+            ['a bare <', 'a < b<ul><li>x', 'a < bx'],
+            ['a tag past the editor set', '<div><span>x</span></div>', 'x'],
+            ['an <a> in an <a>', '<p><a href="https://a">a<a href="https://b">b</a></a></p>', 'ab'],
+            ['an <li> outside a list', '<li>x</li>', 'x'],
+            ['an upper-case tag', '<P>x</P>', 'x'],
+            [
+                'more attributes than the editor writes',
+                `<p ${Array.from({ length: 9 }, (_, i) => `a${i}`).join(' ')}>x</p>`,
+                'x',
+            ],
+            ['a trailing bare <', 'x < y', 'x < y'],
+            ['a <style> block, its rules unshown', '<style>*{display:none}</style><p>x</p>', 'x'],
+            ['a <script>, its code unshown', '<p>x</p><SCRIPT type=module>alert(1)</script >', 'x'],
+        ])('%s flattens', (_, html, text) => {
+            expect(readHtml(html)).toBe(`<p>${escapeHtml(text)}</p>`);
+        });
+
+        test('a flattened body stays inside the byte cap, its markup inert', () => {
+            const read = readHtml(`<div>${'"&lt;img src=x onerror=alert(1)&gt;'.repeat(2_000)}</div>`);
+            expect(new TextEncoder().encode(read).length).toBeLessThanOrEqual(64 * 1024);
+            expect(read).toStartWith('<p>&quot;&lt;img src=x onerror=alert(1)&gt;');
+            expect(read).not.toContain('<img');
+            expect(readHtml(read)).toBe(read);
+        });
+
+        test('a bare < after the markup keeps its text', () => {
+            expect(readHtml('<p>hi</p>tail < more')).toBe('<p>hi</p><p>tail &lt; more</p>');
+        });
+
+        // Distinct attribute names cost jsdom's dedupe quadratically: 10k on one <p> fit the byte cap and held it ~1 s per box.
+        test('a tag with thousands of attributes reads in linear time, flattened', () => {
+            const attrs = Array.from({ length: 10_000 }, (_, i) => ` a${i.toString(36).padStart(4, '0')}`).join('');
+            const start = performance.now();
+            expect(readHtml(`<p${attrs}>x</p>`)).toBe('<p>x</p>');
+            expect(performance.now() - start).toBeLessThan(200);
+        });
+
+        test('a body the byte cap tears mid-tag keeps its markup', () => {
+            const body = `<p>${'x'.repeat(64 * 1024 - 8)}</p><p><strong>y</strong></p>`;
+            expect(readHtml(body)).toBe(`<p>${'x'.repeat(64 * 1024 - 8)}</p>`);
+        });
     });
 
     test('materializes an arrow: heads, canonical bindings, and label fields', () => {
@@ -573,6 +697,14 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
 
     const rect = base({ id: 'rect1', type: 'rectangle', ...paint, ...sketch, corners: 'round' });
     const pie = base({ id: 'pie1', type: 'pie', ...paint, ...sketch, startAngle: 120, sweepAngle: 45 });
+    const path = base({
+        id: 'path1',
+        type: 'path',
+        ...paint,
+        ...sketch,
+        path: 'M 0 1 Q 0.5 -0.25 1 1 Z',
+        closed: true,
+    });
     const chart = base({
         id: 'chart1',
         type: 'chart',
@@ -647,7 +779,8 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
     const cases = [
         { record: rect, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'corners'] },
         { record: pie, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'startAngle', 'sweepAngle'] },
-        { record: chart, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'chart', 'fontFamily', 'color'] },
+        { record: path, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'path', 'closed'] },
+        { record: chart, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'chart', 'color'] },
         {
             record: richtext,
             fields: [
@@ -857,6 +990,20 @@ describe('readVectorFromDoc — the canvas model', () => {
         });
     });
 
+    test('caps a hostile frame name at MAX_ARROW_LABEL_BYTES, like a label', () => {
+        const doc = new Y.Doc();
+        doc.transact(() => {
+            const f = new Y.Map();
+            f.set('id', 'f1');
+            f.set('index', 'a0');
+            f.set('name', '☃'.repeat(100_000));
+            doc.getMap('frames').set('f1', f);
+        });
+        const [frame] = readVectorFromDoc(doc).frames;
+        expect(new TextEncoder().encode(frame.name).length).toBeLessThanOrEqual(MAX_ARROW_LABEL_BYTES);
+        expect(frame.name).toBe('☃'.repeat(Math.floor(MAX_ARROW_LABEL_BYTES / 3)));
+    });
+
     test('a frameId whose frame is gone re-homes to the lowest-index frame', () => {
         const doc = new Y.Doc();
         doc.transact(() => {
@@ -913,5 +1060,49 @@ describe('readVectorFromDoc — the canvas model', () => {
         const [a, b] = readVectorFromDoc(doc).elements;
         expect(a).toMatchObject({ corners: DEFAULT_CORNERS });
         expect(b).toMatchObject({ corners: 'straight' });
+    });
+});
+
+describe('readVectorFromDoc — the slide size', () => {
+    function deckSized(slideSize?: unknown): Y.Doc {
+        const doc = new Y.Doc();
+        writeFrame(doc, 'f1', 'a0');
+        writeFrame(doc, 'f2', 'a1');
+        if (slideSize !== undefined) doc.getMap('meta').set('slideSize', slideSize);
+        return doc;
+    }
+
+    const sizes = (doc: Y.Doc) => readVectorFromDoc(doc).frames.map(({ width, height }) => ({ width, height }));
+
+    test('a deck without one is 16:9, and every frame is 1920x1080', () => {
+        const doc = deckSized();
+        expect(readVectorFromDoc(doc).meta.slideSize).toBe('16:9');
+        expect(sizes(doc)).toEqual([SLIDE_SIZES['16:9'], SLIDE_SIZES['16:9']]);
+    });
+
+    test('a 4:3 deck stamps 1920x1440 on every frame', () => {
+        const doc = deckSized('4:3');
+        expect(readVectorFromDoc(doc).meta.slideSize).toBe('4:3');
+        expect(sizes(doc)).toEqual([
+            { width: 1920, height: 1440 },
+            { width: 1920, height: 1440 },
+        ]);
+    });
+
+    test('an unknown or forged size reads as 16:9', () => {
+        for (const forged of ['5:4', '16:10', 1440, '__proto__', 'toString', null]) {
+            const doc = deckSized(forged);
+            expect(readVectorFromDoc(doc).meta.slideSize).toBe('16:9');
+            expect(sizes(doc)).toEqual([SLIDE_SIZES['16:9'], SLIDE_SIZES['16:9']]);
+        }
+    });
+
+    test("a peer's size change reaches every frame on the next read", () => {
+        const local = deckSized();
+        const peer = new Y.Doc();
+        Y.applyUpdate(peer, Y.encodeStateAsUpdate(local));
+        peer.getMap('meta').set('slideSize', '4:3');
+        Y.applyUpdate(local, Y.encodeStateAsUpdate(peer, Y.encodeStateVector(local)));
+        expect(sizes(local)).toEqual([SLIDE_SIZES['4:3'], SLIDE_SIZES['4:3']]);
     });
 });

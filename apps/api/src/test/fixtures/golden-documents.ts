@@ -1,5 +1,7 @@
+import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_PAGE_SETUP, type FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
@@ -7,10 +9,10 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_RICHTEXT_PROPS,
+    DEFAULT_SCENE_META,
     FRAME_FIELDS,
-    FRAME_HEIGHT,
-    FRAME_WIDTH,
     generateNKeysBetween,
+    SLIDE_SIZES,
     serializeBackgroundFill,
     serializeFill,
     solidFill,
@@ -20,12 +22,13 @@ import {
     type VectorRichTextElement,
     type VectorScene,
 } from '@workspace/lib/vector';
-import { type MathRow, writeMathml } from '@workspace/math';
+import { type MathRow, readOmml, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
+import { parseOoxml } from '../../lib/core/ooxml';
 import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import type { DocxMedia } from '../../lib/export/doc/to-docx';
+import type { OfficeMedia } from '../../lib/export/office-image';
 import type { Mount } from '../../lib/mount';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
@@ -244,11 +247,19 @@ export function equation(mathml: string, display = false): JSONContent {
     return { type: 'equation', attrs: { mathml, display, commentCardId: null } };
 }
 
-// Until the docx import reads an equation (B2), it comes back as its text, so the trips send none.
-export function withoutEquations(json: JSONContent): JSONContent {
-    return json.content
-        ? { ...json, content: json.content.filter((node) => node.type !== 'equation').map(withoutEquations) }
-        : json;
+// The 108 Word equations of the math package's corpus, as the docx import reads them.
+export function corpusEquations(): { row: MathRow; display: boolean }[] {
+    const corpus: { omml: string; display: boolean }[] = JSON.parse(
+        fs.readFileSync(
+            new URL('../../../../../packages/math/src/test/fixtures/omml-corpus.json', import.meta.url),
+            'utf8',
+        ),
+    );
+    return corpus.map(({ omml, display }) => {
+        const oMath = parseOoxml(omml);
+        if (!oMath) throw new Error('a corpus equation does not parse');
+        return { row: readOmml(oMath), display };
+    });
 }
 
 // Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
@@ -490,7 +501,17 @@ export function buildAllFeaturesDocJson(): JSONContent {
             },
             small('One of two tables in a row'),
             small('Two of two'),
-            paragraph('After the tables.'),
+            // The docx leaves the chart out, so the Google Docs re-save, which predates it, still reads the paragraph.
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'After the tables.' },
+                    {
+                        type: 'chart',
+                        attrs: { spec: JSON.stringify(sampleChartSpec('column')), width: 480, height: 297 },
+                    },
+                ],
+            },
             figure({ mediaName: 'chart.png', width: 320, alignment: 'left', caption: 'A chart, left', alt: 'Chart' }),
             figure({ mediaName: 'photo.jpeg', width: null, alt: 'A photo at its own size' }),
             figure({ mediaName: 'diagram.svg', width: 200, caption: 'An SVG', commentCardId: 'card-2' }),
@@ -533,7 +554,7 @@ function figure(attrs: FigureAttrs): JSONContent {
 
 // The all-features doc's media as the docx prep hands it over: sizes from the thumbnail Worker, an SVG beside its PNG.
 // The writer never decodes a raster, so marker bytes stand in for the PNG and the JPEG.
-export function buildAllFeaturesDocMedia(): DocxMedia[] {
+export function buildAllFeaturesDocMedia(): OfficeMedia[] {
     return [
         { name: 'chart.png', contentType: 'image/png', data: toTransferableText('chart png'), width: 800, height: 500 },
         {
@@ -573,8 +594,7 @@ function deckFrame(id: string, index: string, background: BackgroundFill | null)
         id,
         index,
         name: '',
-        width: FRAME_WIDTH,
-        height: FRAME_HEIGHT,
+        ...SLIDE_SIZES['16:9'],
         background: serializeBackgroundFill(background),
     };
 }
@@ -667,7 +687,7 @@ export function buildGoldenDeckScene(): VectorScene {
         );
     }
 
-    return { elements, frames, meta: { background: 'transparent' } };
+    return { elements, frames, meta: DEFAULT_SCENE_META };
 }
 
 // Rich text only — no media, so the deck renders without a seeded media/ folder. Every frame carries
@@ -704,7 +724,7 @@ export function buildHeavyDeckScene(frameCount = 60, elementsPerFrame = 6): Vect
             );
         }
     }
-    return { elements, frames, meta: { background: 'transparent' } };
+    return { elements, frames, meta: DEFAULT_SCENE_META };
 }
 
 // A follow-up edit in its own transaction, the way an editor session writes one, so
@@ -907,10 +927,10 @@ export function buildGoldenVectorScene(): VectorScene {
             fill: serializeFill({ type: 'gradient', from: '#e60076', to: '#2563eb', angle: 45, style: 'hachure' }),
         },
     ];
-    return { elements, frames: [], meta: { background: 'transparent' } };
+    return { elements, frames: [], meta: DEFAULT_SCENE_META };
 }
 
-// Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element Y.Map under
+// Write a VectorScene into a Y.Doc the way lib's write-vector.ts persists one: a per-element Y.Map under
 // `elements`, a per-frame Y.Map under `frames`, and the `meta` root. read-vector reads only the
 // whitelisted keys, so setting every own field is safe.
 export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
@@ -925,11 +945,12 @@ export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
         }
         for (const frame of scene.frames) {
             const yFrame = new Y.Map<unknown>();
-            // width/height are constants, never stored — FRAME_FIELDS is the allow-list.
+            // width/height come from meta.slideSize, never a frame's own keys — FRAME_FIELDS is the allow-list.
             for (const field of FRAME_FIELDS) yFrame.set(field, frameField(frame, field));
             framesMap.set(frame.id, yFrame);
         }
         metaMap.set('background', scene.meta.background);
+        metaMap.set('slideSize', scene.meta.slideSize);
     });
 }
 

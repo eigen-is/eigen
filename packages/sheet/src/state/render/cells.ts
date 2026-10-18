@@ -21,13 +21,13 @@ import {
 import { getCellTextInfo } from '../modules/text';
 import type { Rect } from '../types';
 import { cellOverflowRender, cellTextRender } from './cell-text';
+import { canvasColors } from './colors';
 import { drawDataBar } from './data-bar';
 import { BORDER_FIX, HALF_PIXEL } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
-import { defaultStyle } from './types';
 
-// Data-verification tick box. Hardcoded light like every other canvas color —
+// Data-verification tick box. Hardcoded light like the cell backgrounds —
 // the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
 // § Theming) — and gray rather than black, the way Google draws the box.
 const CHECKBOX_STROKE = '#5f6368';
@@ -110,7 +110,7 @@ function strokeGridLine(renderCtx: CanvasRenderingContext2D, x1: number, y1: num
     renderCtx.moveTo(x1, y1);
     renderCtx.lineTo(x2, y2);
     renderCtx.lineWidth = 1;
-    renderCtx.strokeStyle = defaultStyle.strokeStyle;
+    renderCtx.strokeStyle = canvasColors(renderCtx.canvas).gridLine;
     renderCtx.stroke();
     renderCtx.closePath();
 }

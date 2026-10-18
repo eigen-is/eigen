@@ -9,6 +9,14 @@ import { IMPORT_MESSAGES } from '../messages';
 // most is 1,055.
 export const MAX_DOCX_PIECES = 75_000;
 
+// Each node and mark the reader emits is a Yjs item: 1.3 to 2.4 KB of peak memory through the transform per unit of
+// weight, 3.8 KB for a cell's 63 column widths. At this budget the heaviest file met peaks near 1 GB, and the corpus's
+// heaviest weighs 57,688.
+export const MAX_DOCX_WEIGHT = 150_000;
+
+// A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
+export const CHARS_PER_UNIT = 512;
+
 export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
 
 export type DocxPackage = {
@@ -27,11 +35,15 @@ export type DocxPackage = {
     readMedia(path: string): Uint8Array | undefined;
     // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own.
     chargePiece(): void;
+    // An equation's MathML is charged as it is written: a space in m:t writes 26 characters, so a few KB zipped would
+    // build hundreds of MB before the output is weighed.
+    chargeMathml(length: number): void;
 };
 
 export function readPackage(bytes: Uint8Array): DocxPackage {
     const pkg = openPackage(bytes, IMPORT_MESSAGES.docx);
     let pieces = MAX_DOCX_PIECES;
+    let mathml = MAX_DOCX_WEIGHT * CHARS_PER_UNIT;
     const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
     const documentRels = pkg.relationships(documentPath);
     // By relationship, else where Word puts the part.
@@ -60,6 +72,10 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         chargePiece: () => {
             pieces--;
             if (pieces < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
+        },
+        chargeMathml: (length) => {
+            mathml -= length;
+            if (mathml < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
         },
     };
 }

@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, drawing, shapes, text, images, charts]
 related: [vector/get-started, vector/connect-with-arrows, vector/style-objects]
 order: 20
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 You build a drawing in Vector by placing objects on the canvas. Pick a tool, then click or drag to add a shape, a freehand line, a text box, or an image. Charts come from the **Insert** menu. This page covers each tool and what happens after you place something.
@@ -64,16 +64,16 @@ You can also drag one or more image files from your desktop and drop them onto t
 1. Open the **Insert** menu and choose **Chart**, then **Bar**, **Column**, **Line**, or **Pie**. A bar chart has horizontal bars, a column chart vertical ones.
 2. The chart appears in the middle of your view with sample data, and stays selected.
 
-With the chart selected, the properties panel shows its options. The **Chart** section sets the **Type**, the **Stacking** of a bar or column chart, the **Title**, and where the **Legend** goes. The **Horizontal axis** and **Vertical axis** sections hold each axis's **Title**. The axis with the numbers also has **Min** and **Max**, which pick their own values while they're empty, and **Gridlines**. **Series** sets the color of each series. A pie chart has **Slices** instead, with a color for each slice.
+With the chart selected, the properties panel shows its options. The **Chart** section sets the **Type**, the **Stacking** of a bar or column chart (**None**, **Standard** or **100%**), the **Title**, where the **Legend** goes, and the **Font** of all the chart's text. The **Horizontal axis** and **Vertical axis** sections hold each axis's **Title** and a **Show axis** box, which hides the axis's labels and line when you clear it. The axis with the categories also has **Reverse axis order**, which runs it the other way. The axis with the numbers also has **Min** and **Max**, which pick their own values while they're empty and are percents on a **100%** stack, and **Gridlines**. Switching **Stacking** to or from **100%** empties **Min** and **Max**. **Series** sets the color of each series. A pie chart has **Slices** instead, with a color for each slice. A color reads **Automatic** until you pick one; **Automatic** in a picked color's list puts it back.
 
 ### Edit the numbers
 
 1. Double-click the chart, or click **Edit data** in the properties panel.
-2. The **Edit data** dialog shows the data as a grid: categories down the first column, series across the top row. Type in any cell. A cell left empty leaves a gap in the chart.
-3. Use **Add row** and **Add column** to grow the grid, or the **×** beside a row or series name to remove it.
+2. The **Edit data** dialog shows the data as a small spreadsheet: categories down column A, series across row 1, and the category axis title in A1. Click a cell and type to replace it, or double-click it (or press **F2**) to change part of it. Press **Enter** to move down or **Tab** to move right. **Escape** cancels what you typed in a cell. A cell left empty leaves a gap in the chart.
+3. Type in an empty row or column after the data to add a category or a series. To remove one, click its row number or column letter and press **Delete**. **Delete** on selected cells empties them.
 4. Click **Save** to update the chart, or **Cancel** to leave it as it was.
 
-You can paste cells copied from a spreadsheet into the grid. They fill it from the cell you paste into, and the grid grows to fit. A chart holds up to 12 series, 200 rows, and 2,000 values. A chart with more data than that, for example from an imported file, opens its data read-only.
+You can paste cells copied from a spreadsheet into the grid, and copy cells out of it. A paste fills the grid from the selected cell, and the grid grows to fit. A chart holds up to 12 series, 200 categories, and 2,000 values; when a paste has more, the dialog says how much it pasted and leaves the rest out. Numbers may have thousands separators, a currency sign or a percent sign, as a spreadsheet shows them. A chart with more data than that, for example from an imported file, opens its data read-only.
 
 **Convert to shapes**, in the properties panel or the right-click menu, turns the chart into ordinary shapes and text boxes you can edit one by one. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back. See [Arrange and align](/support/vector/arrange-and-align).
 

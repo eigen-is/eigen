@@ -333,6 +333,87 @@ function corePath(core: Point[], r: number): string {
     return parts.join(' ');
 }
 
+// --- path data ----------------------------------------------------------------------------------
+//
+// A path element's `path`: absolute M/L/C/Q/Z in its unit box, so its numbers alone scale it. The points
+// each command takes; Z returns to the subpath's start.
+const PATH_COMMAND_POINTS = { M: 1, L: 1, C: 3, Q: 2, Z: 0 } as const;
+// Control points may overshoot the box a little; a 1e15 would reach roughjs and every viewBox.
+export const PATH_COORD_MIN = -2;
+export const PATH_COORD_MAX = 3;
+// ASCII separators only, so a valid path's length is its bytes, which MAX_PATH_BYTES caps.
+const PATH_SPACE = ' \t\r\n';
+const PATH_TOKEN = /[ \t\r\n,]*(?:([A-Za-z])|([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?))/y;
+
+type PathOp = keyof typeof PATH_COMMAND_POINTS;
+export type PathCommand = { op: PathOp; points: Point[] };
+
+function isPathOp(v: string): v is PathOp {
+    return Object.hasOwn(PATH_COMMAND_POINTS, v);
+}
+
+// The five commands in SVG syntax, numbers clamped and rounded to 4 decimals; null for anything else:
+// another command, a relative one, a missing or extra number, a subpath that doesn't start with M, or a
+// separator other than ASCII space, tab, CR, LF or comma. The reader's parseNormalizedPath caps it;
+// every consumer reads the canonical string it stores.
+export function parsePathCommands(d: string): PathCommand[] | null {
+    const commands: PathCommand[] = [];
+    let current: PathCommand | null = null;
+    // A point's x, read and waiting for its y.
+    let x: number | null = null;
+    let end = d.length;
+    while (end > 0 && PATH_SPACE.includes(d[end - 1])) end--;
+    PATH_TOKEN.lastIndex = 0;
+    while (PATH_TOKEN.lastIndex < end) {
+        const token = PATH_TOKEN.exec(d);
+        if (!token) return null;
+        const [, op, value] = token;
+        if (op !== undefined) {
+            if (!isPathOp(op) || !complete(current)) return null;
+            if ((current === null || current.op === 'Z') && op !== 'M') return null;
+            current = { op, points: [] };
+            commands.push(current);
+            continue;
+        }
+        const v = Number(value);
+        if (current === null || complete(current) || !Number.isFinite(v)) return null;
+        const coord = round4(clamp(v, PATH_COORD_MIN, PATH_COORD_MAX));
+        if (x === null) {
+            x = coord;
+        } else {
+            current.points.push({ x, y: coord });
+            x = null;
+        }
+    }
+    return complete(current) ? commands : null;
+}
+
+function complete(command: PathCommand | null): boolean {
+    return command === null || command.points.length === PATH_COMMAND_POINTS[command.op];
+}
+
+export function serializePath(commands: PathCommand[]): string {
+    const parts: string[] = [];
+    for (const { op, points } of commands) {
+        parts.push(op);
+        for (const p of points) parts.push(`${p.x}`, `${p.y}`);
+    }
+    return parts.join(' ');
+}
+
+// A stored `path` in the element's local frame at its box size: the one mapping render draws and the hit
+// test, the outline and the pptx writer read. [] for a string that never went through the reader.
+export function scaledPathCommands(path: string, width: number, height: number): PathCommand[] {
+    return (parsePathCommands(path) ?? []).map(({ op, points }) => ({
+        op,
+        points: points.map((p) => ({ x: n(p.x * width), y: n(p.y * height) })),
+    }));
+}
+
+export function scaleNormalizedPath(path: string, width: number, height: number): string {
+    return serializePath(scaledPathCommands(path, width, height));
+}
+
 // --- primitives ---------------------------------------------------------------------------------
 
 // Excalidraw's ellipseDistanceFromPoint (ported from elbow-heading, verbatim): three Newton-style

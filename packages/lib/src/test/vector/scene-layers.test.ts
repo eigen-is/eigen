@@ -5,6 +5,7 @@ import {
     layerBoxCss,
     layerContent,
     layerInnerHtml,
+    layerPrintCss,
     RICH_TEXT_CLASS,
     sceneLayers,
 } from '../../vector/scene-layers';
@@ -267,5 +268,30 @@ describe('layerBoxCss', () => {
         expect(
             layerBoxCss({ box: { x: 1.23456, y: 0, width: 9.87654, height: 1, angle: 7.777 }, opacity: 100 }),
         ).toEqual({ width: '9.88px', height: '1px', transform: 'translate(1.23px,0px) rotate(7.78deg)' });
+    });
+});
+
+// The PDF's box: WeasyPrint lays a page out ignoring transforms, so the origin is top and left there.
+describe('layerPrintCss', () => {
+    const box = { x: 12.5, y: -3.25, width: 40, height: 20, angle: 0 };
+
+    test('the origin rides in top and left, offset by the page origin, with no transform', () => {
+        expect(layerPrintCss({ box, opacity: 100 }, { x: -10, y: -10 })).toEqual({
+            top: '6.75px',
+            left: '22.5px',
+            width: '40px',
+            height: '20px',
+        });
+    });
+
+    test('the rotation alone is a transform, on the default box-centre origin', () => {
+        expect(layerPrintCss({ box: { ...box, angle: 30 }, opacity: 40 }, { x: 0, y: 0 })).toEqual({
+            top: '-3.25px',
+            left: '12.5px',
+            width: '40px',
+            height: '20px',
+            transform: 'rotate(30deg)',
+            opacity: '0.4',
+        });
     });
 });

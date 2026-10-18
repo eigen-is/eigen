@@ -14,6 +14,8 @@ import type {
     ExtractTextJob,
     PreviewResult,
     SheetsImportJob,
+    SlidesImportJob,
+    SlidesImportWorkerResult,
     TransformResultFor,
     TransformWarning,
 } from './protocol';
@@ -41,7 +43,7 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
 async function runTransformRequest<R extends DocumentTransformRequest>(
     request: R,
     opts: TransformOptions & { captureMs?: number },
-): Promise<TransformResultFor<R>> {
+): Promise<{ result: TransformResultFor<R>; warnings: TransformWarning[] }> {
     const { priority = 'foreground', ...rest } = opts;
     const limits = TRANSFORM_LIMITS[request.kind];
     // The media prep spends from the deadline, so an export is one deadline end to end; a spent one times out at once.
@@ -68,7 +70,7 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
     // The one seam the kind→result mapping crosses: the runner settles every kind of job
     // through one widened response, having already proved this result pairs with this
     // request (resultMatchesRequest). Past here every caller reads its field with no cast.
-    return response.result as TransformResultFor<R>;
+    return { result: response.result as TransformResultFor<R>, warnings: response.warnings };
 }
 
 // `toRequest` completes the caller's own job with the captured source, so the request
@@ -86,11 +88,12 @@ async function runDocumentTransform<R extends DocumentTransformRequest>(
 
     const captureStart = performance.now();
     const source = await captureCollabSource(mount, drivePath);
-    return runTransformRequest(toRequest(source), {
+    const { result } = await runTransformRequest(toRequest(source), {
         ...opts,
         priority,
         captureMs: performance.now() - captureStart,
     });
+    return result;
 }
 
 // Only recalc-failed needs a line here: the child already logs every skipped blob
@@ -167,19 +170,19 @@ export async function runBytesTransformToText(
     data: ArrayBuffer,
     opts: TransformOptions & { captureMs?: number },
 ): Promise<string> {
-    const { body } = await runTransformRequest({ ...job, data }, opts);
-    return body;
+    const { result } = await runTransformRequest({ ...job, data }, opts);
+    return result.body;
 }
 
 // Imports carry uploaded bytes instead of a captured document, and hand back what
 // the caller commits: the snapshot JSON (decoded, never parsed, on the main thread)
-// for sheets, a ready Yjs update plus extracted media for documents.
+// for sheets, a ready Yjs update plus extracted media for documents and decks.
 export async function runImportToSnapshotJson(
     job: SheetsImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
 ): Promise<string> {
-    const result = await runTransformRequest({ ...job, data }, opts);
+    const { result } = await runTransformRequest({ ...job, data }, opts);
     return new TextDecoder().decode(result.snapshotJson);
 }
 
@@ -188,5 +191,16 @@ export async function runImportToDocumentUpdate(
     data: ArrayBuffer,
     opts: TransformOptions,
 ): Promise<DocImportWorkerResult> {
-    return runTransformRequest({ ...job, data }, opts);
+    const { result } = await runTransformRequest({ ...job, data }, opts);
+    return result;
+}
+
+// The warnings come back too: a pptx import's counted losses are the summary its caller answers with.
+export async function runImportToSlidesUpdate(
+    job: SlidesImportJob,
+    data: ArrayBuffer,
+    opts: TransformOptions,
+): Promise<SlidesImportWorkerResult & { warnings: TransformWarning[] }> {
+    const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
+    return { ...result, warnings };
 }

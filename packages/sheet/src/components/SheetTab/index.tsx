@@ -12,9 +12,9 @@ import { WorkbookContext } from '../../context';
 import {
     addSheet,
     calcSelectionInfo,
-    cancelActiveImgItem,
     cancelNormalSelected,
     changeSheet,
+    deselectFloatingObject,
     updateCell,
 } from '../../state';
 import { SheetItem } from './SheetItem';
@@ -135,7 +135,7 @@ export const SheetTab: React.FC = () => {
                                 onClick={() => {
                                     setContext((draftCtx) => {
                                         changeSheet(draftCtx, singleSheet.id!);
-                                        cancelActiveImgItem(draftCtx, refs.globalCache);
+                                        deselectFloatingObject(draftCtx, refs.globalCache);
                                         cancelNormalSelected(draftCtx);
                                     });
                                 }}

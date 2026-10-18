@@ -2,6 +2,7 @@ import { TaskItem, TaskList } from '@tiptap/extension-list';
 import { type Editor, EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
+import { mathAsText } from '@workspace/lib/docs/eigendoc';
 import { useEffect, useRef } from 'react';
 import { isFilesOnlyClipboard } from '../../hooks/use-file-paste-target';
 import { cn } from '../../lib/utils';
@@ -73,6 +74,8 @@ export function LightEditor({
                 class: cn(proseStyle && 'eigen-prose', 'outline-none min-h-[100px]', className),
                 ...(placeholder ? { 'data-placeholder': placeholder } : {}),
             },
+            // No equation node either: a pasted equation reads as its linear text.
+            transformPastedHTML: mathAsText,
             // No file node in the schema: decline files-only pastes so the event bubbles to the host's attach flow.
             handlePaste: (_view, event) => event.clipboardData != null && isFilesOnlyClipboard(event.clipboardData),
             // Swallow Mod+Enter (runs before the HardBreak keymap) so the host's submit hotkey gets a clean event.

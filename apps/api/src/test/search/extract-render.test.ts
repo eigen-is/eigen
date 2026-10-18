@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
+import { sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
+import { MATHML_NAMESPACE, readLatex, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
@@ -70,10 +72,36 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
-    // Until the package writes an equation's linear text, its typed LaTeX is what search finds.
-    test("eigendoc: an equation indexes its LaTeX, and one the server can't parse nothing", async () => {
+    // A figure's caption and a chart's text are attributes, which no text node holds.
+    test("eigendoc: a figure's caption, and a chart's caption, titles, series and categories, index as text", async () => {
         const doc = new Y.Doc();
-        const x: MathRow = [{ kind: 'identifier', text: 'x' }];
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Before' },
+                        { type: 'figure', attrs: { mediaName: 'a.png', caption: 'Team photo', alt: 'Unindexed' } },
+                        {
+                            type: 'chart',
+                            attrs: { spec: JSON.stringify(sampleChartSpec('pie')), caption: 'Scores by team' },
+                        },
+                        { type: 'chart', attrs: { spec: 'not a chart' } },
+                    ],
+                },
+            ],
+        });
+        expect((await extractCollabText('eigendoc', doc)).text).toBe(
+            'Before Team photo Scores by team Points scored Period 1 Team 1 Team 2 Team 3 Team 4',
+        );
+        doc.destroy();
+    });
+
+    // Its linear form, typed or not, is what search finds.
+    test("eigendoc: an equation indexes its linear form, and one the server can't parse nothing", async () => {
+        const doc = new Y.Doc();
+        const area = readLatex('\\pi r^2');
         const equation = (mathml: string) => ({ type: 'equation', attrs: { mathml } });
         seedEigendoc(doc, {
             type: 'doc',
@@ -82,14 +110,14 @@ describe('extractCollabText', () => {
                     type: 'paragraph',
                     content: [
                         { type: 'text', text: 'Area' },
-                        equation(writeMathml(x, '\\pi r^2')),
-                        equation(writeMathml(x)),
+                        equation(writeMathml(area, '\\pi r^2')),
+                        equation(writeMathml(area)),
                         equation(`<math xmlns="${MATHML_NAMESPACE}"><mi>x</mi>`),
                     ],
                 },
             ],
         });
-        expect((await extractCollabText('eigendoc', doc)).text).toBe('Area \\pi r^2');
+        expect((await extractCollabText('eigendoc', doc)).text).toBe('Area πr^2 πr^2');
         doc.destroy();
     });
 
@@ -164,7 +192,7 @@ describe('extractCollabText', () => {
 
     test('eigenvector: an empty drawing extracts to the empty string', async () => {
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: 'transparent' } });
+        seedVectorDoc(doc, { elements: [], frames: [], meta: DEFAULT_SCENE_META });
 
         const { text, warnings } = await extractCollabText('eigenvector', doc);
         expect(text).toBe('');

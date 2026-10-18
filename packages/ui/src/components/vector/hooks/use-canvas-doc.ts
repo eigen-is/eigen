@@ -7,32 +7,31 @@ import {
     followBindings,
     generateNKeysBetween,
     isVectorElementType,
+    type NewVectorElement,
     parseBinding,
     readElementFromFields,
     readVectorFromDoc,
     type StyleDefaults,
+    topmostIndex,
     type VectorArrowElement,
-    type VectorChartElement,
     type VectorElement,
-    type VectorElementType,
+    type VectorElementPatch,
     type VectorFrame,
-    type VectorImageElement,
-    type VectorLinearElement,
     type VectorMeta,
-    type VectorPieElement,
-    type VectorRichTextElement,
     type VectorScene,
-    type VectorShapeElement,
+    writeElementInDoc,
 } from '@workspace/lib/vector';
+import { sealed } from '@workspace/ui/components/properties-panel';
 import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { duplicateElementsInDoc, replaceElementInDoc, topmostIndex, writeElementInDoc } from './element-writes';
+import { duplicateElementsInDoc, replaceElementInDoc } from './element-writes';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
     duplicateFrameInDoc,
     moveFrameInDoc,
     updateFramesInDoc,
+    updateMetaInDoc,
 } from './frame-writes';
 
 // Origin sentinel for writes the UndoManager must IGNORE. Its trackedOrigins defaults to {null}
@@ -41,60 +40,6 @@ import {
 // itself). Used for the pending→real image swap after a cross-mount paste, so the paste is ONE undo
 // step (⌘Z reverts the insert; peers converge via its inverse) instead of two.
 const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
-
-// One discrete op = one undo step. Y.UndoManager merges everything inside a 500ms capture window, so a
-// discrete op seals on BOTH sides: nothing that happened just before it (a nudge) and nothing that
-// follows joins its step. The canvas' element ops, the panel's writes and the frame ops all go through
-// this — a gesture that deliberately coalesces (a nudge, a keystroke) simply doesn't call it.
-export function sealed<T>(undoManager: Y.UndoManager | null, op: () => T): T {
-    // A gesture is holding the window open (holdCapture), and it owns the step: sealing a write inside
-    // it would split one typed number into a step per digit.
-    if (undoManager?.captureTimeout === Number.POSITIVE_INFINITY) return op();
-    undoManager?.stopCapturing();
-    const result = op();
-    undoManager?.stopCapturing();
-    return result;
-}
-
-// The continuous counterpart of `sealed`: one GESTURE = one undo step, however long it lasts. A
-// slider drag writes live so the canvas updates under the pointer, and merely leaving those writes
-// unsealed is not enough — Y.UndoManager only merges changes that land within `captureTimeout` of
-// each other, so a slow drag, or a pause to look at the result, silently splits into several steps.
-// Hold the window open for the gesture instead, and seal at both ends. Returns the release, which is
-// idempotent: a gesture can end more than once (Radix commits AND the pointer-up fires, or an unmount
-// cleanup follows a commit), and a second restore would write back the Infinity the first one left.
-export function holdCapture(undoManager: Y.UndoManager | null): () => void {
-    if (!undoManager) return () => {};
-    const previous = undoManager.captureTimeout;
-    // A hold is already open, so this one is a no-op: capturing Infinity as the timeout to restore would
-    // make the inner release leave the window open forever, and sealing here would split the outer
-    // gesture's step in two. The outer hold stays in charge.
-    if (previous === Number.POSITIVE_INFINITY) return () => {};
-    undoManager.stopCapturing();
-    undoManager.captureTimeout = Number.POSITIVE_INFINITY;
-    let released = false;
-    return () => {
-        if (released) return;
-        released = true;
-        undoManager.captureTimeout = previous;
-        undoManager.stopCapturing();
-    };
-}
-
-// A partial patch over the write/read allow-list — every field optional, so a caller sets any
-// subset of any element variant's fields (the union members share the geometry base). id/type
-// are never patched; z-order changes rewrite `index`.
-export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
-    Partial<Omit<VectorPieElement, 'id' | 'type'>> &
-    Partial<Omit<VectorChartElement, 'id' | 'type'>> &
-    Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
-    Partial<Omit<VectorImageElement, 'id' | 'type'>> &
-    Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
-    Partial<Omit<VectorArrowElement, 'id' | 'type'>>;
-
-// addElement input: the caller names a `type` and overrides whatever it likes; the hook fills
-// the rest from lib defaults and generates id/seed/index.
-export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
 
 // After a patch, re-run followBindings and write the geometry into the same transact for every
 // arrow bound to a patched SHAPE — and for every patched BOUND ARROW, so a nudge/align/rotate of a bound
@@ -350,15 +295,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
     const updateMeta = useCallback(
         (fields: Partial<VectorMeta>) => {
             const doc = docRef.current;
-            if (!doc) return;
-            sealed(undoManager, () =>
-                doc.transact(() => {
-                    const metaMap = doc.getMap('meta');
-                    for (const [key, value] of Object.entries(fields)) {
-                        if (value !== undefined) metaMap.set(key, value);
-                    }
-                }),
-            );
+            if (doc) sealed(undoManager, () => updateMetaInDoc(doc, fields));
         },
         [undoManager],
     );

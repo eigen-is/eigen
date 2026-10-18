@@ -1,5 +1,5 @@
 // One frame as a read-only page: its own background and its own elements, laid out at the frame's
-// 1920x1080 scale and shrunk as a whole to whatever box the host gives it. The rail thumbnail and
+// own scale (1920 wide) and shrunk as a whole to whatever box the host gives it. The rail thumbnail and
 // present mode both render this, so a slide cannot look different in the two places — and both draw
 // through ElementLayer, the same component the live canvas uses, so neither can drift from the editor.
 // Scaling the page rather than re-unitising its contents is the server compositor's model too

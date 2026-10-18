@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { bundledFont, bundledFontOfCategory, bundledFontOfStack, EIGEN_FONT_NAMES } from '../../constants/fonts';
+import {
+    bundledFont,
+    bundledFontOfCategory,
+    bundledFontOfStack,
+    EIGEN_FONT_NAMES,
+    MAX_FONT_SIZE,
+    MIN_FONT_SIZE,
+    nextFontSize,
+    readFontSize,
+} from '../../constants/fonts';
 
 describe('bundledFont', () => {
     test('a bundled font is its own', () => {
@@ -57,6 +66,30 @@ describe('bundledFontOfCategory', () => {
         ['hand-drawn', 'Excalifont'],
     ] as const)('%s is drawn in %s', (category, name) => {
         expect(bundledFontOfCategory(category)).toBe(name);
+    });
+});
+
+describe('font sizes', () => {
+    test("a size lands in Google's 1 to 400 pt, in Word's half points", () => {
+        expect(readFontSize(12)).toBe(12);
+        expect(readFontSize(10.3)).toBe(10.5);
+        expect(readFontSize(0)).toBe(MIN_FONT_SIZE);
+        expect(readFontSize(1e6)).toBe(MAX_FONT_SIZE);
+    });
+
+    // A peer writes the attribute, so a string would otherwise reach a style attribute.
+    test.each([['12'], ['12pt; position: fixed'], [Number.NaN], [Number.POSITIVE_INFINITY], [null], [undefined]])(
+        '%p is no size',
+        (value) => {
+            expect(readFontSize(value)).toBeUndefined();
+        },
+    );
+
+    test('a step is a point, and stops at the ends of the range', () => {
+        expect(nextFontSize(11, 1)).toBe(12);
+        expect(nextFontSize(10.5, -1)).toBe(9.5);
+        expect(nextFontSize(MAX_FONT_SIZE, 1)).toBe(MAX_FONT_SIZE);
+        expect(nextFontSize(MIN_FONT_SIZE, -1)).toBe(MIN_FONT_SIZE);
     });
 });
 

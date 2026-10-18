@@ -6,7 +6,7 @@ import type { Options } from 'roughjs/bin/core';
 import type { RoughGenerator } from 'roughjs/bin/generator';
 import { headingIsHorizontal, vectorToHeading } from '../elbow-heading';
 import { getLineHeightPx } from '../font-metrics';
-import { arrowheadGeometry, distance, type Point, round } from '../geometry';
+import { ARROW_LABEL_PAD, arrowheadGeometry, distance, type Point, round } from '../geometry';
 import type { Arrowhead, VectorArrowElement } from '../types';
 import { baseRoughOptions, drawableToSvg, svgTextLine } from './render-utils';
 
@@ -104,19 +104,18 @@ function headOptions(el: VectorArrowElement, solidFill: boolean, roughnessCap: n
     return options;
 }
 
-// The hole under a label: a white ground rect the shaft paints through, with the label rect + 5px of
-// padding in black so nothing shows under the text. A mask rather than an even-odd clipPath because
+// The hole under a label: a white ground rect the shaft paints through, with the label rect + its pad
+// in black so nothing shows under the text. A mask rather than an even-odd clipPath because
 // WeasyPrint ignores `clip-rule="evenodd"` and the shaft then strikes through the label in a PDF.
 // The ground HIDES anything outside it, so it must enclose the whole shaft — the point bounds (and the
 // hole) padded past roughjs jitter + the stroke half-width, never a fixed square (an arrow larger than
 // it would lose its shaft). userSpaceOnUse with an explicit box, because the default mask region
 // resolves against the shaft's bounding box, not the ground rect.
 export function labelMask(id: string, points: Point[], label: LabelBox, strokeWidth: number): string {
-    const pad = 5;
-    const hx = label.center.x - label.width / 2 - pad;
-    const hy = label.center.y - label.height / 2 - pad;
-    const hw = label.width + pad * 2;
-    const hh = label.height + pad * 2;
+    const hx = label.center.x - label.width / 2 - ARROW_LABEL_PAD;
+    const hy = label.center.y - label.height / 2 - ARROW_LABEL_PAD;
+    const hw = label.width + ARROW_LABEL_PAD * 2;
+    const hh = label.height + ARROW_LABEL_PAD * 2;
 
     let minX = hx;
     let minY = hy;

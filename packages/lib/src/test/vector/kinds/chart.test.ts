@@ -1,13 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import { formatTickValue, layoutChart, MAX_CHART_SPEC_BYTES, sampleChartSpec } from '../../../charts';
+import {
+    chartColor,
+    formatTickValue,
+    layoutChart,
+    MAX_CHART_SPEC_BYTES,
+    parseChartSpec,
+    sampleChartSpec,
+} from '../../../charts';
+import { getFontFamily } from '../../../constants/fonts';
+import { escapeXml } from '../../../core/xml';
 import type { ChartLayout, ChartSpec } from '../../../types/chart';
 import { parseFill, serializeFill, TRANSPARENT_FILL } from '../../../vector/fill';
-import { ELEMENT_KINDS, sceneFontFamilies } from '../../../vector/kinds';
+import { ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, sceneFontFamilies, VECTOR_STYLE_DEFAULTS } from '../../../vector/kinds';
 import { svgTextLine } from '../../../vector/kinds/render-utils';
 import { readElementFromFields } from '../../../vector/read-vector';
 import { elementToSvg } from '../../../vector/scene-to-svg';
-import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, type VectorChartElement } from '../../../vector/types';
-import { chart } from '../element-factories';
+import { DEFAULT_ELEMENT_PROPS, type VectorChartElement } from '../../../vector/types';
+import { chart, richtext } from '../element-factories';
 
 const specJson = (over: Partial<ChartSpec> = {}, type: ChartSpec['type'] = 'column'): string =>
     JSON.stringify({ ...sampleChartSpec(type), ...over });
@@ -51,7 +60,6 @@ function layoutOf(el: VectorChartElement, spec: ChartSpec): ChartLayout {
         width: el.width,
         height: el.height,
         paint: {
-            fontFamily: el.fontFamily,
             color: el.color,
             background: el.fill,
             strokeColor: el.strokeColor,
@@ -89,18 +97,23 @@ describe('chart read', () => {
         expect(readChart({ chart: 42 }).chart).toBe('');
     });
 
-    test('font, color and background go through the shared field readers', () => {
-        const el = readChart({ chart: specJson(), fontFamily: 'Comic; color:red', color: 'url(#x)', fill: 'nope' });
-        expect(el.fontFamily).toBe(DEFAULT_FONT_FAMILY);
+    test('color and background go through the shared field readers; the font is the spec’s, not a field', () => {
+        const el = readChart({ chart: specJson(), fontFamily: 'Inter', color: 'url(#x)', fill: 'nope' });
         expect(el.color).toBe(DEFAULT_ELEMENT_PROPS.strokeColor);
         expect(el.fill).toBe(serializeFill(TRANSPARENT_FILL));
+        expect('fontFamily' in el).toBe(false);
+        expect(ELEMENT_KINDS.chart.fields).not.toContain('fontFamily');
     });
 
     test('a new chart is the column sample in the host font, color and fill', () => {
         const el = chart({ id: 'c1' });
-        expect(el.chart).toBe(JSON.stringify(sampleChartSpec('column')));
-        expect(el.fontFamily).toBe('Excalifont');
+        expect(el.chart).toBe(JSON.stringify({ ...sampleChartSpec('column'), fontFamily: 'Excalifont' }));
         expect(parseFill(el.fill).style).toBe('cross-hatch');
+        const slide = ELEMENT_KINDS.chart.defaults(SLIDES_STYLE_DEFAULTS);
+        expect(parseChartSpec(slide.chart)?.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
+        expect(parseChartSpec(ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS).chart)?.fontFamily).toBe(
+            'Excalifont',
+        );
     });
 });
 
@@ -124,7 +137,7 @@ describe('chart placeholder', () => {
 describe('chart painter', () => {
     test('each shape draws exactly as the same element would on the canvas', () => {
         const el = chart({ id: 'c1' });
-        const out = layoutOf(el, sampleChartSpec('column'));
+        const out = layoutOf(el, { ...sampleChartSpec('column'), fontFamily: 'Excalifont' });
         const svg = svgOf(el);
         expect(out.shapes.filter((shape) => shape.type === 'rectangle').length).toBeGreaterThan(4);
         for (const shape of out.shapes) expect([shape.id, svg.includes(elementToSvg(shape))]).toEqual([shape.id, true]);
@@ -163,6 +176,12 @@ describe('chart painter', () => {
         );
     });
 
+    test('every label draws in the spec font', () => {
+        const svg = svgOf(chart({ id: 'c1', chart: specJson({ fontFamily: 'JetBrains Mono' }) }));
+        const fonts = new Set(Array.from(svg.matchAll(/font-family="([^"]*)"/g), (m) => m[1]));
+        expect(fonts).toEqual(new Set([escapeXml(getFontFamily('JetBrains Mono'))]));
+    });
+
     test('label text is escaped', () => {
         const svg = svgOf(chart({ id: 'c1', chart: specJson({ title: 'A < B & "C"' }) }));
         expect(svg).toContain('A &lt; B &amp; &quot;C&quot;');
@@ -196,7 +215,7 @@ describe('chart painter', () => {
                 expect(svg).toContain(elementToSvg(mark));
             }
             // a hachure fill is drawn as stroked sketch lines in the mark's color, never a filled path
-            expect(svg).toContain('stroke="#2a78d6" stroke-width="1" fill="none"');
+            expect(svg).toContain(`stroke="${chartColor(0)}" stroke-width="1" fill="none"`);
         }
     });
 
@@ -211,7 +230,7 @@ describe('chart text', () => {
         const el = chart({
             id: 'c1',
             chart: specJson({
-                categoryAxis: { title: 'Teams' },
+                categoryAxis: { ...sampleChartSpec('column').categoryAxis, title: 'Teams' },
                 valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
             }),
         });
@@ -230,7 +249,13 @@ describe('chart text', () => {
         expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: RANGE_SPEC }))).toBe('Points scored\nSales');
     });
 
-    test('the SVG download embeds the chart font', () => {
-        expect(sceneFontFamilies([chart({ id: 'c1', fontFamily: 'Inter' })])).toEqual(new Set(['Inter']));
+    test('the SVG download embeds the font in the chart’s spec, and none for a placeholder', () => {
+        const serif = chart({ id: 'c1', chart: specJson({ fontFamily: 'Source Serif 4' }) });
+        expect(sceneFontFamilies([serif])).toEqual(new Set(['Source Serif 4']));
+        expect(sceneFontFamilies([chart({ id: 'c2', chart: 'nope' }), chart({ id: 'c3', chart: RANGE_SPEC })])).toEqual(
+            new Set(),
+        );
+        const text = richtext({ id: 't1', html: '<p>Hi</p>', fontFamily: 'JetBrains Mono' });
+        expect(sceneFontFamilies([serif, text])).toEqual(new Set(['Source Serif 4', 'JetBrains Mono']));
     });
 });

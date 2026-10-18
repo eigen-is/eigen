@@ -1,16 +1,16 @@
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
-import { equationText, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { isFigureFrameNode, readEquation, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 
 export type TextCounts = { words: number; characters: number; charactersExcludingSpaces: number };
 
 const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' });
 
-// A leaf ends the word before it; a figure adds its caption, never its alt text or media name, and an equation its
-// text.
+// A leaf ends the word before it; a figure or a chart adds its caption, never its alt text, media name or chart text,
+// and an equation its text.
 function leafText(node: Node): string {
-    if (node.type.name === 'figure') return `\n${readFigureAttrs(node.attrs).caption ?? ''}\n`;
-    if (node.type.name === 'equation') return `\n${equationText(node)}\n`;
+    if (isFigureFrameNode(node.type.name)) return `\n${readFigureFrameAttrs(node.attrs).caption ?? ''}\n`;
+    if (node.type.name === 'equation') return `\n${readEquation(node.attrs).text}\n`;
     return '\n\n';
 }
 

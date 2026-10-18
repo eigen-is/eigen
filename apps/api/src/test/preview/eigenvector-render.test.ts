@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
-import type { VectorScene } from '@workspace/lib/vector';
+import { DEFAULT_SCENE_META, type VectorScene } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
 import {
@@ -161,7 +161,7 @@ describe('renderEigenvectorPreviewBody', () => {
 
     test('an empty drawing previews as an empty page, so the cache stops serving its old body', () => {
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: '#fef3c7' } });
+        seedVectorDoc(doc, { elements: [], frames: [], meta: { ...DEFAULT_SCENE_META, background: '#fef3c7' } });
         const { body, warnings } = renderEigenvectorPreviewBody(doc, new Map());
         doc.destroy();
         expect(body).toContain(`<div class="canvas-page" style="position:relative;overflow:hidden;width:960px;`);

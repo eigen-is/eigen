@@ -1,84 +1,20 @@
-// The element-writing primitives over a vector Y.Doc: fresh ids, the seed rule, the live topmost
-// z-index, and the duplicate pass. Plain functions over the doc, the way the tools modules are plain
-// functions over the scene, so the hook stays the thin React surface.
+// The editor's multi-element passes over a vector Y.Doc: replace and duplicate, over the shared writer
+// (write-vector.ts). Plain functions over the doc, the way the tools modules are plain functions over
+// the scene, so the hook stays the thin React surface.
 
 import {
-    baseDefaultsFor,
     ELEMENT_FIELDS,
-    ELEMENT_KINDS,
     generateNKeysBetween,
     isValidFractionalIndex,
+    type NewVectorElement,
+    newElementId,
+    randomSeed,
     remapBinding,
     type StyleDefaults,
-    storedFields,
-    type VectorElementType,
+    topmostIndex,
+    writeElementInDoc,
 } from '@workspace/lib/vector';
-import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
-import type { NewVectorElement } from './use-canvas-doc';
-
-export function newElementId(): string {
-    return `el-${nanoid(10)}`;
-}
-
-// A fresh roughjs jitter seed. One source: the creation paths, the duplicate pass and the draw drafts
-// must draw from the same range or a preview pops on release.
-export function randomSeed(): number {
-    return 1 + Math.floor(Math.random() * (2 ** 31 - 1));
-}
-
-// Per-type defaults: the geometry box, the shared base props, and the kind's own fields straight from
-// the registry, styled by the HOST's table (vector draws rough and hatched, slides flat and solid) —
-// a new kind needs no entry here, and a new host only a table.
-function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<string, unknown> {
-    return {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-        angle: 0,
-        // The shared base paint under the kind's overrides: rich text and images use the stroke as a
-        // border, so a fresh one is unframed until the user picks a stroke color. The panel's reset
-        // rows read the same helper, so a reset restores what creation gave.
-        ...baseDefaultsFor(type, style),
-        ...ELEMENT_KINDS[type].defaults(style),
-    };
-}
-
-// One element into the doc's `elements` map at the given fractional index, under the kind's defaults
-// and the host's style table — THE element writer, shared by the editor's add path and the deck
-// seeder. Honors a caller-supplied seed so a drag-create preview and its committed element share the
-// same roughjs jitter (no visual pop on release). A caller-supplied `id` is the seeder's: two peers
-// seeding one empty deck write the same key, so they converge on one element instead of two. Nested
-// in a live transact it joins that one, so a caller's origin and single-atom guarantee both survive.
-export function writeElementInDoc(
-    doc: Y.Doc,
-    partial: NewVectorElement,
-    index: string,
-    style: StyleDefaults,
-    id: string = newElementId(),
-): string {
-    const seed = partial.seed ?? randomSeed();
-    const record = { ...elementDefaults(partial.type, style), ...partial, id, type: partial.type, seed, index };
-    const element = new Y.Map<unknown>();
-    for (const [field, value] of storedFields(record, ELEMENT_FIELDS)) element.set(field, value);
-    doc.transact(() => doc.getMap('elements').set(id, element));
-    return id;
-}
-
-// Live topmost fractional index in the map. Skips non-map entries and malformed index strings —
-// a corrupt peer write must not make generateKeyBetween throw and brick adding elements
-// (read-vector heals them on read).
-export function topmostIndex(elementsMap: Y.Map<unknown>): string | null {
-    let topmost: string | null = null;
-    for (const value of elementsMap.values()) {
-        if (!(value instanceof Y.Map)) continue;
-        const idx = value.get('index');
-        if (typeof idx !== 'string' || !isValidFractionalIndex(idx, undefined, undefined)) continue;
-        if (topmost === null || idx > topmost) topmost = idx;
-    }
-    return topmost;
-}
 
 // The lowest valid stored index above `index`: the top of the z slot an element at `index` holds.
 function indexAbove(elementsMap: Y.Map<unknown>, index: string): string | null {

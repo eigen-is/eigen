@@ -61,6 +61,11 @@ type CanvasToolbarProps = {
     createLabel: string;
     createIcon: LucideIcon;
     createType: EigenDocType;
+    // The deck's File → Import slides…; the host draws the picker it opens.
+    onImport?: () => void;
+    importLabel?: string;
+    // Rows above Move to trash in the File menu (the deck's "Page setup…").
+    fileItems?: ReactNode;
     // Rows above the shape tools in the Insert menu (the deck's "New slide").
     insertItems?: ReactNode;
     // Buttons a read-only viewer keeps at any width (the deck's Present).
@@ -89,6 +94,9 @@ export function CanvasToolbar({
     createLabel,
     createIcon,
     createType,
+    onImport,
+    importLabel,
+    fileItems,
     insertItems,
     centerItems,
 }: CanvasToolbarProps) {
@@ -106,11 +114,15 @@ export function CanvasToolbar({
                             path={path}
                             canWrite={canWrite}
                             onAccessDialogOpen={onAccessDialogOpen}
+                            onImport={onImport}
+                            importLabel={importLabel}
                             onExport={(format) => exportPath(path, format)}
                             createLabel={createLabel}
                             createIcon={createIcon}
                             createType={createType}
-                        />
+                        >
+                            {fileItems}
+                        </FileMenu>
                         {/* Unconditional: EditMenu drops its edit section itself, and its Find entries
                             are the read-only viewer's only menu route to the find bar. */}
                         <EditMenu canEdit={canEdit} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo}>

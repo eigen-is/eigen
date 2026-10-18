@@ -278,6 +278,13 @@
         margin: 0;
     }
 
+    /* A chart's inline SVG, as an image: never wider than the column, its height following. */
+    .figure svg {
+        display: block;
+        max-width: 100%;
+        height: auto;
+    }
+
     /* Tables */
 
     table {
@@ -573,6 +580,140 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
     .tiptap li:has(:where(.figure[data-layout^="wrap"])) {
         contain: layout;
     }
+}
+
+/* ===== Equations ===== */
+
+/* Every <math> Eigen draws, in the editor, its panel and an export. */
+math {
+    font-family: "STIX Two Math", math;
+}
+
+/* MathML's own cell spacing, which Tailwind's reset takes away, so a matrix's columns touch. An equations table's
+   cells meet at their alignment point, as Word's do. */
+mtd {
+    padding: 0.5ex 0.4em;
+}
+
+mtable[displaystyle="true"] > mtr > mtd {
+    padding-inline: 0;
+}
+
+/* The writer aligns an equations table as Word's & marks do: right of the first, left of the next, by turns, and a
+   cases table's columns left. Browsers leave columnalign to CSS and centre every cell. */
+mtable[displaystyle="true"] > mtr > mtd:nth-child(odd) {
+    text-align: right;
+}
+
+mtable[displaystyle="true"] > mtr > mtd:nth-child(even),
+mtable[columnalign="left"] > mtr > mtd {
+    text-align: left;
+}
+
+/* MathML Core, which Chrome implements and names `display: block math`, lays a cell's content out as a block, which
+   only the -webkit- values move (in WebKit they break the row), and draws no menclose, which WebKit and Firefox draw
+   themselves. Each notation's line is a border or a background layer of its own, so any set of them combines. The HTML
+   download needs this block in Chrome; WeasyPrint skips @supports, and the PDF draws an equation as SVG anyway. */
+@supports (display: block math) {
+    mtable[displaystyle="true"] > mtr > mtd:nth-child(odd) {
+        text-align: -webkit-right;
+    }
+
+    mtable[displaystyle="true"] > mtr > mtd:nth-child(even),
+    mtable[columnalign="left"] > mtr > mtd {
+        text-align: -webkit-left;
+    }
+
+    menclose {
+        --strike-horizontal: none;
+        --strike-vertical: none;
+        --strike-up: none;
+        --strike-down: none;
+        padding: 0.1em 0.15em;
+        background-image: var(--strike-horizontal), var(--strike-vertical), var(--strike-up), var(--strike-down);
+    }
+
+    menclose[notation~="top"] {
+        border-top: 0.06em solid;
+    }
+
+    menclose[notation~="bottom"] {
+        border-bottom: 0.06em solid;
+    }
+
+    menclose[notation~="left"] {
+        border-left: 0.06em solid;
+    }
+
+    menclose[notation~="right"] {
+        border-right: 0.06em solid;
+    }
+
+    menclose[notation~="horizontalstrike"] {
+        --strike-horizontal: linear-gradient(
+            transparent calc(50% - 0.03em),
+            currentColor 0 calc(50% + 0.03em),
+            transparent 0
+        );
+    }
+
+    menclose[notation~="verticalstrike"] {
+        --strike-vertical: linear-gradient(
+            to right,
+            transparent calc(50% - 0.03em),
+            currentColor 0 calc(50% + 0.03em),
+            transparent 0
+        );
+    }
+
+    menclose[notation~="updiagonalstrike"] {
+        --strike-up: linear-gradient(
+            to top left,
+            transparent calc(50% - 0.03em),
+            currentColor 0 calc(50% + 0.03em),
+            transparent 0
+        );
+    }
+
+    menclose[notation~="downdiagonalstrike"] {
+        --strike-down: linear-gradient(
+            to top right,
+            transparent calc(50% - 0.03em),
+            currentColor 0 calc(50% + 0.03em),
+            transparent 0
+        );
+    }
+}
+
+/* An inline atom, so the comment mark's button sits in its corner. */
+.tiptap .equation {
+    position: relative;
+}
+
+/* A displayed equation takes its line, centred, in the editor and the HTML exports; as the figure, a full-width box on
+   the bottom of its line keeps ProseMirror's trailing break on that line. */
+.eigen-prose .equation[data-display] {
+    display: inline-flex;
+    justify-content: center;
+    width: 100%;
+    vertical-align: bottom;
+    /* Two in a row part by a paragraph's gap (p + p), or one's limits touch the next. */
+    margin-block: 0.25em;
+}
+
+/* An empty equation, in the editor and its panel. */
+.equation-placeholder {
+    display: inline-block;
+    width: 0.8em;
+    height: 1em;
+    vertical-align: -0.15em;
+    border: 1px dashed currentColor;
+    opacity: 0.5;
+}
+
+/* An empty argument's box, which only the editor and its panel draw. */
+.equation-slot {
+    opacity: 0.5;
 }
 
 /* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */

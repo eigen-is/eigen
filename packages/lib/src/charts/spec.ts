@@ -2,12 +2,14 @@
 // node attribute, a SheetChart), and parseChartSpec is the one reader every surface and importer runs.
 // Malformed structure or a hard limit reads as null, never a throw; a presentation field reads its default.
 
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../constants/colors';
 import { isRecord } from '../core/guards';
 import { stripNonXmlChars } from '../core/xml';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../sheets/defaults';
 import {
     type CellRangeRef,
     CHART_BLANKS,
+    CHART_STACKINGS,
     CHART_TYPES,
     type ChartSeriesStyle,
     type ChartSpec,
@@ -18,7 +20,7 @@ import {
     type RangeChartData,
     type RangeChartSeries,
 } from '../types/chart';
-import { bool, color, oneOf, str } from '../vector/kinds/read-fields';
+import { bool, color, fontFamily, oneOf, str } from '../vector/kinds/read-fields';
 import { prop } from '../vector/types';
 
 // Hard limits: every peer lays out and paints whatever is stored, so they bound one chart's cost.
@@ -33,25 +35,13 @@ export const MAX_CHART_LABEL_LENGTH = 200;
 export const INLINE_GRID_MAX_SERIES = 12;
 export const INLINE_GRID_MAX_CATEGORIES = 200;
 
-// The dataviz reference palette's eight slots plus four, ordered so every neighbor, the last and the
-// first included, passes its colorblind and normal-vision separation checks on a light surface.
-export const CHART_PALETTE = [
-    '#2a78d6',
-    '#eb6834',
-    '#1baf7a',
-    '#eda100',
-    '#e87ba4',
-    '#008300',
-    '#6250d6',
-    '#e34948',
-    '#0f9bb5',
-    '#b0662a',
-    '#a24fc9',
-    '#7a9a00',
-] as const;
+// Google's chart font, and the one a spec that names none or a font Eigen doesn't bundle reads as.
+export const DEFAULT_CHART_FONT = 'Inter';
 
+// The accent colors in the order calendars hand them out, so a series and its neighbor stay apart, for a deuteranope too.
+// A series or slice whose color is null draws in the one at its index.
 export function chartColor(index: number): string {
-    return CHART_PALETTE[index % CHART_PALETTE.length];
+    return EIGEN_ACCENT_COLORS_SHUFFLED[index % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
 }
 
 export function fitsInlineGrid(series: number, rows: number): boolean {
@@ -68,19 +58,19 @@ export function exceedsInlineGridLimits(data: InlineChartData): boolean {
 // added later reads its default from charts stored before it.
 function defaultPresentation(type: ChartType): Omit<ChartSpec, 'type' | 'data'> {
     return {
-        stacked: false,
+        stacking: 'none',
         title: '',
         legend: type === 'pie' ? 'none' : 'top',
         blanks: 'gap',
-        categoryAxis: { title: '' },
-        valueAxis: { title: '', min: null, max: null, gridlines: true, format: null },
+        categoryAxis: { title: '', visible: true, reversed: false },
+        valueAxis: { title: '', min: null, max: null, gridlines: true, format: null, visible: true },
         sliceColors: [],
+        fontFamily: DEFAULT_CHART_FONT,
     };
 }
 
-function defaultSeriesStyle(index: number): ChartSeriesStyle {
-    return { color: chartColor(index), markers: false, smooth: false };
-}
+// A new series, made in Eigen: its color automatic, so the palette colors it by position.
+export const DEFAULT_CHART_SERIES_STYLE: ChartSeriesStyle = { color: null, markers: false, smooth: false };
 
 // Google's sample for Insert → Chart.
 export function sampleChartSpec(type: ChartType): ChartSpec {
@@ -89,22 +79,38 @@ export function sampleChartSpec(type: ChartType): ChartSpec {
         { name: 'Period 1', values: [42, 65, 38, 80] },
         { name: 'Period 2', values: [58, 47, 71, 63] },
     ];
-    const pie = type === 'pie';
     return {
         ...defaultPresentation(type),
         type,
         title: 'Points scored',
-        sliceColors: pie ? categories.map((_, i) => chartColor(i)) : [],
         data: {
             source: 'inline',
             categories,
-            series: (pie ? periods.slice(0, 1) : periods).map((period, i) => ({ ...period, ...defaultSeriesStyle(i) })),
+            series: (type === 'pie' ? periods.slice(0, 1) : periods).map((period) => ({
+                ...period,
+                ...DEFAULT_CHART_SERIES_STYLE,
+            })),
         },
     };
 }
 
 export function exceedsChartSpecBytes(value: string): boolean {
     return new TextEncoder().encode(value).length > MAX_CHART_SPEC_BYTES;
+}
+
+// What a search finds a chart by: its titles, series names and inline categories, a line each.
+export function chartSearchText(spec: ChartSpec | null): string {
+    if (!spec) return '';
+    const { data } = spec;
+    return [
+        spec.title,
+        spec.categoryAxis.title,
+        spec.valueAxis.title,
+        ...data.series.flatMap((series) => (typeof series.name === 'string' ? [series.name] : [])),
+        ...(data.source === 'inline' ? data.categories : []),
+    ]
+        .filter((text) => text !== '')
+        .join('\n');
 }
 
 // Takes the stored string, like the fill and points codecs, so the size limit is measured on what peers store.
@@ -139,19 +145,25 @@ function chartSpec(v: unknown): ChartSpec {
     if (slices.length > MAX_CHART_POINTS) invalid();
     return {
         type,
-        stacked: bool(prop(spec, 'stacked'), defaults.stacked),
+        stacking: oneOf(prop(spec, 'stacking'), CHART_STACKINGS, defaults.stacking),
         title: text(str(prop(spec, 'title'), defaults.title)),
         legend: oneOf(prop(spec, 'legend'), LEGEND_POSITIONS, defaults.legend),
         blanks: oneOf(prop(spec, 'blanks'), CHART_BLANKS, defaults.blanks),
-        categoryAxis: { title: text(str(prop(categoryAxis, 'title'), defaults.categoryAxis.title)) },
+        categoryAxis: {
+            title: text(str(prop(categoryAxis, 'title'), defaults.categoryAxis.title)),
+            visible: bool(prop(categoryAxis, 'visible'), defaults.categoryAxis.visible),
+            reversed: bool(prop(categoryAxis, 'reversed'), defaults.categoryAxis.reversed),
+        },
         valueAxis: {
             title: text(str(prop(valueAxis, 'title'), defaults.valueAxis.title)),
             min: ordered ? min : null,
             max: ordered ? max : null,
             gridlines: bool(prop(valueAxis, 'gridlines'), defaults.valueAxis.gridlines),
             format: typeof format === 'string' ? text(format) : defaults.valueAxis.format,
+            visible: bool(prop(valueAxis, 'visible'), defaults.valueAxis.visible),
         },
-        sliceColors: slices.map((slice, i) => color(slice, chartColor(i))),
+        sliceColors: slices.map((v) => color(v, null)),
+        fontFamily: fontFamily(prop(spec, 'fontFamily'), defaults.fontFamily),
         data: chartData(prop(spec, 'data')),
     };
 }
@@ -179,32 +191,31 @@ function chartData(v: unknown): InlineChartData | RangeChartData {
     return invalid();
 }
 
-function inlineSeries(v: unknown, index: number): InlineChartSeries {
+function inlineSeries(v: unknown): InlineChartSeries {
     const series = record(v);
     return {
-        ...seriesStyle(series, index),
+        ...seriesStyle(series),
         name: text(str(prop(series, 'name'), '')),
         values: list(prop(series, 'values')).map(finiteOrNull),
     };
 }
 
-function rangeSeries(v: unknown, index: number): RangeChartSeries {
+function rangeSeries(v: unknown): RangeChartSeries {
     const series = record(v);
     const name = prop(series, 'name');
     const values = prop(series, 'values');
     return {
-        ...seriesStyle(series, index),
+        ...seriesStyle(series),
         name: typeof name === 'string' ? text(name) : cellRange(name),
         values: values === null ? null : cellRange(values),
     };
 }
 
-function seriesStyle(series: object, index: number): ChartSeriesStyle {
-    const defaults = defaultSeriesStyle(index);
+function seriesStyle(series: object): ChartSeriesStyle {
     return {
-        color: color(prop(series, 'color'), defaults.color),
-        markers: bool(prop(series, 'markers'), defaults.markers),
-        smooth: bool(prop(series, 'smooth'), defaults.smooth),
+        color: color(prop(series, 'color'), null),
+        markers: bool(prop(series, 'markers'), DEFAULT_CHART_SERIES_STYLE.markers),
+        smooth: bool(prop(series, 'smooth'), DEFAULT_CHART_SERIES_STYLE.smooth),
     };
 }
 

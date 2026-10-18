@@ -1,8 +1,10 @@
 export { CHART_MESSAGES, FLAT_CHART_PAINT, layoutChart, layoutChartMessage } from './layout';
 export {
-    CHART_PALETTE,
     chartColor,
     chartLabel,
+    chartSearchText,
+    DEFAULT_CHART_FONT,
+    DEFAULT_CHART_SERIES_STYLE,
     exceedsChartSpecBytes,
     exceedsInlineGridLimits,
     fitsInlineGrid,

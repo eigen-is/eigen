@@ -62,6 +62,11 @@ describe('state/modules/text — getCellTextInfo wrap', () => {
     });
 });
 
+// The size box takes Google's half points, so a cell draws the 10.5 it shows.
+test('a cell draws at its half-point size', () => {
+    expect(getFontSet({ fs: 10.5 }, 10)).toStartWith('normal normal normal 10.5pt ');
+});
+
 describe('state/modules/text — font sets', () => {
     test('a cell with no font, and the canvas default, draw in Inter', () => {
         expect(getFontSet({}, 10)).toStartWith('normal normal normal 10pt "Inter",');

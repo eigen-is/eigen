@@ -55,6 +55,8 @@ function mount(doc: InstanceType<typeof Y.Doc>, target: Target) {
     return editor;
 }
 
+const HEADER = { field: 'header', onLeave: () => {} } as const;
+
 const body = (doc: InstanceType<typeof Y.Doc>, cardIds: string[] = []) =>
     mount(doc, { undoManager: createDocUndoManager(doc), cardIds: () => new Set(cardIds) });
 
@@ -67,7 +69,7 @@ test("a band's editor writes its own root and undoes only its own typing", () =>
     const doc = new Y.Doc();
     const undoManager = createDocUndoManager(doc);
     const page = mount(doc, { undoManager, cardIds: () => new Set() });
-    const header = mount(doc, { field: 'header' });
+    const header = mount(doc, HEADER);
 
     page.commands.insertContent('Body');
     header.commands.insertContent('Acme');
@@ -84,7 +86,7 @@ test("a band's editor writes its own root and undoes only its own typing", () =>
 test("a band's schema has every mark of the body's and its nodes but BAND_EXCLUDED_NODES", () => {
     const doc = new Y.Doc();
     const page = body(doc);
-    const header = mount(doc, { field: 'header' });
+    const header = mount(doc, HEADER);
     const excluded: readonly string[] = BAND_EXCLUDED_NODES;
     expect(Object.keys(header.schema.marks)).toEqual(Object.keys(page.schema.marks));
     expect(Object.keys(header.schema.nodes)).toEqual(
@@ -111,7 +113,7 @@ test("a band's editor deletes a node a band leaves out and keeps a comment's tex
     Y.applyUpdate(doc, Y.encodeStateAsUpdate(peer));
     full.destroy();
 
-    const header = mount(doc, { field: 'header' });
+    const header = mount(doc, HEADER);
     // The peer's TrailingNode wrote a paragraph after the break.
     expect(header.getJSON().content?.map((node) => node.type)).toEqual(['paragraph', 'paragraph']);
     expect(header.state.doc.textContent).toBe('Noted');
@@ -119,11 +121,25 @@ test("a band's editor deletes a node a band leaves out and keeps a comment's tex
     expect(doc.getXmlFragment('header').toString()).not.toContain('pageBreak');
 });
 
+// A band has no Equation panel, so Enter on a selected equation does what it does on a selected figure.
+test('Enter on a selected equation in a band does what it does on a selected figure', () => {
+    const enterOn = (leaf: JSONContent) => {
+        const header = mount(new Y.Doc(), HEADER);
+        header.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [leaf] }] });
+        header.commands.setNodeSelection(1);
+        header.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        return header.getJSON().content?.map((block) => block.content?.map((node) => node.type === leaf.type));
+    };
+    // A paragraph opens before the leaf, which stays.
+    expect(enterOn({ type: 'equation', attrs: { mathml: '' } })).toEqual([undefined, [true]]);
+    expect(enterOn({ type: 'figure', attrs: { mediaName: 'logo.png' } })).toEqual([undefined, [true]]);
+});
+
 // Comments don't reach a band, so a pasted anchor would mark text no card points at.
 test('a paste into a band drops comment anchors; the body keeps those of its own cards', () => {
     const html = '<p><span data-comment-id="c1">Noted</span></p>';
     const doc = new Y.Doc();
-    const header = mount(doc, { field: 'header' });
+    const header = mount(doc, HEADER);
     header.view.pasteHTML(html);
     expect(header.getText()).toBe('Noted');
     expect(commentIds(header.getJSON())).toEqual([]);
@@ -136,7 +152,7 @@ test('a paste into a band drops comment anchors; the body keeps those of its own
 test('an image pasted into a band lands in that editor, under the name its re-upload gives', async () => {
     const doc = new Y.Doc();
     body(doc);
-    const header = mount(doc, { field: 'header' });
+    const header = mount(doc, HEADER);
     const event = new ClipboardEvent('paste', { clipboardData: new DataTransfer(), bubbles: true });
     writeEigenClipboard(event, {
         version: 1,
@@ -247,8 +263,7 @@ const { AuthProvider } = await import('@workspace/lib/auth');
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
-const { useBandEditors, useDocEditor, useDocMedia } = await import('../../../components/docs/doc-editor');
-const { HeadersFootersPanel } = await import('../../../components/docs/headers-footers-panel');
+const { useDocEditor, useDocMedia } = await import('../../../components/docs/doc-editor');
 
 type Media = ReturnType<typeof useDocMedia>;
 
@@ -332,49 +347,8 @@ test('a body upload that settles after its editor was built anew swaps the name 
     expect(doc.getXmlFragment('default').toString()).toContain('mediaName="logo-1.png"');
 });
 
-test("a band upload that settles after the panel closed swaps the name in the band's editor", async () => {
-    const doc = new Y.Doc();
-    const rendered: { host: { header: InstanceType<typeof Editor>; media: Media; close: () => void } | null } = {
-        host: null,
-    };
-    function Host() {
-        const [open, setOpen] = useState(true);
-        const media = useDocMedia(path);
-        const editors = useBandEditors({
-            media,
-            yDoc: doc,
-            provider: null,
-            editable: true,
-        });
-        rendered.host = { header: editors.header, media, close: () => setOpen(false) };
-        return open
-            ? createElement(HeadersFootersPanel, {
-                  editors,
-                  media,
-                  setup: DEFAULT_PAGE_SETUP,
-                  onSetupChange: () => {},
-                  request: { band: 'header' },
-                  onClose: () => {},
-              })
-            : null;
-    }
-    ({ unmount } = await render(createElement(Host)));
-    if (!rendered.host) throw new Error('no editors');
-    const { header, media, close } = rendered.host;
-    const upload = media.uploadImage(() => header, logo);
-    expect(doc.getXmlFragment('header').toString()).toContain('mediaName="pending:');
-
-    await act(async () => close());
-    // Tiptap destroys an unmounted editor a tick later.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    expect(document.querySelector('[data-band]')).toBeNull();
-    await settleUpload('logo-1.png');
-    await upload;
-    expect(doc.getXmlFragment('header').toString()).toContain('mediaName="logo-1.png"');
-});
-
 // A tab closed mid-upload leaves a pending name that a writer's tab sweeps a minute after opening the doc. A viewer's
-// deletion would be dropped by the server, and a read-only band on the page shares its root with the band's editor.
+// deletion would be dropped by the server.
 test.each([
     ["a writer's editor sweeps", true, '<paragraph>Acme</paragraph>'],
     ['a read-only editor leaves', false, '<paragraph>Acme<figure mediaName="pending:gone"></figure></paragraph>'],
@@ -392,7 +366,7 @@ test.each([
             yDoc: doc,
             provider: null,
             editable,
-            target: { field: 'header' },
+            target: HEADER,
         });
         return null;
     }

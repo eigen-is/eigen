@@ -4,7 +4,14 @@ import { Node } from '@tiptap/pm/model';
 import { writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { restoreYjsDoc } from '../../../core/collab/yjs-utils';
-import { BAND_EXCLUDED_NODES, BAND_ROOTS, bandHasContent, getDocExtensions } from '../../../docs/eigendoc';
+import {
+    BAND_EXCLUDED_NODES,
+    BAND_ROOTS,
+    bandEdge,
+    bandHasContent,
+    FIRST_PAGE_BAND,
+    getDocExtensions,
+} from '../../../docs/eigendoc';
 import { EIGEN_DOC_TYPE_INFO } from '../../../types/drive';
 import { installHappyDom } from '../../happy-dom';
 
@@ -14,6 +21,11 @@ installHappyDom();
 const schema = getSchema(getDocExtensions());
 
 describe('the header and footer bands', () => {
+    test('page 1 takes the first-page band of its edge, and each band sits at the header or the footer edge', () => {
+        expect(FIRST_PAGE_BAND).toEqual({ header: 'headerFirst', footer: 'footerFirst' });
+        expect(BAND_ROOTS.map(bandEdge)).toEqual(['header', 'footer', 'header', 'footer']);
+    });
+
     test('are four XmlFragment roots of the doc, so a version restore takes them with it', () => {
         expect([...BAND_ROOTS]).toEqual(['header', 'footer', 'headerFirst', 'footerFirst']);
         expect(EIGEN_DOC_TYPE_INFO.doc.yjsRoots).toMatchObject({
@@ -36,7 +48,7 @@ describe('the header and footer bands', () => {
     // A mark missing from a band's schema would delete the text that carries it, so only nodes are left out.
     test("a band's schema leaves out the excluded nodes and keeps every mark", () => {
         const band = getSchema(getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }));
-        expect([...BAND_EXCLUDED_NODES].sort()).toEqual(['codeBlock', 'pageBreak', 'subtitle', 'title']);
+        expect([...BAND_EXCLUDED_NODES].sort()).toEqual(['chart', 'codeBlock', 'pageBreak', 'subtitle', 'title']);
         // The code block exists only with lowlight, so the band leaves it out of the schema that has one.
         const withCode = getSchema(getDocExtensions({ lowlight: {}, exclude: [...BAND_EXCLUDED_NODES] }));
         for (const name of BAND_EXCLUDED_NODES) {

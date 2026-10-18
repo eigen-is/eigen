@@ -1,6 +1,11 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { formatEventWhen, viewerTimeZone } from '@workspace/lib/calendar';
-import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
+import {
+    CANVAS_PREVIEW_HEIGHT,
+    CANVAS_PREVIEW_WIDTH,
+    getTextPreviewMode,
+    type TextPreviewMode,
+} from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
@@ -11,7 +16,7 @@ import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
 import { type DrivePath, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '../../lib/utils';
 import { UserAvatar } from '../user/user-avatar';
@@ -274,6 +279,7 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
                 // A doc thumbnail is its page, light like the editor's; the prose inside escapes the dark rules.
                 data.mode === 'eigendoc' && 'eigen-paper',
             )}
+            style={{ '--preview-h': `${CANVAS_PREVIEW_HEIGHT}px` } as CSSProperties}
         >
             <div
                 ref={setContent}

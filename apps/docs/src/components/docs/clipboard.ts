@@ -10,9 +10,9 @@ import {
 } from '@workspace/lib/clipboard';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import {
-    equationText,
     ITALIC_HEADING_LEVELS,
     ITALIC_HEADING_SELECTOR,
+    readEquation,
     type TitleType,
 } from '@workspace/lib/docs/eigendoc';
 import type {
@@ -73,7 +73,7 @@ function copiedClipboardItems(
     const pushText = (runTo: number) => {
         const text = view.state.doc
             .textBetween(runFrom, runTo, '\n', (leaf) =>
-                leaf.type.name === 'equation' ? equationText(leaf) : (leaf.type.spec.leafText?.(leaf) ?? ''),
+                leaf.type.name === 'equation' ? readEquation(leaf.attrs).text : (leaf.type.spec.leafText?.(leaf) ?? ''),
             )
             .trim();
         if (text) items.push(buildTextClipboardItem({ text, box: textRunBox(view, runFrom, runTo) }));

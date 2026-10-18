@@ -1,7 +1,18 @@
 export { fromDom } from './dom';
 export { MathError } from './error';
+export { readLatex, writeLatex } from './latex';
+export type { LatexCommand } from './latex-commands';
+export { LATEX_COMMANDS } from './latex-commands';
 export { MATHML_NAMESPACE, readMathml, readMathmlLatex, writeMathml } from './mathml';
-export { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from './omml';
+export {
+    MARKUP_COMPATIBILITY_NAMESPACE,
+    OMML_NAMESPACE,
+    readOmml,
+    readOmmlText,
+    WORDML_NAMESPACE,
+    writeOmml,
+} from './omml';
+export { writeText } from './text';
 export type { MathNode, MathRow, MathVariant } from './tree';
 export { MATH_LIMITS, mathText } from './tree';
 export type { MathXmlElement } from './xml';

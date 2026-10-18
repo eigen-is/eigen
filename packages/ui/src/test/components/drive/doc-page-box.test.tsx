@@ -13,7 +13,8 @@ const resizeCallbacks: (() => void)[] = [];
 installHappyDom({ onResizeObserver: (callback) => resizeCallbacks.push(callback) });
 
 const session = { user: { id: 'owner-1' } };
-mock.module('@workspace/lib/auth', () => ({ useAuth: () => session, useIsGuest: () => false }));
+const realAuth = await import('@workspace/lib/auth');
+mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 
 let textPreview: TextPreviewResult = { mode: 'eigendoc', body: '<p>Quarterly report</p>' };
 const realDrive = await import('@workspace/lib/drive');

@@ -1,16 +1,16 @@
 ---
 title: "Get started with Slides"
-description: "Create presentations in the browser, add text and images to a 16:9 canvas, and present your work in full screen."
+description: "Create presentations in the browser, add text and images to your slides, and present your work in full screen."
 type: overview
 category: Basics
 tags: [slides, getting-started, presentation, canvas]
 related: [slides/create-and-edit, slides/draw-shapes-and-arrows, slides/present, slides/share-and-comment]
 crossSections: [getting-started]
 order: 10
-updated: 2026-09-29
+updated: 2026-10-14
 ---
 
-Slides is where you build presentations in Eigen. Each presentation is a collection of 16:9 slides you can fill with text and images, reorder in a panel on the left, and then present in full screen from the browser.
+Slides is where you build presentations in Eigen. Each presentation is a collection of slides, 16:9 or 4:3, that you can fill with text and images, reorder in a panel on the left, and then present in full screen from the browser.
 
 ## Create a presentation
 
@@ -23,7 +23,7 @@ You can also create a presentation from Drive, or from any other Eigen app that 
 When you open a presentation, the editor has three areas:
 
 - **Slide panel** on the left: thumbnails of every slide in order. Click a thumbnail to make that slide active.
-- **Canvas** in the center: the editing surface for the active slide, at 1920×1080 pixels.
+- **Canvas** in the center: the editing surface for the active slide, at 1920×1080 pixels, or 1920×1440 in a 4:3 presentation. To switch between the two, see [Change the slide size](/support/slides/create-and-edit#change-the-slide-size).
 - **Properties panel** on the right: changes to reflect whatever you have selected. With nothing selected, it shows the slide background options. With an object selected, it shows that object's properties.
 
 ## Add content to a slide
@@ -65,6 +65,6 @@ Click the **Present** button in the toolbar to enter full-screen presentation mo
 
 ## Share and export
 
-Open the **File** menu in the toolbar to rename your presentation, share it with other people, or download it. Slides can export to PDF or as a web page (**File → Download → PDF (.pdf)** or **Web Page (.html)**).
+Open the **File** menu in the toolbar to rename your presentation, share it with other people, or download it. Slides can export to PowerPoint, to PDF, or as a web page (**File → Download → Microsoft PowerPoint (.pptx)**, **PDF (.pdf)**, or **Web Page (.html)**). To bring in a PowerPoint file, use **File → Import slides…** or **Convert to Slides** in Drive: see [Import a PowerPoint presentation](/support/slides/import-powerpoint).
 
 To share, use **File → Share** or the **Share** button in the top-right corner of the toolbar. See [Share a presentation and comment](/support/slides/share-and-comment) for the full sharing options.

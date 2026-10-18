@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
+    readElementFromFields,
     serializeBinding,
     serializePoints,
     solidFill,
@@ -255,6 +256,15 @@ describe('rich text is sanitized at the mount seam', () => {
         );
         expect(html).not.toContain('javascript:');
         expect(html).toContain('click');
+    });
+
+    test('a list a peer nested 3,000 deep mounts flattened to a paragraph, every x kept', () => {
+        const deep = `${'<ul><li>x'.repeat(3_000)}${'</li></ul>'.repeat(3_000)}`;
+        const el = readElementFromFields(new Map(Object.entries(richtext(deep))));
+        if (!el) throw new Error('the reader dropped the text box');
+        const html = renderToStaticMarkup(<ElementLayer el={el} />);
+        expect(html).not.toContain('<ul>');
+        expect(html).toContain(`<p>${'x'.repeat(3_000)}</p>`);
     });
 });
 

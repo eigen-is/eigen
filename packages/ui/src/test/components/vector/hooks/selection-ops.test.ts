@@ -6,9 +6,10 @@ import {
     readVectorFromDoc,
     VECTOR_STYLE_DEFAULTS,
     type VectorElement,
+    writeElementInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { replaceElementInDoc, writeElementInDoc } from '../../../../components/vector/hooks/element-writes';
+import { replaceElementInDoc } from '../../../../components/vector/hooks/element-writes';
 import { convertElementToShapes, selectionShapes } from '../../../../components/vector/hooks/selection-ops';
 
 const BASE = { ...DEFAULT_ELEMENT_PROPS, x: 0, y: 0, width: 640, height: 400, angle: 0, index: 'a0', seed: 3 };
