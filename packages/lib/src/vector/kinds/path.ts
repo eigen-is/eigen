@@ -17,6 +17,10 @@ const MITER_LIMIT = 4;
 // The angle one chord of a grown corner's arc turns, in radians: it sags 0.13 units at an inflate of 15.
 const JOIN_STEP = Math.PI / 12;
 
+// Hover hit-tests every element and arrow docking outlines every candidate on each pointer move. An edit
+// makes a new element object, so a cache keyed by the object never goes stale.
+const SAMPLED = new WeakMap<VectorPathElement, Point[][]>();
+
 export const pathKind = defineKind<VectorPathElement>({
     type: 'path',
     is: (el): el is VectorPathElement => el.type === 'path',
@@ -70,6 +74,8 @@ export const pathKind = defineKind<VectorPathElement>({
 // Every subpath as a polyline in the unrotated scene frame, its curves flattened; a closed one ends on
 // its start.
 function sampledSubpaths(el: VectorPathElement): Point[][] {
+    const cached = SAMPLED.get(el);
+    if (cached) return cached;
     const at = (p: Point): Point => ({ x: el.x + p.x, y: el.y + p.y });
     const subpaths: Point[][] = [];
     let current: Point[] = [];
@@ -83,6 +89,7 @@ function sampledSubpaths(el: VectorPathElement): Point[][] {
             current.push(...flatten([current[current.length - 1], ...points.map(at)]));
         }
     }
+    SAMPLED.set(el, subpaths);
     return subpaths;
 }
 
