@@ -23,9 +23,11 @@ export { PAGE_NUMBER_TEXT, PageNumberNode, readPageNumberKind } from './nodes/pa
 export type { TitleType } from './nodes/title';
 export type { PageMargin, PageSetup, PaperSizeName } from './page';
 export {
+    cmText,
     DEFAULT_PAGE_SETUP,
     MIN_TEXT_MM,
     matchPaperSize,
+    mmToPx,
     PAGE_ROOT,
     PAPER_SIZES,
     pageBoxStyle,
@@ -33,6 +35,8 @@ export {
     pageRecord,
     pageStylesheet,
     pageTwips,
+    pxToMm,
+    readCm,
     readPageSetup,
 } from './page';
 export { attributeSearchText } from './search-text';

@@ -449,20 +449,23 @@ describe('docx writer — text', () => {
     });
 
     // The Yjs binding keeps no mark on an atom, so one a fresh doc still holds is never written either.
-    test('a page number is a PAGE field, a page count a NUMPAGES one, each caching 1 in a run of no marks', async () => {
+    test('a page number is a complex PAGE field, a page count a NUMPAGES one, each caching 1 in runs of no marks', async () => {
         const page = (kind: unknown, ...marks: NonNullable<JSONContent['marks']>): JSONContent => ({
             type: 'pageNumber',
             attrs: { kind },
             marks,
         });
+        // Google Docs leaves a w:fldSimple PAGE in the body blank.
+        const field = (instr: string) =>
+            '<w:r><w:fldChar w:fldCharType="begin"/></w:r>' +
+            `<w:r><w:instrText xml:space="preserve"> ${instr} </w:instrText></w:r>` +
+            '<w:r><w:fldChar w:fldCharType="separate"/></w:r>' +
+            run('1') +
+            '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
         expect(
             await paragraphsOf(doc(p(text('Page '), page('page', { type: 'bold' }), text(' of '), page('pages')))),
-        ).toEqual([
-            `<w:p>${run('Page ')}<w:fldSimple w:instr=" PAGE ">${run('1')}</w:fldSimple>${run(' of ')}<w:fldSimple w:instr=" NUMPAGES ">${run('1')}</w:fldSimple></w:p>`,
-        ]);
-        expect(await paragraphsOf(doc(p(page('chapter'))))).toEqual([
-            `<w:p><w:fldSimple w:instr=" PAGE ">${run('1')}</w:fldSimple></w:p>`,
-        ]);
+        ).toEqual([`<w:p>${run('Page ')}${field('PAGE')}${run(' of ')}${field('NUMPAGES')}</w:p>`]);
+        expect(await paragraphsOf(doc(p(page('chapter'))))).toEqual([`<w:p>${field('PAGE')}</w:p>`]);
     });
 });
 

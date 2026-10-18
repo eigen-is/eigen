@@ -97,6 +97,7 @@ type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'ex
     // The box the transform chrome resizes; none shows the plain ring on a selected figure.
     box: Box | null;
     resizeMode: 'aspect' | 'free';
+    formatSize?: (box: Box) => string;
     onTransform: (next: Box) => void;
     onCommit: (next: Box) => void;
     label: string;
@@ -117,6 +118,7 @@ export function FigureFrame({
     containerRef,
     box,
     resizeMode,
+    formatSize,
     onTransform,
     onCommit,
     label,
@@ -167,6 +169,7 @@ export function FigureFrame({
                         screenDeltaToScene={screenDeltaToScene}
                         showRotate={false}
                         resizeMode={resizeMode}
+                        formatSize={formatSize}
                         // Default minSize (1): in aspect mode the component floors BOTH dims, which would inflate
                         // wide images (a 100 floor on a 4:1 banner's height forces width 400). The host's fit clamps.
                         onTransform={onTransform}

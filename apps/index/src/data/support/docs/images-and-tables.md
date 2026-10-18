@@ -42,7 +42,7 @@ Click an image to select it. Resize handles appear at the edges. Drag a handle t
 
 On a wide screen, selecting an image also opens the **Image** panel on the right side of the editor. From there you can:
 
-- **Width**: type the image's width in pixels and press Enter. The height follows, and the image stays between 100 pixels and the width of the text (half of it for a floating image).
+- **Width**: type the image's width in centimeters and press Enter. The height follows, and the image stays between 2.6 cm and the width of the text (half of it for a floating image).
 - **Style**: set the image to sit on its own line (the default), float to the left, or float to the right with text wrapping around it.
 - **Align**: when the image is on its own line, choose left, center, or right alignment.
 - **Alt**: add alternative text, which is used by screen readers and shown if the image fails to load.

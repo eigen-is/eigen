@@ -16,6 +16,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 - **Sheets copy and Tab** — copied cells paste into other apps as rows and columns, not one run of text, and Tab while typing in a cell confirms it and moves right (Shift+Tab left)
 
+### Changed
+
+- **Image sizes in centimeters** — in Docs, the Image panel's **Width** field and the size shown while you drag a handle are in cm, as in Page setup
+
 ## [0.3.3] - 2026-10-13
 
 Eigen reads and writes Word files itself, and Docs gets Google Docs' menus: page breaks, Title and Subtitle, small caps, word count and resizable table columns. The update migrates each user's mail index, `mail.db`, which an older version refuses to open: to go back, restore the backup the update made, with `./eigen rollback` right after it or later with `./eigen restore` and the `server-pre-update-` backup that `./eigen rollback --help` lists. Reload open documents after the update: a tab from 0.3.2 deletes the page breaks, titles and subtitles it receives.

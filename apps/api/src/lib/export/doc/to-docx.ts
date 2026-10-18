@@ -6,6 +6,7 @@ import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/const
 import {
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
+    type PageNumberKind,
     type PageSetup,
     pageTwips,
     readFigureAttrs,
@@ -1258,15 +1259,13 @@ const INLINES = new Map<
         },
     ],
     ['hardBreak', () => '<w:r><w:br/></w:r>'],
-    // Word lays out the page and updates the field; 1 is what a reader without fields shows. The run takes no marks:
-    // the Yjs binding stores none on an atom, so a reloaded doc holds none.
+    // The runs take no marks: the Yjs binding stores none on an atom, so a reloaded doc holds none.
     [
         'pageNumber',
-        (node, linked, context, style, faces) => {
-            const field = PAGE_NUMBER_FIELDS[readPageNumberKind(node.attrs?.['kind'])];
-            const run = runXml(textXml('1'), {}, linked, context, style, faces);
-            return `<w:fldSimple w:instr=" ${field} ">${run}</w:fldSimple>`;
-        },
+        (node, linked, context, style, faces) =>
+            pageFieldXml(readPageNumberKind(node.attrs?.['kind']), (content) =>
+                runXml(content, {}, linked, context, style, faces),
+            ),
     ],
     // A sibling of the runs, not a run; a displayed one alone in its paragraph (blocksOf). An empty one stays an empty
     // math zone, as the editor draws an empty box.
@@ -1279,6 +1278,20 @@ const INLINES = new Map<
         },
     ],
 ]);
+
+// A complex field, as Word writes it: Google Docs leaves a w:fldSimple PAGE in the body blank. Word lays out the page
+// and updates the field; 1 is what a reader without fields shows. Every run of the field gets the result's look.
+function pageFieldXml(kind: PageNumberKind, run: (content: string) => string): string {
+    return [
+        '<w:fldChar w:fldCharType="begin"/>',
+        `<w:instrText xml:space="preserve"> ${PAGE_NUMBER_FIELDS[kind]} </w:instrText>`,
+        '<w:fldChar w:fldCharType="separate"/>',
+        textXml('1'),
+        '<w:fldChar w:fldCharType="end"/>',
+    ]
+        .map(run)
+        .join('');
+}
 
 // A run in the node's marks.
 function runXml(
