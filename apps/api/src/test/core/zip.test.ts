@@ -59,6 +59,109 @@ function refusal(bytes: Uint8Array): ZipError {
     throw new Error('expected a ZipError');
 }
 
+// A whole zip after 16 bytes of a stored entry, its offsets counted from its own start.
+function hiding(): RawPart {
+    return stored('docProps/custom.bin', Buffer.concat([Buffer.alloc(16, 0x20), build([TYPES, EVIL])]));
+}
+
+// A ZIP64 archive whose plain end record fields name a central directory of EVIL's stored in an entry, up to the record.
+function hiddenDirectory(): Buffer {
+    const inner = build([EVIL]);
+    const innerEnd = inner.length - 22;
+    const local = inner.subarray(0, inner.readUInt32LE(innerEnd + 16));
+    const central = Buffer.from(inner.subarray(local.length, local.length + inner.readUInt32LE(innerEnd + 12)));
+    const make = () =>
+        build([TYPES, REAL, stored('docProps/custom.bin', Buffer.concat([local, central]))], { zip64End: true });
+    const sized = make();
+    const localAt = sized.indexOf(local);
+    const centralAt = localAt + local.length;
+    const end = sized.length - 22;
+    central.writeUInt32LE(localAt, 42);
+    // The header's comment runs up to the end record.
+    central.writeUInt16LE(end - (centralAt + 46 + central.readUInt16LE(28)), 32);
+    const zip = make();
+    zip.writeUInt16LE(1, end + 8);
+    zip.writeUInt16LE(1, end + 10);
+    zip.writeUInt32LE(end - centralAt, end + 12);
+    zip.writeUInt32LE(centralAt, end + 16);
+    return zip;
+}
+
+// A ZIP64 archive whose plain record has the right count and size and the sentinel offset. A reader taking the plain
+// record seeks to 0xFFFFFFFF and counts the bytes it misses as a prefix to subtract, which lands on a directory hidden
+// in an extra field, naming EVIL's entry stored in another. `skip` makes Info-ZIP take the plain record.
+function infoZipFallback(skip: (zip: Buffer, end: number) => void): Buffer {
+    const inner = build([EVIL]);
+    const innerEnd = inner.length - 22;
+    const evilLocal = inner.subarray(0, inner.readUInt32LE(innerEnd + 16));
+    const evilCentral = Buffer.from(
+        inner.subarray(evilLocal.length, evilLocal.length + inner.readUInt32LE(innerEnd + 12)),
+    );
+    const room = 400;
+    const make = (blob: Buffer) =>
+        build([{ ...TYPES, extra: blob }, REAL, stored('docProps/custom.bin', evilLocal)], { zip64End: true });
+    const sized = make(Buffer.alloc(room, 0x20));
+    const end = sized.length - 22;
+    const end64 = end - 20 - 56;
+    const directorySize = Number(sized.readBigUInt64LE(end64 + 40));
+    const directoryStart = Number(sized.readBigUInt64LE(end64 + 48));
+    const shift = 0xffffffff + directorySize - end;
+    const headers: Buffer[] = [];
+    for (let at = directoryStart, index = 0; index < 3; index++) {
+        const length = 46 + sized.readUInt16LE(at + 28) + sized.readUInt16LE(at + 30) + sized.readUInt16LE(at + 32);
+        headers.push(Buffer.from(sized.subarray(at, at + length)));
+        at += length;
+    }
+    // A header without its extras and comment, at a shifted offset.
+    const fake = (header: Buffer, offset: number) => {
+        const out = Buffer.from(header.subarray(0, 46 + header.readUInt16LE(28)));
+        out.writeUInt16LE(0, 30);
+        out.writeUInt16LE(0, 32);
+        out.writeUInt32LE(offset + shift, 42);
+        return out;
+    };
+    const evil = Buffer.from(evilCentral);
+    evil.writeUInt32LE(sized.indexOf(evilLocal) + shift, 42);
+    const directory = Buffer.concat([fake(headers[0], 0), evil, fake(headers[2], headers[2].readUInt32LE(42))]);
+    const blob = Buffer.alloc(room, 0x20);
+    directory.copy(blob, end - directorySize - (directoryStart + 46 + TYPES.name.length));
+    const zip = make(blob);
+    zip.writeUInt16LE(3, end + 8);
+    zip.writeUInt16LE(3, end + 10);
+    zip.writeUInt32LE(directorySize, end + 12);
+    zip.writeUInt32LE(0xffffffff, end + 16);
+    skip(zip, end);
+    return zip;
+}
+
+// A ZIP64 end record whose extensible data holds a directory naming EVIL's entry, stored in another, and a ZIP64 record
+// naming that directory, last before the locator.
+function extensibleData(): Buffer {
+    const inner = build([EVIL]);
+    const innerEnd = inner.length - 22;
+    const evilLocal = inner.subarray(0, inner.readUInt32LE(innerEnd + 16));
+    const evilCentral = Buffer.from(
+        inner.subarray(evilLocal.length, evilLocal.length + inner.readUInt32LE(innerEnd + 12)),
+    );
+    const zip = build([TYPES, REAL, stored('docProps/custom.bin', evilLocal)], { zip64End: true });
+    const end64 = zip.length - 22 - 20 - 56;
+    const directoryStart = Number(zip.readBigUInt64LE(end64 + 48));
+    evilCentral.writeUInt32LE(zip.indexOf(evilLocal), 42);
+    const directory = Buffer.concat([
+        zip.subarray(directoryStart, directoryStart + 46 + TYPES.name.length),
+        evilCentral,
+    ]);
+    const fake64 = Buffer.from(zip.subarray(end64, end64 + 56));
+    fake64.writeBigUInt64LE(2n, 24);
+    fake64.writeBigUInt64LE(2n, 32);
+    fake64.writeBigUInt64LE(BigInt(directory.length), 40);
+    fake64.writeBigUInt64LE(BigInt(end64 + 56), 48);
+    const data = Buffer.concat([directory, fake64]);
+    const out = Buffer.concat([zip.subarray(0, end64 + 56), data, zip.subarray(end64 + 56)]);
+    out.writeBigUInt64LE(BigInt(44 + data.length), end64 + 4);
+    return out;
+}
+
 const bombs: Record<string, () => Uint8Array> = {
     'an honest 1 GiB bomb': () => build([TYPES, bomb('word/document.xml', GiB, GiB)]),
     'a 1 GiB bomb declaring 1 KB': () => build([TYPES, bomb('word/document.xml', GiB, 1000)]),
@@ -117,7 +220,86 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         'no-end',
     ],
     ['all but the last 10 bytes', () => build([TYPES, REAL]).subarray(0, -10), 'no-end'],
-    ['bytes after the end record', () => Buffer.concat([build([TYPES, REAL]), Buffer.from('trailing')]), 'no-end'],
+    [
+        'bytes after an end record whose directory ends elsewhere',
+        () => {
+            const zip = build([TYPES, REAL]);
+            return Buffer.concat([patched(zip, zip.length - 22 + 16, 0, 4), Buffer.from([0])]);
+        },
+        'no-end',
+    ],
+    ['an empty archive with a byte after its end record', () => Buffer.concat([build([]), Buffer.from([0])]), 'no-end'],
+    [
+        'a ZIP64 archive with a byte after its end record',
+        () => Buffer.concat([build([TYPES, REAL], { zip64End: true }), Buffer.from([0])]),
+        'no-end',
+    ],
+    [
+        'a comment past the end of the file',
+        () => {
+            const zip = build([TYPES, REAL]);
+            return patched(zip, zip.length - 2, 1, 2);
+        },
+        'no-end',
+    ],
+    [
+        'a comment far past the end of the file',
+        () => {
+            const zip = build([TYPES, REAL]);
+            return patched(zip, zip.length - 2, 0xffff, 2);
+        },
+        'no-end',
+    ],
+    // java.util.zip skips these end records for the hidden one, which reads as an archive at its own start.
+    [
+        'a ZIP64 archive with a byte after its end record, hiding a zip in an entry',
+        () => Buffer.concat([build([TYPES, REAL, hiding()], { zip64End: true }), Buffer.from([0])]),
+        'no-end',
+    ],
+    [
+        'a ZIP64 archive with a comment past the end, hiding a zip in an entry',
+        () => {
+            const zip = build([TYPES, REAL, hiding()], { zip64End: true });
+            return patched(zip, zip.length - 2, 5, 2);
+        },
+        'no-end',
+    ],
+    [
+        'a comment past the end, hiding a zip in an entry',
+        () => {
+            const zip = build([TYPES, REAL, hiding()]);
+            return patched(zip, zip.length - 2, 5, 2);
+        },
+        'no-end',
+    ],
+    // Only java.util.zip's check on the plain fields would take this record: they name a directory up to it.
+    [
+        'a ZIP64 archive with a byte after its end record, whose plain fields name a directory up to it',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            const end = zip.length - 22;
+            const directoryStart = zip.indexOf(CENTRAL_HEADER);
+            const plain = patched(patched(patched(zip, end + 8, 2, 2), end + 10, 2, 2), end + 16, directoryStart, 4);
+            return Buffer.concat([patched(plain, end + 12, end - directoryStart, 4), Buffer.from([0])]);
+        },
+        'no-end',
+    ],
+    [
+        'a byte after an end record whose directory starts on no central header',
+        () => {
+            const zip = build([TYPES, REAL]);
+            const end = zip.length - 22;
+            const shifted = patched(zip, end + 16, zip.readUInt32LE(end + 16) + 4, 4);
+            return Buffer.concat([patched(shifted, end + 12, zip.readUInt32LE(end + 12) - 4, 4), Buffer.from([0])]);
+        },
+        'no-end',
+    ],
+    // Python reads the last signature and refuses the record it can't read whole.
+    [
+        'part of a record in the last 21 bytes',
+        () => Buffer.concat([build([TYPES, REAL]), Buffer.from([0x50, 0x4b, 0x05, 0x06, 0, 0])]),
+        'ambiguous-end',
+    ],
     ['text', () => Buffer.from('<w:document/>'), 'no-end'],
     ['nothing', () => new Uint8Array(0), 'no-end'],
     [
@@ -128,6 +310,43 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         },
         'ambiguous-end',
     ],
+    [
+        'a second end record in the comment, then a byte',
+        () => {
+            const real = build([TYPES, REAL]);
+            const comment = build([TYPES, EVIL], { base: real.length });
+            return Buffer.concat([build([TYPES, REAL], { comment }), Buffer.from([0])]);
+        },
+        'ambiguous-end',
+    ],
+    [
+        'a second end record after the end record',
+        () => Buffer.concat([build([TYPES, REAL]), build([TYPES, EVIL]).subarray(-22)]),
+        'ambiguous-end',
+    ],
+    // A reader taking the last record would read this one, whatever directory it names.
+    [
+        'a record after the end record whose directory ends elsewhere',
+        () => Buffer.concat([build([TYPES, REAL]), build([TYPES, EVIL]).subarray(-22), Buffer.from([0])]),
+        'ambiguous-end',
+    ],
+    ...(
+        [
+            ['entry count on this disk', 8, 2],
+            ['entry count', 10, 2],
+            ['directory size', 12, 4],
+            ['directory offset', 16, 4],
+        ] as const
+    ).map(([field, at, width]): [string, () => Uint8Array, ZipErrorCode] => [
+        `a plain ${field} differing from the ZIP64 one`,
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            return patched(zip, zip.length - 22 + at, 1, width);
+        },
+        'ambiguous-end',
+    ]),
+    // Info-ZIP, Java and Go read the plain fields, which name a directory hidden in an entry.
+    ['plain end record fields naming a hidden directory', hiddenDirectory, 'ambiguous-end'],
     [
         'a second disk',
         () => {
@@ -178,6 +397,56 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
         'corrupt',
     ],
     [
+        'no disk in the ZIP64 locator',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            return patched(zip, zip.length - 22 - 4, 0, 4);
+        },
+        'multi-disk',
+    ],
+    [
+        'a plain disk number beside a ZIP64 end record',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            return patched(zip, zip.length - 22 + 4, 5, 2);
+        },
+        'multi-disk',
+    ],
+    [
+        'a plain start disk beside a ZIP64 end record',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            return patched(zip, zip.length - 22 + 6, 7, 2);
+        },
+        'multi-disk',
+    ],
+    // Info-ZIP reads the plain record instead of these, and so a directory hidden in an extra field.
+    [
+        'no disk in the ZIP64 locator, over a plain record leading to a hidden directory',
+        () => infoZipFallback((zip, end) => zip.writeUInt32LE(0, end - 4)),
+        'multi-disk',
+    ],
+    [
+        'a plain disk number over a plain record leading to a hidden directory',
+        () => infoZipFallback((zip, end) => zip.writeUInt16LE(5, end + 4)),
+        'multi-disk',
+    ],
+    [
+        'a second disk in the ZIP64 locator, over a plain record leading to a hidden directory',
+        () => infoZipFallback((zip, end) => zip.writeUInt32LE(1, end - 16)),
+        'multi-disk',
+    ],
+    [
+        'a second directory disk in the ZIP64 end record, over a plain record leading to a hidden directory',
+        () => infoZipFallback((zip, end) => zip.writeUInt32LE(1, end - 20 - 56 + 20)),
+        'multi-disk',
+    ],
+    [
+        "a ZIP64 end record's entries on this disk short of its total, over a plain record leading to a hidden directory",
+        () => infoZipFallback((zip, end) => zip.writeBigUInt64LE(5n, end - 20 - 56 + 24)),
+        'multi-disk',
+    ],
+    [
         'a second disk in the ZIP64 end record',
         () => {
             const zip = build([TYPES, REAL], { zip64End: true });
@@ -193,6 +462,22 @@ const refused: [string, () => Uint8Array, ZipErrorCode][] = [
             return patched(zip, end64 + 4, 43, 4);
         },
         'misplaced',
+    ],
+    [
+        'bytes between the ZIP64 end record and its locator, its size unchanged',
+        () => {
+            const zip = build([TYPES, REAL], { zip64End: true });
+            const after64 = zip.length - 22 - 20;
+            return Buffer.concat([zip.subarray(0, after64), new Uint8Array(4), zip.subarray(after64)]);
+        },
+        'misplaced',
+    ],
+    // Python reads the 56 bytes before the locator: here a ZIP64 record naming a directory of EVIL's.
+    ['a ZIP64 end record with extensible data', extensibleData, 'misplaced'],
+    [
+        'a prefix and a byte after the end record',
+        () => Buffer.concat([new Uint8Array(1024), build([TYPES, REAL], { base: 1024 }), Buffer.from([0])]),
+        'no-end',
     ],
     ['a prefix the offsets ignore', () => Buffer.concat([new Uint8Array(1024), build([TYPES, REAL])]), 'misplaced'],
     [
@@ -381,6 +666,21 @@ describe('openZip reads', () => {
         expect(readAll(zip).get('word/document.xml')).toBe('<w:document>REAL</w:document>');
     });
 
+    // As Info-ZIP, LibreOffice, PowerPoint and java.util.zip read them: POI's HowWeRefactor.pptx has a byte after its end record.
+    test('bytes after the end record', () => {
+        const zip = build([TYPES, REAL]);
+        const shapes = [
+            Buffer.concat([zip, Buffer.from([0])]),
+            Buffer.concat([zip, Buffer.from('trailing')]),
+            Buffer.concat([build([TYPES, REAL], { comment: Buffer.from('a comment') }), Buffer.from([0])]),
+        ];
+        for (const shape of shapes) expect(readAll(shape)).toEqual(readAll(zip));
+    });
+
+    test('a ZIP64 archive whose plain record has its count and size and the sentinel offset', () => {
+        expect(readAll(infoZipFallback(() => {})).get('word/document.xml')).toBe('<w:document>REAL</w:document>');
+    });
+
     test('an entry only when it is read', () => {
         const zip = openZip(build([TYPES, REAL, bomb('word/media/image1.png', GiB, 1000)]));
         expect(utf8.decode(zip.read('word/document.xml'))).toBe('<w:document>REAL</w:document>');
@@ -551,7 +851,8 @@ describe('openZip under fuzzing', () => {
                     }
                 } else if (kind === 3) bytes = bytes.subarray(0, pick(bytes.length + 1));
                 else if (kind === 4) {
-                    const at = pick(bytes.length + 1);
+                    // Bytes after the end record a quarter of the time: a shape real files have.
+                    const at = next() < 0.25 ? bytes.length : pick(bytes.length + 1);
                     bytes = Buffer.concat([
                         bytes.subarray(0, at),
                         Buffer.from(Array.from({ length: 1 + pick(64) }, () => pick(256))),
