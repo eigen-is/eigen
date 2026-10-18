@@ -131,6 +131,11 @@ describe('a bar chart', () => {
             series: [{ values: [1, 2, 3] }, { values: [4.5, 5, 6] }],
         });
         expect(spec(space(bar() + AXES)).categoryAxis.reversed).toBe(false);
+        const line = `<c:lineChart><c:grouping val="standard"/>${ser({ idx: 0, name: 'L', values: [1, 2, 3] })}</c:lineChart>`;
+        const reversed = spec(space(line + AXES.replace('minMax', 'maxMin')));
+        expect(reversed).toMatchObject({ type: 'line', categoryAxis: { reversed: true } });
+        expect(reversed.data).toMatchObject({ categories: CATEGORIES, series: [{ values: [1, 2, 3] }] });
+        expect(spec(space(line + AXES)).categoryAxis.reversed).toBe(false);
     });
 
     // python-pptx's sample (fixtures/charts/SOURCES.md): Office draws Category 1 at the bottom and, in each band,
