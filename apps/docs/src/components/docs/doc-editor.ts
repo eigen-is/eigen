@@ -1,6 +1,7 @@
-import { Extension, type Extensions } from '@tiptap/core';
+import { Extension, type Extensions, Node } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
+import { Slice } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
 import type { Editor, UseEditorOptions } from '@tiptap/react';
 import { useEditor } from '@tiptap/react';
@@ -20,6 +21,7 @@ import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
     BAND_ROOTS,
+    flattenNestedFootnotes,
     getDocExtensions,
     PAGE_BAND_CLASS,
     PAGE_ROOT,
@@ -49,6 +51,7 @@ import { Chart, type ChartOptions } from './extensions/chart';
 import { Equation, type EquationOptions } from './extensions/equation';
 import { Figure } from './extensions/figure';
 import type { FigureFrameOptions } from './extensions/figure-frame';
+import { Footnote, type FootnoteOptions, NOTE_EDIT, NoteDecorations, NoteFormatting } from './extensions/footnote';
 import { PageNumber } from './extensions/page-number';
 import { EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
@@ -79,7 +82,8 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
                 tr.setNodeAttribute(pos, 'mediaName', newName);
             }
         }
-        if (dispatch) dispatch(tr);
+        // A note's image takes its name too, a change to a note the body otherwise never makes.
+        if (dispatch) dispatch(tr.setMeta(NOTE_EDIT, true));
         return true;
     });
 }
@@ -119,13 +123,15 @@ export function useDocMedia(path: DrivePath) {
     const copyToMediaFolder = useCopyToMediaFolder(path.ownerId, path.mountId);
     const { mediaFolderId, startUpload, resolveMediaPath } = useMediaResolver();
 
-    const uploadImage = async (editor: () => Editor | null, file: File) => {
+    // `settle` holds the doc's fragment once the upload lands: for an image put in a note, the body, which holds every
+    // note, open or not, as the note's editor may have moved on to another.
+    const uploadImage = async (editor: () => Editor | null, file: File, settle = editor) => {
         const target = editor();
         if (!mediaFolderId || !file.type.startsWith('image/') || !target) return;
         const { pendingName, promise } = startUpload(file);
         target.chain().focus().setFigure({ mediaName: pendingName }).run();
         const result = await promise;
-        const settled = editor();
+        const settled = settle();
         if (settled && !settled.isDestroyed) swapFigureMediaName(settled, pendingName, result?.name ?? null);
     };
 
@@ -136,9 +142,10 @@ export function useDocMedia(path: DrivePath) {
         // A vector SVG payload (or a pasted SVG document) lands as a figure through the exact image-upload path:
         // stored in media/, served as-is, rendered by <image>. Its images are name-referenced (eigen-media:);
         // materialize re-uploads each into our media/ and rewrites the svg's refs before it's stored.
-        uploadSvg: async (editor: () => Editor | null, { svg, items }: ClassifiedSvg) => {
+        uploadSvg: async (editor: () => Editor | null, { svg, items }: ClassifiedSvg, settle = editor) => {
             if (!mediaFolderId) return;
-            await uploadImage(editor, await materializeClipboardSvg(svg, items, mediaFolderId, uploadFile.mutateAsync));
+            const file = await materializeClipboardSvg(svg, items, mediaFolderId, uploadFile.mutateAsync);
+            await uploadImage(editor, file, settle);
         },
         insertFromDrive: async (editor: () => Editor | null, paths: DrivePath[]) => {
             if (!mediaFolderId) return;
@@ -149,14 +156,14 @@ export function useDocMedia(path: DrivePath) {
                 settled.chain().focus().setFigure({ mediaName: result.name }).run();
             }
         },
-        replaceImage: async (editor: () => Editor | null, file: File) => {
+        replaceImage: async (editor: () => Editor | null, file: File, settle = editor) => {
             const target = editor();
             if (!mediaFolderId || !file.type.startsWith('image/') || !target) return;
             const { pendingName, promise } = startUpload(file);
             // Reset width so the new image's aspect ratio is recomputed on load
             target.chain().focus().updateFigure({ mediaName: pendingName, width: null }).run();
             const result = await promise;
-            const settled = editor();
+            const settled = settle();
             if (settled && !settled.isDestroyed) swapFigureMediaName(settled, pendingName, result?.name ?? null);
         },
         replaceFromDrive: async (editor: () => Editor | null, paths: DrivePath[]) => {
@@ -189,12 +196,48 @@ export function useDocMedia(path: DrivePath) {
 
 export type DocMedia = ReturnType<typeof useDocMedia>;
 
+// A note holds paragraphs, so a pasted heading, list or table lands as paragraphs.
+const NoteDocument = Node.create({ name: 'doc', topNode: true, content: 'paragraph+' });
+
+// A note has no history of its own: its edits forward into the body, whose undo takes them back and pulls the note
+// back with them, so ⌘Z in a note and in the body walk one history.
+const noteHistory = (body: () => Editor | null) =>
+    Extension.create({
+        name: 'noteHistory',
+        // The body's undo pulls the note back while the command runs, so the note's own transaction would land on a
+        // state it was not made from; Collaboration's undo prevents its dispatch the same way.
+        addCommands: () => ({
+            undo:
+                () =>
+                ({ tr, dispatch }) => {
+                    tr.setMeta('preventDispatch', true);
+                    return (dispatch ? body()?.commands.undo() : body()?.can().undo()) ?? false;
+                },
+            redo:
+                () =>
+                ({ tr, dispatch }) => {
+                    tr.setMeta('preventDispatch', true);
+                    return (dispatch ? body()?.commands.redo() : body()?.can().redo()) ?? false;
+                },
+        }),
+        addKeyboardShortcuts() {
+            return {
+                'Mod-z': () => this.editor.commands.undo(),
+                'Shift-Mod-z': () => this.editor.commands.redo(),
+                'Mod-y': () => this.editor.commands.redo(),
+            };
+        },
+    });
+
 type DocEditorTarget =
     // The body: its undo manager over the content and the page, and the comment cards a pasted anchor may keep.
     | { undoManager: Y.UndoManager; cardIds: () => ReadonlySet<string> }
     // A band: its root, y-tiptap's own undo over it, no comments, and Esc to leave it. Esc is the band's own key, so
     // the find bar and a dialog, which hold focus, keep theirs.
-    | { field: BandRoot; onLeave: () => void };
+    | { field: BandRoot; onLeave: () => void }
+    // The open footnote's note: no root of its own, as the body's editor holds the note and the note's edits forward
+    // into it. Its undo is the body's, comments don't reach it, and Esc leaves it.
+    | { body: () => Editor | null; onLeave: () => void };
 
 type DocEditorOptions = {
     yDoc: Y.Doc;
@@ -207,6 +250,7 @@ type DocEditorOptions = {
     figure?: Partial<FigureFrameOptions>;
     chart?: Partial<ChartOptions>;
     equation?: Partial<EquationOptions>;
+    footnote?: Partial<FootnoteOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
     media: () => DocMedia;
@@ -224,12 +268,14 @@ export function docEditorOptions({
     figure,
     chart,
     equation,
+    footnote,
     extensions = [],
     media,
     editor,
 }: DocEditorOptions): UseEditorOptions {
     const band = 'field' in target;
-    const cardIds = band ? () => NO_CARDS : target.cardIds;
+    const note = 'body' in target;
+    const cardIds = band || note ? () => NO_CARDS : target.cardIds;
     // The page map, not the page on screen: an update that changes the content and the page together reaches the
     // editor before React draws the new page. A band prints in the body's column. Tables and indents keep within it.
     const textColumnWidth = () => {
@@ -238,15 +284,28 @@ export function docEditorOptions({
     };
     // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one.
     const normalStyle = () => readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON());
+    const settle = note ? target.body : editor;
+    const leave = (onLeave: () => void) =>
+        Extension.create({
+            name: 'leave',
+            addKeyboardShortcuts: () => ({
+                Escape: () => {
+                    onLeave();
+                    return true;
+                },
+            }),
+        });
     return {
         editable,
         extensions: [
+            // A note's own doc holds its paragraphs; its nested note stays in the schema, as a peer may write one.
             ...getDocExtensions({
                 lowlight,
                 textColumnWidth,
                 normalStyle,
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
+                    ...(band || note ? [] : ['footnote']),
                     'figure',
                     'chart',
                     'equation',
@@ -254,34 +313,31 @@ export function docEditorOptions({
                     'pageNumber',
                     ...extensions.map((extension) => extension.name),
                 ],
-            }),
+            }).map((extension) =>
+                note && extension.name === 'starterKit' ? extension.configure({ document: false }) : extension,
+            ),
+            ...(note ? [NoteDocument] : []),
             EditorTable.configure({ resizable: !coarsePointer }),
             Figure.configure(figure),
             ...(band ? [] : [Chart.configure(chart)]),
             Equation.configure(equation),
             PageNumber,
+            ...(band || note ? [] : [Footnote.configure(footnote), NoteFormatting]),
             TableWidthClamp.configure({ textColumnWidth }),
             AtomMarks,
             ...extensions,
-            ...(band
-                ? [
-                      Extension.create({
-                          name: 'leaveBand',
-                          addKeyboardShortcuts: () => ({
-                              Escape: () => {
-                                  target.onLeave();
-                                  return true;
-                              },
-                          }),
-                      }),
-                  ]
-                : []),
-            Collaboration.configure(
-                band
-                    ? { document: yDoc, field: target.field }
-                    : { document: yDoc, yUndoOptions: { undoManager: target.undoManager } },
-            ),
-            ...(caret
+            ...(band ? [leave(target.onLeave)] : []),
+            ...(note ? [leave(target.onLeave), NoteDecorations, noteHistory(target.body)] : []),
+            ...(note
+                ? []
+                : [
+                      Collaboration.configure(
+                          band
+                              ? { document: yDoc, field: target.field }
+                              : { document: yDoc, yUndoOptions: { undoManager: target.undoManager } },
+                      ),
+                  ]),
+            ...(caret && !note
                 ? [
                       CollaborationCaret.configure({
                           provider: caret.provider,
@@ -302,7 +358,16 @@ export function docEditorOptions({
                 cut: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
             },
             transformPastedHTML: (html: string) =>
-                cleanPastedHTML(html, textColumnWidth(), cardIds(), normalStyle().font),
+                cleanPastedHTML(html, textColumnWidth(), cardIds(), normalStyle().font, !band),
+            // A note pasted into a note is nested in it: its text stays, in its place.
+            transformPasted: note
+                ? (slice, view) =>
+                      Slice.fromJSON(view.state.schema, {
+                          ...slice.toJSON(),
+                          content: flattenNestedFootnotes({ type: 'footnote', content: slice.content.toJSON() })
+                              .content,
+                      })
+                : undefined,
             handleDrop: (view, event) => {
                 if (!event.dataTransfer) return false;
                 const files = Array.from(event.dataTransfer.files);
@@ -315,7 +380,7 @@ export function docEditorOptions({
                         view.dispatch(tr);
                     }
                     media()
-                        .uploadImage(editor, imageFile)
+                        .uploadImage(editor, imageFile, settle)
                         .catch(() => {});
                     return true;
                 }
@@ -329,7 +394,7 @@ export function docEditorOptions({
 
                 if (paste.svg && mediaFolderId) {
                     event.preventDefault();
-                    uploadSvg(editor, paste.svg).catch(() => {});
+                    uploadSvg(editor, paste.svg, settle).catch(() => {});
                     return true;
                 }
 
@@ -350,7 +415,7 @@ export function docEditorOptions({
                 const imageFile = paste.imageFiles[0];
                 if (imageFile && mediaFolderId) {
                     event.preventDefault();
-                    uploadImage(editor, imageFile).catch(() => {});
+                    uploadImage(editor, imageFile, settle).catch(() => {});
                     return true;
                 }
                 return false;
@@ -366,7 +431,7 @@ type UseDocEditorOptions = Omit<DocEditorOptions, 'caret' | 'coarsePointer' | 'm
     provider: WebsocketProvider | null;
 };
 
-// The body's editor and each band's: docEditorOptions with this tab's user and its pointer, plus the sweep of pending
+// The body's editor, each band's and the open note's: docEditorOptions with this tab's user and its pointer, plus the sweep of pending
 // images a closed tab left and the font-name pass, both in an editable editor only.
 export function useDocEditor({ media, provider, ...options }: UseDocEditorOptions, deps: DependencyList = []): Editor {
     const auth = useAuth();
@@ -389,13 +454,14 @@ export function useDocEditor({ media, provider, ...options }: UseDocEditorOption
         deps,
     );
     editorRef.current = editor;
-    const { editable } = options;
+    // A note's images and fonts are the body's, which sweeps and collapses them.
+    const sweeps = options.editable && !('body' in options.target);
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
     // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
     // A viewer's deletion would be dropped by the server.
     useZombieMediaSweep({
-        ready: !!editor && editable,
+        ready: !!editor && sweeps,
         scan: () => {
             const names: string[] = [];
             editor?.state.doc.descendants((node) => {
@@ -420,9 +486,9 @@ export function useDocEditor({ media, provider, ...options }: UseDocEditorOption
     // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
     // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
     useEffect(() => {
-        if (!editor || !editable) return;
+        if (!editor || !sweeps) return;
         normalizeFontFamilyMarks(editor);
-    }, [editor, editable]);
+    }, [editor, sweeps]);
 
     return editor;
 }

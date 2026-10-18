@@ -1,0 +1,149 @@
+import type { Editor } from '@tiptap/core';
+import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
+import type { Transaction } from '@tiptap/pm/state';
+import { type Decoration, DecorationSet } from '@tiptap/pm/view';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import {
+    findNote,
+    NOTE_EDIT,
+    NOTE_PULL,
+    type NoteAnchor,
+    noteAnchor,
+    noteDecorationsKey,
+} from '../extensions/footnote';
+
+// How a note opens: with the caret where a press landed or at its end, or with a find bar's match selected and the
+// focus left in the bar.
+export type NoteOpening = {
+    anchor: NoteAnchor;
+    focus: boolean;
+    at: { left: number; top: number } | null;
+    selection: { from: number; to: number } | null;
+};
+
+// Where two versions of a note's paragraphs differ: from `start` to `endA` in the first, to `endB` in the second.
+function noteDiff(a: Fragment, b: Fragment): { start: number; endA: number; endB: number } | null {
+    const start = a.findDiffStart(b);
+    const end = a.findDiffEnd(b);
+    if (start === null || !end) return null;
+    // A repeated run lets the two ends cross the start; both move past it alike.
+    const overlap = Math.max(0, start - Math.min(end.a, end.b));
+    return { start, endA: end.a + overlap, endB: end.b + overlap };
+}
+
+// The body's note into the note's editor, the range that differs only, so the caret maps through a peer's edit and an
+// undo, with the body's decorations inside the note, the find bar's matches. False once the note is gone.
+export function pullNote(body: Editor, note: Editor, anchor: NoteAnchor): boolean {
+    const found = findNote(body, anchor);
+    if (!found) return false;
+    // Two schema instances: the note crosses as JSON.
+    const next = note.schema.nodeFromJSON({ type: 'doc', content: found.node.content.toJSON() });
+    const { tr } = note.state;
+    const diff = noteDiff(next.content, tr.doc.content);
+    if (diff) tr.replace(diff.start, diff.endB, next.slice(diff.start, diff.endA));
+    const decorations: Decoration[] = [];
+    found.view.innerDecorations.forEachSet((set) => decorations.push(...set.find()));
+    note.view.dispatch(
+        tr.setMeta(NOTE_PULL, true).setMeta(noteDecorationsKey, DecorationSet.create(tr.doc, decorations)),
+    );
+    return true;
+}
+
+// The note's edit into the body, by diff rather than by step: TipTap replays a captured transaction without its meta,
+// and a diff that finds nothing to change forwards nothing twice.
+export function forwardNote(body: Editor, note: Editor, anchor: NoteAnchor): void {
+    const found = findNote(body, anchor);
+    if (!found) return;
+    const { pos, node } = found;
+    const next = node.copy(Fragment.fromJSON(body.schema, note.state.doc.content.toJSON()));
+    const diff = noteDiff(node.content, next.content);
+    if (!diff) return;
+    body.view.dispatch(
+        body.state.tr
+            .replace(pos + 1 + diff.start, pos + 1 + diff.endA, next.slice(diff.start, diff.endB))
+            .setMeta(NOTE_EDIT, true),
+    );
+}
+
+// The one footnote open in a live editor, the note's editor, for a writer on a desktop or a tablet: its edits forward
+// into the body, the body's changes to it pull back, and a body selection inside a note (the find bar's reveal) opens
+// it. Any other selection the body takes leaves it, a press in the body's text included.
+export function useOpenNote(body: Editor, note: Editor, allowed: boolean) {
+    const [opening, setOpening] = useState<NoteOpening | null>(null);
+    if (opening && !allowed) setOpening(null);
+    const anchor = opening?.anchor ?? null;
+
+    const open = useCallback(
+        (node: PMNode, how: Omit<NoteOpening, 'anchor'>) => {
+            const anchor = noteAnchor(body, node);
+            if (anchor) setOpening({ anchor, ...how });
+        },
+        [body],
+    );
+
+    useLayoutEffect(() => {
+        if (!anchor) return;
+        const pull = () => {
+            if (!pullNote(body, note, anchor)) setOpening(null);
+        };
+        const forward = ({ transaction }: { transaction: Transaction }) => {
+            if (transaction.docChanged && !transaction.getMeta(NOTE_PULL)) forwardNote(body, note, anchor);
+        };
+        pull();
+        body.on('transaction', pull);
+        note.on('transaction', forward);
+        return () => {
+            body.off('transaction', pull);
+            note.off('transaction', forward);
+        };
+    }, [body, note, anchor]);
+
+    // After the pull above, and after the list has mounted the note's editor where the note was.
+    useLayoutEffect(() => {
+        if (!opening) return;
+        const { selection, at, focus } = opening;
+        if (selection) note.commands.setTextSelection(selection);
+        if (focus) note.commands.focus((at && note.view.posAtCoords(at)?.pos) ?? 'end');
+        else
+            note.view.dom
+                .querySelector('.ProseMirror-active-search-match')
+                ?.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }, [note, opening]);
+
+    useEffect(() => {
+        if (!allowed) return;
+        // A peer's edit and undo restore the selection they found, and the note's own edit maps it.
+        const follow = ({ transaction }: { transaction: Transaction }) => {
+            if (!transaction.selectionSet || transaction.getMeta(NOTE_EDIT) || transaction.getMeta(ySyncPluginKey))
+                return;
+            const { $from, to } = body.state.selection;
+            for (let depth = $from.depth; depth > 0; depth--) {
+                if ($from.node(depth).type.name !== 'footnote') continue;
+                const start = $from.start(depth);
+                if (to <= $from.end(depth)) {
+                    open($from.node(depth), {
+                        focus: false,
+                        at: null,
+                        selection: { from: $from.pos - start, to: to - start },
+                    });
+                    return;
+                }
+            }
+            setOpening(null);
+        };
+        body.on('transaction', follow);
+        return () => {
+            body.off('transaction', follow);
+        };
+    }, [body, allowed, open]);
+
+    // Esc puts the caret right after the reference.
+    const leave = () => {
+        const found = anchor && findNote(body, anchor);
+        setOpening(null);
+        if (found) body.commands.focus(found.pos + found.node.nodeSize);
+    };
+
+    return { anchor, open, leave, close: () => setOpening(null) };
+}

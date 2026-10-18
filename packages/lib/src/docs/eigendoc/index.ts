@@ -29,6 +29,7 @@ export {
 export { selectionFontSizes } from './nodes/font-size';
 export {
     FOOTNOTE_PARAGRAPH,
+    FOOTNOTE_SELECTOR,
     FootnoteNode,
     flattenNestedFootnotes,
     footnoteNumbers,

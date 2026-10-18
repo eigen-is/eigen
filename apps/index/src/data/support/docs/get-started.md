@@ -7,7 +7,7 @@ tags: [docs, getting-started, editor, collaboration, writing]
 related: [docs/export, docs/comments, docs/share-a-document]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 Docs is where you write in Eigen. You can create a document, format it, insert images and tables, and share it with other people who can edit alongside you in real time. This page is a quick tour of what you can do.
@@ -28,7 +28,7 @@ The toolbar has three areas:
 - **Formatting controls**, in the center. Change the paragraph style (Normal text, Title, Subtitle, Heading 1 through Heading 6) and the font, make text **Bold**, **Italic**, or **Underline**, set text color and highlight color, insert a link or an image, and set alignment and list style (bulleted, numbered, or checklist).
 - **Share** and **Comments** buttons, on the right.
 
-On every screen, writers see the **Format** and **Insert** menus next to **File** and **Edit**. They hold every formatting option, including strikethrough, capitals, and quotes, and everything you can insert, such as an equation, a horizontal rule, a page break, a table, or a header with page numbers ([Add headers, footers, and page numbers](/support/docs/headers-and-footers)). On a narrower window the center shows fewer controls, dropping them from the right, and on a small screen none. Use the menus for the rest. The **Tools** menu comes after **Insert** and holds **Word count**, which viewers can use too. On a phone, **Word count** sits in the **⋮** menu instead.
+On every screen, writers see the **Format** and **Insert** menus next to **File** and **Edit**. They hold every formatting option, including strikethrough, capitals, and quotes, and everything you can insert, such as an equation, a horizontal rule, a page break, a table, a header with page numbers ([Add headers, footers, and page numbers](/support/docs/headers-and-footers)), or a footnote ([Add footnotes](/support/docs/footnotes)). On a narrower window the center shows fewer controls, dropping them from the right, and on a small screen none. Use the menus for the rest. The **Tools** menu comes after **Insert** and holds **Word count**, which viewers can use too. On a phone, **Word count** sits in the **⋮** menu instead.
 
 ## Your changes save automatically
 

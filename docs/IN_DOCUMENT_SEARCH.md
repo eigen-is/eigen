@@ -20,11 +20,11 @@ Under collaboration a match can vanish between search and reveal, so `reveal` va
 
 `replace` and `replaceAll` make the edit and return the post-edit matches, which the provider adopts. It never re-runs `search` after an edit, because sheets' React context is one render behind at that point. The query is passed on every call rather than read from a cached term, for the same interleaving reason as the id. `preserveCase` is its own argument, applied by `applyPreserveCase` (`packages/lib/src/doc-search/`). Replacement text is literal everywhere: no `$1` or `$&` expansion.
 
-A surface sets `canReplace` from its write access. A read-only document gets search only, and `⌥⌘F` opens plain search there.
+A surface sets `canReplace` from its write access. A read-only document gets search only, and `⇧⌘H` opens plain search there.
 
 ## The provider owns the session and the keys
 
-A surface wraps its editor in `DocSearchProvider` and passes its controller. `⌘F` opens the bar or refocuses it, `⌥⌘F` opens it in replace mode (`Ctrl+H` works too off macOS, where `⌘H` hides the app), `⌘G` and `⇧⌘G` step, and `Esc` closes. `⌘G` with the bar closed and a query kept reopens it without focusing the input. Every key is off while a dialog is open, because the bar would open unseen behind it. The query debounces 150 ms.
+A surface wraps its editor in `DocSearchProvider` and passes its controller. `⌘F` opens the bar or refocuses it, `⇧⌘H` opens it in replace mode, as in Google Docs, whose `⌥⌘F` inserts a footnote (`Ctrl+H` works too off macOS, where `⌘H` hides the app), `⌘G` and `⇧⌘G` step, and `Esc` closes. `⌘G` with the bar closed and a query kept reopens it without focusing the input. Every key is off while a dialog is open, because the bar would open unseen behind it. The query debounces 150 ms.
 
 `⌘Z` and `⇧⌘Z` inside the bar's inputs go to the surface's own undo (`onUndo`, `onRedo`), so a replace is undoable without leaving the bar. `barClassName` moves the bar clear of a surface's chrome, and `onOpenChange` lets slides fit the bar into its layered `Escape` (present, edit, bar, deselect). Toolbar buttons and Edit-menu items read `useOptionalDocSearchBar()`, so a read-only surface hides "Find and replace".
 
@@ -38,7 +38,7 @@ The highlight classes live in `packages/ui/src/styles/globals.css`, so a match l
 
 ## Each surface searches its own model
 
-- Docs, and Drive's markdown editor in WYSIWYG mode, share `useProseMirrorSearchController` (`packages/ui/src/components/search/`). It lives in `packages/ui` because two apps use it. It matches text nodes only, so a docs figure's or chart's caption and a chart's titles, series and categories, which the search index finds ([SEARCH.md](SEARCH.md)), find nothing in the bar.
+- Docs, and Drive's markdown editor in WYSIWYG mode, share `useProseMirrorSearchController` (`packages/ui/src/components/search/`). It lives in `packages/ui` because two apps use it. It matches text nodes only, so a docs figure's or chart's caption and a chart's titles, series and categories, which the search index finds ([SEARCH.md](SEARCH.md)), find nothing in the bar. A footnote's text sits inside its reference, so docs counts and replaces it as the body's. prosemirror-search pads an inline node with content by a space on each side, so a match never joins a note to the sentence around it. The body draws no note, so its decorations reach the open note's editor through the reference's node view, and a reveal that selects a match inside a note opens that note with the match selected and the focus left in the bar ([DOCS.md](DOCS.md#an-open-note-forwards-its-edits-by-diff-anchored-on-its-yjs-element)).
 - Drive's code editor, and the markdown editor in source mode, use `useCodeMirrorSearchController` (`apps/drive/src/components/editor/`), which matches with `buildSearchRegex`.
 - Sheets adapts the engine's `collectMatches` (`packages/sheet`), which scans every visible tab in display order with one match per cell. The adapter is `apps/sheets/src/components/sheets/hooks/use-search-controller.ts`.
 - Stickies scans the column titles and the visible cards only, because a card the board's filter hides has no element for `reveal` to scroll to. `reveal` scrolls to the card and flashes it.

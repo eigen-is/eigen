@@ -30,9 +30,21 @@ function countText(text: string): TextCounts {
     };
 }
 
-// The whole doc, and the selection when it holds any range (a table's cells are several).
+// The whole doc, and the selection when it holds any range (a table's cells are several). A footnote's note counts
+// nothing, as in Google Docs, and its reference ends the word before it.
 export function countWords({ doc, selection }: EditorState): { document: TextCounts; selection: TextCounts | null } {
-    const textOf = (from: number, to: number) => doc.textBetween(from, to, '\n', leafText);
+    const textOf = (from: number, to: number) => {
+        const runs: string[] = [];
+        let start = from;
+        doc.nodesBetween(from, to, (node, pos) => {
+            if (node.type.name !== 'footnote') return true;
+            runs.push(doc.textBetween(start, Math.max(start, pos), '\n', leafText));
+            start = Math.max(start, pos + node.nodeSize);
+            return false;
+        });
+        runs.push(doc.textBetween(start, Math.max(start, to), '\n', leafText));
+        return runs.join('\n');
+    };
     return {
         document: countText(textOf(0, doc.content.size)),
         selection: selection.empty

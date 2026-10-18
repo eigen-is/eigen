@@ -60,9 +60,12 @@ import {
     selectCommentAnchor,
     updateCommentDecorations,
 } from './extensions/comment-mark';
+import { insertNote } from './extensions/footnote';
 import { FigurePropertiesPanel } from './figure-properties-panel';
+import { FootnoteList } from './footnote-list';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useNormalStyle } from './hooks/use-normal-style';
+import { useOpenNote } from './hooks/use-open-note';
 import { usePageSetup } from './hooks/use-page-setup';
 import { type SelectionPanel, useSelectionPanel } from './hooks/use-selection-panel';
 import { updateNormalStyle } from './normal-style';
@@ -195,6 +198,8 @@ const TiptapEditor = ({
     // The extensions keep the closures they were created with, so the figure menu reads this render's state here.
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
     const editEquationRef = useRef(() => {});
+    const openNoteRef = useRef((_pos: number) => {});
+    const leaveNoteRef = useRef(() => {});
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
     const pageSetup = usePageSetup(yDoc);
     const writeSetup = (from: PageSetup, to: PageSetup) => writePageSetup(yDoc, undoManager, from, to);
@@ -265,6 +270,7 @@ const TiptapEditor = ({
                 onOpenComment: handleCommentClick,
                 onEdit: isMobile ? undefined : () => editEquationRef.current(),
             },
+            footnote: { onOpen: (pos) => openNoteRef.current(pos) },
             extensions: [
                 SearchHighlight,
                 CommentMark.configure({
@@ -309,9 +315,34 @@ const TiptapEditor = ({
         editing: editingBand,
         onLeave: leaveBand,
     });
-    const activeEditor = editingBand ? bands[editingBand] : editor;
+    // The open footnote's one live editor, kept as long as the doc is open; it holds whichever note is open. A writer's
+    // on a desktop or a tablet, as a band is.
+    const noteEditor = useDocEditor({
+        media,
+        yDoc,
+        provider: null,
+        editable: canWrite,
+        target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current() },
+    });
+    const notes = useOpenNote(editor, noteEditor, bandsAllowed);
+    leaveNoteRef.current = notes.leave;
+    const openNote = (node: Node, at: { left: number; top: number } | null) => {
+        setEditingBand(null);
+        notes.open(node, { focus: true, at, selection: null });
+    };
+    openNoteRef.current = (pos) => {
+        const node = editor.state.doc.nodeAt(pos);
+        if (node && bandsAllowed) openNote(node, null);
+    };
+    // Google's Insert › Footnote: the reference after the selection, and its note open with the caret in it.
+    const insertFootnote = () => {
+        const pos = insertNote(editor);
+        if (pos !== null) openNoteRef.current(pos);
+    };
+    const activeEditor = editingBand ? bands[editingBand] : notes.anchor ? noteEditor : editor;
     // A double-click puts the caret where it was, a menu at the band's end.
     const enterBand = (root: BandRoot, at?: { left: number; top: number }) => {
+        notes.close();
         setEditingBand(root);
         const band = bands[root];
         band.commands.focus((at && band.view.posAtCoords(at)?.pos) ?? 'end');
@@ -324,13 +355,19 @@ const TiptapEditor = ({
         enterBand(entryBand(preset.band));
     };
     // An image goes where the caret is and settles into that editor: a band's lives as long as the doc, and the body's
-    // is read again once the upload lands.
-    const insertTarget = editingBand ? () => bands[editingBand] : () => editorRef.current;
+    // is read again once the upload lands. A note's settles in the body, which holds every note.
+    const insertTarget = editingBand
+        ? () => bands[editingBand]
+        : notes.anchor
+          ? () => noteEditor
+          : () => editorRef.current;
+    const settleTarget = notes.anchor ? () => editorRef.current : insertTarget;
 
     // From the undo manager's own events: it moves an undone step onto the redo stack after the transaction that undid
     // it, so an editor transaction reads the stacks too early.
     const { canUndo, canRedo } = useYjsUndoState(
-        yUndoPluginKey.getState(activeEditor.state)?.undoManager ?? null,
+        // A note's history is the body's.
+        editingBand ? (yUndoPluginKey.getState(bands[editingBand].state)?.undoManager ?? null) : undoManager,
         canWrite,
     );
 
@@ -436,7 +473,8 @@ const TiptapEditor = ({
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
     // The figure, chart, equation and table panels follow the body's selection, so a band being edited closes them.
-    const showSidebar = !isMobile && (panel !== null || (canWrite && !editingBand && selectionPanel !== 'document'));
+    const showSidebar =
+        !isMobile && (panel !== null || (canWrite && !editingBand && !notes.anchor && selectionPanel !== 'document'));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
@@ -550,7 +588,7 @@ const TiptapEditor = ({
                                     onPageSetupChange={writeSetup}
                                     normalStyle={normalStyle}
                                     onUpdateNormalStyle={
-                                        editingBand
+                                        editingBand || notes.anchor
                                             ? undefined
                                             : () => updateNormalStyle(yDoc, undoManager, editor, normalStyle)
                                     }
@@ -562,7 +600,9 @@ const TiptapEditor = ({
                                     activityPanelOpen={activityPanelOpen}
                                     assignedCommentCount={assignedCount}
                                     onImageUpload={
-                                        mediaFolderId ? (file) => media.uploadImage(insertTarget, file) : undefined
+                                        mediaFolderId
+                                            ? (file) => media.uploadImage(insertTarget, file, settleTarget)
+                                            : undefined
                                     }
                                     onImagePickFromDrive={
                                         mediaFolderId
@@ -571,8 +611,12 @@ const TiptapEditor = ({
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                     // Comments anchor in the body only, and the Equation panel edits the body's.
-                                    onAddComment={chatFolderId && !editingBand ? handleAddComment : undefined}
-                                    onInsertEquation={editingBand ? undefined : insertEquation}
+                                    onAddComment={
+                                        chatFolderId && !editingBand && !notes.anchor ? handleAddComment : undefined
+                                    }
+                                    onInsertEquation={editingBand || notes.anchor ? undefined : insertEquation}
+                                    onInsertFootnote={bandsAllowed ? insertFootnote : undefined}
+                                    inNote={!!notes.anchor}
                                     onEnterBand={bandsAllowed ? (edge) => enterBand(entryBand(edge)) : undefined}
                                     onPageNumbers={bandsAllowed ? applyPreset : undefined}
                                 />
@@ -596,37 +640,52 @@ const TiptapEditor = ({
                                     // as in Google, and one in another band moves there, as that band is read-only
                                     // until entered; a press anywhere else would focus nothing, leaving the band
                                     // edited with Esc and typing reaching nothing, so it keeps the caret. A portaled
-                                    // menu or dialog is the band's own.
+                                    // menu or dialog is the band's own. An open note is left and kept alike, and
+                                    // another note opens itself.
                                     onMouseDown={
-                                        editingBand
+                                        notes.anchor && !editingBand
                                             ? (e) => {
                                                   const target = e.target;
                                                   if (
                                                       !(target instanceof Element) ||
-                                                      !e.currentTarget.contains(target)
+                                                      !e.currentTarget.contains(target) ||
+                                                      noteEditor.view.dom.contains(target)
                                                   ) {
                                                       return;
                                                   }
-                                                  if (target.closest('[data-page-body]')) {
-                                                      setEditingBand(null);
-                                                      return;
-                                                  }
-                                                  const pressed = BAND_ROOTS.find((root) =>
-                                                      bands[root].view.dom.contains(target),
-                                                  );
-                                                  if (pressed === editingBand) return;
-                                                  e.preventDefault();
-                                                  if (pressed) enterBand(pressed, { left: e.clientX, top: e.clientY });
+                                                  if (target.closest('[data-page-body]')) notes.close();
+                                                  else e.preventDefault();
                                               }
-                                            : undefined
+                                            : editingBand
+                                              ? (e) => {
+                                                    const target = e.target;
+                                                    if (
+                                                        !(target instanceof Element) ||
+                                                        !e.currentTarget.contains(target)
+                                                    ) {
+                                                        return;
+                                                    }
+                                                    if (target.closest('[data-page-body]')) {
+                                                        setEditingBand(null);
+                                                        return;
+                                                    }
+                                                    const pressed = BAND_ROOTS.find((root) =>
+                                                        bands[root].view.dom.contains(target),
+                                                    );
+                                                    if (pressed === editingBand) return;
+                                                    e.preventDefault();
+                                                    if (pressed)
+                                                        enterBand(pressed, { left: e.clientX, top: e.clientY });
+                                                }
+                                              : undefined
                                     }
                                 >
                                     <div
                                         data-document="true"
                                         className={cn(
                                             // eigen-paper: the page always renders light, in dark mode too (globals.css)
-                                            // Rows: the header band, the body, the footer band.
-                                            'eigen-paper grid grid-rows-[auto_1fr_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
+                                            // Rows: the header band, the body, the notes, the footer band.
+                                            'eigen-paper grid grid-rows-[auto_1fr_auto_auto] bg-white rounded-lg shadow-sm shadow-transparent print:shadow-none',
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}
@@ -662,6 +721,12 @@ const TiptapEditor = ({
                                                 'row-start-2 h-full min-w-0 tiptap-wrapper',
                                                 editingBand && 'opacity-50 print:opacity-100',
                                             )}
+                                        />
+                                        <FootnoteList
+                                            body={editor}
+                                            note={noteEditor}
+                                            open={notes.anchor}
+                                            onOpen={bandsAllowed ? openNote : undefined}
                                         />
                                         <PageBands
                                             edge="footer"
@@ -716,7 +781,7 @@ const TiptapEditor = ({
                 title="Replace image"
                 canPick={(item) => isImageMime(item.mimeType)}
                 onPickFromDrive={(paths) => media.replaceFromDrive(insertTarget, paths)}
-                onPickFromDevice={(files) => files[0] && media.replaceImage(insertTarget, files[0])}
+                onPickFromDevice={(files) => files[0] && media.replaceImage(insertTarget, files[0], settleTarget)}
                 accept="image/*"
             />
 

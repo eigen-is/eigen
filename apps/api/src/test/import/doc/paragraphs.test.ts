@@ -321,15 +321,15 @@ describe('notes', () => {
         expect(notesOf(json)).toEqual([['First'], ['End'], ['Last']]);
     });
 
-    // A Word custom mark: the reference shows the run's own text, which stays as text beside the numbered note.
-    test("a custom mark's text stays beside the note", async () => {
+    // A Word custom mark: the reference shows the run's own text in place of a number. A note numbers 1, 2, 3.
+    test("a custom mark's text goes, and the note keeps its number", async () => {
         const { json } = await importDocxBody(
             paragraph(`${run('Claim')}<w:r><w:footnoteReference w:customMarkFollows="1" w:id="1"/><w:t>*</w:t></w:r>`),
             { footnotes: note(1, run(' Starred')) },
         );
         expect(
             (json.content?.[0]?.content ?? []).map((node) => (node.type === 'text' ? node.text : node.type)),
-        ).toEqual(['Claim', 'footnote', '*']);
+        ).toEqual(['Claim', 'footnote']);
         expect(notesOf(json)).toEqual([['Starred']]);
     });
 

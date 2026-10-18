@@ -81,7 +81,7 @@ export function EditMenu({
                     }}
                 >
                     <TextSearch className="h-4 w-4 mr-2" /> Find and replace
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+Alt+F')}</DropdownMenuShortcut>
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+H')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
         </ToolbarMenu>

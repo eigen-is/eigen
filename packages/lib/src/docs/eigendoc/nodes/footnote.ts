@@ -14,6 +14,9 @@ const NAME = 'footnote';
 // A note's paragraph in HTML: a span, as a <p> inside the body's <p> closes it in every HTML parser.
 export const FOOTNOTE_PARAGRAPH = 'footnote-paragraph';
 
+// data-type, as a web page's own span.footnote is its text.
+export const FOOTNOTE_SELECTOR = `span[data-type="${NAME}"]`;
+
 // The schema can't refuse a note inside a note: the note holds the body's own paragraph, and a content expression
 // names what a node admits, never what it leaves out. So the insert refuses one, a paste flattens one, and every
 // renderer and writer reads a forged one through this: its paragraphs' inline content in its place, each after a space.
@@ -104,8 +107,7 @@ export const FootnoteNode = Node.create({
     selectable: true,
 
     parseHTML() {
-        // data-type, as a web page's own span.footnote is its text.
-        return [{ tag: `span[data-type="${NAME}"]`, getContent: noteContent }];
+        return [{ tag: FOOTNOTE_SELECTOR, getContent: noteContent }];
     },
 
     // Built, not a spec with a hole, which would render each paragraph as a <p>.

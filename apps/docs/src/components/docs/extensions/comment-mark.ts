@@ -51,7 +51,8 @@ export function addCommentAnchor(editor: Editor, { from, to }: { from: number; t
 }
 
 // Whether addCommentAnchor would anchor a card on the selection: a node holding a card attribute selected alone, or
-// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment.
+// text. AtomMarks strips the mark from any other atom, so a page number alone takes no comment, and a footnote's note
+// keeps the body's marks off its text, so a reference alone takes none either.
 export function canAnchorComment({ doc, selection: { from, to, empty } }: EditorState): boolean {
     if (empty) return false;
     const node = doc.nodeAt(from);
@@ -59,7 +60,7 @@ export function canAnchorComment({ doc, selection: { from, to, empty } }: Editor
     let text = false;
     doc.nodesBetween(from, to, (child) => {
         text ||= child.isText;
-        return !text;
+        return !text && child.type.name !== 'footnote';
     });
     return text;
 }

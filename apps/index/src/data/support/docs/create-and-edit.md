@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, editing, create, writing]
 related: [docs/format-text, docs/get-started]
 order: 20
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 Docs is the document editor in Eigen. You can create a new document in seconds, write and format your content in the browser, and share it with others when you're ready. Everything saves as you go.
@@ -54,7 +54,7 @@ The word count tells you how long the document is, or how long a part of it is.
 2. Open the **Tools** menu and choose **Word count**, or press Cmd+Shift+C (Mac) or Ctrl+Shift+C (Windows). On a phone, **Word count** sits in the **⋮** menu at the top right.
 3. Read the counts, then click **OK**.
 
-The dialog shows **Words**, **Characters**, and **Characters excluding spaces**. With text selected, each count shows the selection out of the whole document, such as "12 of 340". Text in tables, lists, and image captions counts, and line breaks don't count as characters. You can count words in a document you can only view, too.
+The dialog shows **Words**, **Characters**, and **Characters excluding spaces**. With text selected, each count shows the selection out of the whole document, such as "12 of 340". Text in tables, lists, and image captions counts. Footnotes don't count, and line breaks don't count as characters. You can count words in a document you can only view, too.
 
 ## Rename a document
 

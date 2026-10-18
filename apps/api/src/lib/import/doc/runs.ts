@@ -143,6 +143,8 @@ function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, conte
 }
 
 function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunProps, context: RunContext): void {
+    // A note numbers 1, 2, 3, so the text a custom mark draws in its place (w:customMarkFollows) goes.
+    let customMark = false;
     for (const child of children) {
         if (isAlternateContent(child)) {
             readRunContent(reader, alternative(child), direct, context);
@@ -165,7 +167,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
         }
         switch (child.local) {
             case 't':
-                pushText(reader, runText(child), direct, linked);
+                if (!customMark) pushText(reader, runText(child), direct, linked);
                 break;
             case 'tab':
             case 'ptab':
@@ -178,6 +180,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                 pushText(reader, '­', direct, linked);
                 break;
             case 'sym': {
+                if (customMark) break;
                 const unicode = symbolOf(w(child, 'font') ?? '', Number.parseInt(w(child, 'char') ?? '', 16));
                 if (unicode) pushText(reader, unicode, direct, linked);
                 break;
@@ -216,6 +219,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                     w(child, 'id') ?? '',
                 );
                 if (content) context.pieces.push({ kind: 'node', node: { type: 'footnote', content } });
+                customMark = isOn(w(child, 'customMarkFollows')) === true;
                 break;
             }
             case 'ruby':

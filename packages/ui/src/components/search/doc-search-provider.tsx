@@ -17,7 +17,7 @@ const DEBOUNCE_MS = 150;
 
 export type DocSearchBarContextValue = {
     open: () => void; // open the bar (or re-focus + select it when already open) — ⌘F / toolbar ⌕ / Edit-menu
-    openReplace: () => void; // open in replace mode when the surface canReplace, else plain search — ⌥⌘F / Edit-menu
+    openReplace: () => void; // open in replace mode when the surface canReplace, else plain search — ⇧⌘H / Edit-menu
     canReplace: boolean; // lets chrome (Edit menu) hide "Find and replace" on read-only surfaces
 };
 
@@ -76,14 +76,15 @@ export function DocSearchProvider({
     const [options, setOptions] = useState<DocSearchOptions>(DEFAULT_OPTIONS);
     const [matches, setMatches] = useState<DocSearchMatch[]>([]);
     const [activeIndex, setActiveIndex] = useState(-1);
-    // Replace session state. mode is 'search' until ⌥⌘F / the chevron opens replace;
+    // Replace session state. mode is 'search' until ⇧⌘H / the chevron opens replace;
     // replacedCount is the transient "Replaced N" the bar shows after Replace All.
     const [mode, setMode] = useState<'search' | 'replace'>('search');
     const [replacement, setReplacement] = useState('');
     const [preserveCase, setPreserveCase] = useState(false);
     const [replacedCount, setReplacedCount] = useState<number | null>(null);
     const canReplace = controller.canReplace ?? false;
-    // ⌥⌘F everywhere; Mod+H only off macOS (plain ⌘H is macOS Hide, never reaches the page).
+    // ⇧⌘H everywhere, as in Google Docs, whose ⌥⌘F is a footnote; Mod+H only off macOS (plain ⌘H is macOS Hide,
+    // never reaches the page).
     const isMac = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
 
     const inputRef = useRef<HTMLInputElement>(null);
@@ -299,7 +300,7 @@ export function DocSearchProvider({
         flashReplaced(replaced);
     }, [query, replacement, options, preserveCase, adoptMatches, flashReplaced]);
 
-    // Shared by the ⌥⌘F / Win-Linux Mod+H hotkeys and the Edit-menu item: open the bar in replace
+    // Shared by the ⇧⌘H / Win-Linux Mod+H hotkeys and the Edit-menu item: open the bar in replace
     // mode when the surface supports it, else plain search (read-only docs/sheets, slides, stickies).
     const openReplace = useCallback(() => {
         setMode(controllerRef.current.canReplace ? 'replace' : 'search');
@@ -316,9 +317,8 @@ export function DocSearchProvider({
         },
         { enabled: !dialogOpen },
     );
-    // ⌥⌘F on macOS, Ctrl+Alt+F elsewhere (order-free at runtime)
     useHotkey(
-        'Mod+Alt+F',
+        'Mod+Shift+H',
         (e) => {
             e.preventDefault();
             openReplace();
