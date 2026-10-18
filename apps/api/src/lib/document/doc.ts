@@ -6,10 +6,13 @@ import {
     type BandRoot,
     bandHasContent,
     FIRST_PAGE_BAND,
+    type NormalStyle,
     PAGE_ROOT,
     type PageSetup,
     pageRecord,
+    readNormalStyle,
     readPageSetup,
+    STYLE_ROOT,
 } from '@workspace/lib/docs/eigendoc';
 import * as Y from 'yjs';
 import { docSchema } from './doc-schema';
@@ -25,6 +28,10 @@ export function readEigendocFromDoc(doc: Y.Doc): JSONContent {
 
 export function readEigendocPage(doc: Y.Doc): PageSetup {
     return readPageSetup(doc.getMap(PAGE_ROOT).toJSON());
+}
+
+export function readEigendocStyle(doc: Y.Doc): NormalStyle {
+    return readNormalStyle(doc.getMap(STYLE_ROOT).toJSON());
 }
 
 // The bands that print, each as the body's JSON: one with content only, a first-page one only when page 1 differs.
@@ -52,10 +59,13 @@ export function readEigendocBands(doc: Y.Doc): EigendocBands {
 }
 
 // The import commit: a Yjs update prepared elsewhere (the transform process) replaces the body and the bands, and the
-// file's page replaces the page, in one transaction. Clearing first is what makes an import a replacement: an applied
-// update alone appends. The page keys are set here, on the live doc: set in the update, each would be concurrent with
-// the live key, and Yjs keeps whichever client id orders last.
-export function commitEigendocImport(doc: Y.Doc, { update, page }: { update: Uint8Array; page: PageSetup }): void {
+// file's page and Normal replace the doc's, in one transaction. Clearing first is what makes an import a replacement:
+// an applied update alone appends. The page and style keys are set here, on the live doc: set in the update, each would
+// be concurrent with the live key, and Yjs keeps whichever client id orders last.
+export function commitEigendocImport(
+    doc: Y.Doc,
+    { update, page, style }: { update: Uint8Array; page: PageSetup; style: NormalStyle },
+): void {
     doc.transact(() => {
         for (const root of ['default', ...BAND_ROOTS]) {
             const fragment = doc.getXmlFragment(root);
@@ -64,5 +74,7 @@ export function commitEigendocImport(doc: Y.Doc, { update, page }: { update: Uin
         Y.applyUpdate(doc, update);
         const map = doc.getMap(PAGE_ROOT);
         for (const [key, value] of Object.entries(pageRecord(page))) map.set(key, value);
+        const normal = doc.getMap(STYLE_ROOT);
+        for (const [key, value] of Object.entries(style)) normal.set(key, value);
     });
 }

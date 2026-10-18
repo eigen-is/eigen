@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/react';
+import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { PARAGRAPH_FORMAT_LIMITS, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -8,6 +9,8 @@ import { useState } from 'react';
 
 type CustomSpacingDialogProps = {
     editor: Editor;
+    // The doc's Normal, which an unformatted paragraph draws.
+    normal: NormalStyle;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 };
@@ -21,7 +24,7 @@ const KEYS = ['lineSpacing', 'spaceBefore', 'spaceAfter'] as const satisfies rea
 const fieldText = (value: number) => String(Math.round(value * 100) / 100);
 
 // Google Docs' Format › Line & paragraph spacing › Custom spacing, on the paragraphs the selection spans.
-export function CustomSpacingDialog({ editor, open, onOpenChange }: CustomSpacingDialogProps) {
+export function CustomSpacingDialog({ editor, normal, open, onOpenChange }: CustomSpacingDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -36,7 +39,7 @@ export function CustomSpacingDialog({ editor, open, onOpenChange }: CustomSpacin
                 <DialogHeader>
                     <DialogTitle>Custom spacing</DialogTitle>
                 </DialogHeader>
-                <CustomSpacingForm editor={editor} onDone={() => onOpenChange(false)} />
+                <CustomSpacingForm editor={editor} normal={normal} onDone={() => onOpenChange(false)} />
             </DialogContent>
         </Dialog>
     );
@@ -44,14 +47,14 @@ export function CustomSpacingDialog({ editor, open, onOpenChange }: CustomSpacin
 
 // Mounted with the dialog, so each opening starts from what the selection's first paragraph draws. A list, a quote and a
 // table cell own the space around what they hold, so there only the line spacing is the paragraph's.
-function CustomSpacingForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
-    const [{ drawn: initial, spacing }] = useState(() => selectionParagraphFormat(editor.state, editor.view));
+function CustomSpacingForm({ editor, normal, onDone }: { editor: Editor; normal: NormalStyle; onDone: () => void }) {
+    const [{ drawn: initial, spacing }] = useState(() => selectionParagraphFormat(editor.state, editor.view, normal));
     const [text, setText] = useState<Record<SpacingKey, string>>(() => ({
         lineSpacing: fieldText(initial.lineSpacing),
         spaceBefore: fieldText(initial.spaceBefore),
         spaceAfter: fieldText(initial.spaceAfter),
     }));
-    // An untouched field writes nothing, so an unset paragraph keeps the doc's look.
+    // An untouched field writes nothing, so an unset paragraph keeps the doc's Normal.
     const changed = KEYS.filter((key) => text[key] !== fieldText(initial[key]));
     const valid = changed.every((key) => {
         const value = text[key].trim() ? Number(text[key]) : Number.NaN;

@@ -10,7 +10,7 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor } = await import('@tiptap/react');
-const { getDocExtensions, PARAGRAPH_FORMAT_KEYS } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_NORMAL_STYLE, getDocExtensions, PARAGRAPH_FORMAT_KEYS } = await import('@workspace/lib/docs/eigendoc');
 const { CustomSpacingDialog } = await import('../../../components/docs/custom-spacing-dialog');
 const { IndentationOptionsDialog } = await import('../../../components/docs/indentation-options-dialog');
 
@@ -68,10 +68,18 @@ async function apply() {
     await act(async () => button('Apply')?.click());
 }
 
-async function open(dialog: typeof CustomSpacingDialog, content: JSONContent, from = 1, to = from) {
+async function open(
+    dialog: typeof CustomSpacingDialog,
+    content: JSONContent,
+    from = 1,
+    to = from,
+    normal = DEFAULT_NORMAL_STYLE,
+) {
     editor.commands.setContent(content);
     editor.commands.setTextSelection({ from, to });
-    ({ unmount } = await renderInDocument(createElement(dialog, { editor, open: true, onOpenChange: () => {} })));
+    ({ unmount } = await renderInDocument(
+        createElement(dialog, { editor, normal, open: true, onOpenChange: () => {} }),
+    ));
 }
 
 test("Custom spacing opens on Eigen's look for an unset paragraph, and an untouched field writes nothing", async () => {
@@ -81,6 +89,16 @@ test("Custom spacing opens on Eigen's look for an unset paragraph, and an untouc
     await type('Before', '6');
     await apply();
     expect(formats()).toEqual([{ spaceBefore: 6 }]);
+});
+
+test("Custom spacing opens on the doc's Normal for an unset paragraph", async () => {
+    await open(CustomSpacingDialog, paragraphs({}), 1, 1, {
+        ...DEFAULT_NORMAL_STYLE,
+        lineSpacing: 1.15,
+        spaceBefore: 3,
+        spaceAfter: 10,
+    });
+    expect(['Line spacing', 'Before', 'After'].map(value)).toEqual(['1.15', '3', '10']);
 });
 
 test('Custom spacing writes every selected paragraph, from what the first one draws', async () => {

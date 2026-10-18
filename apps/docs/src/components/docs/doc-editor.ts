@@ -26,7 +26,9 @@ import {
     PAGE_BAND_CLASS,
     PAGE_ROOT,
     pagePx,
+    readNormalStyle,
     readPageSetup,
+    STYLE_ROOT,
 } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -280,6 +282,8 @@ export function docEditorOptions({
         const { width, margin } = pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
         return width - margin.left - margin.right;
     };
+    // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one.
+    const normalStyle = () => readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON());
     const settle = note ? target.body : editor;
     const leave = (onLeave: () => void) =>
         Extension.create({
@@ -298,6 +302,7 @@ export function docEditorOptions({
             ...getDocExtensions({
                 lowlight,
                 textColumnWidth,
+                normalStyle,
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
                     ...(band || note ? [] : ['footnote']),
@@ -352,7 +357,8 @@ export function docEditorOptions({
                 copy: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
                 cut: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
             },
-            transformPastedHTML: (html: string) => cleanPastedHTML(html, textColumnWidth(), cardIds(), !band),
+            transformPastedHTML: (html: string) =>
+                cleanPastedHTML(html, textColumnWidth(), cardIds(), normalStyle().font, !band),
             // A note pasted into a note is nested in it: its text stays, in its place.
             transformPasted: note
                 ? (slice, view) =>

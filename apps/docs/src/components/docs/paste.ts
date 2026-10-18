@@ -1,13 +1,15 @@
-import { bundledFontOfStack, DOCUMENT_FONT, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
+import { bundledFontOfStack, DOCUMENT_FONT_SIZE, getFontFamily } from '@workspace/lib/constants/fonts';
 import { FOOTNOTE_SELECTOR, ITALIC_HEADING_SELECTOR, unwrapRenderedMath } from '@workspace/lib/docs/eigendoc';
 
 // Pasted HTML before the schema parses it: a drawn equation as its <math> alone, foreign fonts onto the bundled ones,
-// no size the doc draws already, images, charts and tables no wider than the column, no anchor for a comment card this
-// document lacks, in an italic heading an upright run as the mark, and no footnote where none goes.
+// no font or size the doc draws already, images, charts and tables no wider than the column, no anchor for a comment
+// card this document lacks, in an italic heading an upright run as the mark, and no footnote where none goes.
+// normalFont: the doc's Normal font.
 export function cleanPastedHTML(
     html: string,
     maxWidth: number,
     cardIds: ReadonlySet<string>,
+    normalFont: string,
     footnotes = true,
 ): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -45,9 +47,9 @@ export function cleanPastedHTML(
     // runs carry, not its body's on every span as Google Docs does, so its sizes are kept.
     const pmCopy = doc.querySelector('[data-pm-slice]') !== null;
     for (const el of doc.querySelectorAll<HTMLElement>('[style]')) {
-        // The document font needs no mark.
+        // The Normal's font needs no mark; any other, Inter in a Times doc too, keeps one.
         const font = bundledFontOfStack(el.style.fontFamily);
-        el.style.fontFamily = font && font !== DOCUMENT_FONT ? getFontFamily(font) : '';
+        el.style.fontFamily = font && font !== normalFont ? getFontFamily(font) : '';
         // Google Docs writes a size on every span: its body's, which is the doc's, and in a heading the heading's,
         // which the doc's heading draws as its own.
         if (!pmCopy && (el.style.fontSize === `${DOCUMENT_FONT_SIZE}pt` || el.closest('h1, h2, h3, h4, h5, h6')))

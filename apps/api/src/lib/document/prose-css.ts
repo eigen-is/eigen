@@ -18,6 +18,9 @@ const FONT_WEIGHTS = new Map(
 // A comma outside parentheses, so `:is(h1, h2)` stays one item.
 const SELECTOR_LIST_COMMA = /,(?![^(]*\))/;
 
+// A custom property the page sets only for a doc's own Normal: the value read is Eigen's own, its fallback.
+const CUSTOM_PROPERTY = /var\(--[\w-]+,\s*([^()]*)\)/g;
+
 export const PROSE_CSS = flattenEigenProseCSS(eigenProseCSSRaw);
 
 const PROSE_RULES = parseRules(PROSE_CSS);
@@ -125,7 +128,13 @@ function parseRules(css: string): Map<string, Map<string, string>> {
             for (const declaration of body.split(';')) {
                 const colon = declaration.indexOf(':');
                 if (colon > 0)
-                    declarations.set(declaration.slice(0, colon).trim(), declaration.slice(colon + 1).trim());
+                    declarations.set(
+                        declaration.slice(0, colon).trim(),
+                        declaration
+                            .slice(colon + 1)
+                            .replace(CUSTOM_PROPERTY, '$1')
+                            .trim(),
+                    );
             }
             rules.set(selector, declarations);
         }

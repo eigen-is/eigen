@@ -119,6 +119,32 @@ test("quick look and the Drive thumbnail draw an eigendoc on the doc's own page"
     }
 });
 
+test("quick look and the Drive thumbnail draw an eigendoc's text in its Normal", async () => {
+    const style = {
+        font: 'Source Serif 4',
+        size: 12,
+        lineSpacing: 1.4,
+        spaceBefore: 0,
+        spaceAfter: 11,
+        color: '#1a1a2e',
+    };
+    textPreview = { mode: 'eigendoc', body: '<p>Quarterly report</p>', style };
+    try {
+        const quickLook = await renderQuickLook();
+        const paper = quickLook.container.querySelector<HTMLElement>('.eigen-prose')?.parentElement;
+        expect(paper?.style.getPropertyValue('--doc-font-size')).toBe('12pt');
+        expect(paper?.style.getPropertyValue('--doc-font-family')).toBe("'Source Serif 4', serif");
+        await quickLook.unmount();
+        const hero = await renderInDocument(createElement(DrivePreview, { path }));
+        expect(
+            hero.container.querySelector<HTMLElement>('.eigen-prose')?.style.getPropertyValue('--doc-font-size'),
+        ).toBe('12pt');
+        await hero.unmount();
+    } finally {
+        textPreview = { mode: 'eigendoc', body: '<p>Quarterly report</p>' };
+    }
+});
+
 test('the Drive thumbnail keeps the default page for markdown, whatever page the result carries', async () => {
     textPreview = { mode: 'markdown', body: '<p>Quarterly report</p>', page: LETTER };
     try {

@@ -17,6 +17,14 @@ describe('prose css — the lookup', () => {
         expect(proseValue('.eigen-prose blockquote', 'margin-bottom')).toBe('1em');
     });
 
+    // The page sets a --doc-* property only for a doc's own Normal, so what is read is Eigen's own look.
+    test("a custom property answers with its fallback, and the sheet keeps the var() for a doc's Normal", () => {
+        expect(proseValue('.eigen-prose', 'font-size')).toBe('11pt');
+        expect(proseValue('.eigen-prose', 'font-family')).toBe('"Inter", system-ui, -apple-system, sans-serif');
+        expect(proseValue('.eigen-prose p', 'margin-bottom')).toBe('11pt');
+        expect(PROSE_CSS).toContain('font-size: var(--doc-font-size, 11pt)');
+    });
+
     test('weights come from font-weights.css', () => {
         expect(proseValue('.eigen-prose strong', 'font-weight')).toBe('600');
     });

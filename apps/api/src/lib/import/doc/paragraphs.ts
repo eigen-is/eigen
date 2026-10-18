@@ -1,7 +1,14 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
 import { DOCUMENT_FONT, EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
-import { type PageSetup, pagePx, pageTwips, readPageSetup } from '@workspace/lib/docs/eigendoc';
+import {
+    type NormalStyle,
+    type PageSetup,
+    pagePx,
+    pageTwips,
+    readNormalStyle,
+    readPageSetup,
+} from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
@@ -10,7 +17,7 @@ import { CHECKBOX_GLYPHS, LIST_LEVELS, STYLE_NAMES } from '../../document/wordml
 import { fontLineHeight } from '../../export/fonts';
 import { DOCUMENT_TOO_LARGE } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { byFace, type FontTable, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
+import { byFace, type FontTable, fontMark, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
 import { Numbering } from './numbering';
 import { alternative, type DocxPackage, descendants, type Part, twipsOf, w, wChild } from './package';
@@ -53,6 +60,8 @@ export type Reader = {
     bodySize: number;
     bodySizeCs: number;
     baseColor: string | undefined;
+    // The docx's Normal as the doc stores it, which a run in its font and a paragraph in its format need no mark for.
+    normal: NormalStyle;
     // The doc holds one page, the body's final section's; its text column places anchors and caps widths.
     page: PageSetup;
     columnTwips: number;
@@ -83,15 +92,22 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const theme = readTheme(pkg.theme, { bidi: w(lang, 'bidi'), eastAsia: w(lang, 'eastAsia') });
     const styles = new Styles(pkg.styles, theme);
     const body = mergeRun(styles.docRun, styles.run(styles.defaultParagraph));
+    const fontTable = readFontTable(pkg.fontTable);
     const sectPr = wChild(wChild(pkg.document.root, 'body'), 'sectPr');
     const size = sectionPage(sectPr);
     const page = { ...size, differentFirstPage: pkg.titlePg };
     const px = pagePx(page);
     const twips = pageTwips(page);
+    // Word's default is 10 pt.
+    const bodySize = body.size ?? 20;
+    const font = fontMark(byFace(' ', body.fonts, body, false)[0]?.font, fontTable) ?? DOCUMENT_FONT;
+    const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
+    // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
+    const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) / 240 : 1;
     return {
         pkg,
         theme,
-        fontTable: readFontTable(pkg.fontTable),
+        fontTable,
         styles,
         numbering: new Numbering(pkg.numbering, styles),
         images: [],
@@ -100,10 +116,17 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         fields: [],
         graphicsDropped: 0,
         graphicParts: new Set(),
-        // Word's default is 10 pt.
-        bodySize: body.size ?? 20,
+        bodySize,
         bodySizeCs: body.sizeCs ?? body.size ?? 20,
         baseColor: body.color?.hex,
+        normal: readNormalStyle({
+            font,
+            size: bodySize / 2,
+            lineSpacing: (line * fontLineHeight(font)) / fontLineHeight(DOCUMENT_FONT),
+            spaceBefore: (para.before ?? 0) / 20,
+            spaceAfter: (para.after ?? 0) / 20,
+            color: body.color?.hex && markColor(body.color.hex),
+        }),
         page,
         columnTwips: twips.width - twips.margin.left - twips.margin.right,
         columnPx: Math.floor(px.width - px.margin.left - px.margin.right),
@@ -331,28 +354,29 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         });
 
     // What the paragraph sets apart from the docx's Normal, or a heading, a title or a quote from its style, whose look
-    // is the node's. The writer scales the line of a paragraph all in one other family by that family's line, which
-    // this undoes, so a line Word draws as Normal's reads as none.
+    // is the node's. A line is drawn in its family's own line, so it is stored as a multiple of Inter's; the writer
+    // scales the line of a paragraph all in one family other than the Normal's by that family's line, which this
+    // undoes, so a line Word draws as Normal's reads as none.
     const base = role.kind === 'paragraph' ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
     const autoLine = (para: ParaProps) => ((para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : undefined);
     const line = autoLine(props);
     const baseLine = autoLine(base);
+    const { normal } = reader;
     const families = new Set(
         texts.flatMap((piece) =>
             piece.kind === 'node' && piece.node.text?.trim()
-                ? [piece.node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'] ?? DOCUMENT_FONT]
+                ? [piece.node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'] ?? normal.font]
                 : [],
         ),
     );
     const [family] = families;
-    const scale =
-        families.size === 1 && EIGEN_FONT_NAMES.includes(family)
-            ? fontLineHeight(family) / fontLineHeight(DOCUMENT_FONT)
-            : 1;
+    const scaleOf = (font: string) => fontLineHeight(font) / fontLineHeight(DOCUMENT_FONT);
+    const scale = families.size === 1 && EIGEN_FONT_NAMES.includes(family) ? scaleOf(family) : 1;
     const lineSpacing =
         line !== undefined &&
         line !== baseLine &&
-        (baseLine === undefined || Math.round((line * scale) / 2.4) !== Math.round(baseLine / 2.4))
+        (baseLine === undefined ||
+            Math.round((line * scale) / 2.4) !== Math.round((baseLine * scaleOf(normal.font)) / 2.4))
             ? (line * scale) / 240
             : undefined;
     const before = props.before ?? 0;

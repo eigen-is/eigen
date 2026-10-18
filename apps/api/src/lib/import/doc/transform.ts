@@ -19,7 +19,7 @@ export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     publicOrigin: string | undefined,
 ): DocImportWorkerResult & { warnings: TransformWarning[] } {
-    const { doc, bands, page, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
+    const { doc, bands, page, style, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
     let update: Uint8Array;
     try {
         // The bands ride in the update beside the body; the commit clears every root before it applies.
@@ -35,6 +35,7 @@ export function importDocxToEigendocUpdate(
     return {
         update: toTransferableBuffer(update),
         page,
+        style,
         images: images.map((image) => ({
             name: image.name,
             contentType: image.contentType,
