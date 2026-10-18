@@ -172,6 +172,15 @@ describe('arcTo', () => {
         expect(quarter([100, 50], 720, 90)).toBe(quarter([100, 50], 0, 90));
     });
 
+    test('a negative radius sweeps a full turn at most too, in four curves', () => {
+        const radii = [-1, -50, 50];
+        const sweeps = [359.9, 360, -360, 3600];
+        for (const [wR, hR, swAng] of radii.flatMap((wR) => radii.flatMap((hR) => sweeps.map((sw) => [wR, hR, sw])))) {
+            const arc = path(moveTo(50, 20) + arcTo(wR, hR, 45, swAng), 'w="100" h="100" fill="none"');
+            expect(geometry(arc)?.[0].path.match(/C/g)?.length ?? 0).toBeLessThanOrEqual(4);
+        }
+    });
+
     test("takes its angles on the ellipse as drawn: an end at 45° lies on the centre's 45° ray", () => {
         // wR 100, hR 50 about (100, 50) in a 200 × 100 space: t = atan(2) on the ellipse, (100 + 44.72, 50 + 44.72).
         const found = pathOf(path(moveTo(200, 50) + arcTo(100, 50, 0, 45), 'w="200" h="100"'));
@@ -300,10 +309,13 @@ describe('fill and stroke', () => {
         // Lines fill nothing, so overlapping they concatenate.
         const crossing = path(moveTo(0, 0) + lnTo(100, 100), 'w="100" h="100" fill="none"');
         expect(geometry(crossing + crossing.replace('x="0"', 'x="100"'))).toHaveLength(1);
-        // Past MAX_SHAPE_PATHS, alike paths concatenate overlapping or not.
+        // Past MAX_SHAPE_PATHS geometries, alike paths concatenate overlapping or not, and a path painting a new way
+        // leaves the shape undrawn.
         const stacked = geometry(wall.repeat(MAX_SHAPE_PATHS + 5));
         expect(stacked).toHaveLength(MAX_SHAPE_PATHS);
         expect(stacked?.at(-1)?.path.split('M')).toHaveLength(7);
+        expect(geometry(crossing + wall.repeat(MAX_SHAPE_PATHS + 5))).toHaveLength(MAX_SHAPE_PATHS);
+        expect(geometry(wall.repeat(MAX_SHAPE_PATHS) + crossing)).toBeUndefined();
     });
 
     test('the filled geometries come first, the lines after: LibreOffice and Apache POI stroke over every fill', () => {
@@ -544,6 +556,16 @@ describe('caps', () => {
         for (let i = 1; i <= 1000; i++) zigzag += lnTo(i / 10, i % 2 === 0 ? 0 : 100);
         const unfilled = path(zigzag, 'w="100" h="100" fill="none"');
         expect(leftAfter(5000, () => expect(geometry(unfilled)).toBeUndefined())).toBeGreaterThan(2000);
+    });
+
+    test("charges a filled path's box tests against the alike geometry it may join, and lines none", () => {
+        const charged = (paths: string) => 100_000 - leftAfter(100_000, () => geometry(paths));
+        // Each line's path node, its 2 commands and their 2 points.
+        const line = path(moveTo(0, 0) + lnTo(10, 10), 'w="100" h="100" fill="none"');
+        expect(charged(line.repeat(250))).toBe(250 * 5);
+        // The second triangle's box against the first's, besides each one's 8 nodes and 3-point outline.
+        const triangle = path(moveTo(0, 0) + lnTo(10, 0) + lnTo(10, 10) + CLOSE);
+        expect(charged(triangle + triangle.replaceAll('"0"', '"20"').replaceAll('"10"', '"30"'))).toBe(2 * (8 + 3) + 1);
     });
 
     test("charges the read's work budget for its guides, commands and outline, and is undrawn where it can't cover them", () => {

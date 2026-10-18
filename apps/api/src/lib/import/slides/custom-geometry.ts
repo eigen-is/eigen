@@ -31,7 +31,8 @@ const MAX_SUBPATHS = MAX_PATH_COMMANDS / 2;
 
 // Paths painting alike concatenate only while their boxes overlap none of the others': the canvas fills nonzero, but the
 // pptx export writes the element as one a:path, which LibreOffice fills even-odd, so an overlap would come back a hole.
-// Past this many geometries a shape's alike paths concatenate overlapping or not.
+// A shape is this many geometries at most, so twice as many elements, a filled open one's fill and line apart: past it
+// an alike path concatenates overlapping or not, and one painting a new way leaves the shape undrawn.
 export const MAX_SHAPE_PATHS = 32;
 
 // A curve's outline is its chords, as many as Wang's formula says keep within this fraction of the box of it, so a
@@ -87,8 +88,6 @@ export function customGeometry(
     if (!guides) return undefined;
     const paths = pathLst ? xmlElements(pathLst).filter((path) => path.ns === A_NS && path.local === 'path') : [];
     charge(nodes - (avLst?.children.length ?? 0) - (gdLst?.children.length ?? 0));
-    // Each path's box against those of the alike paths before it, at most.
-    if (!spend((paths.length * (paths.length - 1)) / 2)) return undefined;
     const painted: Painted[] = [];
     const lastPainted = new Map<string, Painted>();
     for (const path of paths) {
@@ -105,11 +104,14 @@ export function customGeometry(
         const box = boundsOf(subpaths.flatMap(pointsOf));
         const key = `${filled} ${stroked} ${shade}`;
         const last = lastPainted.get(key);
-        const apart = !filled || painted.length >= MAX_SHAPE_PATHS || !last?.boxes.some((other) => overlap(box, other));
-        if (last && apart) {
+        const full = painted.length >= MAX_SHAPE_PATHS;
+        // Its box against each of the alike geometry's it may join.
+        if (filled && last && !full && !spend(last.boxes.length)) return undefined;
+        if (last && (!filled || full || !last.boxes.some((other) => overlap(box, other)))) {
             last.subpaths.push(...subpaths);
             last.boxes.push(box);
-        } else {
+        } else if (full) return undefined;
+        else {
             const started = { filled, stroked, shade, subpaths, boxes: [box] };
             painted.push(started);
             lastPainted.set(key, started);
@@ -341,7 +343,8 @@ function inBox(value: number, extent: number): number {
 }
 
 // arcTo's angles are on the ellipse as drawn, so each maps to the parametric angle that reaches it, keeping its turns. A
-// sweep past a full turn retraces it, so it stops at one: four quarters at most.
+// sweep past a full turn retraces it, so it stops at one: four quarters at most. A negative radius turns the mapping
+// half a turn, so its ends can land a turn further apart: the parametric sweep stops at one too.
 function arcCurves(from: Point, radii: Point, startAngle: number, sweepAngle: number): Point[][] {
     const start = (startAngle % FULL_TURN) * RADIANS_PER_UNIT;
     const sweep = clamp(sweepAngle, -FULL_TURN, FULL_TURN) * RADIANS_PER_UNIT;
@@ -349,7 +352,8 @@ function arcCurves(from: Point, radii: Point, startAngle: number, sweepAngle: nu
         const turns = Math.round((visual - Math.atan2(Math.sin(visual), Math.cos(visual))) / (2 * Math.PI));
         return Math.atan2(radii.x * Math.sin(visual), radii.y * Math.cos(visual)) + turns * 2 * Math.PI;
     };
-    const [first, last] = [parametric(start), parametric(start + sweep)];
+    const first = parametric(start);
+    const last = first + clamp(parametric(start + sweep) - first, -2 * Math.PI, 2 * Math.PI);
     const centre = { x: from.x - radii.x * Math.cos(first), y: from.y - radii.y * Math.sin(first) };
     const on = (t: number) => ({ x: centre.x + radii.x * Math.cos(t), y: centre.y + radii.y * Math.sin(t) });
     const tangent = (t: number, k: number) => ({ x: -k * radii.x * Math.sin(t), y: k * radii.y * Math.cos(t) });
