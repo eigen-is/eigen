@@ -17,7 +17,7 @@ export type FrameChart =
     | { chart: string; color: string; strokeColor: string }
     | { unsupported: { title: string; name: string } };
 
-// Painted as a document's and a sheet's charts are, in Inter, unfilled as PowerPoint's plot area; coloured as the slide.
+// Painted as a document's and a sheet's charts are, in Inter, unfilled as PowerPoint's plot area.
 export const CHART_PAINT = {
     fill: FLAT_CHART_PAINT.background,
     fontFamily: FLAT_CHART_PAINT.fontFamily,

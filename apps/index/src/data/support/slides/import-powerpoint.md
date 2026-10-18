@@ -5,10 +5,10 @@ type: how-to
 tags: [slides, import, powerpoint, pptx]
 related: [slides/export-slides, slides/add-slides]
 order: 100
-updated: 2026-10-14
+updated: 2026-10-18
 ---
 
-You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in Drive into a new presentation, or import its slides into a presentation you already have open. Its slides come across with their text, shapes, pictures, and backgrounds.
+You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in Drive into a new presentation, or import its slides into a presentation you already have open. Its slides come across with their text, shapes, pictures, charts, and backgrounds.
 
 ## Convert a PowerPoint file in Drive
 
@@ -34,6 +34,7 @@ An **Importing slides** dialog shows while the file imports. Pictures from the f
 - Text keeps its bold, italic, underline, color, size, and alignment. Fonts become Eigen's own: a sans-serif font such as Calibri or Arial shows in Inter, a serif font such as Times New Roman in Source Serif 4, and a monospace font such as Courier New in JetBrains Mono.
 - Rectangles, rounded rectangles, ovals, diamonds, pie shapes, lines, and arrows, with their fill and outline.
 - PNG, JPEG, GIF, and SVG pictures.
+- Column, bar, line, and pie charts, with their data, colors, and title. They become Slides charts, so you can [edit their data](/support/slides/insert-content) like any other chart. A 3-D chart comes in flat.
 - Slide backgrounds: a color, a gradient, or a picture.
 - The shapes and pictures of the slide master and layout, such as a logo or a border, on every slide that shows them.
 
@@ -43,7 +44,8 @@ A widescreen (16:9) slide fills the slide in Slides. A standard (4:3) slide is f
 
 When you use **Import slides…**, a message afterwards counts what didn't come across, for example "2 tables and 1 SmartArt graphic were not imported; 5 shapes were simplified."
 
-- A table, chart, SmartArt graphic, or embedded object becomes a box that says what was there, so you can see the gap and rebuild it.
+- A table, SmartArt graphic, or embedded object becomes a box that says what was there, so you can see the gap and rebuild it. The box is see-through, so a title behind it stays readable.
+- A chart Slides can't draw the way PowerPoint does, such as an area, scatter, doughnut, or combo chart, becomes a box that names the kind of chart and its title, for example **Scatter chart not imported**.
 - A shape Slides has no shape for, such as a star or a block arrow, keeps its text but loses its outline.
 - Pictures come in uncropped and unflipped. A TIFF, EMF, or WMF picture becomes a box that says **Picture not imported**.
 - A pattern fill becomes a plain color, a gradient keeps its first and last color, and a picture used to fill a shape is left out.

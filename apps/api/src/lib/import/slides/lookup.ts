@@ -8,8 +8,8 @@ import { PRESENTATION_TOO_LARGE } from '../messages';
 // One of a few children is scanned each time instead, which costs no more than the index and keeps no memory.
 const SCANNED_BELOW = 16;
 
-// What the read under way may still do, in children scanned, colours resolved, characters and shapes read. The caches
-// here are keyed by element and live past a read, so the budget is the module's while a read runs; a read is
+// What the read under way may still do, in children scanned, colours resolved, characters, shapes and charts read. The
+// caches here are keyed by element and live past a read, so the budget is the module's while a read runs; a read is
 // synchronous, so no other read charges it meanwhile.
 let workLeft = Number.POSITIVE_INFINITY;
 
