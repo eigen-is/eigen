@@ -16,6 +16,7 @@ import { FigureNode } from './nodes/figure';
 import { EigenFontFamily } from './nodes/font-family';
 import { EigenFontSize } from './nodes/font-size';
 import { FootnoteNode } from './nodes/footnote';
+import { EigenLink } from './nodes/link';
 import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
 import { PageNumberNode } from './nodes/page-number';
@@ -39,11 +40,13 @@ export function getDocExtensions(options?: {
             undoRedo: false,
             codeBlock: false,
             orderedList: false,
-            link: {
-                HTMLAttributes: {
-                    target: '_blank',
-                    rel: 'noopener noreferrer',
-                },
+            link: false,
+        }),
+        EigenLink.configure({
+            autolink: false,
+            HTMLAttributes: {
+                target: '_blank',
+                rel: 'noopener noreferrer',
             },
         }),
         EigenOrderedList,
