@@ -39,7 +39,7 @@ Double-click the header or footer, then choose **Options → Remove header** or 
 ## Good to know
 
 - **File → Print** and the PDF and Word downloads put the header and footer on every page, with the page numbers filled in, and the first page's own when it differs. The web page download shows the header at the top and the footer at the end.
-- A header or footer taller than its margin moves your text away from it, on the page and in the PDF. In the PDF, the header and footer never take more than half the page: the rest of a taller one runs over your text. The downloads cut a header or footer after about 200 paragraphs or 20,000 characters.
+- A header or footer taller than its margin moves your text away from it, on the page and in the PDF. In the PDF, the header and footer never take more than half the page: the rest of a taller one runs over your text. The PDF cuts a header or footer after about 200 paragraphs or 20,000 characters.
 - Importing a Word file brings its header and footer along. See [Import a Word document](/support/docs/import-word).
 - Comments and **Find** work on your text, not on the header or footer.
 - On a phone you see the header and footer on the page, but you can't change them.

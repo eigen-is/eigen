@@ -15,8 +15,6 @@ import { writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import {
     commitEigendocImport,
-    MAX_BAND_BLOCKS,
-    MAX_BAND_TEXT,
     readEigendocBands,
     readEigendocFromDoc,
     readEigendocPage,
@@ -131,9 +129,9 @@ describe('document/doc', () => {
             seedBand(doc, 'headerFirst', text('Letterhead'));
             seedBand(doc, 'footerFirst', { type: 'paragraph', content: [{ type: 'hardBreak' }] }, text('  '));
 
-            expect(Object.keys(readEigendocBands(doc).bands)).toEqual(['header', 'footer']);
+            expect(Object.keys(readEigendocBands(doc))).toEqual(['header', 'footer']);
             doc.getMap(PAGE_ROOT).set('differentFirstPage', true);
-            const { bands } = readEigendocBands(doc);
+            const bands = readEigendocBands(doc);
             expect(Object.keys(bands)).toEqual(['header', 'footer', 'headerFirst']);
             expect(JSON.stringify(bands.headerFirst)).toContain('Letterhead');
             doc.destroy();
@@ -150,7 +148,7 @@ describe('document/doc', () => {
                 { type: 'codeBlock', content: [{ type: 'text', text: 'x' }] },
             );
 
-            const { bands } = readEigendocBands(doc);
+            const bands = readEigendocBands(doc);
             expect(bands.header).toEqual({ type: 'doc', content: [text('Acme')] });
             expect(bands.footer).toBeUndefined();
             doc.destroy();
@@ -163,34 +161,7 @@ describe('document/doc', () => {
                 type: 'paragraph',
                 content: [{ type: 'equation', attrs: { mathml: writeMathml([{ kind: 'identifier', text: 'x' }]) } }],
             });
-            expect(readEigendocBands(doc).bands.header).toBeDefined();
-            doc.destroy();
-        });
-
-        // WeasyPrint lays a running element out on every page: a 4,000-paragraph header ran a PDF past its timeout.
-        test('cuts a band past its blocks or its text, counting the blocks cut', () => {
-            const doc = new Y.Doc();
-            seedBand(doc, 'header', ...Array.from({ length: 4000 }, (_, index) => text(`Head ${index}`)));
-            seedBand(doc, 'footer', text('Foot'), text('x'.repeat(MAX_BAND_TEXT)), text('Gone'));
-            const { bands, cut } = readEigendocBands(doc);
-            expect(bands.header?.content).toHaveLength(MAX_BAND_BLOCKS);
-            expect(bands.header?.content?.at(-1)).toEqual(text(`Head ${MAX_BAND_BLOCKS - 1}`));
-            expect(bands.footer).toEqual({ type: 'doc', content: [text('Foot')] });
-            expect(cut).toBe(4000 - MAX_BAND_BLOCKS + 2);
-            doc.destroy();
-        });
-
-        test('counts the blocks a table holds', () => {
-            const doc = new Y.Doc();
-            const cell = { type: 'tableCell', content: [text('c')] };
-            const table = {
-                type: 'table',
-                content: Array.from({ length: MAX_BAND_BLOCKS }, () => ({ type: 'tableRow', content: [cell] })),
-            };
-            seedBand(doc, 'header', text('Logo'), table);
-            const { bands, cut } = readEigendocBands(doc);
-            expect(bands.header).toEqual({ type: 'doc', content: [text('Logo')] });
-            expect(cut).toBe(1);
+            expect(readEigendocBands(doc).header).toBeDefined();
             doc.destroy();
         });
     });

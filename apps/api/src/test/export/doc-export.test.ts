@@ -9,12 +9,11 @@ import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { openZip } from '../../lib/core/zip';
-import { MAX_BAND_BLOCKS } from '../../lib/document/doc';
 import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { MATHML_LIMIT, renderDocHtml } from '../../lib/export/doc/render';
-import { MAX_PAGE_NOTES, renderEigendocExport } from '../../lib/export/doc/transform';
+import { MAX_BAND_BLOCKS, MAX_BAND_TEXT, MAX_PAGE_NOTES, renderEigendocExport } from '../../lib/export/doc/transform';
 import * as mathSvg from '../../lib/export/math-svg';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
@@ -1551,7 +1550,7 @@ describe('doc export — headers and footers', () => {
     });
 
     // WeasyPrint lays a running element out on every page, so an unbounded header ran the PDF into its timeout.
-    test('a band past its caps exports its first blocks, with a warning', async () => {
+    test('the PDF prints a band past its caps up to them, with a warning', async () => {
         const doc = seededDoc();
         seedBand(doc, 'header', ...Array.from({ length: 4000 }, (_, index) => paragraph(`Head ${index}.`)));
         const { data, warnings } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
@@ -1559,6 +1558,43 @@ describe('doc export — headers and footers', () => {
         expect(html).toContain(`Head ${MAX_BAND_BLOCKS - 1}.`);
         expect(html).not.toContain(`Head ${MAX_BAND_BLOCKS}.`);
         expect(warnings).toEqual([{ code: 'band-blocks-cut', count: 4000 - MAX_BAND_BLOCKS }]);
+    });
+
+    // A table counts its rows, cells and paragraphs, so one block can pass the caps alone: it keeps what fits.
+    test('the PDF cuts the block that passes the caps inside it, so a band keeps its first lines', async () => {
+        const cell = (text: string) => ({ type: 'tableCell', content: [paragraph(text)] });
+        const table = {
+            type: 'table',
+            content: Array.from({ length: 25 }, (_, row) => ({
+                type: 'tableRow',
+                content: Array.from({ length: 4 }, (_, column) => cell(`R${row}C${column}.`)),
+            })),
+        };
+        const doc = seededDoc();
+        seedBand(doc, 'header', table, paragraph('After the table'));
+        seedBand(doc, 'footer', paragraph(`${'x'.repeat(MAX_BAND_TEXT)}Gone`));
+        const { data, warnings } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+        const html = new TextDecoder().decode(data);
+        expect(html).toContain('R0C0.');
+        expect(html).toContain('R20C3.');
+        expect(html).not.toContain('R24C3.');
+        expect(html).not.toContain('After the table');
+        expect(html).toContain('x'.repeat(MAX_BAND_TEXT));
+        expect(html).not.toContain('Gone');
+        expect(warnings).toEqual([{ code: 'band-blocks-cut', count: 3 }]);
+    });
+
+    // Only the PDF lays a band out on every page; the docx and the download keep all of it.
+    test.each(['html', 'docx'] as const)('the %s keeps a band past the caps whole', async (format) => {
+        const doc = seededDoc();
+        seedBand(doc, 'header', ...Array.from({ length: 300 }, (_, index) => paragraph(`Head ${index}.`)));
+        const { data, warnings } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+        const text =
+            format === 'docx'
+                ? new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/header1.xml'))
+                : new TextDecoder().decode(data);
+        expect(text).toContain('Head 299.');
+        expect(warnings).toEqual([]);
     });
 
     test("the HTML download's header is page 1's when page 1 differs", async () => {

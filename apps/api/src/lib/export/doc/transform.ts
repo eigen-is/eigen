@@ -16,7 +16,14 @@ import {
     pageStylesheet,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
-import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
+import {
+    type EigendocBands,
+    readEigendocBands,
+    readEigendocFromDoc,
+    readEigendocPage,
+    readEigendocStyle,
+} from '../../document/doc';
+import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
@@ -62,8 +69,7 @@ export async function renderEigendocExport(
     const json = readEigendocFromDoc(doc);
     const page = readEigendocPage(doc);
     const style = readEigendocStyle(doc);
-    const { bands, cut } = readEigendocBands(doc);
-    const warnings: TransformWarning[] = cut > 0 ? [{ code: 'band-blocks-cut', count: cut }] : [];
+    const bands = readEigendocBands(doc);
     if (format === 'docx') {
         const { chartFigureMedia, eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
         const roots = [json, ...Object.values(bands)];
@@ -71,18 +77,20 @@ export async function renderEigendocExport(
         const docxMedia = await withSvgFallbacks([...media, ...drawn]);
         return {
             data: toTransferableBuffer(await eigendocToDocx(json, bands, page, style, docxMedia, title, publicOrigin)),
-            warnings,
+            warnings: [],
         };
     }
     const dataUriMap = toDataUriMap(media);
     const pdf = htmlExportMode(format) === 'pdf';
+    const { printed, cut } = pdf ? printedBands(bands) : { printed: bands, cut: 0 };
+    const warnings: TransformWarning[] = cut > 0 ? [{ code: 'band-blocks-cut', count: cut }] : [];
     // Browsers ignore running(), so the download shows each band where the long page does: page 1's header on top, the
     // other pages' footer at the end.
     const order: (BandRoot | 'body')[] = pdf
         ? [...BAND_ROOTS, 'body']
         : [page.differentFirstPage ? 'headerFirst' : 'header', 'body', 'footer'];
     const roots = order.flatMap((part) => {
-        const content = part === 'body' ? json : bands[part];
+        const content = part === 'body' ? json : printed[part];
         return content ? [{ part, content }] : [];
     });
     const notes = footnotesInOrder(json);
@@ -104,10 +112,62 @@ export async function renderEigendocExport(
     const html = exportHtmlDocument({
         title,
         fonts: usedFamilies(body, style),
-        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
+        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings };
+}
+
+// WeasyPrint lays a running element out again on every page, so a 4,000-paragraph header ran a PDF past its 60 s. Half
+// an A4 page, 421 pt, holds about 60 lines of 6 pt text, 200 characters a line, and a band taller than half the page
+// prints over the body anyway (weasyprint-render.py), so a band within these caps keeps all it shows clear of the body.
+export const MAX_BAND_BLOCKS = 200;
+export const MAX_BAND_TEXT = 20_000;
+
+// The bands as the PDF prints them: each one's blocks in document order, counted inside tables and lists, while they
+// fit, and the one that passes the caps cut inside to what fits, so a band keeps its first lines whatever their size.
+// cut counts the top-level blocks shortened or dropped.
+function printedBands(bands: EigendocBands): { printed: EigendocBands; cut: number } {
+    const { nodes } = docSchema();
+    const printed: EigendocBands = {};
+    let cut = 0;
+    for (const root of BAND_ROOTS) {
+        const band = bands[root];
+        if (!band) continue;
+        let blocks = MAX_BAND_BLOCKS;
+        let text = MAX_BAND_TEXT;
+        let short = false;
+        const fit = (node: JSONContent): JSONContent | undefined => {
+            if (node.text !== undefined) {
+                const kept = node.text.slice(0, Math.max(0, text));
+                text -= kept.length;
+                short ||= kept.length < node.text.length;
+                return kept ? { ...node, text: kept } : undefined;
+            }
+            if (nodes[node.type ?? '']?.isBlock && --blocks < 0) {
+                short = true;
+                return undefined;
+            }
+            if (!node.content) return node;
+            const content: JSONContent[] = [];
+            for (const child of node.content) {
+                const kept = fit(child);
+                if (!kept) break;
+                content.push(kept);
+            }
+            short ||= content.length < node.content.length;
+            return { ...node, content };
+        };
+        const content: JSONContent[] = [];
+        for (const block of band.content ?? []) {
+            short = false;
+            const kept = fit(block);
+            if (kept) content.push(kept);
+            if (short) cut++;
+        }
+        printed[root] = { ...band, content };
+    }
+    return { printed, cut };
 }
 
 // The bundled families a doc's export can draw in, as a face is up to 0.6 MB of base64 WeasyPrint reads per PDF: the
