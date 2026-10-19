@@ -596,6 +596,8 @@ describe('range data for a workbook', () => {
     const SHEETS = new Map([
         ['Sheet1', 's1'],
         ["My 'Q' sheet", 's2'],
+        ['A!B', 's3'],
+        ['Лист1', 's4'],
     ]);
     const ranges = { ranges: (name: string) => SHEETS.get(name) };
     const byRange = (xml: string) => {
@@ -627,7 +629,7 @@ describe('range data for a workbook', () => {
         });
     });
 
-    test('a quoted sheet name, relative refs and a reversed range; an unknown sheet or #REF! is no range', () => {
+    test('a quoted sheet name, one holding a !, a non-Latin one, relative refs and a reversed range; an unknown sheet or #REF! is no range', () => {
         const series = (f: string) =>
             `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>Lit</c:v></c:tx><c:val><c:numRef><c:f>${f}</c:f></c:numRef></c:val></c:ser></c:barChart>`;
         const values = (f: string) => {
@@ -635,6 +637,9 @@ describe('range data for a workbook', () => {
             return first?.values;
         };
         expect(values("'My ''Q'' sheet'!C10:$B$2")).toEqual({ sheetId: 's2', row: [1, 9], column: [1, 2] });
+        expect(values("'A!B'!$A$1:$A$3")).toEqual({ sheetId: 's3', row: [0, 2], column: [0, 0] });
+        // Excel leaves a name of non-Latin letters unquoted.
+        expect(values('Лист1!$B$2:$B$4')).toEqual({ sheetId: 's4', row: [1, 3], column: [1, 1] });
         expect(values('Sheet1!$XFD$1048576')).toEqual({
             sheetId: 's1',
             row: [1048575, 1048575],
