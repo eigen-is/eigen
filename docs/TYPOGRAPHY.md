@@ -72,8 +72,8 @@ The registry drives the pickers and the sheet lists. The other places keep their
 
 1. The woff2 files, the static TrueType faces the docx embeds and the font's `OFL.txt` in `packages/ui/src/assets/fonts/<font-name>/`.
 2. Its `@font-face` rules in `fonts.css`.
-3. The entry in `EIGEN_FONTS`, appended at the end.
-4. `FONT_METRICS` in `packages/lib/src/vector/font-metrics.ts`. The canvas places SVG text baselines from each face's vertical metrics, and an unknown font gets Excalifont's. The widest digit there sizes a sheet's xlsx column unit.
+3. The entry in `EIGEN_FONTS`, appended at the end, with its single line (`lineHeight`), `(usWinAscent + usWinDescent) / unitsPerEm` of its Regular, which `fonts.test.ts` checks against the TTF. The editor's paragraph line, the docx writer and reader and the canvas read it through `fontLineHeight`.
+4. `FONT_METRICS` in `packages/lib/src/vector/font-metrics.ts`. The canvas places SVG text baselines from each face's vertical metrics, and an unknown font gets Excalifont's. A face's line there is its `EIGEN_FONTS` line, but Excalifont's, which the canvas draws at Excalidraw's 1.25 under the face's 1.26, the line every drawing's text is laid out at. The widest digit there sizes a sheet's xlsx column unit.
 5. `FONT_FILES` and `DOCX_FONT_FILES` in `apps/api/src/lib/export/fonts.ts`. Exports embed the faces as base64 `@font-face` rules ([EXPORT.md](EXPORT.md)), and a font missing there prints in a fallback; the docx embeds the static faces, keyed by the font's name ([EXPORT.md](EXPORT.md#the-docx-embeds-the-faces-a-doc-uses-its-600s-in-the-bold-slot)). `apps/api/src/test/export/fonts.test.ts` fails when `FONT_FILES` and `fonts.css` disagree, when `DOCX_FONT_FILES` misses a font, or when a face names another family, and pins the count of faces, so a new face updates the test too.
 6. The `FONTS` list in `apps/index/scripts/build-licenses.ts`, which the /licenses page reads. A bundled font is not a package, so the license build does not find it on its own.
 

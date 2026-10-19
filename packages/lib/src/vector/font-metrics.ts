@@ -3,6 +3,7 @@
 // values extracted from the shipped faces (fonttools). Never stored per element — derived at render.
 // `getVerticalOffset` replicates Excalidraw's alphabetic-baseline formula.
 
+import { fontLineHeight } from '../constants/fonts';
 import { DEFAULT_FONT_FAMILY } from './types';
 
 export type FontMetrics = {
@@ -13,10 +14,24 @@ export type FontMetrics = {
     digitWidth: number; // the widest of 0–9's advances
 };
 
+// A line is the face's single line (EIGEN_FONTS), but Excalifont's: the canvas draws it at Excalidraw's 1.25, under the
+// face's 1.26, and every drawing's text is laid out at that.
 const FONT_METRICS: Record<string, FontMetrics> = {
-    Inter: { unitsPerEm: 2048, ascender: 1984, descender: -494, lineHeight: 1.21, digitWidth: 1323 },
-    'Source Serif 4': { unitsPerEm: 1000, ascender: 1036, descender: -335, lineHeight: 1.371, digitWidth: 500 },
-    'JetBrains Mono': { unitsPerEm: 1000, ascender: 1020, descender: -300, lineHeight: 1.32, digitWidth: 600 },
+    Inter: { unitsPerEm: 2048, ascender: 1984, descender: -494, lineHeight: fontLineHeight('Inter'), digitWidth: 1323 },
+    'Source Serif 4': {
+        unitsPerEm: 1000,
+        ascender: 1036,
+        descender: -335,
+        lineHeight: fontLineHeight('Source Serif 4'),
+        digitWidth: 500,
+    },
+    'JetBrains Mono': {
+        unitsPerEm: 1000,
+        ascender: 1020,
+        descender: -300,
+        lineHeight: fontLineHeight('JetBrains Mono'),
+        digitWidth: 600,
+    },
     Excalifont: { unitsPerEm: 1000, ascender: 886, descender: -374, lineHeight: 1.25, digitWidth: 700 },
 };
 

@@ -1,26 +1,52 @@
+// lineHeight: its single line as a multiple of its size, (usWinAscent + usWinDescent) / unitsPerEm of its Regular, as Word
+// and Google Docs draw it; the API's fonts.test.ts pins each against the TTF.
 export type EigenFont = {
     name: string;
     family: string;
     category: 'sans-serif' | 'serif' | 'monospace' | 'hand-drawn';
     weights: number[];
+    lineHeight: number;
 };
 
 // Order is load-bearing: numeric xlsx font indices (ff) index into this array, [0] is the
 // default in docs and sheets (the canvas has its own, DEFAULT_FONT_FAMILY), and a category's
 // first font is the one a foreign font of that category maps to.
 export const EIGEN_FONTS: EigenFont[] = [
-    { name: 'Inter', family: "'Inter', sans-serif", category: 'sans-serif', weights: [400, 500, 600, 700] },
-    { name: 'Source Serif 4', family: "'Source Serif 4', serif", category: 'serif', weights: [400, 600, 700] },
-    { name: 'JetBrains Mono', family: "'JetBrains Mono', monospace", category: 'monospace', weights: [400, 700] },
-    { name: 'Excalifont', family: "'Excalifont', cursive", category: 'hand-drawn', weights: [400] },
+    {
+        name: 'Inter',
+        family: "'Inter', sans-serif",
+        category: 'sans-serif',
+        weights: [400, 500, 600, 700],
+        lineHeight: 1.21,
+    },
+    {
+        name: 'Source Serif 4',
+        family: "'Source Serif 4', serif",
+        category: 'serif',
+        weights: [400, 600, 700],
+        lineHeight: 1.371,
+    },
+    {
+        name: 'JetBrains Mono',
+        family: "'JetBrains Mono', monospace",
+        category: 'monospace',
+        weights: [400, 700],
+        lineHeight: 1.32,
+    },
+    { name: 'Excalifont', family: "'Excalifont', cursive", category: 'hand-drawn', weights: [400], lineHeight: 1.26 },
 ];
 
 // A doc's text draws in it without a font mark, so a paste or an import gives it none.
 export const DOCUMENT_FONT = EIGEN_FONTS[0].name;
 
-// Its single line as a multiple of its size, (usWinAscent + usWinDescent) / unitsPerEm as Word and Google Docs draw it:
-// a paragraph's CSS line-height is its line spacing times this, as CSS can't know the fonts of a paragraph's runs.
-export const DOCUMENT_LINE_RATIO = 1.21;
+// A family's single line; one no font of Eigen's names draws in the document's.
+export function fontLineHeight(name: string): number {
+    return (EIGEN_FONTS.find((font) => font.name === name) ?? EIGEN_FONTS[0]).lineHeight;
+}
+
+// A paragraph's CSS line-height is its line spacing times the document font's single line, as CSS can't know the fonts
+// of a paragraph's runs.
+export const DOCUMENT_LINE_RATIO = fontLineHeight(DOCUMENT_FONT);
 
 // A doc's text draws at it without a size mark: eigen-prose.css's body, in pt.
 export const DOCUMENT_FONT_SIZE = 11;

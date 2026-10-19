@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_FONT, EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, EIGEN_FONT_NAMES, fontLineHeight } from '@workspace/lib/constants/fonts';
 import {
     flattenNestedFootnotes,
     type NormalStyle,
@@ -16,7 +16,6 @@ import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES } from '../../document/wordml';
-import { fontLineHeight } from '../../export/fonts';
 import { IMPORT_MESSAGES } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, fontMark, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';

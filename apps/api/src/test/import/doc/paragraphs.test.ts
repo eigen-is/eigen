@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, fontLineHeight } from '@workspace/lib/constants/fonts';
 import {
     DEFAULT_NORMAL_STYLE,
     DEFAULT_PAGE_SETUP,
@@ -9,7 +9,6 @@ import {
     readPageSetup,
 } from '@workspace/lib/docs/eigendoc';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../../lib/document/looks';
-import { fontLineHeight } from '../../../lib/export/fonts';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.
@@ -331,6 +330,18 @@ describe('notes', () => {
             (json.content?.[0]?.content ?? []).map((node) => (node.type === 'text' ? node.text : node.type)),
         ).toEqual(['Claim', 'footnote']);
         expect(notesOf(json)).toEqual([['Starred']]);
+    });
+
+    // The mark is the run's text up to a tab; with no note made, the text stays.
+    test('a custom mark ends at a tab, and stays text when the note is missing', async () => {
+        const marked = (id: number, text: string) =>
+            `<w:r><w:footnoteReference w:customMarkFollows="1" w:id="${id}"/><w:t>*</w:t><w:tab/><w:t>after</w:t></w:r>${run(text)}`;
+        const { json } = await importDocxBody(paragraph(`${marked(1, ' one')}${marked(7, ' two')}`), {
+            footnotes: note(1, run(' Starred')),
+        });
+        expect(
+            (json.content?.[0]?.content ?? []).map((node) => (node.type === 'text' ? node.text : node.type)),
+        ).toEqual(['footnote', '\tafter one*\tafter two']);
     });
 
     test('a note inside a note is its text there, each paragraph after a space', async () => {

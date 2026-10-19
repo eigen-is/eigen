@@ -7,6 +7,7 @@ import {
     DOCUMENT_LINE_RATIO,
     EIGEN_FONT_NAMES,
     EIGEN_FONTS,
+    fontLineHeight,
     getFontName,
     readFontSize,
 } from '@workspace/lib/constants/fonts';
@@ -91,7 +92,7 @@ import {
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
 import { splitDataUri } from '../../shared/data-uri';
-import { DOCX_FONT_FILES, type DocxFontFiles, fontLineHeight, sfntTables } from '../fonts';
+import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import { encodeOfficeImage, OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 

@@ -34,7 +34,6 @@ import {
 import { PROSE_CSS, proseValue } from '../../lib/document/prose-css';
 import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../lib/document/wordml';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
-import { fontLineHeight } from '../../lib/export/fonts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
 const zip = openZip(
@@ -173,12 +172,8 @@ describe('the writer draws its body in the document font', () => {
     });
 });
 
-// A paragraph's CSS line-height is its line spacing times the document font's line, which lib can't measure.
+// A paragraph's CSS line-height is its line spacing times the document font's line (fonts.test.ts pins it to the TTF).
 describe("the writer draws a paragraph in Eigen's declared look", () => {
-    test("the document font's line ratio is Inter's, measured from its TTF", () => {
-        expect(DOCUMENT_LINE_RATIO).toBe(Math.round(fontLineHeight(DOCUMENT_FONT) * 100) / 100);
-    });
-
     test('eigen-prose.css draws an unset paragraph at line spacing 1.4 and 11 pt after', () => {
         const { lineSpacing, spaceAfter } = DOCUMENT_PARAGRAPH_FORMAT;
         expect(Number(proseValue('.eigen-prose p', 'line-height'))).toBe(
