@@ -1,4 +1,5 @@
 import { gradientStops } from '@workspace/lib/background';
+import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import {
@@ -135,7 +136,7 @@ const MASTER_XML = `<p:sldMaster ${NAMESPACES}><p:cSld><p:bg><p:bgPr><a:solidFil
 
 const LAYOUT_XML = `<p:sldLayout ${NAMESPACES} type="blank" preserve="1"><p:cSld name="Blank"><p:spTree>${GROUP_PROPERTIES}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
 
-// Every shape writes its own colors and fonts, so the theme only has to be valid: Inter as its fonts, plain colors.
+// Every shape writes its own colors and fonts, so the theme only has to be valid: Eigen's document font, plain colors.
 const THEME_XML = (() => {
     const colors = [
         ['dk1', '000000'],
@@ -151,7 +152,7 @@ const THEME_XML = (() => {
         ['hlink', '1971C2'],
         ['folHlink', '6741D9'],
     ].map(([name, value]) => `<a:${name}><a:srgbClr val="${value}"/></a:${name}>`);
-    const font = '<a:latin typeface="Inter"/><a:ea typeface=""/><a:cs typeface=""/>';
+    const font = `<a:latin typeface="${DOCUMENT_FONT}"/><a:ea typeface=""/><a:cs typeface=""/>`;
     const placeholder = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
     const three = (xml: string) => xml.repeat(3);
     return [
