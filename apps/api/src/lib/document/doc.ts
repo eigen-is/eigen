@@ -57,25 +57,23 @@ export function readEigendocBands(doc: Y.Doc): { bands: EigendocBands; cut: numb
               }
             : node;
     const { nodes } = docSchema();
-    let blocks = 0;
-    let text = 0;
-    const spend = (node: JSONContent): void => {
-        if (nodes[node.type ?? '']?.isBlock) blocks++;
-        text += node.text?.length ?? 0;
-        for (const child of node.content ?? []) spend(child);
-    };
     const bands: EigendocBands = {};
     let cut = 0;
     for (const root of BAND_ROOTS) {
         if (firstPage.includes(root)) continue;
         const { content = [], ...band } = without(yXmlFragmentToProsemirrorJSON(doc.getXmlFragment(root)));
-        blocks = 0;
-        text = 0;
-        let kept = 0;
-        for (; kept < content.length; kept++) {
-            spend(content[kept]);
-            if (blocks > MAX_BAND_BLOCKS || text > MAX_BAND_TEXT) break;
-        }
+        let blocks = 0;
+        let text = 0;
+        const spend = (node: JSONContent): void => {
+            if (nodes[node.type ?? '']?.isBlock) blocks++;
+            text += node.text?.length ?? 0;
+            for (const child of node.content ?? []) spend(child);
+        };
+        const past = content.findIndex((block) => {
+            spend(block);
+            return blocks > MAX_BAND_BLOCKS || text > MAX_BAND_TEXT;
+        });
+        const kept = past < 0 ? content.length : past;
         cut += content.length - kept;
         const json = { ...band, content: content.slice(0, kept) };
         if (bandHasContent(docSchema().nodeFromJSON(json), readStoredEquation)) bands[root] = json;
