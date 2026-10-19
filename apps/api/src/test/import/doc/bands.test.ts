@@ -127,6 +127,24 @@ describe('docx import — headers and footers', () => {
         expect(texts(json)).toEqual(['Here ']);
     });
 
+    // A switch may follow the name with no space; a doc is one section, so its section's page count is the doc's.
+    test('NUMPAGES with a switch run on and SECTIONPAGES are page counts, their cached digits gone', async () => {
+        const { bands } = await docxWith([
+            {
+                id: 'f1',
+                kind: 'footer',
+                xml: paragraph(
+                    `${complexField(' NUMPAGES\\*Arabic ', '7')}${run('/')}${complexField(' SECTIONPAGES ', '5')}`,
+                ),
+            },
+        ]);
+        expect(nodesOfType(bands.footer ?? {}, 'pageNumber')).toEqual([
+            { type: 'pageNumber', attrs: { kind: 'pages' } },
+            { type: 'pageNumber', attrs: { kind: 'pages' } },
+        ]);
+        expect(texts(bands.footer)).toEqual(['/']);
+    });
+
     test("a header's picture resolves through the header's relationships, and an anchored one is a block figure", async () => {
         const anchored = GOLDEN_DOCX_IMAGE_RUN.replace(
             '<wp:inline>',
