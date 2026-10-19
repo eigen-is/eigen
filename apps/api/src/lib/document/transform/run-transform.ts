@@ -16,6 +16,7 @@ import type {
     SheetsImportJob,
     SlidesImportJob,
     SlidesImportWorkerResult,
+    TransformError,
     TransformResultFor,
     TransformWarning,
 } from './protocol';
@@ -42,6 +43,21 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
 
 const TOO_LARGE_TO_INDEX = 'Document too large to index';
 
+// The failures the same input repeats: a job past its memory or its deadline. A crash may be the install, not the input.
+function repeatsForSameInput(code: TransformError['code']): boolean {
+    return code === 'out-of-memory' || code === 'timeout';
+}
+
+// Every other failure, with whether the same input would fail again, so a caller can stop rerunning it.
+export class TransformFailedError extends Error {
+    readonly repeats: boolean;
+
+    constructor(code: TransformError['code'], message: string) {
+        super(message);
+        this.repeats = repeatsForSameInput(code);
+    }
+}
+
 async function runTransformRequest<R extends DocumentTransformRequest>(
     request: R,
     opts: TransformOptions & { captureMs?: number },
@@ -61,13 +77,15 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
             throw new ApiError(413, IMPORT_MESSAGES[request.sourceFormat].tooLarge);
         }
         // The search extract indexes it as nothing rather than running out, or timing out, again on every drain.
-        const tooLargeToIndex = response.error.code === 'out-of-memory' || response.error.code === 'timeout';
-        if (tooLargeToIndex && request.kind === 'extract-text') {
+        if (repeatsForSameInput(response.error.code) && request.kind === 'extract-text') {
             throw new ApiError(413, TOO_LARGE_TO_INDEX);
         }
         const what =
             request.kind === 'import' ? `${request.sourceFormat} import` : `${request.documentType} ${request.kind}`;
-        throw new Error(`${what} transform failed (${response.error.code}): ${response.error.message}`);
+        throw new TransformFailedError(
+            response.error.code,
+            `${what} transform failed (${response.error.code}): ${response.error.message}`,
+        );
     }
     for (const warning of response.warnings) surfaceWarning(warning, request.kind);
     // The one seam the kind→result mapping crosses: the runner settles every kind of job
