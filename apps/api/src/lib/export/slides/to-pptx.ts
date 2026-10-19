@@ -31,7 +31,6 @@ import {
     parsePoints,
     pointsBounds,
     rectOutline,
-    type SlideSize,
     type StrokeStyle,
     scaledPathCommands,
     type TextAlign,
@@ -50,6 +49,7 @@ import { ApiError } from '../../core/errors';
 import { A_NS, AHYP_NS, ASVG_NS, EMU_PER_POINT, P_NS, R_NS } from '../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
 import { cssColorToHex } from '../../document/colors';
+import { PML, PPTX_SLIDE_SIZES, PRESENTATION_TYPE, THEME_TYPE } from '../../document/presentationml';
 import { canvasTextValue } from '../../document/prose-css';
 import { OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
 import { isElement } from '../sanitize';
@@ -84,7 +84,7 @@ export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], titl
             [
                 'ppt/presentation.xml',
                 `<p:presentation ${NAMESPACES} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${size.cx}" cy="${size.cy}"${size.type ? ` type="${size.type}"` : ''}/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
-                `${PML}.presentation.main+xml`,
+                PRESENTATION_TYPE,
             ],
             ['ppt/_rels/presentation.xml.rels', relationshipsXml(presentationRelationships)],
             ['ppt/presProps.xml', `<p:presentationPr ${NAMESPACES}/>`, `${PML}.presProps+xml`],
@@ -107,7 +107,7 @@ export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], titl
                 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
                 relationshipsXml([{ type: `${R_NS}/slideMaster`, target: '../slideMasters/slideMaster1.xml' }]),
             ],
-            ['ppt/theme/theme1.xml', THEME_XML, 'application/vnd.openxmlformats-officedocument.theme+xml'],
+            ['ppt/theme/theme1.xml', THEME_XML, THEME_TYPE],
             ...slides.flatMap(({ xml, relationships }, i): PackagePart[] => [
                 [`ppt/slides/slide${i + 1}.xml`, xml, `${PML}.slide+xml`],
                 [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
@@ -120,14 +120,7 @@ export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], titl
     });
 }
 
-const PML = 'application/vnd.openxmlformats-officedocument.presentationml';
 const NAMESPACES = `xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"`;
-
-// The EMU size PowerPoint gives each of a deck's slide sizes; a frame's width sets EMU per px.
-const PPTX_SLIDE_SIZES: Record<SlideSize, { cx: number; cy: number; type?: string }> = {
-    '16:9': { cx: 12_192_000, cy: 6_858_000 },
-    '4:3': { cx: 9_144_000, cy: 6_858_000, type: 'screen4x3' },
-};
 
 // Text sizes and spacing in 100ths of a point, at the deck's scale.
 function centipoints(slide: Slide, px: number): number {
