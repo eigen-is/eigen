@@ -414,10 +414,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     );
     const [family] = families;
     const scaleOf = (font: string) => fontLineHeight(font) / fontLineHeight(DOCUMENT_FONT);
-    const markFont = fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font);
+    const markFont =
+        fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font;
     const scale = Math.max(
         families.size === 1 && EIGEN_FONT_NAMES.includes(family) ? scaleOf(family) : 0,
-        scaleOf(markFont ?? normal.font),
+        scaleOf(markFont),
     );
     // An at-least Normal reads as single, so the Normal's own line is the one to compare with.
     const baseSpacing = normalBase
