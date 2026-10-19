@@ -20,12 +20,12 @@ afterEach(async () => {
     cleanups = [];
 });
 
-// Mounts the editor over `spec`, feeding every change back in as the new spec, as a host does; `resolved` is
-// what a sheet passes for a range chart.
+// Mounts the editor over `spec`, feeding every change back in as the new spec, as a host does; `host` is what
+// a sheet passes for a range chart, or the Docs app's own Edit data.
 async function mount(
     spec: ChartSpec,
     beginGesture?: () => () => void,
-    resolved: { categories?: string[]; seriesNames?: string[] } = {},
+    host: { categories?: string[]; seriesNames?: string[]; onEditData?: () => void } = {},
     history: { undo: () => void; redo: () => void } | null = null,
 ) {
     const changes: ChartSpec[] = [];
@@ -36,7 +36,7 @@ async function mount(
     const draw = async () => {
         const editor = createElement(ChartEditor, {
             spec: current,
-            ...resolved,
+            ...host,
             onChange: (next: ChartSpec) => {
                 changes.push(next);
                 current = next;
@@ -148,6 +148,8 @@ async function mount(
         }
         return found;
     };
+    const button = (label: string) =>
+        [...container.querySelectorAll<HTMLButtonElement>('button')].find((el) => el.textContent?.trim() === label);
     const click = async (name: string) => {
         const box = container.querySelector(`button[role="checkbox"][aria-label="${name}"]`);
         if (!box) throw new Error(`no "${name}" checkbox`);
@@ -173,6 +175,7 @@ async function mount(
         options,
         fonts,
         automatic,
+        button,
         click,
     };
 }
@@ -386,6 +389,37 @@ describe('ChartEditor', () => {
         expect(editor.sectionTitles()).toEqual(['Chart', 'Slices']);
         expect(editor.rowLabels()).toEqual(expect.arrayContaining(['Team 1', 'Team 2', 'Team 3', 'Team 4']));
         expect(editor.rowLabels()).not.toContain('Period 1');
+    });
+
+    test("inline data offers Edit data, whose Save is one write; a host's own Edit data opens nothing here", async () => {
+        const editor = await mount(sample('column'));
+        const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]');
+        const press = (target: HTMLElement | null | undefined) =>
+            act(async () => target?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        await press(editor.button('Edit data'));
+        const save = [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(
+            (el) => el.textContent?.trim() === 'Save',
+        );
+        await press(save);
+        expect(editor.changes).toHaveLength(1);
+        expect(dialog()).toBeNull();
+
+        let asked = 0;
+        const docs = await mount(sample('column'), undefined, {
+            onEditData: () => {
+                asked += 1;
+            },
+        });
+        await press(docs.button('Edit data'));
+        expect(asked).toBe(1);
+        expect(dialog()).toBeNull();
+    });
+
+    test('range data has no Edit data, as its grid is the sheet', async () => {
+        const ref = { sheetId: 's1', row: [1, 3] as [number, number], column: [1, 1] as [number, number] };
+        const series = { name: 'Points', values: ref, color: chartColor(0), markers: false, smooth: false };
+        const range: ChartSpec = { ...sample('column'), data: { source: 'range', categories: null, series: [series] } };
+        expect((await mount(range)).button('Edit data')).toBeUndefined();
     });
 
     test("a range chart's slices take the categories its sheet resolved", async () => {
