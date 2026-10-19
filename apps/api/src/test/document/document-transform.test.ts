@@ -1174,20 +1174,45 @@ describe('document transform (eigendoc)', () => {
         expect(names).toEqual(['shown.png']);
     }, 120_000);
 
-    // Declared past the cap, the files are never read: their row's size is what an import's source is held to.
-    test('media the document names past MAX_DECOMPRESSED_BYTES is a 413 before any read', async () => {
-        const doc = await seedFigureDoc('too-much-media', ['a.png', 'b.png']);
+    // Declared sizes, the bytes stored are a small PNG or SVG: what a row says is all the cap reads before a file.
+    async function seedDeclaredMedia(fileName: string, files: [name: string, mime: string, size: number][]) {
+        const doc = await seedFigureDoc(
+            fileName,
+            files.map(([name]) => name),
+        );
         const mediaFolder = await doc.mount.getChildByName(doc.path.id, 'media');
         if (!mediaFolder) throw new Error('no media folder');
-        for (const name of ['a.png', 'b.png']) {
+        const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>');
+        for (const [name, mime, size] of files) {
             await doc.mount.createFile(
                 mediaFolder.id,
                 name,
-                'image/png',
-                MAX_DECOMPRESSED_BYTES / 2 + 1,
-                TEST_PNG_BYTES,
+                mime,
+                size,
+                mime === 'image/svg+xml' ? svg : TEST_PNG_BYTES,
             );
         }
+        return doc;
+    }
+
+    // HTML and PDF send each raster's screen preview, at most 2560 px of WebP, whatever the photo weighs.
+    test('photos past MAX_DECOMPRESSED_BYTES in all export as their previews', async () => {
+        const half = MAX_DECOMPRESSED_BYTES / 2 + 1;
+        const doc = await seedDeclaredMedia('heavy-photos', [
+            ['a.png', 'image/png', half],
+            ['b.png', 'image/png', half],
+        ]);
+        const html = await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, doc.mount, doc.path);
+        expect(html.toString('utf-8').match(/src="data:image\/webp;base64,/g)).toHaveLength(2);
+    }, 120_000);
+
+    // An SVG travels as its own bytes, so its row's size is what the export would hold.
+    test('SVGs past MAX_DECOMPRESSED_BYTES in all are a 413 before any read', async () => {
+        const half = MAX_DECOMPRESSED_BYTES / 2 + 1;
+        const doc = await seedDeclaredMedia('heavy-svgs', [
+            ['a.svg', 'image/svg+xml', half],
+            ['b.svg', 'image/svg+xml', half],
+        ]);
         const read = spyOn(previewCache, 'getScreenPreview');
         let failure: unknown;
         try {
@@ -1196,8 +1221,23 @@ describe('document transform (eigendoc)', () => {
         } finally {
             read.mockRestore();
         }
-        expect(failure).toBeInstanceOf(ApiError);
-        expect((failure as ApiError).status).toBe(413);
+        expect(failure).toMatchObject({ status: 413 });
+    }, 120_000);
+
+    // A docx re-encodes each image from its source, read whole: one source past the cap is refused before its read.
+    test('a docx source past MAX_DECOMPRESSED_BYTES is a 413 before it is read', async () => {
+        const doc = await seedDeclaredMedia('heavy-source', [['a.png', 'image/png', MAX_DECOMPRESSED_BYTES + 1]]);
+        const encode = spyOn(thumbnails, 'generateImagePreview');
+        let failure: unknown;
+        try {
+            failure = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, doc.mount, doc.path).catch(
+                (err: unknown) => err,
+            );
+            expect(encode).not.toHaveBeenCalled();
+        } finally {
+            encode.mockRestore();
+        }
+        expect(failure).toMatchObject({ status: 413 });
     }, 120_000);
 
     test.each(['html', 'docx'] as const)(

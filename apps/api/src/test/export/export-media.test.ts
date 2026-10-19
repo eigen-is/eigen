@@ -3,9 +3,11 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp, { type Sharp } from 'sharp';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import { MAX_DECOMPRESSED_BYTES } from '../../lib/core/zip';
 import type { ExportMedia } from '../../lib/document/transform/protocol';
 import { collectExportMedia } from '../../lib/export/media';
 import { Mount } from '../../lib/mount/mount';
+import * as previewCache from '../../lib/preview/preview-cache';
 import { SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
 import * as thumbnails from '../../lib/shared/thumbnails';
 import { createTestMountConfig } from '../mount-test-helpers';
@@ -181,6 +183,33 @@ describe('collectExportMedia', () => {
         }
         expect(peak).toBe(1);
     }, 60_000);
+
+    // An SVG's siblings inline into it, so what it sends can outgrow its file: the prepared bytes are the cap too. A
+    // zeroed buffer of its own is sent as it is, so the test commits no memory for it.
+    test('SVGs whose prepared bytes pass MAX_DECOMPRESSED_BYTES in all are a 413', async () => {
+        const inlined = Buffer.alloc(MAX_DECOMPRESSED_BYTES / 2 + 1);
+        const preview = spyOn(previewCache, 'getScreenPreview').mockResolvedValue({
+            type: 'image',
+            contentType: 'image/svg+xml',
+            data: inlined,
+        });
+        const container = await mount.getPath(containerId);
+        if (!container) throw new Error('no container');
+        let failure: unknown;
+        try {
+            failure = await collectExportMedia(
+                mount,
+                container,
+                'html',
+                ['drawing.svg', 'html.svg', 'chart.png'],
+                new AbortController().signal,
+            ).catch((err: unknown) => err);
+            expect(preview).toHaveBeenCalledTimes(2);
+        } finally {
+            preview.mockRestore();
+        }
+        expect(failure).toMatchObject({ status: 413 });
+    });
 
     test('a docx queues no more media once its job ends', async () => {
         const controller = new AbortController();

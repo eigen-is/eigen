@@ -21,10 +21,12 @@ const TOO_LARGE = "This document's images are too large to export";
 // Workers. A docx or pptx takes PNG or JPEG from the source file instead, since Word and PowerPoint
 // for the web and Google Docs show no WebP, with the thumbnail Worker's width and height for its extent.
 //
-// The bytes are held in the API's heap and copied over IPC, so they are bounded as an import source
-// is: the files' declared sizes before any read, what was prepared (an SVG with its siblings inlined
-// can outgrow its file) as it goes. One file at a time, so a docx holds at most one of the thumbnail
-// slots uploads and previews share, and none once the job ends.
+// The bytes are held in the API's heap and copied over IPC, so what is sent is held to
+// MAX_DECOMPRESSED_BYTES, an import source's cap, as it is prepared. An SVG travels as its own bytes,
+// so the SVGs' declared sizes are charged before any read; a raster's preview is at most 2560 px,
+// and a docx's or pptx's source is read whole, one at a time, so only a source past the cap alone is
+// refused unread. One file at a time, so a docx holds at most one of the thumbnail slots uploads and
+// previews share, and none once the job ends.
 export async function collectExportMedia(
     mount: Mount,
     drivePath: DrivePath,
@@ -34,8 +36,8 @@ export async function collectExportMedia(
 ): Promise<ExportMedia[]> {
     const wanted = new Set(names);
     const named = [...(await listDocumentMedia(mount, drivePath))].filter(([name]) => wanted.has(name));
-    if (named.reduce((sum, [, file]) => sum + file.size, 0) > MAX_DECOMPRESSED_BYTES)
-        throw new ApiError(413, TOO_LARGE);
+    const svgBytes = named.reduce((sum, [, file]) => sum + (file.mimeType === 'image/svg+xml' ? file.size : 0), 0);
+    if (svgBytes > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, TOO_LARGE);
     const prepare = OFFICE_FORMATS.has(format) ? prepareOfficeMedia : prepareMedia;
     const prepared: ExportMedia[] = [];
     let held = 0;
@@ -65,6 +67,7 @@ async function prepareOfficeMedia(mount: Mount, name: string, file: DrivePath): 
     if (mime === 'image/svg+xml') return prepareMedia(mount, name, file);
     // What getScreenPreview shows as an image, and nothing else.
     if (isScreenPreviewRedirect(mime) || !isExiftoolCandidate(mime, file.name)) return null;
+    if (file.size > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, TOO_LARGE);
     const source = await mount.readFile(file.id);
     if (!source) return null;
     // From the source, never the lossy WebP preview.
