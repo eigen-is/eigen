@@ -16,8 +16,7 @@ import {
 } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
+import { DocumentImportPicker, DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
     DropdownMenu,
