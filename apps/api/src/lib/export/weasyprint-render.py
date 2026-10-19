@@ -36,7 +36,7 @@ BAND_PROBE = """
 # its own, and the other pages', so the doc lays out once; None when every band fits. A full-page letterhead overflows
 # its margin rather than take the page. The probe reads WeasyPrint's layout, so a WeasyPrint that moved it grows no
 # margin rather than failing every PDF export, and says so in one line on stderr.
-def band_margins(html):
+def band_margins(html, font_config):
     try:
         from weasyprint.formatting_structure.boxes import MarginBox
 
@@ -44,7 +44,7 @@ def band_margins(html):
         if not any('page-band' in (element.get('class') or '').split() for element in html.etree_element.iter()):
             return None
         margins, grown = [], False
-        for page in html.render(stylesheets=[weasyprint.CSS(string=BAND_PROBE)]).pages:
+        for page in html.render(stylesheets=[weasyprint.CSS(string=BAND_PROBE)], font_config=font_config).pages:
             page_box = page._page_box
             margin_top, margin_bottom = page_box.margin_top, page_box.margin_bottom
             top, bottom = margin_top, margin_bottom
@@ -75,8 +75,10 @@ def band_margins(html):
         return None
 
 
-# A passed stylesheet is the user's, so the margins it grows are !important to win over the document's @page.
+# A passed stylesheet is the user's, so the margins it grows are !important to win over the document's @page. The probe
+# and the render share one font configuration, so the doc's @font-face fonts load once.
 html = weasyprint.HTML(file_obj=sys.stdin.buffer, encoding='utf-8', url_fetcher=DataFetcher())
-margins = band_margins(html)
-document = html.render(stylesheets=[weasyprint.CSS(string=margins)] if margins else None)
+font_config = weasyprint.text.fonts.FontConfiguration()
+margins = band_margins(html, font_config)
+document = html.render(stylesheets=[weasyprint.CSS(string=margins)] if margins else None, font_config=font_config)
 document.write_pdf(sys.stdout.buffer, zoom=float(sys.argv[1]) if len(sys.argv) > 1 else 1)

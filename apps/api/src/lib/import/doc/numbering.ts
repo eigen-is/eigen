@@ -38,46 +38,28 @@ const MAX_LABEL_CHARS = 255;
 
 type Override = { start?: number; level?: Level };
 
+type Definitions = {
+    abstracts: Map<string, { levels: Map<number, Level>; styleLink?: string }>;
+    nums: Map<string, { abstractId: string; overrides: Map<number, Override> }>;
+};
+
 export class Numbering {
-    private readonly abstracts = new Map<string, { levels: Map<number, Level>; styleLink?: string }>();
-    private readonly nums = new Map<string, { abstractId: string; overrides: Map<number, Override> }>();
+    private readonly abstracts: Definitions['abstracts'];
+    private readonly nums: Definitions['nums'];
     private readonly counters = new Map<string, (number | undefined)[]>();
     private readonly started = new Set<string>();
 
     constructor(
-        root: XmlElement | undefined,
+        definitions: Definitions,
         private readonly styles: Styles,
     ) {
-        for (const element of root ? xmlElements(root) : []) {
-            if (hasXmlName(element, W_NS, 'abstractNum')) {
-                const levels = new Map<number, Level>();
-                // Word draws nine levels; one past them is never drawn, and every paragraph would look through it.
-                for (const lvl of xmlElements(element)) {
-                    const ilvl = int(w(lvl, 'ilvl')) ?? 0;
-                    if (hasXmlName(lvl, W_NS, 'lvl') && ilvl >= 0 && ilvl < LIST_LEVELS)
-                        levels.set(ilvl, readLevel(lvl));
-                }
-                this.abstracts.set(w(element, 'abstractNumId') ?? '', {
-                    levels,
-                    styleLink: w(wChild(element, 'numStyleLink'), 'val'),
-                });
-            }
-            if (hasXmlName(element, W_NS, 'num')) {
-                const overrides = new Map<number, Override>();
-                for (const override of xmlElements(element)) {
-                    if (!hasXmlName(override, W_NS, 'lvlOverride')) continue;
-                    const lvl = wChild(override, 'lvl');
-                    overrides.set(int(w(override, 'ilvl')) ?? 0, {
-                        start: startOf(wChild(override, 'startOverride')),
-                        level: lvl && readLevel(lvl),
-                    });
-                }
-                this.nums.set(w(element, 'numId') ?? '', {
-                    abstractId: w(wChild(element, 'abstractNumId'), 'val') ?? '',
-                    overrides,
-                });
-            }
-        }
+        this.abstracts = definitions.abstracts;
+        this.nums = definitions.nums;
+    }
+
+    // A story whose lists count on their own, a band's or a note's: the definitions shared, every counter unstarted.
+    restarted(): Numbering {
+        return new Numbering({ abstracts: this.abstracts, nums: this.nums }, this.styles);
     }
 
     // A numbering style's abstractNum holds no levels of its own: it links to the style, whose numPr names the real one.
@@ -147,6 +129,41 @@ export class Numbering {
             suffix: level.suffix,
         };
     }
+}
+
+export function readNumbering(root: XmlElement | undefined, styles: Styles): Numbering {
+    const abstracts: Definitions['abstracts'] = new Map();
+    const nums: Definitions['nums'] = new Map();
+    for (const element of root ? xmlElements(root) : []) {
+        if (hasXmlName(element, W_NS, 'abstractNum')) {
+            const levels = new Map<number, Level>();
+            // Word draws nine levels; one past them is never drawn, and every paragraph would look through it.
+            for (const lvl of xmlElements(element)) {
+                const ilvl = int(w(lvl, 'ilvl')) ?? 0;
+                if (hasXmlName(lvl, W_NS, 'lvl') && ilvl >= 0 && ilvl < LIST_LEVELS) levels.set(ilvl, readLevel(lvl));
+            }
+            abstracts.set(w(element, 'abstractNumId') ?? '', {
+                levels,
+                styleLink: w(wChild(element, 'numStyleLink'), 'val'),
+            });
+        }
+        if (hasXmlName(element, W_NS, 'num')) {
+            const overrides = new Map<number, Override>();
+            for (const override of xmlElements(element)) {
+                if (!hasXmlName(override, W_NS, 'lvlOverride')) continue;
+                const lvl = wChild(override, 'lvl');
+                overrides.set(int(w(override, 'ilvl')) ?? 0, {
+                    start: startOf(wChild(override, 'startOverride')),
+                    level: lvl && readLevel(lvl),
+                });
+            }
+            nums.set(w(element, 'numId') ?? '', {
+                abstractId: w(wChild(element, 'abstractNumId'), 'val') ?? '',
+                overrides,
+            });
+        }
+    }
+    return new Numbering({ abstracts, nums }, styles);
 }
 
 // ECMA-376 says a missing start is 0; files that omit it are hand-made and mean 1.

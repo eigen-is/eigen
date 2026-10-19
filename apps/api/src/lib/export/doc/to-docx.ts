@@ -7,6 +7,7 @@ import {
     DOCUMENT_LINE_RATIO,
     EIGEN_FONT_NAMES,
     EIGEN_FONTS,
+    fontLineHeight,
     getFontName,
     readFontSize,
 } from '@workspace/lib/constants/fonts';
@@ -17,6 +18,7 @@ import {
     flattenNestedFootnotes,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
+    mmToTwips,
     type NormalStyle,
     type PageSetup,
     pageTwips,
@@ -30,7 +32,7 @@ import {
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import { writeOmml } from '@workspace/math';
-import { A_NS, ASVG_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../core/ooxml';
+import { A_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../core/ooxml';
 import {
     type PackagePart,
     type Relationship,
@@ -91,8 +93,14 @@ import {
     WORD_SETTINGS_URI,
 } from '../../document/wordml';
 import { splitDataUri } from '../../shared/data-uri';
-import { DOCX_FONT_FILES, type DocxFontFiles, fontLineHeight, sfntTables } from '../fonts';
-import { encodeOfficeImage, OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
+import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
+import {
+    blipXml,
+    encodeOfficeImage,
+    OFFICE_IMAGE_CONTENT_TYPES,
+    type OfficeMedia,
+    officeImageParts,
+} from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
@@ -344,7 +352,7 @@ type Context = {
 };
 
 // The bands' distance from the page edge, inside a smaller margin.
-const BAND_DISTANCE = Math.round((BAND_DISTANCE_MM * 1440) / 25.4);
+const BAND_DISTANCE = Math.round(mmToTwips(BAND_DISTANCE_MM));
 
 function sectionXml({ width, height, margin, differentFirstPage }: PageSetup, references: string): string {
     const orient = width > height ? ' w:orient="landscape"' : '';
@@ -979,9 +987,16 @@ function withoutAfter(blocks: Block[]): Block[] {
     ];
 }
 
-function withBefore(paragraph: Paragraph, before: number, styles: Styles): Paragraph {
+// Below an in-flow table. The editor draws a paragraph's space before, its own or the Normal's, as padding, which adds
+// to the table's margin; a style's margin above, a heading's, collapses with it to the larger, and an inset paragraph's
+// already holds the whole gap (withInsets).
+function withBefore(paragraph: Paragraph, margin: number, styles: Styles): Paragraph {
     const { props } = paragraph;
-    if (before <= (props.spacing?.before ?? styleSpacing(styles, props.style, 'before'))) return paragraph;
+    const own = props.spacing?.before;
+    const space = own ?? styleSpacing(styles, props.style, 'before');
+    const padded = !paragraph.inset && (own !== undefined || props.style === undefined || props.style === 'Normal');
+    const before = padded ? margin + space : Math.max(margin, space);
+    if (before === space) return paragraph;
     return { ...paragraph, props: { ...props, spacing: { ...props.spacing, before } } };
 }
 
@@ -1181,6 +1196,9 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     }
     const rowsXml = grid.map((cells, rowIndex) => {
         const byColumn = new Map(cells.map((cell) => [cell.column, cell]));
+        // Only an all-header row repeats; a reader may take an explicit off as on. A header cell beside a body cell is
+        // marked by its paragraphs' style.
+        const header = cells.length > 0 && cells.every((cell) => cell.node.type === 'tableHeader');
         const tcs: string[] = [];
         for (let column = 0; column < dxa.length; ) {
             const cell = byColumn.get(column);
@@ -1196,14 +1214,13 @@ function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
                 `<w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}</w:tcPr>`;
             if (cell) {
                 const merge = cell.rowspan > 1 ? '<w:vMerge w:val="restart"/>' : '';
+                const marked = !header && cell.node.type === 'tableHeader';
                 tcs.push(
-                    `<w:tc>${tcPr(merge)}${cellXml(cell, width - 2 * TABLE_LOOK.padding.horizontal, context)}</w:tc>`,
+                    `<w:tc>${tcPr(merge)}${cellXml(cell, width - 2 * TABLE_LOOK.padding.horizontal, context, marked)}</w:tc>`,
                 );
             } else tcs.push(`<w:tc>${tcPr(merged === undefined ? '' : '<w:vMerge/>')}<w:p/></w:tc>`);
             column += colspan;
         }
-        // Only an all-header row repeats; a reader may take an explicit off as on.
-        const header = cells.length > 0 && cells.every((cell) => cell.node.type === 'tableHeader');
         return `<w:tr>${header ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${tcs.join('')}</w:tr>`;
     });
 
@@ -1240,7 +1257,7 @@ function gridWidths(widths: (number | undefined)[], columnPx: number): { dxa: nu
 
 // A cell is a flow of its own: no indent or list around it, its paragraphs flush and aligned as the cell is. Only an
 // untyped list in it still numbers by the lists around the table, as eigen-prose.css draws it.
-function cellXml({ node, content }: GridCell, column: number, { pkg, numbered }: Context): string {
+function cellXml({ node, content }: GridCell, column: number, { pkg, numbered }: Context, marked: boolean): string {
     const align = node.attrs?.['align'];
     const cell: Context = {
         pkg,
@@ -1254,8 +1271,23 @@ function cellXml({ node, content }: GridCell, column: number, { pkg, numbered }:
         align: typeof align === 'string' ? JUSTIFICATION.get(align) : undefined,
     };
     const blocks = blocksOf(content, textProps({}, cell), cell, false);
-    return blocks.length > 0 ? blocksXml(blocks, pkg.styles) : paragraphXml({ props: textProps({}, cell), runs: '' });
+    const empty = textProps({}, cell);
+    if (marked) {
+        pkg.styles.set('TableHeader', TABLE_HEADER_STYLE);
+        for (const { props } of [...blocks.filter((block) => 'props' in block), { props: empty }])
+            props.style ??= 'TableHeader';
+    }
+    return blocks.length > 0 ? blocksXml(blocks, pkg.styles) : paragraphXml({ props: empty, runs: '' });
 }
+
+// Based on Normal, it looks as Normal does, and stays out of Word's gallery.
+const TABLE_HEADER_STYLE: StyleDef = {
+    type: 'paragraph',
+    id: 'TableHeader',
+    name: STYLE_NAMES.TableHeader,
+    basedOn: 'Normal',
+    semiHidden: true,
+};
 
 const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
 
@@ -1272,7 +1304,7 @@ const TABLE_LOOK = {
 
 // One image file per media name, and one relationship per part that shows it; an SVG's PNG is its blip, the SVG its
 // extension.
-type ImageFile = { part: string; svg?: string; width: number; height: number };
+type ImageFile = { part: string; svgPart?: string; width: number; height: number };
 
 type Image = ImageFile & { rId: string; svgRId?: string };
 
@@ -1383,19 +1415,16 @@ function imageOf(name: string, pkg: Package): Image | undefined {
         const media = pkg.media.get(name);
         const { width, height } = media ?? {};
         if (!media || !isPositive(width) || !isPositive(height)) return undefined;
-        const svg = media.contentType === 'image/svg+xml';
-        const raster = svg ? media.png : media.data;
-        const extension = svg ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
-        if (!raster || !extension) return undefined;
-        const n = pkg.imageFiles.size + 1;
-        file = { part: `image${n}.${extension}`, ...(svg && { svg: `image${n}.svg` }), width, height };
-        pkg.files.push([`word/media/${file.part}`, raster]);
-        if (file.svg) pkg.files.push([`word/media/${file.svg}`, media.data]);
+        const parts = officeImageParts(media, pkg.imageFiles.size + 1);
+        if (!parts) return undefined;
+        file = { part: parts.part, ...(parts.svgPart && { svgPart: parts.svgPart }), width, height };
+        pkg.files.push([`word/media/${parts.part}`, parts.raster]);
+        if (parts.svgPart) pkg.files.push([`word/media/${parts.svgPart}`, media.data]);
         pkg.imageFiles.set(name, file);
     }
     const relate = (target: string) =>
         `rId${pkg.part.relationships.push({ type: `${R_NS}/image`, target: `media/${target}` })}`;
-    const image: Image = { ...file, rId: relate(file.part), ...(file.svg && { svgRId: relate(file.svg) }) };
+    const image: Image = { ...file, rId: relate(file.part), ...(file.svgPart && { svgRId: relate(file.svgPart) }) };
     pkg.part.images.set(name, image);
     return image;
 }
@@ -1408,9 +1437,7 @@ function isPositive(value: number | undefined): value is number {
 function drawingXml(image: Image, cx: number, cy: number, alt: string, pkg: Package): string {
     const n = ++pkg.drawings;
     const descr = escapeXml(alt);
-    const blip = image.svgRId
-        ? `<a:blip r:embed="${image.rId}"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="${ASVG_NS}" r:embed="${image.svgRId}"/></a:ext></a:extLst></a:blip>`
-        : `<a:blip r:embed="${image.rId}"/>`;
+    const blip = blipXml(image.rId, image.svgRId);
     return [
         `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`,
         `<wp:docPr id="${n}" name="Picture ${n}" descr="${descr}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>`,

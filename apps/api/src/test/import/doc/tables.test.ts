@@ -12,7 +12,8 @@ const COLUMN_PX = 601;
 
 const run = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
 const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
-const cell = (text: string, tcPr = '') => `<w:tc>${tcPr && `<w:tcPr>${tcPr}</w:tcPr>`}${paragraph(run(text))}</w:tc>`;
+const cell = (text: string, tcPr = '', pPr = '') =>
+    `<w:tc>${tcPr && `<w:tcPr>${tcPr}</w:tcPr>`}${paragraph(run(text), pPr)}</w:tc>`;
 const row = (cells: string[], trPr = '') => `<w:tr>${trPr && `<w:trPr>${trPr}</w:trPr>`}${cells.join('')}</w:tr>`;
 const table = (rows: string[], tblPr = '') =>
     `<w:tbl>${tblPr && `<w:tblPr>${tblPr}</w:tblPr>`}<w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>${rows.join('')}</w:tbl>`;
@@ -27,28 +28,24 @@ async function rowTypes(body: string): Promise<string[][]> {
 }
 
 describe('header rows', () => {
-    // P12: Google Docs and many templates draw a header as a filled first row.
-    test('a first row filled in every cell over rows without a fill is a header row', async () => {
-        const body = table([
-            row([cell('Region', FILL), cell('Q1', FILL)]),
-            row([cell('North'), cell('4')]),
-            row([cell('South'), cell('5')]),
-        ]);
+    // A fill is a cell's look, which the cell keeps: only w:tblHeader and a table style's first row mark a header.
+    test('a filled first row over rows without a fill is no header row', async () => {
+        const body = table([row([cell('Region', FILL), cell('Q1', FILL)]), row([cell('North'), cell('4')])]);
         expect(await rowTypes(body)).toEqual([
-            ['tableHeader', 'tableHeader'],
             ['tableCell', 'tableCell'],
             ['tableCell', 'tableCell'],
         ]);
     });
 
-    test('a filled first row over a filled row is no header row', async () => {
-        const body = table([row([cell('A', FILL), cell('B', FILL)]), row([cell('C', FILL), cell('D')])]);
-        expect((await rowTypes(body))[0]).toEqual(['tableCell', 'tableCell']);
-    });
-
-    test('a first row filled in one cell only is no header row', async () => {
-        const body = table([row([cell('A', FILL), cell('B')]), row([cell('C'), cell('D')])]);
-        expect((await rowTypes(body))[0]).toEqual(['tableCell', 'tableCell']);
+    // The writer's mark for a header cell beside a body cell, which w:tblHeader can't mark.
+    test('a cell whose paragraph is in the Table Header style is a header cell', async () => {
+        const { json } = await importDocxBody(
+            table([row([cell('Head', '', '<w:pStyle w:val="TH"/>'), cell('Body')])]),
+            { styles: '<w:style w:type="paragraph" w:styleId="TH"><w:name w:val="Table Header"/></w:style>' },
+        );
+        expect(
+            nodesOfType(json, 'tableRow').map((tableRow) => (tableRow.content ?? []).map((node) => node.type)),
+        ).toEqual([['tableHeader', 'tableCell']]);
     });
 
     test('a w:tblHeader row is a header row, and w:tblHeader off is not', async () => {
@@ -181,7 +178,7 @@ describe('cell fill', () => {
     const filledCell = (inner: string, fill: string) =>
         `<w:tc><w:tcPr><w:shd w:val="clear" w:fill="${fill}"/></w:tcPr>${inner}</w:tc>`;
 
-    test("a cell's fill is its background, in lowercase; white, auto and the header's grey are none", async () => {
+    test("a cell's fill is its background, in lowercase, the header's grey too; white and auto are none", async () => {
         const body = table([
             row([
                 cell('a', '<w:shd w:val="clear" w:fill="CFE2F3"/>'),
@@ -196,14 +193,18 @@ describe('cell fill', () => {
         expect(await fillsOf(body)).toEqual([
             ['#cfe2f3', '#00ff00'],
             [null, null],
-            [null, null],
+            ['#f9fafb', null],
         ]);
     });
 
-    test('a filled header row keeps its fill beside its header type', async () => {
-        const body = table([row([cell('Region', FILL), cell('Q1', FILL)]), row([cell('North'), cell('4')])]);
+    test("a header row keeps its fill beside its header type, and the header's grey is none", async () => {
+        const grey = '<w:shd w:val="clear" w:fill="F9FAFB"/>';
+        const body = table([
+            row([cell('Region', FILL), cell('Q1', grey)], '<w:tblHeader/>'),
+            row([cell('North'), cell('4')]),
+        ]);
         expect(await fillsOf(body)).toEqual([
-            ['#1f4e79', '#1f4e79'],
+            ['#1f4e79', null],
             [null, null],
         ]);
         expect(await rowTypes(body)).toEqual([

@@ -491,9 +491,8 @@ describe('document transform (eigensheets preview)', () => {
     }, 60_000);
 });
 
-// Pinned bytes of the golden fixture's export documents (the html download and the
-// wrapped document fed to htmlToPdf). Regenerate only for an intentional renderer
-// change — last moved by the table taking the body's FONT_STACK_SANS (2026-10-12).
+// The golden workbook's HTML download and the document fed to WeasyPrint, its @page fit to the widest and tallest
+// sheet, pinned byte for byte: a hash moves only with an intentional renderer change.
 const GOLDEN_EXPORT_HTML_SHA256 = '7237285629cf37d274ebdccb41375c534f13a8fc29602d19a79e530dd269c391';
 const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'e411e94a27817d76929b53fb8a033e62a2ebf94cc6a7e537297368d6bee168a4';
 
@@ -817,67 +816,18 @@ describe('document transform (xlsx import)', () => {
     }, 120_000);
 });
 
-// Recorded from the pre-Worker doc/slides pipeline on the golden fixtures (preview
-// generators, the html downloads, and the wrapped documents fed to WeasyPrint), so the
-// move off-thread is proven byte-identical. Regenerate only
-// for an intentional renderer change. The embedded media data URI comes from the
-// screen-preview pipeline (sharp → WebP), so a preview-encoder change moves the
-// export hashes legitimately. The deck hashes were re-recorded when the deck moved onto the canvas
-// compositor: a slide is a `canvas-page` of scene layers now, so the bytes differ by construction —
-// and again when every screen-rendered page gained the shared `.page-fit` wrapper, which the preview
-// body now carries too so the lightbox and the drive hero can scale a page below its own width. The three
-// deck hashes moved again when gradients started sampling in OKLab: the deck's one slide-background
-// gradient now emits nine stops instead of two, and substituting that stop list back reproduces the
-// previous hashes byte-for-byte, so nothing else in the deck bytes moved. The deck's html hash moved
-// once more when the fallback ladder's bottom step was sized for the narrowest viewport it serves
-// rather than for its own breakpoint: one CSS scale value in the wrapping document, nothing else. All three
-// moved again when the two DOM boxes started drawing their paint with roughjs: the bordered image gained a
-// rough border path, and every painted rich-text box gained an svg backdrop before its text div while its
-// style dropped the CSS background and radius. The two doc export hashes moved when the page came from
-// the one page setup: the @page rule, the .page padding and the print CSS comments, and nothing else.
-// They moved again when the export resolved the weight scale to values (headings 500, bold 600) and dropped the
-// editor-only search flash: those lines, and nothing else.
-// And again when the page box, @page and the print reset came from one page stylesheet: the same rules, reordered.
-// And again when the page break gained its dashed rule, its float clear and its print rule: those lines, and nothing else.
-// And again when the dark-drop stopped leaving the dark theme's tail and a stray brace, and the two print blocks merged: those lines, and nothing else.
-// And again when the flattener dropped the CSS comments and prefixed every item of a comma list, the body stopped repeating the prose size and line height, and headings inherit the font size: those lines, and nothing else.
-// And again when the flattener kept declarations that precede a nested rule on their own rule, so the editor's .tiptap block reaches the export (repeated spaces kept, ligatures off), and the page wrapper lost its whitespace: those lines, and nothing else.
-// And again when the print extras stopped repeating the body font and color eigen-prose sets: that rule, and nothing else.
-// The preview and both doc hashes moved when a figure became spans its paragraph holds, the .figure box the editor draws, and a table's margin, a list item's floats and the float margins moved into eigen-prose.css: those, and nothing else.
-// And again when a textblock ending in a figure took the trailing <br> ProseMirror gives it: that <br>, and nothing else.
-// The docx hash is the writer's own output (to-docx.ts) with its embedded fonts; its image is the thumbnail
-// Worker's PNG of the source, so a writer, font or encoder change moves it. It moved when a figure's margin became an
-// inset inside its paragraph's spacing: the golden figure paragraph's spacing, and nothing else.
-// The HTML hashes moved when the print CSS named .figure and let a table or quote holding a page break split.
-// And again when a done task's strike moved from its content div to the blocks in it but a nested task list: that rule.
-// And again when an ordered list took its marker style inline and eigen-prose.css lost its four ol[type] rules: those.
-// All six html and pdf-html hashes (sheets, doc, deck) moved when the export documents gained the Content-Security-Policy meta after the charset meta: that line, and nothing else (the old hashes come back with it stripped).
-// The sheets pdf-html and both doc hashes moved when one builder sanitized every export body keeping link targets: a target="_blank" on each link, and nothing else (the old hashes come back with it stripped; WeasyPrint prints the same PDF bytes).
-// Both doc HTML hashes moved when Heading 5 and 6 took Google Docs' look: eigen-prose.css's h5 and h6 rules and their first-child margin, and nothing else. The docx hash moved with them: Heading5's and Heading6's grey and Heading6's italic in styles.xml, and nothing else.
-// Both doc HTML hashes moved again when an italic mark in Heading 6 drew upright: the h6 em rule, and a blank line where the second dark rule is dropped, and nothing else.
-// Both doc HTML hashes moved again when a numbered list right after another ran on at the items' step: the two ol + ol rules, and nothing else.
-// Both doc HTML hashes moved again when docs gained the title and subtitle: their two rules and their place in the clear-floats list, and nothing else. The docx hash moved with them: the Title and Subtitle styles in styles.xml, and nothing else.
-// Both doc HTML hashes moved again when the grey of Heading 5, 6 and the subtitle became one rule and the print extras lost the dead text-align classes and the clear-floats list eigen-prose.css carries: those lines, and nothing else.
-// Both doc HTML hashes moved again when a chart's inline SVG took its fit from eigen-prose.css: the .figure svg rule, and nothing else.
-// The deck pdf-html hash moved when a printed page lost its scene wrapper and each layer took its place as top and left, the rotation alone a transform, at 1:1 so its @page is 1920 wide: those styles, and nothing else.
-// The deck html and pdf-html hashes moved when canvas-text.css gave an empty paragraph its line: that rule and its comment, and nothing else.
-// Both doc HTML hashes moved again when the PDF drew equations as SVG, scaled down to the column: the three .math-svg rules in the print extras and their comment, and nothing else.
-// Both doc HTML hashes moved again when a displayed equation took its line in the exports as in the editor: the .math-svg[data-display] rule and its comment in the print extras, the + br rule gone, and eigen-prose.css's .equation[data-display] rule scoped to .eigen-prose with its comment, and nothing else.
-// Both doc HTML hashes moved again when a header's or footer's last block lost its space after: the .page-band rule, and nothing else (a doc without bands prints no band stylesheet).
-// Both doc HTML hashes moved again when equations met headers and footers: the .math-svg rules and the .page-band rule together, and nothing else.
-// Both doc HTML hashes moved again when a paragraph took its line spacing as a multiple of Inter's line: .eigen-prose p's line-height 1.7 to 1.694, and nothing else. The docx hash moved with it: Normal's w:line 337 to 336, and the lines familyLine rescales from it, and nothing else.
-// Both doc HTML hashes moved again when one paragraph followed another at the space after the first alone and a list, quote or cell kept the spacing of the paragraphs it holds: the .eigen-prose > p + p and :is(li, blockquote, td, th) p rules, and nothing else.
-// Both doc HTML hashes moved when the body text came to draw from the doc's Normal: eigen-prose.css's body and paragraph values as var(--doc-*) with Eigen's own as the fallback, .eigen-prose p's padding-top and margin-bottom 1em as 11pt, and the title's and subtitle's padding-top 0, and nothing else (the old hashes come back with each var() replaced by its fallback and those three lines reverted). A doc without the style map declares no --doc-* property, so the preview and docx hashes stayed.
-// All four moved again when headers and footers met paragraph format: the two sides' changes together, and nothing else.
-// Both doc HTML hashes moved again when a list became a flow-root and an untyped nested list numbered by depth: the ul, ol and ol ol rules of eigen-prose.css, and nothing else.
-// Both doc HTML hashes moved again when the list rules became Docs' own: the article's eigen-doc class, the .eigen-doc block with its first and last items' margins, and the restarted list's 0.25em, and nothing else.
+// The golden fixtures' renders through the Worker, pinned byte for byte, so a hash moves only with an intentional
+// renderer change, recorded again with it. Each embeds the golden image as its pipeline encodes it, so an encoder
+// change moves it too.
+// The doc's preview body: its first 20 blocks, the truncation marker, media as an embed URL, sanitized.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-// Both doc HTML hashes moved again when headers and footers on paper met the doc's Normal: the two sides' changes together, and nothing else; the preview and docx hashes are headers and footers' alone.
-// Both doc HTML hashes moved again when U5's Docs list rules met the doc's Normal: the two sides' changes together, and nothing else.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '237e7e41cdbb9bbc9d6e61bf9a1a996078c194cd85d88b7512e085dcad329af2';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '237e7e41cdbb9bbc9d6e61bf9a1a996078c194cd85d88b7512e085dcad329af2';
-// The docx hash is U9's: styles.xml gained Word's FootnoteText and FootnoteReference styles.
+// The doc's HTML download and the document fed to WeasyPrint: one hash, as the golden doc holds nothing that prints
+// otherwise on paper, no band, note, equation or small caps.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '9c7b694a73e76496796d3e99b2b7713feb681b528b4b6a6c3199a3d4c5a085fe';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '9c7b694a73e76496796d3e99b2b7713feb681b528b4b6a6c3199a3d4c5a085fe';
+// The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
+// The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
@@ -1169,7 +1119,7 @@ describe('document transform (eigendoc)', () => {
         const media = await collectExportMedia(mount, path, 'docx');
         const direct = await eigendocToDocx(
             readEigendocFromDoc(persisted),
-            readEigendocBands(persisted),
+            readEigendocBands(persisted).bands,
             readEigendocPage(persisted),
             readEigendocStyle(persisted),
             media,

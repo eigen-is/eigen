@@ -1,4 +1,11 @@
-import { BAND_ROOTS, type BandRoot, bandEdge, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_ROOTS,
+    type BandRoot,
+    bandEdge,
+    FIRST_PAGE_BAND,
+    mmToPt,
+    TWIPS_PER_POINT,
+} from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { alternativeFor, isOn, R_NS, W_NS } from '../../core/ooxml';
 import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../core/opc';
@@ -34,6 +41,8 @@ export type DocxPackage = {
     titlePg: boolean;
     // Even pages' bands the final section names, which Word draws only with evenAndOddHeaders.
     evenBands: number;
+    // Bands the final section names in a part that is missing or damaged.
+    damagedBands: number;
     contentTypeOf: OoxmlPackage['contentTypeOf'];
     // A part a drawing names, read when met; a damaged one is no part.
     readPart(path: string): XmlElement | undefined;
@@ -75,6 +84,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         }
     const titlePg = onOff(wChild(wChild(wChild(document, 'body'), 'sectPr'), 'titlePg')) === true;
     const bands: Partial<Record<BandRoot, Part>> = {};
+    let damagedBands = 0;
     for (const root of BAND_ROOTS) {
         const edge = bandEdge(root);
         const first = root === FIRST_PAGE_BAND[edge];
@@ -86,6 +96,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
             return tree && { path: rel.target, root: tree, rels: pkg.relationships(rel.target) };
         });
         if (band) bands[root] = band;
+        else damagedBands++;
     }
     const even = ['header:even', 'footer:even'].filter((key) => references.has(key)).length;
     const evenAndOdd = even > 0 && onOff(wChild(xml('settings'), 'evenAndOddHeaders')) === true;
@@ -101,6 +112,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         bands,
         titlePg,
         evenBands: evenAndOdd ? even : 0,
+        damagedBands,
         contentTypeOf: pkg.contentTypeOf,
         readPart: (path) => optional(() => pkg.part(path)),
         readMedia: (path) => optional(() => pkg.zip.read(path)),
@@ -172,8 +184,8 @@ export const POINTS_PER_UNIT = new Map([
     ['pc', 12],
     ['pi', 12],
     ['in', 72],
-    ['cm', 72 / 2.54],
-    ['mm', 72 / 25.4],
+    ['cm', mmToPt(10)],
+    ['mm', mmToPt(1)],
 ]);
 
 // A length in twips or half-points: a bare number is in that unit, a universal measure is converted.
@@ -184,7 +196,7 @@ function measure(value: string | undefined, perPoint: number): number | undefine
 }
 
 export function twipsOf(value: string | undefined): number | undefined {
-    return measure(value, 20);
+    return measure(value, TWIPS_PER_POINT);
 }
 
 export function halfPointsOf(value: string | undefined): number | undefined {

@@ -10,7 +10,7 @@ import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { openZip } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
-import { HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
+import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
 import { chartFigureMedia, eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { withSvgFallbacks } from '../../../lib/export/office-image';
 import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
@@ -18,6 +18,8 @@ import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixture
 import { importDocxBody } from '../../fixtures/golden-docx';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
+
+const HEADER_GREY = `#${HEADER_CELL_LOOK.fill.toLowerCase()}`;
 
 const ORIGIN = 'https://eigen.example';
 
@@ -41,10 +43,15 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // which the transform process makes, so a chart writes nothing; 'a chart' round-trips one. (9) Small is written as its
 // look and comes back as that size. (10) OMML has no slot for the typed LaTeX. (11) In Word a display equation is a
 // paragraph of its own, and every piece but the last keeps the writer's no space after, so the pieces draw as one
-// paragraph.
+// paragraph. (12) A header cell beside a body cell is marked by the Table Header style on its plain paragraphs, so
+// one holding none, only quotes, code, headings, rules or done tasks, comes back a body cell in the header's grey.
+// (13) A paragraph's format is what it sets apart from the Normal, so a value equal to the Normal's comes back as none.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
+        if (source.type === 'paragraph')
+            for (const name of ['lineSpacing', 'spaceBefore', 'spaceAfter'] as const)
+                if (attrs[name] === DEFAULT_NORMAL_STYLE[name]) attrs[name] = null;
         for (const name of ['colwidth', 'width'])
             if (name in attrs && attrs[name] === null) attrs[name] = imported?.attrs?.[name] ?? null;
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
@@ -69,9 +76,13 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         }
         return [mark];
     });
+    const mixed = source.type === 'tableRow' && source.content?.some((cell) => cell.type === 'tableCell');
     const kept = source.content
         ?.filter((child, index, siblings) => child.type !== 'chart' && !blankBeforeBreak(siblings, index))
-        .flatMap(splitAtDisplayEquations);
+        .flatMap(splitAtDisplayEquations)
+        .map((child) =>
+            mixed && child.type === 'tableHeader' && !child.content?.some(isPlain) ? asBodyCell(child) : child,
+        );
     const content = kept?.map((child, index) => expected(child, imported?.content?.[index]));
     return {
         ...source,
@@ -80,6 +91,16 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         ...(content && { content }),
     };
 }
+
+const isPlain = (block: JSONContent): boolean =>
+    ['paragraph', 'bulletList', 'orderedList'].includes(block.type ?? '') ||
+    (block.type === 'taskList' && !!block.content?.some((item) => !item.attrs?.['checked']));
+
+const asBodyCell = (cell: JSONContent): JSONContent => ({
+    ...cell,
+    type: 'tableCell',
+    attrs: { ...cell.attrs, backgroundColor: cell.attrs?.['backgroundColor'] ?? HEADER_GREY },
+});
 
 const isDisplayEquation = (node: JSONContent) => node.type === 'equation' && node.attrs?.['display'] === true;
 
@@ -620,13 +641,16 @@ describe("a heading's italic", () => {
     });
 });
 
-// Google Docs drops every custom style, so the code block's language; a page break in a table cell; a link's title.
+// Google Docs drops every custom style, so the code block's language and the mark of a header cell beside a body cell,
+// which comes back a body cell in the header's grey; a page break in a table cell; a link's title.
 // It keeps one placeholder for the export's media, so names don't say which image is which. The recording predates
 // caps, and Heading 6's italic, so its Heading 6 draws upright: there a plain run is the italic mark, and a marked one plain.
 function googleLosses(node: JSONContent, imported: JSONContent | undefined): JSONContent {
     const upright = node.type === 'heading' && !!HEADING_LOOKS[node.attrs?.['level'] - 1]?.italic;
+    const mixed = node.type === 'tableRow' && node.content?.some((cell) => cell.type === 'tableCell');
     const content = node.content
         ?.filter((child) => !(child.type === 'pageBreak' && (node.type === 'tableCell' || node.type === 'tableHeader')))
+        .map((child) => (mixed && child.type === 'tableHeader' ? asBodyCell(child) : child))
         .map((child, index) => googleLosses(upright ? toggleItalic(child) : child, imported?.content?.[index]));
     const attrs = node.attrs && {
         ...node.attrs,
@@ -693,9 +717,98 @@ describe("a paragraph's format", () => {
             'a heading after a table',
             [table, { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'H' }] }],
         ],
+        // Random seed 605: the editor adds a space before to the table's margin above it, as the writer and reader do.
+        [
+            'a space before under a table',
+            [
+                table,
+                formatted({ spaceBefore: 6 }),
+                table,
+                { type: 'heading', attrs: { level: 2, spaceBefore: 6 }, content: [{ type: 'text', text: 'H' }] },
+            ],
+        ],
     ])('%s come back as set', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
+// A header cell beside a body cell is marked by its paragraphs' style; a fill is a cell's look, whatever its color.
+describe("a cell's fill and header", () => {
+    const cell = (type: string, text: string, backgroundColor?: string) => ({
+        type,
+        attrs: backgroundColor ? { backgroundColor } : {},
+        content: [p(text)],
+    });
+    const grid = (...rows: JSONContent[][]) => ({
+        type: 'table',
+        content: rows.map((content) => ({ type: 'tableRow', content })),
+    });
+    test.each<[string, JSONContent]>([
+        [
+            'a header cell beside a body cell, filled or in the grey',
+            grid(
+                [cell('tableHeader', 'Own', '#cfe2f3'), cell('tableCell', 'A')],
+                [cell('tableHeader', 'Grey'), cell('tableCell', 'B')],
+            ),
+        ],
+        [
+            "a body cell in the header's grey, and a filled first row",
+            grid(
+                [cell('tableCell', 'Filled', '#1f4e79'), cell('tableCell', 'Too', '#1f4e79')],
+                [cell('tableCell', 'Grey', HEADER_GREY), cell('tableCell', 'Plain')],
+            ),
+        ],
+        [
+            'a header row with a fill of its own',
+            grid(
+                [cell('tableHeader', 'H', '#cfe2f3'), cell('tableHeader', 'I')],
+                [cell('tableCell', 'A'), cell('tableCell', 'B')],
+            ),
+        ],
+    ])('%s come back as written', async (_name, table) => {
+        const { source, json } = await roundTrip([table]);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
+// Word draws a line in its tallest face, the paragraph mark's when it's taller than the runs', and the reader reads it so.
+describe('a line under a Normal in another family', () => {
+    test.each<[string, string | undefined]>([
+        ['in a shorter family', 'Inter'],
+        ['in two families', undefined],
+        ['with no text', undefined],
+    ])('a paragraph %s keeps its line spacing, trip after trip', async (name, font) => {
+        const runs: JSONContent[] =
+            name === 'with no text'
+                ? []
+                : name === 'in two families'
+                  ? [
+                        { type: 'text', text: 'Serif ' },
+                        {
+                            type: 'text',
+                            text: 'Mono',
+                            marks: [{ type: 'textStyle', attrs: { fontFamily: 'JetBrains Mono' } }],
+                        },
+                    ]
+                  : [{ type: 'text', text: 'Text', marks: [{ type: 'textStyle', attrs: { fontFamily: font } }] }];
+        let content: JSONContent[] = [{ type: 'paragraph', attrs: { lineSpacing: 2 }, content: runs }];
+        let style = { ...DEFAULT_NORMAL_STYLE, font: 'Source Serif 4' };
+        for (let trip = 0; trip < 3; trip++) {
+            const docx = await eigendocToDocx(
+                { type: 'doc', content },
+                {},
+                DEFAULT_PAGE_SETUP,
+                style,
+                [],
+                'Line',
+                undefined,
+            );
+            const imported = docxToPmJson(Buffer.from(docx));
+            content = imported.json.content ?? [];
+            style = imported.style;
+            expect(content[0]?.attrs?.['lineSpacing']).toBe(2);
+        }
     });
 });
 
@@ -739,7 +852,17 @@ describe('random documents', () => {
 
 const BLOCKS = ['paragraph', 'heading', 'quote', 'bullets', 'ordered', 'tasks', 'code', 'rule', 'table', 'pageBreak'];
 
-// Three containers deep at most.
+// Three containers deep at most. A paragraph may take a format, a size, a note, an equation or a page number, a cell a
+// fill and an ordered list a type.
+const LINE_SPACINGS = [1, 1.15, 1.5, 2];
+const SPACINGS = [0, 6, 12];
+const INDENTS = [18, 36];
+const FONT_SIZES = [8, 14, 18];
+const FILLS = ['#cfe2f3', '#fce5cd'];
+// 1, a and i are what an untyped list draws at some depth, which reads back untyped (EXPORT.md's numbering section).
+const LIST_TYPES = ['A', 'I'];
+const EQUATION = writeMathml([{ kind: 'identifier', text: 'x' }]);
+
 function randomDocument(seed: number): JSONContent[] {
     let state = seed;
     const next = () => {
@@ -747,16 +870,39 @@ function randomDocument(seed: number): JSONContent[] {
         return state / 0x7fffffff;
     };
     const below = (count: number) => Math.floor(next() * count);
+    const pick = <T>(values: T[]): T => values[below(values.length)] as T;
     let written = 0;
     const text = () => `T${++written}`;
+    const inline = (): JSONContent[] => {
+        const sized = next() < 0.2 ? { marks: [{ type: 'textStyle', attrs: { fontSize: pick(FONT_SIZES) } }] } : {};
+        const runs: JSONContent[] = [{ type: 'text', text: text(), ...sized }];
+        const extra = next();
+        if (extra < 0.08) runs.push({ type: 'footnote', content: [p(text())] });
+        else if (extra < 0.14) runs.push({ type: 'equation', attrs: { mathml: EQUATION } });
+        else if (extra < 0.18) runs.push({ type: 'pageNumber', attrs: { kind: 'page' } });
+        return runs;
+    };
+    // Spacing and indents are a top-level paragraph's, as a list, quote or cell owns the spacing of what it holds.
+    const format = (depth: number): Record<string, number> => {
+        const attrs: Record<string, number> = {};
+        if (next() < 0.3) attrs['lineSpacing'] = pick(LINE_SPACINGS);
+        if (depth > 0) return attrs;
+        if (next() < 0.2) attrs['spaceBefore'] = pick(SPACINGS);
+        if (next() < 0.2) attrs['spaceAfter'] = pick(SPACINGS);
+        if (next() < 0.15) attrs['indentLeft'] = pick(INDENTS);
+        if (next() < 0.1) attrs['indentRight'] = pick(INDENTS);
+        if (next() < 0.1) attrs['indentFirstLine'] = pick([...INDENTS, -18]);
+        return attrs;
+    };
+    const para = (depth: number): JSONContent => ({ type: 'paragraph', attrs: format(depth), content: inline() });
     const blocks = (depth: number, least: number): JSONContent[] =>
         Array.from({ length: least + below(3) }, () => block(depth));
     const items = (depth: number) =>
-        Array.from({ length: 1 + below(2) }, () => [p(text()), ...(next() < 0.6 ? blocks(depth + 1, 0) : [])]);
+        Array.from({ length: 1 + below(2) }, () => [para(depth + 1), ...(next() < 0.6 ? blocks(depth + 1, 0) : [])]);
     const cell = (depth: number, attrs: Record<string, number>) => ({
         type: next() < 0.2 ? 'tableHeader' : 'tableCell',
-        attrs,
-        content: depth < 2 && next() < 0.3 ? blocks(depth + 1, 1) : [p(text())],
+        attrs: next() < 0.3 ? { ...attrs, backgroundColor: pick(FILLS) } : attrs,
+        content: depth < 2 && next() < 0.3 ? blocks(depth + 1, 1) : [para(depth + 1)],
     });
     const block = (depth: number): JSONContent => {
         switch (depth >= 3 ? 'paragraph' : BLOCKS[below(BLOCKS.length)]) {
@@ -767,7 +913,10 @@ function randomDocument(seed: number): JSONContent[] {
             case 'bullets':
                 return bullets(...items(depth));
             case 'ordered':
-                return ordered(...items(depth));
+                return {
+                    ...ordered(...items(depth)),
+                    ...(next() < 0.4 && { attrs: { start: 1, type: pick(LIST_TYPES) } }),
+                };
             case 'tasks':
                 return {
                     type: 'taskList',
@@ -801,7 +950,7 @@ function randomDocument(seed: number): JSONContent[] {
                 };
             }
             default:
-                return p(text());
+                return para(depth);
         }
     };
     return blocks(0, 1);
@@ -823,6 +972,8 @@ function writable(content: JSONContent[], container = 'doc'): boolean {
         const previous = blocks[index - 1];
         // No task list is numbered, so two apart by nothing or page breaks are one.
         if (node.type === 'taskList' && previous?.type === 'taskList') return false;
+        // An indent nests a paragraph into the list item before it, as Word draws one there.
+        if (node.attrs?.['indentLeft'] && LISTS.has(previous?.type ?? '')) return false;
         if (node.type !== 'blockquote' || previous?.type !== 'blockquote') continue;
         const last = previous.content?.at(-1);
         // A break between quotes is one in a quote; nothing parts a quote that ends deep in a table from the next.

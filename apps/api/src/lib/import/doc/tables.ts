@@ -3,7 +3,7 @@ import { MIN_TABLE_COLUMN_PX, PROSE_TEXTBLOCKS, readCellBackground } from '@work
 import { isOn, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
-import { MAX_TABLE_COLUMNS, TWIPS_PER_PX } from '../../document/wordml';
+import { MAX_TABLE_COLUMNS, STYLE_NAMES, TWIPS_PER_PX } from '../../document/wordml';
 import { build, type Item, inlineText, isWhitespace, type Para } from './assemble';
 import { int, onOff, twipsOf, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
@@ -70,8 +70,8 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         if (figure) return [{ kind: 'float', figure }];
     }
 
-    // A first row the table style fills is a header row, as one the cells fill is.
-    const shadedHeader = isShadedHeader(rows) || (firstRowOn && isFill(tableLook?.firstRowFill));
+    // A first row the table style fills is a header row, as Word marks one with w:tblHeader.
+    const styledHeader = firstRowOn && isFill(tableLook?.firstRowFill);
     const rowNodes: { cells: JSONContent[]; end: number }[] = [];
     // The merged cells a continuation in the next row extends, by the column each starts at.
     let open = new Map<number, CellAttrs>();
@@ -81,7 +81,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     for (const [rowIndex, row] of rows.entries()) {
         // A merge stops at the end of its part; a continuation past it starts a cell of its own.
         if (split && rowNodes.length > 0 && rowNodes.length % MAX_MERGED_ROWS === 0) open = new Map();
-        const header = (onOff(wChild(row.trPr, 'tblHeader')) ?? false) || (rowIndex === 0 && shadedHeader);
+        const header = (onOff(wChild(row.trPr, 'tblHeader')) ?? false) || (rowIndex === 0 && styledHeader);
         const cells: JSONContent[] = [];
         const next = new Map<number, CellAttrs>();
         const extended: CellAttrs[] = [];
@@ -126,8 +126,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
                           (item) => item.kind !== 'para' || !item.empty,
                       );
             const content = build([...own, ...past]);
-            const type =
-                header || shadingOf(wChild(tcPr, 'shd')) === HEADER_CELL_LOOK.fill ? 'tableHeader' : 'tableCell';
+            const type = header || isMarkedHeader(reader, cell) ? 'tableHeader' : 'tableCell';
             const fill = fillOf(cell, rowIndex);
             // A header's grey is the header's own look.
             const backgroundColor =
@@ -204,19 +203,13 @@ function cellContent(cell: XmlElement): XmlElement[] {
     return xmlElements(cell).filter((child) => !hasXmlName(child, W_NS, 'tcPr'));
 }
 
-function cellFill(cell: XmlElement): boolean {
-    return isFill(shadingOf(wChild(wChild(cell, 'tcPr'), 'shd')));
-}
-
-// A shaded first row over unshaded rows is a header row, as Google Docs and many templates draw one.
-function isShadedHeader(rows: Row[]): boolean {
-    const [first, ...rest] = rows;
-    return (
-        !!first &&
-        rest.length > 0 &&
-        first.cells.length > 0 &&
-        first.cells.every(cellFill) &&
-        rest.every((row) => !row.cells.some(cellFill))
+// The writer marks a header cell in a row with a body cell by its paragraphs' style.
+function isMarkedHeader(reader: Reader, cell: XmlElement): boolean {
+    return cellContent(cell).some(
+        (child) =>
+            hasXmlName(child, W_NS, 'p') &&
+            reader.styles.get(w(wChild(wChild(child, 'pPr'), 'pStyle'), 'val'))?.name ===
+                STYLE_NAMES.TableHeader.toLowerCase(),
     );
 }
 

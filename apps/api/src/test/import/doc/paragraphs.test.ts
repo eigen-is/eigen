@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, fontLineHeight } from '@workspace/lib/constants/fonts';
 import {
     DEFAULT_NORMAL_STYLE,
     DEFAULT_PAGE_SETUP,
@@ -9,7 +9,6 @@ import {
     readPageSetup,
 } from '@workspace/lib/docs/eigendoc';
 import { CODE_BLOCK_LOOK, QUOTE_LOOK } from '../../../lib/document/looks';
-import { fontLineHeight } from '../../../lib/export/fonts';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A paragraph's rules: blank lines, breaks, alignment, comments.
@@ -116,6 +115,19 @@ describe('the page', () => {
         );
         expect(read.width).toBe(279.4);
         expect(warnings).toEqual([{ code: 'section-pages-dropped', count: 1 }]);
+    });
+
+    // A tracked change keeps a section's old properties inside its own, which Word no longer draws.
+    test("a tracked section change's old page is no section", async () => {
+        const tracked = (section: string) =>
+            section.replace(
+                '</w:sectPr>',
+                `<w:sectPrChange w:id="1" w:author="A">${page(11906, 16838, 1440)}</w:sectPrChange></w:sectPr>`,
+            );
+        const { warnings } = await importDocxBody(
+            `${paragraph(run('One'), tracked(LETTER_LANDSCAPE))}${paragraph(run('Two'))}${tracked(LETTER_LANDSCAPE)}`,
+        );
+        expect(warnings).toEqual([]);
     });
 
     test("a size a section leaves out is the default A4, a margin Word's 1 in", async () => {
@@ -333,6 +345,18 @@ describe('notes', () => {
         expect(notesOf(json)).toEqual([['Starred']]);
     });
 
+    // The mark is the run's text up to a tab; with no note made, the text stays.
+    test('a custom mark ends at a tab, and stays text when the note is missing', async () => {
+        const marked = (id: number, text: string) =>
+            `<w:r><w:footnoteReference w:customMarkFollows="1" w:id="${id}"/><w:t>*</w:t><w:tab/><w:t>after</w:t></w:r>${run(text)}`;
+        const { json } = await importDocxBody(paragraph(`${marked(1, ' one')}${marked(7, ' two')}`), {
+            footnotes: note(1, run(' Starred')),
+        });
+        expect(
+            (json.content?.[0]?.content ?? []).map((node) => (node.type === 'text' ? node.text : node.type)),
+        ).toEqual(['footnote', '\tafter one*\tafter two']);
+    });
+
     test('a note inside a note is its text there, each paragraph after a space', async () => {
         const { json } = await importDocxBody(paragraph(`${run('Body')}${reference(1)}`), {
             footnotes: `${note(1, `${run(' Outer')}${reference(2)}`)}${note(2, run(' Inner'))}`,
@@ -347,6 +371,35 @@ describe('notes', () => {
             footnotes: `${note(1, `${run(' One')}${reference(2)}`)}${note(2, `${run(' Two')}${reference(3)}`)}${note(3, run(' Three'))}`,
         });
         expect(notesOf(json)).toEqual([['One Two'], ['Two Three']]);
+    });
+
+    // A note read inside another holds its text alone, whichever reference reads it first, and a cycle puts no note's
+    // own text inside it.
+    test("a note's text is the same in either order, and a cycle holds each note's text once", async () => {
+        const chain = `${note(1, `${run(' One')}${reference(2)}`)}${note(2, `${run(' Two')}${reference(3)}`)}${note(3, run(' Three'))}`;
+        const cycle = `${note(1, `${run(' One')}${reference(2)}`)}${note(2, `${run(' Two')}${reference(1)}`)}`;
+        const notesFor = async (order: number[], footnotes: string) =>
+            notesOf(
+                (
+                    await importDocxBody(paragraph(`${run('Body')}${order.map((id) => reference(id)).join('')}`), {
+                        footnotes,
+                    })
+                ).json,
+            );
+        expect(await notesFor([3, 2, 1], chain)).toEqual([['Three'], ['Two Three'], ['One Two']]);
+        expect(await notesFor([1, 2], cycle)).toEqual([['One Two'], ['Two One']]);
+        expect(await notesFor([2, 1], cycle)).toEqual([['Two One'], ['One Two']]);
+    });
+
+    // A note holds paragraphs only, so a list in it is its paragraphs; its count is its own, not the body's.
+    test("a note's numbered list starts its own count", async () => {
+        const numbered = '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr>';
+        const { json } = await importDocxBody(
+            `${paragraph(run('One'), numbered)}${paragraph(`${run('Two')}${reference(1)}`, numbered)}${paragraph(run('Three'), numbered)}`,
+            { footnotes: `<w:footnote w:id="1">${paragraph(run('Item'), numbered)}</w:footnote>` },
+        );
+        expect(nodesOfType(json, 'listItem')).toHaveLength(3);
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1]);
     });
 
     test('a separator, a missing note and a note with no reference are no notes', async () => {
@@ -1064,6 +1117,30 @@ describe('the Normal', () => {
         );
         expect(marksOfType(json, 'textStyle')).toEqual([]);
         for (const node of nodesOfType(json, 'paragraph')) expect(node.attrs).toMatchObject(UNFORMATTED);
+    });
+
+    // An at-least Normal reads as single, so a single line set on a paragraph is the Normal's.
+    test('under an at-least Normal, a paragraph set to single lines has no line spacing of its own', async () => {
+        const atLeast =
+            '<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:line="300" w:lineRule="atLeast"/></w:pPr></w:pPrDefault></w:docDefaults>';
+        const { json, style } = await importDocxBody(
+            `${paragraph(run('Single'), '<w:spacing w:line="240" w:lineRule="auto"/>')}${paragraph(run('Double'), '<w:spacing w:line="480" w:lineRule="auto"/>')}`,
+            { styles: atLeast },
+        );
+        expect(style.lineSpacing).toBe(1);
+        expect(nodesOfType(json, 'paragraph').map((node) => node.attrs?.['lineSpacing'])).toEqual([null, 2]);
+    });
+
+    // A size past the range lands in it, as a run's does, so every size compared with the body's is in it too.
+    test("the body's size is bounded as a run's is", async () => {
+        const sized = (size: number) =>
+            `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="${size}"/></w:rPr></w:rPrDefault></w:docDefaults>`;
+        const tiny = await importDocxBody(paragraph(run('a', '<w:sz w:val="2"/>')), { styles: sized(0) });
+        expect(tiny.style.size).toBe(1);
+        expect(marksOfType(tiny.json, 'textStyle')).toEqual([]);
+        const huge = await importDocxBody(paragraph(run('b', '<w:sz w:val="800"/>')), { styles: sized(100_000) });
+        expect(huge.style.size).toBe(400);
+        expect(marksOfType(huge.json, 'textStyle')).toEqual([]);
     });
 
     test("a run in another bundled font is marked, the document font's included, and one Eigen can't draw draws in Inter", async () => {

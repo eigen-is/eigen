@@ -47,11 +47,17 @@ import {
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import { ApiError } from '../../core/errors';
-import { A_NS, AHYP_NS, ASVG_NS, P_NS, R_NS } from '../../core/ooxml';
+import { A_NS, AHYP_NS, P_NS, R_NS } from '../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
 import { cssColorToHex } from '../../document/colors';
 import { canvasTextValue } from '../../document/prose-css';
-import { OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
+import {
+    blipXml,
+    OFFICE_IMAGE_CONTENT_TYPES,
+    type OfficeImageParts,
+    type OfficeMedia,
+    officeImageParts,
+} from '../office-image';
 import { isElement } from '../sanitize';
 
 // A deck → hand-written PresentationML, one slide per frame, each element as the DrawingML shape that draws it. Takes
@@ -183,7 +189,7 @@ type Deck = {
 };
 
 // An SVG's raster is its PNG, its own data the svgPart beside it.
-type Image = { part: string; svgPart?: string; raster: ArrayBuffer; media: OfficeMedia };
+type Image = OfficeImageParts & { media: OfficeMedia };
 
 type Slide = {
     deck: Deck;
@@ -660,24 +666,17 @@ function imageOf(name: string, deck: Deck): Image | undefined {
     const known = deck.images.get(name);
     if (known) return known;
     const media = deck.media.get(name);
-    if (!media) return undefined;
-    const svg = media.contentType === 'image/svg+xml';
-    const raster = svg ? media.png : media.data;
-    const extension = svg ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
-    if (!raster || !extension) return undefined;
-    const n = deck.images.size + 1;
-    const image: Image = { part: `image${n}.${extension}`, svgPart: svg ? `image${n}.svg` : undefined, raster, media };
+    const parts = media && officeImageParts(media, deck.images.size + 1);
+    if (!media || !parts) return undefined;
+    const image: Image = { ...parts, media };
     deck.images.set(name, image);
     return image;
 }
 
-function blipXml(image: Image, slide: Slide, opacity: number): string {
+function slideBlipXml(image: Image, slide: Slide, opacity: number): string {
     const rId = relate(slide, 'image', `../media/${image.part}`);
-    const alpha = opacity < 1 ? `<a:alphaModFix amt="${share(opacity)}"/>` : '';
-    const svg = image.svgPart
-        ? `<a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="${ASVG_NS}" r:embed="${relate(slide, 'image', `../media/${image.svgPart}`)}"/></a:ext></a:extLst>`
-        : '';
-    return `<a:blip r:embed="${rId}">${alpha}${svg}</a:blip>`;
+    const svgRId = image.svgPart && relate(slide, 'image', `../media/${image.svgPart}`);
+    return blipXml(rId, svgRId, opacity < 1 ? `<a:alphaModFix amt="${share(opacity)}"/>` : '');
 }
 
 // How much of each side cover cuts off the picture, or contain leaves empty in the box: one share of the whole, on the
@@ -719,7 +718,7 @@ function pictureXml(el: VectorImageElement, slide: Slide, opacity: number): stri
             : '';
     const geometry = contain ? presetXml('rect') : boxGeometry(el);
     const id = ++slide.shapes;
-    const picture = `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${blipXml(image, slide, opacity)}${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(slide, box)}${geometry}</p:spPr></p:pic>`;
+    const picture = `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${slideBlipXml(image, slide, opacity)}${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(slide, box)}${geometry}</p:spPr></p:pic>`;
     return picture + border;
 }
 
@@ -738,7 +737,7 @@ function backgroundXml(background: BackgroundFill | null, frame: VectorFrame, sl
         const inset = share(cover ? -fit.cut / (1 - 2 * fit.cut) : fit.cut);
         insets = fit.wide === cover ? ` l="${inset}" r="${inset}"` : ` t="${inset}" b="${inset}"`;
     }
-    return `<p:bg><p:bgPr><a:blipFill dpi="0" rotWithShape="1">${blipXml(image, slide, 1)}<a:stretch><a:fillRect${insets}/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`;
+    return `<p:bg><p:bgPr><a:blipFill dpi="0" rotWithShape="1">${slideBlipXml(image, slide, 1)}<a:stretch><a:fillRect${insets}/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`;
 }
 
 // ── Text ─────────────────────────────────────────────────────────────────────────────────────────────────────────

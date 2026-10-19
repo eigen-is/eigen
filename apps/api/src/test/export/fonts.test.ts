@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { DOCX_FONT_FILES, getFontCSS, sfntTables } from '../../lib/export/fonts';
 
 const UI_STYLES_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/styles');
@@ -122,3 +122,18 @@ test('every docx font file may be embedded for editing', () => {
     const usage = (face: (typeof docxFaces)[number]) => (face.tables.get('OS/2')?.readUInt16BE(8) ?? 0x0002) & 0x000f;
     expect(docxFaces.filter((face) => ![0, 8].includes(usage(face))).map((face) => face.file)).toEqual([]);
 });
+
+// Each family's single line is a number of lib's, as the editor, the canvas and the docx all read it; it is Word's,
+// (usWinAscent + usWinDescent) / unitsPerEm of the Regular the docx embeds.
+test.each(EIGEN_FONTS.map((font) => [font.name, font.lineHeight] as const))(
+    "%s's single line is its TTF's",
+    (name, lineHeight) => {
+        const regular = DOCX_FONT_FILES.get(name)?.Regular;
+        if (!regular) throw new Error(`no TTF for ${name}`);
+        const tables = sfntTables(fs.readFileSync(regular));
+        const os2 = tables.get('OS/2');
+        const head = tables.get('head');
+        if (!os2 || !head) throw new Error(`no OS/2 or head table for ${name}`);
+        expect((os2.readUInt16BE(74) + os2.readUInt16BE(76)) / head.readUInt16BE(18)).toBeCloseTo(lineHeight, 3);
+    },
+);

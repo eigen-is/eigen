@@ -473,7 +473,8 @@ export class Styles {
             });
             if (type === 'paragraph' && isOn(w(element, 'default'))) defaultParagraph ??= id;
         }
-        this.defaultParagraph = defaultParagraph ?? (this.byId.has('Normal') ? 'Normal' : undefined);
+        this.defaultParagraph =
+            defaultParagraph ?? (this.byId.get('Normal')?.type === 'paragraph' ? 'Normal' : undefined);
     }
 
     get(id: string | undefined): Style | undefined {

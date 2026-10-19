@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { DOCUMENT_LINE_RATIO, EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
 import {
     BAND_DISTANCE_MM,
     BAND_ROOTS,
@@ -6,6 +7,7 @@ import {
     DOC_PROSE_CLASS,
     FOOTNOTE_PARAGRAPH,
     footnotesInOrder,
+    mmToPt,
     type NormalStyle,
     normalStyleProperties,
     PAGE_BAND_CLASS,
@@ -60,7 +62,8 @@ export async function renderEigendocExport(
     const json = readEigendocFromDoc(doc);
     const page = readEigendocPage(doc);
     const style = readEigendocStyle(doc);
-    const bands = readEigendocBands(doc);
+    const { bands, cut } = readEigendocBands(doc);
+    const warnings: TransformWarning[] = cut > 0 ? [{ code: 'band-blocks-cut', count: cut }] : [];
     if (format === 'docx') {
         const { chartFigureMedia, eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
         const roots = [json, ...Object.values(bands)];
@@ -68,7 +71,7 @@ export async function renderEigendocExport(
         const docxMedia = await withSvgFallbacks([...media, ...drawn]);
         return {
             data: toTransferableBuffer(await eigendocToDocx(json, bands, page, style, docxMedia, title, publicOrigin)),
-            warnings: [],
+            warnings,
         };
     }
     const dataUriMap = toDataUriMap(media);
@@ -82,26 +85,40 @@ export async function renderEigendocExport(
         const content = part === 'body' ? json : bands[part];
         return content ? [{ part, content }] : [];
     });
+    const notes = footnotesInOrder(json);
+    const pageNotes = pdf && notesFitPages(notes, page);
     const equations = renderEquations(pdf ? await svgEquations(roots.map(({ content }) => content)) : undefined);
     const body = roots
         .map(({ part, content }) => {
             const html = renderDocHtml(
                 withAbsoluteLinks(content, publicOrigin),
                 (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-                { ...(pdf && { smallCapsFont: style.font }), pageCounters: pdf, pageFootnotes: pdf, equations },
+                { ...(pdf && { smallCapsFont: style.font }), pageCounters: pdf, pageFootnotes: pageNotes, equations },
             );
             return part === 'body'
                 ? `<article class="eigen-prose tiptap ${DOC_PROSE_CLASS}">${html}</article>`
                 : `<div class="band-${part}"><article class="eigen-prose tiptap ${DOC_PROSE_CLASS} ${PAGE_BAND_CLASS}">${html}</article></div>`;
         })
         .join('');
-    const notes = footnotesInOrder(json).length > 0 ? (pdf ? PAGE_FOOTNOTES_CSS : FOOTNOTE_LIST_CSS) : '';
+    const notesCss = notes.length > 0 ? (pageNotes ? PAGE_FOOTNOTES_CSS : FOOTNOTE_LIST_CSS) : '';
     const html = exportHtmlDocument({
         title,
-        css: `${PROSE_CSS}${printExtras(page, style)}${notes}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
+        fonts: usedFamilies(body, style),
+        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
-    return { data: toTransferableText(html), warnings: [] };
+    return { data: toTransferableText(html), warnings };
+}
+
+// The bundled families a doc's export can draw in, as a face is up to 0.6 MB of base64 WeasyPrint reads per PDF: the
+// Normal's, in which eigen-prose.css draws the body and which names no other as its fallback, the monospace of code,
+// and each family a font mark's style or a chart's SVG names in the body. A body's text that names a family embeds it
+// for nothing, and misses none.
+function usedFamilies(body: string, style: NormalStyle): Set<string> {
+    const families = new Set([style.font]);
+    if (body.includes('<code')) families.add(getFontName(FONT_STACK_MONO));
+    for (const name of EIGEN_FONT_NAMES) if (body.includes(name)) families.add(name);
+    return families;
 }
 
 // WeasyPrint draws no MathML, so the PDF draws its equations as the SVGs MathJax makes of the MathML the screen draws,
@@ -151,6 +168,29 @@ ${page.differentFirstPage ? '@page :first { @top-center { content: element(heade
 `;
 }
 
+// A note floats whole to its reference's page, so one taller than the page's text loses what doesn't fit, and
+// WeasyPrint lays the notes out again for every page they fill: 4,000 one-line notes took 35 s and 10,000 ran past the
+// 60 s timeout. Past either, the PDF lists the notes after the body, as the download does.
+export const MAX_PAGE_NOTES = 1500;
+
+// A note's lines at 10 pt, a character at most 0.6 em wide on average, against the page's text less the reference's
+// line and the rule above the notes.
+function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
+    if (notes.length > MAX_PAGE_NOTES) return false;
+    const { sizePt } = FOOTNOTE_LOOK;
+    const lineChars = mmToPt(page.width - page.margin.left - page.margin.right) / (0.6 * sizePt);
+    const pageLines = mmToPt(page.height - page.margin.top - page.margin.bottom) / (sizePt * DOCUMENT_LINE_RATIO) - 3;
+    const textOf = (node: JSONContent): number =>
+        (node.text?.length ?? 0) + (node.content ?? []).reduce((sum, child) => sum + textOf(child), 0);
+    return notes.every(
+        (note) =>
+            (note.content ?? []).reduce(
+                (lines, block) => lines + Math.max(1, Math.ceil(textOf(block) / lineChars)),
+                0,
+            ) <= pageLines,
+    );
+}
+
 // A note floats to the foot of its reference's page, numbered in the text and at the note, under a short rule, as Google
 // prints it. The note inherits from its reference's paragraph, a heading's, a title's, a quote's or a list item's, and
 // its call too, which takes that text's size: so the note's own font has no line of its own (line-height 0), and its
@@ -173,6 +213,7 @@ const PAGE_FOOTNOTES_CSS = `
 .footnote::footnote-marker { content: counter(footnote) ' '; vertical-align: super; font-size: ${FOOTNOTE_LOOK.sizePt * 0.75}pt; }
 .footnote > [data-type="${FOOTNOTE_PARAGRAPH}"] { display: block; }
 .footnote > [data-type="${FOOTNOTE_PARAGRAPH}"]:first-child { display: inline; }
+[data-bookmark] { bookmark-label: attr(data-bookmark); }
 @page {
     @footnote {
         margin-top: 1em;
@@ -216,9 +257,10 @@ table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-bre
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 
 /* The PDF's equations: MathJax's vertical-align sets an inline one on the baseline, and breaks no line, so one wider
-   than the column scales down to it; a displayed one takes its line as in the editor, a full-width box on the bottom
-   of the line that keeps the trailing <br> */
-.math-svg > svg { display: inline; max-width: 100%; }
+   than the column scales down to it, its height with it, as WeasyPrint 70 reads a root svg element's ex width and height as
+   CSS; a displayed one takes its line as in the editor, a full-width box on the bottom of the line that keeps the
+   trailing <br> */
+.math-svg > svg { display: inline; max-width: 100%; height: auto; }
 .math-svg[data-display] { display: inline-block; width: 100%; text-align: center; vertical-align: bottom; }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */
