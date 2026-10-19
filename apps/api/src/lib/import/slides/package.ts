@@ -1,10 +1,9 @@
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
-import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../core/ooxml';
+import { A_NS, ASVG_NS, alternativeFor, EMU_PER_POINT, P_NS, POINTS_PER_UNIT, R_NS } from '../../core/ooxml';
 import { openPackage, optional, type Relationship, relOfType } from '../../core/opc';
 import type { XmlElement } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
-import { POINTS_PER_UNIT } from '../doc/package';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
@@ -157,8 +156,6 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
         readMedia: (path) => optional(() => pkg.zip.read(path)),
     };
 }
-
-export const EMU_PER_POINT = 12_700;
 
 // ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
 // Past 64 characters it is none unread: no coordinate needs more, and a file's 4 MB one would be parsed at each use.

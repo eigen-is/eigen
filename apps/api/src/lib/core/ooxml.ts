@@ -2,7 +2,7 @@ import { MARKUP_COMPATIBILITY_NAMESPACE, OMML_NAMESPACE, WORDML_NAMESPACE } from
 import { hasXmlName, parseXml, type XmlElement, xmlElements } from './xml';
 
 // The OOXML every format's reader and writer share: namespaces, Strict read as transitional, markup compatibility and
-// DrawingML's unit. Word's own vocabulary is document/wordml.ts.
+// the units. Word's own vocabulary is document/wordml.ts.
 
 // ── Namespaces ──────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -77,6 +77,17 @@ export function alternativeFor(understood: ReadonlySet<string>): (element: XmlEl
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export const EMU_PER_PX = 9525;
+export const EMU_PER_POINT = 12_700;
+
+// ST_UniversalMeasure, which Strict OOXML writes where transitional writes a number: points per unit.
+export const POINTS_PER_UNIT = new Map([
+    ['pt', 1],
+    ['pc', 12],
+    ['pi', 12],
+    ['in', 72],
+    ['cm', 72 / 2.54],
+    ['mm', 72 / 25.4],
+]);
 
 // ── Values ──────────────────────────────────────────────────────────────────────────────────────────────────────
 

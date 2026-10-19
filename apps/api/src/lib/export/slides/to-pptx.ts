@@ -47,7 +47,7 @@ import {
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import { ApiError } from '../../core/errors';
-import { A_NS, AHYP_NS, ASVG_NS, P_NS, R_NS } from '../../core/ooxml';
+import { A_NS, AHYP_NS, ASVG_NS, EMU_PER_POINT, P_NS, R_NS } from '../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
 import { cssColorToHex } from '../../document/colors';
 import { canvasTextValue } from '../../document/prose-css';
@@ -129,11 +129,9 @@ const PPTX_SLIDE_SIZES: Record<SlideSize, { cx: number; cy: number; type?: strin
     '4:3': { cx: 9_144_000, cy: 6_858_000, type: 'screen4x3' },
 };
 
-const EMU_PER_PT = 12_700;
-
 // Text sizes and spacing in 100ths of a point, at the deck's scale.
 function centipoints(slide: Slide, px: number): number {
-    return Math.round((px * slide.deck.scale * 100) / EMU_PER_PT);
+    return Math.round((px * slide.deck.scale * 100) / EMU_PER_POINT);
 }
 
 const GROUP_PROPERTIES =
