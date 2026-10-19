@@ -1261,7 +1261,8 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     }, 60_000);
 });
 
-// D16: an unformatted paragraph draws the doc's Normal, and a paragraph's own format still wins.
+// D16: an unformatted paragraph draws the doc's Normal, and a paragraph's own format still wins. The line is measured
+// as drawn: WeasyPrint 68 stores a computed line height as ('NUMBER', x) and 70 as a float.
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — the Normal (WeasyPrint)', () => {
     test('an unformatted paragraph draws in the Normal: its font, size, line and spacing', async () => {
         const { data } = await renderEigendocExport(
@@ -1280,7 +1281,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         );
         const boxes = await laidOut(
             new TextDecoder().decode(data),
-            "if tag == 'p' and type(box).__name__ == 'BlockBox': print(box.style['font_family'][0], box.style['font_size'], box.style['line_height'][1], float(box.padding_top), float(box.margin_bottom))",
+            "if tag == 'p' and type(box).__name__ == 'BlockBox': print(box.style['font_family'][0], box.style['font_size'], round(box.height / box.style['font_size'], 2), float(box.padding_top), float(box.margin_bottom))",
         );
         expect(boxes).toEqual([
             'Source Serif 4 16.0 1.21 8.0 0.0',
