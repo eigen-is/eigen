@@ -30,7 +30,7 @@ import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type Transf
 //
 // There is deliberately no main-thread fallback: a runner 503 and controlled
 // document errors keep their HTTP status, an import or a search extract that ran out of
-// memory is a file too large, every other failure throws.
+// memory is a file too large, as is a search extract that timed out, every other failure throws.
 
 // What a caller still decides; the limits belong to the job kind (TRANSFORM_LIMITS),
 // and the capture time is measured here. prepMs: main-thread media preparation time,
@@ -60,8 +60,9 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
         if (response.error.code === 'out-of-memory' && request.kind === 'import') {
             throw new ApiError(413, IMPORT_MESSAGES[request.sourceFormat].tooLarge);
         }
-        // The search extract indexes it as nothing rather than running out again on every drain.
-        if (response.error.code === 'out-of-memory' && request.kind === 'extract-text') {
+        // The search extract indexes it as nothing rather than running out, or timing out, again on every drain.
+        const tooLargeToIndex = response.error.code === 'out-of-memory' || response.error.code === 'timeout';
+        if (tooLargeToIndex && request.kind === 'extract-text') {
             throw new ApiError(413, TOO_LARGE_TO_INDEX);
         }
         const what =
