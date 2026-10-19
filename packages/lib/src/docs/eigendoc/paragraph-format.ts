@@ -3,7 +3,7 @@ import type { EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { DOCUMENT_LINE_RATIO } from '../../constants/fonts';
 import type { NormalStyle } from './normal-style';
-import { MAX_PAPER_MM } from './page';
+import { MAX_PAPER_MM, mmToPt } from './page';
 
 // A paragraph's format as values and readers, apart from its extension (nodes/paragraph-format.ts), so a page that
 // draws a doc's Normal loads no editor.
@@ -37,7 +37,7 @@ export const DOCUMENT_PARAGRAPH_FORMAT: ParagraphFormat = {
 };
 
 // Word's largest page, 22 in, as no page setup reads wider: the bound of a stored indent, where no text column is known.
-const MAX_INDENT = (MAX_PAPER_MM / 25.4) * 72;
+const MAX_INDENT = mmToPt(MAX_PAPER_MM);
 
 const INDENT_KEYS: ParagraphFormatKey[] = ['indentLeft', 'indentRight', 'indentFirstLine'];
 
