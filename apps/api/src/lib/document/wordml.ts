@@ -23,6 +23,8 @@ export const STYLE_NAMES = {
     PageBreak: 'Page Break',
     Spacer: 'Spacer',
     TaskDone: 'Task Done',
+    // A header cell's paragraphs in a row with a body cell, which w:tblHeader can't mark.
+    TableHeader: 'Table Header',
     Hyperlink: 'Hyperlink',
     Code: 'Code',
     FootnoteText: 'footnote text',

@@ -10,7 +10,7 @@ import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { openZip } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
-import { HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
+import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
 import { chartFigureMedia, eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { withSvgFallbacks } from '../../../lib/export/office-image';
 import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
@@ -18,6 +18,8 @@ import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixture
 import { importDocxBody } from '../../fixtures/golden-docx';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
+
+const HEADER_GREY = `#${HEADER_CELL_LOOK.fill.toLowerCase()}`;
 
 const ORIGIN = 'https://eigen.example';
 
@@ -41,7 +43,8 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // which the transform process makes, so a chart writes nothing; 'a chart' round-trips one. (9) Small is written as its
 // look and comes back as that size. (10) OMML has no slot for the typed LaTeX. (11) In Word a display equation is a
 // paragraph of its own, and every piece but the last keeps the writer's no space after, so the pieces draw as one
-// paragraph.
+// paragraph. (12) A header cell beside a body cell is marked by the Table Header style on its plain paragraphs, so
+// one holding none, only quotes, code, headings, rules or done tasks, comes back a body cell in the header's grey.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -69,9 +72,13 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         }
         return [mark];
     });
+    const mixed = source.type === 'tableRow' && source.content?.some((cell) => cell.type === 'tableCell');
     const kept = source.content
         ?.filter((child, index, siblings) => child.type !== 'chart' && !blankBeforeBreak(siblings, index))
-        .flatMap(splitAtDisplayEquations);
+        .flatMap(splitAtDisplayEquations)
+        .map((child) =>
+            mixed && child.type === 'tableHeader' && !child.content?.some(isPlain) ? asBodyCell(child) : child,
+        );
     const content = kept?.map((child, index) => expected(child, imported?.content?.[index]));
     return {
         ...source,
@@ -80,6 +87,16 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         ...(content && { content }),
     };
 }
+
+const isPlain = (block: JSONContent): boolean =>
+    ['paragraph', 'bulletList', 'orderedList'].includes(block.type ?? '') ||
+    (block.type === 'taskList' && !!block.content?.some((item) => !item.attrs?.['checked']));
+
+const asBodyCell = (cell: JSONContent): JSONContent => ({
+    ...cell,
+    type: 'tableCell',
+    attrs: { ...cell.attrs, backgroundColor: cell.attrs?.['backgroundColor'] ?? HEADER_GREY },
+});
 
 const isDisplayEquation = (node: JSONContent) => node.type === 'equation' && node.attrs?.['display'] === true;
 
@@ -620,13 +637,16 @@ describe("a heading's italic", () => {
     });
 });
 
-// Google Docs drops every custom style, so the code block's language; a page break in a table cell; a link's title.
+// Google Docs drops every custom style, so the code block's language and the mark of a header cell beside a body cell,
+// which comes back a body cell in the header's grey; a page break in a table cell; a link's title.
 // It keeps one placeholder for the export's media, so names don't say which image is which. The recording predates
 // caps, and Heading 6's italic, so its Heading 6 draws upright: there a plain run is the italic mark, and a marked one plain.
 function googleLosses(node: JSONContent, imported: JSONContent | undefined): JSONContent {
     const upright = node.type === 'heading' && !!HEADING_LOOKS[node.attrs?.['level'] - 1]?.italic;
+    const mixed = node.type === 'tableRow' && node.content?.some((cell) => cell.type === 'tableCell');
     const content = node.content
         ?.filter((child) => !(child.type === 'pageBreak' && (node.type === 'tableCell' || node.type === 'tableHeader')))
+        .map((child) => (mixed && child.type === 'tableHeader' ? asBodyCell(child) : child))
         .map((child, index) => googleLosses(upright ? toggleItalic(child) : child, imported?.content?.[index]));
     const attrs = node.attrs && {
         ...node.attrs,
@@ -695,6 +715,45 @@ describe("a paragraph's format", () => {
         ],
     ])('%s come back as set', async (_name, content) => {
         const { source, json } = await roundTrip(content);
+        expect(stored(json)).toEqual(stored(expected(source, json)));
+    });
+});
+
+// A header cell beside a body cell is marked by its paragraphs' style; a fill is a cell's look, whatever its color.
+describe("a cell's fill and header", () => {
+    const cell = (type: string, text: string, backgroundColor?: string) => ({
+        type,
+        attrs: backgroundColor ? { backgroundColor } : {},
+        content: [p(text)],
+    });
+    const grid = (...rows: JSONContent[][]) => ({
+        type: 'table',
+        content: rows.map((content) => ({ type: 'tableRow', content })),
+    });
+    test.each<[string, JSONContent]>([
+        [
+            'a header cell beside a body cell, filled or in the grey',
+            grid(
+                [cell('tableHeader', 'Own', '#cfe2f3'), cell('tableCell', 'A')],
+                [cell('tableHeader', 'Grey'), cell('tableCell', 'B')],
+            ),
+        ],
+        [
+            "a body cell in the header's grey, and a filled first row",
+            grid(
+                [cell('tableCell', 'Filled', '#1f4e79'), cell('tableCell', 'Too', '#1f4e79')],
+                [cell('tableCell', 'Grey', HEADER_GREY), cell('tableCell', 'Plain')],
+            ),
+        ],
+        [
+            'a header row with a fill of its own',
+            grid(
+                [cell('tableHeader', 'H', '#cfe2f3'), cell('tableHeader', 'I')],
+                [cell('tableCell', 'A'), cell('tableCell', 'B')],
+            ),
+        ],
+    ])('%s come back as written', async (_name, table) => {
+        const { source, json } = await roundTrip([table]);
         expect(stored(json)).toEqual(stored(expected(source, json)));
     });
 });
