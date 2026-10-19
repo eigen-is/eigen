@@ -21,11 +21,12 @@ import { EigenLink } from './nodes/link';
 import { EigenOrderedList } from './nodes/ordered-list';
 import { PageBreakNode } from './nodes/page-break';
 import { PageNumberNode } from './nodes/page-number';
-import { EigenParagraphFormat, PROSE_TEXTBLOCKS } from './nodes/paragraph-format';
+import { EigenParagraphFormat } from './nodes/paragraph-format';
 import { SmallMark } from './nodes/small-mark';
 import { EigenTableCell, EigenTableHeader } from './nodes/table-cell';
 import { SubtitleNode, TitleNode } from './nodes/title';
 import type { NormalStyle } from './normal-style';
+import { PROSE_TEXTBLOCKS } from './paragraph-format';
 
 // textColumnWidth: the editor's text column in px, which a paragraph's indent stays within. normalStyle: the doc's
 // Normal, which unsized text draws at. remote: a transaction the editor's Yjs binding applied, which autolinks nothing.
