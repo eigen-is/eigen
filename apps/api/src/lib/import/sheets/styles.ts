@@ -8,8 +8,9 @@ import type {
 } from '@workspace/lib/sheets';
 import { BORDER_STYLES } from '@workspace/lib/sheets';
 import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
+import { readColorScheme, SCHEME_SLOTS } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { A_NS, isOn, SML_NS } from '../../core/ooxml';
+import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { IMPORT_MESSAGES } from '../messages';
 
@@ -298,43 +299,13 @@ function applyTint(hex: string, tint: number): string {
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// SpreadsheetML theme indices: 0=lt1, 1=dk1, 2=lt2, 3=dk2, 4-9=accent1-6, 10=hlink, 11=folHlink.
-// The clrScheme XML lists them as dk1,lt1,dk2,lt2,accent1-6,hlink,folHlink — reorder to match.
-const CLR_SCHEME_ELEMENTS = [
-    'dk1',
-    'lt1',
-    'dk2',
-    'lt2',
-    'accent1',
-    'accent2',
-    'accent3',
-    'accent4',
-    'accent5',
-    'accent6',
-    'hlink',
-    'folHlink',
-] as const;
+// SpreadsheetML's theme indices swap each dark and light pair of a:clrScheme's order: 0=lt1, 1=dk1, 2=lt2, 3=dk2.
 const THEME_INDEX_ORDER = [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
 export function themePalette(theme: XmlElement | undefined): ThemePalette {
-    const elements = theme?.ns === A_NS ? xmlChild(theme, A_NS, 'themeElements') : undefined;
-    const scheme = elements && xmlChild(elements, A_NS, 'clrScheme');
-    if (!scheme) return [];
-
-    const xmlColors: string[] = [];
-    for (const el of CLR_SCHEME_ELEMENTS) {
-        const slot = xmlChild(scheme, A_NS, el);
-        const srgb = slot && xmlChild(slot, A_NS, 'srgbClr');
-        const sys = slot && xmlChild(slot, A_NS, 'sysClr');
-        const hex = (srgb && xmlAttr(srgb, '', 'val')) ?? (sys && xmlAttr(sys, '', 'lastClr'));
-        xmlColors.push(hex && /^[A-Fa-f0-9]{6}$/.test(hex) ? `#${hex.toUpperCase()}` : '#000000');
-    }
-
-    const palette: ThemePalette = [];
-    for (const xmlIndex of THEME_INDEX_ORDER) {
-        palette.push(xmlColors[xmlIndex]);
-    }
-    return palette;
+    const scheme = readColorScheme(theme);
+    if (scheme.size === 0) return [];
+    return THEME_INDEX_ORDER.map((index) => scheme.get(SCHEME_SLOTS[index])?.toUpperCase() ?? '#000000');
 }
 
 // Excel writes month and minute both as `m`, told apart by what sits beside it, and numfmt reads it so. The format
