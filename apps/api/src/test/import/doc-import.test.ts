@@ -275,12 +275,12 @@ describe('Eigendoc docx import/convert', () => {
         expect(await res.text()).toBe('Not a valid docx file');
     }, 60_000);
 
-    test('import route surfaces the decompression-bomb guard as 413 Document too large', async () => {
+    test('import route surfaces the decompression-bomb guard as 413 This document is too large to import', async () => {
         const docPath = await createDoc('bomb-import-target');
         const bomb = buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
         const res = await importRequest(docPath.id, toTransferableBuffer(bomb));
         expect(res.status).toBe(413);
-        expect(await res.text()).toBe('Document too large');
+        expect(await res.text()).toBe('This document is too large to import');
     }, 60_000);
 
     test('write revoked while the transform ran blocks the commit', async () => {
@@ -503,7 +503,7 @@ describe('docx import resource guards', () => {
         }
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(413);
-        expect((error as ApiError).message).toBe('Document too large');
+        expect((error as ApiError).message).toBe('This document is too large to import');
     });
 });
 

@@ -6,13 +6,10 @@ import type { XmlElement } from '../../core/xml';
 import { PML, PRESENTATION_TYPE, THEME_TYPE } from '../../document/presentationml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
-import { IMPORT_MESSAGES } from '../messages';
+import { IMPORT_MESSAGES, SAVE_AS_PPTX } from '../messages';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 
 export const MAX_SLIDES = 500;
-
-const SAVE_AS_PPTX =
-    'Only .pptx presentations can be imported. Save the file as a .pptx in PowerPoint and import it again.';
 
 // What PowerPoint saves a macro-enabled deck, a template and a slideshow as: each a presentation too, refused by name.
 const NOT_A_PRESENTATION = new Set([
