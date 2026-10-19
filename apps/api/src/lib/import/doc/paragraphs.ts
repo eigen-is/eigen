@@ -500,6 +500,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             format: {
                 lineSpacing: format.lineSpacing,
                 spaceBefore: index === 0 ? format.spaceBefore : undefined,
+                baseBefore: twipsToPt(base.before ?? 0),
                 spaceAfter: index === halves.length - 1 ? format.spaceAfter : undefined,
             },
             indent,

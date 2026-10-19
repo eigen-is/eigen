@@ -38,7 +38,8 @@ export type Para = {
     hairline: boolean;
     // What it sets apart from the docx's Normal, in pt, and its own indent in twips, which counts from its container's
     // text; an item's holds its number.
-    format?: { lineSpacing?: number; spaceBefore?: number; spaceAfter?: number };
+    // baseBefore is the space before its style or the Normal gives it.
+    format?: { lineSpacing?: number; spaceBefore?: number; spaceAfter?: number; baseBefore?: number };
     indent?: { left: number; right: number; firstLine: number };
 };
 
@@ -611,21 +612,19 @@ function nestsUnder(para: Para, text: number, inTask: boolean): boolean {
 
 // Its format where Eigen draws no container around it: an item's, a quote's or a paragraph's in an item take their
 // spacing from it, as the writer writes it, and list and quote nesting is the indent's structure. Only an indent past
-// the text of the item it lands in is its own. A space above no larger than the one Eigen draws there anyway, in twips,
-// is the writer's.
+// the text of the item it lands in is its own. Eigen draws a space above anyway, in twips, under a table: the writer
+// adds a space before to it, so only what passes it is the paragraph's, and none where that is its style's or the
+// Normal's.
 function formatOf(para: Para, edge: number | undefined, above?: number): Record<string, number> {
     const { indent, format } = para;
     const past = indent && edge !== undefined && para.quote === 0 ? indent.left - edge : undefined;
+    const before = format?.spaceBefore;
+    const own = above === undefined || before === undefined ? before : twipsToPt(ptToTwips(before) - above);
+    const spaceBefore =
+        above === undefined || (own !== undefined && own > 0 && own !== format?.baseBefore) ? own : undefined;
     return readParagraphFormat({
         lineSpacing: format?.lineSpacing,
-        ...(edge === 0 &&
-            para.quote === 0 && {
-                spaceBefore:
-                    above !== undefined && ptToTwips(format?.spaceBefore ?? 0) <= above
-                        ? undefined
-                        : format?.spaceBefore,
-                spaceAfter: format?.spaceAfter,
-            }),
+        ...(edge === 0 && para.quote === 0 && { spaceBefore, spaceAfter: format?.spaceAfter }),
         ...(past !== undefined && {
             indentLeft: past > INDENT_TOLERANCE ? twipsToPt(past) : undefined,
             indentRight: indent && indent.right > 0 ? twipsToPt(indent.right) : undefined,

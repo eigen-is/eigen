@@ -987,9 +987,16 @@ function withoutAfter(blocks: Block[]): Block[] {
     ];
 }
 
-function withBefore(paragraph: Paragraph, before: number, styles: Styles): Paragraph {
+// Below an in-flow table. The editor draws a paragraph's space before, its own or the Normal's, as padding, which adds
+// to the table's margin; a style's margin above, a heading's, collapses with it to the larger, and an inset paragraph's
+// already holds the whole gap (withInsets).
+function withBefore(paragraph: Paragraph, margin: number, styles: Styles): Paragraph {
     const { props } = paragraph;
-    if (before <= (props.spacing?.before ?? styleSpacing(styles, props.style, 'before'))) return paragraph;
+    const own = props.spacing?.before;
+    const space = own ?? styleSpacing(styles, props.style, 'before');
+    const padded = !paragraph.inset && (own !== undefined || props.style === undefined || props.style === 'Normal');
+    const before = padded ? margin + space : Math.max(margin, space);
+    if (before === space) return paragraph;
     return { ...paragraph, props: { ...props, spacing: { ...props.spacing, before } } };
 }
 

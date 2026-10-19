@@ -45,9 +45,13 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // paragraph of its own, and every piece but the last keeps the writer's no space after, so the pieces draw as one
 // paragraph. (12) A header cell beside a body cell is marked by the Table Header style on its plain paragraphs, so
 // one holding none, only quotes, code, headings, rules or done tasks, comes back a body cell in the header's grey.
+// (13) A paragraph's format is what it sets apart from the Normal, so a value equal to the Normal's comes back as none.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
+        if (source.type === 'paragraph')
+            for (const name of ['lineSpacing', 'spaceBefore', 'spaceAfter'] as const)
+                if (attrs[name] === DEFAULT_NORMAL_STYLE[name]) attrs[name] = null;
         for (const name of ['colwidth', 'width'])
             if (name in attrs && attrs[name] === null) attrs[name] = imported?.attrs?.[name] ?? null;
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
@@ -713,6 +717,16 @@ describe("a paragraph's format", () => {
             'a heading after a table',
             [table, { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'H' }] }],
         ],
+        // Random seed 605: the editor adds a space before to the table's margin above it, as the writer and reader do.
+        [
+            'a space before under a table',
+            [
+                table,
+                formatted({ spaceBefore: 6 }),
+                table,
+                { type: 'heading', attrs: { level: 2, spaceBefore: 6 }, content: [{ type: 'text', text: 'H' }] },
+            ],
+        ],
     ])('%s come back as set', async (_name, content) => {
         const { source, json } = await roundTrip(content);
         expect(stored(json)).toEqual(stored(expected(source, json)));
@@ -838,7 +852,17 @@ describe('random documents', () => {
 
 const BLOCKS = ['paragraph', 'heading', 'quote', 'bullets', 'ordered', 'tasks', 'code', 'rule', 'table', 'pageBreak'];
 
-// Three containers deep at most.
+// Three containers deep at most. A paragraph may take a format, a size, a note, an equation or a page number, a cell a
+// fill and an ordered list a type.
+const LINE_SPACINGS = [1, 1.15, 1.5, 2];
+const SPACINGS = [0, 6, 12];
+const INDENTS = [18, 36];
+const FONT_SIZES = [8, 14, 18];
+const FILLS = ['#cfe2f3', '#fce5cd'];
+// 1, a and i are what an untyped list draws at some depth, which reads back untyped (EXPORT.md's numbering section).
+const LIST_TYPES = ['A', 'I'];
+const EQUATION = writeMathml([{ kind: 'identifier', text: 'x' }]);
+
 function randomDocument(seed: number): JSONContent[] {
     let state = seed;
     const next = () => {
@@ -846,16 +870,39 @@ function randomDocument(seed: number): JSONContent[] {
         return state / 0x7fffffff;
     };
     const below = (count: number) => Math.floor(next() * count);
+    const pick = <T>(values: T[]): T => values[below(values.length)] as T;
     let written = 0;
     const text = () => `T${++written}`;
+    const inline = (): JSONContent[] => {
+        const sized = next() < 0.2 ? { marks: [{ type: 'textStyle', attrs: { fontSize: pick(FONT_SIZES) } }] } : {};
+        const runs: JSONContent[] = [{ type: 'text', text: text(), ...sized }];
+        const extra = next();
+        if (extra < 0.08) runs.push({ type: 'footnote', content: [p(text())] });
+        else if (extra < 0.14) runs.push({ type: 'equation', attrs: { mathml: EQUATION } });
+        else if (extra < 0.18) runs.push({ type: 'pageNumber', attrs: { kind: 'page' } });
+        return runs;
+    };
+    // Spacing and indents are a top-level paragraph's, as a list, quote or cell owns the spacing of what it holds.
+    const format = (depth: number): Record<string, number> => {
+        const attrs: Record<string, number> = {};
+        if (next() < 0.3) attrs['lineSpacing'] = pick(LINE_SPACINGS);
+        if (depth > 0) return attrs;
+        if (next() < 0.2) attrs['spaceBefore'] = pick(SPACINGS);
+        if (next() < 0.2) attrs['spaceAfter'] = pick(SPACINGS);
+        if (next() < 0.15) attrs['indentLeft'] = pick(INDENTS);
+        if (next() < 0.1) attrs['indentRight'] = pick(INDENTS);
+        if (next() < 0.1) attrs['indentFirstLine'] = pick([...INDENTS, -18]);
+        return attrs;
+    };
+    const para = (depth: number): JSONContent => ({ type: 'paragraph', attrs: format(depth), content: inline() });
     const blocks = (depth: number, least: number): JSONContent[] =>
         Array.from({ length: least + below(3) }, () => block(depth));
     const items = (depth: number) =>
-        Array.from({ length: 1 + below(2) }, () => [p(text()), ...(next() < 0.6 ? blocks(depth + 1, 0) : [])]);
+        Array.from({ length: 1 + below(2) }, () => [para(depth + 1), ...(next() < 0.6 ? blocks(depth + 1, 0) : [])]);
     const cell = (depth: number, attrs: Record<string, number>) => ({
         type: next() < 0.2 ? 'tableHeader' : 'tableCell',
-        attrs,
-        content: depth < 2 && next() < 0.3 ? blocks(depth + 1, 1) : [p(text())],
+        attrs: next() < 0.3 ? { ...attrs, backgroundColor: pick(FILLS) } : attrs,
+        content: depth < 2 && next() < 0.3 ? blocks(depth + 1, 1) : [para(depth + 1)],
     });
     const block = (depth: number): JSONContent => {
         switch (depth >= 3 ? 'paragraph' : BLOCKS[below(BLOCKS.length)]) {
@@ -866,7 +913,10 @@ function randomDocument(seed: number): JSONContent[] {
             case 'bullets':
                 return bullets(...items(depth));
             case 'ordered':
-                return ordered(...items(depth));
+                return {
+                    ...ordered(...items(depth)),
+                    ...(next() < 0.4 && { attrs: { start: 1, type: pick(LIST_TYPES) } }),
+                };
             case 'tasks':
                 return {
                     type: 'taskList',
@@ -900,7 +950,7 @@ function randomDocument(seed: number): JSONContent[] {
                 };
             }
             default:
-                return p(text());
+                return para(depth);
         }
     };
     return blocks(0, 1);
@@ -922,6 +972,8 @@ function writable(content: JSONContent[], container = 'doc'): boolean {
         const previous = blocks[index - 1];
         // No task list is numbered, so two apart by nothing or page breaks are one.
         if (node.type === 'taskList' && previous?.type === 'taskList') return false;
+        // An indent nests a paragraph into the list item before it, as Word draws one there.
+        if (node.attrs?.['indentLeft'] && LISTS.has(previous?.type ?? '')) return false;
         if (node.type !== 'blockquote' || previous?.type !== 'blockquote') continue;
         const last = previous.content?.at(-1);
         // A break between quotes is one in a quote; nothing parts a quote that ends deep in a table from the next.
