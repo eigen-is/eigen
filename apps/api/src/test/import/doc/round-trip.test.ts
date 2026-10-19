@@ -772,6 +772,18 @@ describe("a cell's fill and header", () => {
     });
 });
 
+// Under a table the writer adds a space before to the table's margin, so an explicit none under a spaced Normal stays.
+test('no space before under a table, beside a Normal with one, comes back as set', async () => {
+    const style = { ...DEFAULT_NORMAL_STYLE, spaceBefore: 6 };
+    const content = [
+        table,
+        { type: 'paragraph', attrs: { spaceBefore: 0 }, content: [{ type: 'text', text: 'After' }] },
+    ];
+    const docx = await eigendocToDocx({ type: 'doc', content }, {}, DEFAULT_PAGE_SETUP, style, [], 'Spaced', undefined);
+    const { json } = docxToPmJson(Buffer.from(docx));
+    expect(json.content?.at(-1)?.attrs?.['spaceBefore']).toBe(0);
+});
+
 // Word draws a line in its tallest face, the paragraph mark's when it's taller than the runs', and the reader reads it so.
 describe('a line under a Normal in another family', () => {
     test.each<[string, string | undefined]>([

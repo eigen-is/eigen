@@ -620,8 +620,9 @@ function formatOf(para: Para, edge: number | undefined, above?: number): Record<
     const past = indent && edge !== undefined && para.quote === 0 ? indent.left - edge : undefined;
     const before = format?.spaceBefore;
     const own = above === undefined || before === undefined ? before : twipsToPt(ptToTwips(before) - above);
-    const spaceBefore =
-        above === undefined || (own !== undefined && own > 0 && own !== format?.baseBefore) ? own : undefined;
+    // At the top the writer writes none, so only a space past it is the paragraph's; under a table an explicit none is.
+    const kept = own !== undefined && (own > 0 || (own === 0 && (above ?? 0) > 0)) && own !== format?.baseBefore;
+    const spaceBefore = above === undefined || kept ? own : undefined;
     return readParagraphFormat({
         lineSpacing: format?.lineSpacing,
         ...(edge === 0 && para.quote === 0 && { spaceBefore, spaceAfter: format?.spaceAfter }),
