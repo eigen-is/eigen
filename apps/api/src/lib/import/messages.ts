@@ -11,12 +11,12 @@ type ImportFormat = ImportTransformJob['sourceFormat'];
 
 export const IMPORT_MESSAGES: Record<ImportFormat, { tooLarge: string; invalid: string; passwordProtected: string }> = {
     docx: {
-        tooLarge: 'Document too large',
+        tooLarge: 'This document is too large to import',
         invalid: 'Not a valid docx file',
         passwordProtected: 'This document is password-protected. Remove the password in Word and import it again.',
     },
     xlsx: {
-        tooLarge: 'Spreadsheet too large',
+        tooLarge: 'This spreadsheet is too large to import',
         invalid: 'Not a valid xlsx file',
         passwordProtected: 'This spreadsheet is password-protected. Remove the password in Excel and import it again.',
     },
@@ -57,6 +57,9 @@ export function importError(error: unknown, format: ImportFormat): Error {
 }
 
 export const PRESENTATION_EMPTY = 'This presentation has no slides';
+// A macro deck, template or slideshow saved under .pptx.
+export const SAVE_AS_PPTX =
+    'Only .pptx presentations can be imported. Save the file as a .pptx in PowerPoint and import it again.';
 
 type Noun = readonly [one: string, many: string];
 

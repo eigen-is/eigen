@@ -396,7 +396,7 @@ describe('Sheets xlsx import/convert', () => {
         expect(await res.text()).toBe('Not a valid xlsx file');
     });
 
-    test('import route surfaces the decompression-bomb guard as 413 Spreadsheet too large', async () => {
+    test('import route surfaces the decompression-bomb guard as 413 This spreadsheet is too large to import', async () => {
         const sheetsDoc = await uploadAndConvert(
             await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]),
             'bomb-target.xlsx',
@@ -409,7 +409,7 @@ describe('Sheets xlsx import/convert', () => {
             { method: 'POST', body: new Uint8Array(bomb) },
         );
         expect(res.status).toBe(413);
-        expect(await res.text()).toBe('Spreadsheet too large');
+        expect(await res.text()).toBe('This spreadsheet is too large to import');
     });
 
     test('import route surfaces the cell-count guard as 413 Spreadsheet has too many cells', async () => {
@@ -1809,7 +1809,7 @@ describe('xlsxToSheets resource guards', () => {
         expect(() => xlsxToSheets(bytes)).toThrow(
             expect.objectContaining({
                 status,
-                message: status === 413 ? 'Spreadsheet too large' : 'Not a valid xlsx file',
+                message: status === 413 ? 'This spreadsheet is too large to import' : 'Not a valid xlsx file',
             }),
         );
     });

@@ -84,7 +84,9 @@ describe('a shared string', () => {
     test('are charged their elements before any is read', () => {
         const budget = readBudget();
         budget.chargeElements(MAX_XLSX_ELEMENTS - 1);
-        expect(() => readSharedStrings(sst(['', '']), PALETTE, budget)).toThrow('Spreadsheet too large');
+        expect(() => readSharedStrings(sst(['', '']), PALETTE, budget)).toThrow(
+            'This spreadsheet is too large to import',
+        );
     });
 
     test('no part is no strings', () => {

@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
-import type { TransformMedia } from './transform/protocol';
+import type { ExportMedia, TransformMedia } from './transform/protocol';
 
 // Media helpers for eigen documents, shared by the main-thread transform wrappers
 // and the Worker-side converters. This module must stay light: the modules the
@@ -78,4 +78,11 @@ export function toDataUriMap(media: TransformMedia[]): Map<string, string> {
             `data:${item.contentType};base64,${Buffer.from(item.data).toString('base64')}`,
         ]),
     );
+}
+
+// SVG media arrives as the file's own bytes. The sanitizer loads only for one, so an xlsx export never evaluates jsdom.
+export async function sanitizeMedia(media: ExportMedia[]): Promise<ExportMedia[]> {
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { sanitizeExportMedia } = await import('../export/sanitize');
+    return sanitizeExportMedia(media);
 }

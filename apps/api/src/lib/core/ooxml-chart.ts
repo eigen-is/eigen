@@ -17,7 +17,7 @@ import {
     type ChartType,
     type LegendPosition,
 } from '@workspace/lib/types/chart';
-import { numberDisplay } from '@workspace/sheet/engine';
+import { numberDisplay, parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
 import { type DrawingTheme, drawingColor, drawingLines, readColorMap } from './drawingml';
 import { A_NS, alternativeFor, C_NS, isAlternateContent, isOn } from './ooxml';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, xmlTrimmedText } from './xml';
@@ -380,33 +380,21 @@ function cachedPoints(cache: XmlElement | undefined): (string | undefined)[] {
 }
 
 // A chart's c:f: a sheet's A1 cell or area. null for a ref Excel shows as #REF!; no spec for a shape it can't hold.
+// Split at the last '!', not by the engine's sheet prefix: Excel leaves a name of any script's letters unquoted.
 function cellRange(formula: string, sheetId: (sheetName: string) => string | undefined): CellRangeRef | null {
     if (formula.includes('#REF!')) return null;
     const bang = formula.lastIndexOf('!');
     if (bang < 1 || formula.startsWith('(')) unsupported();
-    const sheet = formula.slice(0, bang);
-    const quoted = sheet.length > 1 && sheet.startsWith("'") && sheet.endsWith("'");
-    const [from, to = from, ...rest] = formula.slice(bang + 1).split(':');
-    const start = cellOf(from);
-    const end = cellOf(to);
-    if (!start || !end || rest.length > 0) unsupported();
-    const id = sheetId(quoted ? sheet.slice(1, -1).replaceAll("''", "'") : sheet);
-    if (id === undefined) return null;
-    return {
-        sheetId: id,
-        row: [Math.min(start[0], end[0]), Math.max(start[0], end[0])],
-        column: [Math.min(start[1], end[1]), Math.max(start[1], end[1])],
-    };
-}
-
-// Zero-based [row, column] inside Excel's grid.
-function cellOf(ref: string | undefined): [number, number] | undefined {
-    const match = ref && /^\$?([A-Za-z]{1,3})\$?([1-9]\d{0,6})$/.exec(ref);
-    if (!match) return undefined;
-    let column = 0;
-    for (const letter of match[1].toUpperCase()) column = column * 26 + letter.charCodeAt(0) - 64;
-    const row = Number(match[2]);
-    return column <= REFERENCE_COLUMN_COUNT && row <= REFERENCE_ROW_COUNT ? [row - 1, column - 1] : undefined;
+    const range = parseA1Range(formula.slice(bang + 1));
+    if (!range) unsupported();
+    const rows: [number, number] = [Math.min(range.start.row, range.end.row), Math.max(range.start.row, range.end.row)];
+    const columns: [number, number] = [
+        Math.min(range.start.col, range.end.col),
+        Math.max(range.start.col, range.end.col),
+    ];
+    if (rows[1] >= REFERENCE_ROW_COUNT || columns[1] >= REFERENCE_COLUMN_COUNT) unsupported();
+    const id = sheetId(unquoteSheetName(formula.slice(0, bang)));
+    return id === undefined ? null : { sheetId: id, row: rows, column: columns };
 }
 
 // An element's children in the chart namespace, an mc:AlternateContent read as the choice this reader understands.

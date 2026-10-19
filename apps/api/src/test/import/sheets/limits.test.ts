@@ -130,7 +130,7 @@ function measuredImport(file: Buffer): Measured {
     return JSON.parse(child.stdout.toString());
 }
 
-const TOO_LARGE = { status: 413, message: 'Spreadsheet too large' };
+const TOO_LARGE = { status: 413, message: 'This spreadsheet is too large to import' };
 const TOO_MANY_CELLS = { status: 413, message: 'Spreadsheet has too many cells' };
 const INVALID = { status: 400, message: 'Not a valid xlsx file' };
 

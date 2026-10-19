@@ -79,7 +79,7 @@ describe('a number format', () => {
                 `<numFmts>${ids.map((id) => `<numFmt numFmtId="${id}" formatCode="0.${'0'.repeat(id % 30)}"/>`).join('')}</numFmts>${xfs('<xf/>', ...ids.slice(0, count).map((id) => `<xf numFmtId="${id}"/>`))}`,
             );
         expect(many(1_000)).toHaveLength(1_001);
-        expect(() => many(1_001)).toThrow(new ApiError(413, 'Spreadsheet too large'));
+        expect(() => many(1_001)).toThrow(new ApiError(413, 'This spreadsheet is too large to import'));
     });
 
     test('General, id 0 or an id nothing names is no format', () => {

@@ -3,6 +3,7 @@ import { type NewVectorElement, nearestSlideSize, SLIDE_SIZES, type SlideSize } 
 import { ApiError } from '../../core/errors';
 import { P_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr } from '../../core/xml';
+import { PPTX_SLIDE_SIZES } from '../../document/presentationml';
 import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
@@ -38,7 +39,6 @@ export const MAX_PPTX_WORK = 3_000_000;
 // ST_SlideSizeCoordinate's range, 1 to 56 inches; PowerPoint's 4:3 where the file states none.
 const MIN_SLIDE_EMU = 914_400;
 const MAX_SLIDE_EMU = 51_206_400;
-const DEFAULT_SLIDE_SIZE = { cx: 9_144_000, cy: 6_858_000 };
 
 export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     try {
@@ -55,8 +55,8 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         const value = Number(sldSz && xmlAttr(sldSz, '', name));
         return Number.isFinite(value) && value > 0 ? Math.min(MAX_SLIDE_EMU, Math.max(MIN_SLIDE_EMU, value)) : fallback;
     };
-    const cx = side('cx', DEFAULT_SLIDE_SIZE.cx);
-    const cy = side('cy', DEFAULT_SLIDE_SIZE.cy);
+    const cx = side('cx', PPTX_SLIDE_SIZES['4:3'].cx);
+    const cy = side('cy', PPTX_SLIDE_SIZES['4:3'].cy);
     const slideSize = nearestSlideSize(cx, cy);
     const frame = options.frame ?? SLIDE_SIZES[slideSize];
     // Letterboxed: the whole slide fits the frame, centred.

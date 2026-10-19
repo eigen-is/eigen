@@ -1,6 +1,6 @@
 import { BAND_ROOTS, type BandRoot, bandEdge, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
-import { alternativeFor, isOn, R_NS, W_NS } from '../../core/ooxml';
+import { alternativeFor, isOn, POINTS_PER_UNIT, R_NS, W_NS } from '../../core/ooxml';
 import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../core/opc';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import type { ZipReader } from '../../core/zip';
@@ -165,16 +165,6 @@ export function int(value: string | undefined): number | undefined {
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? Math.round(number) : undefined;
 }
-
-// ST_UniversalMeasure, which Strict OOXML writes where transitional writes a number: points per unit.
-export const POINTS_PER_UNIT = new Map([
-    ['pt', 1],
-    ['pc', 12],
-    ['pi', 12],
-    ['in', 72],
-    ['cm', 72 / 2.54],
-    ['mm', 72 / 25.4],
-]);
 
 // A length in twips or half-points: a bare number is in that unit, a universal measure is converted.
 function measure(value: string | undefined, perPoint: number): number | undefined {
