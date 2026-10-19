@@ -54,8 +54,12 @@ export function pullNote(
     if (diff) tr.replace(diff.start, diff.endB, next.slice(diff.start, diff.endA));
     const decorations: Decoration[] = [];
     found.view.innerDecorations.forEachSet((set) => decorations.push(...set.find()));
+    // The body linked what it links: the note's autolink would read a peer's or an undo's text as typed here.
     note.view.dispatch(
-        tr.setMeta(NOTE_PULL, true).setMeta(noteDecorationsKey, DecorationSet.create(tr.doc, decorations)),
+        tr
+            .setMeta(NOTE_PULL, true)
+            .setMeta('preventAutolink', true)
+            .setMeta(noteDecorationsKey, DecorationSet.create(tr.doc, decorations)),
     );
     return found.pos;
 }

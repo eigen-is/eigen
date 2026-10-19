@@ -7,6 +7,7 @@ import { Table, TableRow } from '@tiptap/extension-table';
 import TextAlign from '@tiptap/extension-text-align';
 import { Color, TextStyle } from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
+import type { Transaction } from '@tiptap/pm/state';
 import StarterKit from '@tiptap/starter-kit';
 import { TextCaps } from './nodes/caps';
 import { ChartNode } from './nodes/chart';
@@ -27,12 +28,13 @@ import { SubtitleNode, TitleNode } from './nodes/title';
 import type { NormalStyle } from './normal-style';
 
 // textColumnWidth: the editor's text column in px, which a paragraph's indent stays within. normalStyle: the doc's
-// Normal, which unsized text draws at.
+// Normal, which unsized text draws at. remote: a transaction the editor's Yjs binding applied, which autolinks nothing.
 export function getDocExtensions(options?: {
     lowlight?: unknown;
     exclude?: string[];
     textColumnWidth?: () => number;
     normalStyle?: () => NormalStyle;
+    remote?: (tr: Transaction) => boolean;
 }) {
     const exclude = options?.exclude;
     const extensions = [
@@ -43,6 +45,7 @@ export function getDocExtensions(options?: {
             link: false,
         }),
         EigenLink.configure({
+            ...(options?.remote && { remote: options.remote }),
             autolink: false,
             HTMLAttributes: {
                 target: '_blank',

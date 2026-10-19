@@ -5,6 +5,7 @@ import { Slice } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
 import type { Editor, UseEditorOptions } from '@tiptap/react';
 import { useEditor } from '@tiptap/react';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
 import type { ClassifiedSvg } from '@workspace/lib/clipboard';
 import {
@@ -309,6 +310,7 @@ export function docEditorOptions({
                 lowlight,
                 textColumnWidth,
                 normalStyle,
+                remote: (tr) => !!tr.getMeta(ySyncPluginKey),
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
                     ...(band || note ? [] : ['footnote']),

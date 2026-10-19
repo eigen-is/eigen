@@ -1,7 +1,7 @@
 import { combineTransactionSteps, getChangedRanges } from '@tiptap/core';
 import Link, { isAllowedUri, type LinkOptions } from '@tiptap/extension-link';
 import type { MarkType, Node } from '@tiptap/pm/model';
-import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { tokenize } from 'linkifyjs';
 
 const TRAILING_WORD = /(\S+)\s*$/;
@@ -33,7 +33,7 @@ function isLinkStructure(tokens: { isLink: boolean; value: string }[]): boolean 
 // through its own text walk. TipTap's reads the paragraph with textBetween, which reads a footnote's note in its
 // reference's place, so past a reference its offsets miss the doc's positions: it linked "hen example" for a typed
 // "then example.com".
-function autolink(type: MarkType, options: LinkOptions): Plugin {
+function autolink(type: MarkType, options: EigenLinkOptions): Plugin {
     const { protocols, defaultProtocol } = options;
     const allowed = (url: string) =>
         options.isAllowedUri(url, {
@@ -47,7 +47,7 @@ function autolink(type: MarkType, options: LinkOptions): Plugin {
             if (
                 !transactions.some((tr) => tr.docChanged) ||
                 oldState.doc.eq(newState.doc) ||
-                transactions.some((tr) => tr.getMeta('preventAutolink'))
+                transactions.some((tr) => tr.getMeta('preventAutolink') || options.remote(tr))
             )
                 return null;
             const { tr } = newState;
@@ -86,10 +86,17 @@ function autolink(type: MarkType, options: LinkOptions): Plugin {
     });
 }
 
+// remote: a transaction the editor's binding applied, a peer's change or an undo, which y-tiptap writes as a replace of
+// the whole doc, so the first textblock would link again here what its writer never linked.
+type EigenLinkOptions = LinkOptions & { remote: (tr: Transaction) => boolean };
+
 // StarterKit's link with the autolink above in place of TipTap's, which is configured off (`autolink: false`); the mark
 // stays inclusive, as it is with TipTap's on, so text typed at a link's end joins it.
-export const EigenLink = Link.extend({
+export const EigenLink = Link.extend<EigenLinkOptions>({
     inclusive: () => true,
+    addOptions() {
+        return { ...Link.options, remote: () => false };
+    },
     addProseMirrorPlugins() {
         return [autolink(this.type, this.options), ...(this.parent?.() ?? [])];
     },
