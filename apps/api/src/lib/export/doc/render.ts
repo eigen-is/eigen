@@ -151,8 +151,8 @@ function footnoteList() {
     };
 }
 
-// WeasyPrint's bookmark is a heading's text, its notes' calls with it, so on paper a heading that holds a note labels
-// its bookmark with its own text (PAGE_FOOTNOTES_CSS).
+// WeasyPrint's bookmark is a heading's text, its notes' numbers with it, so on paper a heading that holds a note labels
+// its bookmark with its own text (printExtras).
 function renderBookmarkedHeading(node: Node, children: string | string[] | undefined): string {
     const spec = node.type.spec.toDOM?.(node);
     const html = spec ? domOutputSpecToHTMLString(spec)(children) : '';
@@ -324,7 +324,9 @@ export function renderDocHtml(
                 equation: options?.equations ?? renderEquations(),
                 footnote:
                     footnotes?.reference ?? (({ node, renderElement }) => renderFootnoteSpans(node, renderElement)),
-                ...(!footnotes && { heading: ({ node, children }) => renderBookmarkedHeading(node, children) }),
+                ...(options?.pageCounters && {
+                    heading: ({ node, children }) => renderBookmarkedHeading(node, children),
+                }),
                 ...(options?.smallCapsFont && {
                     text: renderTextSynthesizingSmallCaps(content, options.smallCapsFont),
                 }),

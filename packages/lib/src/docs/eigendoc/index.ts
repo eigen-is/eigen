@@ -65,6 +65,7 @@ export {
     ptToPx,
     ptToTwips,
     pxToMm,
+    pxToPt,
     readCm,
     readPageSetup,
     TWIPS_PER_POINT,

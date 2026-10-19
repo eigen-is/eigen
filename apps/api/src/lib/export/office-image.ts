@@ -1,3 +1,4 @@
+import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import { ASVG_NS } from '../core/ooxml';
 import { type ExportMedia, toTransferableBuffer } from '../document/transform/protocol';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../shared/thumbnail-timeout';
@@ -98,7 +99,7 @@ const PHYSICAL_LENGTH = /^\s*[\d.e+-]+\s*(in|cm|mm|pt|pc)\s*$/i;
 function cssSize(svg: Buffer, width: number, height: number): { width: number; height: number } {
     const root = svg.toString('utf8', 0, svg.indexOf('>') + 1);
     const scale = (value: string | undefined) =>
-        value === undefined ? undefined : PHYSICAL_LENGTH.test(value) ? 96 / 72 : 1;
+        value === undefined ? undefined : PHYSICAL_LENGTH.test(value) ? ptToPx(1) : 1;
     const x = scale(root.match(/\swidth="([^"]*)"/)?.[1]);
     const y = scale(root.match(/\sheight="([^"]*)"/)?.[1]);
     return { width: width * (x ?? y ?? 1), height: height * (y ?? x ?? 1) };

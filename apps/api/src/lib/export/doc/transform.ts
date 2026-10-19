@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_LINE_RATIO, EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
 import {
     BAND_DISTANCE_MM,
     BAND_ROOTS,
@@ -14,6 +14,7 @@ import {
     PAGE_BREAK_CLASS,
     type PageSetup,
     pageStylesheet,
+    pxToPt,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import {
@@ -233,19 +234,29 @@ ${page.differentFirstPage ? '@page :first { @top-center { content: element(heade
 // 60 s timeout. Past either, the PDF lists the notes after the body, as the download does.
 export const MAX_PAGE_NOTES = 1500;
 
-// A note's lines at 10 pt, a character at most 0.6 em wide on average, against the page's text less the reference's
-// line and the rule above the notes.
+// A note's lines at 10 pt in the tallest bundled face, as its runs may draw in any, a character at most 0.6 em wide on
+// average, and a picture as tall as it is wide, or as the column where it stores no width, a chart at its height:
+// against the page's text less the reference's line and the rule above the notes.
 function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
     if (notes.length > MAX_PAGE_NOTES) return false;
     const { sizePt } = FOOTNOTE_LOOK;
-    const lineChars = mmToPt(page.width - page.margin.left - page.margin.right) / (0.6 * sizePt);
-    const pageLines = mmToPt(page.height - page.margin.top - page.margin.bottom) / (sizePt * DOCUMENT_LINE_RATIO) - 3;
+    const columnPt = mmToPt(page.width - page.margin.left - page.margin.right);
+    const linePt = sizePt * Math.max(...EIGEN_FONTS.map((font) => font.lineHeight));
+    const lineChars = columnPt / (0.6 * sizePt);
+    const pageLines = mmToPt(page.height - page.margin.top - page.margin.bottom) / linePt - 3;
+    const pictureLines = (node: JSONContent): number => {
+        const { width, height } = node.attrs ?? {};
+        const tall = node.type === 'chart' ? height : node.type === 'figure' ? width : undefined;
+        const own = typeof tall === 'number' && tall > 0 ? Math.min(pxToPt(tall), columnPt) : columnPt;
+        const lines = node.type === 'chart' || node.type === 'figure' ? Math.ceil(own / linePt) : 0;
+        return lines + (node.content ?? []).reduce((sum, child) => sum + pictureLines(child), 0);
+    };
     const textOf = (node: JSONContent): number =>
         (node.text?.length ?? 0) + (node.content ?? []).reduce((sum, child) => sum + textOf(child), 0);
     return notes.every(
         (note) =>
             (note.content ?? []).reduce(
-                (lines, block) => lines + Math.max(1, Math.ceil(textOf(block) / lineChars)),
+                (lines, block) => lines + Math.max(1, Math.ceil(textOf(block) / lineChars)) + pictureLines(block),
                 0,
             ) <= pageLines,
     );
@@ -273,7 +284,6 @@ const PAGE_FOOTNOTES_CSS = `
 .footnote::footnote-marker { content: counter(footnote) ' '; vertical-align: super; font-size: ${FOOTNOTE_LOOK.sizePt * 0.75}pt; }
 .footnote > [data-type="${FOOTNOTE_PARAGRAPH}"] { display: block; }
 .footnote > [data-type="${FOOTNOTE_PARAGRAPH}"]:first-child { display: inline; }
-[data-bookmark] { bookmark-label: attr(data-bookmark); }
 @page {
     @footnote {
         margin-top: 1em;
@@ -322,6 +332,9 @@ pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
    trailing <br> */
 .math-svg > svg { display: inline; max-width: 100%; height: auto; }
 .math-svg[data-display] { display: inline-block; width: 100%; text-align: center; vertical-align: bottom; }
+
+/* The PDF's bookmark of a heading that holds a note: its own text, without the note's number */
+[data-bookmark] { bookmark-label: attr(data-bookmark); }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */
 ul[data-type="taskList"] li > label input[type="checkbox"] {

@@ -1900,6 +1900,27 @@ describe('doc export — footnotes', () => {
         expect(await exportStyle('pdf-html', doc)).not.toContain('float: footnote');
     });
 
+    // 52 lines fit Inter's line on A4 but not Source Serif 4's taller one, and a picture counts at its height.
+    test.each<[string, JSONContent[]]>([
+        ['52 lines under a serif Normal', Array.from({ length: 52 }, (_, index) => paragraph(`Line ${index}`))],
+        [
+            'two tall pictures',
+            [
+                paragraph('Pictured'),
+                { type: 'paragraph', content: [{ type: 'figure', attrs: { mediaName: 'a.png', width: 600 } }] },
+                { type: 'paragraph', content: [{ type: 'figure', attrs: { mediaName: 'b.png', width: 600 } }] },
+            ],
+        ],
+    ])('the PDF of a note of %s lists its notes after the body', async (_name, paragraphs) => {
+        const doc = styledDoc({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Claim' }, note(...paragraphs)] }],
+        });
+        const { body } = new JSDOM(await exported('pdf-html', doc)).window.document;
+        expect(body.querySelector('span.footnote')).toBeNull();
+        expect(body.querySelector('section.footnotes')).not.toBeNull();
+    });
+
     test('a note just within a page stays at its foot', async () => {
         const html = await pdfHtml({
             type: 'paragraph',
@@ -1909,6 +1930,29 @@ describe('doc export — footnotes', () => {
             ],
         });
         expect(html).toContain('<span class="footnote"');
+    });
+
+    // The notes listed after the body put a linked number in the heading, which the bookmark leaves out too.
+    test("the PDF that lists its notes still labels a heading's bookmark without its note's number", async () => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'heading',
+                    attrs: { level: 1 },
+                    content: [
+                        { type: 'text', text: 'Intro' },
+                        note(...Array.from({ length: 300 }, (_, index) => paragraph(`Line ${index}`))),
+                    ],
+                },
+            ],
+        });
+        const { body } = new JSDOM(await exported('pdf-html', doc)).window.document;
+        expect(body.querySelector('section.footnotes')).not.toBeNull();
+        expect(body.querySelector('h1')?.getAttribute('data-bookmark')).toBe('Intro');
+        expect(await exportStyle('pdf-html', doc)).toContain(
+            '[data-bookmark] { bookmark-label: attr(data-bookmark); }',
+        );
     });
 
     // A forged note may end in a block that is no paragraph; its link back follows it.

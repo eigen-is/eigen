@@ -115,6 +115,7 @@ export const pxToMm = (px: number) => (px / 96) * 25.4;
 export const mmToPt = (mm: number) => (mm / 25.4) * 72;
 export const ptToMm = (pt: number) => (pt / 72) * 25.4;
 export const ptToPx = (pt: number) => (pt / 72) * 96;
+export const pxToPt = (px: number) => (px / 96) * 72;
 export const TWIPS_PER_POINT = 20;
 export const ptToTwips = (pt: number) => pt * TWIPS_PER_POINT;
 export const twipsToPt = (twips: number) => twips / TWIPS_PER_POINT;
