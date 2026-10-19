@@ -112,7 +112,7 @@ async function serveExport(
     return {
         // WeasyPrint stays a main-thread subprocess (already off-process, so it never
         // blocks the event loop) over the document the Worker rendered.
-        data: envelope.workerFormat === 'pdf-html' ? await htmlToPdf(bytes, zoom) : bytes,
+        data: envelope.workerFormat === 'pdf-html' ? await htmlToPdf(bytes, zoom, signal) : bytes,
         contentType: envelope.contentType,
         fileName: `${stripEigenExtension(path.name)}.${envelope.extension}`,
     };

@@ -147,7 +147,7 @@ function childOutcome(signal: NodeJS.Signals | null, killedBy: RunnerKill | unde
 export function limitedCommand(command: string[], deadlineMs: number, memoryLimitKiB = MACHINE_MEMORY_KIB): string[] {
     if (process.platform !== 'linux') return command;
     const cpuSeconds = Math.ceil(deadlineMs / 1000) * availableParallelism() + CPU_SLACK_SECONDS;
-    return ['sh', '-c', LIMITED_COMMAND, 'sh', String(memoryLimitKiB), String(cpuSeconds), ...command];
+    return ['/bin/sh', '-c', LIMITED_COMMAND, 'sh', String(memoryLimitKiB), String(cpuSeconds), ...command];
 }
 
 // Each arm of the closed warning union carries exactly one payload field; settle()

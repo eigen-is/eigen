@@ -16,19 +16,19 @@ Export and import both dispatch on the container type, not the mime type. A mime
 
 `runDocumentExport` is the one main-thread entry. The runner admits the job before anything is read. Once the transform process has read the document, it names the media files the document holds, and `collectExportMedia` (`export/media.ts`) prepares those and no others, one at a time: the screen preview for HTML and PDF, a fresh PNG or JPEG for a docx or pptx ([§ An Office image](#an-office-image-is-a-png-or-jpeg-made-from-its-source)). That is Mount I/O plus the capped thumbnail path, so it stays on the main thread. Named files past 200 MB in all make the export a 413 before any is read ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#an-exports-media-is-prepared-inside-its-job)). The prep runs inside the export's 120 s transform deadline, so an export is one deadline end to end: once it is spent, or the client is gone, the prep reads no more media and the job fails as a timed-out or canceled one does. The xlsx export names none, because the writer carries cells only.
 
-The one-shot transform process ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) materializes the captured Yjs blobs, then renders and sanitizes the HTML, or writes the docx, pptx or xlsx. The docx and pptx writers and ExcelJS load lazily, so an HTML export evaluates none of them. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live read. WeasyPrint stays on the main thread: it is already a separate process.
+The one-shot transform process ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)) materializes the captured Yjs blobs, then renders and sanitizes the HTML, or writes the docx, pptx or xlsx. The docx and pptx writers and ExcelJS load lazily, so an HTML export evaluates none of them. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live read. WeasyPrint stays outside the runner, since it is already a separate process, but it takes the transform child's treatment: one render at a time (`htmlToPdf`, `export/weasyprint.ts`), because a render can hold gigabytes as a child can, under the child's Linux limits (`limitedCommand`, [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#a-child-runs-under-the-machines-memory)), and killed by the request's signal when the client goes, or skipped if it goes while the render waits its turn.
 
 | Outcome | Status |
 |---|---|
 | WeasyPrint not installed, older than 68 or its import past 5 s (PDF only) | 501 naming the minimum and how to install it |
-| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or a bare 500 with its traceback in the log. A SIGSEGV, which WeasyPrint 68 hits now and then in a glib thread while renders run side by side, renders once more in what is left of the 60 s, unless the first took over half |
+| WeasyPrint past its 60 s timeout, or exits non-zero | 504, or a bare 500 with its traceback in the log. A SIGSEGV, which WeasyPrint 68 hits now and then in a glib thread, renders once more in what is left of the 60 s, unless the first took over half |
 | The media the document names past 200 MB in all | 413, before any is read |
 | Transform runner saturated | 503, never a main-thread fallback |
 | Empty deck or empty drawing | 400 |
 
 ## A transform route exempts itself from the idle timeout
 
-The response is silent while the job queues and its transform runs. Queue wait plus the 120 s transform deadline plus 60 s of WeasyPrint can outlast any server-wide `idleTimeout`, which Bun caps at 255 s. So the export, import and convert routes call `server.timeout(request, 0)`. Without it Bun closes the silent connection, which aborts the signal and kills the job mid-transform. `request.signal` still fires on a real disconnect, and the runner then drops the queued job or kills its child process.
+The response is silent while the job queues and its transform runs. Queue wait plus the 120 s transform deadline plus the wait for WeasyPrint and its 60 s can outlast any server-wide `idleTimeout`, which Bun caps at 255 s. So the export, import and convert routes call `server.timeout(request, 0)`. Without it Bun closes the silent connection, which aborts the signal and kills the job mid-transform. `request.signal` still fires on a real disconnect, and the runner then drops the queued job or kills its child process, as `htmlToPdf` kills its render.
 
 ## Every format but xlsx, docx, pptx and SVG is one HTML document
 
