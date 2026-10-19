@@ -2,6 +2,7 @@ import { parseChartSpec } from '@workspace/lib/charts';
 import { downloadBlob } from '@workspace/lib/download';
 import type { SheetChart } from '@workspace/lib/sheets';
 import { type Box, orderByFractionalIndex } from '@workspace/lib/vector';
+import { ObjectTransform } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -12,7 +13,6 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
 import { EllipsisVertical } from 'lucide-react';
 import { useContext, useEffect, useRef, useState } from 'react';
