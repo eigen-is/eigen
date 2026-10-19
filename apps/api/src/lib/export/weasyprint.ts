@@ -1,5 +1,7 @@
+import { Semaphore } from '../../utils/semaphore';
 import { ApiError } from '../core/errors';
 import { isEnoent } from '../core/local-filesystem';
+import { BUSY_MESSAGE, limitedCommand } from '../document/transform/runner';
 import renderScript from './weasyprint-render.py' with { type: 'file' };
 
 // The largest @page side an export asks WeasyPrint for: 200 inches, the PDF page limit. A page sized from
@@ -11,6 +13,13 @@ export const MAX_PDF_PAGE_PX = 19_200;
 const MIN_WEASYPRINT_MAJOR = 68;
 
 const RENDER_TIMEOUT_MS = 60_000;
+
+// A render can take gigabytes, so renders run one at a time, as transform children do (DOCUMENT-TRANSFORMS.md § One
+// child runs at a time), beside at most the one child.
+const renders = new Semaphore(1);
+// A waiting render holds its document and its connection. The runner admits about four foreground exports behind the
+// one running (120 s of predicted wait at 30 s each), so four renders may wait behind the one WeasyPrint.
+const MAX_WAITING_RENDERS = 4;
 
 type WeasyPrintProbe = { python: string } | { python: null; found: string | null };
 
@@ -60,7 +69,8 @@ export async function isWeasyPrintAvailable(): Promise<boolean> {
 
 // A cached interpreter can vanish, as a Homebrew upgrade removes the old Cellar path, so a spawn that finds none probes
 // once more. The script's fetcher opens only data: URIs, so nothing in the HTML makes WeasyPrint fetch from the API host.
-async function spawnRender(zoom: number, timeout: number) {
+// It runs under the transform child's limits, so the kernel's OOM killer takes it before the API.
+async function spawnRender(zoom: number, timeout: number, signal?: AbortSignal) {
     const spawn = async () => {
         const probe = await weasyPrint();
         if (probe.python === null) {
@@ -70,11 +80,12 @@ async function spawnRender(zoom: number, timeout: number) {
                     'Install it with Homebrew (brew install weasyprint) or with pip in a venv, not pip install --user.',
             );
         }
-        return Bun.spawn([probe.python, '-I', renderScript, String(zoom)], {
+        return Bun.spawn(limitedCommand([probe.python, '-I', renderScript, String(zoom)], timeout), {
             stdin: 'pipe',
             stdout: 'pipe',
             stderr: 'pipe',
             timeout,
+            signal,
         });
     };
     try {
@@ -86,8 +97,8 @@ async function spawnRender(zoom: number, timeout: number) {
     }
 }
 
-async function render(html: string | Uint8Array, zoom: number, timeout: number) {
-    const proc = await spawnRender(zoom, timeout);
+async function render(html: string | Uint8Array, zoom: number, timeout: number, signal?: AbortSignal) {
+    const proc = await spawnRender(zoom, timeout, signal);
 
     // A WeasyPrint that exits early (bad input) closes its stdin; writing to the dead pipe throws
     // EPIPE. Guard it so an early exit becomes the exitCode-500 below, never a process crash.
@@ -108,18 +119,29 @@ async function render(html: string | Uint8Array, zoom: number, timeout: number) 
 
 // Accepts the UTF-8 bytes the transform Worker returns as well as a plain string —
 // Bun's stdin sink writes both, and the render script reads stdin as UTF-8. `zoom` scales the
-// laid-out pages onto their sheets: at 0.5 a 1920 px page prints 960 px, 254 mm, wide.
-export async function htmlToPdf(html: string | Uint8Array, zoom = 1): Promise<Buffer> {
-    const started = Date.now();
-    let result = await render(html, zoom, RENDER_TIMEOUT_MS);
-
-    // WeasyPrint 68 segfaults in a glib thread now and then while renders run side by side, and the same HTML renders
-    // the next time. One more render, in what is left of the timeout, and none once the first took most of it.
-    const left = RENDER_TIMEOUT_MS - (Date.now() - started);
-    if (result.signalCode === 'SIGSEGV' && left > RENDER_TIMEOUT_MS / 2) {
-        console.warn('[export] WeasyPrint died of SIGSEGV, rendering once more:', result.stderr);
-        result = await render(html, zoom, left);
+// laid-out pages onto their sheets: at 0.5 a 1920 px page prints 960 px, 254 mm, wide. `signal` is the request's: a
+// client that is gone kills its render, or leaves the queue of renders waiting their turn.
+export async function htmlToPdf(html: string | Uint8Array, zoom = 1, signal?: AbortSignal): Promise<Buffer> {
+    if (renders.waiting >= MAX_WAITING_RENDERS) {
+        console.warn(`[export] WeasyPrint refused waiting=${renders.waiting}`);
+        throw new ApiError(503, BUSY_MESSAGE);
     }
+    return renders.run(() => renderPdf(html, zoom, signal), signal);
+}
+
+async function renderPdf(html: string | Uint8Array, zoom: number, signal?: AbortSignal): Promise<Buffer> {
+    signal?.throwIfAborted();
+    const started = Date.now();
+    let result = await render(html, zoom, RENDER_TIMEOUT_MS, signal);
+
+    // WeasyPrint 68 segfaults in a glib thread now and then, and the same HTML renders the next time. One more render,
+    // in what is left of the timeout, and none once the first took most of it.
+    const left = RENDER_TIMEOUT_MS - (Date.now() - started);
+    if (result.signalCode === 'SIGSEGV' && left > RENDER_TIMEOUT_MS / 2 && !signal?.aborted) {
+        console.warn('[export] WeasyPrint died of SIGSEGV, rendering once more:', result.stderr);
+        result = await render(html, zoom, left, signal);
+    }
+    signal?.throwIfAborted();
 
     // Only the deadline sends SIGTERM; a render that exited on its own has no signalCode.
     if (result.signalCode === 'SIGTERM') {

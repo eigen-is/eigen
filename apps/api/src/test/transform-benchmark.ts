@@ -241,7 +241,6 @@ for (const mb of [50, 200]) {
         documentType: 'eigensheets',
         format: 'xlsx',
         title: 'bench',
-        media: [],
         source: { snapshot: null, updates: [] },
         test: { behavior: 'export-bytes', bytes },
     };

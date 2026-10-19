@@ -3,6 +3,7 @@ import {
     DEFAULT_SCENE_META,
     ELEMENT_KINDS,
     SLIDES_STYLE_DEFAULTS,
+    serializeBackgroundFill,
     solidFill,
     type VectorElement,
     type VectorScene,
@@ -14,6 +15,7 @@ import {
     renderCanvasPage,
     renderFittedPage,
     renderPrintPage,
+    sceneMediaNames,
 } from '../../lib/export/canvas/render';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { buildGoldenDeckScene, buildGoldenVectorScene, GOLDEN_MEDIA_NAME } from '../fixtures/golden-documents';
@@ -281,5 +283,27 @@ describe('framePages', () => {
     test('a deck with no frames has no pages', () => {
         const empty = { elements: [], frames: [], meta: DEFAULT_SCENE_META };
         expect(framePages(empty, noMedia)).toEqual([]);
+    });
+});
+
+// An export prepares only the media these name, so a frame's picture, kept as stored JSON, must be among them.
+describe('sceneMediaNames', () => {
+    test("names the images and every frame's background picture, and nothing a solid background holds", () => {
+        const golden = buildGoldenDeckScene();
+        const [first, ...rest] = golden.frames;
+        const scene: VectorScene = {
+            ...golden,
+            frames: [
+                {
+                    ...first,
+                    background: serializeBackgroundFill({ type: 'image', mediaName: 'cover.png', fit: 'cover' }),
+                },
+                ...rest.map((frame) => ({
+                    ...frame,
+                    background: serializeBackgroundFill({ type: 'solid', color: '#fff' }),
+                })),
+            ],
+        };
+        expect([...sceneMediaNames(scene)].sort()).toEqual(['cover.png', GOLDEN_MEDIA_NAME].sort());
     });
 });

@@ -50,7 +50,6 @@ import {
 } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { sealed } from '@workspace/ui/components/properties-panel';
-import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
 import { ImageIcon } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -64,6 +63,7 @@ import { FileDropOverlay } from '../file-drop-overlay';
 import { HintPill } from '../hint-pill';
 import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
+import { ObjectTransform } from '../transform/object-transform';
 import { CanvasObjectMenu } from './canvas-object-menu';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';

@@ -1,10 +1,10 @@
 import type * as Y from 'yjs';
-import { toDataUriMap } from '../../document/media';
+import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { readSheetsFromDoc } from '../../document/sheets';
 import {
+    type ExportMediaLoader,
     htmlExportMode,
     type SheetExportFormat,
-    type TransformMedia,
     type TransformWarning,
     toTransferableBuffer,
     toTransferableText,
@@ -20,7 +20,7 @@ export async function renderEigensheetsExport(
     doc: Y.Doc,
     format: SheetExportFormat,
     title: string,
-    media: TransformMedia[],
+    loadMedia: ExportMediaLoader,
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const warnings: TransformWarning[] = [];
     const { sheets, recalcError } = readSheetsFromDoc(doc);
@@ -30,6 +30,7 @@ export async function renderEigensheetsExport(
         case 'html':
         case 'pdf-html': {
             const { sheetsHtmlDocument } = await import('./render');
+            const media = await loadMedia(mediaNamesIn(sheets.map((sheet) => sheet.images)));
             const html = sheetsHtmlDocument({
                 title,
                 sheets,

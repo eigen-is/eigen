@@ -18,11 +18,11 @@ import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocS
 import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
-import { toDataUriMap } from '../../document/media';
+import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import {
     type EigendocExportFormat,
-    type ExportMedia,
+    type ExportMediaLoader,
     htmlExportMode,
     type TransformWarning,
     toTransferableBuffer,
@@ -54,13 +54,14 @@ export async function renderEigendocExport(
     doc: Y.Doc,
     format: EigendocExportFormat,
     title: string,
-    media: ExportMedia[],
+    loadMedia: ExportMediaLoader,
     publicOrigin: string | undefined,
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const json = readEigendocFromDoc(doc);
     const page = readEigendocPage(doc);
     const style = readEigendocStyle(doc);
     const bands = readEigendocBands(doc);
+    const media = await loadMedia(mediaNamesIn([json, bands]));
     if (format === 'docx') {
         const { chartFigureMedia, eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
         const roots = [json, ...Object.values(bands)];

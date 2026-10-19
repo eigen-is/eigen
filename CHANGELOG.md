@@ -39,6 +39,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 - **Rich text in Sheets** — a cell that mixes bold, italic, colors or fonts counts in sorting, filtering, conditional formats, dropdown checks, formulas and the status bar, where it read as empty, imported or typed in the editor. A number, which counted as empty too, anchors a merge and stops text overflowing into its cell, as in Google Sheets
 - **Docs images** — switching an image or chart to wrap text shrinks it to half the width of the text so text fits beside it, dragging an image's handle follows the pointer when the page is shown smaller, and a list beside a wrapped image keeps its bullets or numbers clear of it. A Word file's wrapped picture placed from the page's edge comes in on the side Word shows it
 - **Server** — a file too large for the server's memory to import, export, preview or index is refused instead of taking the server down. An import says Document too large or Spreadsheet too large
+- **Downloads** — a download reads only the images the document still shows, not every image it ever held, and one whose images pass 200 MB in all is refused with "This document's images are too large to export"
 
 ## [0.3.3] - 2026-10-13
 

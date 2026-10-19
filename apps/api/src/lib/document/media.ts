@@ -14,6 +14,22 @@ export async function listDocumentMedia(mount: Mount, drivePath: DrivePath): Pro
     return new Map(children.map((file) => [file.name, file]));
 }
 
+// The media names a document read for an export holds: every document kind names a file in `media/` by a `mediaName`
+// field (docs/MEDIA-REFERENCES.md), wherever it sits in the tree.
+export function mediaNamesIn(tree: unknown): Set<string> {
+    const names = new Set<string>();
+    const stack = [tree];
+    while (stack.length > 0) {
+        const value = stack.pop();
+        if (!value || typeof value !== 'object') continue;
+        for (const [key, child] of Object.entries(value)) {
+            if (key === 'mediaName' && typeof child === 'string' && child) names.add(child);
+            else stack.push(child);
+        }
+    }
+    return names;
+}
+
 // Public-facing API URL for preview HTML embedded in exported documents. The frontend
 // convention switched to relative VITE_API_HOST (e.g. "/eigen"), so resolve against the
 // absolute API_URL here — these <img src=...> URLs end up in HTML that may be rendered
