@@ -1,3 +1,4 @@
+export * from './document-import-picker';
 export * from './drive-access-list';
 export * from './drive-browser';
 export * from './drive-create-eigendoc';
