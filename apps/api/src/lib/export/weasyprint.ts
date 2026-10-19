@@ -1,7 +1,7 @@
 import { Semaphore } from '../../utils/semaphore';
 import { ApiError } from '../core/errors';
 import { isEnoent } from '../core/local-filesystem';
-import { limitedCommand } from '../document/transform/runner';
+import { BUSY_MESSAGE, limitedCommand } from '../document/transform/runner';
 import renderScript from './weasyprint-render.py' with { type: 'file' };
 
 // The largest @page side an export asks WeasyPrint for: 200 inches, the PDF page limit. A page sized from
@@ -17,6 +17,9 @@ const RENDER_TIMEOUT_MS = 60_000;
 // A render can take gigabytes, so renders run one at a time, as transform children do (DOCUMENT-TRANSFORMS.md § One
 // child runs at a time), beside at most the one child.
 const renders = new Semaphore(1);
+// A waiting render holds its document and its connection. The runner admits about four foreground exports behind the
+// one running (120 s of predicted wait at 30 s each), so four renders may wait behind the one WeasyPrint.
+const MAX_WAITING_RENDERS = 4;
 
 type WeasyPrintProbe = { python: string } | { python: null; found: string | null };
 
@@ -117,9 +120,13 @@ async function render(html: string | Uint8Array, zoom: number, timeout: number, 
 // Accepts the UTF-8 bytes the transform Worker returns as well as a plain string —
 // Bun's stdin sink writes both, and the render script reads stdin as UTF-8. `zoom` scales the
 // laid-out pages onto their sheets: at 0.5 a 1920 px page prints 960 px, 254 mm, wide. `signal` is the request's: a
-// client that is gone kills its render, or takes its turn before one starts.
-export function htmlToPdf(html: string | Uint8Array, zoom = 1, signal?: AbortSignal): Promise<Buffer> {
-    return renders.run(() => renderPdf(html, zoom, signal));
+// client that is gone kills its render, or leaves the queue of renders waiting their turn.
+export async function htmlToPdf(html: string | Uint8Array, zoom = 1, signal?: AbortSignal): Promise<Buffer> {
+    if (renders.waiting >= MAX_WAITING_RENDERS) {
+        console.warn(`[export] WeasyPrint refused waiting=${renders.waiting}`);
+        throw new ApiError(503, BUSY_MESSAGE);
+    }
+    return renders.run(() => renderPdf(html, zoom, signal), signal);
 }
 
 async function renderPdf(html: string | Uint8Array, zoom: number, signal?: AbortSignal): Promise<Buffer> {

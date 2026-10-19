@@ -62,7 +62,7 @@ const CLOSE_GRACE_MS = 5_000;
 // A killed child stuck in the kernel can't exit, and must not hold the shutdown.
 const KILL_WAIT_MS = 1_000;
 // Shown verbatim by useExportDocument's error toast — keep it human-readable.
-const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
+export const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 
 // Linux alone takes the limits: macOS refuses setrlimit for the data segment. $1 is the data segment in KiB (dash's
 // unit), $2 the CPU seconds, the rest the command. The kernel kills the process before the API when the host runs out

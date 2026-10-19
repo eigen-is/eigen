@@ -152,6 +152,42 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
         expect(result).toEqual(Array(4).fill({ pdf: 'alone' }));
     }, 15_000);
 
+    // A waiting render holds its document and its connection, so past MAX_WAITING_RENDERS the export is the
+    // runner's 503, as a full transform queue is.
+    test('past the waiting renders an export answers 503 busy', async () => {
+        const { result } = await runWithStubPython(
+            'echo 70.0; exit 0',
+            "/bin/sleep 0.2; printf '%%PDF-'",
+            `const outcomes = await Promise.all(Array.from({ length: 6 }, () => outcome(htmlToPdf(HTML))));
+            process.stdout.write(JSON.stringify(outcomes));`,
+        );
+        expect(result).toEqual([
+            ...Array(5).fill({ pdf: '%PDF-' }),
+            { status: 503, message: 'The server is busy, please try again in a moment' },
+        ]);
+    }, 15_000);
+
+    // The aborted waiter leaves the queue at once, its HTML with it, and never spawns.
+    test('a waiting export whose request aborts leaves the queue before the render ahead of it ends', async () => {
+        const { result } = await runWithStubPython(
+            'echo 70.0; exit 0',
+            `echo $$ >> "$0.pids"; /bin/sleep 1; printf '%%PDF-'`,
+            `const controller = new AbortController();
+            const started = Date.now();
+            const first = outcome(htmlToPdf(HTML));
+            const second = htmlToPdf(HTML, 1, controller.signal).then(() => 'rendered', () => Date.now() - started);
+            await Bun.sleep(100);
+            controller.abort();
+            const leftAfter = await second;
+            await first;
+            const { readFileSync } = await import('node:fs');
+            const spawned = readFileSync(process.env.PATH + '/python3.13.pids', 'utf8').trim().split('\\n').length;
+            process.stdout.write(JSON.stringify({ leftAfter, spawned }));`,
+        );
+        expect(result.spawned).toBe(1);
+        expect(result.leftAfter).toBeLessThan(800);
+    }, 15_000);
+
     // The stub execs the sleep, so its pid is the render's: an abort must leave no such process.
     test('an aborted export kills its render, and one still waiting never starts', async () => {
         const { result } = await runWithStubPython(
