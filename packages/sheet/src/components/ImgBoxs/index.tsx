@@ -1,8 +1,8 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Box } from '@workspace/lib/vector';
+import { ObjectTransform } from '@workspace/ui';
 import { ContextMenuAnchor, DownloadImageMenuItem, useContextMenu } from '@workspace/ui/components/context-menu';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
-import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { onImageMoveStart, updateImage } from '../../state';

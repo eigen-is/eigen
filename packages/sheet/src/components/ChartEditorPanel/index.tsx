@@ -1,8 +1,7 @@
 import { parseChartSpec } from '@workspace/lib/charts';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
-import { Button } from '@workspace/ui/components/button';
-import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
+import { ChartEditor } from '@workspace/ui/components/charts';
 import { Input } from '@workspace/ui/components/input';
 import {
     PropertiesPanel,
@@ -11,7 +10,6 @@ import {
     PropertyRow,
     PropertySection,
 } from '@workspace/ui/components/properties-panel';
-import { Table } from 'lucide-react';
 import { type RefObject, useState } from 'react';
 import { rowIndexToLabel } from '../../engine/a1-notation';
 import {
@@ -33,7 +31,6 @@ type ChartEditorPanelProps = {
 // Google's Chart editor: Setup (the data range and how it reads) over the shared Customise rows. Every
 // change is one write of the chart's spec, a typed field one undo step for the whole edit.
 export function ChartEditorPanel({ editor, workbook }: ChartEditorPanelProps) {
-    const [dataOpen, setDataOpen] = useState(false);
     const spec = parseChartSpec(editor.chart.spec);
     if (!spec) return null;
     const { data } = spec;
@@ -50,21 +47,7 @@ export function ChartEditorPanel({ editor, workbook }: ChartEditorPanelProps) {
                     onChange={write}
                     categories={editor.categories}
                     seriesNames={editor.seriesNames}
-                >
-                    {data.source === 'inline' && (
-                        <>
-                            <Button variant="outline" size="sm" className="w-full" onClick={() => setDataOpen(true)}>
-                                <Table /> Edit data
-                            </Button>
-                            <ChartDataDialog
-                                spec={{ ...spec, data }}
-                                open={dataOpen}
-                                onOpenChange={setDataOpen}
-                                onSave={write}
-                            />
-                        </>
-                    )}
-                </ChartEditor>
+                />
             </PropertyGestureContext.Provider>
         </PropertiesPanel>
     );
