@@ -12,11 +12,11 @@ const Y = await import('yjs');
 const { act, createElement, Fragment, useState } = await import('react');
 const { EditorContent } = await import('@tiptap/react');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { BAND_ROOTS, DEFAULT_PAGE_SETUP, PAGE_ROOT } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_ROOTS, DEFAULT_PAGE_SETUP, PAGE_ROOT, readPageSetup } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { useBandEditors, useDocMedia } = await import('../../../components/docs/doc-editor');
-const { usePageSetup } = await import('../../../components/docs/hooks/use-page-setup');
+const { useYMapRead } = await import('../../../components/docs/hooks/use-y-map-read');
 const { applyPageNumberPreset, PAGE_NUMBER_PRESETS } = await import('../../../components/docs/page-numbers');
 const { createDocUndoManager, writePageSetup } = await import('../../../components/docs/page-setup');
 
@@ -32,7 +32,7 @@ let editors: Record<BandRoot, Editor> | null = null;
 
 // The editor's wiring: the four band editors on the page, the page map written through writePageSetup.
 function Host({ doc }: { doc: InstanceType<typeof Y.Doc> }) {
-    const setup = usePageSetup(doc);
+    const setup = useYMapRead(doc.getMap(PAGE_ROOT), readPageSetup);
     const [undoManager] = useState(() => createDocUndoManager(doc));
     const media = useDocMedia(drivePath({ name: 'Letter', mimeType: DRIVE_MIME_DOC }));
     const bands = useBandEditors({

@@ -11,7 +11,7 @@ const { Editor } = await import('@tiptap/react');
 const { docEditorOptions } = await import('../../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../../components/docs/page-setup');
 const { canAnchorComment, commentAnchorText } = await import('../../../../components/docs/extensions/comment-mark');
-const { insertNote } = await import('../../../../components/docs/extensions/footnote');
+const { footnotesInDoc, insertNote, NOTE_EDIT } = await import('../../../../components/docs/extensions/footnote');
 
 const media = {
     mediaFolderId: 'media',
@@ -84,6 +84,38 @@ test('a reference draws its number in document order, and an insert before it re
     expect(insertNote(editor)).toBe(3);
     expect(numbers(editor)).toEqual(['1', '2']);
     expect(editor.state.selection.from).toBe(3 + (editor.state.doc.nodeAt(3)?.nodeSize ?? 0));
+});
+
+// The numbering maps through a change that leaves every note as it was, and walks the doc again for one that reaches a
+// note: a mark across a reference makes a new node at the same position.
+test('the notes list keeps its array while no note moves or changes, and follows every change that reaches one', () => {
+    const editor = body([...DOC, paragraph(text('Two'), footnote(paragraph(text('Second'))))]);
+    const notes = footnotesInDoc(editor);
+    const end = editor.state.doc.content.size - 1;
+    editor.view.dispatch(editor.state.tr.insertText('!', end));
+    expect(footnotesInDoc(editor)).toBe(notes);
+
+    editor.view.dispatch(editor.state.tr.insertText('A', 1));
+    expect(footnotesInDoc(editor).map(({ pos }) => pos)).toEqual(notes.map(({ pos }) => pos + 1));
+    expect(numbers(editor)).toEqual(['1', '2']);
+
+    const atNodes = () => footnotesInDoc(editor).map(({ pos, node }) => editor.state.doc.nodeAt(pos) === node);
+    editor.commands.selectAll();
+    editor.commands.toggleBold();
+    expect(atNodes()).toEqual([true, true]);
+
+    // The open note's edit, forwarded.
+    const [first] = footnotesInDoc(editor);
+    if (!first) throw new Error('no note');
+    editor.view.dispatch(editor.state.tr.insertText('Oh, ', first.pos + 2).setMeta(NOTE_EDIT, true));
+    expect(footnotesInDoc(editor)[0]?.node.textContent).toBe('Oh, Hello world');
+    expect(atNodes()).toEqual([true, true]);
+
+    editor.view.dispatch(
+        editor.state.tr.delete(first.pos, first.pos + (editor.state.doc.nodeAt(first.pos)?.nodeSize ?? 0)),
+    );
+    expect(footnotesInDoc(editor).map(({ node }) => node.textContent)).toEqual(['Second']);
+    expect(numbers(editor)).toEqual(['1']);
 });
 
 test('no note goes in a code block', () => {

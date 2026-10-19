@@ -11,9 +11,7 @@ const { formatForDisplay, getHotkeyManager } = await import('@tanstack/react-hot
 const { Editor } = await import('@tiptap/react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { BAND_EXCLUDED_NODES, DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, getDocExtensions } = await import(
-    '@workspace/lib/docs/eigendoc'
-);
+const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { CommandPaletteProvider } = await import('@workspace/ui');
@@ -63,7 +61,6 @@ async function render(
         canRedo: false,
         pageSetup: DEFAULT_PAGE_SETUP,
         onPageSetupChange: () => {},
-        normalStyle: DEFAULT_NORMAL_STYLE,
         onUpdateNormalStyle: () => {},
         onAccessDialogOpen: () => {},
         onImageUpload: () => {},

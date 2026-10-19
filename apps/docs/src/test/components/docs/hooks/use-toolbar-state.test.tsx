@@ -13,9 +13,12 @@ const { useToolbarState } = await import('../../../../components/docs/hooks/use-
 let unmount = async () => {};
 afterEach(() => unmount());
 
+// The doc's Normal, as the style map would hold it.
+let normal = DEFAULT_NORMAL_STYLE;
+
 // "plain " at 1-7, the bold Source Serif 4 "caps" at 7-11, then a heading.
 const editor = new Editor({
-    extensions: getDocExtensions(),
+    extensions: getDocExtensions({ normalStyle: () => normal }),
     content: {
         type: 'doc',
         content: [
@@ -36,14 +39,8 @@ const editor = new Editor({
 });
 
 let seen: ReturnType<typeof useToolbarState>[] = [];
-function Probe({
-    of = editor,
-    normal = DEFAULT_NORMAL_STYLE,
-}: {
-    of?: typeof editor;
-    normal?: typeof DEFAULT_NORMAL_STYLE;
-}) {
-    seen.push(useToolbarState(of, normal));
+function Probe({ of = editor }: { of?: typeof editor }) {
+    seen.push(useToolbarState(of));
     return null;
 }
 
@@ -67,14 +64,15 @@ test("unformatted text reads as the doc's Normal, and a new Normal reaches the t
     ({ unmount } = await renderInDocument(createElement(Probe)));
     expect(seen.at(-1)).toMatchObject({ fontName: 'Inter', fontSize: 11, lineSpacing: 1.4 });
 
-    const word = { ...DEFAULT_NORMAL_STYLE, font: 'Source Serif 4', size: 12, lineSpacing: 1.15 };
+    normal = { ...DEFAULT_NORMAL_STYLE, font: 'Source Serif 4', size: 12, lineSpacing: 1.15 };
     await unmount();
-    ({ unmount } = await renderInDocument(createElement(Probe, { normal: word })));
+    ({ unmount } = await renderInDocument(createElement(Probe)));
     expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', fontSize: 12, lineSpacing: 1.15 });
 
     // A heading draws its own size and line, which no CSS here gives.
     await act(async () => editor.commands.setTextSelection(14));
     expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', lineSpacing: undefined });
+    normal = DEFAULT_NORMAL_STYLE;
 });
 
 test('a caret move that changes nothing drawn renders nothing', async () => {

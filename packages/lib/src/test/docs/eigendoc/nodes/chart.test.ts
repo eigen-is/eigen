@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { createDocument, Editor, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { sampleChartSpec } from '../../../../charts';
-import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, getDocExtensions, readChartAttrs } from '../../../../docs/eigendoc';
+import { CHART_DEFAULT_SIZE, getDocExtensions, readChartAttrs } from '../../../../docs/eigendoc';
+import { CHART_MAX_SIDE } from '../../../../docs/eigendoc/nodes/chart';
 import { installHappyDom } from '../../../happy-dom';
 
 // generateHTML serializes through `document`, createDocument parses with DOMParser.

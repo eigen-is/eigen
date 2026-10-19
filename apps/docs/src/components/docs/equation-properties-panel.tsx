@@ -1,7 +1,7 @@
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorState, Transaction } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
-import { equationMath, parseMathml, readEquation } from '@workspace/lib/docs/eigendoc';
+import { equationMath, parseMathml, readEquation, unlessRefused } from '@workspace/lib/docs/eigendoc';
 import {
     LATEX_COMMANDS,
     MathError,
@@ -38,14 +38,8 @@ type Read =
 
 // A MathML draft's own LaTeX when the LaTeX reader takes it, as a paste keeps it, else its tree's.
 function latexOf(math: MathXmlElement, row: MathRow): string {
-    try {
-        const latex = readMathmlLatex(math);
-        if (latex !== undefined) readLatex(latex);
-        return latex ?? writeLatex(row);
-    } catch (error) {
-        if (!(error instanceof MathError)) throw error;
-        return writeLatex(row);
-    }
+    const latex = unlessRefused(() => readMathmlLatex(math));
+    return latex !== undefined && unlessRefused(() => readLatex(latex)) !== undefined ? latex : writeLatex(row);
 }
 
 // The MathML a draft commits as, its LaTeX the annotation, or where the reader stopped. A draft that starts with <math

@@ -245,6 +245,43 @@ test('a note pasted into a band drops, note and all', () => {
     expect(header.getText()).toBe('Claim end.');
 });
 
+// A note's text draws at 10 pt, which its size box shows, so a step goes from 10, as the body's goes from its Normal.
+test('a size step in a note steps from the footnote size', () => {
+    const doc = new Y.Doc();
+    const sizes = (editor: InstanceType<typeof Editor>) => {
+        const found: unknown[] = [];
+        editor.state.doc.descendants((node) => {
+            if (node.isText) found.push(node.marks.find((mark) => mark.type.name === 'textStyle')?.attrs['fontSize']);
+        });
+        return found;
+    };
+    const note = mount(doc, { body: () => null, onLeave: () => {} });
+    note.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'See' }] }],
+    });
+    note.commands.selectAll();
+    note.commands.stepFontSize(1);
+    expect(sizes(note)).toEqual([11]);
+    note.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'See' }] }],
+    });
+    note.commands.selectAll();
+    note.commands.stepFontSize(-1);
+    expect(sizes(note)).toEqual([9]);
+    expect(note.storage.eigenFontSize.normalStyle().size).toBe(10);
+
+    const page = body(doc);
+    page.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'See' }] }],
+    });
+    page.commands.selectAll();
+    page.commands.stepFontSize(1);
+    expect(sizes(page)).toEqual([12]);
+});
+
 type PageSetup = typeof DEFAULT_PAGE_SETUP;
 
 // A text column of 108 mm, 408 px.

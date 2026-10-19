@@ -34,6 +34,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Fixed
 
+- **Links in Docs** — a collaborator's edit or an undo no longer turns a web address or file name at the end of the document's first paragraph, such as plan.md, into a link nobody made
 - **Sheets copy and Tab** — copied cells paste into other apps as rows and columns, not one run of text, and Tab while typing in a cell confirms it and moves right (Shift+Tab left)
 - **Copy and paste in Sheets** — a pasted cell keeps its font, mapped to the bundled one: Times New Roman becomes Source Serif 4, where every font became Inter
 - **Rich text in Sheets** — a cell that mixes bold, italic, colors or fonts counts in sorting, filtering, conditional formats, dropdown checks, formulas and the status bar, where it read as empty, imported or typed in the editor. A number, which counted as empty too, anchors a merge and stops text overflowing into its cell, as in Google Sheets
