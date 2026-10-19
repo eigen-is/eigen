@@ -13,7 +13,7 @@ import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { MATHML_LIMIT, renderDocHtml } from '../../lib/export/doc/render';
-import { renderEigendocExport } from '../../lib/export/doc/transform';
+import { MAX_BAND_BLOCKS, MAX_BAND_TEXT, MAX_PAGE_NOTES, renderEigendocExport } from '../../lib/export/doc/transform';
 import * as mathSvg from '../../lib/export/math-svg';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
@@ -224,6 +224,82 @@ describe('doc export — the stylesheet', () => {
 
         expect(css).toContain('.figure, table, pre, blockquote { page-break-inside: avoid; }');
         expect(css).toContain('table:has(.page-break), blockquote:has(.page-break) { page-break-inside: auto; }');
+    });
+});
+
+// A face is up to 0.6 MB of base64, so a doc embeds only the families it can draw in; a missing one would print in
+// a system font.
+describe('doc export — fonts', () => {
+    const embedded = async (doc: Y.Doc, format: 'html' | 'pdf-html' = 'pdf-html') => [
+        ...new Set([...(await exportStyle(format, doc)).matchAll(/font-family: "([^"]+)";\s*src:/g)].map((m) => m[1])),
+    ];
+    const marked = (fontFamily: string) => ({
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Marked', marks: [{ type: 'textStyle', attrs: { fontFamily } }] }],
+    });
+
+    test.each(['html', 'pdf-html'] as const)('a plain doc in %s embeds its Normal font alone', async (format) => {
+        expect(await embedded(seededDoc(), format)).toEqual(['Inter']);
+        expect(await embedded(styledDoc(), format)).toEqual(['Source Serif 4']);
+    });
+
+    test("a font mark, a band's, code, a note's and a chart's font each embed their family", async () => {
+        expect(await embedded(seededDoc({ type: 'doc', content: [marked('Excalifont')] }))).toEqual([
+            'Inter',
+            'Excalifont',
+        ]);
+        expect(
+            await embedded(
+                seededDoc({ type: 'doc', content: [{ type: 'codeBlock', content: [{ type: 'text', text: 'x' }] }] }),
+            ),
+        ).toEqual(['Inter', 'JetBrains Mono']);
+        expect(
+            await embedded(
+                seededDoc({
+                    type: 'doc',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a', marks: [{ type: 'code' }] }] }],
+                }),
+            ),
+        ).toEqual(['Inter', 'JetBrains Mono']);
+        const banded = seededDoc();
+        seedBand(banded, 'header', marked('Source Serif 4'));
+        expect(await embedded(banded)).toEqual(['Inter', 'Source Serif 4']);
+        const noted = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Claim' },
+                        { type: 'footnote', content: [marked('Excalifont')] },
+                    ],
+                },
+            ],
+        });
+        expect(await embedded(noted)).toEqual(['Inter', 'Excalifont']);
+        const chart = (fontFamily: string) =>
+            seededDoc({
+                type: 'doc',
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            {
+                                type: 'chart',
+                                attrs: {
+                                    spec: JSON.stringify({ ...sampleChartSpec('column'), fontFamily }),
+                                    width: 400,
+                                    height: 240,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            });
+        expect(await embedded(chart('Source Serif 4'))).toEqual(['Inter', 'Source Serif 4']);
+        const serifChart = chart('Inter');
+        for (const [key, value] of Object.entries(WORD_NORMAL)) serifChart.getMap(STYLE_ROOT).set(key, value);
+        expect(await embedded(serifChart)).toEqual(['Inter', 'Source Serif 4']);
     });
 });
 
@@ -1136,9 +1212,27 @@ const weasyPrint = await isWeasyPrintAvailable();
 const launcher = Bun.which('weasyprint');
 const python = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
 
+// A Python script's whole output once it has exited. WeasyPrint hits a SIGSEGV now and then while renders run side by
+// side, which the export renders once more (weasyprint.ts), so this does too; any other failure throws its stderr.
+async function pythonOutput(args: string[], input: string): Promise<string> {
+    if (python === null) throw new Error('no python behind the weasyprint launcher');
+    for (let attempt = 0; ; attempt++) {
+        const proc = Bun.spawn([python, '-I', ...args], { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
+        proc.stdin.write(input);
+        await proc.stdin.end();
+        const [stdout, stderr, code] = await Promise.all([
+            new Response(proc.stdout).text(),
+            new Response(proc.stderr).text(),
+            proc.exited,
+        ]);
+        if (code === 0) return stdout;
+        if (proc.signalCode !== 'SIGSEGV' || attempt > 0)
+            throw new Error(`python exited with ${proc.signalCode ?? code}: ${stderr}`);
+    }
+}
+
 // What `line` prints of each box WeasyPrint lays out for the pages the PDF is written from, `tag` its element's name.
 async function laidOut(html: string, line: string): Promise<string[]> {
-    if (python === null) throw new Error('no python behind the weasyprint launcher');
     const script = `
 import sys, weasyprint
 def walk(box):
@@ -1150,10 +1244,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         tag = str(getattr(box, 'element_tag', '')).split('}')[-1]
         ${line}
 `;
-    const proc = Bun.spawn([python, '-I', '-c', script], { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' });
-    proc.stdin.write(html);
-    await proc.stdin.end();
-    return (await new Response(proc.stdout).text()).trim().split('\n');
+    return (await pythonOutput(['-c', script], html)).trim().split('\n');
 }
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — ordered list numbers (WeasyPrint)', () => {
@@ -1272,7 +1363,8 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     }, 60_000);
 });
 
-// D16: an unformatted paragraph draws the doc's Normal, and a paragraph's own format still wins.
+// D16: an unformatted paragraph draws the doc's Normal, and a paragraph's own format still wins. The line is measured
+// as drawn: WeasyPrint 68 stores a computed line height as ('NUMBER', x) and 70 as a float.
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — the Normal (WeasyPrint)', () => {
     test('an unformatted paragraph draws in the Normal: its font, size, line and spacing', async () => {
         const { data } = await renderEigendocExport(
@@ -1291,7 +1383,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         );
         const boxes = await laidOut(
             new TextDecoder().decode(data),
-            "if tag == 'p' and type(box).__name__ == 'BlockBox': print(box.style['font_family'][0], box.style['font_size'], box.style['line_height'][1], float(box.padding_top), float(box.margin_bottom))",
+            "if tag == 'p' and type(box).__name__ == 'BlockBox': print(box.style['font_family'][0], box.style['font_size'], round(box.height / box.style['font_size'], 2), float(box.padding_top), float(box.margin_bottom))",
         );
         expect(boxes).toEqual([
             'Source Serif 4 16.0 1.21 8.0 0.0',
@@ -1469,6 +1561,72 @@ describe('doc export — headers and footers', () => {
         expect(css).not.toContain('@top-center');
     });
 
+    // WeasyPrint lays a running element out on every page, so an unbounded header ran the PDF into its timeout.
+    test('the PDF prints a band past its caps up to them, with a warning', async () => {
+        const doc = seededDoc();
+        seedBand(doc, 'header', ...Array.from({ length: 4000 }, (_, index) => paragraph(`Head ${index}.`)));
+        const { data, warnings } = await renderEigendocExport(
+            doc,
+            'pdf-html',
+            'Report.eigendoc',
+            async () => [],
+            undefined,
+        );
+        const html = new TextDecoder().decode(data);
+        expect(html).toContain(`Head ${MAX_BAND_BLOCKS - 1}.`);
+        expect(html).not.toContain(`Head ${MAX_BAND_BLOCKS}.`);
+        expect(warnings).toEqual([{ code: 'band-blocks-cut', count: 4000 - MAX_BAND_BLOCKS }]);
+    });
+
+    // A table counts its rows, cells and paragraphs, so one block can pass the caps alone: it keeps what fits.
+    test('the PDF cuts the block that passes the caps inside it, so a band keeps its first lines', async () => {
+        const cell = (text: string) => ({ type: 'tableCell', content: [paragraph(text)] });
+        const table = {
+            type: 'table',
+            content: Array.from({ length: 25 }, (_, row) => ({
+                type: 'tableRow',
+                content: Array.from({ length: 4 }, (_, column) => cell(`R${row}C${column}.`)),
+            })),
+        };
+        const doc = seededDoc();
+        seedBand(doc, 'header', table, paragraph('After the table'));
+        seedBand(doc, 'footer', paragraph(`${'x'.repeat(MAX_BAND_TEXT)}Gone`));
+        const { data, warnings } = await renderEigendocExport(
+            doc,
+            'pdf-html',
+            'Report.eigendoc',
+            async () => [],
+            undefined,
+        );
+        const html = new TextDecoder().decode(data);
+        expect(html).toContain('R0C0.');
+        expect(html).toContain('R20C3.');
+        expect(html).not.toContain('R24C3.');
+        expect(html).not.toContain('After the table');
+        expect(html).toContain('x'.repeat(MAX_BAND_TEXT));
+        expect(html).not.toContain('Gone');
+        expect(warnings).toEqual([{ code: 'band-blocks-cut', count: 3 }]);
+    });
+
+    // Only the PDF lays a band out on every page; the docx and the download keep all of it.
+    test.each(['html', 'docx'] as const)('the %s keeps a band past the caps whole', async (format) => {
+        const doc = seededDoc();
+        seedBand(doc, 'header', ...Array.from({ length: 300 }, (_, index) => paragraph(`Head ${index}.`)));
+        const { data, warnings } = await renderEigendocExport(
+            doc,
+            format,
+            'Report.eigendoc',
+            async () => [],
+            undefined,
+        );
+        const text =
+            format === 'docx'
+                ? new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/header1.xml'))
+                : new TextDecoder().decode(data);
+        expect(text).toContain('Head 299.');
+        expect(warnings).toEqual([]);
+    });
+
     test("the HTML download's header is page 1's when page 1 differs", async () => {
         const html = await exported('html', bandedDoc(2, true));
         expect(html).toContain('Letterhead');
@@ -1525,15 +1683,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 `;
 
 async function pageTexts(html: string): Promise<string[]> {
-    if (python === null) throw new Error('no python behind the weasyprint launcher');
-    const proc = Bun.spawn([python, '-I', '-c', PAGE_TEXT_SCRIPT], {
-        stdin: 'pipe',
-        stdout: 'pipe',
-        stderr: 'inherit',
-    });
-    proc.stdin.write(html);
-    await proc.stdin.end();
-    return (await new Response(proc.stdout).text()).trim().split('\n');
+    return (await pythonOutput(['-c', PAGE_TEXT_SCRIPT], html)).trim().split('\n');
 }
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — headers and footers (WeasyPrint)', () => {
@@ -1617,18 +1767,8 @@ async function printedLines(
     doc: Y.Doc,
     options: { broken?: boolean } = {},
 ): Promise<{ renders: number; probes: number; pages: PrintedLines[] }> {
-    if (python === null) throw new Error('no python behind the weasyprint launcher');
-    const proc = Bun.spawn(
-        [python, '-I', '-c', RENDER_LINES_SCRIPT, renderScript, ...(options.broken ? ['broken'] : [])],
-        {
-            stdin: 'pipe',
-            stdout: 'pipe',
-            stderr: 'inherit',
-        },
-    );
-    proc.stdin.write(await exported('pdf-html', doc));
-    await proc.stdin.end();
-    return JSON.parse(await new Response(proc.stdout).text());
+    const args = ['-c', RENDER_LINES_SCRIPT, renderScript, ...(options.broken ? ['broken'] : [])];
+    return JSON.parse(await pythonOutput(args, await exported('pdf-html', doc)));
 }
 
 const px = (mm: number) => (mm / 25.4) * 96;
@@ -1757,6 +1897,144 @@ describe('doc export — footnotes', () => {
         expect(body.querySelector('span.footnote')).toBeNull();
         // The list closes the body, before a footer.
         expect(body.querySelector('article')?.lastElementChild?.className).toBe('footnotes');
+    });
+
+    // A note floats whole to its page, so a taller one loses what doesn't fit, and WeasyPrint grows slow past about
+    // 2,000 notes: past either, the PDF lists the notes after the body, as the download does.
+    test.each<[string, JSONContent[]]>([
+        [
+            'a note longer than a page',
+            [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Claim' },
+                        note(...Array.from({ length: 300 }, (_, index) => paragraph(`Line ${index}`))),
+                    ],
+                },
+            ],
+        ],
+        [
+            `more than ${MAX_PAGE_NOTES} notes`,
+            Array.from({ length: MAX_PAGE_NOTES + 1 }, (_, index) => ({
+                type: 'paragraph',
+                content: [{ type: 'text', text: `Body ${index}` }, note(paragraph(`Note ${index}`))],
+            })),
+        ],
+    ])('the PDF of %s lists its notes after the body', async (_name, content) => {
+        const doc = seededDoc({ type: 'doc', content });
+        const html = await exported('pdf-html', doc);
+        const { body } = new JSDOM(html).window.document;
+        expect(body.querySelector('article')?.lastElementChild?.className).toBe('footnotes');
+        expect(body.querySelector('span.footnote')).toBeNull();
+        expect(await exportStyle('pdf-html', doc)).not.toContain('float: footnote');
+    });
+
+    // 52 lines fit Inter's line on A4 but not Source Serif 4's taller one, and a picture counts at its height.
+    test.each<[string, JSONContent[]]>([
+        ['52 lines under a serif Normal', Array.from({ length: 52 }, (_, index) => paragraph(`Line ${index}`))],
+        [
+            'two tall pictures',
+            [
+                paragraph('Pictured'),
+                { type: 'paragraph', content: [{ type: 'figure', attrs: { mediaName: 'a.png', width: 600 } }] },
+                { type: 'paragraph', content: [{ type: 'figure', attrs: { mediaName: 'b.png', width: 600 } }] },
+            ],
+        ],
+    ])('the PDF of a note of %s lists its notes after the body', async (_name, paragraphs) => {
+        const doc = styledDoc({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Claim' }, note(...paragraphs)] }],
+        });
+        const { body } = new JSDOM(await exported('pdf-html', doc)).window.document;
+        expect(body.querySelector('span.footnote')).toBeNull();
+        expect(body.querySelector('section.footnotes')).not.toBeNull();
+    });
+
+    test('a note just within a page stays at its foot', async () => {
+        const html = await pdfHtml({
+            type: 'paragraph',
+            content: [
+                { type: 'text', text: 'Claim' },
+                note(...Array.from({ length: 20 }, (_, index) => paragraph(`Line ${index}`))),
+            ],
+        });
+        expect(html).toContain('<span class="footnote"');
+    });
+
+    // The notes listed after the body put a linked number in the heading, which the bookmark leaves out too.
+    test("the PDF that lists its notes still labels a heading's bookmark without its note's number", async () => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'heading',
+                    attrs: { level: 1 },
+                    content: [
+                        { type: 'text', text: 'Intro' },
+                        note(...Array.from({ length: 300 }, (_, index) => paragraph(`Line ${index}`))),
+                    ],
+                },
+            ],
+        });
+        const { body } = new JSDOM(await exported('pdf-html', doc)).window.document;
+        expect(body.querySelector('section.footnotes')).not.toBeNull();
+        expect(body.querySelector('h1')?.getAttribute('data-bookmark')).toBe('Intro');
+        expect(await exportStyle('pdf-html', doc)).toContain(
+            '[data-bookmark] { bookmark-label: attr(data-bookmark); }',
+        );
+    });
+
+    // A forged note may end in a block that is no paragraph; its link back follows it.
+    test('a note whose last block is no paragraph still links back', async () => {
+        const html = await exported(
+            'html',
+            seededDoc({
+                type: 'doc',
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            { type: 'text', text: 'Claim' },
+                            note(paragraph('First'), {
+                                type: 'heading',
+                                attrs: { level: 2 },
+                                content: [{ type: 'text', text: 'Forged' }],
+                            }),
+                        ],
+                    },
+                ],
+            }),
+        );
+        const item = new JSDOM(html).window.document.querySelector('#fn-1');
+        expect(item?.querySelector('a[href="#fnref-1"]')?.textContent).toBe('↩');
+    });
+
+    // A heading's bookmark is its text: the call's number and the note it floats away are no part of it.
+    test("the PDF labels a heading's bookmark with its text without its notes", async () => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'heading',
+                    attrs: { level: 1, textAlign: 'center' },
+                    content: [
+                        { type: 'text', text: 'Intro' },
+                        note(paragraph('Aside')),
+                        { type: 'text', text: ' & more' },
+                    ],
+                },
+                { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Plain' }] },
+            ],
+        });
+        const { body } = new JSDOM(await exported('pdf-html', doc)).window.document;
+        const [noted, plain] = [...body.querySelectorAll('h1, h2')];
+        expect(noted?.getAttribute('data-bookmark')).toBe('Intro & more');
+        expect(noted?.getAttribute('style')).toContain('text-align: center');
+        expect(plain?.hasAttribute('data-bookmark')).toBe(false);
+        expect(await exportStyle('pdf-html', doc)).toContain(
+            '[data-bookmark] { bookmark-label: attr(data-bookmark); }',
+        );
     });
 
     // readEigendocBands drops what a band's schema leaves out, so a peer's forged note never renders.

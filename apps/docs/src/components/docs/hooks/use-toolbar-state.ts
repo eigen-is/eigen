@@ -2,7 +2,6 @@ import { getAttributes, isActive } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { type Editor, useEditorState } from '@tiptap/react';
 import { getFontName } from '@workspace/lib/constants/fonts';
-import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import {
     insertFootnote,
     readCellBackground,
@@ -82,11 +81,13 @@ const MAX_READ_RANGE = 10_000;
 
 // useEditor re-renders on no transaction, so the toolbar subscribes to what it draws, and a caret move updates it. The
 // selector reads the editor passed in, not the snapshot's: the toolbar follows a band's editor while it is edited, and
-// the snapshot keeps the last editor until the new one's first transaction. Unformatted text reads as the doc's Normal.
-export function useToolbarState(editor: Editor, normal: NormalStyle): ToolbarState {
+// the snapshot keeps the last editor until the new one's first transaction. Unformatted text reads as the editor's
+// Normal, the doc's or a note's.
+export function useToolbarState(editor: Editor): ToolbarState {
     return useEditorState({
         editor,
         selector: () => {
+            const normal = editor.storage.eigenFontSize.normalStyle();
             const { doc, selection } = editor.state;
             // A longer range reads its first MAX_READ_RANGE positions, as a caret would take the marks before it; a state without the editor's plugins costs nothing to make.
             const state =

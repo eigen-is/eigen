@@ -12,7 +12,13 @@ declare module '@tiptap/core' {
             stepFontSize: (by: 1 | -1) => ReturnType;
         };
     }
+
+    interface Storage {
+        eigenFontSize: FontSizeOptions;
+    }
 }
+
+type FontSizeOptions = { normalStyle: () => NormalStyle };
 
 // pt and px are a size; em, rem, % and keywords are relative to what the source drew around them.
 const ABSOLUTE_SIZE = /^(\d*\.?\d+)(pt|px)$/;
@@ -64,12 +70,17 @@ export function selectionFontSizes(state: EditorState, view: EditorView | undefi
     ]);
 }
 
-// normalStyle: the doc's Normal, which unsized text in a paragraph draws at.
-export const EigenFontSize = Extension.create<{ normalStyle: () => NormalStyle }>({
+// normalStyle: the Normal unsized text in a paragraph draws at, the doc's or a note's. The storage hands it to the
+// toolbar, so the size box and a step read one Normal.
+export const EigenFontSize = Extension.create<FontSizeOptions, FontSizeOptions>({
     name: 'eigenFontSize',
 
     addOptions() {
         return { normalStyle: () => DEFAULT_NORMAL_STYLE };
+    },
+
+    addStorage() {
+        return { normalStyle: this.options.normalStyle };
     },
 
     addGlobalAttributes() {

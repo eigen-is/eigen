@@ -1,5 +1,5 @@
 import { EIGEN_FONT_NAMES, FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
-import { DOC_PROSE_CLASS, listTypeOfStyle, type TitleType } from '@workspace/lib/docs/eigendoc';
+import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips, type TitleType } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
 import { LIST_FORMATS, LIST_LEVELS } from './wordml';
@@ -17,7 +17,7 @@ export function cssPt(length: string, emPt: number): number {
 }
 
 export function twips(pt: number): number {
-    return Math.round(pt * 20);
+    return Math.round(ptToTwips(pt));
 }
 
 export function halfPoints(pt: number): number {

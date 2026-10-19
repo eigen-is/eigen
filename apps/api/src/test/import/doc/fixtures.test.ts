@@ -97,10 +97,13 @@ describe('docx fixtures', () => {
         expect(fonts).toEqual(['Source Serif 4']);
         expect(nodesOfType(json, 'table').length).toBeGreaterThan(0);
         expect(images.map((image) => image.contentType)).toContain('image/svg+xml');
-        // Its chart is dropped and keeps its title.
+        // Its chart is dropped and keeps its title, and its header's text watermark goes.
         expect([texts(json).filter((text) => text === 'A Chart'), warnings]).toEqual([
             ['A Chart'],
-            [{ code: 'graphics-dropped', count: 1 }],
+            [
+                { code: 'graphics-dropped', count: 1 },
+                { code: 'band-content-dropped', count: 1 },
+            ],
         ]);
     });
 });

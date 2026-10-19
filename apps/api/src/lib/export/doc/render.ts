@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import { domOutputSpecToHTMLString, renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { parseChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import {
@@ -141,12 +141,29 @@ function footnoteList() {
                 paragraphs.push([renderElement({ content: paragraph, parent: node })].flat().join(''));
             });
             const last = paragraphs.pop() ?? '';
-            const back = ` <a href="#fnref-${number}">↩</a></p>`;
-            notes.push(`<li id="fn-${number}">${paragraphs.join('')}${last.replace(/<\/p>$/, back)}</li>`);
+            // At the end of the last paragraph, or after the last block of a forged note that ends in another.
+            const back = `<a href="#fnref-${number}">↩</a>`;
+            const closed = last.endsWith('</p>') ? `${last.slice(0, -'</p>'.length)} ${back}</p>` : `${last}${back}`;
+            notes.push(`<li id="fn-${number}">${paragraphs.join('')}${closed}</li>`);
             return `<sup><a href="#fn-${number}" id="fnref-${number}">${number}</a></sup>`;
         },
         list: () => (notes.length > 0 ? `<section class="footnotes"><hr><ol>${notes.join('')}</ol></section>` : ''),
     };
+}
+
+// WeasyPrint's bookmark is a heading's text, its notes' numbers with it, so on paper a heading that holds a note labels
+// its bookmark with its own text (printExtras).
+function renderBookmarkedHeading(node: Node, children: string | string[] | undefined): string {
+    const spec = node.type.spec.toDOM?.(node);
+    const html = spec ? domOutputSpecToHTMLString(spec)(children) : '';
+    let label = '';
+    let noted = false;
+    node.descendants((child) => {
+        if (child.type.name === 'footnote') noted = true;
+        else if (child.isText) label += child.text;
+        return child.type.name !== 'footnote';
+    });
+    return noted ? html.replace(/^<h[1-6]/, (open) => `${open} data-bookmark="${escapeHtml(label)}"`) : html;
 }
 
 // Without the annotation, which no screen draws and the sanitizer would keep as text; the PDF's MathJax draws it too.
@@ -307,6 +324,9 @@ export function renderDocHtml(
                 equation: options?.equations ?? renderEquations(),
                 footnote:
                     footnotes?.reference ?? (({ node, renderElement }) => renderFootnoteSpans(node, renderElement)),
+                ...(options?.pageCounters && {
+                    heading: ({ node, children }) => renderBookmarkedHeading(node, children),
+                }),
                 ...(options?.smallCapsFont && {
                     text: renderTextSynthesizingSmallCaps(content, options.smallCapsFont),
                 }),

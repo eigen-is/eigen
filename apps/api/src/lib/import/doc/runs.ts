@@ -143,7 +143,8 @@ function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, conte
 }
 
 function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunProps, context: RunContext): void {
-    // A note numbers 1, 2, 3, so the text a custom mark draws in its place (w:customMarkFollows) goes.
+    // A note numbers 1, 2, 3, so the text a custom mark draws in its place (w:customMarkFollows) goes: the run's text up
+    // to a tab, and only where a note was made.
     let customMark = false;
     for (const child of children) {
         if (isAlternateContent(child)) {
@@ -171,6 +172,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                 break;
             case 'tab':
             case 'ptab':
+                customMark = false;
                 pushText(reader, '\t', direct, linked);
                 break;
             case 'noBreakHyphen':
@@ -219,7 +221,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
                     w(child, 'id') ?? '',
                 );
                 if (content) context.pieces.push({ kind: 'node', node: { type: 'footnote', content } });
-                customMark = isOn(w(child, 'customMarkFollows')) === true;
+                customMark = !!content && isOn(w(child, 'customMarkFollows')) === true;
                 break;
             }
             case 'ruby':
@@ -261,9 +263,14 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
     }
 }
 
-// PAGE and NUMPAGES whatever their switches; a field's name is case-insensitive.
+// PAGE and NUMPAGES whatever their switches, which may follow the name with no space; a field's name is
+// case-insensitive. A doc is one section, so SECTIONPAGES is its page count.
 function pageNumberKind(code: string): PageNumberKind | undefined {
-    const name = code.trim().split(/\s/, 1)[0]?.toUpperCase();
+    const name = code
+        .trim()
+        .split(/[\s\\]/, 1)[0]
+        ?.toUpperCase();
+    if (name === 'SECTIONPAGES') return 'pages';
     return PAGE_NUMBER_KINDS.find((kind) => PAGE_NUMBER_FIELDS[kind] === name);
 }
 

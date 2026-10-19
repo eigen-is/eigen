@@ -1,6 +1,6 @@
 import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
-import type { BandEdge, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import type { BandEdge, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { usePrintPdf } from '@workspace/lib/drive';
 import { useIsMobile, useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -16,8 +16,7 @@ import {
 } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
+import { DocumentImportPicker, DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
     DropdownMenu,
@@ -92,8 +91,7 @@ type EditorToolbarProps = {
     canRedo: boolean;
     pageSetup: PageSetup;
     onPageSetupChange: (from: PageSetup, to: PageSetup) => void;
-    // The doc's Normal, which unformatted text draws, and Update 'Normal text' to match, the body's only.
-    normalStyle: NormalStyle;
+    // Update 'Normal text' to match, the body's only.
     onUpdateNormalStyle?: () => void;
     onAccessDialogOpen: () => void;
     path: DrivePath;
@@ -129,7 +127,6 @@ export const EditorToolbar = ({
     canRedo,
     pageSetup,
     onPageSetupChange,
-    normalStyle,
     onUpdateNormalStyle,
     onAccessDialogOpen,
     onToggleCommentPanel,
@@ -156,7 +153,7 @@ export const EditorToolbar = ({
     const [restartNumberingOpen, setRestartNumberingOpen] = useState(false);
     const [customSpacingOpen, setCustomSpacingOpen] = useState(false);
     const [indentationOpen, setIndentationOpen] = useState(false);
-    const active = useToolbarState(editor, normalStyle);
+    const active = useToolbarState(editor);
     // A range of mixed alignments checks no Align item, and its trigger draws Left's icon.
     const AlignmentIcon = ALIGNMENT_LOOK[active.alignment ?? 'left'].icon;
     const { exportPath, isExporting } = useDocumentExport();
@@ -620,14 +617,14 @@ export const EditorToolbar = ({
 
             <CustomSpacingDialog
                 editor={editor}
-                normal={normalStyle}
+                normal={editor.storage.eigenFontSize.normalStyle()}
                 open={customSpacingOpen}
                 onOpenChange={setCustomSpacingOpen}
             />
 
             <IndentationOptionsDialog
                 editor={editor}
-                normal={normalStyle}
+                normal={editor.storage.eigenFontSize.normalStyle()}
                 open={indentationOpen}
                 onOpenChange={setIndentationOpen}
             />

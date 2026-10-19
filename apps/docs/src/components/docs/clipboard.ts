@@ -23,6 +23,7 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_IMAGE_BOX, oneOf, TEXT_ALIGNS } from '@workspace/lib/vector';
+import { textOutsideNotes } from './extensions/footnote';
 
 // The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
 // the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
@@ -61,8 +62,8 @@ function textRunBox(view: EditorView, from: number, to: number): ClipboardBox {
 }
 
 // The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file
-// resolves, and the text between them as a text item, a line per paragraph, an equation as its text and a page
-// number as its #. None resolves → no items, and the copy is ProseMirror's own.
+// resolves, and the text between them as a text item, a line per paragraph, an equation as its text, a page
+// number as its # and a footnote as nothing. None resolves → no items, and the copy is ProseMirror's own.
 function copiedClipboardItems(
     view: EditorView,
     from: number,
@@ -72,15 +73,15 @@ function copiedClipboardItems(
     const items: EigenClipboardItem[] = [];
     let runFrom = from;
     const pushText = (runTo: number) => {
-        const text = view.state.doc
-            .textBetween(runFrom, runTo, '\n', (leaf) => {
-                if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text;
-                return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
-            })
-            .trim();
+        const text = textOutsideNotes(view.state.doc, runFrom, runTo, '\n', '', (leaf) => {
+            if (leaf.type.name === 'equation') return readEquation(leaf.attrs).text;
+            return leaf.type.name === 'pageNumber' ? PAGE_NUMBER_TEXT : '';
+        }).trim();
         if (text) items.push(buildTextClipboardItem({ text, box: textRunBox(view, runFrom, runTo) }));
     };
+    // A note's text and images are no part of the sentence around its reference: a paste elsewhere places them as one.
     view.state.doc.nodesBetween(from, to, (node, pos) => {
+        if (node.type.name === 'footnote') return false;
         if (node.type.name !== 'figure' || !node.attrs.mediaName) return;
         const mediaPath = resolveMediaPath(node.attrs.mediaName);
         if (!mediaPath) return;

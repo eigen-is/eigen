@@ -127,6 +127,24 @@ describe('docx import — headers and footers', () => {
         expect(texts(json)).toEqual(['Here ']);
     });
 
+    // A switch may follow the name with no space; a doc is one section, so its section's page count is the doc's.
+    test('NUMPAGES with a switch run on and SECTIONPAGES are page counts, their cached digits gone', async () => {
+        const { bands } = await docxWith([
+            {
+                id: 'f1',
+                kind: 'footer',
+                xml: paragraph(
+                    `${complexField(' NUMPAGES\\*Arabic ', '7')}${run('/')}${complexField(' SECTIONPAGES ', '5')}`,
+                ),
+            },
+        ]);
+        expect(nodesOfType(bands.footer ?? {}, 'pageNumber')).toEqual([
+            { type: 'pageNumber', attrs: { kind: 'pages' } },
+            { type: 'pageNumber', attrs: { kind: 'pages' } },
+        ]);
+        expect(texts(bands.footer)).toEqual(['/']);
+    });
+
     test("a header's picture resolves through the header's relationships, and an anchored one is a block figure", async () => {
         const anchored = GOLDEN_DOCX_IMAGE_RUN.replace(
             '<wp:inline>',
@@ -169,6 +187,27 @@ describe('docx import — headers and footers', () => {
         expect(warnings).toContainEqual({ code: 'band-images-unanchored', count: 1 });
     });
 
+    // Word's text watermark is a VML shape whose text is its path, which no node holds.
+    test('a text watermark and a band part that is no XML are dropped, with a warning', async () => {
+        const textMark = `<w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml" type="#_x0000_t136" style="position:absolute;width:400pt"><v:textpath string="CONFIDENTIAL"/></v:shape></w:pict></w:r>`;
+        const { bands, warnings } = await docxWith([
+            { id: 'h1', kind: 'header', xml: paragraph(`${textMark}${run('Acme')}`) },
+        ]);
+        expect(texts(bands.header)).toEqual(['Acme']);
+        expect(warnings).toContainEqual({ code: 'band-content-dropped', count: 1 });
+
+        const damaged = await buildDocxWithBody(
+            `${paragraph(run('Body'))}<w:sectPr><w:footerReference w:type="default" r:id="f1"/></w:sectPr>`,
+            {
+                rels: `<Relationship Id="f1" Type="${REL}/footer" Target="f1.xml"/>`,
+                media: { 'word/media/pixel.png': new Uint8Array(), 'word/f1.xml': new TextEncoder().encode('<w:ftr') },
+            },
+        );
+        const read = docxToPmJson(Buffer.from(damaged));
+        expect(read.bands).toEqual({});
+        expect(read.warnings).toContainEqual({ code: 'band-content-dropped', count: 1 });
+    });
+
     // A band's schema holds no note: the note belongs to the body's text.
     test('a note reference in a band is dropped, with a warning', async () => {
         const { json, bands, warnings } = await docxWith([
@@ -181,6 +220,17 @@ describe('docx import — headers and footers', () => {
         expect(texts(bands.footer)).toEqual(['Source']);
         expect(texts(json)).toEqual(['Body']);
         expect(warnings).toContainEqual({ code: 'band-content-dropped', count: 1 });
+    });
+
+    // In Eigen a band's lists count on their own, so a band's item doesn't continue the body's count.
+    test("a band's numbered list starts its own count", async () => {
+        const item = (text: string) =>
+            paragraph(run(text), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr>');
+        const { json, bands } = await docxWith([{ id: 'h1', kind: 'header', xml: item('Head') }], {
+            body: `${item('One')}${item('Two')}`,
+        });
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1]);
+        expect(nodesOfType(bands.header ?? {}, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1]);
     });
 
     test("a reference whose relationship isn't a header's or a footer's is no band", async () => {

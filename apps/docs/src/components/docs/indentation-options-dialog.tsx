@@ -1,6 +1,13 @@
 import type { Editor } from '@tiptap/react';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
-import { cmText, readCm, readParagraphFormat, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
+import {
+    cmText,
+    mmToPt,
+    ptToMm,
+    readCm,
+    readParagraphFormat,
+    selectionParagraphFormat,
+} from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
@@ -24,8 +31,8 @@ const SPECIAL_INDENTS = [
 type SpecialIndent = (typeof SPECIAL_INDENTS)[number]['value'];
 
 // Indents are stored in pt and shown in cm to 0.01, as Google shows 0.5 in as 1.27 cm.
-const cm = (pt: number) => cmText((pt * 25.4) / 72, 2);
-const pt = (text: string) => (readCm(text) * 72) / 25.4;
+const cm = (pt: number) => cmText(ptToMm(pt), 2);
+const pt = (text: string) => mmToPt(readCm(text));
 
 // Google Docs' Format › Align and indent › Indentation options, on the paragraphs the selection spans.
 export function IndentationOptionsDialog({ editor, normal, open, onOpenChange }: IndentationOptionsDialogProps) {

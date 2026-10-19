@@ -402,6 +402,38 @@ test("typing in a note makes no link of the body's text before its reference", a
     expect(links).toEqual([]);
 });
 
+const linksIn = (editor: TestEditor) => {
+    const links: string[] = [];
+    editor.state.doc.descendants((node) => {
+        if (node.marks.some((mark) => mark.type.name === 'link')) links.push(node.text ?? node.type.name);
+    });
+    return links;
+};
+
+// y-tiptap applies a peer's change and an undo as a replace of the whole doc, which autolink read as the first
+// textblock typed anew.
+test("a peer's edit and an undo link nothing their writer never linked", async () => {
+    const { a, b, undoManager } = await setup([paragraph(text('see plan.md')), paragraph(text('More'))]);
+    a.chain().selectAll().unsetLink().run();
+    undoManager.clear();
+    expect(linksIn(b)).toEqual([]);
+    a.view.dispatch(a.state.tr.insertText('!', a.state.doc.content.size - 1));
+    expect(b.state.doc.textContent).toBe('see plan.mdMore!');
+    undoManager.undo();
+    expect(a.state.doc.textContent).toBe('see plan.mdMore');
+    expect([linksIn(a), linksIn(b)]).toEqual([[], []]);
+});
+
+// A pull is the body's change: the note's own autolink would link what a peer left unlinked.
+test('a pull into the open note links nothing', async () => {
+    const { a, b, note, open } = await setup([paragraph(text('Claim'), footnote(paragraph(text('see plan.md'))))]);
+    a.chain().selectAll().unsetLink().run();
+    await open(6);
+    b.view.dispatch(b.state.tr.insertText(' ', 8 + 'see plan.md'.length).setMeta('preventAutolink', true));
+    expect(note.state.doc.textContent).toBe('see plan.md ');
+    expect([linksIn(note), linksIn(a), linksIn(b)]).toEqual([[], [], []]);
+});
+
 test("text typed after a reference never joins its note's text in a link or a rule", async () => {
     const { a } = await setup([paragraph(text('See'), footnote(paragraph(text('example (c'))))]);
     const end = a.state.doc.firstChild?.nodeSize ?? 0;

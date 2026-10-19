@@ -5,7 +5,7 @@ import {
     getFontFamily,
     readFontSize,
 } from '../../constants/fonts';
-import { cssLineHeight, DOCUMENT_PARAGRAPH_FORMAT, readParagraphFormat } from './nodes/paragraph-format';
+import { cssLineHeight, DOCUMENT_PARAGRAPH_FORMAT, readParagraphFormat } from './paragraph-format';
 
 // The doc's Normal text, which text without a font, size or colour mark and a paragraph without a format draws: a
 // bundled font's name, the size and spacing in pt, line spacing a multiple, as a paragraph's.

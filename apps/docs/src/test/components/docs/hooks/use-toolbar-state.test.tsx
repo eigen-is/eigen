@@ -7,15 +7,22 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor } = await import('@tiptap/react');
-const { DEFAULT_NORMAL_STYLE, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_NORMAL_STYLE, getDocExtensions, readNormalStyle, STYLE_ROOT } = await import(
+    '@workspace/lib/docs/eigendoc'
+);
+const Y = await import('yjs');
 const { useToolbarState } = await import('../../../../components/docs/hooks/use-toolbar-state');
+const { useYMapRead } = await import('../../../../components/docs/hooks/use-y-map-read');
 
 let unmount = async () => {};
 afterEach(() => unmount());
 
+// The doc's Normal, as the style map would hold it.
+let normal = DEFAULT_NORMAL_STYLE;
+
 // "plain " at 1-7, the bold Source Serif 4 "caps" at 7-11, then a heading.
 const editor = new Editor({
-    extensions: getDocExtensions(),
+    extensions: getDocExtensions({ normalStyle: () => normal }),
     content: {
         type: 'doc',
         content: [
@@ -36,14 +43,8 @@ const editor = new Editor({
 });
 
 let seen: ReturnType<typeof useToolbarState>[] = [];
-function Probe({
-    of = editor,
-    normal = DEFAULT_NORMAL_STYLE,
-}: {
-    of?: typeof editor;
-    normal?: typeof DEFAULT_NORMAL_STYLE;
-}) {
-    seen.push(useToolbarState(of, normal));
+function Probe({ of = editor }: { of?: typeof editor }) {
+    seen.push(useToolbarState(of));
     return null;
 }
 
@@ -67,14 +68,40 @@ test("unformatted text reads as the doc's Normal, and a new Normal reaches the t
     ({ unmount } = await renderInDocument(createElement(Probe)));
     expect(seen.at(-1)).toMatchObject({ fontName: 'Inter', fontSize: 11, lineSpacing: 1.4 });
 
-    const word = { ...DEFAULT_NORMAL_STYLE, font: 'Source Serif 4', size: 12, lineSpacing: 1.15 };
+    normal = { ...DEFAULT_NORMAL_STYLE, font: 'Source Serif 4', size: 12, lineSpacing: 1.15 };
     await unmount();
-    ({ unmount } = await renderInDocument(createElement(Probe, { normal: word })));
+    ({ unmount } = await renderInDocument(createElement(Probe)));
     expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', fontSize: 12, lineSpacing: 1.15 });
 
     // A heading draws its own size and line, which no CSS here gives.
     await act(async () => editor.commands.setTextSelection(14));
     expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', lineSpacing: undefined });
+    normal = DEFAULT_NORMAL_STYLE;
+});
+
+// A peer's new Normal is no transaction of this editor: it reaches the toolbar through the style map's reader, which
+// renders the toolbar again, as the editor's page does.
+test("a peer's new Normal reaches the toolbar live", async () => {
+    const yDoc = new Y.Doc();
+    const styles = yDoc.getMap(STYLE_ROOT);
+    const live = new Editor({
+        extensions: getDocExtensions({ normalStyle: () => readNormalStyle(styles.toJSON()) }),
+        content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'plain' }] }] },
+    });
+    live.commands.setTextSelection(3);
+    function Page() {
+        useYMapRead(styles, readNormalStyle);
+        return createElement(Probe, { of: live });
+    }
+    ({ unmount } = await renderInDocument(createElement(Page)));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Inter', fontSize: 11, lineSpacing: 1.4 });
+
+    const peer = new Y.Doc();
+    const set = { font: 'Source Serif 4', size: 12, lineSpacing: 1.15 };
+    for (const [key, value] of Object.entries(set)) peer.getMap(STYLE_ROOT).set(key, value);
+    await act(async () => Y.applyUpdate(yDoc, Y.encodeStateAsUpdate(peer)));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', fontSize: 12, lineSpacing: 1.15 });
+    live.destroy();
 });
 
 test('a caret move that changes nothing drawn renders nothing', async () => {

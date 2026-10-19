@@ -175,6 +175,7 @@ const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, un
     'even-bands-dropped': (w) => typeof w['count'] === 'number',
     'band-images-unanchored': (w) => typeof w['count'] === 'number',
     'band-content-dropped': (w) => typeof w['count'] === 'number',
+    'band-blocks-cut': (w) => typeof w['count'] === 'number',
 };
 
 function isValidWarning(warning: unknown): boolean {

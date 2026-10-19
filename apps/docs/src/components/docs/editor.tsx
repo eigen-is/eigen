@@ -10,15 +10,18 @@ import {
     useCommentLifecycle,
     useDocumentPanels,
 } from '@workspace/lib/comments';
-import { FOOTNOTE_FONT_SIZE } from '@workspace/lib/constants/fonts';
 import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
     bandEdge,
     FIRST_PAGE_BAND,
     normalStyleProperties,
+    PAGE_ROOT,
     pagePx,
     pageStylesheet,
+    readNormalStyle,
+    readPageSetup,
+    STYLE_ROOT,
 } from '@workspace/lib/docs/eigendoc';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
@@ -65,10 +68,9 @@ import { insertNote } from './extensions/footnote';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { FootnoteList } from './footnote-list';
 import { useActiveComments } from './hooks/use-active-comments';
-import { useNormalStyle } from './hooks/use-normal-style';
 import { useOpenNote } from './hooks/use-open-note';
-import { usePageSetup } from './hooks/use-page-setup';
 import { type SelectionPanel, useSelectionPanel } from './hooks/use-selection-panel';
+import { useYMapRead } from './hooks/use-y-map-read';
 import { updateNormalStyle } from './normal-style';
 import { BandControls, PageBands } from './page-band';
 import { applyPageNumberPreset, type PageNumberPreset } from './page-numbers';
@@ -203,9 +205,9 @@ const TiptapEditor = ({
     const insertFootnoteRef = useRef((): boolean => false);
     const leaveNoteRef = useRef(() => {});
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
-    const pageSetup = usePageSetup(yDoc);
+    const pageSetup = useYMapRead(yDoc.getMap(PAGE_ROOT), readPageSetup);
     const writeSetup = (from: PageSetup, to: PageSetup) => writePageSetup(yDoc, undoManager, from, to);
-    const normalStyle = useNormalStyle(yDoc);
+    const normalStyle = useYMapRead(yDoc.getMap(STYLE_ROOT), readNormalStyle);
     // The page at 96 dpi, for the layout math below and the text column before the page mounts.
     const page = pagePx(pageSetup);
     // Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
@@ -590,10 +592,6 @@ const TiptapEditor = ({
                                     canRedo={canRedo}
                                     pageSetup={pageSetup}
                                     onPageSetupChange={writeSetup}
-                                    // A note's paragraphs draw at the footnote size, the toolbar's size box included.
-                                    normalStyle={
-                                        notes.anchor ? { ...normalStyle, size: FOOTNOTE_FONT_SIZE } : normalStyle
-                                    }
                                     onUpdateNormalStyle={
                                         editingBand || notes.anchor
                                             ? undefined

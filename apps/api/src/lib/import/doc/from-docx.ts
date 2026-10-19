@@ -75,9 +75,14 @@ export function readDocx(
             refused++;
             return asParagraphs(node);
         };
+        // A part several references name is read once, and each copy weighed.
+        const read = new Map<string, JSONContent[]>();
         const bandContent = BAND_ROOTS.flatMap((root): [BandRoot, JSONContent[]][] => {
             const part = pkg.bands[root];
-            return part ? [[root, readBand(reader, part).flatMap(withoutExcluded)]] : [];
+            if (!part) return [];
+            const blocks = read.get(part.path) ?? readBand(reader, part).flatMap(withoutExcluded);
+            read.set(part.path, blocks);
+            return [[root, blocks]];
         });
         const { weight, text } = sizeOf([...content, ...bandContent.flatMap(([, blocks]) => blocks)]);
         if (weight > MAX_DOCX_WEIGHT || text > MAX_DOCX_TEXT) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
@@ -124,7 +129,8 @@ export function readDocx(
         if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
         if (pkg.evenBands > 0) warnings.push({ code: 'even-bands-dropped', count: pkg.evenBands });
         if (reader.bandAnchors > 0) warnings.push({ code: 'band-images-unanchored', count: reader.bandAnchors });
-        if (reader.bandDropped > 0) warnings.push({ code: 'band-content-dropped', count: reader.bandDropped });
+        const bandDropped = reader.bandDropped + pkg.damagedBands;
+        if (bandDropped > 0) warnings.push({ code: 'band-content-dropped', count: bandDropped });
         return { doc, bands, page: reader.page, style: reader.normal, images, warnings };
     } catch (error) {
         throw importError(error, 'docx');

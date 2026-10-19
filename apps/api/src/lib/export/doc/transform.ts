@@ -1,4 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
 import {
     BAND_DISTANCE_MM,
     BAND_ROOTS,
@@ -6,15 +7,24 @@ import {
     DOC_PROSE_CLASS,
     FOOTNOTE_PARAGRAPH,
     footnotesInOrder,
+    mmToPt,
     type NormalStyle,
     normalStyleProperties,
     PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
     type PageSetup,
     pageStylesheet,
+    pxToPt,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
-import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
+import {
+    type EigendocBands,
+    readEigendocBands,
+    readEigendocFromDoc,
+    readEigendocPage,
+    readEigendocStyle,
+} from '../../document/doc';
+import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
@@ -74,35 +84,103 @@ export async function renderEigendocExport(
     }
     const dataUriMap = toDataUriMap(media);
     const pdf = htmlExportMode(format) === 'pdf';
+    const { printed, cut } = pdf ? printedBands(bands) : { printed: bands, cut: 0 };
+    const warnings: TransformWarning[] = cut > 0 ? [{ code: 'band-blocks-cut', count: cut }] : [];
     // Browsers ignore running(), so the download shows each band where the long page does: page 1's header on top, the
     // other pages' footer at the end.
     const order: (BandRoot | 'body')[] = pdf
         ? [...BAND_ROOTS, 'body']
         : [page.differentFirstPage ? 'headerFirst' : 'header', 'body', 'footer'];
     const roots = order.flatMap((part) => {
-        const content = part === 'body' ? json : bands[part];
+        const content = part === 'body' ? json : printed[part];
         return content ? [{ part, content }] : [];
     });
+    const notes = footnotesInOrder(json);
+    const pageNotes = pdf && notesFitPages(notes, page);
     const equations = renderEquations(pdf ? await svgEquations(roots.map(({ content }) => content)) : undefined);
     const body = roots
         .map(({ part, content }) => {
             const html = renderDocHtml(
                 withAbsoluteLinks(content, publicOrigin),
                 (mediaName, src) => (mediaName ? (dataUriMap.get(mediaName) ?? null) : src),
-                { ...(pdf && { smallCapsFont: style.font }), pageCounters: pdf, pageFootnotes: pdf, equations },
+                { ...(pdf && { smallCapsFont: style.font }), pageCounters: pdf, pageFootnotes: pageNotes, equations },
             );
             return part === 'body'
                 ? `<article class="eigen-prose tiptap ${DOC_PROSE_CLASS}">${html}</article>`
                 : `<div class="band-${part}"><article class="eigen-prose tiptap ${DOC_PROSE_CLASS} ${PAGE_BAND_CLASS}">${html}</article></div>`;
         })
         .join('');
-    const notes = footnotesInOrder(json).length > 0 ? (pdf ? PAGE_FOOTNOTES_CSS : FOOTNOTE_LIST_CSS) : '';
+    const notesCss = notes.length > 0 ? (pageNotes ? PAGE_FOOTNOTES_CSS : FOOTNOTE_LIST_CSS) : '';
     const html = exportHtmlDocument({
         title,
-        css: `${PROSE_CSS}${printExtras(page, style)}${notes}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
+        fonts: usedFamilies(body, style),
+        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
-    return { data: toTransferableText(html), warnings: [] };
+    return { data: toTransferableText(html), warnings };
+}
+
+// WeasyPrint lays a running element out again on every page, so a 4,000-paragraph header ran a PDF past its 60 s. Half
+// an A4 page, 421 pt, holds about 60 lines of 6 pt text, 200 characters a line, and a band taller than half the page
+// prints over the body anyway (weasyprint-render.py), so a band within these caps keeps all it shows clear of the body.
+export const MAX_BAND_BLOCKS = 200;
+export const MAX_BAND_TEXT = 20_000;
+
+// The bands as the PDF prints them: each one's blocks in document order, counted inside tables and lists, while they
+// fit, and the one that passes the caps cut inside to what fits, so a band keeps its first lines whatever their size.
+// cut counts the top-level blocks shortened or dropped.
+function printedBands(bands: EigendocBands): { printed: EigendocBands; cut: number } {
+    const { nodes } = docSchema();
+    const printed: EigendocBands = {};
+    let cut = 0;
+    for (const root of BAND_ROOTS) {
+        const band = bands[root];
+        if (!band) continue;
+        let blocks = MAX_BAND_BLOCKS;
+        let text = MAX_BAND_TEXT;
+        let short = false;
+        const fit = (node: JSONContent): JSONContent | undefined => {
+            if (node.text !== undefined) {
+                const kept = node.text.slice(0, Math.max(0, text));
+                text -= kept.length;
+                short ||= kept.length < node.text.length;
+                return kept ? { ...node, text: kept } : undefined;
+            }
+            if (nodes[node.type ?? '']?.isBlock && --blocks < 0) {
+                short = true;
+                return undefined;
+            }
+            if (!node.content) return node;
+            const content: JSONContent[] = [];
+            for (const child of node.content) {
+                const kept = fit(child);
+                if (!kept) break;
+                content.push(kept);
+            }
+            short ||= content.length < node.content.length;
+            return { ...node, content };
+        };
+        const content: JSONContent[] = [];
+        for (const block of band.content ?? []) {
+            short = false;
+            const kept = fit(block);
+            if (kept) content.push(kept);
+            if (short) cut++;
+        }
+        printed[root] = { ...band, content };
+    }
+    return { printed, cut };
+}
+
+// The bundled families a doc's export can draw in, as a face is up to 0.6 MB of base64 WeasyPrint reads per PDF: the
+// Normal's, in which eigen-prose.css draws the body and which names no other as its fallback, the monospace of code,
+// and each family a font mark's style or a chart's SVG names in the body. A body's text that names a family embeds it
+// for nothing, and misses none.
+function usedFamilies(body: string, style: NormalStyle): Set<string> {
+    const families = new Set([style.font]);
+    if (body.includes('<code')) families.add(getFontName(FONT_STACK_MONO));
+    for (const name of EIGEN_FONT_NAMES) if (body.includes(name)) families.add(name);
+    return families;
 }
 
 // WeasyPrint draws no MathML, so the PDF draws its equations as the SVGs MathJax makes of the MathML the screen draws,
@@ -150,6 +228,39 @@ ${page.differentFirstPage ? '@page :first { @top-center { content: element(heade
 [data-type="page-number"][data-kind="page"]::after { content: counter(page); }
 [data-type="page-number"][data-kind="pages"]::after { content: counter(pages); }
 `;
+}
+
+// A note floats whole to its reference's page, so one taller than the page's text loses what doesn't fit, and
+// WeasyPrint lays the notes out again for every page they fill: 4,000 one-line notes took 35 s and 10,000 ran past the
+// 60 s timeout. Past either, the PDF lists the notes after the body, as the download does.
+export const MAX_PAGE_NOTES = 1500;
+
+// A note's lines at 10 pt in the tallest bundled face, as its runs may draw in any, a character at most 0.6 em wide on
+// average, and a picture as tall as it is wide, or as the column where it stores no width, a chart at its height:
+// against the page's text less the reference's line and the rule above the notes.
+function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
+    if (notes.length > MAX_PAGE_NOTES) return false;
+    const { sizePt } = FOOTNOTE_LOOK;
+    const columnPt = mmToPt(page.width - page.margin.left - page.margin.right);
+    const linePt = sizePt * Math.max(...EIGEN_FONTS.map((font) => font.lineHeight));
+    const lineChars = columnPt / (0.6 * sizePt);
+    const pageLines = mmToPt(page.height - page.margin.top - page.margin.bottom) / linePt - 3;
+    const pictureLines = (node: JSONContent): number => {
+        const { width, height } = node.attrs ?? {};
+        const tall = node.type === 'chart' ? height : node.type === 'figure' ? width : undefined;
+        const own = typeof tall === 'number' && tall > 0 ? Math.min(pxToPt(tall), columnPt) : columnPt;
+        const lines = node.type === 'chart' || node.type === 'figure' ? Math.ceil(own / linePt) : 0;
+        return lines + (node.content ?? []).reduce((sum, child) => sum + pictureLines(child), 0);
+    };
+    const textOf = (node: JSONContent): number =>
+        (node.text?.length ?? 0) + (node.content ?? []).reduce((sum, child) => sum + textOf(child), 0);
+    return notes.every(
+        (note) =>
+            (note.content ?? []).reduce(
+                (lines, block) => lines + Math.max(1, Math.ceil(textOf(block) / lineChars)) + pictureLines(block),
+                0,
+            ) <= pageLines,
+    );
 }
 
 // A note floats to the foot of its reference's page, numbered in the text and at the note, under a short rule, as Google
@@ -217,10 +328,14 @@ table:has(.${PAGE_BREAK_CLASS}), blockquote:has(.${PAGE_BREAK_CLASS}) { page-bre
 pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 
 /* The PDF's equations: MathJax's vertical-align sets an inline one on the baseline, and breaks no line, so one wider
-   than the column scales down to it; a displayed one takes its line as in the editor, a full-width box on the bottom
-   of the line that keeps the trailing <br> */
-.math-svg > svg { display: inline; max-width: 100%; }
+   than the column scales down to it, its height with it, as WeasyPrint 70 reads a root svg element's ex width and height as
+   CSS; a displayed one takes its line as in the editor, a full-width box on the bottom of the line that keeps the
+   trailing <br> */
+.math-svg > svg { display: inline; max-width: 100%; height: auto; }
 .math-svg[data-display] { display: inline-block; width: 100%; text-align: center; vertical-align: bottom; }
+
+/* The PDF's bookmark of a heading that holds a note: its own text, without the note's number */
+[data-bookmark] { bookmark-label: attr(data-bookmark); }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */
 ul[data-type="taskList"] li > label input[type="checkbox"] {

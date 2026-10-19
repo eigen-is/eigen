@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, headers, footers, page-numbers, layout]
 related: [docs/print, docs/export]
 order: 55
-updated: 2026-10-18
+updated: 2026-10-19
 ---
 
 A header sits at the top of each page and a footer at the bottom. Use them for a title, a logo, or page numbers. You type them right on the page, in its top and bottom margins.
@@ -39,7 +39,7 @@ Double-click the header or footer, then choose **Options → Remove header** or 
 ## Good to know
 
 - **File → Print** and the PDF and Word downloads put the header and footer on every page, with the page numbers filled in, and the first page's own when it differs. The web page download shows the header at the top and the footer at the end.
-- A header or footer taller than its margin moves your text away from it, on the page and in the PDF. In the PDF, the header and footer never take more than half the page: the rest of a taller one runs over your text.
+- A header or footer taller than its margin moves your text away from it, on the page and in the PDF. In the PDF, the header and footer never take more than half the page: the rest of a taller one runs over your text. The PDF cuts a header or footer after about 200 paragraphs or 20,000 characters.
 - Importing a Word file brings its header and footer along. See [Import a Word document](/support/docs/import-word).
 - Comments and **Find** work on your text, not on the header or footer.
 - On a phone you see the header and footer on the page, but you can't change them.

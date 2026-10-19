@@ -1,5 +1,5 @@
 import type { EigenFont } from '@workspace/lib/constants/fonts';
-import type { PageNumberKind } from '@workspace/lib/docs/eigendoc';
+import { type PageNumberKind, ptToTwips, pxToPt } from '@workspace/lib/docs/eigendoc';
 
 // Word's vocabulary, which the docx writer writes and the docx reader recognises, one source both ways: style names,
 // list formats, units and Word's spelling of a number. The OOXML every format shares is core/ooxml.ts.
@@ -23,6 +23,8 @@ export const STYLE_NAMES = {
     PageBreak: 'Page Break',
     Spacer: 'Spacer',
     TaskDone: 'Task Done',
+    // A header cell's paragraphs in a row with a body cell, which w:tblHeader can't mark.
+    TableHeader: 'Table Header',
     Hyperlink: 'Hyperlink',
     Code: 'Code',
     FootnoteText: 'footnote text',
@@ -146,7 +148,7 @@ export const NOTE_SEPARATORS = ['separator', 'continuationSeparator', 'continuat
 
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export const TWIPS_PER_PX = 15;
+export const TWIPS_PER_PX = ptToTwips(pxToPt(1));
 
 export const EMU_PER_TWIP = 635;
 

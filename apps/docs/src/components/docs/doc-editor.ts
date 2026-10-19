@@ -5,6 +5,7 @@ import { Slice } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
 import type { Editor, UseEditorOptions } from '@tiptap/react';
 import { useEditor } from '@tiptap/react';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
 import type { ClassifiedSvg } from '@workspace/lib/clipboard';
 import {
@@ -16,7 +17,7 @@ import {
     reUploadImage,
 } from '@workspace/lib/clipboard';
 import { userColor } from '@workspace/lib/constants/colors';
-import { getFontName } from '@workspace/lib/constants/fonts';
+import { FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
@@ -196,7 +197,7 @@ export function useDocMedia(path: DrivePath) {
     };
 }
 
-export type DocMedia = ReturnType<typeof useDocMedia>;
+type DocMedia = ReturnType<typeof useDocMedia>;
 
 // A note holds paragraphs, so a pasted heading, list or table lands as paragraphs.
 const NoteDocument = Node.create({ name: 'doc', topNode: true, content: 'paragraph+' });
@@ -284,8 +285,12 @@ export function docEditorOptions({
         const { width, margin } = pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
         return width - margin.left - margin.right;
     };
-    // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one.
-    const normalStyle = () => readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON());
+    // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one. A note's
+    // paragraphs draw at the footnote size, which its size box shows and a step steps from.
+    const normalStyle = () => {
+        const style = readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON());
+        return note ? { ...style, size: FOOTNOTE_FONT_SIZE } : style;
+    };
     const settle = note ? target.body : editor;
     const leave = (onLeave: () => void) =>
         Extension.create({
@@ -305,6 +310,7 @@ export function docEditorOptions({
                 lowlight,
                 textColumnWidth,
                 normalStyle,
+                remote: (tr) => !!tr.getMeta(ySyncPluginKey),
                 exclude: [
                     ...(band ? BAND_EXCLUDED_NODES : []),
                     ...(band || note ? [] : ['footnote']),

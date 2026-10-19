@@ -142,6 +142,21 @@ test("a page number copied beside an image is # in the copy's text item", () => 
     expect(eigen?.items.map((item) => (item.type === 'text' ? item.text : item.type))).toEqual(['Page #', 'image']);
 });
 
+// A note is no part of the sentence around its reference, and its image no item of its own.
+test("a copy's items leave a note's text and images out", () => {
+    const { eigen } = copy([
+        paragraph(
+            text('Claim'),
+            { type: 'footnote', content: [paragraph(text('Note'), figure('noted.png'))] },
+            text('.'),
+        ),
+        paragraph(figure('chart.png')),
+    ]);
+    expect(
+        eigen?.items.map((item) => (item.type === 'image' ? item.mediaName : item.type === 'text' && item.text)),
+    ).toEqual(['Claim.', 'chart.png']);
+});
+
 test('a figure whose re-upload fails is left out', async () => {
     const clipboard = copy([paragraph(text('One'), figure('chart.png'))]);
     expect(blocks(await paste(clipboard, async () => null))).toEqual([['One']]);

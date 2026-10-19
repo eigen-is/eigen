@@ -108,9 +108,19 @@ function convert(setup: PageSetup, fromMm: (mm: number) => number): PageSetup {
     };
 }
 
-// CSS px at 96 dpi, unrounded: Docs stores a figure's width in them.
+// The lengths a doc is measured in, unrounded: mm on paper, CSS px at 96 dpi (Docs stores a figure's width in them),
+// points, and Word's twips, twentieths of a point.
 export const mmToPx = (mm: number) => (mm / 25.4) * 96;
 export const pxToMm = (px: number) => (px / 96) * 25.4;
+export const mmToPt = (mm: number) => (mm / 25.4) * 72;
+export const ptToMm = (pt: number) => (pt / 72) * 25.4;
+export const ptToPx = (pt: number) => (pt / 72) * 96;
+export const pxToPt = (px: number) => (px / 96) * 72;
+export const TWIPS_PER_POINT = 20;
+export const ptToTwips = (pt: number) => pt * TWIPS_PER_POINT;
+export const twipsToPt = (twips: number) => twips / TWIPS_PER_POINT;
+export const mmToTwips = (mm: number) => (mm * 1440) / 25.4;
+export const twipsToMm = (twips: number) => (twips * 25.4) / 1440;
 
 // A length as Docs' fields show it, in cm to `decimals` places, without trailing zeros.
 export const cmText = (mm: number, decimals: number) => String(Math.round(mm * 10 ** (decimals - 1)) / 10 ** decimals);
@@ -122,9 +132,8 @@ export function pagePx(setup: PageSetup): PageSetup {
     return convert(setup, mmToPx);
 }
 
-// Word's twentieths of a point.
 export function pageTwips(setup: PageSetup): PageSetup {
-    return convert(setup, (mm) => Math.round((mm * 1440) / 25.4));
+    return convert(setup, (mm) => Math.round(mmToTwips(mm)));
 }
 
 // The page box on screen: its margins are padding, so the content box is the text column.

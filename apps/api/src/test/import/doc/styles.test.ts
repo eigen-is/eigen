@@ -248,3 +248,19 @@ describe('a style with no id', () => {
         expect(emptyFirst.run(undefined)).toEqual({});
     });
 });
+
+// Only a paragraph style is a paragraph's default; a character or table style with the id Normal is none.
+describe('the default paragraph style', () => {
+    const stylesOf = (inner: string) =>
+        new Styles(parseOoxml(`<w:styles xmlns:w="${W_NS}">${inner}</w:styles>`) ?? undefined, {
+            font: () => undefined,
+        });
+
+    test('is the style marked default, else a paragraph style with the id Normal', () => {
+        expect(stylesOf(style('Normal', 'Normal')).defaultParagraph).toBe('Normal');
+        expect(
+            stylesOf('<w:style w:type="character" w:styleId="Normal"><w:name w:val="Normal"/></w:style>')
+                .defaultParagraph,
+        ).toBeUndefined();
+    });
+});
