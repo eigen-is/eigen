@@ -14,7 +14,7 @@ import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { MATHML_LIMIT, renderDocHtml } from '../../lib/export/doc/render';
-import { renderEigendocExport } from '../../lib/export/doc/transform';
+import { MAX_PAGE_NOTES, renderEigendocExport } from '../../lib/export/doc/transform';
 import * as mathSvg from '../../lib/export/math-svg';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
@@ -1755,6 +1755,100 @@ describe('doc export — footnotes', () => {
         expect(body.querySelector('span.footnote')).toBeNull();
         // The list closes the body, before a footer.
         expect(body.querySelector('article')?.lastElementChild?.className).toBe('footnotes');
+    });
+
+    // A note floats whole to its page, so a taller one loses what doesn't fit, and WeasyPrint grows slow past about
+    // 2,000 notes: past either, the PDF lists the notes after the body, as the download does.
+    test.each<[string, JSONContent[]]>([
+        [
+            'a note longer than a page',
+            [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Claim' },
+                        note(...Array.from({ length: 300 }, (_, index) => paragraph(`Line ${index}`))),
+                    ],
+                },
+            ],
+        ],
+        [
+            `more than ${MAX_PAGE_NOTES} notes`,
+            Array.from({ length: MAX_PAGE_NOTES + 1 }, (_, index) => ({
+                type: 'paragraph',
+                content: [{ type: 'text', text: `Body ${index}` }, note(paragraph(`Note ${index}`))],
+            })),
+        ],
+    ])('the PDF of %s lists its notes after the body', async (_name, content) => {
+        const doc = seededDoc({ type: 'doc', content });
+        const html = await exported('pdf-html', doc);
+        const { body } = new JSDOM(html).window.document;
+        expect(body.querySelector('article')?.lastElementChild?.className).toBe('footnotes');
+        expect(body.querySelector('span.footnote')).toBeNull();
+        expect(await exportStyle('pdf-html', doc)).not.toContain('float: footnote');
+    });
+
+    test('a note just within a page stays at its foot', async () => {
+        const html = await pdfHtml({
+            type: 'paragraph',
+            content: [
+                { type: 'text', text: 'Claim' },
+                note(...Array.from({ length: 20 }, (_, index) => paragraph(`Line ${index}`))),
+            ],
+        });
+        expect(html).toContain('<span class="footnote"');
+    });
+
+    // A forged note may end in a block that is no paragraph; its link back follows it.
+    test('a note whose last block is no paragraph still links back', async () => {
+        const html = await exported(
+            'html',
+            seededDoc({
+                type: 'doc',
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            { type: 'text', text: 'Claim' },
+                            note(paragraph('First'), {
+                                type: 'heading',
+                                attrs: { level: 2 },
+                                content: [{ type: 'text', text: 'Forged' }],
+                            }),
+                        ],
+                    },
+                ],
+            }),
+        );
+        const item = new JSDOM(html).window.document.querySelector('#fn-1');
+        expect(item?.querySelector('a[href="#fnref-1"]')?.textContent).toBe('↩');
+    });
+
+    // A heading's bookmark is its text: the call's number and the note it floats away are no part of it.
+    test("the PDF labels a heading's bookmark with its text without its notes", async () => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'heading',
+                    attrs: { level: 1, textAlign: 'center' },
+                    content: [
+                        { type: 'text', text: 'Intro' },
+                        note(paragraph('Aside')),
+                        { type: 'text', text: ' & more' },
+                    ],
+                },
+                { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Plain' }] },
+            ],
+        });
+        const { body } = new JSDOM(await exported('pdf-html', doc)).window.document;
+        const [noted, plain] = [...body.querySelectorAll('h1, h2')];
+        expect(noted?.getAttribute('data-bookmark')).toBe('Intro & more');
+        expect(noted?.getAttribute('style')).toContain('text-align: center');
+        expect(plain?.hasAttribute('data-bookmark')).toBe(false);
+        expect(await exportStyle('pdf-html', doc)).toContain(
+            '[data-bookmark] { bookmark-label: attr(data-bookmark); }',
+        );
     });
 
     // readEigendocBands drops what a band's schema leaves out, so a peer's forged note never renders.
