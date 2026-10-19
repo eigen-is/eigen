@@ -117,6 +117,19 @@ describe('the page', () => {
         expect(warnings).toEqual([{ code: 'section-pages-dropped', count: 1 }]);
     });
 
+    // A tracked change keeps a section's old properties inside its own, which Word no longer draws.
+    test("a tracked section change's old page is no section", async () => {
+        const tracked = (section: string) =>
+            section.replace(
+                '</w:sectPr>',
+                `<w:sectPrChange w:id="1" w:author="A">${page(11906, 16838, 1440)}</w:sectPrChange></w:sectPr>`,
+            );
+        const { warnings } = await importDocxBody(
+            `${paragraph(run('One'), tracked(LETTER_LANDSCAPE))}${paragraph(run('Two'))}${tracked(LETTER_LANDSCAPE)}`,
+        );
+        expect(warnings).toEqual([]);
+    });
+
     test("a size a section leaves out is the default A4, a margin Word's 1 in", async () => {
         const WORD_MARGIN = { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 };
         const WORD_PAGE = { ...DEFAULT_PAGE_SETUP, margin: WORD_MARGIN };
@@ -1104,6 +1117,30 @@ describe('the Normal', () => {
         );
         expect(marksOfType(json, 'textStyle')).toEqual([]);
         for (const node of nodesOfType(json, 'paragraph')) expect(node.attrs).toMatchObject(UNFORMATTED);
+    });
+
+    // An at-least Normal reads as single, so a single line set on a paragraph is the Normal's.
+    test('under an at-least Normal, a paragraph set to single lines has no line spacing of its own', async () => {
+        const atLeast =
+            '<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:line="300" w:lineRule="atLeast"/></w:pPr></w:pPrDefault></w:docDefaults>';
+        const { json, style } = await importDocxBody(
+            `${paragraph(run('Single'), '<w:spacing w:line="240" w:lineRule="auto"/>')}${paragraph(run('Double'), '<w:spacing w:line="480" w:lineRule="auto"/>')}`,
+            { styles: atLeast },
+        );
+        expect(style.lineSpacing).toBe(1);
+        expect(nodesOfType(json, 'paragraph').map((node) => node.attrs?.['lineSpacing'])).toEqual([null, 2]);
+    });
+
+    // A size past the range lands in it, as a run's does, so every size compared with the body's is in it too.
+    test("the body's size is bounded as a run's is", async () => {
+        const sized = (size: number) =>
+            `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="${size}"/></w:rPr></w:rPrDefault></w:docDefaults>`;
+        const tiny = await importDocxBody(paragraph(run('a', '<w:sz w:val="2"/>')), { styles: sized(0) });
+        expect(tiny.style.size).toBe(1);
+        expect(marksOfType(tiny.json, 'textStyle')).toEqual([]);
+        const huge = await importDocxBody(paragraph(run('b', '<w:sz w:val="800"/>')), { styles: sized(100_000) });
+        expect(huge.style.size).toBe(400);
+        expect(marksOfType(huge.json, 'textStyle')).toEqual([]);
     });
 
     test("a run in another bundled font is marked, the document font's included, and one Eigen can't draw draws in Inter", async () => {

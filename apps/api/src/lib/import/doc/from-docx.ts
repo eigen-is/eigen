@@ -129,7 +129,8 @@ export function readDocx(
         if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
         if (pkg.evenBands > 0) warnings.push({ code: 'even-bands-dropped', count: pkg.evenBands });
         if (reader.bandAnchors > 0) warnings.push({ code: 'band-images-unanchored', count: reader.bandAnchors });
-        if (reader.bandDropped > 0) warnings.push({ code: 'band-content-dropped', count: reader.bandDropped });
+        const bandDropped = reader.bandDropped + pkg.damagedBands;
+        if (bandDropped > 0) warnings.push({ code: 'band-content-dropped', count: bandDropped });
         return { doc, bands, page: reader.page, style: reader.normal, images, warnings };
     } catch (error) {
         throw importError(error, 'docx');

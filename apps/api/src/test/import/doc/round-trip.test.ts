@@ -758,6 +758,46 @@ describe("a cell's fill and header", () => {
     });
 });
 
+// Word draws a line in its tallest face, the paragraph mark's when it's taller than the runs', and the reader reads it so.
+describe('a line under a Normal in another family', () => {
+    test.each<[string, string | undefined]>([
+        ['in a shorter family', 'Inter'],
+        ['in two families', undefined],
+        ['with no text', undefined],
+    ])('a paragraph %s keeps its line spacing, trip after trip', async (name, font) => {
+        const runs: JSONContent[] =
+            name === 'with no text'
+                ? []
+                : name === 'in two families'
+                  ? [
+                        { type: 'text', text: 'Serif ' },
+                        {
+                            type: 'text',
+                            text: 'Mono',
+                            marks: [{ type: 'textStyle', attrs: { fontFamily: 'JetBrains Mono' } }],
+                        },
+                    ]
+                  : [{ type: 'text', text: 'Text', marks: [{ type: 'textStyle', attrs: { fontFamily: font } }] }];
+        let content: JSONContent[] = [{ type: 'paragraph', attrs: { lineSpacing: 2 }, content: runs }];
+        let style = { ...DEFAULT_NORMAL_STYLE, font: 'Source Serif 4' };
+        for (let trip = 0; trip < 3; trip++) {
+            const docx = await eigendocToDocx(
+                { type: 'doc', content },
+                {},
+                DEFAULT_PAGE_SETUP,
+                style,
+                [],
+                'Line',
+                undefined,
+            );
+            const imported = docxToPmJson(Buffer.from(docx));
+            content = imported.json.content ?? [];
+            style = imported.style;
+            expect(content[0]?.attrs?.['lineSpacing']).toBe(2);
+        }
+    });
+});
+
 describe("the all-features doc's Google Docs re-save", () => {
     test('comes back as written, but for the named differences and what Google Docs drops', async () => {
         const bytes = await Bun.file(

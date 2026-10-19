@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_FONT, EIGEN_FONT_NAMES, fontLineHeight } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, EIGEN_FONT_NAMES, fontLineHeight, readFontSize } from '@workspace/lib/constants/fonts';
 import {
     flattenNestedFootnotes,
     type NormalStyle,
@@ -72,7 +72,8 @@ export type Reader = {
     pagesDropped: number;
     // Pictures a band anchored, which it holds as block figures.
     bandAnchors: number;
-    // What a band drops: a picture behind the text or a VML one, a letterhead or a watermark, and a note reference.
+    // What a band drops: a picture behind the text or a VML one, a letterhead or a watermark, a text watermark, and a
+    // note reference.
     bandDropped: number;
     publicOrigin: string | undefined;
 };
@@ -102,8 +103,8 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const page = { ...size, differentFirstPage: pkg.titlePg };
     const px = pagePx(page);
     const twips = pageTwips(page);
-    // Word's default is 10 pt.
-    const bodySize = body.size ?? 20;
+    // Word's default is 10 pt; a size past the range lands in it, as a run's does.
+    const bodySize = 2 * (readFontSize((body.size ?? 20) / 2) ?? 10);
     const font = fontMark(byFace(' ', body.fonts, body, false)[0]?.font, fontTable) ?? DOCUMENT_FONT;
     const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
     // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
@@ -123,7 +124,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         graphicsDropped: 0,
         graphicParts: new Set(),
         bodySize,
-        bodySizeCs: body.sizeCs ?? body.size ?? 20,
+        bodySizeCs: 2 * (readFontSize((body.sizeCs ?? body.size ?? 20) / 2) ?? 10),
         baseColor: body.color?.hex,
         normal: readNormalStyle({
             font,
@@ -391,17 +392,16 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         });
 
     // What the paragraph sets apart from the docx's Normal, or a heading, a title, a quote or a note from its style,
-    // whose look is the node's. A line is drawn in its family's own line, so it is stored as a multiple of Inter's; the
-    // writer scales the line of a paragraph all in one family other than the Normal's by that family's line, which this
+    // whose look is the node's. Word draws a line in the tallest face in it, so it is stored as a multiple of Inter's
+    // from the taller of the runs' family, when they are all in one, and the paragraph mark's; the writer scales the
+    // line of a paragraph all in one taller family than its mark's by that family's line (familyLine), which this
     // undoes, so a line Word draws as Normal's reads as none.
-    const base =
-        role.kind === 'paragraph' && scope.story !== 'note'
-            ? mergePara(styles.docPara, styles.para(styles.defaultParagraph))
-            : styled;
+    const { normal } = reader;
+    const normalBase = role.kind === 'paragraph' && scope.story !== 'note';
+    const base = normalBase ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
     const autoLine = (para: ParaProps) => ((para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : undefined);
     const line = autoLine(props);
     const baseLine = autoLine(base);
-    const { normal } = reader;
     const families = new Set(
         texts.flatMap((piece) =>
             piece.kind === 'node' && piece.node.text?.trim()
@@ -411,12 +411,21 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     );
     const [family] = families;
     const scaleOf = (font: string) => fontLineHeight(font) / fontLineHeight(DOCUMENT_FONT);
-    const scale = families.size === 1 && EIGEN_FONT_NAMES.includes(family) ? scaleOf(family) : 1;
+    const markFont = fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font);
+    const scale = Math.max(
+        families.size === 1 && EIGEN_FONT_NAMES.includes(family) ? scaleOf(family) : 0,
+        scaleOf(markFont ?? normal.font),
+    );
+    // An at-least Normal reads as single, so the Normal's own line is the one to compare with.
+    const baseSpacing = normalBase
+        ? normal.lineSpacing
+        : baseLine === undefined
+          ? undefined
+          : (baseLine * scaleOf(normal.font)) / 240;
     const lineSpacing =
         line !== undefined &&
         line !== baseLine &&
-        (baseLine === undefined ||
-            Math.round((line * scale) / 2.4) !== Math.round((baseLine * scaleOf(normal.font)) / 2.4))
+        (baseSpacing === undefined || Math.round((line * scale) / 2.4) !== Math.round(baseSpacing * 100))
             ? (line * scale) / 240
             : undefined;
     const before = props.before ?? 0;

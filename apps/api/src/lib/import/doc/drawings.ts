@@ -192,6 +192,9 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
             context.pieces.push({ kind: 'hr' });
             continue;
         }
+        // A band's VML text is Word's text watermark, its text a path no node holds; a shapetype only defines one.
+        const textPath = descendants(shape, V_NS, 'textpath').some((path) => path.attributes['string']);
+        if (context.scope.story === 'band' && shape.local !== 'shapetype' && textPath) reader.bandDropped++;
         for (const data of descendants(shape, V_NS, 'imagedata')) {
             // A band's VML picture is Word's picture watermark, laid over the page.
             if (context.scope.story === 'band') {
