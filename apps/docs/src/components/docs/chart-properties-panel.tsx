@@ -1,8 +1,7 @@
 import { type Editor, useEditorState } from '@tiptap/react';
 import { parseChartSpec } from '@workspace/lib/charts';
 import { CHART_DEFAULT_SIZE, type ChartAttrs, readChartAttrs } from '@workspace/lib/docs/eigendoc';
-import { Button } from '@workspace/ui/components/button';
-import { ChartDataDialog, ChartEditor } from '@workspace/ui/components/charts';
+import { ChartEditor, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
     holdCapture,
     PropertiesPanel,
@@ -11,8 +10,7 @@ import {
     PropertySection,
     sealed,
 } from '@workspace/ui/components/properties-panel';
-import { Table } from 'lucide-react';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import type * as Y from 'yjs';
 import { widthWithinLayout } from './extensions/figure-frame';
 import { FigureField, FigureLayoutSection } from './figure-properties-panel';
@@ -63,13 +61,11 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
             <PropertyHistoryContext.Provider value={history}>
                 <PropertiesPanel title="Chart">
                     {spec && (
-                        <ChartEditor spec={spec} onChange={(next) => write({ spec: JSON.stringify(next) })}>
-                            {spec.data.source === 'inline' && (
-                                <Button variant="outline" size="sm" className="w-full" onClick={onEditData}>
-                                    <Table /> Edit data
-                                </Button>
-                            )}
-                        </ChartEditor>
+                        <ChartEditor
+                            spec={spec}
+                            onChange={(next) => write({ spec: JSON.stringify(next) })}
+                            onEditData={onEditData}
+                        />
                     )}
                     <FigureLayoutSection
                         layout={layout}
@@ -107,20 +103,11 @@ type ChartDataEditorProps = {
 // open, as it reads the selection on every transaction. Save is one write.
 export function ChartDataEditor({ editor, undoManager, onClose }: ChartDataEditorProps) {
     const { spec } = useSelectedChart(editor);
-    const data = spec?.data.source === 'inline' ? spec.data : null;
-    // A chart a collaborator deleted or broke meanwhile has no grid to show.
-    useEffect(() => {
-        if (!data) onClose();
-    }, [data, onClose]);
-    if (!spec || !data) return null;
     return (
-        <ChartDataDialog
-            spec={{ ...spec, data }}
-            open
-            onOpenChange={(open) => {
-                if (!open) onClose();
-            }}
+        <InlineChartDataDialog
+            spec={spec}
             onSave={(next) => writeChart(editor, undoManager, { spec: JSON.stringify(next) })}
+            onClose={onClose}
         />
     );
 }

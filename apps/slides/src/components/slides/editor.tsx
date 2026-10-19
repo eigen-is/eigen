@@ -10,7 +10,7 @@ import {
 } from '@workspace/lib/vector';
 import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
-import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
+import { DocumentImportPicker } from '@workspace/ui/components/drive';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import {

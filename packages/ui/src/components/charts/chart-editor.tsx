@@ -5,6 +5,7 @@
 
 import { chartColor, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';
 import { type ChartSpec, type ChartStacking, LEGEND_POSITIONS, type LegendPosition } from '@workspace/lib/types/chart';
+import { Button } from '@workspace/ui/components/button';
 import {
     ColorRow,
     FontRow,
@@ -15,7 +16,9 @@ import {
     PropertySection,
     PropertyTextInput,
 } from '@workspace/ui/components/properties-panel';
-import type { ReactNode } from 'react';
+import { Table } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
+import { ChartDataDialog } from './chart-data-dialog';
 import { CHART_TYPE_OPTIONS } from './chart-types';
 import { fromPercent } from './percent';
 
@@ -41,11 +44,14 @@ type ChartEditorProps = {
     // series in the spec.
     categories?: string[];
     seriesNames?: string[];
-    // The host's actions on the chart (the canvas's Edit data), at the end of the Chart section.
+    // A host whose double-click opens the same Edit data (Docs) opens it itself.
+    onEditData?: () => void;
+    // The host's actions on the chart (the canvas's Convert to shapes), at the end of the Chart section.
     children?: ReactNode;
 };
 
-export function ChartEditor({ spec, onChange, categories, seriesNames, children }: ChartEditorProps) {
+export function ChartEditor({ spec, onChange, categories, seriesNames, onEditData, children }: ChartEditorProps) {
+    const [dataOpen, setDataOpen] = useState(false);
     const { type, data, valueAxis, categoryAxis } = spec;
     const pie = type === 'pie';
     // A bar chart lies on its side, so its value axis is the horizontal one.
@@ -205,6 +211,26 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, children 
                     />
                 </PropertyRow>
                 <FontRow value={spec.fontFamily} onChange={(fontFamily) => onChange({ ...spec, fontFamily })} />
+                {data.source === 'inline' && (
+                    <>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={onEditData ?? (() => setDataOpen(true))}
+                        >
+                            <Table /> Edit data
+                        </Button>
+                        {!onEditData && (
+                            <ChartDataDialog
+                                spec={{ ...spec, data }}
+                                open={dataOpen}
+                                onOpenChange={setDataOpen}
+                                onSave={onChange}
+                            />
+                        )}
+                    </>
+                )}
                 {children}
             </PropertySection>
 
