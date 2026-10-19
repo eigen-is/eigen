@@ -54,12 +54,12 @@ function brokenDoc(): Y.Doc {
 }
 
 async function docxDocumentXml(doc: Y.Doc): Promise<string> {
-    const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', [], undefined);
+    const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => [], undefined);
     return new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
 }
 
 async function exportStyle(format: 'html' | 'pdf-html', doc = seededDoc()): Promise<string> {
-    const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+    const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
     return new TextDecoder().decode(data).match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? '';
 }
 
@@ -144,12 +144,12 @@ describe('doc export — the Normal', () => {
                 },
             ],
         });
-        const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', async () => [], undefined);
         expect(new TextDecoder().decode(data)).toContain('<span style="font-variant-caps: small-caps">Serif</span>');
     });
 
     test("docx writes the Normal as docDefaults and the Normal style, in the Normal's font's own line", async () => {
-        const { data } = await renderEigendocExport(styledDoc(), 'docx', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(styledDoc(), 'docx', 'Report.eigendoc', async () => [], undefined);
         const styles = new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/styles.xml'));
         expect(styles).toContain(
             '<w:rPrDefault><w:rPr><w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4" w:eastAsia="Source Serif 4" w:cs="Source Serif 4"/><w:color w:val="000000"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:rPrDefault>',
@@ -246,7 +246,7 @@ describe('doc export — tasks', () => {
                     },
                 ],
             });
-            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
             const { window } = new JSDOM(new TextDecoder().decode(data));
             const { document } = window;
             const struck = [...document.styleSheets]
@@ -264,7 +264,13 @@ describe('doc export — figures', () => {
     const IMG = '<img src="data:image/png;base64,AA==" alt="" style="width: 320px; max-width: 100%" />';
 
     async function exportHtml(json: JSONContent): Promise<string> {
-        const { data } = await renderEigendocExport(seededDoc(json), 'html', 'Report.eigendoc', media, undefined);
+        const { data } = await renderEigendocExport(
+            seededDoc(json),
+            'html',
+            'Report.eigendoc',
+            async () => media,
+            undefined,
+        );
         return new TextDecoder().decode(data);
     }
 
@@ -317,7 +323,7 @@ describe('doc export — charts', () => {
         '%s draws a chart as inline SVG at its size in the figure box, its labels as text',
         async (format) => {
             const doc = seededDoc(chartDoc({ width: 480, height: 300, alignment: 'right', caption: 'Points' }));
-            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
             const html = new TextDecoder().decode(data);
             expect(html).toContain(
                 '<span class="figure" data-layout="block" data-alignment="right"><svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300">',
@@ -332,7 +338,7 @@ describe('doc export — charts', () => {
 
     test('docx draws a chart as a picture of its SVG beside its PNG', async () => {
         const doc = seededDoc(chartDoc({ width: 480, height: 300 }));
-        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => [], undefined);
         expect(
             openZip(new Uint8Array(data))
                 .names()
@@ -367,7 +373,7 @@ describe('doc export — trailing breaks', () => {
             seededDoc({ type: 'doc', content }),
             'html',
             'Report.eigendoc',
-            [],
+            async () => [],
             undefined,
         );
         const html = new TextDecoder().decode(data);
@@ -430,7 +436,7 @@ describe('doc export — trailing breaks', () => {
 
 describe('doc export — page breaks', () => {
     test.each(['html', 'pdf-html'] as const)('%s carries the page break div', async (format) => {
-        const { data } = await renderEigendocExport(brokenDoc(), format, 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(brokenDoc(), format, 'Report.eigendoc', async () => [], undefined);
         expect(new TextDecoder().decode(data)).toContain('<p>Before</p><div class="page-break"></div><p>After</p>');
     });
 
@@ -452,7 +458,7 @@ describe('doc export — page breaks', () => {
     });
 
     test('a docx export imports back to the same blocks', async () => {
-        const { data } = await renderEigendocExport(brokenDoc(), 'docx', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(brokenDoc(), 'docx', 'Report.eigendoc', async () => [], undefined);
         const { json } = docxToPmJson(Buffer.from(data));
         expect(json.content?.map((node) => node.type)).toEqual(['paragraph', 'pageBreak', 'paragraph']);
     });
@@ -483,7 +489,7 @@ describe('doc export — equations', () => {
     async function exportEquations(format: 'html' | 'pdf-html', ...attrs: Record<string, unknown>[]): Promise<string> {
         const equations = attrs.map((a) => ({ type: 'equation', attrs: a }));
         const doc = seededDoc({ type: 'doc', content: [{ type: 'paragraph', content: equations }] });
-        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
         return new TextDecoder().decode(data);
     }
 
@@ -534,7 +540,7 @@ describe('doc export — equations', () => {
                 },
             ],
         });
-        const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', async () => [], undefined);
         const html = new TextDecoder().decode(data);
 
         expect(html).toMatch(/<\/svg><\/span>AFTER<br>MORE<\/p>/);
@@ -666,7 +672,7 @@ describe('doc export — equations', () => {
                     { type: 'paragraph', content: [digit(7)] },
                 ],
             });
-            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
             const html = new TextDecoder().decode(data);
             // MathJax names each glyph by its code point: 0x31 is 1.
             const drawn = format === 'html' ? /<mn>(\d)<\/mn>/g : /<span class="math-svg">[\s\S]*?data-c="3(\d)"/g;
@@ -721,7 +727,7 @@ describe('doc export — table column widths', () => {
     const resized = () => seededDoc({ type: 'doc', content: [{ type: 'table', content: [row(), row()] }] });
 
     test.each(['html', 'pdf-html'] as const)('%s draws each column at its width', async (format) => {
-        const { data } = await renderEigendocExport(resized(), format, 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(resized(), format, 'Report.eigendoc', async () => [], undefined);
         const { document } = new JSDOM(new TextDecoder().decode(data)).window;
         const cols = [...document.querySelectorAll<HTMLTableColElement>('table col')];
         expect(cols.map((col) => col.style.width)).toEqual(['300px', '150px', '120px']);
@@ -729,7 +735,7 @@ describe('doc export — table column widths', () => {
     });
 
     test('a docx export imports back with the same widths', async () => {
-        const { data } = await renderEigendocExport(resized(), 'docx', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(resized(), 'docx', 'Report.eigendoc', async () => [], undefined);
         const { json } = docxToPmJson(Buffer.from(data));
         const widths = json.content?.[0]?.content?.flatMap((tableRow) =>
             (tableRow.content ?? []).map((node) => node.attrs?.['colwidth']),
@@ -743,7 +749,7 @@ describe('doc export — whitespace', () => {
         '%s keeps repeated spaces and prints no whitespace around the body',
         async (format) => {
             const doc = seededDoc({ type: 'doc', content: [paragraph('a  b')] });
-            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
             const html = new TextDecoder().decode(data);
             expect(html).toContain('<p>a  b</p>');
             expect(html).toMatch(/<article class="eigen-prose tiptap eigen-doc"><p>/);
@@ -764,7 +770,7 @@ describe('doc export — caps', () => {
             seededDoc({ type: 'doc', content }),
             format,
             'Report.eigendoc',
-            [],
+            async () => [],
             undefined,
         );
         return new TextDecoder().decode(data);
@@ -864,7 +870,7 @@ describe('doc export — links', () => {
                 },
             ],
         });
-        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], publicOrigin);
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], publicOrigin);
         return [...new TextDecoder().decode(data).matchAll(/<a [^>]*href="([^"]*)"/g)].map((match) => match[1] ?? '');
     }
 
@@ -903,7 +909,7 @@ describe('doc export — links', () => {
                 },
             ],
         });
-        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
         const { document } = new JSDOM(new TextDecoder().decode(data)).window;
         expect([...document.querySelectorAll('article p > *')].map((node) => node.outerHTML)).toEqual([
             `<a target="_blank" rel="noopener noreferrer" href="${href}">plain</a>`,
@@ -923,7 +929,7 @@ describe('doc export — links', () => {
                 },
             ],
         });
-        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(doc, 'html', 'Report.eigendoc', async () => [], undefined);
         const { document } = new JSDOM(new TextDecoder().decode(data)).window;
         expect(document.querySelector('article a')?.getAttribute('target')).toBe('_blank');
     });
@@ -944,7 +950,7 @@ describe('doc export — docx SVG size', () => {
             content: [{ type: 'paragraph', content: [{ type: 'figure', attrs: { mediaName: 'd.svg' } }] }],
         });
         const media = [{ name: 'd.svg', contentType: 'image/svg+xml', data: toTransferableText(svg(attrs)) }];
-        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', media, undefined);
+        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => media, undefined);
         const xml = new TextDecoder().decode(openZip(new Uint8Array(data)).read('word/document.xml'));
         const [, cx = '0', cy = '0'] = xml.match(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/) ?? [];
         return [Number(cx) / 9525, Number(cy) / 9525];
@@ -979,7 +985,7 @@ describe('doc export — docx data: figures', () => {
             type: 'doc',
             content: srcs.map((src) => ({ type: 'paragraph', content: [{ type: 'figure', attrs: { src } }] })),
         });
-        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', [], undefined);
+        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => [], undefined);
         const zip = openZip(new Uint8Array(data));
         return { zip, parts: zip.names().filter((name) => name.startsWith('word/media/')) };
     }
@@ -1051,7 +1057,7 @@ describe('doc export — docx SVG fallback timeout', () => {
                 { name: 'fast.svg', contentType: 'image/svg+xml', data: toTransferableText(fast) },
             ];
             const doc = seededDoc({ type: 'doc', content: [figure('slow.svg'), figure('fast.svg')] });
-            const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', media, undefined);
+            const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => media, undefined);
             const zip = openZip(new Uint8Array(data));
             expect(zip.names().filter((name) => name.startsWith('word/media/'))).toEqual([
                 'word/media/image1.png',
@@ -1074,7 +1080,7 @@ function orderedList(attrs: { start?: number; type?: string }, ...items: JSONCon
 
 async function pdfHtml(...content: JSONContent[]): Promise<string> {
     const doc = seededDoc({ type: 'doc', content });
-    const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+    const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', async () => [], undefined);
     return new TextDecoder().decode(data);
 }
 
@@ -1088,7 +1094,7 @@ describe('doc export — ordered lists', () => {
                 type: 'doc',
                 content: [orderedList({ start: 3 }, listItem('a')), orderedList({ start: 1 }, listItem('b'))],
             });
-            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+            const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
             const html = new TextDecoder().decode(data);
             expect(html).toContain('<ol start="3" style="counter-reset: list-item 2">');
             expect(html).not.toContain('list-item 0');
@@ -1197,7 +1203,13 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
             const sized = async (...content: JSONContent[]) => {
                 const doc = seededDoc({ type: 'doc', content });
                 doc.getMap(STYLE_ROOT).set('size', size);
-                const { data } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+                const { data } = await renderEigendocExport(
+                    doc,
+                    'pdf-html',
+                    'Report.eigendoc',
+                    async () => [],
+                    undefined,
+                );
                 return new TextDecoder().decode(data);
             };
             const html = await sized(
@@ -1274,7 +1286,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
             }),
             'pdf-html',
             'Report.eigendoc',
-            [],
+            async () => [],
             undefined,
         );
         const boxes = await laidOut(
@@ -1404,7 +1416,7 @@ function bandedDoc(pages: number, differentFirstPage: boolean): Y.Doc {
 }
 
 async function exported(format: 'html' | 'pdf-html', doc: Y.Doc): Promise<string> {
-    const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', [], undefined);
+    const { data } = await renderEigendocExport(doc, format, 'Report.eigendoc', async () => [], undefined);
     return new TextDecoder().decode(data);
 }
 

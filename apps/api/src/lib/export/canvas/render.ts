@@ -17,6 +17,7 @@ import {
     sceneLayers,
     type VectorScene,
 } from '@workspace/lib/vector';
+import { mediaNamesIn } from '../../document/media';
 
 // The canvas compositor: a page of sceneLayers as an HTML string, for the PDF export and the
 // preview body. A screen layer carries the same box CSS the live canvas sets (layerBoxCss), a printed
@@ -33,6 +34,11 @@ import {
 // document scales its pages by it; the PDF document lays them out at 1:1 (renderPrintPage), and it is the
 // zoom htmlToPdf hands WeasyPrint for a deck.
 export const DECK_SCALE = 960 / FRAME_WIDTH;
+
+// The media a deck or drawing names: its images, and the frame backgrounds, which the scene keeps as stored JSON.
+export function sceneMediaNames(scene: VectorScene): Set<string> {
+    return mediaNamesIn([scene.elements, scene.frames.map((frame) => parseBackgroundFill(frame.background))]);
+}
 
 // A page in SCENE units plus the offset that brings its top-left to (0,0): a frame is (0,0)-based
 // so its origin is zero, a frameless drawing's content bounds start wherever the user drew.

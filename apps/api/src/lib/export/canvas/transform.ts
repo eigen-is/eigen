@@ -7,15 +7,15 @@ import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import {
     type DocumentExportFormat,
+    type ExportMediaLoader,
     htmlExportMode,
-    type TransformMedia,
     type TransformWarning,
     toTransferableText,
 } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { type CanvasPage, DECK_SCALE, framePages, renderFittedPage, renderPrintPage } from './render';
+import { type CanvasPage, DECK_SCALE, framePages, renderFittedPage, renderPrintPage, sceneMediaNames } from './render';
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
 // PDF all leave through here, so there is one @page rule, one font block and one reset instead of a
@@ -57,17 +57,18 @@ export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
 }
 
 // Materialized doc + prepared media → a deck's HTML or PDF document: one page per frame.
-export function renderEigenslidesHtml(
+export async function renderEigenslidesHtml(
     doc: Y.Doc,
     format: DocumentExportFormat,
     title: string,
-    media: TransformMedia[],
-): { data: ArrayBuffer; warnings: TransformWarning[] } {
-    const dataUriMap = toDataUriMap(media);
-    const resolveMedia: MediaResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
+    loadMedia: ExportMediaLoader,
+): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     // Rich text is filtered per element before the compositor lays it out, so a <style> block in a
     // text box cannot reach the document — which carries the generated @font-face rules of its own.
-    const pages = framePages(sanitizeSceneHtml(readVectorFromDoc(doc)), resolveMedia);
+    const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
+    const dataUriMap = toDataUriMap(await loadMedia(sceneMediaNames(scene)));
+    const resolveMedia: MediaResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
+    const pages = framePages(scene, resolveMedia);
     // Nothing to print, and nothing to size a page from.
     if (pages.length === 0) throw new ApiError(400, 'The deck is empty');
     const html = canvasHtmlDocument(

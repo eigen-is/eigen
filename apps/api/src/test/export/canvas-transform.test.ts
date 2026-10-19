@@ -62,7 +62,11 @@ describe('canvasHtmlDocument', () => {
 
 // A rich-text box is a schemaless collaborator string, and a <style> element in it is document-wide
 // CSS in whatever embeds the body — the downloaded .html and the sheet WeasyPrint prints.
-function deckExportHtml(format: DocumentExportFormat, html: string, slideSize: SlideSize = '16:9'): string {
+async function deckExportHtml(
+    format: DocumentExportFormat,
+    html: string,
+    slideSize: SlideSize = '16:9',
+): Promise<string> {
     const scene = buildGoldenDeckScene();
     const doc = new Y.Doc();
     seedDeckDoc(doc, {
@@ -70,19 +74,19 @@ function deckExportHtml(format: DocumentExportFormat, html: string, slideSize: S
         elements: scene.elements.map((el) => ('html' in el ? { ...el, html } : el)),
         meta: { ...scene.meta, slideSize },
     });
-    return new TextDecoder().decode(renderEigenslidesHtml(doc, format, 'Deck', []).data);
+    return new TextDecoder().decode((await renderEigenslidesHtml(doc, format, 'Deck', async () => [])).data);
 }
 
 describe('renderEigenslidesHtml', () => {
-    test.each(['html', 'pdf-html'] as const)('drops a <style> block a rich-text box carries (%s)', (format) => {
-        const html = deckExportHtml(format, '<style>*{display:none}</style><p>hi</p>');
+    test.each(['html', 'pdf-html'] as const)('drops a <style> block a rich-text box carries (%s)', async (format) => {
+        const html = await deckExportHtml(format, '<style>*{display:none}</style><p>hi</p>');
         expect(html).not.toContain('display:none');
         expect(html).toContain('<p>hi</p>');
     });
 
-    test('the html download opens a text box link in a new tab, as the canvas does', () => {
+    test('the html download opens a text box link in a new tab, as the canvas does', async () => {
         const link = '<p><a href="https://a.example/" target="_blank" rel="noopener noreferrer">a</a></p>';
-        expect(deckExportHtml('html', link)).toContain(link);
+        expect(await deckExportHtml('html', link)).toContain(link);
     });
 
     // The PDF document's sheet is the slide at 1:1, which htmlToPdf zooms to 960 px wide: 254 mm at 96 dpi,
@@ -91,18 +95,18 @@ describe('renderEigenslidesHtml', () => {
     test.each([
         ['16:9', 540],
         ['4:3', 720],
-    ] as const)('a %s deck prints on its own sheet, and the download pages follow', (slideSize, height) => {
-        expect(deckExportHtml('pdf-html', '<p>hi</p>', slideSize)).toContain(
+    ] as const)('a %s deck prints on its own sheet, and the download pages follow', async (slideSize, height) => {
+        expect(await deckExportHtml('pdf-html', '<p>hi</p>', slideSize)).toContain(
             `@page { size: 1920px ${height * 2}px; margin: 0; }`,
         );
-        const screen = deckExportHtml('html', '<p>hi</p>', slideSize);
+        const screen = await deckExportHtml('html', '<p>hi</p>', slideSize);
         const pages = screen.match(/<div class="page-fit" style="[^"]*">/g) ?? [];
         expect(pages.length).toBe(buildGoldenDeckScene().frames.length);
         for (const page of pages) expect(page).toContain(`--page-ar:960/${height}`);
     });
 
-    test('keeps the embedded font faces the document needs', () => {
-        expect(deckExportHtml('html', '<p>hi</p>')).toContain('@font-face');
+    test('keeps the embedded font faces the document needs', async () => {
+        expect(await deckExportHtml('html', '<p>hi</p>')).toContain('@font-face');
     });
 });
 
@@ -126,7 +130,7 @@ const weasyprint = (await isWeasyPrintAvailable()) ? describe : describe.skip;
 // The editor shows an empty paragraph one line tall because ProseMirror gives it a trailing <br>; the
 // stored html has none, so the print must lay out `<p></p>` as the editor lays out `<p><br></p>`.
 weasyprint('renderEigenslidesHtml — an empty paragraph prints a line (WeasyPrint)', () => {
-    const printed = (html: string) => htmlToPdf(deckExportHtml('pdf-html', html)).then(textOrigins);
+    const printed = async (html: string) => textOrigins(await htmlToPdf(await deckExportHtml('pdf-html', html)));
 
     test.each([
         ['a paragraph', '<p>a</p><p></p><p>b</p>', '<p>a</p><p><br></p><p>b</p>'],
