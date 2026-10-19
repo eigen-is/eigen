@@ -1,5 +1,6 @@
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
+import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 
@@ -173,8 +174,9 @@ export function toTransformError(err: unknown): TransformError {
     };
 }
 
-// A doc's preview carries its page and its Normal, which quick look and the hero draw it on and in.
-export type PreviewResult = { body: string; page?: PageSetup; style?: NormalStyle };
+// The route's preview less the mode it adds: a doc's carries its page and its Normal, which quick look and the hero
+// draw it on and in.
+export type PreviewResult = Omit<TextPreviewResult, 'mode'>;
 // Body text for the content index, already capped by the extractor — small like a
 // preview body.
 export type ExtractTextResult = { text: string };
