@@ -1,5 +1,6 @@
 import type * as Y from 'yjs';
 import { peakRss } from '../../core/peak-rss';
+import { sanitizeMedia } from '../media';
 import {
     type BytesPreviewJob,
     type BytesTransformJob,
@@ -10,7 +11,6 @@ import {
     type CollabTransformJob,
     type DocumentTransformRequest,
     type DocumentTransformResponse,
-    type ExportMedia,
     type ExportTransformJob,
     type ImportTransformJob,
     type PreviewResult,
@@ -72,13 +72,6 @@ async function renderExport(
             return renderEigenvectorExport(doc, request.format, request.title, media);
         }
     }
-}
-
-// SVG media arrives as the file's own bytes. The sanitizer loads only for one, so an xlsx export never evaluates jsdom.
-async function sanitizeMedia(media: ExportMedia[]): Promise<ExportMedia[]> {
-    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
-    const { sanitizeExportMedia } = await import('../../export/sanitize');
-    return sanitizeExportMedia(media);
 }
 
 async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): Promise<DocumentTransformResponse> {
