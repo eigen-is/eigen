@@ -330,6 +330,16 @@ describe('doc export — charts', () => {
         },
     );
 
+    test('docx draws a chart as a picture of its SVG beside its PNG', async () => {
+        const doc = seededDoc(chartDoc({ width: 480, height: 300 }));
+        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', [], undefined);
+        expect(
+            openZip(new Uint8Array(data))
+                .names()
+                .filter((name) => name.startsWith('word/media/')),
+        ).toEqual(['word/media/image1.png', 'word/media/image1.svg']);
+    });
+
     test("every label draws in the spec's font", () => {
         const fontsOf = (html: string) =>
             new Set(Array.from(html.matchAll(/<text[^>]*font-family="([^"]*)"/g), (m) => m[1]));

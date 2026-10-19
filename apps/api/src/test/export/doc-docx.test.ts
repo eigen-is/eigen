@@ -10,6 +10,7 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
 import JSZip from 'jszip';
+import sharp from 'sharp';
 import { parseOoxml } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip, type ZipReader } from '../../lib/core/zip';
@@ -18,8 +19,9 @@ import { docSchema } from '../../lib/document/doc-schema';
 import { cssPt, QUOTE_LOOK, twips } from '../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
 import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
-import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { chartFigureMedia, eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
+import { withSvgFallbacks } from '../../lib/export/office-image';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,
@@ -1957,6 +1959,10 @@ function figure(attrs: Record<string, unknown>): JSONContent {
     return { type: 'figure', attrs };
 }
 
+function chartNode(attrs: Record<string, unknown>): JSONContent {
+    return { type: 'chart', attrs };
+}
+
 describe('docx writer — figures', () => {
     // The fixture's media: chart.png 800 × 500, photo.jpeg 4000 × 3000, diagram.svg 300 × 150 beside its PNG.
     const CHART = { mediaName: 'chart.png' };
@@ -2368,22 +2374,49 @@ describe('docx writer — figures', () => {
         ]);
     });
 
-    // T4-R12: until the docx writes Word charts, a chart is left out and its caption kept, as a figure without media.
-    test('a chart is left out, its caption kept as a figure without media keeps it', async () => {
+    // The media the transform process draws for a doc's charts, as the export hands it to the writer.
+    const chartMedia = async (json: JSONContent) => withSvgFallbacks(await chartFigureMedia([json]));
+
+    test("a chart is a picture of its SVG beside the SVG's PNG, at its width, its caption kept", async () => {
         const spec = JSON.stringify(sampleChartSpec('column'));
-        const chart = (attrs: Record<string, unknown>) => ({ type: 'chart', attrs: { spec, width: 600, ...attrs } });
+        const json = doc(p(chartNode({ spec, width: 480, height: 300, caption: 'Points' })));
+        const media = await chartMedia(json);
+        expect(await blocksOf(json, media)).toEqual([
+            imageParagraph(
+                drawing({
+                    id: 1,
+                    px: 480,
+                    ratio: 300 / 480,
+                    part: 'image1.png',
+                    embed: 'rId5',
+                    svg: 'rId6',
+                    descr: 'Points scored',
+                }),
+                'center',
+                23,
+            ),
+            `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="23" w:after="385"/><w:jc w:val="center"/></w:pPr>${run('Points')}</w:p>`,
+        ]);
+        const zip = await unzip(json, undefined, media);
+        const svg = await part(zip, 'word/media/image1.svg');
+        expect([xmlAttr(svg, '', 'width'), xmlAttr(svg, '', 'height')]).toEqual(['480', '300']);
+        expect(entryText(zip, 'word/media/image1.svg')).toMatch(/<text[^>]*>Team 1<\/text>/);
+        const { format, width, height } = await sharp(zip.read('word/media/image1.png')).metadata();
+        expect([format, width, height]).toEqual(['png', 480, 300]);
+    });
+
+    test("a chart whose spec doesn't parse keeps its caption alone, as a figure without media does", async () => {
         const charts = doc(
-            p(text('a'), chart({ caption: 'Lost', alignment: 'right' }), text('b')),
-            p(chart({ caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
-            p(text('c'), chart({})),
+            p(text('a'), chartNode({ spec: '{', caption: 'Lost', alignment: 'right' }), text('b')),
+            p(chartNode({ caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
         );
         const figures = doc(
             p(text('a'), figure({ mediaName: 'gone', caption: 'Lost', alignment: 'right' }), text('b')),
             p(figure({ mediaName: 'gone', caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
-            p(text('c'), figure({ mediaName: 'gone' })),
         );
-        expect(await blocksOf(charts)).toEqual(await blocksOf(figures));
-        expect((await unzip(charts)).names().filter((name) => /chart|media/.test(name))).toEqual([]);
+        const media = await chartMedia(charts);
+        expect(media).toEqual([]);
+        expect(await blocksOf(charts, media)).toEqual(await blocksOf(figures));
     });
 
     test('an SVG is its PNG blip with the SVG beside it, each a part and an image relationship', async () => {

@@ -33,7 +33,15 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
-import { type ClipboardEvent, type KeyboardEvent, type MouseEvent, useLayoutEffect, useRef, useState } from 'react';
+import {
+    type ClipboardEvent,
+    type KeyboardEvent,
+    type MouseEvent,
+    useEffect,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from 'react';
 import { fromPercent } from './percent';
 
 type InlineChartSpec = ChartSpec & { data: InlineChartData };
@@ -235,6 +243,33 @@ export function ChartDataDialog({ spec, open, onOpenChange, onSave }: ChartDataD
                 )}
             </DialogContent>
         </Dialog>
+    );
+}
+
+type InlineChartDataDialogProps = {
+    spec: ChartSpec | null;
+    onSave: (spec: ChartSpec) => void;
+    onClose: () => void;
+};
+
+// Edit data opened by a double-click: open at once, closed on Cancel or Save. A chart that can't be drawn, or
+// that a collaborator deleted or broke meanwhile, has no grid to show, so it closes itself.
+export function InlineChartDataDialog({ spec, onSave, onClose }: InlineChartDataDialogProps) {
+    const data = spec?.data.source === 'inline' ? spec.data : null;
+    const editable = data !== null;
+    useEffect(() => {
+        if (!editable) onClose();
+    }, [editable, onClose]);
+    if (!spec || !data) return null;
+    return (
+        <ChartDataDialog
+            spec={{ ...spec, data }}
+            open
+            onOpenChange={(open) => {
+                if (!open) onClose();
+            }}
+            onSave={onSave}
+        />
     );
 }
 

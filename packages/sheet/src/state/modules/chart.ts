@@ -125,7 +125,7 @@ export function deleteActiveChart(ctx: Context) {
 // nothing else does: not a selection, not a cell on another sheet.
 const drawings = new WeakMap<SheetChart, { sheetIds: string[]; reads: (CellMatrix | undefined)[]; svg: string }>();
 
-export function chartSvg(ctx: Context, chart: SheetChart): string {
+export function sheetChartSvg(ctx: Context, chart: SheetChart): string {
     const cellsOf = (sheetId: string) => ctx.sheets.find((sheet) => sheet.id === sheetId)?.data;
     const drawn = drawings.get(chart);
     if (drawn?.sheetIds.every((sheetId, i) => cellsOf(sheetId) === drawn.reads[i])) return drawn.svg;

@@ -3,6 +3,7 @@
 // Malformed structure or a hard limit reads as null, never a throw; a presentation field reads its default.
 
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../constants/colors';
+import { DOCUMENT_FONT } from '../constants/fonts';
 import { isRecord } from '../core/guards';
 import { stripNonXmlChars } from '../core/xml';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../sheets/defaults';
@@ -36,7 +37,7 @@ export const INLINE_GRID_MAX_SERIES = 12;
 export const INLINE_GRID_MAX_CATEGORIES = 200;
 
 // Google's chart font, and the one a spec that names none or a font Eigen doesn't bundle reads as.
-export const DEFAULT_CHART_FONT = 'Inter';
+export const DEFAULT_CHART_FONT = DOCUMENT_FONT;
 
 // The accent colors in the order calendars hand them out, so a series and its neighbor stay apart, for a deuteranope too.
 // A series or slice whose color is null draws in the one at its index.
