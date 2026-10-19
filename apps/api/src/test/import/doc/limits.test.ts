@@ -360,6 +360,41 @@ describe('XML budget', () => {
 
 // A run's text splits where its face or its look changes, and each piece past a run's first counts against a cap of its
 // own: about 600 bytes a piece before the output is weighed, so 4 million of them from 5.7 MB of XML took 2.5 GB.
+describe('bands', () => {
+    // A part all four references name is parsed once, and read once: each copy is weighed, so four copies of a header
+    // past the weight are 413 for the price of one read, where four reads of a 38 KB file took 15 s and 8 GB.
+    test('a band part named by all four references is read once, each copy weighed', async () => {
+        const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+        const docx = (references: string[]) =>
+            buildDocxWithBody(`${paragraph(run('Body'))}<w:sectPr>${references.join('')}<w:titlePg/></w:sectPr>`, {
+                rels: ['h1', 'h2', 'f1', 'f2']
+                    .map(
+                        (id) =>
+                            `<Relationship Id="${id}" Type="${REL}/${id[0] === 'h' ? 'header' : 'footer'}" Target="x.xml"/>`,
+                    )
+                    .join(''),
+                media: {
+                    'word/x.xml': new TextEncoder().encode(
+                        `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${paragraph(run('a')).repeat(MAX_DOCX_WEIGHT / 2 + 5_000)}</w:hdr>`,
+                    ),
+                },
+            });
+        const one = measuredImport(await docx(['<w:headerReference w:type="default" r:id="h1"/>']));
+        const four = measuredImport(
+            await docx([
+                '<w:headerReference w:type="default" r:id="h1"/>',
+                '<w:headerReference w:type="first" r:id="h2"/>',
+                '<w:footerReference w:type="default" r:id="f1"/>',
+                '<w:footerReference w:type="first" r:id="f2"/>',
+            ]),
+        );
+        expect(one.status).toBe(413);
+        expect(four.status).toBe(413);
+        expect(four.cpuMs).toBeLessThan(2 * one.cpuMs);
+        expect(four.rssGrowth).toBeLessThan(2 * one.rssGrowth);
+    });
+});
+
 describe('text pieces', () => {
     test('Latin and Arabic in one face and one look are one piece', async () => {
         const result = measuredImport(await buildDocxWithBody(paragraph(run('aب'.repeat(4_000_000)))));
