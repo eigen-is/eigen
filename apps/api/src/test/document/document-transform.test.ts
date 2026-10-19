@@ -1169,7 +1169,7 @@ describe('document transform (eigendoc)', () => {
         const media = await collectExportMedia(mount, path, 'docx');
         const direct = await eigendocToDocx(
             readEigendocFromDoc(persisted),
-            readEigendocBands(persisted),
+            readEigendocBands(persisted).bands,
             readEigendocPage(persisted),
             readEigendocStyle(persisted),
             media,

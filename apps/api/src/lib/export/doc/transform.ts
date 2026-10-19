@@ -60,7 +60,8 @@ export async function renderEigendocExport(
     const json = readEigendocFromDoc(doc);
     const page = readEigendocPage(doc);
     const style = readEigendocStyle(doc);
-    const bands = readEigendocBands(doc);
+    const { bands, cut } = readEigendocBands(doc);
+    const warnings: TransformWarning[] = cut > 0 ? [{ code: 'band-blocks-cut', count: cut }] : [];
     if (format === 'docx') {
         const { chartFigureMedia, eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
         const roots = [json, ...Object.values(bands)];
@@ -68,7 +69,7 @@ export async function renderEigendocExport(
         const docxMedia = await withSvgFallbacks([...media, ...drawn]);
         return {
             data: toTransferableBuffer(await eigendocToDocx(json, bands, page, style, docxMedia, title, publicOrigin)),
-            warnings: [],
+            warnings,
         };
     }
     const dataUriMap = toDataUriMap(media);
@@ -101,7 +102,7 @@ export async function renderEigendocExport(
         css: `${PROSE_CSS}${printExtras(page, style)}${notes}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
-    return { data: toTransferableText(html), warnings: [] };
+    return { data: toTransferableText(html), warnings };
 }
 
 // WeasyPrint draws no MathML, so the PDF draws its equations as the SVGs MathJax makes of the MathML the screen draws,

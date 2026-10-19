@@ -9,6 +9,7 @@ import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { openZip } from '../../lib/core/zip';
+import { MAX_BAND_BLOCKS } from '../../lib/document/doc';
 import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
@@ -1455,6 +1456,17 @@ describe('doc export — headers and footers', () => {
         const css = await exportStyle('html', bandedDoc(2, false));
         expect(css).not.toContain('running(');
         expect(css).not.toContain('@top-center');
+    });
+
+    // WeasyPrint lays a running element out on every page, so an unbounded header ran the PDF into its timeout.
+    test('a band past its caps exports its first blocks, with a warning', async () => {
+        const doc = seededDoc();
+        seedBand(doc, 'header', ...Array.from({ length: 4000 }, (_, index) => paragraph(`Head ${index}.`)));
+        const { data, warnings } = await renderEigendocExport(doc, 'pdf-html', 'Report.eigendoc', [], undefined);
+        const html = new TextDecoder().decode(data);
+        expect(html).toContain(`Head ${MAX_BAND_BLOCKS - 1}.`);
+        expect(html).not.toContain(`Head ${MAX_BAND_BLOCKS}.`);
+        expect(warnings).toEqual([{ code: 'band-blocks-cut', count: 4000 - MAX_BAND_BLOCKS }]);
     });
 
     test("the HTML download's header is page 1's when page 1 differs", async () => {

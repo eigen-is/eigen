@@ -145,7 +145,8 @@ export type CountedWarningCode =
     | 'section-pages-dropped'
     | 'even-bands-dropped'
     | 'band-images-unanchored'
-    | 'band-content-dropped';
+    | 'band-content-dropped'
+    | 'band-blocks-cut';
 
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }
