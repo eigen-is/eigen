@@ -18,6 +18,7 @@ import {
     flattenNestedFootnotes,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
+    mmToTwips,
     type NormalStyle,
     type PageSetup,
     pageTwips,
@@ -345,7 +346,7 @@ type Context = {
 };
 
 // The bands' distance from the page edge, inside a smaller margin.
-const BAND_DISTANCE = Math.round((BAND_DISTANCE_MM * 1440) / 25.4);
+const BAND_DISTANCE = Math.round(mmToTwips(BAND_DISTANCE_MM));
 
 function sectionXml({ width, height, margin, differentFirstPage }: PageSetup, references: string): string {
     const orient = width > height ? ' w:orient="landscape"' : '';

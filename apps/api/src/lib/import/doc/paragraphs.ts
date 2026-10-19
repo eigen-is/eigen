@@ -8,8 +8,11 @@ import {
     PROSE_TEXTBLOCKS,
     pagePx,
     pageTwips,
+    ptToMm,
     readNormalStyle,
     readPageSetup,
+    twipsToMm,
+    twipsToPt,
 } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { isAlternateContent, W_NS } from '../../core/ooxml';
@@ -130,8 +133,8 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
             font,
             size: bodySize / 2,
             lineSpacing: (line * fontLineHeight(font)) / fontLineHeight(DOCUMENT_FONT),
-            spaceBefore: (para.before ?? 0) / 20,
-            spaceAfter: (para.after ?? 0) / 20,
+            spaceBefore: twipsToPt(para.before ?? 0),
+            spaceAfter: twipsToPt(para.after ?? 0),
             color: body.color?.hex && markColor(body.color.hex),
         }),
         page,
@@ -147,7 +150,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
 }
 
 // Word draws a margin a section leaves out at 1 in; a size it leaves out is the default A4.
-const WORD_MARGIN_MM = 25.4;
+const WORD_MARGIN_MM = ptToMm(72);
 
 // Through the one reader of a stored page, so a file's page is clamped as a peer's is. w:orient is not read: Word draws
 // the page w by h whatever it says.
@@ -156,7 +159,7 @@ function sectionPage(sectPr: XmlElement | undefined): PageSetup {
     const margin = wChild(sectPr, 'pgMar');
     const mm = (element: XmlElement | undefined, local: string) => {
         const twips = twipsOf(w(element, local));
-        return twips === undefined ? undefined : (twips * 25.4) / 1440;
+        return twips === undefined ? undefined : twipsToMm(twips);
     };
     return readPageSetup({
         width: mm(size, 'w'),
@@ -433,8 +436,8 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // A cell's paragraphs take their spacing from the cell.
     const format = {
         lineSpacing,
-        spaceBefore: scope.tables > 0 || before === (base.before ?? 0) ? undefined : before / 20,
-        spaceAfter: scope.tables > 0 || after === (base.after ?? 0) ? undefined : after / 20,
+        spaceBefore: scope.tables > 0 || before === (base.before ?? 0) ? undefined : twipsToPt(before),
+        spaceAfter: scope.tables > 0 || after === (base.after ?? 0) ? undefined : twipsToPt(after),
     };
     // An item's indent holds its number or checkbox.
     const indent =

@@ -1,4 +1,11 @@
-import { BAND_ROOTS, type BandRoot, bandEdge, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_ROOTS,
+    type BandRoot,
+    bandEdge,
+    FIRST_PAGE_BAND,
+    mmToPt,
+    TWIPS_PER_POINT,
+} from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { alternativeFor, isOn, R_NS, W_NS } from '../../core/ooxml';
 import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../core/opc';
@@ -177,8 +184,8 @@ export const POINTS_PER_UNIT = new Map([
     ['pc', 12],
     ['pi', 12],
     ['in', 72],
-    ['cm', 72 / 2.54],
-    ['mm', 72 / 25.4],
+    ['cm', mmToPt(10)],
+    ['mm', mmToPt(1)],
 ]);
 
 // A length in twips or half-points: a bare number is in that unit, a universal measure is converted.
@@ -189,7 +196,7 @@ function measure(value: string | undefined, perPoint: number): number | undefine
 }
 
 export function twipsOf(value: string | undefined): number | undefined {
-    return measure(value, 20);
+    return measure(value, TWIPS_PER_POINT);
 }
 
 export function halfPointsOf(value: string | undefined): number | undefined {

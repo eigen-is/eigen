@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { pageTwips } from '@workspace/lib/docs/eigendoc';
+import { pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
     ASVG_NS,
@@ -16,7 +16,7 @@ import {
     WP_NS,
 } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
-import { EMU_PER_TWIP, FLOATING_WRAPS, TWIPS_PER_PX } from '../../document/wordml';
+import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../document/wordml';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
 import { descendants, int, POINTS_PER_UNIT } from './package';
@@ -254,10 +254,9 @@ function columnOffset(reader: Reader, relativeFrom: string | undefined, offset: 
 const AREA_AT_PAPER_EDGE = new Set(['page', 'leftMargin', 'insideMargin']);
 const AREA_AT_COLUMN_END = new Set(['rightMargin', 'outsideMargin']);
 
-// A point is 20 twips.
 const PX_PER_UNIT = new Map([
     ['px', 1],
-    ...[...POINTS_PER_UNIT].map(([unit, points]): [string, number] => [unit, (points * 20) / TWIPS_PER_PX]),
+    ...[...POINTS_PER_UNIT].map(([unit, points]): [string, number] => [unit, ptToPx(points)]),
 ]);
 
 const VML_WIDTH = new RegExp(`(?:^|;)\\s*width\\s*:\\s*([\\d.]+)(${[...PX_PER_UNIT.keys()].join('|')})?`, 'i');

@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { readParagraphFormat } from '@workspace/lib/docs/eigendoc';
+import { ptToTwips, readParagraphFormat, twipsToPt } from '@workspace/lib/docs/eigendoc';
 import { readStoredEquation } from '../../document/equation';
 import { BLOCK_MARGINS, CODE_BLOCK_LOOK, QUOTE_LOOK, TABLE_MARGIN, untypedListFormat } from '../../document/looks';
 import { LIST_FORMATS, LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
@@ -621,13 +621,15 @@ function formatOf(para: Para, edge: number | undefined, above?: number): Record<
         ...(edge === 0 &&
             para.quote === 0 && {
                 spaceBefore:
-                    above !== undefined && (format?.spaceBefore ?? 0) * 20 <= above ? undefined : format?.spaceBefore,
+                    above !== undefined && ptToTwips(format?.spaceBefore ?? 0) <= above
+                        ? undefined
+                        : format?.spaceBefore,
                 spaceAfter: format?.spaceAfter,
             }),
         ...(past !== undefined && {
-            indentLeft: past > INDENT_TOLERANCE ? past / 20 : undefined,
-            indentRight: indent && indent.right > 0 ? indent.right / 20 : undefined,
-            indentFirstLine: indent?.firstLine ? indent.firstLine / 20 : undefined,
+            indentLeft: past > INDENT_TOLERANCE ? twipsToPt(past) : undefined,
+            indentRight: indent && indent.right > 0 ? twipsToPt(indent.right) : undefined,
+            indentFirstLine: indent?.firstLine ? twipsToPt(indent.firstLine) : undefined,
         }),
     });
 }

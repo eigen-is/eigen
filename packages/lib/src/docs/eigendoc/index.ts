@@ -60,7 +60,9 @@ export {
     DEFAULT_PAGE_SETUP,
     MIN_TEXT_MM,
     matchPaperSize,
+    mmToPt,
     mmToPx,
+    mmToTwips,
     PAGE_ROOT,
     PAPER_SIZES,
     pageBoxStyle,
@@ -68,9 +70,15 @@ export {
     pageRecord,
     pageStylesheet,
     pageTwips,
+    ptToMm,
+    ptToPx,
+    ptToTwips,
     pxToMm,
     readCm,
     readPageSetup,
+    TWIPS_PER_POINT,
+    twipsToMm,
+    twipsToPt,
 } from './page';
 export { attributeSearchText } from './search-text';
 export { MIN_TABLE_COLUMN_PX } from './table';
