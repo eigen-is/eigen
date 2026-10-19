@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_LINE_RATIO } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_LINE_RATIO, EIGEN_FONT_NAMES, getFontName } from '@workspace/lib/constants/fonts';
 import {
     BAND_DISTANCE_MM,
     BAND_ROOTS,
@@ -103,10 +103,22 @@ export async function renderEigendocExport(
     const notesCss = notes.length > 0 ? (pageNotes ? PAGE_FOOTNOTES_CSS : FOOTNOTE_LIST_CSS) : '';
     const html = exportHtmlDocument({
         title,
+        fonts: usedFamilies(body, style),
         css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf && Object.keys(bands).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings };
+}
+
+// The bundled families a doc's export can draw in, as a face is up to 0.6 MB of base64 WeasyPrint reads per PDF: the
+// Normal's, in which eigen-prose.css draws the body and which names no other as its fallback, the monospace of code,
+// and each family a font mark's style or a chart's SVG names in the body. A body's text that names a family embeds it
+// for nothing, and misses none.
+function usedFamilies(body: string, style: NormalStyle): Set<string> {
+    const families = new Set([style.font]);
+    if (body.includes('<code')) families.add(getFontName(FONT_STACK_MONO));
+    for (const name of EIGEN_FONT_NAMES) if (body.includes(name)) families.add(name);
+    return families;
 }
 
 // WeasyPrint draws no MathML, so the PDF draws its equations as the SVGs MathJax makes of the MathML the screen draws,

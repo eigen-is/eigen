@@ -228,6 +228,82 @@ describe('doc export — the stylesheet', () => {
     });
 });
 
+// A face is up to 0.6 MB of base64, so a doc embeds only the families it can draw in; a missing one would print in
+// a system font.
+describe('doc export — fonts', () => {
+    const embedded = async (doc: Y.Doc, format: 'html' | 'pdf-html' = 'pdf-html') => [
+        ...new Set([...(await exportStyle(format, doc)).matchAll(/font-family: "([^"]+)";\s*src:/g)].map((m) => m[1])),
+    ];
+    const marked = (fontFamily: string) => ({
+        type: 'paragraph',
+        content: [{ type: 'text', text: 'Marked', marks: [{ type: 'textStyle', attrs: { fontFamily } }] }],
+    });
+
+    test.each(['html', 'pdf-html'] as const)('a plain doc in %s embeds its Normal font alone', async (format) => {
+        expect(await embedded(seededDoc(), format)).toEqual(['Inter']);
+        expect(await embedded(styledDoc(), format)).toEqual(['Source Serif 4']);
+    });
+
+    test("a font mark, a band's, code, a note's and a chart's font each embed their family", async () => {
+        expect(await embedded(seededDoc({ type: 'doc', content: [marked('Excalifont')] }))).toEqual([
+            'Inter',
+            'Excalifont',
+        ]);
+        expect(
+            await embedded(
+                seededDoc({ type: 'doc', content: [{ type: 'codeBlock', content: [{ type: 'text', text: 'x' }] }] }),
+            ),
+        ).toEqual(['Inter', 'JetBrains Mono']);
+        expect(
+            await embedded(
+                seededDoc({
+                    type: 'doc',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a', marks: [{ type: 'code' }] }] }],
+                }),
+            ),
+        ).toEqual(['Inter', 'JetBrains Mono']);
+        const banded = seededDoc();
+        seedBand(banded, 'header', marked('Source Serif 4'));
+        expect(await embedded(banded)).toEqual(['Inter', 'Source Serif 4']);
+        const noted = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Claim' },
+                        { type: 'footnote', content: [marked('Excalifont')] },
+                    ],
+                },
+            ],
+        });
+        expect(await embedded(noted)).toEqual(['Inter', 'Excalifont']);
+        const chart = (fontFamily: string) =>
+            seededDoc({
+                type: 'doc',
+                content: [
+                    {
+                        type: 'paragraph',
+                        content: [
+                            {
+                                type: 'chart',
+                                attrs: {
+                                    spec: JSON.stringify({ ...sampleChartSpec('column'), fontFamily }),
+                                    width: 400,
+                                    height: 240,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            });
+        expect(await embedded(chart('Source Serif 4'))).toEqual(['Inter', 'Source Serif 4']);
+        const serifChart = chart('Inter');
+        for (const [key, value] of Object.entries(WORD_NORMAL)) serifChart.getMap(STYLE_ROOT).set(key, value);
+        expect(await embedded(serifChart)).toEqual(['Inter', 'Source Serif 4']);
+    });
+});
+
 describe('doc export — tasks', () => {
     // A line-through reaches every descendant and none can undo it, so what each strike rule hits is what prints struck.
     test.each(['html', 'pdf-html'] as const)(

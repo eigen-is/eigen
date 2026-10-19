@@ -823,8 +823,8 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint: one hash, as the golden doc holds nothing that prints
 // otherwise on paper, no band, note, equation or small caps.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'd3081f222bb541c4f3b0cbc716a06b54806786244c8670fb4ba6560626ae5d02';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'd3081f222bb541c4f3b0cbc716a06b54806786244c8670fb4ba6560626ae5d02';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '9c7b694a73e76496796d3e99b2b7713feb681b528b4b6a6c3199a3d4c5a085fe';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '9c7b694a73e76496796d3e99b2b7713feb681b528b4b6a6c3199a3d4c5a085fe';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
