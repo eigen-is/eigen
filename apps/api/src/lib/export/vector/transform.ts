@@ -11,12 +11,12 @@ import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { spliceAfterSvgOpenTag, toDataUriMap } from '../../document/media';
 import {
-    type TransformMedia,
+    type ExportMediaLoader,
     type TransformWarning,
     toTransferableText,
     type VectorExportFormat,
 } from '../../document/transform/protocol';
-import { drawingPage } from '../canvas/render';
+import { drawingPage, sceneMediaNames } from '../canvas/render';
 import { canvasHtmlDocument } from '../canvas/transform';
 import { getFontFaceCSSForFamilies } from '../fonts';
 import { sanitizeExportHtml, sanitizeSceneHtml, toXmlDocument } from '../sanitize';
@@ -35,16 +35,16 @@ const PDF_PAPER = '#ffffff';
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
 // (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
 // This module must not reach the Mount or the preview cache — the Worker imports it.
-export function renderEigenvectorExport(
+export async function renderEigenvectorExport(
     doc: Y.Doc,
     format: VectorExportFormat,
     title: string,
-    media: TransformMedia[],
-): { data: ArrayBuffer; warnings: TransformWarning[] } {
+    loadMedia: ExportMediaLoader,
+): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     // Rich text is filtered per element here rather than in the assembled output, which carries the
     // generated @font-face rules and so cannot forbid the <style> element a text box must not hold.
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
-    const dataUriMap = toDataUriMap(media);
+    const dataUriMap = toDataUriMap(await loadMedia(sceneMediaNames(scene)));
 
     if (format === 'svg') {
         // A collaborator can put arbitrary strings in the schemaless scene, so the assembled SVG runs

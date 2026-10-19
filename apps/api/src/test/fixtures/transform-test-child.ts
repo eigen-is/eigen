@@ -7,6 +7,8 @@ import { readFileSync } from 'node:fs';
 import {
     type ChildRequestEnvelope,
     type ChildResponseEnvelope,
+    type ExportMedia,
+    type ParentMediaReply,
     toTransformError,
 } from '../../lib/document/transform/protocol';
 
@@ -40,6 +42,7 @@ type TestDirective = {
     signal?: NodeJS.Signals;
     heap?: 'objects' | 'strings' | 'buffers';
     bytes?: number;
+    mediaNames?: unknown[];
 };
 
 // The three shapes an allocation failure takes under the limit: JSC aborts on objects, segfaults on strings, and throws
@@ -57,7 +60,22 @@ function allocate(heap: TestDirective['heap']): never {
 
 const send = (message: unknown) => process.send?.(message);
 
-process.on('message', async ({ jobId, request }: ChildRequestEnvelope) => {
+let onMediaReply: ((media: ExportMedia[]) => void) | undefined;
+
+// Asks for media as an export's renderer does, and waits for the runner's reply.
+function askForMedia(jobId: number, mediaNames: unknown[]): Promise<ExportMedia[]> {
+    return new Promise((resolve) => {
+        onMediaReply = resolve;
+        send({ jobId, mediaNames });
+    });
+}
+
+process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) => {
+    if ('media' in message) {
+        onMediaReply?.(message.media);
+        return;
+    }
+    const { jobId, request } = message;
     const directive = (request as { test?: TestDirective }).test ?? {};
     if (directive.beforeAck && directive.behavior === 'signal') process.kill(process.pid, directive.signal);
     if (directive.beforeAck) process.exit(1);
@@ -138,9 +156,11 @@ process.on('message', async ({ jobId, request }: ChildRequestEnvelope) => {
             return;
         }
         case 'export-echo-media': {
-            // Doc/slides exports carry prepared media; echo the sizes that arrived.
-            const media = 'media' in request ? request.media : [];
-            const sizes = new TextEncoder().encode(JSON.stringify(media.map((item) => item.data.byteLength)));
+            // An export asks for the media it names; echo the names and sizes that arrived.
+            const media = await askForMedia(jobId, directive.mediaNames ?? []);
+            const sizes = new TextEncoder().encode(
+                JSON.stringify(media.map((item) => [item.name, item.data.byteLength])),
+            );
             const data = sizes.buffer as ArrayBuffer;
             const response: ChildResponseEnvelope = { jobId, response: { ok: true, result: { data }, warnings: [] } };
             send(response);

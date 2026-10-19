@@ -905,7 +905,7 @@ suite('PDF export SSRF (the data-only fetcher, sanitizer bypassed)', () => {
                     content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x', marks: [link] }] }],
                 });
                 const html = Buffer.from(
-                    (await renderEigendocExport(doc, 'pdf-html', 'Doc', [], undefined)).data,
+                    (await renderEigendocExport(doc, 'pdf-html', 'Doc', async () => [], undefined)).data,
                 ).toString();
                 expect(html).toContain(`rel="attachment" href="${href}"`);
                 return html;
@@ -916,12 +916,14 @@ suite('PDF export SSRF (the data-only fetcher, sanitizer bypassed)', () => {
 
     // A text box keeps only an http(s) or mailto: href (LIGHT_EDITOR_HREF), so no plain path reaches a deck.
     test('a deck link with rel=attachment to an http target fetches nothing', async () => {
-        const result = await renderAgainstListener((u) => {
+        const result = await renderAgainstListener(async (u) => {
             const scene = buildGoldenDeckScene();
             const html = `<p><a href="${u('attach')}" rel="attachment">x</a></p>`;
             const doc = new Y.Doc();
             seedDeckDoc(doc, { ...scene, elements: scene.elements.map((el) => ('html' in el ? { ...el, html } : el)) });
-            const out = Buffer.from(renderEigenslidesHtml(doc, 'pdf-html', 'Deck', []).data).toString();
+            const out = Buffer.from(
+                (await renderEigenslidesHtml(doc, 'pdf-html', 'Deck', async () => [])).data,
+            ).toString();
             expect(out).toContain(`<a href="${u('attach')}" rel="attachment"`);
             return out;
         });

@@ -74,8 +74,8 @@ describe('a chart in the canvas exports', () => {
     const chart = chartElement(VECTOR_STYLE_DEFAULTS);
     const scene: VectorScene = { elements: [chart], frames: [], meta: DEFAULT_SCENE_META };
 
-    test('the SVG download keeps the chart as drawn: shapes and text, no foreignObject', () => {
-        const svg = decode(renderEigenvectorExport(docOf(scene), 'svg', 'Drawing', []).data);
+    test('the SVG download keeps the chart as drawn: shapes and text, no foreignObject', async () => {
+        const svg = decode((await renderEigenvectorExport(docOf(scene), 'svg', 'Drawing', async () => [])).data);
         // The same XML serialization of the unsanitized drawing: the sanitizer dropped nothing.
         const drawn = toXmlDocument(sceneToSvg(scene));
         const body = drawn.slice(drawn.indexOf('>') + 1, drawn.lastIndexOf('</svg>'));
@@ -91,8 +91,8 @@ describe('a chart in the canvas exports', () => {
         expect(svg).toContain('font-family: "Excalifont"');
     });
 
-    test('the PDF page holds the chart layer the live canvas mounts', () => {
-        const html = decode(renderEigenvectorExport(docOf(scene), 'pdf-html', 'Drawing', []).data);
+    test('the PDF page holds the chart layer the live canvas mounts', async () => {
+        const html = decode((await renderEigenvectorExport(docOf(scene), 'pdf-html', 'Drawing', async () => [])).data);
         const layer = elementLayer(chart);
         if (!layer) throw new Error('a chart always draws');
         const bodies = layerBodies(html, '.canvas-page > div');
@@ -102,14 +102,14 @@ describe('a chart in the canvas exports', () => {
         expect(bodies[0]).not.toContain('foreignObject');
     });
 
-    test('a deck prints its chart the same way', () => {
+    test('a deck prints its chart the same way', async () => {
         const slide = chartElement(SLIDES_STYLE_DEFAULTS, { frameId: 'frame-1' });
         const deck: VectorScene = {
             elements: [slide],
             frames: [{ id: 'frame-1', index: 'a0', name: '', background: '', ...SLIDE_SIZES['16:9'] }],
             meta: DEFAULT_SCENE_META,
         };
-        const html = decode(renderEigenslidesHtml(docOf(deck), 'html', 'Deck', []).data);
+        const html = decode((await renderEigenslidesHtml(docOf(deck), 'html', 'Deck', async () => [])).data);
         const layer = elementLayer(slide);
         if (!layer) throw new Error('a chart always draws');
         expect(layerBodies(html, '.canvas-page > div > div')).toEqual([asParsed(layerInnerHtml(layer.content))]);

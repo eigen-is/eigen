@@ -5,6 +5,7 @@ import { ApiError } from '../../lib/core/errors';
 import {
     type DocumentTransformRequest,
     type DocumentTransformResponse,
+    type ExportMedia,
     toTransferableBuffer,
 } from '../../lib/document/transform/protocol';
 import { DocumentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
@@ -21,6 +22,7 @@ type TestDirective = {
     beforeAck?: boolean;
     signal?: NodeJS.Signals;
     heap?: 'objects' | 'strings' | 'buffers';
+    mediaNames?: unknown[];
 };
 
 // The scriptable child reads its script off `test`, the one field a production request
@@ -44,24 +46,14 @@ function makeExportRequest(directive: TestDirective = {}): TestRequest {
         documentType: 'eigensheets',
         format: 'html',
         title: 'runner-test',
-        media: [],
         source: { snapshot: null, updates: [] },
         test: directive,
     };
 }
 
-// Doc/slides exports carry prepared media buffers beside the document.
-function makeMediaExportRequest(directive: TestDirective, media: ArrayBuffer[]): TestRequest {
-    return {
-        kind: 'export',
-        documentType: 'eigendoc',
-        format: 'html',
-        title: 'runner-test',
-        media: media.map((data, i) => ({ name: `media-${i}.png`, contentType: 'image/png', data })),
-        publicOrigin: undefined,
-        source: { snapshot: null, updates: [] },
-        test: directive,
-    };
+// The media a test's prepareMedia hands back, one PNG per buffer.
+function pngMedia(buffers: ArrayBuffer[]): ExportMedia[] {
+    return buffers.map((data, i) => ({ name: `media-${i}.png`, contentType: 'image/png', data }));
 }
 
 function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = new ArrayBuffer(0)): TestRequest {
@@ -275,14 +267,16 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    // The media prep spends from the deadline (run-transform.ts), and a spent one leaves no time for a child.
+    // A caller's prep spends from the deadline (run-transform.ts), and a spent one leaves no time for a child.
     test.each([0, -50])('a deadline of %d ms times out without spawning a child', async (deadlineMs) => {
         const runner = makeRunner();
-        const media = [new Uint8Array([1, 2, 3]).buffer];
-        const response = await runner.run(makeMediaExportRequest({ behavior: 'export-echo-media' }, media), {
+        const spawn = spyOn(Bun, 'spawn');
+        const response = await runner.run(makeExportRequest({ behavior: 'export-ok' }), {
             ...EXPORT_OPTIONS,
             deadlineMs,
         });
+        expect(spawn).not.toHaveBeenCalled();
+        spawn.mockRestore();
         expect(response).toEqual({ ok: false, error: { code: 'timeout', message: 'Document transform timed out' } });
 
         const next = await runner.run(makeRequest(), PREVIEW_OPTIONS);
@@ -309,7 +303,7 @@ describe('DocumentTransformRunner', () => {
         structuredClone(detached, { transfer: [detached] });
 
         const start = Date.now();
-        const failed = await runner.run(makeMediaExportRequest({ behavior: 'export-ok' }, [detached]), EXPORT_OPTIONS);
+        const failed = await runner.run(makeRequest({}, [detached]), PREVIEW_OPTIONS);
         expect(Date.now() - start).toBeLessThan(1000); // not held until the kill deadline
         expect(failed.ok).toBe(false);
         if (!failed.ok) expect(failed.error.code).toBe('crashed');
@@ -467,17 +461,85 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    test('export media buffers are copied to the child and arrive intact', async () => {
+    test('the media an export child names are prepared and copied to it, and arrive intact', async () => {
         const runner = makeRunner();
-        const media = [new Uint8Array([1, 2, 3]).buffer, new Uint8Array([4, 5, 6, 7]).buffer];
+        const buffers = [new Uint8Array([1, 2, 3]).buffer, new Uint8Array([4, 5, 6, 7]).buffer];
+        const asked: string[][] = [];
         const response = await runner.run(
-            makeMediaExportRequest({ behavior: 'export-echo-media' }, media),
-            EXPORT_OPTIONS,
+            makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['media-0.png', 'media-1.png'] }),
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: async (names) => {
+                    asked.push(names);
+                    return pngMedia(buffers);
+                },
+            },
         );
-        expect(media.map((buffer) => buffer.byteLength)).toEqual([3, 4]); // the sender keeps its own
-        expect(JSON.parse(Buffer.from(exportBytes(response)).toString('utf-8'))).toEqual([3, 4]);
+        expect(asked).toEqual([['media-0.png', 'media-1.png']]);
+        expect(buffers.map((buffer) => buffer.byteLength)).toEqual([3, 4]); // the sender keeps its own
+        expect(JSON.parse(Buffer.from(exportBytes(response)).toString('utf-8'))).toEqual([
+            ['media-0.png', 3],
+            ['media-1.png', 4],
+        ]);
         await runner.close();
     });
+
+    // A 413 past the media cap keeps its status, as a document error does.
+    test("a media prep that refuses fails the job with the prep's status and releases the slot", async () => {
+        const runner = makeRunner();
+        const response = await runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['a'] }), {
+            ...EXPORT_OPTIONS,
+            prepareMedia: async () => {
+                throw new ApiError(413, 'too large');
+            },
+        });
+        expect(response).toEqual({
+            ok: false,
+            error: { code: 'transform-failed', status: 413, message: 'too large' },
+        });
+        expect((await runner.run(makeRequest(), PREVIEW_OPTIONS)).ok).toBe(true);
+        await runner.close();
+    });
+
+    test.each([
+        ['a job that offers none', undefined, ['a']],
+        ['names that are not strings', async () => [], [1]],
+    ])('a child that asks for media on %s is an invalid response', async (_, prepareMedia, mediaNames) => {
+        const runner = makeRunner();
+        const response = await runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames }), {
+            ...EXPORT_OPTIONS,
+            prepareMedia,
+        });
+        expect(errorCode(response)).toBe('invalid-response');
+        await runner.close();
+    });
+
+    // The prep runs inside the job, so the request's abort and the deadline both end it.
+    test.each(['canceled', 'timeout'] as const)(
+        'a job %s during its media prep kills the child and aborts the prep',
+        async (outcome) => {
+            const runner = makeRunner();
+            const controller = new AbortController();
+            let prepSignal: AbortSignal | undefined;
+            const start = Date.now();
+            const pending = runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['a'] }), {
+                ...EXPORT_OPTIONS,
+                ...(outcome === 'timeout' && { deadlineMs: 1_000 }),
+                signal: controller.signal,
+                prepareMedia: (_, signal) => {
+                    prepSignal = signal;
+                    if (outcome === 'canceled') controller.abort();
+                    return new Promise(() => {});
+                },
+            });
+            const response = await pending;
+            expect(Date.now() - start).toBeLessThan(5_000);
+            expect(errorCode(response)).toBe(outcome);
+            expect(prepSignal?.aborted).toBe(true);
+            expect((await runner.run(makeRequest(), PREVIEW_OPTIONS)).ok).toBe(true);
+            await runner.close();
+        },
+    );
 
     test('an export response without export bytes resolves as invalid-response', async () => {
         const runner = makeRunner();

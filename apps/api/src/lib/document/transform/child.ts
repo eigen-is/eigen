@@ -4,6 +4,7 @@ import {
     type BytesPreviewJob,
     type BytesTransformJob,
     type ChildAck,
+    type ChildMediaRequest,
     type ChildRequestEnvelope,
     type ChildResponseEnvelope,
     type CollabPreviewJob,
@@ -11,16 +12,18 @@ import {
     type DocumentTransformRequest,
     type DocumentTransformResponse,
     type ExportMedia,
+    type ExportMediaLoader,
     type ExportTransformJob,
     type ImportTransformJob,
+    type ParentMediaReply,
     type PreviewResult,
     type TransformResult,
     type TransformWarning,
     toTransformError,
 } from './protocol';
 
-// One-shot document-transform process: acknowledges one request, sends one response,
-// and is killed by the runner. Operation dispatch stays a closed switch over the
+// One-shot document-transform process: acknowledges one request, asks for the media an
+// export's document names, sends one response, and is killed by the runner. Operation dispatch stays a closed switch over the
 // request union — nothing from the message can select a module or path.
 // Format-specific modules load via dynamic import so a doc preview never evaluates
 // the sheet engine, and a deck export never loads lowlight.
@@ -52,26 +55,42 @@ async function renderPreview(
 async function renderExport(
     request: ExportTransformJob,
     doc: Y.Doc,
+    loadMedia: ExportMediaLoader,
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
-    const media = await sanitizeMedia(request.media);
     switch (request.documentType) {
         case 'eigensheets': {
             const { renderEigensheetsExport } = await import('../../export/sheets/transform');
-            return renderEigensheetsExport(doc, request.format, request.title, media);
+            return renderEigensheetsExport(doc, request.format, request.title, loadMedia);
         }
         case 'eigendoc': {
             const { renderEigendocExport } = await import('../../export/doc/transform');
-            return renderEigendocExport(doc, request.format, request.title, media, request.publicOrigin);
+            return renderEigendocExport(doc, request.format, request.title, loadMedia, request.publicOrigin);
         }
         case 'eigenslides': {
             const { renderEigenslidesExport } = await import('../../export/slides/transform');
-            return renderEigenslidesExport(doc, request.format, request.title, media);
+            return renderEigenslidesExport(doc, request.format, request.title, loadMedia);
         }
         case 'eigenvector': {
             const { renderEigenvectorExport } = await import('../../export/vector/transform');
-            return renderEigenvectorExport(doc, request.format, request.title, media);
+            return renderEigenvectorExport(doc, request.format, request.title, loadMedia);
         }
     }
+}
+
+// The media reply the runner sends once the main thread has prepared what the renderer named.
+let onMediaReply: ((media: ExportMedia[]) => void) | undefined;
+
+// A document that names no media asks for none, so its export costs no round trip.
+function mediaLoader(jobId: number): ExportMediaLoader {
+    return async (names) => {
+        if (names.size === 0) return [];
+        const media = await new Promise<ExportMedia[]>((resolve) => {
+            onMediaReply = resolve;
+            const ask: ChildMediaRequest = { jobId, mediaNames: [...names] };
+            process.send?.(ask);
+        });
+        return sanitizeMedia(media);
+    };
 }
 
 // SVG media arrives as the file's own bytes. The sanitizer loads only for one, so an xlsx export never evaluates jsdom.
@@ -135,6 +154,7 @@ async function buildBytesPreviewJson(request: BytesPreviewJob & { data: ArrayBuf
 async function renderCollabRequest(
     request: CollabTransformJob,
     doc: Y.Doc,
+    loadMedia: ExportMediaLoader,
 ): Promise<{ result: TransformResult; warnings: TransformWarning[] }> {
     switch (request.kind) {
         case 'preview': {
@@ -142,7 +162,7 @@ async function renderCollabRequest(
             return { result, warnings };
         }
         case 'export': {
-            const { data, warnings } = await renderExport(request, doc);
+            const { data, warnings } = await renderExport(request, doc, loadMedia);
             return { result: { data }, warnings };
         }
         case 'extract-text': {
@@ -153,7 +173,7 @@ async function renderCollabRequest(
     }
 }
 
-async function handleRequest(request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
+async function handleRequest(jobId: number, request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
     // Bytes-sourced jobs carry their own input — no document to materialize.
     if ('data' in request) return runBytesRequest(request);
 
@@ -161,12 +181,17 @@ async function handleRequest(request: DocumentTransformRequest): Promise<Documen
     const { materializeYjsState } = await import('../../collab/yjs-loader');
     const { doc, blobsSkipped } = materializeYjsState(request.source, undefined, 'transform-process');
 
-    const { result, warnings } = await renderCollabRequest(request, doc);
+    const { result, warnings } = await renderCollabRequest(request, doc, mediaLoader(jobId));
     if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
     return { ok: true, result, warnings };
 }
 
-process.on('message', async ({ jobId, request }: ChildRequestEnvelope) => {
+process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) => {
+    if ('media' in message) {
+        onMediaReply?.(message.media);
+        return;
+    }
+    const { jobId, request } = message;
     const ack: ChildAck = { jobId, ack: true };
     process.send?.(ack);
     const startedAt = performance.now();
@@ -182,7 +207,7 @@ process.on('message', async ({ jobId, request }: ChildRequestEnvelope) => {
     };
     // The send serializes the result, which can fail too, out of memory included: it is answered like any throw.
     try {
-        reply(await handleRequest(request));
+        reply(await handleRequest(jobId, request));
     } catch (err) {
         reply({ ok: false, error: toTransformError(err) });
     }

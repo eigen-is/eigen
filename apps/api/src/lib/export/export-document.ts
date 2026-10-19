@@ -11,7 +11,6 @@ import type {
     VectorExportFormat,
 } from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
-import { documentTransformRunner, TRANSFORM_LIMITS } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { DECK_SCALE } from './canvas/render';
 import { collectExportMedia } from './media';
@@ -119,39 +118,25 @@ async function serveExport(
     };
 }
 
-// The one main-thread entry every export takes: prepare what the Worker cannot fetch,
-// then run the shared transform seam. The Worker returns the finished bytes — the UTF-8
-// document for html and pdf-html, the zip for xlsx, docx and pptx.
+// The one main-thread entry every export takes: run the shared transform seam, and prepare
+// the media the child names once it has read the document (an xlsx names none). The Worker
+// returns the finished bytes — the UTF-8 document for html and pdf-html, the zip for xlsx,
+// docx and pptx.
 export async function runDocumentExport(
     job: ExportJob,
     mount: Mount,
     path: DrivePath,
     signal?: AbortSignal,
 ): Promise<Buffer> {
-    // Refuse before the prep: media collection is Mount I/O plus a screen preview per
-    // image, and a job the runner will not admit must not pay for it. run() rechecks
-    // authoritatively — this is only the early exit.
-    documentTransformRunner.assertAdmissible('foreground');
-
-    // The prep is skipped for the one format that inlines nothing: the xlsx writer carries
-    // cells alone. It spends from the job's deadline (run-transform.ts), and stops once that is spent.
-    const prepStart = performance.now();
-    const deadline = AbortSignal.timeout(TRANSFORM_LIMITS.export.deadlineMs);
-    const prepSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
-    const media = job.format === 'xlsx' ? [] : await collectExportMedia(mount, path, job.format, prepSignal);
-    const prepMs = performance.now() - prepStart;
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
     // docx document property carries the stripped one, applied in the Worker. Root-relative
     // links take the public origin in every format, none on a checkout's dev server.
     const request: ExportTransformJob =
         job.documentType === 'eigendoc'
-            ? {
-                  kind: 'export',
-                  ...job,
-                  title: path.name,
-                  media,
-                  publicOrigin: getPublicOrigin(),
-              }
-            : { kind: 'export', ...job, title: stripEigenExtension(path.name), media };
-    return runTransformToBytes(mount, path, request, { prepMs, signal });
+            ? { kind: 'export', ...job, title: path.name, publicOrigin: getPublicOrigin() }
+            : { kind: 'export', ...job, title: stripEigenExtension(path.name) };
+    return runTransformToBytes(mount, path, request, {
+        signal,
+        prepareMedia: (names, prepSignal) => collectExportMedia(mount, path, job.format, names, prepSignal),
+    });
 }

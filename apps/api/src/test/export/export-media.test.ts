@@ -151,13 +151,14 @@ describe('collectExportMedia', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
+    // Every file, as a document naming them all asks for.
     async function collect(
         format: 'docx' | 'pptx' | 'html' | 'pdf-html',
-        signal?: AbortSignal,
+        signal = new AbortController().signal,
     ): Promise<ExportMedia[]> {
         const container = await mount.getPath(containerId);
         if (!container) throw new Error('no container');
-        return collectExportMedia(mount, container, format, signal);
+        return collectExportMedia(mount, container, format, [...sources.keys()], signal);
     }
 
     // A docx re-encodes every image from its source on the thumbnail semaphore every upload and preview shares.
@@ -181,7 +182,7 @@ describe('collectExportMedia', () => {
         expect(peak).toBe(1);
     }, 60_000);
 
-    test('a docx queues no more media once its export aborts', async () => {
+    test('a docx queues no more media once its job ends', async () => {
         const controller = new AbortController();
         const spy = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
             controller.abort();
