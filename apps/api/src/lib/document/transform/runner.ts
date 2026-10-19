@@ -408,6 +408,7 @@ export class DocumentTransformRunner {
         // Asked once, after the child read its document: the media prep's bytes are held only while the job holds the
         // slot, and its failure (a 413 past the cap) is the job's.
         const provideMedia = async (names: unknown[]) => {
+            if (!this.active.has(job.id)) return;
             if (mediaAsked || !job.prepareMedia || !names.every((name) => typeof name === 'string')) {
                 settle(errorResponse('invalid-response', 'The transform asked for media it was not given'));
                 return;

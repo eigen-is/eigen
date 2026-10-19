@@ -31,6 +31,7 @@ type TestDirective = {
         | 'export-ok'
         | 'export-bytes'
         | 'export-echo-media'
+        | 'export-ask-twice'
         | 'export-warn'
         | 'export-malformed'
         | 'import-ok'
@@ -155,6 +156,11 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             send(response);
             return;
         }
+        case 'export-ask-twice':
+            // A child that asks once more after its media arrived, as a compromised parser could.
+            await askForMedia(jobId, directive.mediaNames ?? []);
+            send({ jobId, mediaNames: directive.mediaNames ?? [] });
+            return;
         case 'export-echo-media': {
             // An export asks for the media it names; echo the names and sizes that arrived.
             const media = await askForMedia(jobId, directive.mediaNames ?? []);

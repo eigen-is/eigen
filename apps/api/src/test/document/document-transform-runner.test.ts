@@ -514,6 +514,22 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
+    // The media is the document's, asked for once: a second ask is a child that is not following the protocol.
+    test('a child that asks for media a second time is an invalid response, and the prep ran once', async () => {
+        const runner = makeRunner();
+        let preps = 0;
+        const response = await runner.run(makeExportRequest({ behavior: 'export-ask-twice', mediaNames: ['a'] }), {
+            ...EXPORT_OPTIONS,
+            prepareMedia: async () => {
+                preps++;
+                return [];
+            },
+        });
+        expect(errorCode(response)).toBe('invalid-response');
+        expect(preps).toBe(1);
+        await runner.close();
+    });
+
     // The prep runs inside the job, so the request's abort and the deadline both end it.
     test.each(['canceled', 'timeout'] as const)(
         'a job %s during its media prep kills the child and aborts the prep',
