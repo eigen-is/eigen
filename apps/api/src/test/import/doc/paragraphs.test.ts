@@ -349,6 +349,35 @@ describe('notes', () => {
         expect(notesOf(json)).toEqual([['One Two'], ['Two Three']]);
     });
 
+    // A note read inside another holds its text alone, whichever reference reads it first, and a cycle puts no note's
+    // own text inside it.
+    test("a note's text is the same in either order, and a cycle holds each note's text once", async () => {
+        const chain = `${note(1, `${run(' One')}${reference(2)}`)}${note(2, `${run(' Two')}${reference(3)}`)}${note(3, run(' Three'))}`;
+        const cycle = `${note(1, `${run(' One')}${reference(2)}`)}${note(2, `${run(' Two')}${reference(1)}`)}`;
+        const notesFor = async (order: number[], footnotes: string) =>
+            notesOf(
+                (
+                    await importDocxBody(paragraph(`${run('Body')}${order.map((id) => reference(id)).join('')}`), {
+                        footnotes,
+                    })
+                ).json,
+            );
+        expect(await notesFor([3, 2, 1], chain)).toEqual([['Three'], ['Two Three'], ['One Two']]);
+        expect(await notesFor([1, 2], cycle)).toEqual([['One Two'], ['Two One']]);
+        expect(await notesFor([2, 1], cycle)).toEqual([['Two One'], ['One Two']]);
+    });
+
+    // A note holds paragraphs only, so a list in it is its paragraphs; its count is its own, not the body's.
+    test("a note's numbered list starts its own count", async () => {
+        const numbered = '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr>';
+        const { json } = await importDocxBody(
+            `${paragraph(run('One'), numbered)}${paragraph(`${run('Two')}${reference(1)}`, numbered)}${paragraph(run('Three'), numbered)}`,
+            { footnotes: `<w:footnote w:id="1">${paragraph(run('Item'), numbered)}</w:footnote>` },
+        );
+        expect(nodesOfType(json, 'listItem')).toHaveLength(3);
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1]);
+    });
+
     test('a separator, a missing note and a note with no reference are no notes', async () => {
         const { json } = await importDocxBody(
             paragraph(`${run('Body')}${reference(-1)}${reference(0)}${reference(7)}`),

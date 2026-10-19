@@ -183,6 +183,17 @@ describe('docx import — headers and footers', () => {
         expect(warnings).toContainEqual({ code: 'band-content-dropped', count: 1 });
     });
 
+    // In Eigen a band's lists count on their own, so a band's item doesn't continue the body's count.
+    test("a band's numbered list starts its own count", async () => {
+        const item = (text: string) =>
+            paragraph(run(text), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr>');
+        const { json, bands } = await docxWith([{ id: 'h1', kind: 'header', xml: item('Head') }], {
+            body: `${item('One')}${item('Two')}`,
+        });
+        expect(nodesOfType(json, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1]);
+        expect(nodesOfType(bands.header ?? {}, 'orderedList').map((list) => list.attrs?.['start'])).toEqual([1]);
+    });
+
     test("a reference whose relationship isn't a header's or a footer's is no band", async () => {
         const docx = await buildDocxWithBody(
             `${paragraph(run('Body'))}<w:sectPr><w:headerReference w:type="default" r:id="h1"/></w:sectPr>`,

@@ -818,6 +818,17 @@ describe('structure', () => {
         expect(error.status).toBe(413);
     }, 20_000);
 
+    // Read inside a note too, a note is read once and each copy charged: 1,000 references to a 1,000-paragraph note in
+    // a note took 5 s and 1.2 GB.
+    test('a note referenced 1,000 times in a note is read once there, and its copies are charged', async () => {
+        const footnotes =
+            footnote(1, paragraph(run('x')).repeat(1000)) + footnote(2, paragraph(noteRef(1).repeat(1000)));
+        const started = performance.now();
+        const error = await rejection(() => imported(paragraph(`${run('Body')}${noteRef(2)}`), { footnotes }));
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(error.status).toBe(413);
+    }, 20_000);
+
     test('a SmartArt that 1,000 graphics name is read once', async () => {
         const points = Array.from(
             { length: 1000 },

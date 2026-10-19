@@ -21,7 +21,7 @@ import { IMPORT_MESSAGES } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, fontMark, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
 import type { MediaPart } from './drawings';
-import { Numbering } from './numbering';
+import { type Numbering, readNumbering } from './numbering';
 import { alternative, type DocxPackage, descendants, type Part, twipsOf, w, wChild } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
 import {
@@ -50,8 +50,8 @@ export type Reader = {
     numbering: Numbering;
     images: MediaPart[];
     imageNames: Map<string, string>;
-    // Each note by type and id, its part beside it, and each as read: a note is read once however often it is
-    // referenced. The notes being read, outermost first.
+    // Each note by type and id, its part beside it, and each as read at its depth: a note is read once per depth
+    // however often it is referenced. The notes being read, outermost first.
     noteElements: Map<string, { part: Part; note: XmlElement }>;
     notes: Map<string, { content: JSONContent[]; weight: number }>;
     openNotes: string[];
@@ -114,7 +114,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         theme,
         fontTable,
         styles,
-        numbering: new Numbering(pkg.numbering, styles),
+        numbering: readNumbering(pkg.numbering, styles),
         images: [],
         imageNames: new Map(),
         noteElements: noteElements(pkg),
@@ -174,11 +174,15 @@ export function readDocument(reader: Reader): JSONContent[] {
     return build(readBlocks(reader, xmlElements(body), { part: reader.pkg.document, story: 'body', tables: 0 }));
 }
 
-// A header or footer part's blocks, read as the body's are, through the part's own relationships.
-// A band's last block draws no space after (PAGE_BAND_CLASS), so one the docx sets there isn't kept.
+// A header or footer part's blocks, read as the body's are, through the part's own relationships, its lists counting
+// on their own as a band's do in Eigen. A band's last block draws no space after (PAGE_BAND_CLASS), so one the docx sets
+// there isn't kept.
 export function readBand(reader: Reader, part: Part): JSONContent[] {
     reader.fields.length = 0;
+    const { numbering } = reader;
+    reader.numbering = numbering.restarted();
     const blocks = build(readBlocks(reader, xmlElements(part.root), { part, story: 'band', tables: 0 }));
+    reader.numbering = numbering;
     const last = blocks.at(-1);
     if (last?.attrs?.['spaceAfter'] == null) return blocks;
     return [...blocks.slice(0, -1), { ...last, attrs: { ...last.attrs, spaceAfter: null } }];
@@ -204,36 +208,38 @@ function noteElements(pkg: DocxPackage): Map<string, { part: Part; note: XmlElem
     return notes;
 }
 
-// A note's paragraphs, read through its part's own relationships, once however often it is referenced from the body:
-// each copy past the first is charged as the pieces no tag counts are. A note referenced in a note is its text there;
-// one referenced deeper, or from inside itself, is dropped, so the walk nests at most twice. Undefined for a note the
+// A note's paragraphs, read through its part's own relationships, once per depth however often it is referenced: each
+// copy past the first is charged as the pieces no tag counts are. A note referenced in a note is its text there; one
+// referenced deeper, or from inside itself, is dropped, so the walk nests at most twice and a note's text is the same
+// whichever reference reads it first. Its lists count on their own, as a note's do in Eigen. Undefined for a note the
 // file lacks.
 export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: string): JSONContent[] | undefined {
-    const key = `${type}-${id}`;
+    const note = `${type}-${id}`;
+    const key = `${note}@${reader.openNotes.length}`;
     const read = reader.notes.get(key);
     if (read) {
         reader.pkg.chargePiece(read.weight);
         return read.content;
     }
-    const found = reader.noteElements.get(key);
-    if (!found || reader.openNotes.length > 1 || reader.openNotes.includes(key)) return undefined;
-    // Read inside another note, its own notes nest too deep and drop, so only a read at the body's depth is kept.
-    const whole = reader.openNotes.length === 0;
-    // A field open in the body around the reference stays open there.
-    const fields = reader.fields;
+    const found = reader.noteElements.get(note);
+    if (!found || reader.openNotes.length > 1 || reader.openNotes.includes(note)) return undefined;
+    // A field open in the body around the reference stays open there, and so do the body's list counters.
+    const { fields, numbering } = reader;
     reader.fields = [];
-    reader.openNotes.push(key);
+    reader.numbering = numbering.restarted();
+    reader.openNotes.push(note);
     const blocks = build(readBlocks(reader, xmlElements(found.note), { part: found.part, story: 'note', tables: 0 }));
     reader.openNotes.pop();
     reader.fields = fields;
+    reader.numbering = numbering;
     const paragraphs = blocks.flatMap(noteParagraphs);
     trimStart(paragraphs[0]?.content ?? []);
-    const note = flattenNestedFootnotes({
-        type: 'footnote',
-        content: paragraphs.length > 0 ? paragraphs : [{ type: 'paragraph' }],
-    });
-    const content = note.content ?? [];
-    if (whole) reader.notes.set(key, { content, weight: weightOf(content) });
+    const content =
+        flattenNestedFootnotes({
+            type: 'footnote',
+            content: paragraphs.length > 0 ? paragraphs : [{ type: 'paragraph' }],
+        }).content ?? [];
+    reader.notes.set(key, { content, weight: weightOf(content) });
     return content;
 }
 
