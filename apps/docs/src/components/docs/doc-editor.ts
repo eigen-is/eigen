@@ -197,7 +197,7 @@ export function useDocMedia(path: DrivePath) {
     };
 }
 
-export type DocMedia = ReturnType<typeof useDocMedia>;
+type DocMedia = ReturnType<typeof useDocMedia>;
 
 // A note holds paragraphs, so a pasted heading, list or table lands as paragraphs.
 const NoteDocument = Node.create({ name: 'doc', topNode: true, content: 'paragraph+' });

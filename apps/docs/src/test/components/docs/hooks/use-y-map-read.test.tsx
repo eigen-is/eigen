@@ -1,4 +1,4 @@
-// The editor's page is the doc's page map as any peer leaves it.
+// The editor's page and Normal are the doc's root maps as any peer leaves them, read through their readers.
 import { afterEach, expect, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -8,8 +8,8 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const Y = await import('yjs');
-const { DEFAULT_PAGE_SETUP, PAGE_ROOT, pageRecord } = await import('@workspace/lib/docs/eigendoc');
-const { usePageSetup } = await import('../../../../components/docs/hooks/use-page-setup');
+const { DEFAULT_PAGE_SETUP, PAGE_ROOT, pageRecord, readPageSetup } = await import('@workspace/lib/docs/eigendoc');
+const { useYMapRead } = await import('../../../../components/docs/hooks/use-y-map-read');
 
 const LETTER_LANDSCAPE: PageSetup = {
     width: 279.4,
@@ -23,7 +23,7 @@ afterEach(() => unmount());
 
 let seen: PageSetup[] = [];
 function Probe({ doc, onRender }: { doc: InstanceType<typeof Y.Doc>; onRender?: () => void }) {
-    seen.push(usePageSetup(doc));
+    seen.push(useYMapRead(doc.getMap(PAGE_ROOT), readPageSetup));
     onRender?.();
     return null;
 }

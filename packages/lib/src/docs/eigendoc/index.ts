@@ -13,11 +13,11 @@ export { getDocExtensions } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';
 export type { Caps } from './nodes/caps';
 export type { ChartAttrs } from './nodes/chart';
-export { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, ChartNode, chartSvg, readChartAttrs } from './nodes/chart';
+export { CHART_DEFAULT_SIZE, ChartNode, chartSvg, readChartAttrs } from './nodes/chart';
 export { CommentMarkSchema } from './nodes/comment-mark';
 export { EquationNode, equationMath, parseMathml, readEquation } from './nodes/equation';
 export type { Equation } from './nodes/equation-paste';
-export { mathAsText, unwrapRenderedMath } from './nodes/equation-paste';
+export { mathAsText, unlessRefused, unwrapRenderedMath } from './nodes/equation-paste';
 export type { FigureAttrs } from './nodes/figure';
 export { FigureNode, readFigureAttrs } from './nodes/figure';
 export type { FigureAlignment, FigureFrameAttrs, FigureFrameNode, FigureLayout } from './nodes/figure-frame';
@@ -64,7 +64,6 @@ export {
     readPageSetup,
 } from './page';
 export {
-    cssLineHeight,
     DOCUMENT_PARAGRAPH_FORMAT,
     PARAGRAPH_FORMAT_KEYS,
     PARAGRAPH_FORMAT_LIMITS,

@@ -15,7 +15,7 @@ import {
 
 // How a note opens: with the caret where a press landed or at its end, or with a find bar's match selected and the
 // focus left in the bar.
-export type NoteOpening = {
+type NoteOpening = {
     anchor: NoteAnchor;
     focus: boolean;
     at: { left: number; top: number } | null;
@@ -39,7 +39,7 @@ function followNote(body: Editor, anchor: NoteAnchor, transactions: readonly Tra
     return found;
 }
 
-export function pullNote(
+function pullNote(
     body: Editor,
     note: Editor,
     anchor: NoteAnchor,
@@ -66,7 +66,7 @@ export function pullNote(
 
 // The note's edit into the body, by diff rather than by step: TipTap replays a captured transaction without its meta,
 // and a diff that finds nothing to change forwards nothing twice.
-export function forwardNote(body: Editor, note: Editor, anchor: NoteAnchor): void {
+function forwardNote(body: Editor, note: Editor, anchor: NoteAnchor): void {
     const found = followNote(body, anchor);
     if (!found) return;
     const { pos, node } = found;

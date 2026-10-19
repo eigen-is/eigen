@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1861 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1860 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -954,7 +954,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (943)
+## Utilities & constants (942)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1292,14 +1292,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `bandEdge` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `bandHasContent` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `CHART_DEFAULT_SIZE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
-| `CHART_MAX_SIDE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `chartSvg` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `cmText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
-| `cssLineHeight` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
 | `DEFAULT_NORMAL_STYLE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
 | `DEFAULT_PAGE_SETUP` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `DOC_PROSE_CLASS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
-| `DOCUMENT_PARAGRAPH_FORMAT` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
+| `DOCUMENT_PARAGRAPH_FORMAT` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
 | `equationMath` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
 | `FIGURE_FRAME_NODES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FIRST_PAGE_BAND` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
@@ -1331,10 +1329,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `pageStylesheet` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pageTwips` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `PAPER_SIZES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
-| `PARAGRAPH_FORMAT_KEYS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
-| `PARAGRAPH_FORMAT_LIMITS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
+| `PARAGRAPH_FORMAT_KEYS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
+| `PARAGRAPH_FORMAT_LIMITS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
 | `parseMathml` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
-| `PROSE_TEXTBLOCKS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
+| `PROSE_TEXTBLOCKS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
 | `pxToMm` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readCellBackground` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `readChartAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
@@ -1345,11 +1343,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readNormalStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
 | `readPageNumberKind` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/page-number.ts |
 | `readPageSetup` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
-| `readParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
+| `readParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
 | `selectionFontSizes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/font-size.ts |
-| `selectionParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/paragraph-format.ts |
+| `selectionParagraphFormat` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/paragraph-format.ts |
 | `setFigureAttributes` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `STYLE_ROOT` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
+| `unlessRefused` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
 | `unwrapRenderedMath` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
 | `downloadBlob` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `downloadDriveFile` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
