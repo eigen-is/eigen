@@ -7,8 +7,12 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor } = await import('@tiptap/react');
-const { DEFAULT_NORMAL_STYLE, getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+const { DEFAULT_NORMAL_STYLE, getDocExtensions, readNormalStyle, STYLE_ROOT } = await import(
+    '@workspace/lib/docs/eigendoc'
+);
+const Y = await import('yjs');
 const { useToolbarState } = await import('../../../../components/docs/hooks/use-toolbar-state');
+const { useYMapRead } = await import('../../../../components/docs/hooks/use-y-map-read');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -73,6 +77,31 @@ test("unformatted text reads as the doc's Normal, and a new Normal reaches the t
     await act(async () => editor.commands.setTextSelection(14));
     expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', lineSpacing: undefined });
     normal = DEFAULT_NORMAL_STYLE;
+});
+
+// A peer's new Normal is no transaction of this editor: it reaches the toolbar through the style map's reader, which
+// renders the toolbar again, as the editor's page does.
+test("a peer's new Normal reaches the toolbar live", async () => {
+    const yDoc = new Y.Doc();
+    const styles = yDoc.getMap(STYLE_ROOT);
+    const live = new Editor({
+        extensions: getDocExtensions({ normalStyle: () => readNormalStyle(styles.toJSON()) }),
+        content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'plain' }] }] },
+    });
+    live.commands.setTextSelection(3);
+    function Page() {
+        useYMapRead(styles, readNormalStyle);
+        return createElement(Probe, { of: live });
+    }
+    ({ unmount } = await renderInDocument(createElement(Page)));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Inter', fontSize: 11, lineSpacing: 1.4 });
+
+    const peer = new Y.Doc();
+    const set = { font: 'Source Serif 4', size: 12, lineSpacing: 1.15 };
+    for (const [key, value] of Object.entries(set)) peer.getMap(STYLE_ROOT).set(key, value);
+    await act(async () => Y.applyUpdate(yDoc, Y.encodeStateAsUpdate(peer)));
+    expect(seen.at(-1)).toMatchObject({ fontName: 'Source Serif 4', fontSize: 12, lineSpacing: 1.15 });
+    live.destroy();
 });
 
 test('a caret move that changes nothing drawn renders nothing', async () => {
