@@ -16,7 +16,7 @@ import {
     reUploadImage,
 } from '@workspace/lib/clipboard';
 import { userColor } from '@workspace/lib/constants/colors';
-import { getFontName } from '@workspace/lib/constants/fonts';
+import { FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
@@ -284,8 +284,12 @@ export function docEditorOptions({
         const { width, margin } = pagePx(readPageSetup(yDoc.getMap(PAGE_ROOT).toJSON()));
         return width - margin.left - margin.right;
     };
-    // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one.
-    const normalStyle = () => readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON());
+    // The map, as the column: a step or a paste right after a peer's update of Normal text takes the new one. A note's
+    // paragraphs draw at the footnote size, which its size box shows and a step steps from.
+    const normalStyle = () => {
+        const style = readNormalStyle(yDoc.getMap(STYLE_ROOT).toJSON());
+        return note ? { ...style, size: FOOTNOTE_FONT_SIZE } : style;
+    };
     const settle = note ? target.body : editor;
     const leave = (onLeave: () => void) =>
         Extension.create({

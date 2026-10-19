@@ -10,7 +10,6 @@ import {
     useCommentLifecycle,
     useDocumentPanels,
 } from '@workspace/lib/comments';
-import { FOOTNOTE_FONT_SIZE } from '@workspace/lib/constants/fonts';
 import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
@@ -590,10 +589,6 @@ const TiptapEditor = ({
                                     canRedo={canRedo}
                                     pageSetup={pageSetup}
                                     onPageSetupChange={writeSetup}
-                                    // A note's paragraphs draw at the footnote size, the toolbar's size box included.
-                                    normalStyle={
-                                        notes.anchor ? { ...normalStyle, size: FOOTNOTE_FONT_SIZE } : normalStyle
-                                    }
                                     onUpdateNormalStyle={
                                         editingBand || notes.anchor
                                             ? undefined
