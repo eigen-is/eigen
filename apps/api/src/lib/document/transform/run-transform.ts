@@ -16,6 +16,7 @@ import type {
     SheetsImportJob,
     SlidesImportJob,
     SlidesImportWorkerResult,
+    TransformError,
     TransformResultFor,
     TransformWarning,
 } from './protocol';
@@ -30,7 +31,7 @@ import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type Transf
 //
 // There is deliberately no main-thread fallback: a runner 503 and controlled
 // document errors keep their HTTP status, an import or a search extract that ran out of
-// memory is a file too large, every other failure throws.
+// memory is a file too large, as is a search extract that timed out, every other failure throws.
 
 // What a caller still decides; the limits belong to the job kind (TRANSFORM_LIMITS),
 // and the capture time is measured here. prepMs: main-thread media preparation time,
@@ -41,6 +42,21 @@ type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionC
 };
 
 const TOO_LARGE_TO_INDEX = 'Document too large to index';
+
+// The failures the same input repeats: a job past its memory or its deadline. A crash may be the install, not the input.
+function repeatsForSameInput(code: TransformError['code']): boolean {
+    return code === 'out-of-memory' || code === 'timeout';
+}
+
+// Every other failure, with whether the same input would fail again, so a caller can stop rerunning it.
+export class TransformFailedError extends Error {
+    readonly repeats: boolean;
+
+    constructor(code: TransformError['code'], message: string) {
+        super(message);
+        this.repeats = repeatsForSameInput(code);
+    }
+}
 
 async function runTransformRequest<R extends DocumentTransformRequest>(
     request: R,
@@ -60,13 +76,16 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
         if (response.error.code === 'out-of-memory' && request.kind === 'import') {
             throw new ApiError(413, IMPORT_MESSAGES[request.sourceFormat].tooLarge);
         }
-        // The search extract indexes it as nothing rather than running out again on every drain.
-        if (response.error.code === 'out-of-memory' && request.kind === 'extract-text') {
+        // The search extract indexes it as nothing rather than running out, or timing out, again on every drain.
+        if (repeatsForSameInput(response.error.code) && request.kind === 'extract-text') {
             throw new ApiError(413, TOO_LARGE_TO_INDEX);
         }
         const what =
             request.kind === 'import' ? `${request.sourceFormat} import` : `${request.documentType} ${request.kind}`;
-        throw new Error(`${what} transform failed (${response.error.code}): ${response.error.message}`);
+        throw new TransformFailedError(
+            response.error.code,
+            `${what} transform failed (${response.error.code}): ${response.error.message}`,
+        );
     }
     for (const warning of response.warnings) surfaceWarning(warning, request.kind);
     // The one seam the kind→result mapping crosses: the runner settles every kind of job

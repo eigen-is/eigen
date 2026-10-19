@@ -11,7 +11,11 @@ import { ApiError } from '../core/errors';
 import { NOT_A_CALENDAR_FILE, NOT_A_VCARD_FILE, NOT_AN_EMAIL_FILE } from '../core/transfer';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { EmlPreviewJob, IcsPreviewJob, PreviewResult, VCardPreviewJob } from '../document/transform/protocol';
-import { runBytesTransformToText, runFileTransformToText } from '../document/transform/run-transform';
+import {
+    runBytesTransformToText,
+    runFileTransformToText,
+    TransformFailedError,
+} from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
 import { decodeCharset } from '../mail/mail-parser/decode';
 import type { Mount } from '../mount';
@@ -73,6 +77,18 @@ const SCREEN_PREVIEW_MAX_SIZE = 2560;
 
 function textCacheName(drivePath: DrivePath, format: string): string {
     return `${drivePath.id}-${drivePath.updatedAt.getTime()}.${format}.json`;
+}
+
+// A version whose job ran out of time or memory will again, and each rerun holds the only transform slot for its
+// deadline, so the failure is remembered beside the body it would have been: empty, named after the cache file. A new
+// version or format is a new name, and pruneOldVersions and the 7-day sweep remove it like any other.
+function failedMarker(cacheFile: string): string {
+    return `${cacheFile}.failed`;
+}
+
+async function rememberIfRepeatable(cacheFile: string, err: unknown): Promise<void> {
+    if (!(err instanceof TransformFailedError && err.repeats)) return;
+    await writeCacheFile(failedMarker(cacheFile), '').catch(() => {});
 }
 
 // Delete previously-cached versions of this path (older updatedAt stamps) so previewsDir
@@ -204,14 +220,16 @@ async function getOrCacheText<T>(
     const cacheFile = path.join(previewsDir, cacheName);
     const current = await readCachedText(cacheFile, parse);
     if (current !== null) return { value: current, stale: false };
+    const failed = fs.existsSync(failedMarker(cacheFile));
 
     // Current version missing. If a previous version is cached, serve it immediately and
     // regenerate the current one in the background (stale-while-revalidate).
     const stale = await readNewestStaleText(previewsDir, pathId, cacheName, format, parse);
     if (stale !== null) {
-        regenerateTextInBackground(previewsDir, pathId, cacheName, format, generate);
+        if (!failed) regenerateTextInBackground(previewsDir, pathId, cacheName, format, generate);
         return { value: stale, stale: true };
     }
+    if (failed) return null;
 
     // No previous version either. A regeneration that landed during the reads above pruned
     // the previous version and wrote the current one: join it rather than start a foreground
@@ -236,6 +254,7 @@ async function getOrCacheText<T>(
             // status reaches the client instead of being cached as a 404.
             if (err instanceof ApiError) throw err;
             console.error(`[preview] Failed to generate ${format} preview for ${pathId}:`, err);
+            await rememberIfRepeatable(cacheFile, err);
             return null;
         }
     })();
@@ -312,6 +331,7 @@ function regenerateTextInBackground(
             pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
         } catch (err) {
             console.error(`[preview] Background regeneration failed for ${format} preview ${pathId}:`, err);
+            await rememberIfRepeatable(cacheFile, err);
         } finally {
             inFlightText.delete(cacheName);
         }
