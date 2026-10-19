@@ -19,10 +19,10 @@ import { useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import {
     type ChartBox as ChartBoxFields,
-    chartSvg,
     deleteActiveChart,
     getSheetIndex,
     selectChart,
+    sheetChartSvg,
     updateChartBox,
 } from '../../state';
 
@@ -53,7 +53,7 @@ function ChartBox({ chart }: { chart: SheetChart }) {
     const [preview, setPreview] = useState<Box | null>(null);
     const box: Box = preview ?? { x: chart.x, y: chart.y, width: chart.width, height: chart.height, angle: 0 };
     const resized = box.width !== chart.width || box.height !== chart.height;
-    const svg = chartSvg(context, resized ? { ...chart, width: box.width, height: box.height } : chart);
+    const svg = sheetChartSvg(context, resized ? { ...chart, width: box.width, height: box.height } : chart);
 
     // The selected chart holds the focus, so the workbook's keydown sees Delete.
     const container = useRef<HTMLDivElement>(null);
