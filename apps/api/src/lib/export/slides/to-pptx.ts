@@ -1,4 +1,5 @@
 import { gradientStops } from '@workspace/lib/background';
+import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import {
@@ -31,7 +32,6 @@ import {
     parsePoints,
     pointsBounds,
     rectOutline,
-    type SlideSize,
     type StrokeStyle,
     scaledPathCommands,
     type TextAlign,
@@ -47,9 +47,10 @@ import {
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import { ApiError } from '../../core/errors';
-import { A_NS, AHYP_NS, P_NS, R_NS } from '../../core/ooxml';
+import { A_NS, AHYP_NS, EMU_PER_POINT, P_NS, R_NS } from '../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
 import { cssColorToHex } from '../../document/colors';
+import { PML, PPTX_SLIDE_SIZES, PRESENTATION_TYPE, THEME_TYPE } from '../../document/presentationml';
 import { canvasTextValue } from '../../document/prose-css';
 import {
     blipXml,
@@ -90,7 +91,7 @@ export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], titl
             [
                 'ppt/presentation.xml',
                 `<p:presentation ${NAMESPACES} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${size.cx}" cy="${size.cy}"${size.type ? ` type="${size.type}"` : ''}/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
-                `${PML}.presentation.main+xml`,
+                PRESENTATION_TYPE,
             ],
             ['ppt/_rels/presentation.xml.rels', relationshipsXml(presentationRelationships)],
             ['ppt/presProps.xml', `<p:presentationPr ${NAMESPACES}/>`, `${PML}.presProps+xml`],
@@ -113,7 +114,7 @@ export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], titl
                 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
                 relationshipsXml([{ type: `${R_NS}/slideMaster`, target: '../slideMasters/slideMaster1.xml' }]),
             ],
-            ['ppt/theme/theme1.xml', THEME_XML, 'application/vnd.openxmlformats-officedocument.theme+xml'],
+            ['ppt/theme/theme1.xml', THEME_XML, THEME_TYPE],
             ...slides.flatMap(({ xml, relationships }, i): PackagePart[] => [
                 [`ppt/slides/slide${i + 1}.xml`, xml, `${PML}.slide+xml`],
                 [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
@@ -126,20 +127,11 @@ export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], titl
     });
 }
 
-const PML = 'application/vnd.openxmlformats-officedocument.presentationml';
 const NAMESPACES = `xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"`;
-
-// The EMU size PowerPoint gives each of a deck's slide sizes; a frame's width sets EMU per px.
-const PPTX_SLIDE_SIZES: Record<SlideSize, { cx: number; cy: number; type?: string }> = {
-    '16:9': { cx: 12_192_000, cy: 6_858_000 },
-    '4:3': { cx: 9_144_000, cy: 6_858_000, type: 'screen4x3' },
-};
-
-const EMU_PER_PT = 12_700;
 
 // Text sizes and spacing in 100ths of a point, at the deck's scale.
 function centipoints(slide: Slide, px: number): number {
-    return Math.round((px * slide.deck.scale * 100) / EMU_PER_PT);
+    return Math.round((px * slide.deck.scale * 100) / EMU_PER_POINT);
 }
 
 const GROUP_PROPERTIES =
@@ -150,7 +142,7 @@ const MASTER_XML = `<p:sldMaster ${NAMESPACES}><p:cSld><p:bg><p:bgPr><a:solidFil
 
 const LAYOUT_XML = `<p:sldLayout ${NAMESPACES} type="blank" preserve="1"><p:cSld name="Blank"><p:spTree>${GROUP_PROPERTIES}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
 
-// Every shape writes its own colors and fonts, so the theme only has to be valid: Inter as its fonts, plain colors.
+// Every shape writes its own colors and fonts, so the theme only has to be valid: Eigen's document font, plain colors.
 const THEME_XML = (() => {
     const colors = [
         ['dk1', '000000'],
@@ -166,7 +158,7 @@ const THEME_XML = (() => {
         ['hlink', '1971C2'],
         ['folHlink', '6741D9'],
     ].map(([name, value]) => `<a:${name}><a:srgbClr val="${value}"/></a:${name}>`);
-    const font = '<a:latin typeface="Inter"/><a:ea typeface=""/><a:cs typeface=""/>';
+    const font = `<a:latin typeface="${DOCUMENT_FONT}"/><a:ea typeface=""/><a:cs typeface=""/>`;
     const placeholder = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
     const three = (xml: string) => xml.repeat(3);
     return [

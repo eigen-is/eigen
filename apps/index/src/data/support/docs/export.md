@@ -37,6 +37,8 @@ Footnotes print at the bottom of their page in the PDF and are Word footnotes in
 
 A page break starts a new page in the PDF and the Word file. Equations show in all three formats. A PDF draws up to 1,000 different equations; past that, or when the equations are very large, the rest print as one-line text, such as `(a+b)/2`. The web page download and the preview in Drive have a similar limit, which only far larger documents reach. In all three formats, links to other files in Eigen point to your Eigen server, and a numbered list keeps the number it starts at and its style (1, a, A, i, or I).
 
+A download carries the images the document shows. When they add up to more than 200 MB, Eigen refuses the download with "This document's images are too large to export".
+
 The PDF, the web page, and the Word file use the editor's spacing, including the space around images and tables. In the PDF, a list next to an image that floats left or right starts below the image instead of beside it. In the Word file:
 
 - The fonts your document uses are included, so it keeps its typeface on a computer that doesn't have them.

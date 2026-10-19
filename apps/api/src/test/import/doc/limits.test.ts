@@ -174,7 +174,7 @@ describe('XML budget', () => {
         const parses = spyOn(xml, 'parseXml');
         spies.push(reads, parses);
         const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
         // The package's structure was read through the spies; the body was not.
         expect(parses).toHaveBeenCalled();
         expect(reads.mock.calls.map(([name]) => name)).not.toContain('word/document.xml');
@@ -187,7 +187,7 @@ describe('XML budget', () => {
         const parses = spyOn(xml, 'parseXml');
         spies.push(parses);
         const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
         expect(Math.max(...parses.mock.calls.map(([input]) => input.length))).toBeLessThan(1024 * 1024);
     });
 
@@ -195,20 +195,20 @@ describe('XML budget', () => {
         const error = await rejection(() =>
             importDocxBody(paragraph(run('Body')), { fontTable: padding(MAX_PACKAGE_XML_BYTES) }),
         );
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     });
 
     test('a styles.xml past the tag budget is 413', async () => {
         const error = await rejection(() =>
             importDocxBody(paragraph(run('Body')), { styles: '<w:style/>'.repeat(MAX_PACKAGE_XML_TAGS) }),
         );
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     });
 
     test('the budget counts the parts together', async () => {
         const half = padding(MAX_PACKAGE_XML_BYTES / 2);
         const error = await rejection(() => importDocxBody(`${paragraph(run('Body'))}${half}`, { styles: half }));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     });
 
     test('a 23 MB webSettings.xml beside a small body imports: the reader never parses it', async () => {
@@ -301,7 +301,7 @@ describe('XML budget', () => {
                 smartArtData(padding(MAX_PACKAGE_XML_BYTES)),
             ),
         );
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     });
 
     test('a chart past the tag budget is 413', async () => {
@@ -318,7 +318,7 @@ describe('XML budget', () => {
                 },
             }),
         );
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     });
 
     // As a corrupt file is, rather than as a server error.
@@ -431,7 +431,7 @@ describe('text pieces', () => {
         const body = paragraph(`<w:hyperlink r:id="rId9">${run('aب'.repeat(MAX_DOCX_PIECES), rich)}</w:hyperlink>`);
         const rels = `<Relationship Id="rId9" Type="${HYPERLINK}" Target="https://example.com" TargetMode="External"/>`;
         const result = measuredImport(await buildDocxWithBody(body, { rels }), 'transform');
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
         expect(result.rssGrowth).toBeLessThan(256 * MB);
     }, 30_000);
 
@@ -458,7 +458,7 @@ describe('output budget', () => {
         expect(at.json.content).toHaveLength(MAX_DOCX_WEIGHT);
         const past = await buildDocxWithBody('<w:p/>'.repeat(MAX_DOCX_WEIGHT + 1));
         const error = await rejection(() => docxToPmJson(Buffer.from(past)));
-        expect([error.status, error.message]).toEqual([413, 'Document too large']);
+        expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
     }, 30_000);
 
     // A tab in a link with eight looks is a text node and nine marks; 360,000 of them took 4.4 GB.
@@ -467,7 +467,7 @@ describe('output budget', () => {
             rels: linkTo('https://example.com'),
         });
         const result = measuredImport(docx, 'transform');
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
     }, 30_000);
 
@@ -479,7 +479,7 @@ describe('output budget', () => {
         const past = measuredImport(
             await buildDocxWithBody(`${paragraph(run('a'.repeat(half)))}${paragraph(run('a'.repeat(half + 1)))}`),
         );
-        expect([past.status, past.message]).toEqual([413, 'Document too large']);
+        expect([past.status, past.message]).toEqual([413, 'This document is too large to import']);
     }, 30_000);
 
     // The update spells a link's href out for every text node it marks, so its characters count as text too.
@@ -487,7 +487,7 @@ describe('output budget', () => {
         const href = `https://example.com/${'x'.repeat(1024 * 1024)}`;
         const body = paragraph(`<w:hyperlink r:id="rId9">${run('Link')}</w:hyperlink>`).repeat(70);
         const result = measuredImport(await buildDocxWithBody(body, { rels: linkTo(href) }));
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
         expect(result.rssGrowth).toBeLessThan(256 * MB);
     }, 30_000);
 
@@ -495,7 +495,7 @@ describe('output budget', () => {
     test('a long href weighs by its length', async () => {
         const href = `https://example.com/${'x'.repeat(16 * 1024)}`;
         const result = measuredImport(await buildDocxWithBody(linked(10_000), { rels: linkTo(href) }), 'transform');
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
         expect(result.rssGrowth).toBeLessThan(128 * MB);
     }, 30_000);
 
@@ -506,7 +506,7 @@ describe('output budget', () => {
         const writes = spyOn(math, 'writeMathml');
         try {
             const error = await rejection(() => docxToPmJson(Buffer.from(docx)));
-            expect([error.status, error.message]).toEqual([413, 'Document too large']);
+            expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
             const written = writes.mock.results.map(({ value }) => String(value).length);
             expect(written.reduce((sum, length) => sum + length, 0)).toBeLessThanOrEqual(
                 MAX_DOCX_WEIGHT * CHARS_PER_UNIT + Math.max(...written),
@@ -596,7 +596,7 @@ describe("the editor's TableMap", () => {
         const grid = `<w:tblGrid>${'<w:gridCol w:w="100"/>'.repeat(63)}</w:tblGrid>`;
         const row = '<w:tr><w:tc><w:tcPr><w:gridSpan w:val="63"/></w:tcPr><w:p/></w:tc></w:tr>';
         const result = measuredImport(await buildDocxWithBody(`<w:tbl>${grid}${row.repeat(45_000)}</w:tbl>`));
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
     }, 60_000);
 });
 
@@ -913,7 +913,7 @@ describe('structure', () => {
     test('a paragraph past the inline node cap is 413 through the Yjs update', async () => {
         const body = paragraph(`<w:r>${'<w:tab/><w:br/>'.repeat(MAX_INLINE_NODES / 2 + 1)}</w:r>`);
         const result = measuredImport(await buildDocxWithBody(body), 'transform');
-        expect([result.status, result.message]).toEqual([413, 'Document too large']);
+        expect([result.status, result.message]).toEqual([413, 'This document is too large to import']);
     }, 30_000);
 
     test('a paragraph at the inline node cap imports', async () => {
@@ -1178,7 +1178,7 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
         );
         expect(response.ok ? undefined : [response.error.status, response.error.message]).toEqual([
             413,
-            'Document too large',
+            'This document is too large to import',
         ]);
     }, 120_000);
 
@@ -1225,7 +1225,7 @@ describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the m
             } as const;
             const error = await runImportToDocumentUpdate(job, docx, {}).catch((reason: unknown) => reason);
             expect(error).toBeInstanceOf(ApiError);
-            expect(error).toMatchObject({ status: 413, message: 'Document too large' });
+            expect(error).toMatchObject({ status: 413, message: 'This document is too large to import' });
             const line = logSpy.mock.calls
                 .map((args) => String(args[0]))
                 .find((logged) => logged.includes('[transform] job=') && logged.includes('format=docx'));
@@ -1255,7 +1255,7 @@ describe.skipIf(!runSlow)('the Yjs conversion in the Worker', () => {
         );
         expect(response.ok ? undefined : [response.error.status, response.error.message]).toEqual([
             413,
-            'Document too large',
+            'This document is too large to import',
         ]);
     }, 120_000);
 });

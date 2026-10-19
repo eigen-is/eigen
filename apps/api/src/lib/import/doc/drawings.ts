@@ -10,6 +10,7 @@ import {
     isOn,
     O_NS,
     PIC_NS,
+    POINTS_PER_UNIT,
     R_NS,
     V_NS,
     W_NS,
@@ -19,7 +20,7 @@ import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText }
 import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../document/wordml';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
-import { descendants, int, POINTS_PER_UNIT } from './package';
+import { descendants, int } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
 import { pushText, type RunContext } from './runs';
 

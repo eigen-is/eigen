@@ -2,7 +2,7 @@ import { MARKUP_COMPATIBILITY_NAMESPACE, OMML_NAMESPACE, WORDML_NAMESPACE } from
 import { hasXmlName, parseXml, type XmlElement, xmlElements } from './xml';
 
 // The OOXML every format's reader and writer share: namespaces, Strict read as transitional, markup compatibility and
-// DrawingML's unit. Word's own vocabulary is document/wordml.ts.
+// the units. Word's own vocabulary is document/wordml.ts.
 
 // ── Namespaces ──────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -13,6 +13,7 @@ export const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 export const PIC_NS = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 export const C_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 export const DGM_NS = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
+export const TBL_NS = 'http://schemas.openxmlformats.org/drawingml/2006/table';
 // Word's drawing of a SmartArt, the shapes and their text as laid out.
 export const DSP_NS = 'http://schemas.microsoft.com/office/drawing/2008/diagram';
 export const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
@@ -20,6 +21,7 @@ export const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main
 export const X14_NS = 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
 export const XM_NS = 'http://schemas.microsoft.com/office/excel/2006/main';
 export const P_NS = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+export const OLE_NS = 'http://schemas.openxmlformats.org/presentationml/2006/ole';
 export const W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
 export const MC_NS = MARKUP_COMPATIBILITY_NAMESPACE;
 export const ASVG_NS = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main';
@@ -77,6 +79,17 @@ export function alternativeFor(understood: ReadonlySet<string>): (element: XmlEl
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export const EMU_PER_PX = 9525;
+export const EMU_PER_POINT = 12_700;
+
+// ST_UniversalMeasure, which Strict OOXML writes where transitional writes a number: points per unit.
+export const POINTS_PER_UNIT = new Map([
+    ['pt', 1],
+    ['pc', 12],
+    ['pi', 12],
+    ['in', 72],
+    ['cm', 72 / 2.54],
+    ['mm', 72 / 25.4],
+]);
 
 // ── Values ──────────────────────────────────────────────────────────────────────────────────────────────────────
 

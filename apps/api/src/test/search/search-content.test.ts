@@ -319,45 +319,51 @@ describe('Drive content-index', () => {
         expect((await searchFile('freshflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(false);
     });
 
-    // A document too big for the transform process would run out of memory again on every drain: it indexes as nothing,
-    // as a vCard the decoder refuses does, and leaves the row clean.
-    test('an extract that ran out of memory indexes the sheet as empty and clears its dirty bit', async () => {
-        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-out-of-memory', 'sheets');
-        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
-        const sheets = [
-            {
-                id: 'sheet-1',
-                name: 'Sheet1',
-                order: 0,
-                config: {},
-                celldata: [{ r: 0, c: 0, v: { m: 'oomflibber', v: 'oomflibber' } }],
-            },
-        ];
-        collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
-        });
-        await home.drive.flushContainerDb(mountId, sheetsPath.id);
-        await home.drive.flushContentReindex();
-        expect((await searchFile('oomflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
-
-        const { mount } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        mount.db.run(sql`UPDATE paths SET contentDirty = 1, contentIndexedAt = 0 WHERE id = ${sheetsPath.id}`);
-        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async () => ({
-            ok: false as const,
-            error: { code: 'out-of-memory' as const, message: 'Out of memory' },
-        }));
-        try {
+    // A document too big or too slow for the transform process would run out of memory, or time out, again on every
+    // drain: it indexes as nothing, as a vCard the decoder refuses does, and leaves the row clean.
+    test.each([
+        ['out-of-memory', 'Document transform ran out of memory'],
+        ['timeout', 'Document transform timed out'],
+    ] as const)(
+        'an extract that failed with %s indexes the sheet as empty and clears its dirty bit',
+        async (code, message) => {
+            const sheetsPath = await home.drive.create(mountId, rootId, `reindex-${code}`, 'sheets');
+            const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+            const sheets = [
+                {
+                    id: 'sheet-1',
+                    name: 'Sheet1',
+                    order: 0,
+                    config: {},
+                    celldata: [{ r: 0, c: 0, v: { m: 'oomflibber', v: 'oomflibber' } }],
+                },
+            ];
+            collab.doc.transact(() => {
+                collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
+            });
+            await home.drive.flushContainerDb(mountId, sheetsPath.id);
             await home.drive.flushContentReindex();
-        } finally {
-            runSpy.mockRestore();
-        }
+            expect((await searchFile('oomflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
 
-        const [row] = mount.db.all(sql`SELECT contentDirty FROM paths WHERE id = ${sheetsPath.id}`) as {
-            contentDirty: number;
-        }[];
-        expect(row.contentDirty).toBe(0);
-        expect((await searchFile('oomflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(false);
-    });
+            const { mount } = await home.drive.resolveFile(mountId, sheetsPath.id);
+            mount.db.run(sql`UPDATE paths SET contentDirty = 1, contentIndexedAt = 0 WHERE id = ${sheetsPath.id}`);
+            const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async () => ({
+                ok: false as const,
+                error: { code, message },
+            }));
+            try {
+                await home.drive.flushContentReindex();
+            } finally {
+                runSpy.mockRestore();
+            }
+
+            const [row] = mount.db.all(sql`SELECT contentDirty FROM paths WHERE id = ${sheetsPath.id}`) as {
+                contentDirty: number;
+            }[];
+            expect(row.contentDirty).toBe(0);
+            expect((await searchFile('oomflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(false);
+        },
+    );
 
     // The drain captures the document at job start, but queue wait plus the Worker can
     // take minutes. An edit that syncs inside that window must survive the older body's

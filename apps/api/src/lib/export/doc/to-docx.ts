@@ -72,6 +72,7 @@ import {
     untypedListFormat,
 } from '../../document/looks';
 import { lowlight } from '../../document/lowlight';
+import { sanitizeMedia } from '../../document/media';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
 import { type ExportMedia, toTransferableBuffer, toTransferableText } from '../../document/transform/protocol';
 import {
@@ -281,9 +282,7 @@ export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMed
         const item = await encodeOfficeImage(src, mediaType ?? '', data, (options) => sharpResize(data, options));
         if (item) media.push(item);
     }
-    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
-    const { sanitizeExportMedia } = await import('../sanitize');
-    return sanitizeExportMedia(media);
+    return sanitizeMedia(media);
 }
 
 const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';

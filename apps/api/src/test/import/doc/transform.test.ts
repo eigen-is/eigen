@@ -113,7 +113,7 @@ describe('the repairs on open are bounded', () => {
     });
 
     test('a table past it is 413', () => {
-        expect(() => asOpened(ragged(side + 2))).toThrow('Document too large');
+        expect(() => asOpened(ragged(side + 2))).toThrow('This document is too large to import');
     });
 
     const stacked = (rows: [number, number][]) =>
@@ -150,7 +150,7 @@ describe('the repairs on open are bounded', () => {
                     [2, 1],
                 ]),
             ),
-        ).toThrow('Document too large');
+        ).toThrow('This document is too large to import');
     });
 });
 
@@ -158,7 +158,13 @@ describe('the repairs on open are bounded', () => {
 describe('a slip converting the doc is refused as the reader refuses one', () => {
     test.each([
         ['a TypeError', new TypeError('slip'), 400, 'Not a valid docx file', 1],
-        ['a stack overflow', new RangeError('Maximum call stack size exceeded.'), 413, 'Document too large', 0],
+        [
+            'a stack overflow',
+            new RangeError('Maximum call stack size exceeded.'),
+            413,
+            'This document is too large to import',
+            0,
+        ],
         ['a schema RangeError', new RangeError('Invalid content for node table'), 400, 'Not a valid docx file', 1],
     ])('%s is a %d', async (_name, thrown, status, message, logged) => {
         const docx = await buildDocxWithBody(table([cell('A') + cell('B') + cell('C')]));

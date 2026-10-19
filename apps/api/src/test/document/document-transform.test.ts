@@ -60,6 +60,7 @@ import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';
 import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
+import * as previewCache from '../../lib/preview/preview-cache';
 import * as thumbnails from '../../lib/shared/thumbnails';
 import type { User } from '../../lib/user';
 import {
@@ -290,7 +291,7 @@ describe('document transform (eigensheets preview)', () => {
             expect(fromDoc.recalcError).toBe('forced recalc failure');
             expect(fromDoc.sheets[0].celldata?.[0]?.v?.v).toBe('replayed-value');
 
-            const exported = await renderEigensheetsExport(doc, 'html', 'Warned', []);
+            const exported = await renderEigensheetsExport(doc, 'html', 'Warned', async () => []);
             expect(exported.warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
             expect(new TextDecoder().decode(exported.data)).toContain('replayed-value');
 
@@ -519,7 +520,7 @@ describe('document transform (eigensheets export)', () => {
             format: 'pdf-html',
             title: 'golden-export',
         } as const;
-        const html = await runTransformToBytes(golden.mount, golden.path, { ...job, media: [] }, {});
+        const html = await runTransformToBytes(golden.mount, golden.path, job, {});
         expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 
@@ -979,23 +980,30 @@ describe('document transform (eigendoc)', () => {
 
     test('export media crosses the boundary as copies the caller keeps', async () => {
         const { mount, path } = golden;
-        const media = await collectExportMedia(mount, path, 'html');
+        const media = await collectExportMedia(mount, path, 'html', [GOLDEN_MEDIA_NAME], new AbortController().signal);
         expect(media).toHaveLength(1);
         expect(media[0].name).toBe(GOLDEN_MEDIA_NAME);
 
+        const asked: string[][] = [];
         const response = await documentTransformRunner.run(
             {
                 kind: 'export',
                 documentType: 'eigendoc',
                 format: 'html',
                 title: path.name,
-                media,
                 publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
-            EXPORT_OPTIONS,
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: async (names) => {
+                    asked.push(names);
+                    return media;
+                },
+            },
         );
-        // The child got a copy, and the bytes came back as a data URI.
+        // The child named the figure's media, got a copy, and the bytes came back as a data URI.
+        expect(asked).toEqual([[GOLDEN_MEDIA_NAME]]);
         expect(media[0].data.byteLength).toBeGreaterThan(0);
         expect(Buffer.from(exportBytes(response)).toString('utf-8')).toContain('src="data:image/webp;base64,');
     }, 120_000);
@@ -1009,11 +1017,15 @@ describe('document transform (eigendoc)', () => {
                 documentType: 'eigendoc',
                 format: 'html',
                 title: path.name,
-                media: [{ name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) }],
                 publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
-            EXPORT_OPTIONS,
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: async () => [
+                    { name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) },
+                ],
+            },
         );
         const html = Buffer.from(exportBytes(response)).toString('utf-8');
         const base64 = html.match(/src="data:image\/svg\+xml;base64,([^"]+)"/)?.[1] ?? '';
@@ -1033,11 +1045,15 @@ describe('document transform (eigendoc)', () => {
                 documentType: 'eigendoc',
                 format: 'docx',
                 title: path.name,
-                media: [{ name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) }],
                 publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
-            EXPORT_OPTIONS,
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: async () => [
+                    { name: GOLDEN_MEDIA_NAME, contentType: 'image/svg+xml', data: toTransferableText(svg) },
+                ],
+            },
         );
         const zip = openZip(new Uint8Array(exportBytes(response)));
         const part = (pattern: RegExp) =>
@@ -1068,19 +1084,158 @@ describe('document transform (eigendoc)', () => {
         expect(calls).toBe(0);
     }, 120_000);
 
-    // The prep's clock is skewed and its deadline signal fired by hand, so no test waits out 120 s.
+    // A doc whose body holds one figure per name, beside its media folder.
+    async function seedFigureDoc(fileName: string, names: string[]): Promise<{ mount: Mount; path: DrivePath }> {
+        const created = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        seedEigendoc((await home.drive.getCollabDocument(mountId, created.id)).doc, {
+            type: 'doc',
+            content: names.map((mediaName) => ({
+                type: 'paragraph',
+                content: [{ type: 'figure', attrs: { mediaName } }],
+            })),
+        });
+        return home.drive.resolveFile(mountId, created.id);
+    }
+
+    // A deleted or replaced image stays in media/, and an import that failed leaves its pictures there.
+    test('an export reads only the media its document names', async () => {
+        const doc = await seedFigureDoc('named-media', ['shown.png']);
+        await seedDocumentMedia(doc.mount, doc.path, 'shown.png', TEST_PNG_BYTES);
+        const unused = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg">${' '.repeat(1024 * 1024)}</svg>`);
+        for (let i = 0; i < 8; i++) {
+            await seedDocumentMedia(doc.mount, doc.path, `unused-${i}.svg`, unused, 'image/svg+xml');
+        }
+        const read = spyOn(previewCache, 'getScreenPreview');
+        let names: string[] = [];
+        try {
+            const html = await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, doc.mount, doc.path);
+            names = read.mock.calls.map(([, file]) => file.name);
+            expect(html.toString('utf-8')).toContain('src="data:image/webp;base64,');
+        } finally {
+            read.mockRestore();
+        }
+        expect(names).toEqual(['shown.png']);
+    }, 120_000);
+
+    // Declared sizes, the bytes stored are a small PNG or SVG: what a row says is all the cap reads before a file. The
+    // doc is deleted after, since its declared sizes count against the user's quota.
+    async function withDeclaredMedia(
+        fileName: string,
+        files: [name: string, mime: string, size: number][],
+        run: (doc: { mount: Mount; path: DrivePath }) => Promise<void>,
+    ): Promise<void> {
+        const doc = await seedFigureDoc(
+            fileName,
+            files.map(([name]) => name),
+        );
+        try {
+            const mediaFolder = await doc.mount.getChildByName(doc.path.id, 'media');
+            if (!mediaFolder) throw new Error('no media folder');
+            const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>');
+            for (const [name, mime, size] of files) {
+                const bytes = mime === 'image/svg+xml' ? svg : TEST_PNG_BYTES;
+                await doc.mount.createFile(mediaFolder.id, name, mime, size, bytes);
+            }
+            await run(doc);
+        } finally {
+            await doc.mount.deletePath(doc.path.id);
+        }
+    }
+
+    // HTML and PDF send each raster's screen preview, at most 2560 px of WebP, whatever the photo weighs.
+    test('photos past MAX_DECOMPRESSED_BYTES in all export as their previews', async () => {
+        const half = MAX_DECOMPRESSED_BYTES / 2 + 1;
+        const photos: [string, string, number][] = [
+            ['a.png', 'image/png', half],
+            ['b.png', 'image/png', half],
+        ];
+        await withDeclaredMedia('heavy-photos', photos, async (doc) => {
+            const html = await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, doc.mount, doc.path);
+            expect(html.toString('utf-8').match(/src="data:image\/webp;base64,/g)).toHaveLength(2);
+        });
+    }, 120_000);
+
+    // An SVG travels as its own bytes, so its row's size is what the export would hold.
+    test('SVGs past MAX_DECOMPRESSED_BYTES in all are a 413 before any read', async () => {
+        const half = MAX_DECOMPRESSED_BYTES / 2 + 1;
+        const svgs: [string, string, number][] = [
+            ['a.svg', 'image/svg+xml', half],
+            ['b.svg', 'image/svg+xml', half],
+        ];
+        await withDeclaredMedia('heavy-svgs', svgs, async (doc) => {
+            const read = spyOn(previewCache, 'getScreenPreview');
+            try {
+                const failure = await exportDocument(doc.mount, doc.path, 'pdf').catch((err: unknown) => err);
+                expect(read).not.toHaveBeenCalled();
+                expect(failure).toMatchObject({ status: 413 });
+            } finally {
+                read.mockRestore();
+            }
+        });
+    }, 120_000);
+
+    // A docx re-encodes each image from its source, read whole: one source past the cap is refused before its read.
+    test('a docx source past MAX_DECOMPRESSED_BYTES is a 413 before it is read', async () => {
+        await withDeclaredMedia('heavy-source', [['a.png', 'image/png', MAX_DECOMPRESSED_BYTES + 1]], async (doc) => {
+            const encode = spyOn(thumbnails, 'generateImagePreview');
+            try {
+                const failure = await runDocumentExport(
+                    { documentType: 'eigendoc', format: 'docx' },
+                    doc.mount,
+                    doc.path,
+                ).catch((err: unknown) => err);
+                expect(encode).not.toHaveBeenCalled();
+                expect(failure).toMatchObject({ status: 413 });
+            } finally {
+                encode.mockRestore();
+            }
+        });
+    }, 120_000);
+
+    test.each(['html', 'docx'] as const)(
+        'a %s export canceled during its media prep reads no more',
+        async (format) => {
+            const doc = await seedFigureDoc(`canceled-prep-${format}`, ['a.png', 'b.png', 'c.png']);
+            for (const name of ['a.png', 'b.png', 'c.png'])
+                await seedDocumentMedia(doc.mount, doc.path, name, TEST_PNG_BYTES);
+            const controller = new AbortController();
+            const encode = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
+                controller.abort();
+                return null;
+            });
+            let calls = -1;
+            try {
+                await runDocumentExport(
+                    { documentType: 'eigendoc', format },
+                    doc.mount,
+                    doc.path,
+                    controller.signal,
+                ).catch(() => {});
+                calls = encode.mock.calls.length;
+            } finally {
+                encode.mockRestore();
+            }
+            expect(calls).toBe(1);
+        },
+        120_000,
+    );
+
+    // The prep runs inside the job, under its deadline, dialed down here so no test waits out 120 s.
     test("a docx's media prep spends from the export's deadline, and once it is spent queues no more media and times out", async () => {
-        const doc = await seedGoldenDocument('deadline-doc', 'doc');
-        await seedDocumentMedia(doc.mount, doc.path, 'second.png', TEST_PNG_BYTES);
-        const { deadlineMs } = TRANSFORM_LIMITS.export;
-        const deadline = new AbortController();
-        const now = performance.now.bind(performance);
-        let skew = 0;
-        const clock = spyOn(performance, 'now').mockImplementation(() => now() + skew);
-        const timeout = spyOn(AbortSignal, 'timeout').mockImplementation(() => deadline.signal);
+        const doc = await seedFigureDoc('deadline-doc', ['a.png', 'b.png']);
+        for (const name of ['a.png', 'b.png']) await seedDocumentMedia(doc.mount, doc.path, name, TEST_PNG_BYTES);
+        const limits = TRANSFORM_LIMITS.export;
+        const { deadlineMs } = limits;
+        limits.deadlineMs = 4_000;
         const encode = spyOn(thumbnails, 'generateImagePreview').mockImplementation(async () => {
-            skew += deadlineMs;
-            deadline.abort();
+            await Bun.sleep(4_500);
             return null;
         });
         let failure: unknown;
@@ -1089,11 +1244,10 @@ describe('document transform (eigendoc)', () => {
             failure = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, doc.mount, doc.path).catch(
                 (err: unknown) => err,
             );
+            await Bun.sleep(600);
             calls = encode.mock.calls.length;
-            expect(timeout.mock.calls).toEqual([[deadlineMs]]);
         } finally {
-            clock.mockRestore();
-            timeout.mockRestore();
+            limits.deadlineMs = deadlineMs;
             encode.mockRestore();
         }
         expect(calls).toBe(1);
@@ -1108,15 +1262,17 @@ describe('document transform (eigendoc)', () => {
                 documentType: 'eigendoc',
                 format: 'docx',
                 title: path.name,
-                media: await collectExportMedia(mount, path, 'docx'),
                 publicOrigin: undefined,
                 source: await captureCollabSource(mount, path),
             },
-            EXPORT_OPTIONS,
+            {
+                ...EXPORT_OPTIONS,
+                prepareMedia: (names, signal) => collectExportMedia(mount, path, 'docx', names, signal),
+            },
         );
         const docx = Buffer.from(exportBytes(response));
         const persisted = await readPersistedDoc(mount, path);
-        const media = await collectExportMedia(mount, path, 'docx');
+        const media = await collectExportMedia(mount, path, 'docx', [GOLDEN_MEDIA_NAME], new AbortController().signal);
         const direct = await eigendocToDocx(
             readEigendocFromDoc(persisted),
             readEigendocBands(persisted),
@@ -1361,10 +1517,12 @@ describe('document transform (eigenslides)', () => {
                     documentType: 'eigenslides',
                     format: 'html',
                     title: stripEigenExtension(path.name),
-                    media: await collectExportMedia(mount, path, 'html'),
                     source: await captureCollabSource(mount, path),
                 },
-                EXPORT_OPTIONS,
+                {
+                    ...EXPORT_OPTIONS,
+                    prepareMedia: (names, signal) => collectExportMedia(mount, path, 'html', names, signal),
+                },
             );
             expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
             // The skipped edit is gone, the base write still renders.

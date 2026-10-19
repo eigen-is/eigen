@@ -1,4 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { ApiError } from '../core/errors';
+import { MAX_DECOMPRESSED_BYTES } from '../core/zip';
 import { listDocumentMedia } from '../document/media';
 import { type ExportMedia, type ExportTransformJob, toTransferableBuffer } from '../document/transform/protocol';
 import type { Mount } from '../mount';
@@ -10,32 +12,42 @@ import { encodeOfficeImage, WEBP_SCAN_BYTES } from './office-image';
 // The formats an Office reader opens, which take a PNG or JPEG from the source file.
 const OFFICE_FORMATS = new Set<ExportTransformJob['format']>(['docx', 'pptx']);
 
-// Main-thread media preparation for doc/slides exports: the screen-res preview of
-// every media child, as exact buffers the transform process gets a copy of (an SVG's
-// sanitizing, base64 and the data: URIs happen there). All Mount I/O — and the globally capped thumbnail
-// path behind getScreenPreview — stays here: the transform never receives a Mount
-// and never spawns thumbnail Workers. A docx or pptx takes PNG or JPEG from the source file
-// instead, since Word and PowerPoint for the web and Google Docs show no WebP, with the thumbnail
-// Worker's width and height for its extent.
+const TOO_LARGE = "This document's images are too large to export";
+
+// Main-thread media preparation for an export: the screen-res preview of each media file the
+// document names, as exact buffers the transform process gets a copy of (an SVG's sanitizing, base64
+// and the data: URIs happen there). All Mount I/O — and the globally capped thumbnail path behind
+// getScreenPreview — stays here: the transform never receives a Mount and never spawns thumbnail
+// Workers. A docx or pptx takes PNG or JPEG from the source file instead, since Word and PowerPoint
+// for the web and Google Docs show no WebP, with the thumbnail Worker's width and height for its extent.
+//
+// The bytes are held in the API's heap and copied over IPC, so what is sent is held to
+// MAX_DECOMPRESSED_BYTES, an import source's cap, as it is prepared. An SVG travels as its own bytes,
+// so the SVGs' declared sizes are charged before any read; a raster's preview is at most 2560 px,
+// and a docx's or pptx's source is read whole, one at a time, so only a source past the cap alone is
+// refused unread. One file at a time, so a docx holds at most one of the thumbnail slots uploads and
+// previews share, and none once the job ends.
 export async function collectExportMedia(
     mount: Mount,
     drivePath: DrivePath,
     format: ExportTransformJob['format'],
-    signal?: AbortSignal,
+    names: string[],
+    signal: AbortSignal,
 ): Promise<ExportMedia[]> {
-    const media = await listDocumentMedia(mount, drivePath);
-    if (!OFFICE_FORMATS.has(format)) {
-        const prepared = await Promise.all([...media].map(([name, file]) => prepareMedia(mount, name, file)));
-        return prepared.filter((item) => item !== null);
-    }
-    // An Office export re-encodes every image, uncached, on the thumbnail semaphore uploads and previews share: one at a
-    // time, so one export holds at most one of its slots, and none once the client is gone (the runner then cancels the
-    // job).
+    const wanted = new Set(names);
+    const named = [...(await listDocumentMedia(mount, drivePath))].filter(([name]) => wanted.has(name));
+    const svgBytes = named.reduce((sum, [, file]) => sum + (file.mimeType === 'image/svg+xml' ? file.size : 0), 0);
+    if (svgBytes > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, TOO_LARGE);
+    const prepare = OFFICE_FORMATS.has(format) ? prepareOfficeMedia : prepareMedia;
     const prepared: ExportMedia[] = [];
-    for (const [name, file] of media) {
-        if (signal?.aborted) break;
-        const item = await prepareOfficeMedia(mount, name, file);
-        if (item) prepared.push(item);
+    let held = 0;
+    for (const [name, file] of named) {
+        if (signal.aborted) break;
+        const item = await prepare(mount, name, file);
+        if (!item) continue;
+        held += item.data.byteLength;
+        if (held > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, TOO_LARGE);
+        prepared.push(item);
     }
     return prepared;
 }
@@ -55,6 +67,7 @@ async function prepareOfficeMedia(mount: Mount, name: string, file: DrivePath): 
     if (mime === 'image/svg+xml') return prepareMedia(mount, name, file);
     // What getScreenPreview shows as an image, and nothing else.
     if (isScreenPreviewRedirect(mime) || !isExiftoolCandidate(mime, file.name)) return null;
+    if (file.size > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, TOO_LARGE);
     const source = await mount.readFile(file.id);
     if (!source) return null;
     // From the source, never the lossy WebP preview.

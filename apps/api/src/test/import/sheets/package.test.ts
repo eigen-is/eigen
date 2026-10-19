@@ -257,8 +257,24 @@ describe("a part's children, a batch at a time", () => {
         readInBatches(part, 'sheetData', 'row', budget);
         expect(thrown(() => readInBatches(part, 'sheetData', 'row', budget))).toMatchObject({
             status: 413,
-            message: 'Spreadsheet too large',
+            message: 'This spreadsheet is too large to import',
         });
+    });
+
+    // The prolog and start tags are parsed again in front of every batch: 1 MB of instructions before the root was
+    // 38M nodes over 180 batches, none of them charged.
+    test("the wrapper's elements are charged again for every batch it is parsed in", () => {
+        const WRAPPER_ELEMENTS = 50_002;
+        const part = encode(
+            `${'<?a?>'.repeat(WRAPPER_ELEMENTS - 2)}<worksheet xmlns="${SML}"><sheetData>${manyRows(COUNT)}</sheetData></worksheet>`,
+        );
+        const charged: number[] = [];
+        const budget = { ...readBudget(), chargeElements: (count: number) => void charged.push(count) };
+        const { children } = readInBatches(part, 'sheetData', 'row', budget);
+        expect([...children]).toHaveLength(COUNT);
+        const [, ...perBatch] = charged;
+        expect(perBatch.length).toBeGreaterThanOrEqual(3);
+        expect(perBatch.every((count) => count === WRAPPER_ELEMENTS)).toBe(true);
     });
 
     test('what is parsed whole, the rest of a part or a part that must be, is charged its bytes and tags', () => {
@@ -285,7 +301,10 @@ describe("a part's children, a batch at a time", () => {
     test('a child longer than a batch may be is too large before it is parsed', () => {
         const part = encode(sheetXml({ data: `<row r="1">${'<c><v>1</v></c>'.repeat(900_000)}</row><row r="2"/>` }));
         const { children } = readInBatches(part, 'sheetData', 'row', readBudget());
-        expect(thrown(() => [...children])).toMatchObject({ status: 413, message: 'Spreadsheet too large' });
+        expect(thrown(() => [...children])).toMatchObject({
+            status: 413,
+            message: 'This spreadsheet is too large to import',
+        });
     });
 
     test('a malformed batch is malformed XML', () => {

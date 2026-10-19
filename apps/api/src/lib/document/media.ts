@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
-import type { TransformMedia } from './transform/protocol';
+import type { ExportMedia, TransformMedia } from './transform/protocol';
 
 // Media helpers for eigen documents, shared by the main-thread transform wrappers
 // and the Worker-side converters. This module must stay light: the modules the
@@ -12,6 +12,22 @@ export async function listDocumentMedia(mount: Mount, drivePath: DrivePath): Pro
     const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
     const children = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
     return new Map(children.map((file) => [file.name, file]));
+}
+
+// The media names a document read for an export holds: every document kind names a file in `media/` by a `mediaName`
+// field (docs/MEDIA-REFERENCES.md), wherever it sits in the tree.
+export function mediaNamesIn(tree: unknown): Set<string> {
+    const names = new Set<string>();
+    const stack = [tree];
+    while (stack.length > 0) {
+        const value = stack.pop();
+        if (!value || typeof value !== 'object') continue;
+        for (const [key, child] of Object.entries(value)) {
+            if (key === 'mediaName' && typeof child === 'string' && child) names.add(child);
+            else stack.push(child);
+        }
+    }
+    return names;
 }
 
 // Public-facing API URL for preview HTML embedded in exported documents. The frontend
@@ -62,4 +78,11 @@ export function toDataUriMap(media: TransformMedia[]): Map<string, string> {
             `data:${item.contentType};base64,${Buffer.from(item.data).toString('base64')}`,
         ]),
     );
+}
+
+// SVG media arrives as the file's own bytes. The sanitizer loads only for one, so an xlsx export never evaluates jsdom.
+export async function sanitizeMedia(media: ExportMedia[]): Promise<ExportMedia[]> {
+    if (!media.some((item) => item.contentType === 'image/svg+xml')) return media;
+    const { sanitizeExportMedia } = await import('../export/sanitize');
+    return sanitizeExportMedia(media);
 }

@@ -302,6 +302,9 @@ describe('docx import — header budget', () => {
             (caught: unknown) => caught,
         );
         expect(error).toBeInstanceOf(ApiError);
-        expect(error instanceof ApiError && [error.status, error.message]).toEqual([413, 'Document too large']);
+        expect(error instanceof ApiError && [error.status, error.message]).toEqual([
+            413,
+            'This document is too large to import',
+        ]);
     });
 });

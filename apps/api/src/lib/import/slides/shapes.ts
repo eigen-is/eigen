@@ -14,7 +14,7 @@ import {
 } from '@workspace/lib/vector';
 import { drawingLines } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { A_NS, C_NS, DGM_NS, isAlternateContent, isOn, P_NS, R_NS } from '../../core/ooxml';
+import { A_NS, C_NS, DGM_NS, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES } from '../messages';
@@ -86,10 +86,10 @@ function droppedChart({ title, name }: { title: string; name: string }): string[
 }
 
 const GRAPHIC_KINDS = new Map<string, Dropped>([
-    ['http://schemas.openxmlformats.org/drawingml/2006/table', 'table'],
+    [TBL_NS, 'table'],
     [C_NS, 'chart'],
     [DGM_NS, 'diagram'],
-    ['http://schemas.openxmlformats.org/presentationml/2006/ole', 'ole'],
+    [OLE_NS, 'ole'],
 ]);
 
 // A head or tail end of a:ln as the arrowhead that draws closest.

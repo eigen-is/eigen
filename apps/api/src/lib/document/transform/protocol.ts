@@ -37,6 +37,10 @@ export type TransformMedia = { name: string; contentType: string; data: ArrayBuf
 // SVG's size inside the transform process.
 export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 
+// An export's renderer asks for the media its document names once it has read the document, so the main thread
+// prepares only those, while the job holds its slot.
+export type ExportMediaLoader = (names: Set<string>) => Promise<ExportMedia[]>;
+
 // A job is everything a caller decides; the shared main-thread orchestration
 // (run-transform.ts) captures the Yjs source and completes it into a request.
 // Previews reference media by URL, so no bytes cross for a preview. (Vector renders to
@@ -63,14 +67,12 @@ export type ExportTransformJob =
           documentType: 'eigensheets';
           format: SheetExportFormat;
           title: string;
-          media: ExportMedia[];
       }
     | {
           kind: 'export';
           documentType: 'eigendoc';
           format: EigendocExportFormat;
           title: string;
-          media: ExportMedia[];
           // The docx absolutizes root-relative links with it; the transform reads no config.
           publicOrigin: string | undefined;
       }
@@ -79,14 +81,12 @@ export type ExportTransformJob =
           documentType: 'eigenslides';
           format: SlidesExportFormat;
           title: string;
-          media: ExportMedia[];
       }
     | {
           kind: 'export';
           documentType: 'eigenvector';
           format: VectorExportFormat;
           title: string;
-          media: ExportMedia[];
       };
 
 // Search reindexing: the same captured document, read for its body text only. The
@@ -228,6 +228,9 @@ export type DocumentTransformResponse =
 export type ChildRequestEnvelope = { jobId: number; request: DocumentTransformRequest };
 // The child's first message: the job arrived, so a death from here on is the job's.
 export type ChildAck = { jobId: number; ack: true };
+// An export's child asks for the media its document names; the runner answers with them prepared.
+export type ChildMediaRequest = { jobId: number; mediaNames: string[] };
+export type ParentMediaReply = { jobId: number; media: ExportMedia[] };
 export type ChildResponseEnvelope = {
     jobId: number;
     response: DocumentTransformResponse;
@@ -241,9 +244,6 @@ export function inputBytesOf(request: DocumentTransformRequest): number {
     if ('data' in request) return request.data.byteLength;
     let bytes = request.source.snapshot?.data.byteLength ?? 0;
     for (const update of request.source.updates) bytes += update.data.byteLength;
-    if (request.kind === 'export') {
-        for (const item of request.media) bytes += item.data.byteLength;
-    }
     return bytes;
 }
 

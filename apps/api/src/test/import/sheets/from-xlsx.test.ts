@@ -599,7 +599,7 @@ describe("the reader's output budget", () => {
         ).join('');
         expect(refused(xlsxFixture({ sheets: [{ data }], strings: [`<t>${'x'.repeat(length)}</t>`] }))).toEqual({
             status: 413,
-            message: 'Spreadsheet too large',
+            message: 'This spreadsheet is too large to import',
         });
     });
 
@@ -621,7 +621,10 @@ describe("the reader's output budget", () => {
         const copies = Math.ceil(MAX_SHARED_FORMULA_TEXT / anchor.length) + 1;
         let data = `<row r="1"><c r="B1"><f t="shared" ref="B1:B${copies + 1}" si="0">${anchor}</f></c></row>`;
         for (let r = 2; r <= copies + 1; r++) data += `<row r="${r}"><c r="B${r}"><f t="shared" si="0"/></c></row>`;
-        expect(refused(xlsxFixture({ sheets: [{ data }] }))).toEqual({ status: 413, message: 'Spreadsheet too large' });
+        expect(refused(xlsxFixture({ sheets: [{ data }] }))).toEqual({
+            status: 413,
+            message: 'This spreadsheet is too large to import',
+        });
     }, 30_000);
 
     test('every sheet counts the grid its cells span, the default grid at the least', () => {
@@ -643,7 +646,7 @@ describe("the reader's output budget", () => {
             });
         const fits = Math.floor(MAX_GRID_SLOTS / (100 * 16_384));
         expect(xlsxToSheets(wide(fits))).toHaveLength(fits);
-        expect(refused(wide(fits + 1))).toEqual({ status: 413, message: 'Spreadsheet too large' });
+        expect(refused(wide(fits + 1))).toEqual({ status: 413, message: 'This spreadsheet is too large to import' });
     });
 
     // Excel refuses two sheets of one name, in any case; a formula naming it means the first.
@@ -694,7 +697,7 @@ describe("the reader's output budget", () => {
         expect(refused(new Uint8Array(64))).toEqual({ status: 400, message: 'Not a valid xlsx file' });
         expect(refused(buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 300 * 1024 * 1024))).toEqual({
             status: 413,
-            message: 'Spreadsheet too large',
+            message: 'This spreadsheet is too large to import',
         });
         expect(refused(xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1"><v>1</v></row>' }] }))).toEqual({
             status: 400,
