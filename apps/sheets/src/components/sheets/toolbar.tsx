@@ -1,7 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FileMenu } from '@workspace/ui';
-import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
-import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
+import { DocumentImportPicker, ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive';
 import { Sheet } from 'lucide-react';
 import { useState } from 'react';
 

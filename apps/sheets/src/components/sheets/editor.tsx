@@ -10,6 +10,7 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
+import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -41,7 +42,7 @@ import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
+import { useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
 import { useSheet } from './hooks/use-sheet';
@@ -156,7 +157,7 @@ function SheetEditorInner({
     const addCommentRef = useRef<(r: number, c: number) => void>(null);
     addCommentRef.current = useCallback((r: number, c: number) => {
         setAddTargetCell({ r, c });
-        setAddInitialTitle(`Cell ${columnToLetter(c)}${r + 1}`);
+        setAddInitialTitle(`Cell ${columnIndexToLabel(c)}${r + 1}`);
         setAddOpen(true);
     }, []);
 
