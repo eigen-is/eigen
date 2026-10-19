@@ -81,9 +81,17 @@ function textCacheName(drivePath: DrivePath, format: string): string {
 
 // A version whose job ran out of time or memory will again, and each rerun holds the only transform slot for its
 // deadline, so the failure is remembered beside the body it would have been: empty, named after the cache file. A new
-// version or format is a new name, and pruneOldVersions and the 7-day sweep remove it like any other.
+// version or format is a new name, and pruneOldVersions and the 7-day sweep remove it like any other. A loaded host or
+// a native crash a fix removes fails the same way, so a marker counts for an hour only.
+const FAILED_MARKER_MS = 60 * 60 * 1000;
+
 function failedMarker(cacheFile: string): string {
     return `${cacheFile}.failed`;
+}
+
+function failedRecently(cacheFile: string): boolean {
+    const marker = fs.statSync(failedMarker(cacheFile), { throwIfNoEntry: false });
+    return marker !== undefined && Date.now() - marker.mtimeMs < FAILED_MARKER_MS;
 }
 
 async function rememberIfRepeatable(cacheFile: string, err: unknown): Promise<void> {
@@ -220,7 +228,7 @@ async function getOrCacheText<T>(
     const cacheFile = path.join(previewsDir, cacheName);
     const current = await readCachedText(cacheFile, parse);
     if (current !== null) return { value: current, stale: false };
-    const failed = fs.existsSync(failedMarker(cacheFile));
+    const failed = failedRecently(cacheFile);
 
     // Current version missing. If a previous version is cached, serve it immediately and
     // regenerate the current one in the background (stale-while-revalidate).

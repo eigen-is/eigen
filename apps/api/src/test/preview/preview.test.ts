@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
@@ -582,6 +583,25 @@ describe('a failed preview', () => {
             }
         },
     );
+
+    // Host pressure passes and a crash gets fixed, so a failure is remembered for an hour, not for as long as the file.
+    test('a failure older than an hour runs again', async () => {
+        const { mount, path } = await vcardMount('failed-preview-expired');
+        const run = failRuns('timeout');
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            expect(await getVCardPreview(mount, path)).toBeNull();
+            const marker = readdirSync(mount.previewsDir).find((name) => name.endsWith('.failed'));
+            if (!marker) throw new Error('no marker');
+            const hourAgo = new Date(Date.now() - 61 * 60 * 1000);
+            utimesSync(join(mount.previewsDir, marker), hourAgo, hourAgo);
+            expect(await getVCardPreview(mount, path)).toBeNull();
+            expect(run).toHaveBeenCalledTimes(2);
+        } finally {
+            errorSpy.mockRestore();
+            run.mockRestore();
+        }
+    });
 
     // A crash is a broken install or a failed spawn, not this version of the file.
     test('one that crashed runs again on the next view', async () => {
