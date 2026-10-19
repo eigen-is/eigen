@@ -135,11 +135,14 @@ export function readInBatches(
     function* batches(within: Span): Generator<XmlElement> {
         const open = Buffer.from(`<${within.prefix}${child}`);
         const step = Math.max(BATCH_BYTES, within.wrapper.length);
+        // Parsed again in front of every batch, so charged again for every batch.
+        const wrapperElements = elementsIn(within.wrapper);
         let read = 0;
         for (let at = within.start; at < within.end; ) {
             const next = at + step < within.end ? findTag(text, open, at + step) : -1;
             const end = next < 0 || next > within.end ? within.end : next;
             if (end - at > MAX_BATCH_BYTES) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+            budget.chargeElements(wrapperElements);
             const batch = parseCut(Buffer.concat([within.wrapper, text.subarray(at, end), within.closing]));
             if (!batch) {
                 // A cut a comment, CDATA or an instruction hides breaks the batch it ends; the batches before it ended at
