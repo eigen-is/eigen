@@ -1131,9 +1131,27 @@ const weasyPrint = await isWeasyPrintAvailable();
 const launcher = Bun.which('weasyprint');
 const python = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
 
+// A Python script's whole output once it has exited. WeasyPrint hits a SIGSEGV now and then while renders run side by
+// side, which the export renders once more (weasyprint.ts), so this does too; any other failure throws its stderr.
+async function pythonOutput(args: string[], input: string): Promise<string> {
+    if (python === null) throw new Error('no python behind the weasyprint launcher');
+    for (let attempt = 0; ; attempt++) {
+        const proc = Bun.spawn([python, '-I', ...args], { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
+        proc.stdin.write(input);
+        await proc.stdin.end();
+        const [stdout, stderr, code] = await Promise.all([
+            new Response(proc.stdout).text(),
+            new Response(proc.stderr).text(),
+            proc.exited,
+        ]);
+        if (code === 0) return stdout;
+        if (proc.signalCode !== 'SIGSEGV' || attempt > 0)
+            throw new Error(`python exited with ${proc.signalCode ?? code}: ${stderr}`);
+    }
+}
+
 // What `line` prints of each box WeasyPrint lays out for the pages the PDF is written from, `tag` its element's name.
 async function laidOut(html: string, line: string): Promise<string[]> {
-    if (python === null) throw new Error('no python behind the weasyprint launcher');
     const script = `
 import sys, weasyprint
 def walk(box):
@@ -1145,10 +1163,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         tag = str(getattr(box, 'element_tag', '')).split('}')[-1]
         ${line}
 `;
-    const proc = Bun.spawn([python, '-I', '-c', script], { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' });
-    proc.stdin.write(html);
-    await proc.stdin.end();
-    return (await new Response(proc.stdout).text()).trim().split('\n');
+    return (await pythonOutput(['-c', script], html)).trim().split('\n');
 }
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — ordered list numbers (WeasyPrint)', () => {
@@ -1526,15 +1541,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 `;
 
 async function pageTexts(html: string): Promise<string[]> {
-    if (python === null) throw new Error('no python behind the weasyprint launcher');
-    const proc = Bun.spawn([python, '-I', '-c', PAGE_TEXT_SCRIPT], {
-        stdin: 'pipe',
-        stdout: 'pipe',
-        stderr: 'inherit',
-    });
-    proc.stdin.write(html);
-    await proc.stdin.end();
-    return (await new Response(proc.stdout).text()).trim().split('\n');
+    return (await pythonOutput(['-c', PAGE_TEXT_SCRIPT], html)).trim().split('\n');
 }
 
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — headers and footers (WeasyPrint)', () => {
@@ -1618,18 +1625,8 @@ async function printedLines(
     doc: Y.Doc,
     options: { broken?: boolean } = {},
 ): Promise<{ renders: number; probes: number; pages: PrintedLines[] }> {
-    if (python === null) throw new Error('no python behind the weasyprint launcher');
-    const proc = Bun.spawn(
-        [python, '-I', '-c', RENDER_LINES_SCRIPT, renderScript, ...(options.broken ? ['broken'] : [])],
-        {
-            stdin: 'pipe',
-            stdout: 'pipe',
-            stderr: 'inherit',
-        },
-    );
-    proc.stdin.write(await exported('pdf-html', doc));
-    await proc.stdin.end();
-    return JSON.parse(await new Response(proc.stdout).text());
+    const args = ['-c', RENDER_LINES_SCRIPT, renderScript, ...(options.broken ? ['broken'] : [])];
+    return JSON.parse(await pythonOutput(args, await exported('pdf-html', doc)));
 }
 
 const px = (mm: number) => (mm / 25.4) * 96;
