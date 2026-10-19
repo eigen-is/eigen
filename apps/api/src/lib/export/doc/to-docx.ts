@@ -32,7 +32,7 @@ import {
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import { writeOmml } from '@workspace/math';
-import { A_NS, ASVG_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../core/ooxml';
+import { A_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../core/ooxml';
 import {
     type PackagePart,
     type Relationship,
@@ -94,7 +94,13 @@ import {
 } from '../../document/wordml';
 import { splitDataUri } from '../../shared/data-uri';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
-import { encodeOfficeImage, OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia, RASTER_EXTENSIONS } from '../office-image';
+import {
+    blipXml,
+    encodeOfficeImage,
+    OFFICE_IMAGE_CONTENT_TYPES,
+    type OfficeMedia,
+    officeImageParts,
+} from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
@@ -1291,7 +1297,7 @@ const TABLE_LOOK = {
 
 // One image file per media name, and one relationship per part that shows it; an SVG's PNG is its blip, the SVG its
 // extension.
-type ImageFile = { part: string; svg?: string; width: number; height: number };
+type ImageFile = { part: string; svgPart?: string; width: number; height: number };
 
 type Image = ImageFile & { rId: string; svgRId?: string };
 
@@ -1402,19 +1408,16 @@ function imageOf(name: string, pkg: Package): Image | undefined {
         const media = pkg.media.get(name);
         const { width, height } = media ?? {};
         if (!media || !isPositive(width) || !isPositive(height)) return undefined;
-        const svg = media.contentType === 'image/svg+xml';
-        const raster = svg ? media.png : media.data;
-        const extension = svg ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
-        if (!raster || !extension) return undefined;
-        const n = pkg.imageFiles.size + 1;
-        file = { part: `image${n}.${extension}`, ...(svg && { svg: `image${n}.svg` }), width, height };
-        pkg.files.push([`word/media/${file.part}`, raster]);
-        if (file.svg) pkg.files.push([`word/media/${file.svg}`, media.data]);
+        const parts = officeImageParts(media, pkg.imageFiles.size + 1);
+        if (!parts) return undefined;
+        file = { part: parts.part, ...(parts.svgPart && { svgPart: parts.svgPart }), width, height };
+        pkg.files.push([`word/media/${parts.part}`, parts.raster]);
+        if (parts.svgPart) pkg.files.push([`word/media/${parts.svgPart}`, media.data]);
         pkg.imageFiles.set(name, file);
     }
     const relate = (target: string) =>
         `rId${pkg.part.relationships.push({ type: `${R_NS}/image`, target: `media/${target}` })}`;
-    const image: Image = { ...file, rId: relate(file.part), ...(file.svg && { svgRId: relate(file.svg) }) };
+    const image: Image = { ...file, rId: relate(file.part), ...(file.svgPart && { svgRId: relate(file.svgPart) }) };
     pkg.part.images.set(name, image);
     return image;
 }
@@ -1427,9 +1430,7 @@ function isPositive(value: number | undefined): value is number {
 function drawingXml(image: Image, cx: number, cy: number, alt: string, pkg: Package): string {
     const n = ++pkg.drawings;
     const descr = escapeXml(alt);
-    const blip = image.svgRId
-        ? `<a:blip r:embed="${image.rId}"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="${ASVG_NS}" r:embed="${image.svgRId}"/></a:ext></a:extLst></a:blip>`
-        : `<a:blip r:embed="${image.rId}"/>`;
+    const blip = blipXml(image.rId, image.svgRId);
     return [
         `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`,
         `<wp:docPr id="${n}" name="Picture ${n}" descr="${descr}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>`,
