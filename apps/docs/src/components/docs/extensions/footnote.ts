@@ -1,7 +1,7 @@
 import { combineTransactionSteps, type Editor, Extension, getChangedRanges } from '@tiptap/core';
-import type { Node as PMNode } from '@tiptap/pm/model';
+import type { Fragment, Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
-import type { MapResult } from '@tiptap/pm/transform';
+import { type MapResult, ReplaceAroundStep, ReplaceStep } from '@tiptap/pm/transform';
 import { Decoration, DecorationSet, type DecorationSource, type NodeView } from '@tiptap/pm/view';
 import { type ProsemirrorBinding, relativePositionToAbsolutePosition, ySyncPluginKey } from '@tiptap/y-tiptap';
 import { FootnoteNode, footnoteNumbers, insertFootnote } from '@workspace/lib/docs/eigendoc';
@@ -36,7 +36,7 @@ declare module '@tiptap/core' {
     }
 }
 
-export type NumberedNote = { pos: number; node: PMNode };
+type NumberedNote = { pos: number; node: PMNode };
 
 type Numbering = { notes: readonly NumberedNote[]; decorations: DecorationSet };
 
@@ -52,6 +52,37 @@ function numbering(doc: PMNode): Numbering {
         decorations.push(Decoration.node(pos, pos + node.nodeSize, {}, { footnoteNumber: number }));
     }
     return { notes, decorations: DecorationSet.create(doc, decorations) };
+}
+
+function holdsNote(content: Fragment): boolean {
+    let found = false;
+    content.descendants((node) => {
+        found ||= node.type.name === 'footnote';
+        return !found;
+    });
+    return found;
+}
+
+// The numbering mapped through a change that leaves every note as it was, its node at its mapped position, and brings
+// none in; null for a walk. A mark or attribute step on a note maps no position yet makes a new node. The notes keep
+// their array while none moved, so the list under the page draws nothing again.
+function mappedNumbering(tr: Transaction, value: Numbering): Numbering | null {
+    if (
+        tr.steps.some(
+            (step) =>
+                (step instanceof ReplaceStep || step instanceof ReplaceAroundStep) && holdsNote(step.slice.content),
+        )
+    )
+        return null;
+    const notes: NumberedNote[] = [];
+    let moved = false;
+    for (const note of value.notes) {
+        const { pos, deleted } = tr.mapping.mapResult(note.pos, 1);
+        if (deleted || tr.doc.nodeAt(pos) !== note.node) return null;
+        moved ||= pos !== note.pos;
+        notes.push(pos === note.pos ? note : { pos, node: note.node });
+    }
+    return { notes: moved ? notes : value.notes, decorations: value.decorations.map(tr.mapping, tr.doc) };
 }
 
 // The notes in document order, numbered: what the reference draws and the list under the page shows.
@@ -104,18 +135,20 @@ class FootnoteView implements NodeView {
 
 const bindingOf = (editor: Editor): ProsemirrorBinding | undefined => ySyncPluginKey.getState(editor.state)?.binding;
 
-// The element that holds a node, through the binding's mapping, which runs from element to node: a footnote's is kept
-// beside its node, as only a note's own edit gives it a new one.
-const elements = new WeakMap<PMNode, Y.AbstractType<unknown>>();
-function elementOf(binding: ProsemirrorBinding, node: PMNode): Y.AbstractType<unknown> | null {
-    const kept = elements.get(node);
-    if (kept && binding.mapping.get(kept) === node) return kept;
-    for (const [element, mapped] of binding.mapping) {
-        if (mapped !== node) continue;
-        elements.set(node, element);
-        return element;
+// The binding's mapping runs from element to node, so its reverse is built once per doc and mapping: y-tiptap clears
+// and refills the mapping on every peer update, and the notes list looks up each note's element on every render.
+type Reverse = { doc: PMNode; size: number; elements: Map<PMNode, Y.AbstractType<unknown>> };
+const reverses = new WeakMap<ProsemirrorBinding, Reverse>();
+function elementOf(binding: ProsemirrorBinding, doc: PMNode, node: PMNode): Y.AbstractType<unknown> | null {
+    let reverse = reverses.get(binding);
+    if (reverse?.doc !== doc || reverse.size !== binding.mapping.size) {
+        const elements = new Map<PMNode, Y.AbstractType<unknown>>();
+        for (const [element, mapped] of binding.mapping) if (!Array.isArray(mapped)) elements.set(mapped, element);
+        reverse = { doc, size: binding.mapping.size, elements };
+        reverses.set(binding, reverse);
     }
-    return null;
+    const element = reverse.elements.get(node);
+    return element && binding.mapping.get(element) === node ? element : null;
 }
 
 // Where an element stands in the doc: before the child it is of its parent.
@@ -137,7 +170,7 @@ function positionOf(binding: ProsemirrorBinding, element: Y.AbstractType<unknown
 export function noteAnchor(editor: Editor, pos: number): NoteAnchor | null {
     const binding = bindingOf(editor);
     const node = editor.state.doc.nodeAt(pos);
-    const element = binding && node?.type.name === 'footnote' ? elementOf(binding, node) : null;
+    const element = binding && node?.type.name === 'footnote' ? elementOf(binding, editor.state.doc, node) : null;
     return element && { pos, element };
 }
 
@@ -147,7 +180,7 @@ const keys = new WeakMap<Y.AbstractType<unknown>, number>();
 let lastKey = 0;
 export function noteKey(editor: Editor, { pos, node }: NumberedNote): string {
     const binding = bindingOf(editor);
-    const element = binding && elementOf(binding, node);
+    const element = binding && elementOf(binding, editor.state.doc, node);
     if (!element) return `at-${pos}`;
     const key = keys.get(element) ?? ++lastKey;
     keys.set(element, key);
@@ -175,7 +208,11 @@ export function findNote(
     if (pos === null || node?.type.name !== 'footnote') return null;
     // A peer's change keeps the element; only a split here gives the note a new one.
     const element =
-        binding.mapping.get(anchor.element) === node ? anchor.element : remote ? null : elementOf(binding, node);
+        binding.mapping.get(anchor.element) === node
+            ? anchor.element
+            : remote
+              ? null
+              : elementOf(binding, editor.state.doc, node);
     const dom = editor.view.nodeDOM(pos);
     const view = dom && editor.storage.footnote.views.get(dom);
     return element && view ? { pos, node, view, element } : null;
@@ -271,8 +308,8 @@ export const Footnote = FootnoteNode.extend<FootnoteOptions, FootnoteStorage>({
                 key: numberingKey,
                 state: {
                     init: (_, state) => numbering(state.doc),
-                    // On every change: a mark or attribute step maps no position yet gives its note a new node.
-                    apply: (tr, value, _oldState, newState) => (tr.docChanged ? numbering(newState.doc) : value),
+                    apply: (tr, value, _oldState, newState) =>
+                        tr.docChanged ? (mappedNumbering(tr, value) ?? numbering(newState.doc)) : value,
                 },
                 props: { decorations: (state) => numberingKey.getState(state)?.decorations },
             }),
