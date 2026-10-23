@@ -370,7 +370,7 @@ export function docEditorOptions({
                 // and the selection's Add comment, which would otherwise open their own menus over a cell.
                 contextmenu: (view, event) => {
                     const target = editor();
-                    const pos = cellPosAt(view, event.target);
+                    const pos = cellPosAt(view, event);
                     if (!table || !target || pos === null || !table.onContextMenu(target, pos, event)) return false;
                     event.preventDefault();
                     return true;

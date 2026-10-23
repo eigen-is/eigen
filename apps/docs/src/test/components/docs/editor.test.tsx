@@ -814,10 +814,15 @@ test("a viewer's right-click on an image with no rows for it opens no menu", asy
     expect(event.defaultPrevented).toBe(false);
 });
 
-const rightClick = async (target: Element | null | undefined) => {
+// happy-dom lays nothing out to hit-test, so the pointer lands at `pos`, else at the target's start.
+const rightClick = async (target: Element | null | undefined, pos?: number) => {
     if (!target) throw new Error('nothing to right-click');
+    const view = target.closest<TiptapEditorHTMLElement>('.ProseMirror')?.editor?.view;
+    const hit =
+        view && spyOn(view, 'posAtCoords').mockReturnValue({ pos: pos ?? view.posAtDOM(target, 0), inside: -1 });
     const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
     await act(async () => target.dispatchEvent(event));
+    hit?.mockRestore();
     return event;
 };
 
@@ -922,6 +927,17 @@ test('a right-click inside a cell selection keeps it, so Merge cells merges it',
     await rightClick(bodyCell());
     await pick('Merge cells');
     expect(doc.getXmlFragment('default').toString()).toContain('colspan="2"');
+});
+
+test('a right-click inside a text selection in a cell keeps it, so Copy copies it', async () => {
+    await render(WRITER);
+    await bodyTable();
+    const body = bodyEditor();
+    await act(async () => void body.commands.insertContentAt(body.state.selection.from, 'Total'));
+    await act(async () => void body.commands.setTextSelection({ from: 5, to: 7 }));
+    await rightClick(bodyView()?.querySelector('th p'), 6);
+    expect(body.state.selection.from).toBe(5);
+    expect(body.state.selection.to).toBe(7);
 });
 
 // The menu fires the native cut and copy ⌘X and ⌘C fire, as Edit › Cut and Copy do.
