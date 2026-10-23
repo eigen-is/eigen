@@ -248,6 +248,28 @@ describe('the page', () => {
         for (const root of ['header', 'footer', 'headerFirst'] as const)
             expect(stored(read[root] ?? {})).toEqual(stored(docSchema().nodeFromJSON(bands[root]).toJSON()));
     });
+
+    // Google's Page count goes anywhere text goes, the body too.
+    test("the body's page count and page number come back as fields", async () => {
+        const number = (kind: string) => ({ type: 'pageNumber', attrs: { kind } });
+        const body = {
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Pages: ' },
+                        number('pages'),
+                        { type: 'text', text: ', this one ' },
+                        number('page'),
+                    ],
+                },
+            ],
+        };
+        const docx = await eigendocToDocx(body, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Body', undefined);
+        const { json } = docxToPmJson(Buffer.from(docx));
+        expect(stored(json)).toEqual(stored(docSchema().nodeFromJSON(body).toJSON()));
+    });
 });
 
 describe('the Normal', () => {

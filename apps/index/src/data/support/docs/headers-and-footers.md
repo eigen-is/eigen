@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, headers, footers, page-numbers, layout]
 related: [docs/print, docs/export]
 order: 55
-updated: 2026-10-19
+updated: 2026-10-23
 ---
 
 A header sits at the top of each page and a footer at the bottom. Use them for a title, a logo, or page numbers. You type them right on the page, in its top and bottom margins.
@@ -26,7 +26,7 @@ Open **Insert → Page elements → Page numbers**, or **Format → Page numbers
 - **In the header** or **In the footer** puts the number on the right of every page.
 - **In the header, not on the first page** or **In the footer, not on the first page** leaves the first page without one, which suits a cover page or a letter. It turns on **Different first page** for you.
 
-The number goes in and your cursor moves to that header or footer. A header or footer that already has a page number keeps that one. To add the number of pages, as in "Page 3 of 7", choose **Page count** from the same menu: it goes in at your cursor. On screen, a page number and a page count both show as **#**. While you edit a header or footer, **Options → Page numbers** on the bar holds the same choices.
+The number goes in and your cursor moves to that header or footer. A header or footer that already has a page number keeps that one. To add the number of pages, as in "Page 3 of 7", choose **Page count** from the same menu: it goes in at your cursor. On screen, a page number shows as **#page** and a page count as **#pages**. Point at one to see which it is. While you edit a header or footer, **Options → Page numbers** on the bar holds the same choices.
 
 ## Give the first page its own header and footer
 
@@ -38,7 +38,7 @@ Double-click the header or footer, then choose **Options → Remove header** or 
 
 ## Good to know
 
-- **File → Print** and the PDF and Word downloads put the header and footer on every page, with the page numbers filled in, and the first page's own when it differs. The web page download shows the header at the top and the footer at the end.
+- **File → Print** and the PDF and Word downloads put the header and footer on every page, with the page numbers filled in, and the first page's own when it differs. A page number or page count in your text is filled in too. The web page download shows the header at the top and the footer at the end.
 - A header or footer taller than its margin moves your text away from it, on the page and in the PDF. In the PDF, the header and footer never take more than half the page: the rest of a taller one runs over your text. The PDF cuts a header or footer after about 200 paragraphs or 20,000 characters.
 - Importing a Word file brings its header and footer along. See [Import a Word document](/support/docs/import-word).
 - Comments and **Find** work on your text, not on the header or footer.

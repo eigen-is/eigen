@@ -1559,6 +1559,15 @@ describe('doc export — headers and footers', () => {
         const css = await exportStyle('html', bandedDoc(2, false));
         expect(css).not.toContain('running(');
         expect(css).not.toContain('@top-center');
+        expect(css).not.toContain('counter(page');
+    });
+
+    // The counters number a field wherever it stands, so the PDF writes them with no band to hold one.
+    test("the PDF counts a body's page number in a doc with no bands", async () => {
+        const css = await exportStyle('pdf-html', seededDoc());
+        expect(css).toContain('[data-type="page-number"][data-kind="page"]::after { content: counter(page); }');
+        expect(css).toContain('[data-type="page-number"][data-kind="pages"]::after { content: counter(pages); }');
+        expect(css).not.toContain('running(');
     });
 
     // WeasyPrint lays a running element out on every page, so an unbounded header ran the PDF into its timeout.
@@ -1701,6 +1710,20 @@ async function pageTexts(html: string): Promise<string[]> {
             'Body 1Letterhead',
             'Body 2Acme headerPage 2 of 2',
         ]);
+    }, 60_000);
+
+    // A docx's NUMPAGES lands in the body of a doc with no bands, as Google's Page count goes anywhere text goes.
+    test("a body's page number and page count print in a doc with no bands", async () => {
+        const number = (kind: 'page' | 'pages') => ({ type: 'pageNumber', attrs: { kind } });
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                { type: 'paragraph', content: [{ type: 'text', text: 'Pages: ' }, number('pages')] },
+                { type: 'pageBreak' },
+                { type: 'paragraph', content: [{ type: 'text', text: 'Page ' }, number('page')] },
+            ],
+        });
+        expect(await pageTexts(await exported('pdf-html', doc))).toEqual(['Pages: 2', 'Page 2']);
     }, 60_000);
 });
 
