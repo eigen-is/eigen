@@ -124,10 +124,9 @@ seed() {
     SHEET_ID=$(api POST "$drive/folder/$ROOT_ID/create/sheets" '{"fileName":"Release sheet"}' | first_id)
     # A workbook of one cell, imported as an operator imports an xlsx into a sheet.
     docker run --rm --entrypoint bun -e CELL="$SHEET_CELL" "$(api_image)" -e '
-        const ExcelJS = require("exceljs");
-        const workbook = new ExcelJS.Workbook();
-        workbook.addWorksheet("Sheet1").getCell("A1").value = process.env.CELL;
-        workbook.xlsx.writeBuffer().then((buffer) => process.stdout.write(Buffer.from(buffer)));
+        const { sheetsToXlsx } = require("./src/lib/export/sheets/to-xlsx");
+        sheetsToXlsx([{ name: "Sheet1", celldata: [{ r: 0, c: 0, v: { v: process.env.CELL } }] }])
+            .then((bytes) => process.stdout.write(bytes));
     ' >"$SCRATCH/seed.xlsx"
     curl -sk -b "$JAR" -o /dev/null -X POST -H 'Content-Type: application/octet-stream' -H 'Origin: https://localhost' \
         --data-binary "@$SCRATCH/seed.xlsx" "$BASE$drive/file/$SHEET_ID/import" || true

@@ -124,7 +124,7 @@ export function borderInfoExtent(borderInfo: Record<string, CellBorderSides>): {
 }
 
 // Folds each merge's perimeter onto its master for readers that address a merge through one
-// cell (an exceljs style, an HTML td). Storage keeps every constituent's sides for an unmerge.
+// cell (an OOXML style, an HTML td). Storage keeps every constituent's sides for an unmerge.
 // `range` is required so the work is bounded: only its cells and the merges crossing it are
 // visited, and a crossing merge is expanded ONLY over its intersection with the range (a legal
 // A1:A100000 merge that crosses the window otherwise built ~100k entries). A constituent that

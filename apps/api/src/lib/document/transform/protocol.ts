@@ -327,7 +327,7 @@ export function resultBytes(result: TransformResult): number {
     return result.images.reduce((sum, image) => sum + image.data.byteLength, result.update.byteLength);
 }
 
-// Buffers from TextEncoder/ExcelJS can be views over a larger pool, and IPC
+// Buffers from TextEncoder and the writers can be views over a larger pool, and IPC
 // serializes a view's WHOLE backing buffer — copy to an exact standalone one first.
 export function toTransferableBuffer(bytes: Uint8Array): ArrayBuffer {
     const { buffer } = bytes;

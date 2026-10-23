@@ -120,8 +120,8 @@ describe('an xlsx export read back by the import', () => {
     });
 });
 
-// What ExcelJS lost, each read back through the import.
-describe("the losses of ExcelJS's export", () => {
+// Each read back through the import.
+describe('the export keeps what a plain writer loses', () => {
     test('a linked number or date keeps its value and type', async () => {
         const [sheet] = xlsxToSheets(
             await sheetsToXlsx([
@@ -285,13 +285,6 @@ describe('the package', () => {
             '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>',
         );
         expect(entry(bytes, 'docProps/core.xml')).toContain('<dc:title>Budget</dc:title>');
-    });
-
-    test('ExcelJS still writes the workbook when asked, until it leaves', async () => {
-        const sheets: Sheet[] = [{ name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { v: 1 } }] }];
-        expect(cellAt(xlsxToSheets(await sheetsToXlsx(sheets, { writer: 'exceljs' }))[0], 0, 0)).toMatchObject({
-            v: 1,
-        });
     });
 });
 

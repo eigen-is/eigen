@@ -134,7 +134,7 @@ const TOO_LARGE = { status: 413, message: 'This spreadsheet is too large to impo
 const TOO_MANY_CELLS = { status: 413, message: 'Spreadsheet has too many cells' };
 const INVALID = { status: 400, message: 'Not a valid xlsx file' };
 
-// Each was a 1.5 KB file the ExcelJS import expanded per cell, past its deadline at 2.3 to 9 GB, until a scan refused
+// Each is a 1.5 KB file that would expand per cell, past the deadline at gigabytes, so a scan refuses
 // it before the load.
 describe('a range a file declares costs what it emits', () => {
     test.each<[string, Parameters<typeof xlsx>[0], Partial<Measured>]>([
@@ -149,7 +149,7 @@ describe('a range a file declares costs what it emits', () => {
         ['a merge of 26 whole columns', { after: merges('A1:Z1048576') }, TOO_MANY_CELLS],
         ['whole rows and four whole columns merged', { after: merges('1:1048576', 'A1:D1048576') }, TOO_MANY_CELLS],
         ['a merge a raw tab names past the grid', { after: merges('A1\tx:XFD1048576!A1:A1') }, { cells: [1] }],
-        // Merges are never checked against each other: the ExcelJS import refused more than 10,000.
+        // Merges are never checked against each other: more than 10,000 are kept.
         [
             '10,001 merges',
             { after: merges(...Array.from({ length: 10_001 }, (_, i) => `A${i + 1}:B${i + 1}`)) },
@@ -159,11 +159,11 @@ describe('a range a file declares costs what it emits', () => {
         ['a column range past the grid', { before: columns(1, 100_000_000) }, { cells: [1] }],
         ['a column range starting past the grid', { before: columns(100_000_000, 1) }, { cells: [1] }],
         ['a column range past the grid behind whitespace', { before: columns(1, ' \t20000000') }, { cells: [1] }],
-        // XML 1.1 reads a NEL as a space too, which ended a range for the ExcelJS import's scan; Bun reads 1.1 as 1.0.
+        // XML 1.1 reads a NEL as a space too, which would end a range for a scan; Bun reads 1.1 as 1.0.
         ['an XML 1.1 part', { version: '1.1', after: validation('B1:B1\u0085A1:XFD1048576') }, { cells: [1] }],
         ['a row past the grid', { data: '<row r="1000000000" hidden="1"/>' }, TOO_MANY_CELLS],
         ['a sheet id far past any real one', { sheetId: 4_294_967_294 }, { cells: [1] }],
-        // Defined names are never read: the ExcelJS import walked every cell of a name's range.
+        // Defined names are never read: walking a name's range would visit every cell.
         [
             'names over external workbooks covering 614 million cells, as a GOV.UK workbook has',
             {
@@ -221,7 +221,7 @@ describe('each cap', () => {
         expect(result.cpuMs).toBeLessThan(2_000);
     }, 30_000);
 
-    // Only what a row emits is read, never the row numbers before it: the ExcelJS import walked 103 s through 500
+    // Only what a row emits is read, never the row numbers before it: walking them took 103 s through 500
     // sheets that each hid their last row.
     test('sheets that each hide their last row cost what they emit', () => {
         const last = '<row r="1048576" hidden="1"/>';

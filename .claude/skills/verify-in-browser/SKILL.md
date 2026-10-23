@@ -46,7 +46,7 @@ How to prove a change works in the real product, not just in tests. Written for 
 - **Behavioral probes beat static shots**: scroll (frozen panes), click (menus, dropdowns, buttons), type and reload (persistence).
 - **Compare against a baseline**: the previous cycle's screenshots, or for round-trips the original document rendered side by side. Pixelmatch for objectivity, eyes for judgment; read flagged regions at zoom.
 - **Pixel gates are for render paths.** A refactor touching a render path (sheet canvas, export and preview renderers, layout CSS), where a wrong pixel is the failure mode and no test asserts it, is gated: capture baseline screenshots before, re-capture after, byte-identical or it doesn't merge; prove baseline determinism with a double pre-capture. Each capture serializes the session (nothing may edit the tree while it runs) and costs minutes, so a type-only or string-only refactor gets tests, typecheck and one behavioral probe with its screenshots read instead.
-- **Output consumed by external software** (xlsx, ics, eml, …) is spot-opened in the real consumer (Excel, Google Sheets, a mail client, …). A library can write technically valid files that real consumers still mishandle: exceljs wrote internal hyperlinks that opened fine in our own importer and showed "Invalid link" in Google Sheets.
+- **Output consumed by external software** (xlsx, ics, eml, …) is spot-opened in the real consumer (Excel, Google Sheets, a mail client, …). A library can write technically valid files that real consumers still mishandle: a former xlsx library wrote internal hyperlinks that opened fine in our own importer and showed "Invalid link" in Google Sheets.
 
 ## Mobile and touch
 
