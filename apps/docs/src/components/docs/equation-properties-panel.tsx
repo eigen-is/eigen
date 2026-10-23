@@ -27,8 +27,8 @@ import {
     PropertyToggle,
 } from '@workspace/ui/components/properties-panel';
 import { Textarea } from '@workspace/ui/components/textarea';
-import { Rows3, TextCursorInput } from 'lucide-react';
 import { type RefObject, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { EQUATION_STYLES } from './equation-menu-sections';
 import { EQUATION_MENUS } from './equation-menus';
 import { drawnMath, MathMount } from './extensions/equation';
 
@@ -222,22 +222,17 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
             <PropertySection title="Layout">
                 <PropertyRow label="Style">
                     <div className="flex items-center gap-1">
-                        <PropertyToggle
-                            aria-label="In line with text"
-                            title="In line with text"
-                            pressed={!display}
-                            onPressedChange={() => editor.commands.updateEquation({ display: false })}
-                        >
-                            <TextCursorInput className="h-4 w-4" />
-                        </PropertyToggle>
-                        <PropertyToggle
-                            aria-label="On its own line"
-                            title="On its own line"
-                            pressed={display}
-                            onPressedChange={() => editor.commands.updateEquation({ display: true })}
-                        >
-                            <Rows3 className="h-4 w-4" />
-                        </PropertyToggle>
+                        {EQUATION_STYLES.map(({ display: value, label, icon: Icon }) => (
+                            <PropertyToggle
+                                key={label}
+                                aria-label={label}
+                                title={label}
+                                pressed={display === value}
+                                onPressedChange={() => editor.commands.updateEquation({ display: value })}
+                            >
+                                <Icon className="h-4 w-4" />
+                            </PropertyToggle>
+                        ))}
                     </div>
                 </PropertyRow>
             </PropertySection>
