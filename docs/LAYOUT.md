@@ -94,6 +94,8 @@ Menubar menus (File, Edit, Format) keep Google's order, which a user knows from 
 
 A share dialog's role Remove is a `SelectItem` with the same `variant`, behind a `SelectSeparator`.
 
+A properties panel has no Delete button. An object's Delete is its menu's last row, the Delete key and Edit › Delete, in Vector, Slides and Sheets alike, so the panel holds only what edits the object and a misclick there loses nothing.
+
 `scripts/check-standards.ts` gates it as a hard zero: a `DropdownMenuItem` or `SelectItem` that draws a `Trash2` icon, or whose label says Delete, Remove or to trash, fails without the variant, and so does one tinted by `text-destructive`, which leaves the icon grey. A toggle's label (`'Remove' : 'Add'` space before) is an undo and passes.
 
 ## Pink is Eigen's accent color

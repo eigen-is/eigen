@@ -1,18 +1,10 @@
 import { parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { ChartLook, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
-import { parseFill, serializeFill } from '@workspace/lib/vector';
-import { ChartEditor } from '@workspace/ui/components/charts';
+import { ChartSections } from '@workspace/ui/components/charts';
 import { Input } from '@workspace/ui/components/input';
-import {
-    PaintSections,
-    PropertiesPanel,
-    PropertyCheckbox,
-    PropertyGestureContext,
-    PropertyRow,
-    PropertySection,
-} from '@workspace/ui/components/properties-panel';
-import { type ReactNode, type RefObject, useState } from 'react';
+import { PropertyCheckbox, PropertyRow } from '@workspace/ui/components/properties-panel';
+import { type RefObject, useState } from 'react';
 import { rowIndexToLabel } from '../../engine/a1-notation';
 import {
     CHART_RANGE_REFUSALS,
@@ -22,67 +14,49 @@ import {
     chartRangeText,
     parseChartRangeText,
 } from '../../engine/chart-range';
-import type { ChartEditorState } from '../../state';
+import type { ChartPanelState } from '../../state';
 import type { WorkbookInstance } from '../Workbook';
 
-type ChartEditorPanelProps = {
-    editor: ChartEditorState;
+type ChartPanelSectionsProps = {
+    panel: ChartPanelState;
     workbook: RefObject<WorkbookInstance | null>;
-    // The app's rows after the chart's own: the Transform section a selected chart shows without its editor.
-    children?: ReactNode;
 };
 
-// Google's Chart editor: Setup (the data range and how it reads) over the shared Customise rows, then the
-// look's paint rows. A Customise change is one write of the chart's spec, a paint row one write of its look
-// fields, and a typed field one undo step for the whole edit.
-export function ChartEditorPanel({ editor, workbook, children }: ChartEditorPanelProps) {
-    const spec = parseChartSpec(editor.chart.spec);
+// The selected chart's sections in the app's panel: the shared chart and look sections, with Google's Setup (the
+// data range and how it reads) inside the Chart section, where an inline chart has Edit data. A Customise change
+// is one write of the chart's spec, a paint row one write of its look fields. The host's PropertyGestureContext
+// makes a typed field one undo step.
+export function ChartPanelSections({ panel, workbook }: ChartPanelSectionsProps) {
+    const spec = parseChartSpec(panel.chart.spec);
     if (!spec) return null;
     const { data } = spec;
-    const look = readChartLook(editor.chart);
-    const write = (next: ChartSpec) => workbook.current?.setChartSpec(editor.chart.id, next);
-    const writeLook = (patch: Partial<ChartLook>) => workbook.current?.setChartLook(editor.chart.id, patch);
-    const beginGesture = () => workbook.current?.beginGesture() ?? (() => {});
+    const write = (next: ChartSpec) => workbook.current?.setChartSpec(panel.chart.id, next);
+    const writeLook = (patch: Partial<ChartLook>) => workbook.current?.setChartLook(panel.chart.id, patch);
     return (
-        <PropertiesPanel title="Chart editor">
-            <PropertyGestureContext.Provider value={beginGesture}>
-                {data.source === 'range' && (
-                    <SetupSection editor={editor} spec={spec} data={data} workbook={workbook} onChange={write} />
-                )}
-                <ChartEditor
-                    spec={spec}
-                    onChange={write}
-                    categories={editor.categories}
-                    seriesNames={editor.seriesNames}
-                />
-                <PaintSections
-                    fill={look.fill}
-                    fillStyle={parseFill(look.fill).style}
-                    marksHatch
-                    strokeColor={look.strokeColor}
-                    strokeWidth={look.strokeWidth}
-                    strokeStyle={look.strokeStyle}
-                    strokeOptional
-                    roughness={look.roughness}
-                    color={look.color}
-                    sketchCapped={editor.sketchCapped}
-                    onFill={(next) => writeLook({ fill: serializeFill(next(parseFill(look.fill))) })}
-                    onChange={writeLook}
-                />
-                {children}
-            </PropertyGestureContext.Provider>
-        </PropertiesPanel>
+        <ChartSections
+            spec={spec}
+            onChange={write}
+            look={readChartLook(panel.chart)}
+            onLookChange={writeLook}
+            sketchCapped={panel.sketchCapped}
+            categories={panel.categories}
+            seriesNames={panel.seriesNames}
+        >
+            {data.source === 'range' && (
+                <DataRangeRows panel={panel} spec={spec} data={data} workbook={workbook} onChange={write} />
+            )}
+        </ChartSections>
     );
 }
 
-type SetupSectionProps = ChartEditorPanelProps & {
+type DataRangeRowsProps = ChartPanelSectionsProps & {
     spec: ChartSpec;
     data: RangeChartData;
     onChange: (spec: ChartSpec) => void;
 };
 
-function SetupSection({ editor, spec, data, workbook, onChange }: SetupSectionProps) {
-    const { chart, sheets, sheetId } = editor;
+function DataRangeRows({ panel, spec, data, workbook, onChange }: DataRangeRowsProps) {
+    const { chart, sheets, sheetId } = panel;
     const range = chartRangeOf(data);
     const text = range ? chartRangeText(range.ref, sheets, sheetId) : '';
     // While focused the field shows its draft, so a peer's write never moves the caret.
@@ -134,7 +108,7 @@ function SetupSection({ editor, spec, data, workbook, onChange }: SetupSectionPr
     ];
 
     return (
-        <PropertySection title="Setup">
+        <>
             <PropertyRow label="Data range">
                 <Input
                     className="h-7 text-xs"
@@ -163,6 +137,6 @@ function SetupSection({ editor, spec, data, workbook, onChange }: SetupSectionPr
                     onCheckedChange={(next) => setup(patch(next))}
                 />
             ))}
-        </PropertySection>
+        </>
     );
 }

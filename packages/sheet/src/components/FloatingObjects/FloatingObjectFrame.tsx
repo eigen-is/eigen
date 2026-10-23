@@ -15,20 +15,12 @@ type FloatingObjectFrameProps = {
     active: boolean;
     longPress: ReturnType<ReturnType<typeof useLongPress<SheetFloatingItem>>['bind']>;
     onContextMenu: (e: React.MouseEvent) => void;
-    onDoubleClick?: () => void;
     children: (box: Box) => ReactNode;
 };
 
 // One image or chart on the grid: select, move, resize, rotate, Escape and the menu, the same for both kinds. The
 // kind draws only its content. Each gesture previews locally and writes once at its end, only the fields it changed.
-export function FloatingObjectFrame({
-    item,
-    active,
-    longPress,
-    onContextMenu,
-    onDoubleClick,
-    children,
-}: FloatingObjectFrameProps) {
+export function FloatingObjectFrame({ item, active, longPress, onContextMenu, children }: FloatingObjectFrameProps) {
     const { context, setContext, settings } = useContext(WorkbookContext);
     const { kind, object } = item;
     const ref = { kind, id: object.id };
@@ -102,7 +94,7 @@ export function FloatingObjectFrame({
             }}
         >
             {/* touch-none only while selected, so a finger on any other object pans the grid. select-none: a
-                chart's double-click opens its editor and would otherwise select the drawing's text. */}
+                drag or a double-click would otherwise select a chart's text. */}
             <div
                 className={cn(
                     'size-full overflow-hidden pointer-events-auto select-none',
@@ -125,10 +117,8 @@ export function FloatingObjectFrame({
                     if (!active) setContext((ctx) => selectFloatingObject(ctx, ref));
                 }}
                 onContextMenu={onContextMenu}
-                onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    onDoubleClick?.();
-                }}
+                // The cell underneath must not start editing.
+                onDoubleClick={(e) => e.stopPropagation()}
             >
                 {children(box)}
             </div>

@@ -16,7 +16,7 @@ import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/co
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
-import { ChartEditorPanel, type ChartEditorState, Workbook, type WorkbookInstance } from '@workspace/sheet';
+import { ChartPanelSections, type ChartPanelState, Workbook, type WorkbookInstance } from '@workspace/sheet';
 import {
     CollabDocumentGate,
     DocumentShareCluster,
@@ -36,7 +36,7 @@ import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { FloatingObjectPanel, FloatingTransformSection } from './floating-object-panel';
+import { FloatingObjectPanel } from './floating-object-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
@@ -90,7 +90,7 @@ function SheetEditorInner({
         activeObject ? [activeObject.object.id] : [],
         activeObject?.kind === 'image',
     );
-    const [chartEditor, setChartEditor] = useState<ChartEditorState | null>(null);
+    const [chartPanel, setChartPanel] = useState<ChartPanelState | null>(null);
 
     const {
         initialData,
@@ -308,6 +308,7 @@ function SheetEditorInner({
         },
         [activeObject],
     );
+    const beginObjectGesture = useCallback(() => workbookRef.current?.beginGesture() ?? (() => {}), []);
 
     const leftItems = useMemo(
         () => <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} />,
@@ -408,7 +409,7 @@ function SheetEditorInner({
                                                 if (r != null && c != null) publishSelection(sheetId, r, c);
                                             },
                                             onActiveObjectChange: setActiveObject,
-                                            onChartEditorChange: setChartEditor,
+                                            onChartPanelChange: setChartPanel,
                                             ...(canWrite && mediaFolderId
                                                 ? {
                                                       onInsertImage: () => setImagePickerOpen(true),
@@ -480,19 +481,7 @@ function SheetEditorInner({
                         />
                     )}
                     {/* The comment/activity pane wins over the properties panel (the slides arrangement). */}
-                    {/* An open Chart editor takes the slot and ends with the chart's Transform section. */}
-                    {activeObject && !panel && chartEditor && (
-                        <ChartEditorPanel key={chartEditor.chart.id} editor={chartEditor} workbook={workbookRef}>
-                            <FloatingTransformSection
-                                item={activeObject}
-                                canWrite={canWrite}
-                                aspectLocked={aspectLocked}
-                                onAspectLockChange={setAspectLocked}
-                                onChange={handleObjectTransform}
-                            />
-                        </ChartEditorPanel>
-                    )}
-                    {activeObject && !panel && !chartEditor && (
+                    {activeObject && !panel && (
                         <FloatingObjectPanel
                             item={activeObject}
                             canWrite={canWrite}
@@ -505,9 +494,16 @@ function SheetEditorInner({
                                     op,
                                 )
                             }
-                            onEditChart={() => workbookRef.current?.openChartEditor(activeObject.object.id)}
-                            onDelete={() => workbookRef.current?.deleteActiveObject()}
-                        />
+                            beginGesture={beginObjectGesture}
+                        >
+                            {chartPanel && (
+                                <ChartPanelSections
+                                    key={chartPanel.chart.id}
+                                    panel={chartPanel}
+                                    workbook={workbookRef}
+                                />
+                            )}
+                        </FloatingObjectPanel>
                     )}
                 </div>
             </div>

@@ -59,7 +59,7 @@ export function setChartLook(ctx: Context, id: string, look: Partial<ChartLook>)
 const NEW_CHART_SIZE = { width: 600, height: 371 };
 
 // Insert → Chart: a column chart of the selection, or of the table around a single selected cell, below
-// it at Google's default size, selected with its editor open. Inserts nothing and says why for a selection
+// it at Google's default size, selected, so its panel shows. Inserts nothing and says why for a selection
 // that holds no chart.
 export function insertChartFromSelection(ctx: Context, id: string): ChartRangeRefusal | undefined {
     const selection = ctx.selections?.at(-1);
@@ -74,7 +74,7 @@ export function insertChartFromSelection(ctx: Context, id: string): ChartRangeRe
     if (typeof spec === 'string') return spec;
     const x = ref.column[0] === 0 ? 0 : ctx.visibledatacolumn[ref.column[0] - 1];
     insertChart(ctx, id, { x, y: ctx.visibledatarow[ref.row[1]], ...NEW_CHART_SIZE }, spec);
-    selectFloatingObject(ctx, { kind: 'chart', id }, true);
+    selectFloatingObject(ctx, { kind: 'chart', id });
 }
 
 // A typed data range is set up the way Insert sets up a selection, each series keeping its style.

@@ -1,5 +1,5 @@
 // A chart's own part of the floating frame on a mounted Workbook: it draws its range as SVG, redrawn only when a
-// sheet it reads changes, a double-click opens its editor, and its menu downloads it as an image. What every floating
+// sheet it reads changes, selecting it reports its panel, and its menu downloads it as an image. What every floating
 // object does is in floating-objects.test.tsx.
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { FLAT_CHART_LOOK, sampleChartSpec } from '@workspace/lib/charts';
@@ -20,7 +20,7 @@ const download = await import('@workspace/lib/download');
 const fonts = stubCanvasImageFonts();
 type Sheet = import('../../../state').Sheet;
 type Op = import('../../../state').Op;
-type ChartEditorState = import('../../../state').ChartEditorState;
+type ChartPanelState = import('../../../state').ChartPanelState;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
 const ref = (row: [number, number], column: [number, number]): CellRangeRef => ({ sheetId: 's1', row, column });
@@ -64,7 +64,7 @@ async function mount(allowEdit = true, look: Partial<ChartLook> = {}) {
     document.body.append(container);
     const root = createRoot(container);
     const workbook = createRef<WorkbookInstance>();
-    const editors: (ChartEditorState | null)[] = [];
+    const panels: (ChartPanelState | null)[] = [];
     const data: Sheet[] = [
         {
             id: 's1',
@@ -94,7 +94,7 @@ async function mount(allowEdit = true, look: Partial<ChartLook> = {}) {
                 allowEdit,
                 showToolbar: false,
                 showFormulaBar: false,
-                hooks: { onChartEditorChange: (editor) => editors.push(editor) },
+                hooks: { onChartPanelChange: (panel) => panels.push(panel) },
             }),
         );
     });
@@ -109,7 +109,7 @@ async function mount(allowEdit = true, look: Partial<ChartLook> = {}) {
             run(workbook.current);
         });
     const charts = () => workbook.current?.getAllSheets()[0].charts;
-    return { container, box, step, charts, editors };
+    return { container, box, step, charts, panels };
 }
 
 const clickCell = (container: HTMLElement) =>
@@ -128,7 +128,7 @@ test('a range chart draws as SVG at its box, labelled from its cells', async () 
     expect(el?.style.width).toBe('400px');
     const svg = el?.querySelector('svg')?.outerHTML ?? '';
     for (const label of ['>Scores<', '>Ajax<', '>PSV<', '>Points<']) expect(svg).toContain(label);
-    // A double-click opens the editor, so it must not select the drawing's text.
+    // A drag moves the chart, so it must not select the drawing's text.
     expect(el?.firstElementChild?.classList.contains('select-none')).toBe(true);
 });
 
@@ -151,12 +151,14 @@ test('a source cell edit redraws the chart; an edit on another sheet or a select
     }
 });
 
-test('a double-click opens the chart editor, and the editor follows the chart', async () => {
-    const { box, container, editors, step } = await mount();
+test('selecting a chart reports its panel, which follows the chart and closes with the selection', async () => {
+    const { box, container, panels, step } = await mount();
     const el = box()?.firstElementChild;
     if (!el) throw new Error('no chart');
-    await act(async () => el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
-    expect(editors.at(-1)).toMatchObject({
+    expect(panels.filter(Boolean)).toEqual([]);
+    await act(async () => el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })));
+    await act(async () => document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 })));
+    expect(panels.at(-1)).toMatchObject({
         chart: { id: 'c1' },
         sheetId: 's1',
         sheets: [
@@ -165,9 +167,9 @@ test('a double-click opens the chart editor, and the editor follows the chart', 
         ],
     });
     await step((w) => w.updateFloatingBox({ kind: 'chart', id: 'c1' }, { x: 10 }));
-    expect(editors.at(-1)?.chart.x).toBe(10);
+    expect(panels.at(-1)?.chart.x).toBe(10);
     await clickCell(container);
-    expect(editors.at(-1)).toBeNull();
+    expect(panels.at(-1)).toBeNull();
 });
 
 async function openMenu(el: Element) {
@@ -215,7 +217,7 @@ test('Download image saves the chart with its range read in, on white, its font 
     }
 });
 
-// A sketch look as the Chart editor stores it: rough, hatched, its labels in their own color.
+// A sketch look as the chart panel stores it: rough, hatched, its labels in their own color.
 const SKETCH: Partial<ChartLook> = {
     fill: serializeFill({ type: 'solid', color: '#ffeeaa', style: 'cross-hatch' }),
     color: '#334455',

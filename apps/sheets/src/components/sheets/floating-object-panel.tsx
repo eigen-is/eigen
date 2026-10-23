@@ -1,79 +1,65 @@
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
-import { Button } from '@workspace/ui/components/button';
 import {
+    type BeginGesture,
     PropertiesPanel,
+    PropertyGestureContext,
     PropertySection,
     type TransformFields,
     TransformSection,
     ZOrderButtons,
 } from '@workspace/ui/components/properties-panel';
-import { ChartColumn, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 
-type FloatingTransformSectionProps = {
+type FloatingObjectPanelProps = {
     item: SheetFloatingItem;
     canWrite: boolean;
     aspectLocked: boolean;
     onAspectLockChange: (locked: boolean) => void;
     onChange: (fields: TransformFields) => void;
+    onArrange: (op: ZOp) => void;
+    // The workbook's undo gesture, so a typed field is one undo step.
+    beginGesture: BeginGesture;
+    // A chart's own sections, between its Transform and Arrange.
+    children?: ReactNode;
 };
 
-// The selected image's or chart's X/Y/W/H/° and Keep aspect ratio, the same checkbox the corner grips follow. A chart
-// shows it in its own panel and at the end of its Chart editor. Read-only viewers get a disabled read-out.
-export function FloatingTransformSection({
-    item: { object },
+// Right-side panel for the selected image or chart, in the canvas panel's order: X/Y/W/H/° and Keep aspect
+// ratio (the checkbox the corner grips follow), a chart's own sections, then Arrange. Delete is the menu's and the
+// keyboard's, as on a canvas. Every edit is one op through the workbook's writers. A viewer gets a disabled read-out.
+export function FloatingObjectPanel({
+    item: { kind, object },
     canWrite,
     aspectLocked,
     onAspectLockChange,
     onChange,
-}: FloatingTransformSectionProps) {
+    onArrange,
+    beginGesture,
+    children,
+}: FloatingObjectPanelProps) {
     return (
-        <TransformSection
-            x={Math.round(object.x)}
-            y={Math.round(object.y)}
-            width={Math.round(object.width)}
-            height={Math.round(object.height)}
-            angle={object.angle ?? 0}
-            onChange={onChange}
-            disabled={!canWrite}
-            aspectLocked={aspectLocked}
-            onAspectLockChange={canWrite ? onAspectLockChange : undefined}
-        />
-    );
-}
-
-type FloatingObjectPanelProps = FloatingTransformSectionProps & {
-    onArrange: (op: ZOp) => void;
-    onEditChart: () => void;
-    onDelete: () => void;
-};
-
-// Right-side panel for the selected image or chart. Composes the shared PropertiesPanel, TransformSection and
-// ZOrderButtons, so the cluster matches Slides and Vector. Every edit is one op through the workbook's writers.
-export function FloatingObjectPanel({ onArrange, onEditChart, onDelete, ...transform }: FloatingObjectPanelProps) {
-    const { item, canWrite } = transform;
-    return (
-        <PropertiesPanel title={item.kind === 'image' ? 'Image' : 'Chart'}>
-            <FloatingTransformSection {...transform} />
-            {canWrite && (
-                <>
-                    <PropertySection title="Arrange">
-                        <ZOrderButtons onApply={onArrange} />
-                    </PropertySection>
-                    <div className="app-gutter flex flex-col gap-2">
-                        {item.kind === 'chart' && (
-                            <Button variant="outline" size="sm" className="w-full" onClick={onEditChart}>
-                                <ChartColumn className="h-3.5 w-3.5 mr-1.5" />
-                                Edit chart
-                            </Button>
-                        )}
-                        <Button variant="destructive" size="sm" className="w-full" onClick={onDelete}>
-                            <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                            {item.kind === 'image' ? 'Delete image' : 'Delete chart'}
-                        </Button>
-                    </div>
-                </>
-            )}
-        </PropertiesPanel>
+        <PropertyGestureContext.Provider value={beginGesture}>
+            <PropertiesPanel title={kind === 'image' ? 'Image' : 'Chart'}>
+                <TransformSection
+                    x={Math.round(object.x)}
+                    y={Math.round(object.y)}
+                    width={Math.round(object.width)}
+                    height={Math.round(object.height)}
+                    angle={object.angle ?? 0}
+                    onChange={onChange}
+                    disabled={!canWrite}
+                    aspectLocked={aspectLocked}
+                    onAspectLockChange={canWrite ? onAspectLockChange : undefined}
+                />
+                {canWrite && (
+                    <>
+                        {children}
+                        <PropertySection title="Arrange">
+                            <ZOrderButtons onApply={onArrange} />
+                        </PropertySection>
+                    </>
+                )}
+            </PropertiesPanel>
+        </PropertyGestureContext.Provider>
     );
 }

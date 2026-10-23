@@ -170,7 +170,7 @@ const KINDS: (SheetFloatingItem & { rows: string[]; download: string })[] = [
     {
         kind: 'chart',
         object: chart,
-        rows: ['Cut', 'Copy', '—', 'Duplicate', 'Edit chart', '—', 'Order', '—', 'Download image', '—', 'Delete'],
+        rows: ['Cut', 'Copy', '—', 'Duplicate', '—', 'Order', '—', 'Download image', '—', 'Delete'],
         download: 'Download image',
     },
 ];

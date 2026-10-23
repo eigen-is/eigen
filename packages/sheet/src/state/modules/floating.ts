@@ -55,7 +55,7 @@ export function duplicateFloatingObject(ctx: Context, { kind, id }: FloatingRef)
     };
     if (kind === 'image' && sheet.images?.[id]) sheet.images[copy] = { ...sheet.images[id], ...placed };
     if (kind === 'chart' && sheet.charts?.[id]) sheet.charts[copy] = { ...sheet.charts[id], ...placed };
-    ctx.activeObject = { kind, id: copy, editor: false };
+    ctx.activeObject = { kind, id: copy };
 }
 
 export function deleteFloatingObject(ctx: Context, { kind, id }: FloatingRef) {
@@ -63,9 +63,8 @@ export function deleteFloatingObject(ctx: Context, { kind, id }: FloatingRef) {
     if (objects?.[id]) delete objects[id];
 }
 
-// Selecting a chart keeps its editor open when another chart's was.
-export function selectFloatingObject(ctx: Context, ref: FloatingRef, editor = false) {
-    ctx.activeObject = { ...ref, editor: ref.kind === 'chart' && (editor || ctx.activeObject?.editor === true) };
+export function selectFloatingObject(ctx: Context, ref: FloatingRef) {
+    ctx.activeObject = ref;
 }
 
 export function deselectFloatingObject(ctx: Context) {
