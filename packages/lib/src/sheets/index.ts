@@ -22,6 +22,7 @@ export {
     sheetDefaultColWidth,
     sheetDefaultRowHeight,
     sheetRowsHeight,
+    sheetTrackAt,
 } from './defaults';
 export { cellFontName, SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from './fonts';
 export { columnIndexToLabel, columnLabelToIndex } from './labels';
