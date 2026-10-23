@@ -715,10 +715,6 @@ export class Mount {
             } catch (e) {
                 rethrowDuplicateActiveName(e, targetName);
             }
-            if (updates.parentId !== undefined) {
-                await this.invalidateSizesFrom(oldParentId ?? null);
-                await this.invalidateSizesFrom(updates.parentId);
-            }
         };
 
         let wroteUnderLock = false;
@@ -771,6 +767,11 @@ export class Mount {
         }
 
         if (!wroteUnderLock) await writeRow();
+        // After, not inside writeRow: a failure there would move the bytes back under a row that already moved.
+        if (updates.parentId !== undefined) {
+            await this.invalidateSizesFrom(oldParentId ?? null);
+            await this.invalidateSizesFrom(updates.parentId);
+        }
 
         // getPath, not getActivePath: collab still touches a trashed doc's row while it drains.
         const updated = await this.getPath(pathId);

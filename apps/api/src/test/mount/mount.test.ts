@@ -520,6 +520,26 @@ describe('Mount (local path-based storage)', () => {
         expect(readFileSync(join(leftover, 'inside.txt'), 'utf8')).toBe('leftover');
     });
 
+    test('a move whose size invalidation fails keeps its bytes with the row', async () => {
+        const fromId = await mount.createFolder(rootId, 'SizeFailFrom');
+        const toId = await mount.createFolder(rootId, 'SizeFailTo');
+        const fileId = await mount.createFile(fromId, 'sized.txt', 'text/plain', 5, Buffer.from('sized'));
+
+        mount.db.run(
+            sql.raw(
+                `CREATE TRIGGER fail_size BEFORE UPDATE OF size ON paths BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`,
+            ),
+        );
+        try {
+            await expect(mount.updatePath(fileId, { parentId: toId })).rejects.toThrow();
+        } finally {
+            mount.db.run(sql.raw('DROP TRIGGER fail_size'));
+        }
+
+        expect((await mount.getPath(fileId))!.parentId).toBe(toId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('sized');
+    });
+
     test('a move into its own subfolder answers 400 and moves nothing', async () => {
         const folderId = await mount.createFolder(rootId, 'MoveIntoSelf');
         const childId = await mount.createFolder(folderId, 'Child');
