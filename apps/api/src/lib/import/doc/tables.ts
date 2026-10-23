@@ -1,5 +1,10 @@
 import type { JSONContent } from '@tiptap/core';
-import { MIN_TABLE_COLUMN_PX, PROSE_TEXTBLOCKS, readCellBackground } from '@workspace/lib/docs/eigendoc';
+import {
+    isFigureFrameNode,
+    MIN_TABLE_COLUMN_PX,
+    PROSE_TEXTBLOCKS,
+    readCellBackground,
+} from '@workspace/lib/docs/eigendoc';
 import { isOn, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
@@ -218,10 +223,10 @@ function floatingFigure(reader: Reader, items: Item[], float: XmlElement, grid: 
     const paras = items.filter((item): item is Para => item.kind === 'para' && !item.empty);
     if (paras.length !== items.filter((item) => item.kind !== 'para' || !item.empty).length) return undefined;
     const [image, caption, ...rest] = paras;
-    const figures = image?.inlines.filter((node) => node.type === 'figure') ?? [];
+    const figures = image?.inlines.filter((node) => isFigureFrameNode(node.type)) ?? [];
     const [figure] = figures;
     if (!figure || figures.length !== 1 || rest.length > 0) return undefined;
-    if (image?.inlines.some((node) => node.type !== 'figure' && !isWhitespace(node))) return undefined;
+    if (image?.inlines.some((node) => !isFigureFrameNode(node.type) && !isWhitespace(node))) return undefined;
     const spec = w(float, 'tblpXSpec');
     const x = twipsOf(w(float, 'tblpX')) ?? 0;
     const width = grid.reduce((sum, col) => sum + col, 0);

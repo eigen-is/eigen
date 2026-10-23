@@ -86,7 +86,7 @@ describe('docx fixtures', () => {
         expect(nodesOfType(json, 'bulletList')[0]?.content).toHaveLength(9);
     });
 
-    test("docx4j load-and-save: notes, a table, the SVG as itself, majorBidi as the Arabic face and its chart's title", async () => {
+    test('docx4j load-and-save: notes, a table, the SVG as itself, majorBidi as the Arabic face and its chart', async () => {
         const { json, images, warnings } = await imported('docx4j-loadAndSave.docx');
         // Its footnote and its endnote, each a note at its reference.
         expect(nodesOfType(json, 'footnote').map((note) => texts(note).join(''))).toEqual(['Footnote', 'Endnote']);
@@ -97,13 +97,11 @@ describe('docx fixtures', () => {
         expect(fonts).toEqual(['Source Serif 4']);
         expect(nodesOfType(json, 'table').length).toBeGreaterThan(0);
         expect(images.map((image) => image.contentType)).toContain('image/svg+xml');
-        // Its chart is dropped and keeps its title, and its header's text watermark goes.
-        expect([texts(json).filter((text) => text === 'A Chart'), warnings]).toEqual([
-            ['A Chart'],
-            [
-                { code: 'graphics-dropped', count: 1 },
-                { code: 'band-content-dropped', count: 1 },
-            ],
+        // Its pie chart is a chart, and its header's text watermark goes.
+        const charts = nodesOfType(json, 'chart').map((chart) => JSON.parse(String(chart.attrs?.['spec'])));
+        expect([charts.map((spec) => [spec.type, spec.title]), warnings]).toEqual([
+            [['pie', 'A Chart']],
+            [{ code: 'band-content-dropped', count: 1 }],
         ]);
     });
 });

@@ -15,6 +15,10 @@ export const MAX_DOCX_PIECES = 75_000;
 // heaviest weighs 57,688.
 export const MAX_DOCX_WEIGHT = 150_000;
 
+// readChart builds every point a cache declares before the spec's cap refuses them, a few tags each up to 68,000 slots,
+// so a file of many small chart parts is bounded by their cost (chartCost) together. The corpus's most is 1,740.
+export const MAX_DOCX_CHART_WORK = 1_000_000;
+
 // A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
 export const CHARS_PER_UNIT = 512;
 
@@ -47,12 +51,15 @@ export type DocxPackage = {
     // An equation's MathML is charged as it is written: a space in m:t writes 26 characters, so a few KB zipped would
     // build hundreds of MB before the output is weighed.
     chargeMathml(length: number): void;
+    // A chart's cost, charged only when the allowance left covers it: one it can't is left out, not the document.
+    spendChart(cost: number): boolean;
 };
 
 export function readPackage(bytes: Uint8Array): DocxPackage {
     const pkg = openPackage(bytes, IMPORT_MESSAGES.docx);
     let pieces = MAX_DOCX_PIECES;
     let mathml = MAX_DOCX_WEIGHT * CHARS_PER_UNIT;
+    let charts = MAX_DOCX_CHART_WORK;
     const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
     const documentRels = pkg.relationships(documentPath);
     // By relationship, else where Word puts the part.
@@ -116,6 +123,11 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         chargeMathml: (length) => {
             mathml -= length;
             if (mathml < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
+        },
+        spendChart: (cost) => {
+            if (cost > charts) return false;
+            charts -= cost;
+            return true;
         },
     };
 }

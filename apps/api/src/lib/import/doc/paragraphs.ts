@@ -14,6 +14,7 @@ import {
     twipsToMm,
     twipsToPt,
 } from '@workspace/lib/docs/eigendoc';
+import { type DrawingTheme, IDENTITY_COLOR_MAP, readColorScheme } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
@@ -22,7 +23,7 @@ import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES } from '../.
 import { IMPORT_MESSAGES } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, fontMark, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
-import type { MediaPart } from './drawings';
+import type { DocxChart, MediaPart } from './drawings';
 import { type Numbering, readNumbering } from './numbering';
 import { alternative, type DocxPackage, descendants, type Part, twipsOf, w, wChild } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
@@ -58,9 +59,14 @@ export type Reader = {
     notes: Map<string, { content: JSONContent[]; weight: number }>;
     openNotes: string[];
     fields: Field[];
-    // Charts and SmartArt, whose graphic the schema can't hold, and the parts of theirs read: each is read once.
+    // SmartArt, whose graphic the schema can't hold, and the parts of a SmartArt's or a band's chart read: each is read
+    // once.
     graphicsDropped: number;
     graphicParts: Set<string>;
+    // The theme's colours a chart's series take, each chart part as read, and the charts that came in as words.
+    colors: DrawingTheme;
+    charts: Map<XmlElement, DocxChart>;
+    chartsDropped: number;
     // The body's size in half-points, its complex script's, and its color, which no run needs a mark for.
     bodySize: number;
     bodySizeCs: number;
@@ -126,6 +132,9 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         fields: [],
         graphicsDropped: 0,
         graphicParts: new Set(),
+        colors: { scheme: readColorScheme(pkg.theme), map: IDENTITY_COLOR_MAP },
+        charts: new Map(),
+        chartsDropped: 0,
         bodySize,
         bodySizeCs: 2 * (readFontSize((body.sizeCs ?? body.size ?? 20) / 2) ?? 10),
         baseColor: body.color?.hex,
@@ -512,7 +521,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (boxed) para.boxed = true;
         if (direct.markDeleted && index === halves.length - 1) para.joinsNext = true;
         if (label && index === 0) para.labelled = true;
-        // A framed paragraph holding only an image is a wrapped figure.
+        // A framed paragraph holding only an image or a chart is a wrapped figure.
         if (props.frame) para.frame = props.frame;
         if (props.frame && isFigureOnly(para)) {
             for (const node of content)

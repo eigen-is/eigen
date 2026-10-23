@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { ptToTwips, readParagraphFormat, twipsToPt } from '@workspace/lib/docs/eigendoc';
+import { isFigureFrameNode, ptToTwips, readParagraphFormat, twipsToPt } from '@workspace/lib/docs/eigendoc';
 import { readStoredEquation } from '../../document/equation';
 import { BLOCK_MARGINS, CODE_BLOCK_LOOK, QUOTE_LOOK, TABLE_MARGIN, untypedListFormat } from '../../document/looks';
 import { LIST_FORMATS, LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
@@ -93,8 +93,8 @@ export function isCaptionLike(para: Para): boolean {
 
 export function isFigureOnly(para: Para): boolean {
     return (
-        para.inlines.some((node) => node.type === 'figure') &&
-        para.inlines.every((node) => node.type === 'figure' || isWhitespace(node))
+        para.inlines.some((node) => isFigureFrameNode(node.type)) &&
+        para.inlines.every((node) => isFigureFrameNode(node.type) || isWhitespace(node))
     );
 }
 
@@ -156,7 +156,7 @@ function attachFloatsAndCaptions(raw: Item[]): Item[] {
             // its own frame.
             const previous = items.at(-1);
             if (previous?.kind === 'para' && isFigureOnly(previous)) {
-                const figures = previous.inlines.filter((node) => node.type === 'figure');
+                const figures = previous.inlines.filter((node) => isFigureFrameNode(node.type));
                 const last = figures.at(-1);
                 const caption = last?.attrs?.['layout']
                     ? !!item.frame && item.frame === previous.frame && isCaptionLike(item)
@@ -496,7 +496,7 @@ function buildFlow(items: Item[]): JSONContent[] {
             if (code && (code.language !== item.role.language || code.host !== host)) flushCode();
             closeLists(host ? stack.indexOf(host) + 1 : 0);
             code ??= { language: item.role.language, lines: [], host };
-            code.lines.push(inlineText(item.inlines.filter((node) => node.type !== 'figure')));
+            code.lines.push(inlineText(item.inlines.filter((node) => !isFigureFrameNode(node.type))));
             continue;
         }
         flushCode();
@@ -575,7 +575,9 @@ function isBreakOnly(para: Para): boolean {
 
 function holdsWrapped(item: JSONContent | undefined): boolean {
     return !!item?.content?.some((block) =>
-        block.content?.some((node) => node.type === 'figure' && String(node.attrs?.['layout']).startsWith('wrap')),
+        block.content?.some(
+            (node) => isFigureFrameNode(node.type) && String(node.attrs?.['layout']).startsWith('wrap'),
+        ),
     );
 }
 
@@ -638,7 +640,7 @@ function textblockOf(para: Para, edge: number | undefined, above?: number): JSON
     const { textAlign, inlines: content } = para;
     if (isFigureOnly(para)) {
         for (const figure of content) {
-            if (figure.type === 'figure' && figure.attrs && !figure.attrs['layout'] && !figure.attrs['alignment'])
+            if (isFigureFrameNode(figure.type) && figure.attrs && !figure.attrs['layout'] && !figure.attrs['alignment'])
                 figure.attrs['alignment'] = textAlign === 'center' || textAlign === 'right' ? textAlign : 'left';
         }
         return { type: 'paragraph', content };

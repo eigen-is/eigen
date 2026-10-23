@@ -1,4 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
+import { C_NS } from '../../lib/core/ooxml';
+import { CHART_CONTENT_TYPE } from '../../lib/core/ooxml-chart';
 import { writeZip } from '../../lib/core/zip';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
@@ -149,13 +151,13 @@ export type DocxBand = { id: string; kind: 'header' | 'footer'; type?: string; x
 // The golden package with a body, a final section naming each band, its sectPr content, settings.xml's and styles.
 export async function buildDocxWithBands(
     bands: DocxBand[],
-    options: { sectPr?: string; settings?: string; body?: string; styles?: string } = {},
+    options: { sectPr?: string; settings?: string; body?: string; styles?: string; media?: DocxParts['media'] } = {},
 ): Promise<ArrayBuffer> {
     const encode = (text: string) => new TextEncoder().encode(text);
     const references = bands
         .map(({ id, kind, type }) => `<w:${kind}Reference${type ? ` w:type="${type}"` : ''} r:id="${id}"/>`)
         .join('');
-    const media: Record<string, Uint8Array> = { 'word/media/pixel.png': new Uint8Array() };
+    const media: Record<string, Uint8Array> = { 'word/media/pixel.png': new Uint8Array(), ...options.media };
     for (const { id, kind, xml, rels } of bands) {
         const tag = kind === 'header' ? 'w:hdr' : 'w:ftr';
         media[`word/${id}.xml`] = encode(`<${tag} ${BAND_NAMESPACES}>${xml}</${tag}>`);
@@ -182,6 +184,30 @@ export async function buildDocxWithBands(
             .join(''),
         media,
     });
+}
+
+// A w:drawing naming a chart part: inline at Word's default 12.7 × 7.62 cm, or anchored with the anchor's own children.
+export function chartRun(id: string, { extent = 'cx="4572000" cy="2743200"', anchor = '' } = {}): string {
+    const tag = anchor ? 'wp:anchor' : 'wp:inline';
+    return `<w:r><w:drawing><${tag}>${anchor}<wp:extent ${extent}/><wp:docPr id="3" name="Chart 3"/><a:graphic><a:graphicData uri="${C_NS}"><c:chart xmlns:c="${C_NS}" r:id="${id}"/></a:graphicData></a:graphic></${tag}></w:drawing></w:r>`;
+}
+
+// Chart parts where Word puts them, word/charts/chart1.xml on, named by rId20 on, as chart parts.
+export function chartParts(parts: string[]): DocxParts {
+    return {
+        rels: parts
+            .map(
+                (_, i) =>
+                    `<Relationship Id="rId${20 + i}" Type="${RELATIONSHIP}/chart" Target="charts/chart${i + 1}.xml"/>`,
+            )
+            .join(''),
+        contentTypes: parts
+            .map((_, i) => `<Override PartName="/word/charts/chart${i + 1}.xml" ContentType="${CHART_CONTENT_TYPE}"/>`)
+            .join(''),
+        media: Object.fromEntries(
+            parts.map((xml, i) => [`word/charts/chart${i + 1}.xml`, new TextEncoder().encode(xml)]),
+        ),
+    };
 }
 
 // A body imported as an upload is, its parts beside the golden package's.

@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
+import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
     ASVG_NS,
@@ -16,7 +16,8 @@ import {
     W_NS,
     WP_NS,
 } from '../../core/ooxml';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
+import { CHART_NOT_IMPORTED, chartCost, chartPart, droppedChart, readChart } from '../../core/ooxml-chart';
+import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../document/wordml';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
@@ -99,6 +100,28 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, width, ...layout } });
             if (anchored && inBand) reader.bandAnchors++;
         }
+        // Only the body holds a chart: a band's schema has none and a note's Insert leaves it out, so there it keeps its
+        // title, read with SmartArt's text.
+        if (context.scope.story === 'body')
+            for (const [reference, ext] of chartsIn(frame, extent)) {
+                const chart = readDocxChart(reader, reference, context.scope);
+                if ('spec' in chart) {
+                    figures.push({
+                        type: 'chart',
+                        attrs: { spec: chart.spec, ...chartSize(ext, reader.columnPx), ...layout },
+                    });
+                    continue;
+                }
+                reader.chartsDropped++;
+                context.pending.push(
+                    paraOf(
+                        chart.dropped.flatMap((text, index) => [
+                            ...(index > 0 ? [{ type: 'hardBreak' }] : []),
+                            { type: 'text', text },
+                        ]),
+                    ),
+                );
+            }
         // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
         const boxed = descendants(frame, W_NS, 'txbxContent').flatMap((box) =>
             readBlocks(reader, xmlElements(box), onShape(context.scope)),
@@ -106,7 +129,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const content = boxed.filter((item) => item.kind !== 'para' || !item.empty);
         const paras = content.filter((item): item is Para => item.kind === 'para');
         const [head, ...tail] = paras;
-        const inner = head && isFigureOnly(head) ? head.inlines.filter((node) => node.type === 'figure') : [];
+        const inner = head && isFigureOnly(head) ? head.inlines.filter((node) => isFigureFrameNode(node.type)) : [];
         const [boxedFigure] = inner;
         const onlyParas = paras.length > 0 && paras.length === content.length;
         if (onlyParas && figures.length === 1 && paras.every(isCaptionLike)) {
@@ -128,8 +151,8 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
     }
 }
 
-// SmartArt's text is the document's: its drawing's shapes in order, else its data model's points. A chart keeps its
-// title only. The schema holds neither graphic, so each counts as dropped.
+// SmartArt's text is the document's: its drawing's shapes in order, else its data model's points; the schema holds no
+// SmartArt, so each counts as dropped. A chart outside the body keeps its title only.
 function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
     const lines: JSONContent[][] = [];
     for (const diagram of descendants(frame, DGM_NS, 'relIds')) {
@@ -145,8 +168,8 @@ function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
                   .flatMap((point) => descendants(point, A_NS, 'p'));
         for (const paragraph of paragraphs) lines.push(drawingLine(paragraph));
     }
-    for (const chart of descendants(frame, C_NS, 'chart')) {
-        reader.graphicsDropped++;
+    for (const chart of scope.story === 'body' ? [] : descendants(frame, C_NS, 'chart')) {
+        reader.chartsDropped++;
         const space = readOnce(reader, partPath(xmlAttr(chart, R_NS, 'id'), scope));
         const plot = space && xmlChild(space, C_NS, 'chart');
         const title = plot && xmlChild(plot, C_NS, 'title');
@@ -159,6 +182,56 @@ function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
         else if (cached) lines.push([{ type: 'text', text: cached }]);
     }
     return lines.filter((line) => line.some((node) => node.type === 'text')).map(paraOf);
+}
+
+// A chart part as the doc holds it: the spec the node stores, or the lines a chart left out leaves in its place.
+export type DocxChart = { spec: string } | { dropped: string[] };
+
+// Each chart a drawing shows with the a:ext it is drawn at: alone, the drawing's extent; in a group or a canvas, its own
+// graphicFrame's. A text box's content is its own paragraphs', read with them.
+function chartsIn(frame: XmlElement, extent: XmlElement | undefined): [XmlElement, XmlElement | undefined][] {
+    const charts: [XmlElement, XmlElement | undefined][] = [];
+    const stack: [XmlElement, XmlElement | undefined][] = [[frame, extent]];
+    for (let next = stack.pop(); next; next = stack.pop()) {
+        const [element, ext] = next;
+        if (hasXmlName(element, C_NS, 'chart')) charts.push(next);
+        else if (!hasXmlName(element, W_NS, 'txbxContent')) {
+            const xfrm =
+                element.local === 'graphicFrame' && xmlElements(element).find((child) => child.local === 'xfrm');
+            const own = xfrm ? xmlChild(xfrm, A_NS, 'ext') : ext;
+            for (const child of xmlElements(element).reverse()) stack.push([child, own]);
+        }
+    }
+    return charts;
+}
+
+// The chart a c:chart names, read once per part: its spec, or the words for a chart the reader can't draw, a part
+// missing, damaged or of another type, or one past the chart allowance, as Slides leaves a box for each.
+function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): DocxChart {
+    const { readPart, contentTypeOf } = reader.pkg;
+    const id = xmlAttr(reference, R_NS, 'id');
+    const root = chartPart({ part: readPart, contentTypeOf }, scope.part.rels, id, 'word/charts/');
+    if (!root) return { dropped: [CHART_NOT_IMPORTED] };
+    const known = reader.charts.get(root);
+    if (known) return known;
+    const read = reader.pkg.spendChart(chartCost(root)) && readChart(root, { theme: reader.colors, data: 'cache' });
+    const chart = !read
+        ? { dropped: [CHART_NOT_IMPORTED] }
+        : 'spec' in read
+          ? { spec: JSON.stringify(read.spec) }
+          : { dropped: droppedChart(read.unsupported) };
+    reader.charts.set(root, chart);
+    return chart;
+}
+
+// Its drawn size, shrunk to the text column and to the node's largest side, keeping its shape.
+function chartSize(ext: XmlElement | undefined, columnPx: number): { width: number; height: number } {
+    const cx = int(ext?.attributes['cx']) ?? 0;
+    const cy = int(ext?.attributes['cy']) ?? 0;
+    const { width, height } =
+        cx > 0 && cy > 0 ? { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX } : CHART_DEFAULT_SIZE;
+    const scale = Math.min(1, columnPx / width, CHART_MAX_SIDE / height);
+    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
 // The points a SmartArt draws text for; transitions and presentation points hold none of the document's.

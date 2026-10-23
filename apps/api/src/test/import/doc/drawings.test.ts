@@ -1,7 +1,20 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { CHART_MAX_SIDE } from '@workspace/lib/docs/eigendoc';
+import { C_NS } from '../../../lib/core/ooxml';
+import * as ooxmlChart from '../../../lib/core/ooxml-chart';
+import { CHART_NOT_IMPORTED } from '../../../lib/core/ooxml-chart';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
-import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
+import { docxToPmJson } from '../../../lib/import/doc/from-docx';
+import {
+    buildDocxWithBands,
+    chartParts,
+    chartRun,
+    GOLDEN_DOCX_IMAGE_RUN,
+    importDocxBody,
+    marksOfType,
+    nodesOfType,
+} from '../../fixtures/golden-docx';
 
 // Pictures: one media file per image part, named from its content type, placed as Word places it.
 
@@ -302,12 +315,11 @@ describe('captions', () => {
     });
 });
 
-// SmartArt's text is the document's, read in place; a chart keeps its title. Each counts as a graphic dropped.
-describe('SmartArt and charts', () => {
+// SmartArt's text is the document's, read in place, and counts as a graphic dropped.
+describe('SmartArt', () => {
     const RELS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
     const DGM = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
     const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
-    const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
     const encode = (text: string) => new TextEncoder().encode(text);
     const frame = (graphic: string) =>
         `<w:r><w:drawing><wp:inline><wp:extent cx="2575560" cy="964504"/><wp:docPr id="3" name="Graphic 3"/><a:graphic><a:graphicData>${graphic}</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
@@ -347,31 +359,140 @@ describe('SmartArt and charts', () => {
         });
         expect(lines(json)).toEqual(['from', 'model']);
     });
+});
 
-    test("a chart keeps its title's text or its cell's, a chart with none leaves nothing", async () => {
-        const chart = (id: string) => `<c:chart xmlns:c="${C}" r:id="${id}"/>`;
-        const part = (title: string) =>
-            `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart>${title}<c:plotArea><c:valAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Axis</a:t></a:r></a:p></c:rich></c:tx></c:title></c:valAx></c:plotArea></c:chart></c:chartSpace>`;
-        const { json, warnings } = await importDocxBody(
-            paragraph(`${frame(chart('rId20'))}${frame(chart('rId21'))}${frame(chart('rId22'))}`),
+// A chart the reader draws is a chart node where the chart was, placed as a picture is; one it can't is a paragraph
+// saying which kind it was, counted as a chart dropped.
+describe('charts', () => {
+    const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+    const cached = (values: (string | number)[]) =>
+        `<c:ptCount val="${values.length}"/>${values.map((value, i) => `<c:pt idx="${i}"><c:v>${value}</c:v></c:pt>`).join('')}`;
+    const series = (idx: number, name: string, values: number[]) =>
+        `<c:ser><c:idx val="${idx}"/><c:order val="${idx}"/><c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache>${cached([name])}</c:strCache></c:strRef></c:tx><c:spPr><a:solidFill><a:schemeClr val="accent${idx + 1}"/></a:solidFill></c:spPr><c:cat><c:strRef><c:f>Sheet1!$A$2:$A$3</c:f><c:strCache>${cached(['North', 'South'])}</c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>Sheet1!$B$2:$B$3</c:f><c:numCache><c:formatCode>General</c:formatCode>${cached(values)}</c:numCache></c:numRef></c:val></c:ser>`;
+    const SERIES = `${series(0, 'Plan', [1, 2])}${series(1, 'Actual', [3, 4])}`;
+    const COLUMNS = `<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>${SERIES}<c:axId val="1"/><c:axId val="2"/></c:barChart>`;
+    const LINES = `<c:lineChart><c:grouping val="standard"/>${series(2, 'Trend', [5, 6])}<c:axId val="1"/><c:axId val="2"/></c:lineChart>`;
+    const AXES =
+        '<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>';
+    const chartSpace = (plot: string, title = 'Sales') =>
+        `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A}"><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${title}</a:t></a:r></a:p></c:rich></c:tx></c:title><c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>${plot}${AXES}</c:plotArea><c:legend><c:legendPos val="b"/></c:legend></c:chart></c:chartSpace>`;
+    const THEME = `<a:theme xmlns:a="${A}" name="Office"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:accent1><a:srgbClr val="C00000"/></a:accent1><a:accent2><a:srgbClr val="00B050"/></a:accent2></a:clrScheme></a:themeElements></a:theme>`;
+    const imported = (body: string, parts: string[]) => importDocxBody(body, { ...chartParts(parts), theme: THEME });
+    const charts = (json: Parameters<typeof nodesOfType>[0]) => nodesOfType(json, 'chart');
+    const lines = (json: Parameters<typeof nodesOfType>[0]) =>
+        nodesOfType(json, 'paragraph')
+            .map((node) =>
+                (node.content ?? []).map((child) => child.text ?? (child.type === 'hardBreak' ? '\n' : '')).join(''),
+            )
+            .filter(Boolean);
+
+    test("a column chart is a chart node at its extent in px, its series in the theme's colours, aligned as its paragraph", async () => {
+        const centered = `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${chartRun('rId20')}</w:p>`;
+        const { json, warnings } = await imported(centered, [chartSpace(COLUMNS)]);
+        const [chart] = charts(json);
+        const spec = JSON.parse(String(chart?.attrs?.['spec']));
+        expect([spec.type, spec.title, spec.legend, spec.data]).toEqual([
+            'column',
+            'Sales',
+            'bottom',
             {
-                rels: `<Relationship Id="rId20" Type="${RELS}/chart" Target="charts/chart1.xml"/><Relationship Id="rId21" Type="${RELS}/chart" Target="charts/chart2.xml"/><Relationship Id="rId22" Type="${RELS}/chart" Target="charts/chart3.xml"/>`,
-                media: {
-                    'word/charts/chart1.xml': encode(
-                        part(
-                            '<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Sales </a:t></a:r><a:r><a:t>2024</a:t></a:r></a:p></c:rich></c:tx></c:title>',
-                        ),
-                    ),
-                    'word/charts/chart2.xml': encode(part('<c:title><c:overlay val="0"/></c:title>')),
-                    'word/charts/chart3.xml': encode(
-                        part(
-                            '<c:title><c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:pt idx="0"><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx></c:title>',
-                        ),
-                    ),
-                },
+                source: 'inline',
+                categories: ['North', 'South'],
+                series: [
+                    { name: 'Plan', values: [1, 2], color: '#c00000', markers: false, smooth: false },
+                    { name: 'Actual', values: [3, 4], color: '#00b050', markers: false, smooth: false },
+                ],
             },
+        ]);
+        expect([chart?.attrs?.['width'], chart?.attrs?.['height'], chart?.attrs?.['alignment']]).toEqual([
+            480,
+            288,
+            'center',
+        ]);
+        expect(warnings).toEqual([]);
+    });
+
+    test('a part two drawings name is read once, and each is a chart', async () => {
+        const reads = spyOn(ooxmlChart, 'readChart');
+        const { json } = await imported(paragraph(`${chartRun('rId20')}${chartRun('rId20')}`), [chartSpace(COLUMNS)]);
+        const calls = reads.mock.calls.length;
+        reads.mockRestore();
+        expect([charts(json).length, calls]).toEqual([2, 1]);
+    });
+
+    test('an anchor wrapped square on the right is a chart wrapped right, one wrapped top and bottom aligned', async () => {
+        const right = chartRun('rId20', {
+            anchor: '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:wrapSquare wrapText="bothSides"/>',
+        });
+        const centered = chartRun('rId20', {
+            anchor: '<wp:positionH relativeFrom="column"><wp:align>center</wp:align></wp:positionH><wp:wrapTopAndBottom/>',
+        });
+        const { json } = await imported(`${paragraph(right)}${paragraph(centered)}`, [chartSpace(COLUMNS)]);
+        expect(charts(json).map((chart) => [chart.attrs?.['layout'], chart.attrs?.['alignment']])).toEqual([
+            ['wrap-right', 'center'],
+            ['block', 'center'],
+        ]);
+    });
+
+    test('a chart wider than the column fits it and one taller than the largest page fits that, each keeping its shape', async () => {
+        const wide = chartRun('rId20', { extent: 'cx="9525000" cy="4762500"' });
+        const tall = chartRun('rId20', { extent: 'cx="952500" cy="28575000"' });
+        const { json } = await imported(paragraph(`${wide}${tall}`), [chartSpace(COLUMNS)]);
+        expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual([
+            [601, 301],
+            [70, CHART_MAX_SIDE],
+        ]);
+    });
+
+    // tdf124398: Word groups a chart with its caption's text box; the chart's own frame sizes it.
+    test("a chart grouped with a caption's text box takes it as its caption, at its own frame's size", async () => {
+        const WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+        const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+        const group = `<w:r><w:drawing><wp:anchor><wp:positionH relativeFrom="column"><wp:align>center</wp:align></wp:positionH><wp:extent cx="5467350" cy="3620770"/><wp:wrapTopAndBottom/><wp:docPr id="11" name="Group 11"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}" xmlns:wps="${WPS}"><wpg:graphicFrame><wpg:xfrm><a:off x="0" y="0"/><a:ext cx="4572000" cy="2743200"/></wpg:xfrm><a:graphic><a:graphicData uri="${C_NS}"><c:chart xmlns:c="${C_NS}" r:id="rId20"/></a:graphicData></a:graphic></wpg:graphicFrame><wps:wsp><wps:txbx><w:txbxContent><w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr><w:r><w:t>Figure 1 Sales</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+        const { json } = await importDocxBody(paragraph(group), {
+            ...chartParts([chartSpace(COLUMNS)]),
+            styles: '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>',
+        });
+        expect(
+            charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height'], chart.attrs?.['caption']]),
+        ).toEqual([[480, 288, 'Figure 1 Sales']]);
+        expect(lines(json)).toEqual([]);
+    });
+
+    test("a chart the reader can't draw is a paragraph naming its kind with its title, a missing part one saying a chart", async () => {
+        const { json, warnings } = await imported(
+            `${paragraph('<w:r><w:t>Before</w:t></w:r>')}${paragraph(chartRun('rId20'))}${paragraph(chartRun('rId9'))}${paragraph('<w:r><w:t>After</w:t></w:r>')}`,
+            [chartSpace(`${COLUMNS}${LINES}`, 'Mixed')],
         );
-        expect(lines(json)).toEqual(['Sales 2024', 'Revenue']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 3 }]);
+        expect([charts(json), lines(json)]).toEqual([
+            [],
+            ['Before', 'Combo chart not imported\nMixed', CHART_NOT_IMPORTED, 'After'],
+        ]);
+        expect(warnings).toEqual([{ code: 'charts-dropped', count: 2 }]);
+    });
+
+    // A header's schema holds no chart, and the Chart panel follows the body only.
+    test("a header's chart keeps its title's text or its cell's, a chart with none leaves nothing", async () => {
+        const part = (title: string) =>
+            `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A}"><c:chart>${title}<c:plotArea><c:valAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Axis</a:t></a:r></a:p></c:rich></c:tx></c:title></c:valAx></c:plotArea></c:chart></c:chartSpace>`;
+        const { rels = '', media } = chartParts([
+            part(
+                '<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Sales </a:t></a:r><a:r><a:t>2024</a:t></a:r></a:p></c:rich></c:tx></c:title>',
+            ),
+            part('<c:title><c:overlay val="0"/></c:title>'),
+            part(
+                '<c:title><c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:pt idx="0"><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx></c:title>',
+            ),
+        ]);
+        const header = paragraph(`${chartRun('rId20')}${chartRun('rId21')}${chartRun('rId22')}`);
+        const { json, bands, warnings } = docxToPmJson(
+            Buffer.from(await buildDocxWithBands([{ id: 'h1', kind: 'header', xml: header, rels }], { media })),
+        );
+        expect([lines(json), bands.header && lines(bands.header), charts(bands.header ?? {})]).toEqual([
+            ['Body'],
+            ['Sales 2024', 'Revenue'],
+            [],
+        ]);
+        expect(warnings).toEqual([{ code: 'charts-dropped', count: 3 }]);
     });
 });
