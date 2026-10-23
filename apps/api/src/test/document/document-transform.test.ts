@@ -493,9 +493,10 @@ describe('document transform (eigensheets preview)', () => {
 });
 
 // The golden workbook's HTML download and the document fed to WeasyPrint, its @page fit to the widest and tallest
-// sheet, pinned byte for byte: a hash moves only with an intentional renderer change.
-const GOLDEN_EXPORT_HTML_SHA256 = '7237285629cf37d274ebdccb41375c534f13a8fc29602d19a79e530dd269c391';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'e411e94a27817d76929b53fb8a033e62a2ebf94cc6a7e537297368d6bee168a4';
+// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved by the table's
+// default font size, 10 pt as the grid draws an unsized cell, where it was 11 px).
+const GOLDEN_EXPORT_HTML_SHA256 = '30544662f5fbcefa770bf02f6c8dd16a81e9813030177da76d5ae6abea7d4976';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'c951df462003b50cd88d85a407ce2648f75d1a7a1ea93416f8c41cdaa7c4d878';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
@@ -558,9 +559,9 @@ describe('document transform (eigensheets export)', () => {
 // Recorded from the import pipeline (xlsxToSheets + recalcImportedSheets +
 // encodeSheetsSnapshot) over buildImportFixture(), so the Worker and the main
 // thread are proven to emit the same bytes. Regenerate only for an intentional
-// converter or wire-format change (last moved by each sheet's default column width
-// and row height, which the import always sets).
-const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '07039d074f55c743bbd93400484e4d2660f92a69463cc736a275002bb123265f';
+// converter or wire-format change (last moved by Excel's column width rule: Calibri 11's
+// 7 px digit makes the default column 64 px and the fixture's width 18 126 px).
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '76fbe3b4fd94331790f9d314eed3a79d1133686b63215d0b247beee13f555e47';
 
 // Small but representative workbook: values, a stale cached formula result the
 // import recalc must correct, styles, a date format, a merge, a column width, a
@@ -833,9 +834,10 @@ const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '5cb21d5397765e68a4c13d2274e99d1606d7d
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
+// The two exports embed canvas-text.css whole, its comments too, so they last moved with its header comment.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'ca6eebcf9d24cbd4f7fe618494848af853bb102b34634fee396aae78136f6bed';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'ecaf8cfcc7d68e1388c6c291039d74a500b894a6bb5bccbe3dd5ffb5c6aab5d6';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '4dcf24f76d0d0d82df636bfcd9f14fd327bf728c0d8840a9fb80f8199b5b1c3b';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.

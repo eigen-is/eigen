@@ -696,7 +696,8 @@ describe('Sheets xlsx conversion fidelity', () => {
         ws.getCell('A6').value = true;
         for (let row = 1; row <= 6; row++) ws.getCell(row, 1).alignment = { wrapText: true };
         const rowlen = (await parseWorkbook(workbook))[0].config?.rowlen ?? {};
-        expect(rowlen).toEqual({ '0': 164, '1': 164, '2': 164, '3': 164, '4': 85, '5': 26 });
+        // Width 4 is 28 px at Calibri's 7 px digit: 38 characters at 6.6 px each take 9 lines.
+        expect(rowlen).toEqual({ '0': 184, '1': 184, '2': 184, '3': 184, '4': 85, '5': 26 });
     });
 
     test('convert preserves formulas in celldata', async () => {
@@ -838,12 +839,14 @@ describe('Sheets xlsx conversion fidelity', () => {
     test('convert scales column widths from character units to pixels', async () => {
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'wide' }], 'Sheet1', [], [{ col: 1, width: 15 }]);
         const sheets = parseXlsx(buffer);
-        expect(sheets[0].config?.columnlen?.['0']).toBe(Math.round(15 * 8));
+        // 15 of Calibri 11's 7 px digits, as Excel draws it.
+        expect(sheets[0].config?.columnlen?.['0']).toBe(105);
     });
 
-    test("a width counts the file's default font: 8 px a character beside Calibri, Inter's digit beside Inter", async () => {
-        const calibri = await buildXlsxBuffer([{ a1: 'A1', value: 'x' }], 'Sheet1', [], [{ col: 1, width: 8.43 }]);
-        expect(parseXlsx(calibri)[0].config?.columnlen?.['0']).toBe(67);
+    test("a width counts the file's default font: Calibri's 7 px digit beside Calibri, Inter's digit beside Inter", async () => {
+        // Excel's default column, 8.43 characters and the padding, stored as 9.140625.
+        const calibri = await buildXlsxBuffer([{ a1: 'A1', value: 'x' }], 'Sheet1', [], [{ col: 1, width: 9.140625 }]);
+        expect(parseXlsx(calibri)[0].config?.columnlen?.['0']).toBe(64);
         const inter = await sheetsToXlsx([{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 67 } } }]);
         expect(xlsxToSheets(inter)[0].config?.columnlen).toEqual({ 0: 67 });
     });
