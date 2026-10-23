@@ -380,7 +380,7 @@ test('a menu closed with Esc hands focus back to the band being edited, and Opti
 });
 
 // Radix hands focus back a tick after a menu unmounts, and by then Tiptap has destroyed the editors of a document that
-// closed with it.
+// closed with it, Insert › Equation's pick waiting for that tick too.
 test('a document closed with the body’s or a band’s menu open throws nothing', async () => {
     const errors: unknown[] = [];
     const onError = (event: InstanceType<typeof window.Event>) => errors.push('error' in event ? event.error : event);
@@ -389,6 +389,15 @@ test('a document closed with the body’s or a band’s menu open throws nothing
         await render(WRITER);
         await openMenu('Insert');
         await unmount();
+        await render(WRITER);
+        await openMenu('Insert');
+        await act(async () => {
+            [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+                .find((item) => item.textContent?.trim() === 'Equation')
+                ?.click();
+            await unmount();
+        });
+        await frames();
         await render(WRITER);
         await doubleClick('header');
         await openMenu('Options');

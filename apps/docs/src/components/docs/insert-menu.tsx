@@ -76,6 +76,8 @@ export function InsertMenu({
                 const insert = afterCloseRef.current;
                 if (!insert) return keepEditorFocus(e);
                 afterCloseRef.current = null;
+                // A document that closed with the menu has destroyed its editors by now, as keepEditorFocus knows.
+                if (editor.isDestroyed) return;
                 e.preventDefault();
                 insert();
             }}
