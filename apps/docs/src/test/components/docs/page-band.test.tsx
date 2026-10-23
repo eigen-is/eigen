@@ -96,6 +96,37 @@ test('at a margin narrower than 1.27 cm a band sits on the margin', async () => 
     expect(footer.style.padding).toBe('0px 15mm 8mm 10mm');
 });
 
+// The hint shows on hover, so it can't take room the way a band does: it fills the margin, and the space before it, the
+// band's distance, gives way where a line doesn't fit after it. That's spot.docx's 1 cm margin.
+test('the hint to add a band stays in its margin, at the band distance where it fits', async () => {
+    const setup = { ...DEFAULT_PAGE_SETUP, margin: { top: 10, right: 15, bottom: 30, left: 12 } };
+    const hint = (margin: HTMLElement) => {
+        const box = margin.querySelector<HTMLElement>('[data-band-hint]');
+        const space = box?.firstElementChild;
+        if (!box || !(space instanceof HTMLElement)) throw new Error('no hint');
+        return {
+            box: [box.style.top, box.style.bottom, box.style.height, box.style.left, box.style.right],
+            clips: box.classList.contains('overflow-hidden'),
+            space: space.style.flexBasis,
+            text: space.nextElementSibling?.textContent,
+        };
+    };
+    const onEnter = () => {};
+    expect(hint(await render(new Y.Doc(), { edge: 'header', setup, onEnter }))).toEqual({
+        box: ['0px', '', '10mm', '12mm', '15mm'],
+        clips: true,
+        space: '10mm',
+        text: 'Double-click to add a header',
+    });
+    await unmount();
+    expect(hint(await render(new Y.Doc(), { edge: 'footer', setup, onEnter }))).toEqual({
+        box: ['', '0px', '30mm', '12mm', '15mm'],
+        clips: true,
+        space: '12.7mm',
+        text: 'Double-click to add a footer',
+    });
+});
+
 // eigen-prose.css drops the last block's space after on PAGE_BAND_CLASS, as the export's bands carry it too.
 test("a band's editor carries the page band class", async () => {
     const doc = new Y.Doc();
