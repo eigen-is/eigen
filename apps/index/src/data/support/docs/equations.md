@@ -47,11 +47,13 @@ Click a symbol to add it at the cursor in the field. A fraction, a root, or anot
 
 ## Show an equation on its own line
 
-An equation sits in the line of text by default. To give it a line of its own, centered, choose **On its own line** next to **Style** under **Layout** in the **Equation** panel. Choose **In line with text** to put the equation back in the text.
+An equation sits in the line of text by default. To give it a line of its own, centered, choose **On its own line** next to **Style** under **Layout** in the **Equation** panel, or right-click the equation and choose **On its own line**. Choose **In line with text** to put the equation back in the text.
 
 ## Change or remove an equation
 
 Click an equation to select it and open its panel, then edit its LaTeX. To open the panel with the cursor in its **LaTeX** field, move onto the equation with the arrow keys and press **Enter**, or click the selected equation again. To remove an equation, select it and press Backspace or Delete.
+
+Right-click an equation for **Cut**, **Copy**, **Edit equation**, which opens its panel with the cursor in the **LaTeX** field, **In line with text** and **On its own line**, **Add comment**, and, last and in red, **Delete equation**.
 
 Other people see your changes once you save them, not while you type. If two people change the same equation, the last one saved wins.
 
@@ -63,7 +65,7 @@ An equation copied from one Eigen document to another stays an equation, with it
 
 ## Comment on an equation
 
-Click the equation, then press Cmd+Option+M (Mac) or Ctrl+Alt+M (Windows), or choose **Comment** from the **Insert** menu. The comment's **Title** starts as the equation's text. A commented equation shows a small triangle in the comment's color at its top-right corner. Click the triangle to open the comment. See [Comment and discuss](/support/docs/comments).
+Right-click the equation and choose **Add comment**. Or click the equation, then press Cmd+Option+M (Mac) or Ctrl+Alt+M (Windows), or choose **Comment** from the **Insert** menu. The comment's **Title** starts as the equation's text. A commented equation shows a small triangle in the comment's color at its top-right corner. Click the triangle to open the comment. See [Comment and discuss](/support/docs/comments).
 
 ## Equations in downloads and search
 

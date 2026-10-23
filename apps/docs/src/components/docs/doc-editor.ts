@@ -55,7 +55,7 @@ import { Figure } from './extensions/figure';
 import type { FigureFrameOptions } from './extensions/figure-frame';
 import { Footnote, type FootnoteOptions, NOTE_EDIT, NoteDecorations, NoteFormatting } from './extensions/footnote';
 import { PageNumber } from './extensions/page-number';
-import { EditorTable } from './extensions/table';
+import { cellPosAt, EditorTable } from './extensions/table';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { cleanPastedHTML } from './paste';
 
@@ -253,6 +253,8 @@ type DocEditorOptions = {
     figure?: Partial<FigureFrameOptions>;
     chart?: Partial<ChartOptions>;
     equation?: Partial<EquationOptions>;
+    // A right-click in a cell, at `pos`: true when the host opened the table menu.
+    table?: { onContextMenu: (editor: Editor, pos: number, event: MouseEvent) => boolean };
     footnote?: Partial<FootnoteOptions>;
     // An extension named as a schema node or mark takes its place, as the body's comment mark does.
     extensions?: Extensions;
@@ -271,6 +273,7 @@ export function docEditorOptions({
     figure,
     chart,
     equation,
+    table,
     footnote,
     extensions = [],
     media,
@@ -364,6 +367,15 @@ export function docEditorOptions({
             handleDOMEvents: {
                 copy: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
                 cut: (view, event) => writeDocsClipboard(view, event, media().resolveMediaPath),
+                // An editor prop, so it runs ahead of every plugin's: the table menu takes in the comment mark's rows
+                // and the selection's Add comment, which would otherwise open their own menus over a cell.
+                contextmenu: (view, event) => {
+                    const target = editor();
+                    const pos = cellPosAt(view, event.target);
+                    if (!table || !target || pos === null || !table.onContextMenu(target, pos, event)) return false;
+                    event.preventDefault();
+                    return true;
+                },
             },
             transformPastedHTML: (html: string) =>
                 cleanPastedHTML(html, textColumnWidth(), cardIds(), normalStyle().font, !band),

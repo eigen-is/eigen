@@ -3,6 +3,7 @@ import { Table } from '@tiptap/extension-table';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, type Transaction } from '@tiptap/pm/state';
 import {
+    cellAround,
     columnResizingPluginKey,
     isInTable,
     selectedRect,
@@ -115,6 +116,13 @@ function tableOf(view: EditorView, tableDom: HTMLTableElement): { table: PMNode;
     const $start = view.state.doc.resolve(view.posAtDOM(tableDom, 0));
     const pos = $start.before();
     return view.nodeDOM(pos)?.firstChild === tableDom ? { table: $start.parent, pos } : null;
+}
+
+// Where in a cell a right-click landed, from the DOM it landed on; null outside a table.
+export function cellPosAt(view: EditorView, target: EventTarget | null): number | null {
+    if (!(target instanceof Node) || !view.dom.contains(target)) return null;
+    const pos = view.posAtDOM(target, 0);
+    return cellAround(view.state.doc.resolve(pos)) ? pos : null;
 }
 
 // Takes over columnResizing's drag from mousedown to mouseup and keeps the rest of it: the hover that finds the border,

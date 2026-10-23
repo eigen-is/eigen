@@ -1,4 +1,5 @@
 import type { Node } from '@tiptap/pm/model';
+import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { EditorContent } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
@@ -59,13 +60,17 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
+import { pasteFromClipboard } from './clipboard';
 import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
 import { EditorToolbar, runClipboardCommand } from './editor-toolbar';
+import { equationMenuSections } from './equation-menu-sections';
 import { EquationPropertiesPanel } from './equation-properties-panel';
 import {
     addCommentAnchor,
     CommentMark,
+    canAnchorComment,
     commentAnchorText,
+    commentCardIdAt,
     nodeCommentCardId,
     removeCommentAnchors,
     selectCommentAnchor,
@@ -77,12 +82,19 @@ import { FootnoteList } from './footnote-list';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useOpenNote } from './hooks/use-open-note';
 import { type SelectionPanel, useSelectionPanel } from './hooks/use-selection-panel';
+import { cellBackground, selectCellCommands } from './hooks/use-toolbar-state';
 import { useYMapRead } from './hooks/use-y-map-read';
 import { updateNormalStyle } from './normal-style';
 import { BandControls, PageBands } from './page-band';
 import { applyPageNumberPreset, type PageNumberPreset } from './page-numbers';
 import { createDocUndoManager, writePageSetup } from './page-setup';
+import { tableMenuSections } from './table-menu-sections';
 import { TablePropertiesPanel } from './table-properties-panel';
+
+// What a cell's or an equation's right-click menu is about: the editor it is in and the comment card under the pointer.
+type NodeMenuItem = { editor: Editor; comment: CommentContextMenuItem | null };
+type TableMenuItem = NodeMenuItem & { cells: ReturnType<typeof selectCellCommands> & { cellBackground: string } };
+type EquationMenuItem = NodeMenuItem & { display: boolean };
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
@@ -205,8 +217,13 @@ const TiptapEditor = ({
     const handleAddCommentRef = useRef<(() => void) | null>(null);
     const allCommentsRef = useRef<CommentEntry[]>([]);
     const cardsRef = useRef<Record<string, CommentCard>>({});
-    // The extensions keep the closures they were created with, so the figure menu reads this render's state here.
+    // The extensions keep the closures they were created with, so the figure, table and equation menus read this render's
+    // state here.
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
+    const tableContextMenuRef = useRef<(editor: Editor, pos: number, event: MouseEvent) => boolean>(() => false);
+    const equationContextMenuRef = useRef<(editor: Editor, node: Node, pos: number, event: React.MouseEvent) => void>(
+        () => {},
+    );
     const editEquationRef = useRef(() => {});
     const openNoteRef = useRef((_pos: number) => {});
     const insertFootnoteRef = useRef((): boolean => false);
@@ -280,7 +297,9 @@ const TiptapEditor = ({
             equation: {
                 onOpenComment: handleCommentClick,
                 onEdit: isMobile ? undefined : () => editEquationRef.current(),
+                onContextMenu: (...args) => equationContextMenuRef.current(...args),
             },
+            table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
             footnote: { onOpen: (pos) => openNoteRef.current(pos), onInsert: () => insertFootnoteRef.current() },
             extensions: [
                 SearchHighlight,
@@ -327,7 +346,11 @@ const TiptapEditor = ({
         editable: canWrite,
         editing: editingBand,
         onLeave: leaveBand,
-        equation: { onEdit: () => editEquationRef.current() },
+        equation: {
+            onEdit: () => editEquationRef.current(),
+            onContextMenu: (...args) => equationContextMenuRef.current(...args),
+        },
+        table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
     });
     // The open footnote's one live editor, kept as long as the doc is open; it holds whichever note is open. A writer's
     // on a desktop or a tablet, as a band is.
@@ -337,7 +360,10 @@ const TiptapEditor = ({
         provider: null,
         editable: canWrite,
         target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current() },
-        equation: { onEdit: () => editEquationRef.current() },
+        equation: {
+            onEdit: () => editEquationRef.current(),
+            onContextMenu: (...args) => equationContextMenuRef.current(...args),
+        },
     });
     const notes = useOpenNote(editor, noteEditor, bandsAllowed);
     leaveNoteRef.current = notes.leave;
@@ -439,6 +465,31 @@ const TiptapEditor = ({
         editor?.commands.setNodeSelection(pos);
         figureContextMenu.handleContextMenu(event, { imagePath, comment });
     };
+
+    // A writer's table and equation menus, about what was right-clicked in `editor`: the body's, the band's being edited
+    // or the open note's. A viewer, and a band not being edited, keep the browser's.
+    const tableContextMenu = useContextMenu<TableMenuItem>();
+    tableContextMenuRef.current = (target, pos, event) => {
+        if (!target.isEditable) return false;
+        // A right-click inside the selection keeps it, so a cell selection merges; elsewhere the caret goes there.
+        const { state } = target;
+        if (!state.selection.ranges.some(({ $from, $to }) => $from.pos <= pos && pos <= $to.pos)) {
+            target.view.dispatch(state.tr.setSelection(Selection.near(state.doc.resolve(pos))));
+        }
+        const cells = { ...selectCellCommands(target, true), cellBackground: cellBackground(target.state) };
+        const comment = commentMenuItem(commentCardIdAt(event.target));
+        tableContextMenu.openAt({ editor: target, cells, comment }, event.clientX, event.clientY);
+        return true;
+    };
+    const equationContextMenu = useContextMenu<EquationMenuItem>();
+    equationContextMenuRef.current = (target, node, pos, event) => {
+        if (!target.isEditable) return;
+        target.commands.setNodeSelection(pos);
+        const comment = commentMenuItem(nodeCommentCardId(node));
+        equationContextMenu.handleContextMenu(event, { editor: target, display: node.attrs.display === true, comment });
+    };
+    // Edit equation opens the panel once the menu has closed, or the menu would hand the focus back from its field.
+    const afterEquationMenuRef = useRef<(() => void) | null>(null);
 
     const removeCommentMarks = (cardId: string) => {
         if (editor) removeCommentAnchors(editor, cardId);
@@ -549,6 +600,78 @@ const TiptapEditor = ({
             if (!isMobile) selectCommentAnchor(editor, cardId);
             setOpenCardId(cardId);
         },
+    };
+
+    // A cell's or an equation's comment rows: the card's under the pointer, else Add comment where one anchors, which
+    // is in the body only. The card's Delete goes last, with the cell's or the equation's.
+    const commentRows = (item: NodeMenuItem, anchors: boolean) => (
+        <CommentLifecycleMenuItems
+            lifecycle={lifecycle}
+            item={item.comment}
+            canWrite={canWrite}
+            onAddComment={item.editor === editor && chatFolderId && anchors ? handleAddComment : undefined}
+            part="rows"
+        />
+    );
+    const commentDelete = (item: NodeMenuItem) => (
+        <CommentLifecycleMenuItems
+            lifecycle={lifecycle}
+            item={item.comment}
+            canWrite={canWrite}
+            onDelete={removeCommentMarks}
+            part="delete"
+        />
+    );
+    const tableMenu = (item: TableMenuItem) => {
+        const rows = tableMenuSections(item.editor, item.cells);
+        return (
+            <MenuSections
+                {...rows}
+                clipboard={
+                    <ClipboardMenuItems
+                        onCut={() => runClipboardCommand(item.editor, 'cut')}
+                        onCopy={() => runClipboardCommand(item.editor, 'copy')}
+                        onPaste={() => void pasteFromClipboard(item.editor).catch(() => {})}
+                    />
+                }
+                collaborate={commentRows(item, canAnchorComment(item.editor.state))}
+                destructive={
+                    <>
+                        {rows.destructive}
+                        {commentDelete(item)}
+                    </>
+                }
+            />
+        );
+    };
+    const equationMenu = (item: EquationMenuItem) => {
+        const rows = equationMenuSections(
+            item.editor,
+            item.display,
+            isMobile
+                ? undefined
+                : () => {
+                      afterEquationMenuRef.current = editEquation;
+                  },
+        );
+        return (
+            <MenuSections
+                {...rows}
+                clipboard={
+                    <ClipboardMenuItems
+                        onCut={() => runClipboardCommand(item.editor, 'cut')}
+                        onCopy={() => runClipboardCommand(item.editor, 'copy')}
+                    />
+                }
+                collaborate={commentRows(item, true)}
+                destructive={
+                    <>
+                        {rows.destructive}
+                        {commentDelete(item)}
+                    </>
+                }
+            />
+        );
     };
 
     const bandControls = editingBand && (
@@ -871,6 +994,23 @@ const TiptapEditor = ({
                         </>
                     }
                 />
+            </ContextMenuAnchor>
+
+            <ContextMenuAnchor contextMenu={tableContextMenu}>
+                {tableContextMenu.item && tableMenu(tableContextMenu.item)}
+            </ContextMenuAnchor>
+
+            <ContextMenuAnchor
+                contextMenu={equationContextMenu}
+                onCloseAutoFocus={(e) => {
+                    const after = afterEquationMenuRef.current;
+                    afterEquationMenuRef.current = null;
+                    e.preventDefault();
+                    if (after) after();
+                    else equationContextMenu.restoreFocus();
+                }}
+            >
+                {equationContextMenu.item && equationMenu(equationContextMenu.item)}
             </ContextMenuAnchor>
 
             <ContextMenuAnchor contextMenu={selectionContextMenu}>

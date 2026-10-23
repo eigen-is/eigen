@@ -94,6 +94,8 @@ Click inside the table. The **Table** panel opens on the right side of the edito
 
 The same actions are under **Format → Table**, which works on any screen, a phone included: **Insert row above**, **Insert row below**, **Insert column left**, **Insert column right**, **Delete row**, **Delete column**, **Delete table**, **Distribute columns**, **Merge cells**, **Unmerge cells**, **Toggle header row**, and **Cell background color**. The **Table** item is greyed out until your cursor is in a table.
 
+Right-click a cell for the same actions in one menu. It starts with **Cut**, **Copy**, and **Paste**, offers **Add comment** when you have text selected, and ends with **Delete row**, **Delete column**, and **Delete table** in red. The first time you choose **Paste**, your browser may ask to let the page see your clipboard. This menu needs edit access, and works in a header or footer while you edit it.
+
 **Add or remove columns**
 
 Under **Columns**, click **Before** or **After** to add a column on either side of the one your cursor is in. Click **Delete column** to remove the current column.

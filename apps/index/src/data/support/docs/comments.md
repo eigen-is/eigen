@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-10-13
+updated: 2026-10-23
 ---
 
 Comments let you leave a note on any piece of text or image in a document. Each comment has its own thread, so collaborators can reply, discuss, and resolve it without touching the document itself.
@@ -59,7 +59,7 @@ Resolved comments are still there; switch the sidebar filter to **Resolved** or 
 
 ## Edit or delete a comment
 
-Right-click a comment highlight in the document to open its context menu:
+Right-click a comment highlight in the document to open its context menu. In a table, these rows are part of the table's menu.
 
 - **View comment**: opens the thread.
 - **Comment color**: change the highlight color.

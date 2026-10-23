@@ -8,7 +8,10 @@ import type { ToolbarState } from './hooks/use-toolbar-state';
 import { TABLE_ACTION_ICONS } from './table-action-icons';
 
 // The table rows of Format › Table, in MenuSections' groups, for any menu about the table the caret is in.
-export function tableMenuSections(editor: Editor, active: ToolbarState): MenuSectionsProps {
+export function tableMenuSections(
+    editor: Editor,
+    active: Pick<ToolbarState, 'canMergeCells' | 'canSplitCell' | 'cellBackground'>,
+): MenuSectionsProps {
     return {
         create: (
             <>

@@ -42,6 +42,12 @@ function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: numbe
     return anchors;
 }
 
+// The card of the comment highlight an event lands on, as text draws it.
+export function commentCardIdAt(target: EventTarget | null): string | null {
+    if (!(target instanceof Element)) return null;
+    return target.closest('.comment-highlight')?.getAttribute('data-comment-id') || null;
+}
+
 // A new card anchors by attribute on an image, a chart or an equation selected alone, else as the mark on the range's text.
 export function addCommentAnchor(editor: Editor, { from, to }: { from: number; to: number }, cardId: string): void {
     const node = editor.state.doc.nodeAt(from);
@@ -168,8 +174,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                 props: {
                     handleClick: onCommentClick
                         ? (_view, _pos, event) => {
-                              const el = (event.target as HTMLElement).closest('.comment-highlight');
-                              const cardId = el?.getAttribute('data-comment-id');
+                              const cardId = commentCardIdAt(event.target);
                               if (cardId) {
                                   onCommentClick(cardId);
                                   return true;
@@ -180,8 +185,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                     handleDOMEvents: {
                         contextmenu: (view, event) => {
                             // Right-click on a comment highlight → comment context menu
-                            const el = (event.target as HTMLElement).closest('.comment-highlight');
-                            const cardId = el?.getAttribute('data-comment-id');
+                            const cardId = commentCardIdAt(event.target);
                             if (cardId && onCommentContextMenu) {
                                 event.preventDefault();
                                 onCommentContextMenu(cardId, event);

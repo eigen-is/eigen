@@ -1,5 +1,6 @@
+import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state';
-import type { NodeViewProps } from '@tiptap/react';
+import type { Editor, NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import { CELL_INDICATOR_SIZE } from '@workspace/lib/constants/comment-indicator';
 import {
@@ -71,10 +72,12 @@ export type EquationOptions = {
     onOpenComment: (cardId: string) => void;
     // None on a phone, which has no Equation panel: Enter there splits the paragraph, as on a figure.
     onEdit: (() => void) | undefined;
+    // A right-click on the equation in `editor`, the body's, a band's or a note's.
+    onContextMenu: (editor: Editor, node: PMNode, pos: number, event: React.MouseEvent) => void;
 };
 
-function EquationView({ node, selected, extension, decorations }: NodeViewProps) {
-    const { onOpenComment }: EquationOptions = extension.options;
+function EquationView({ editor, node, getPos, selected, extension, decorations }: NodeViewProps) {
+    const { onOpenComment, onContextMenu }: EquationOptions = extension.options;
     const commentCardId: string | null = node.attrs.commentCardId;
     const commentColor: string | undefined = decorations.find((d) => 'commentColor' in d.spec)?.spec.commentColor;
     const { mathml, display } = node.attrs;
@@ -89,6 +92,11 @@ function EquationView({ node, selected, extension, decorations }: NodeViewProps)
             data-display={equation.display || undefined}
             // Room for the corner mark beside the glyphs, which it would cover.
             style={commentCardId ? { paddingRight: CELL_INDICATOR_SIZE } : undefined}
+            // ProseMirror never sees a node view's right-click (stopEvent), so the equation asks here, as a figure does.
+            onContextMenu={(e: React.MouseEvent) => {
+                const pos = getPos();
+                if (pos !== undefined) onContextMenu(editor, node, pos, e);
+            }}
         >
             {equation.row.length === 0 ? (
                 <span className="equation-placeholder" role="img" aria-label="Empty equation" />
@@ -115,7 +123,7 @@ function EquationView({ node, selected, extension, decorations }: NodeViewProps)
 
 export const Equation = EquationNode.extend<EquationOptions>({
     addOptions() {
-        return { onOpenComment: () => {}, onEdit: undefined };
+        return { onOpenComment: () => {}, onEdit: undefined, onContextMenu: () => {} };
     },
     addKeyboardShortcuts() {
         return {
