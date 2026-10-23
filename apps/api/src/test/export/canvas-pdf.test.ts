@@ -152,7 +152,7 @@ function area(frameId: string, x: number, y: number, height: number) {
     };
 }
 
-// CI installs neither WeasyPrint nor poppler, so this suite runs only where both a WeasyPrint and a
+// CI installs WeasyPrint but no poppler, so this suite runs only where both a WeasyPrint and a
 // rasterizer are on the machine, and skips everywhere else.
 const suite = (await isWeasyPrintAvailable()) && rasterizer ? describe : describe.skip;
 
