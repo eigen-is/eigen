@@ -236,7 +236,7 @@ const HOVER_REVEAL =
 // docs/LAYOUT.md § A row that deletes is red and last: a row that deletes, trashes or removes is the destructive
 // variant, red with its icon, never a plain row or one tinted by a class. A row is destructive when it draws a trash
 // icon or its label (JSX text or a string literal, read where stripNoise blanked it) says Delete, Remove or to trash. A
-// toggle's label, a ternary with one branch saying Remove and the other not ('Remove' : 'Add' space before), names an
+// toggle's label, a ternary with one branch saying Remove and the other not ('Remove' : 'Add', say), names an
 // undo, not a deletion.
 const MENU_ROW = /<(DropdownMenuItem|SelectItem)\b/g;
 const TRASH_ICON = /<Trash2?\b/;
