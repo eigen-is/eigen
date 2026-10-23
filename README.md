@@ -6,6 +6,8 @@
 
 Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email, file storage, documents, spreadsheets, presentations, drawings, kanban boards, calendar, contacts, and real-time chat, all sharing one API, one auth system, and one UI.
 
+It syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV. It opens and saves Word, Excel and PowerPoint files.
+
 The name *Eigen* is Dutch and German for "own." You own your data, you own your infrastructure, you own your workspace.
 
 > For the backstory on how and why this project started, see [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/).
