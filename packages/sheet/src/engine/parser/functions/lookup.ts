@@ -87,13 +87,11 @@ function binary(lookup: FormulaValue, values: FormulaValue[], indices: number[],
         }
         return low;
     };
-    if (matchMode * flip === -1) {
-        const below = first((p) => order(p) > 0) - 1;
-        return below >= 0 ? indices[below] : -1;
-    }
+    // An exact match is the first of its run in every mode, the row a linear search finds.
     const atLeast = first((p) => order(p) >= 0);
-    if (atLeast === indices.length) return -1;
-    return matchMode * flip === 1 || order(atLeast) === 0 ? indices[atLeast] : -1;
+    if (atLeast < indices.length && order(atLeast) === 0) return indices[atLeast];
+    if (matchMode * flip === -1) return atLeast > 0 ? indices[atLeast - 1] : -1;
+    return matchMode * flip === 1 && atLeast < indices.length ? indices[atLeast] : -1;
 }
 
 // The index of the match in `values`, or -1. Only values of the lookup's own kind are candidates, so a binary

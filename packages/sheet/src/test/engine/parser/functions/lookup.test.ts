@@ -12,18 +12,19 @@ function rows(values: (number | string | null)[][]): (Cell | null)[][] {
     return values.map((row) => row.map(cell));
 }
 
-// A: ascending ids, B: names, C: price, D: quantity, E: descending, F: date serials, G: blank.
+// A: ascending ids, B: names, C: price, D: quantity, E: descending, F: date serials, G: blank,
+// H: ascending with duplicates, I: descending with duplicates.
 const resolver = createArrayResolver([
     {
         id: 's1',
         name: 'Sheet1',
         data: rows([
-            [10, 'Apple', 1.5, 3, 40, 46027, null],
-            [20, 'banana', 0.5, 12, 30, 46028, null],
-            [30, 'Cherry', 4, 7, 20, null, null],
-            [40, 'apple', 2, 1, 10, null, null],
-            [50, 'Xstar', 9, 9, null, null, null],
-            [60, '*star', 6, 6, null, null, null],
+            [10, 'Apple', 1.5, 3, 40, 46027, null, 1, 3],
+            [20, 'banana', 0.5, 12, 30, 46028, null, 1, 3],
+            [30, 'Cherry', 4, 7, 20, null, null, 2, 2],
+            [40, 'apple', 2, 1, 10, null, null, 2, 2],
+            [50, 'Xstar', 9, 9, null, null, null, 3, 1],
+            [60, '*star', 6, 6, null, null, null, 3, 1],
         ]),
         calculationChain: [],
         dynamicArrayCompute: [],
@@ -175,6 +176,14 @@ describe('XMATCH', () => {
     test('an empty mode is its default', () => {
         expect(value('=XMATCH(25,A1:A6,-1,)')).toBe(2);
         expect(value('=XMATCH("apple",B1:B6,,-1)')).toBe(4);
+    });
+
+    test('a binary search lands an exact match on its first occurrence in every match mode, as a linear one does', () => {
+        for (const matchMode of [0, -1, 1]) {
+            expect(value(`=XMATCH(2,H1:H6,${matchMode},2)`)).toBe(3);
+            expect(value(`=XMATCH(2,I1:I6,${matchMode},-2)`)).toBe(3);
+            expect(value(`=XMATCH(2,H1:H6,${matchMode},1)`)).toBe(3);
+        }
     });
 
     test('a miss is #N/A, a 2-D lookup_array #VALUE!', () => {
