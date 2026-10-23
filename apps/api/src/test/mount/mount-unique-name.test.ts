@@ -1,10 +1,12 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { MOUNT_DB_CONFIG } from '../../lib/mount/db-config';
 import { Mount } from '../../lib/mount/mount';
+import { writeTempWithHash } from '../../lib/storage';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 const UNIQUE_INDEX = 'idx_paths_unique_active_name';
@@ -229,12 +231,64 @@ describe('concurrent same-name create → exactly one 409', () => {
 
         const children = await mount.listFolder(rootId);
         expect(children.filter((c) => c.name === 'same.txt').length).toBe(1);
+        // On `local` the loser's disk rename must not replace the winner's bytes.
+        expect(await (await mount.readFile(one))!.text()).toBe('1');
+        expect(await (await mount.readFile(two))!.text()).toBe('2');
 
         await mount.closeAllDatabases();
     }
 
     test('raced rename to the same name → 409, path-based (local)', () => renameRaceOnBackend('local'));
     test('raced rename to the same name → 409, id-based (local-key)', () => renameRaceOnBackend('local-key'));
+
+    // The upload passes its name check and holds the tree lock through its row write; the rename waits on it.
+    // `Y.txt` lands on `y.txt` on a case-insensitive disk (APFS, NTFS).
+    test.each([
+        ['y.txt', 'exact'],
+        ['Y.txt', 'folded'],
+    ])('a rename to %s raced by an upload of y.txt keeps the upload, path-based (local)', async (target, mountId) => {
+        const config = createTestMountConfig(`rename-upload-race-${mountId}`, 'local');
+        const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+        const renamed = await mount.createFile(rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+
+        const [rename, upload] = await Promise.allSettled([
+            mount.updatePath(renamed, { name: target }),
+            mount.createFile(rootId, 'y.txt', 'text/plain', 6, Buffer.from('upload')),
+        ]);
+
+        expect(rename.status).toBe('rejected');
+        expect(((rename as PromiseRejectedResult).reason as ApiError).status).toBe(409);
+        expect(upload.status).toBe('fulfilled');
+        const uploaded = (upload as PromiseFulfilledResult<string>).value;
+        expect(await (await mount.readFile(uploaded))!.text()).toBe('upload');
+        expect(await (await mount.readFile(renamed))!.text()).toBe('x');
+
+        await mount.closeAllDatabases();
+    });
+
+    // A disk rename of a folder replaces an empty one at its target.
+    test('a folder rename raced by an empty folder of the target name keeps that folder, path-based (local)', async () => {
+        const config = createTestMountConfig('rename-folder-race', 'local');
+        const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+        const renamed = await mount.createFolder(rootId, 'Old');
+        await mount.createFile(renamed, 'inside.txt', 'text/plain', 6, Buffer.from('inside'));
+
+        const [rename, create] = await Promise.allSettled([
+            mount.updatePath(renamed, { name: 'New' }),
+            mount.createFolder(rootId, 'New'),
+        ]);
+
+        expect(rename.status).toBe('rejected');
+        expect(create.status).toBe('fulfilled');
+        expect(existsSync(join(mount.dataDir, 'New'))).toBe(true);
+        expect(existsSync(join(mount.dataDir, 'Old', 'inside.txt'))).toBe(true);
+
+        await mount.closeAllDatabases();
+    });
 
     // Pins the translation's precision: rethrowDuplicateActiveName must map ONLY the
     // idx_paths_unique_active_name violation to 409. A duplicate paths.id (PRIMARY KEY) through the
@@ -268,6 +322,132 @@ describe('concurrent same-name create → exactly one 409', () => {
 
         await mount.closeAllDatabases();
     });
+});
+
+type CreateKind = 'folder' | 'file' | 'temp file';
+const CREATE_KINDS: CreateKind[] = ['folder', 'file', 'temp file'];
+
+describe('a local rename or create onto bytes already on disk', () => {
+    const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-rename-on-disk-${Date.now()}`);
+    mkdirSync(TEST_DIR, { recursive: true });
+    // APFS folds ſ to s and ß to ss, which no name check in the table matches; a case-sensitive disk keeps them apart.
+    writeFileSync(join(TEST_DIR, 'fold-probe-s'), '');
+    const foldsBeyondLowerCase = existsSync(join(TEST_DIR, 'fold-probe-ſ'));
+
+    afterAll(() => {
+        try {
+            rmSync(TEST_DIR, { recursive: true, force: true });
+        } catch {}
+    });
+
+    async function localMount(id: string) {
+        const mount = new Mount('owner', TEST_DIR, createTestMountConfig(id, 'local'), getLocalDatabase(TEST_DIR));
+        await mount.init();
+        return { mount, rootId: (await mount.getRootFolder())!.id };
+    }
+
+    function movedAside(mount: Mount): string[] {
+        const trashDir = join(mount.dataDir, '.trash');
+        return existsSync(trashDir) ? readdirSync(trashDir).filter((f) => f.includes('.stale-')) : [];
+    }
+
+    test('a leftover no row owns moves aside into .trash/ and the rename goes on', async () => {
+        const { mount, rootId } = await localMount('rename-onto-leftover');
+        const renamed = await mount.createFile(rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+        writeFileSync(join(mount.dataDir, 'y.txt'), 'leftover');
+
+        await mount.updatePath(renamed, { name: 'y.txt' });
+
+        expect(await (await mount.readFile(renamed))!.text()).toBe('x');
+        const aside = movedAside(mount);
+        expect(aside).toHaveLength(1);
+        expect(aside[0].startsWith(`${renamed}.txt.stale-`)).toBe(true);
+        expect(readFileSync(join(mount.dataDir, '.trash', aside[0]), 'utf8')).toBe('leftover');
+
+        await mount.closeAllDatabases();
+    });
+
+    test('a case-only rename on a case-insensitive disk is not a leftover', async () => {
+        const { mount, rootId } = await localMount('rename-case-only');
+        const renamed = await mount.createFile(rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+
+        await mount.updatePath(renamed, { name: 'X.txt' });
+
+        expect(await mount.getStorageKey(renamed)).toBe('X.txt');
+        expect(await (await mount.readFile(renamed))!.text()).toBe('x');
+        expect(movedAside(mount)).toEqual([]);
+
+        await mount.closeAllDatabases();
+    });
+
+    test.skipIf(!foldsBeyondLowerCase).each([
+        ['ſ.txt', 's.txt', 'long-s'],
+        ['straße.txt', 'strasse.txt', 'sharp-s'],
+    ])('a rename to %s beside %s answers 409 and keeps both files', async (target, sibling, mountId) => {
+        const { mount, rootId } = await localMount(`rename-fold-${mountId}`);
+        const renamed = await mount.createFile(rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+        const other = await mount.createFile(rootId, sibling, 'text/plain', 5, Buffer.from('other'));
+
+        await expect(mount.updatePath(renamed, { name: target })).rejects.toMatchObject({ status: 409 });
+
+        expect(await (await mount.readFile(renamed))!.text()).toBe('x');
+        expect(await (await mount.readFile(other))!.text()).toBe('other');
+        expect((await mount.getPath(renamed))!.name).toBe('x.txt');
+
+        await mount.closeAllDatabases();
+    });
+
+    async function create(mount: Mount, kind: CreateKind, parentId: string, name: string): Promise<string> {
+        if (kind === 'folder') return mount.createFolder(parentId, name);
+        if (kind === 'file') return mount.createFile(parentId, name, 'text/plain', 3, Buffer.from('new'));
+        const tempId = randomUUID();
+        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('new'));
+        try {
+            return await mount.createFileFromTemp(parentId, name, 'text/plain', size, hash, tempId);
+        } finally {
+            await mount.cleanupTemp(tempId);
+        }
+    }
+
+    test.each(CREATE_KINDS)('a %s create onto a leftover no row owns moves it aside into .trash/', async (kind) => {
+        const { mount, rootId } = await localMount(`create-onto-leftover-${kind}`);
+        const name = kind === 'folder' ? 'docs' : 'y.txt';
+        const leftover = kind === 'folder' ? join(name, 'old.txt') : name;
+        if (kind === 'folder') mkdirSync(join(mount.dataDir, name));
+        writeFileSync(join(mount.dataDir, leftover), 'leftover');
+
+        const created = await create(mount, kind, rootId, name);
+
+        const aside = movedAside(mount);
+        expect(aside).toHaveLength(1);
+        expect(aside[0].startsWith(kind === 'folder' ? `${created}.stale-` : `${created}.txt.stale-`)).toBe(true);
+        const asideLeftover = join(mount.dataDir, '.trash', aside[0], kind === 'folder' ? 'old.txt' : '');
+        expect(readFileSync(asideLeftover, 'utf8')).toBe('leftover');
+        if (kind === 'folder') expect(readdirSync(join(mount.dataDir, name))).toEqual([]);
+        else expect(await (await mount.readFile(created))!.text()).toBe('new');
+
+        await mount.closeAllDatabases();
+    });
+
+    test.skipIf(!foldsBeyondLowerCase).each(CREATE_KINDS)(
+        'a %s create of ſ beside s answers 409 and keeps the sibling',
+        async (kind) => {
+            const { mount, rootId } = await localMount(`create-fold-${kind}`);
+            const name = kind === 'folder' ? 'ſ' : 'ſ.txt';
+            const siblingName = kind === 'folder' ? 's' : 's.txt';
+            const sibling =
+                kind === 'folder'
+                    ? await mount.createFolder(rootId, siblingName)
+                    : await mount.createFile(rootId, siblingName, 'text/plain', 5, Buffer.from('other'));
+
+            await expect(create(mount, kind, rootId, name)).rejects.toMatchObject({ status: 409 });
+
+            expect((await mount.listFolder(rootId)).map((c) => c.name)).toEqual([siblingName]);
+            if (kind !== 'folder') expect(await (await mount.readFile(sibling))!.text()).toBe('other');
+
+            await mount.closeAllDatabases();
+        },
+    );
 });
 
 describe('v7 dedup covers the folder restore-from-trash cohort', () => {

@@ -48,9 +48,10 @@ import {
     buildUploadDestinationKey,
     createMountStorage,
     docContainerDescendantIds,
+    renameThenWriteRow,
     rethrowDuplicateActiveName,
 } from './helpers';
-import { buildStorageKey, isReservedName, validateName } from './names';
+import { buildStorageKey, isReservedName, trashStorageKey, validateName } from './names';
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
@@ -392,7 +393,8 @@ export class Mount {
     // so those must compare equal too. JS toLowerCase() is the stricter fold; only consulted for
     // non-ASCII names on path-based mounts, so ASCII lookups and id-keyed backends keep SQLite's
     // fold. The v7 unique index stays the ASCII race net.
-    // An ASCII query never scans, so a stored-side-only alias (U+212A 'K') or an unfoldable pair (ſ/s) is not caught.
+    // An ASCII query never scans, so a stored-side-only alias (U+212A 'K') or an unfoldable pair (ſ/s) is not caught;
+    // a local create, rename, move or restore catches those on disk (trash.renameTarget).
     private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
         if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;
         const folded = name.toLowerCase();
@@ -465,9 +467,21 @@ export class Mount {
         return this.isPathBased ? this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
     }
 
+    // Under the tree lock, right before a create's write: on `local` the disk folds names the check above misses
+    // (ſ onto s), and a crash can leave bytes no row owns at the key, which a write would replace or a mkdir adopt.
+    private async claimCreateKey(parentId: string, key: string, id: string, name: string): Promise<void> {
+        if (!this.isPathBased || !this.storage.rename) return;
+        const occupant = await trash.renameTarget(this, parentId, key);
+        if (occupant === 'live') {
+            throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+        }
+        if (occupant === 'leftover') {
+            await trash.moveAside(this.storage.rename.bind(this.storage), key, trashStorageKey(id, name));
+        }
+    }
+
     async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
         name = validateName(name);
-        await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();
         // Derive the container mime from the canonical registry; only plain folders
         // have no eigendoc entry.
@@ -475,8 +489,12 @@ export class Mount {
         const fileValue = this.isPathBased ? name : '';
 
         await this.withTreeShared(async () => {
+            // Under the lock: on `local` a rename that took it first owns the key this write replaces.
+            await this.assertUniqueName(parentId, name);
             if (this.isPathBased && this.storage.mkdir) {
-                await this.storage.mkdir(await this.resolveWriteKey(parentId, fileValue));
+                const key = await this.resolveWriteKey(parentId, fileValue);
+                await this.claimCreateKey(parentId, key, folderId, name);
+                await this.storage.mkdir(key);
             }
 
             await this.insertPathRow({
@@ -514,16 +532,19 @@ export class Mount {
         data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined,
     ): Promise<string> {
         name = validateName(name);
-        await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
         const fileValue = this.buildFileValue(fileId, name);
         const hash = data !== undefined ? await this.computeHash(data) : null;
 
         const searchable = isSearchableTextFile(mimeType, name);
         await this.withTreeShared(async () => {
+            // Under the lock: on `local` a rename that took it first owns the key this write replaces.
+            await this.assertUniqueName(parentId, name);
+            const storageKey = await this.resolveWriteKey(parentId, fileValue);
+            await this.claimCreateKey(parentId, storageKey, fileId, name);
             // Storage write before DB insert (crash safety: orphaned file > orphaned row)
             if (data !== undefined) {
-                await this.storage.write(await this.resolveWriteKey(parentId, fileValue), data);
+                await this.storage.write(storageKey, data);
             }
 
             await this.insertPathRow({
@@ -558,13 +579,15 @@ export class Mount {
         tempId: string,
     ): Promise<string> {
         name = validateName(name);
-        await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
         const fileValue = this.buildFileValue(fileId, name);
 
         const searchable = isSearchableTextFile(mimeType, name);
         await this.withTreeShared(async () => {
+            // Under the lock: on `local` a rename that took it first owns the key this write replaces.
+            await this.assertUniqueName(parentId, name);
             const storageKey = await this.resolveWriteKey(parentId, fileValue);
+            await this.claimCreateKey(parentId, storageKey, fileId, name);
 
             await this.uploadFromTemp(storageKey, tempId);
 
@@ -696,8 +719,7 @@ export class Mount {
         // when neither name nor parent changes — then the index can't fire.
         let targetName = updates.name ?? '';
 
-        // The row write both branches owe. Sizes are invalidated here, i.e. before any storage rename —
-        // a rename failure still leaves the DB updated, so the caches must already reflect the new parent.
+        // The row write both branches owe; on `local` it runs once the bytes moved, so a refused rename writes nothing.
         const writeRow = async (): Promise<void> => {
             // A caller's updatedAt wins: collab stamps the time of the edit, not of the write.
             const set = { updatedAt: new Date(), ...values };
@@ -707,24 +729,13 @@ export class Mount {
                     await this.db.update(paths).set(set).where(eq(paths.id, pathId));
                 } else {
                     // One sync transaction: no raced trash or opposite move lands between the checks and the UPDATE.
-                    // A trash that committed while this waited keeps its row: on `local` a move would carry it out of .trash/.
                     this.db.transaction((tx) => {
-                        const row = tx
-                            .select({ trashedAt: paths.trashedAt })
-                            .from(paths)
-                            .where(eq(paths.id, pathId))
-                            .get();
-                        if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
-                        if (targetParentId !== undefined) this.assertNotOwnAncestorInTx(tx, pathId, targetParentId);
+                        this.assertMovableInTx(tx, pathId, targetParentId);
                         tx.update(paths).set(set).where(eq(paths.id, pathId)).run();
                     });
                 }
             } catch (e) {
                 rethrowDuplicateActiveName(e, targetName);
-            }
-            if (updates.parentId !== undefined) {
-                await this.invalidateSizesFrom(oldParentId ?? null);
-                await this.invalidateSizesFrom(updates.parentId);
             }
         };
 
@@ -755,11 +766,31 @@ export class Mount {
                             if (updates.name !== undefined) {
                                 values.file = targetName;
                             }
-                            await writeRow();
-                            const newPath = await this.getStorageKey(pathId);
-                            if (oldPath !== newPath) {
-                                await renameFn.call(this.storage, oldPath, newPath);
+                            const parentKey = updates.parentId
+                                ? await this.getStorageKey(updates.parentId)
+                                : path.posix.dirname(oldPath);
+                            const newPath = path.posix.join(parentKey, values.file ?? path.posix.basename(oldPath));
+                            if (oldPath === newPath) {
+                                await writeRow();
+                                return;
                             }
+                            // Refused before the bytes move: a disk rename replaces a raced sibling's bytes at the
+                            // target, and one into its own subtree throws a bare EINVAL.
+                            this.db.transaction((tx) => this.assertMovableInTx(tx, pathId, updates.parentId));
+                            const parentId = updates.parentId ?? (await this.getPath(pathId))?.parentId;
+                            const newName = path.posix.basename(newPath);
+                            const rename = renameFn.bind(this.storage);
+                            if (parentId) {
+                                await this.assertUniqueName(parentId, newName, pathId);
+                                const occupant = await trash.renameTarget(this, parentId, newPath, oldPath);
+                                if (occupant === 'live') {
+                                    throw new ApiError(409, `"${newName}" is taken on disk by another item`);
+                                }
+                                if (occupant === 'leftover') {
+                                    await trash.moveAside(rename, newPath, trashStorageKey(pathId, newName));
+                                }
+                            }
+                            await renameThenWriteRow(rename, oldPath, newPath, writeRow);
                         }),
                     );
                 }
@@ -767,6 +798,10 @@ export class Mount {
         }
 
         if (!wroteUnderLock) await writeRow();
+        if (updates.parentId !== undefined) {
+            await this.invalidateSizesFrom(oldParentId ?? null);
+            await this.invalidateSizesFrom(updates.parentId);
+        }
 
         // getPath, not getActivePath: collab still touches a trashed doc's row while it drains.
         const updated = await this.getPath(pathId);
@@ -877,12 +912,16 @@ export class Mount {
         }
     }
 
+    // A trash that committed while a move waited keeps its row: on `local` a move would carry it out of .trash/.
     // `seen` bounds the walk, so a tree that already holds a cycle fails instead of spinning.
-    private assertNotOwnAncestorInTx(
+    private assertMovableInTx(
         tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
         pathId: string,
-        targetParentId: string | null,
+        targetParentId: string | null | undefined,
     ): void {
+        const row = tx.select({ trashedAt: paths.trashedAt }).from(paths).where(eq(paths.id, pathId)).get();
+        if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
+        if (targetParentId === undefined) return;
         const seen = new Set<string>();
         let current = targetParentId;
         while (current) {
@@ -1381,24 +1420,40 @@ export class Mount {
 
     // internal — used by mount/*.ts + versioning/snapshot.ts
     async invalidateAncestorsOf(pathId: string): Promise<void> {
-        const row = await this.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, pathId)).get();
-        if (row) await this.invalidateSizesFrom(row.parentId);
+        let parentId: string | null;
+        try {
+            const row = await this.db
+                .select({ parentId: paths.parentId })
+                .from(paths)
+                .where(eq(paths.id, pathId))
+                .get();
+            parentId = row?.parentId ?? null;
+        } catch (e) {
+            console.error(`[Mount] Could not invalidate the folder sizes above ${pathId}:`, e);
+            return;
+        }
+        await this.invalidateSizesFrom(parentId);
     }
 
     // NULL the cached size on `parentId` and every ancestor up to the mount root.
+    // Every caller has committed its write: a failure leaves a stale size, logged, not a 500.
     // internal — used by mount/*.ts
     async invalidateSizesFrom(parentId: string | null): Promise<void> {
         if (!parentId) return;
-        await this.db.run(sql`
-            WITH RECURSIVE ancestors(id) AS (
-                SELECT ${parentId} AS id
-                UNION ALL
-                SELECT p.parentId FROM paths p
-                    JOIN ancestors a ON p.id = a.id
-                    WHERE p.parentId IS NOT NULL
-            )
-            UPDATE paths SET size = NULL WHERE id IN (SELECT id FROM ancestors)
-        `);
+        try {
+            await this.db.run(sql`
+                WITH RECURSIVE ancestors(id) AS (
+                    SELECT ${parentId} AS id
+                    UNION ALL
+                    SELECT p.parentId FROM paths p
+                        JOIN ancestors a ON p.id = a.id
+                        WHERE p.parentId IS NOT NULL
+                )
+                UPDATE paths SET size = NULL WHERE id IN (SELECT id FROM ancestors)
+            `);
+        } catch (e) {
+            console.error(`[Mount] Could not invalidate the folder sizes from ${parentId}:`, e);
+        }
     }
 
     private computeAndCacheFolderSize(folderId: string): number {

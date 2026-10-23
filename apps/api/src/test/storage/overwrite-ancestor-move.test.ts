@@ -340,6 +340,40 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
         expect(await storage.exists(trashedKey)).toBe(false);
     });
 
+    // The create passes its name check while the rename waits, then queues behind it.
+    test.each([
+        ['an upload', 'file'],
+        ['an upload from a temp file', 'temp'],
+        ['a folder create', 'folder'],
+    ] as const)('%s queued behind a rename to its name answers 409 and keeps the renamed bytes', async (_, kind) => {
+        const { mount, storage, folderId, fileId } = await fileInFolder(`create-behind-rename-${kind}`);
+        const tempId = randomUUID();
+        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('UPLOAD'));
+        try {
+            const hold = Promise.withResolvers<void>();
+            const held = mount.withTreeExclusive(() => hold.promise);
+            const renameQueued = mount.armTreeWait();
+            const rename = mount.updatePath(fileId, { name: 'new.txt' });
+            await renameQueued;
+            const createQueued = mount.armTreeWait();
+            const create =
+                kind === 'folder'
+                    ? mount.createFolder(folderId, 'new.txt')
+                    : kind === 'temp'
+                      ? mount.createFileFromTemp(folderId, 'new.txt', 'text/plain', size, hash, tempId)
+                      : mount.createFile(folderId, 'new.txt', 'text/plain', size, Buffer.from('UPLOAD'));
+            await createQueued;
+            hold.resolve();
+            await Promise.all([held, rename]);
+
+            await expect(create).rejects.toMatchObject({ status: 409 });
+            expect(await mount.getStorageKey(fileId)).toBe('before/new.txt');
+            expect(await storage.read('before/new.txt').text()).toBe('v0');
+        } finally {
+            await mount.cleanupTemp(tempId);
+        }
+    });
+
     test('two moves that would form a cycle: the second answers 400 and the tree stays acyclic', async () => {
         const { mount, folderId: a } = await fileInFolder('move-cycle');
         const rootId = (await mount.getRootFolder())!.id;

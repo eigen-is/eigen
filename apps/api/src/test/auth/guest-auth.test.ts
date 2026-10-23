@@ -4,7 +4,7 @@ import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { user as userSchema, verification as verificationSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { scopedPassword } from '../../lib/auth/guest-auth';
+import { signInWithScopedPassword } from '../../lib/auth/guest-auth';
 import { _resetOtpRateLimitForTests, MAX_OTP_GUESSES, MAX_OTP_REQUESTS_PER_EMAIL } from '../../lib/auth/otp-rate-limit';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getOrgRole } from '../../lib/user';
@@ -13,11 +13,19 @@ import { assertJson, authedRequest, getTestContext } from '../setup';
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
 describe('Guest Auth', () => {
-    test('scopedPassword is the hex HMAC-SHA256 of scope:email under the auth secret', () => {
-        const expected = (scope: string) =>
-            createHmac('sha256', auth.options.secret).update(`${scope}:a@example.com`).digest('hex');
-        expect(scopedPassword('guest', 'a@example.com')).toBe(expected('guest'));
-        expect(scopedPassword('demo', 'a@example.com')).toBe(expected('demo'));
+    test('a scoped sign-in stores the HMAC-SHA256 of scope:email under the auth secret, one per scope', async () => {
+        const email = `scoped-${randomUUID()}@example.com`;
+        const created = await auth.api.createUser({
+            body: { email, password: randomUUID(), name: 'Scoped', role: 'user' },
+        });
+        const signIn = (scope: string) => {
+            const password = createHmac('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
+            return auth.api.signInEmail({ body: { email, password }, asResponse: true });
+        };
+
+        expect((await signInWithScopedPassword('guest', created.user.id, email)).status).toBe(200);
+        expect((await signIn('guest')).status).toBe(200);
+        expect((await signIn('demo')).status).toBe(401);
     });
 
     let ctx: TestCtx;

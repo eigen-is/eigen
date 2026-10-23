@@ -5,7 +5,7 @@ import { and, desc, eq, isNotNull, isNull, type SQL, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
-import { rethrowDuplicateActiveName } from './helpers';
+import { renameThenWriteRow, rethrowDuplicateActiveName } from './helpers';
 import type { Mount } from './mount';
 import { isReservedName, trashStorageKey } from './names';
 import { paths } from './schema';
@@ -154,17 +154,17 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                 const currentKey = await mount.getStorageKey(pathId);
                 // The mirror of trash: bytes at the target alone are this item's, left by a restore's lost row write;
                 // beside bytes still in trash they are a leftover, unless a live row's name aliases them on disk.
-                const atTarget = onDisk(mount, targetKey);
-                if (atTarget && (await liveSiblingHolds(mount, targetParentId, parentKey, targetKey))) {
+                const occupant = await renameTarget(mount, targetParentId, targetKey, currentKey);
+                if (occupant === 'live') {
                     throw new ApiError(
                         409,
                         `"${restoreName}" is taken on disk by another item; rename that, then restore`,
                     );
                 }
-                if (atTarget && !onDisk(mount, currentKey)) {
+                if (occupant === 'leftover' && !onDisk(mount, currentKey)) {
                     await writeRow();
                 } else {
-                    if (atTarget) {
+                    if (occupant === 'leftover') {
                         await moveAside(rename, targetKey, trashStorageKey(pathId, restoreName));
                     }
                     await renameThenWriteRow(rename, currentKey, targetKey, writeRow);
@@ -192,28 +192,33 @@ function onDisk(mount: Mount, key: string): boolean {
     return fs.existsSync(path.join(mount.dataDir, key));
 }
 
-// Same inode: a case-insensitive disk resolves a live sibling's name onto the target, though no name in the table matches.
-async function liveSiblingHolds(
+// What a `local` disk rename of sourceKey onto targetKey, or a create at targetKey, would replace. `source`: the item
+// itself, as a case-only rename on a case-insensitive disk resolves. `live`: a live sibling's bytes, whose name the disk
+// folds onto the target though no name in the table matches (same inode). `leftover`: bytes no row owns.
+// internal — used by mount/*.ts
+export async function renameTarget(
     mount: Mount,
     parentId: string,
-    parentKey: string,
     targetKey: string,
-): Promise<boolean> {
-    const target = fs.statSync(path.join(mount.dataDir, targetKey));
+    sourceKey?: string,
+): Promise<'free' | 'source' | 'live' | 'leftover'> {
+    const stat = (key: string) => fs.statSync(path.join(mount.dataDir, key), { throwIfNoEntry: false });
+    const target = stat(targetKey);
+    if (!target) return 'free';
+    const sameInode = (other: fs.Stats | undefined) => other?.ino === target.ino && other.dev === target.dev;
+    if (sourceKey !== undefined && sameInode(stat(sourceKey))) return 'source';
+    const parentKey = path.posix.dirname(targetKey);
     const siblings = await mount.db
         .select({ file: paths.file })
         .from(paths)
         .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
         .all();
-    return siblings.some((s) => {
-        const key = parentKey ? `${parentKey}/${s.file}` : s.file;
-        const stat = fs.statSync(path.join(mount.dataDir, key), { throwIfNoEntry: false });
-        return stat?.ino === target.ino && stat.dev === target.dev;
-    });
+    return siblings.some((s) => sameInode(stat(path.posix.join(parentKey, s.file)))) ? 'live' : 'leftover';
 }
 
 // Bytes no row owns. Kept in .trash/ for the operator, not deleted: they may hold versions or media the item lacks.
-async function moveAside(
+// internal — used by mount/*.ts
+export async function moveAside(
     rename: (oldKey: string, newKey: string) => Promise<void>,
     key: string,
     asideBase: string,
@@ -221,26 +226,6 @@ async function moveAside(
     const aside = `${asideBase}.stale-${Date.now()}`;
     console.warn(`[Mount] ${key} belongs to no row; moved aside to ${aside}`);
     await rename(key, aside);
-}
-
-// Bytes first, then the row. A row write that throws moves the bytes back, or row and bytes disagree: a live row over
-// bytes in .trash/ (a sync rebuilds the item at its old key), or a trashed row over bytes at a live name. A crash or a
-// failed move-back still leaves that, and the next trash or restore finishes by what it finds on disk.
-async function renameThenWriteRow(
-    rename: (oldKey: string, newKey: string) => Promise<void>,
-    fromKey: string,
-    toKey: string,
-    writeRow: () => Promise<void>,
-): Promise<void> {
-    await rename(fromKey, toKey);
-    try {
-        await writeRow();
-    } catch (e) {
-        await rename(toKey, fromKey).catch((undo: unknown) => {
-            console.error(`[Mount] Could not move ${toKey} back to ${fromKey} after a failed row write:`, undo);
-        });
-        throw e;
-    }
 }
 
 // Every descendant of parentId, transitively. sql.raw emits a bare column name — an

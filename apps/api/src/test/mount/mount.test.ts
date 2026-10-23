@@ -504,6 +504,65 @@ describe('Mount (local path-based storage)', () => {
         expect(existsSync(join(mount.dataDir, 'Destination', 'move.txt'))).toBe(true);
     });
 
+    test('a rename the disk refuses leaves the row on the old name, so a trash moves the right bytes', async () => {
+        const folderId = await mount.createFolder(rootId, 'RenameRefused');
+        const fileId = await mount.createFile(folderId, 'A.txt', 'text/plain', 5, Buffer.from('alpha'));
+        const spy = spyOn(mount.storage, 'rename').mockImplementation(async () => {
+            throw new Error('EIO');
+        });
+        try {
+            await expect(mount.updatePath(fileId, { name: 'B.txt' })).rejects.toThrow('EIO');
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect((await mount.getPath(fileId))!.name).toBe('A.txt');
+        expect(await (await mount.readFile(fileId))!.text()).toBe('alpha');
+        await mount.trashPath(fileId);
+        expect(readFileSync(join(mount.dataDir, '.trash', buildStorageKey(fileId, 'A.txt')), 'utf8')).toBe('alpha');
+    });
+
+    // The cached folder size is NULLed after the write commits: a failure there is logged, not a 500 for a write that happened.
+    test.each(['move', 'trash', 'restore'] as const)(
+        'a %s whose size invalidation fails still answers, its bytes with the row',
+        async (op) => {
+            const fromId = await mount.createFolder(rootId, `SizeFailFrom-${op}`);
+            const toId = await mount.createFolder(rootId, `SizeFailTo-${op}`);
+            const fileId = await mount.createFile(fromId, 'sized.txt', 'text/plain', 5, Buffer.from('sized'));
+            if (op === 'restore') await mount.trashPath(fileId);
+
+            mount.db.run(
+                sql.raw(
+                    `CREATE TRIGGER fail_size BEFORE UPDATE OF size ON paths WHEN NEW.size IS NULL BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`,
+                ),
+            );
+            const logged = spyOn(console, 'error').mockImplementation(() => {});
+            try {
+                if (op === 'move') await mount.updatePath(fileId, { parentId: toId });
+                if (op === 'trash') await mount.trashPath(fileId);
+                if (op === 'restore') await mount.restorePath(fileId);
+            } finally {
+                logged.mockRestore();
+                mount.db.run(sql.raw('DROP TRIGGER fail_size'));
+            }
+
+            const row = (await mount.getPath(fileId))!;
+            expect(row.parentId).toBe(op === 'move' ? toId : op === 'trash' ? rootId : fromId);
+            expect(row.trashedAt !== null).toBe(op === 'trash');
+            expect(await (await mount.readFile(fileId))!.text()).toBe('sized');
+        },
+    );
+
+    test('a move into its own subfolder answers 400 and moves nothing', async () => {
+        const folderId = await mount.createFolder(rootId, 'MoveIntoSelf');
+        const childId = await mount.createFolder(folderId, 'Child');
+
+        await expect(mount.updatePath(folderId, { parentId: childId })).rejects.toMatchObject({ status: 400 });
+
+        expect((await mount.getPath(folderId))!.parentId).toBe(rootId);
+        expect(existsSync(join(mount.dataDir, 'MoveIntoSelf', 'Child'))).toBe(true);
+    });
+
     test('delete folder removes physical directory', async () => {
         const folderId = await mount.createFolder(rootId, 'DeletePhysical');
         await mount.createFile(folderId, 'file.txt', 'text/plain', 3, Buffer.from('abc'));
