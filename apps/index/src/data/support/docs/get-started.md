@@ -52,7 +52,7 @@ To download a copy of the document, open the **File** menu and go to **Download*
 - **PDF (.pdf)**
 - **Web Page (.html)**
 
-To bring content from a Word file into the current document, open the **File** menu and choose **Import…**. See [Export to Word, PDF, or HTML](/support/docs/export) and [Import a Word document](/support/docs/import-word) for more.
+To replace the current document with a Word file, open the **File** menu and choose **Import…**. See [Export to Word, PDF, or HTML](/support/docs/export) and [Import a Word document](/support/docs/import-word) for more.
 
 ## Keep things tidy
 

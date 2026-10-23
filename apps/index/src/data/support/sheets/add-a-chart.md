@@ -25,7 +25,7 @@ A chart holds up to 32 series and 2,000 values. Hidden rows and columns are incl
 
 ## Change the data and the look
 
-Click a chart to select it, and a panel headed **Chart** opens on the right. Its **Chart** section has the chart's **Type** (**Bar**, **Column**, **Line**, or **Pie**), its **Stacking** (**None**, **Standard** or **100%**), **Title**, **Legend** and **Font**, and then the cells it reads:
+Click a chart to select it, and a panel headed **Chart** opens on the right. Its **Chart** section has the chart's **Type** (**Bar**, **Column**, **Line**, or **Pie**), the **Title**, **Legend** and **Font**, the **Stacking** of a column or bar chart (**None**, **Standard** or **100%**), and then the cells it reads:
 
 - **Data range** shows the cells the chart reads, such as `A1:D10`. Type a new range and press Enter to chart other cells. To chart cells on another tab, put the tab name in front, such as `'Sales 2026'!A1:D10`.
 - **Switch rows/columns** turns each row into a series instead of each column.
