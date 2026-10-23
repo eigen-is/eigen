@@ -48,6 +48,7 @@ import {
     buildUploadDestinationKey,
     createMountStorage,
     docContainerDescendantIds,
+    renameThenWriteRow,
     rethrowDuplicateActiveName,
 } from './helpers';
 import { buildStorageKey, isReservedName, validateName } from './names';
@@ -696,8 +697,7 @@ export class Mount {
         // when neither name nor parent changes — then the index can't fire.
         let targetName = updates.name ?? '';
 
-        // The row write both branches owe. Sizes are invalidated here, i.e. before any storage rename —
-        // a rename failure still leaves the DB updated, so the caches must already reflect the new parent.
+        // The row write both branches owe; on `local` it runs once the bytes moved, so a refused rename writes nothing.
         const writeRow = async (): Promise<void> => {
             // A caller's updatedAt wins: collab stamps the time of the edit, not of the write.
             const set = { updatedAt: new Date(), ...values };
@@ -707,15 +707,8 @@ export class Mount {
                     await this.db.update(paths).set(set).where(eq(paths.id, pathId));
                 } else {
                     // One sync transaction: no raced trash or opposite move lands between the checks and the UPDATE.
-                    // A trash that committed while this waited keeps its row: on `local` a move would carry it out of .trash/.
                     this.db.transaction((tx) => {
-                        const row = tx
-                            .select({ trashedAt: paths.trashedAt })
-                            .from(paths)
-                            .where(eq(paths.id, pathId))
-                            .get();
-                        if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
-                        if (targetParentId !== undefined) this.assertNotOwnAncestorInTx(tx, pathId, targetParentId);
+                        this.assertMovableInTx(tx, pathId, targetParentId);
                         tx.update(paths).set(set).where(eq(paths.id, pathId)).run();
                     });
                 }
@@ -755,11 +748,17 @@ export class Mount {
                             if (updates.name !== undefined) {
                                 values.file = targetName;
                             }
-                            await writeRow();
-                            const newPath = await this.getStorageKey(pathId);
-                            if (oldPath !== newPath) {
-                                await renameFn.call(this.storage, oldPath, newPath);
+                            const parentKey = updates.parentId
+                                ? await this.getStorageKey(updates.parentId)
+                                : path.posix.dirname(oldPath);
+                            const newPath = path.posix.join(parentKey, values.file ?? path.posix.basename(oldPath));
+                            if (oldPath === newPath) {
+                                await writeRow();
+                                return;
                             }
+                            // Refused before the bytes move: a disk rename into its own subtree throws a bare EINVAL.
+                            this.db.transaction((tx) => this.assertMovableInTx(tx, pathId, updates.parentId));
+                            await renameThenWriteRow(renameFn.bind(this.storage), oldPath, newPath, writeRow);
                         }),
                     );
                 }
@@ -877,12 +876,16 @@ export class Mount {
         }
     }
 
+    // A trash that committed while a move waited keeps its row: on `local` a move would carry it out of .trash/.
     // `seen` bounds the walk, so a tree that already holds a cycle fails instead of spinning.
-    private assertNotOwnAncestorInTx(
+    private assertMovableInTx(
         tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
         pathId: string,
-        targetParentId: string | null,
+        targetParentId: string | null | undefined,
     ): void {
+        const row = tx.select({ trashedAt: paths.trashedAt }).from(paths).where(eq(paths.id, pathId)).get();
+        if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
+        if (targetParentId === undefined) return;
         const seen = new Set<string>();
         let current = targetParentId;
         while (current) {

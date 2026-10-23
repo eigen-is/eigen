@@ -5,7 +5,7 @@ import { and, desc, eq, isNotNull, isNull, type SQL, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
-import { rethrowDuplicateActiveName } from './helpers';
+import { renameThenWriteRow, rethrowDuplicateActiveName } from './helpers';
 import type { Mount } from './mount';
 import { isReservedName, trashStorageKey } from './names';
 import { paths } from './schema';
@@ -221,26 +221,6 @@ async function moveAside(
     const aside = `${asideBase}.stale-${Date.now()}`;
     console.warn(`[Mount] ${key} belongs to no row; moved aside to ${aside}`);
     await rename(key, aside);
-}
-
-// Bytes first, then the row. A row write that throws moves the bytes back, or row and bytes disagree: a live row over
-// bytes in .trash/ (a sync rebuilds the item at its old key), or a trashed row over bytes at a live name. A crash or a
-// failed move-back still leaves that, and the next trash or restore finishes by what it finds on disk.
-async function renameThenWriteRow(
-    rename: (oldKey: string, newKey: string) => Promise<void>,
-    fromKey: string,
-    toKey: string,
-    writeRow: () => Promise<void>,
-): Promise<void> {
-    await rename(fromKey, toKey);
-    try {
-        await writeRow();
-    } catch (e) {
-        await rename(toKey, fromKey).catch((undo: unknown) => {
-            console.error(`[Mount] Could not move ${toKey} back to ${fromKey} after a failed row write:`, undo);
-        });
-        throw e;
-    }
 }
 
 // Every descendant of parentId, transitively. sql.raw emits a bare column name — an

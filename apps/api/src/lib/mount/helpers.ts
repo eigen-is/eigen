@@ -52,6 +52,26 @@ export function rethrowDuplicateActiveName(e: unknown, name: string): never {
     throw e;
 }
 
+// Bytes first, then the row, for a rename, move, trash or restore on `local`: a disk rename that throws leaves both as
+// they were, and a row write that throws moves the bytes back. A crash or a failed move-back still leaves them apart;
+// the next trash or restore finishes by what it finds on disk.
+export async function renameThenWriteRow(
+    rename: (oldKey: string, newKey: string) => Promise<void>,
+    fromKey: string,
+    toKey: string,
+    writeRow: () => Promise<void>,
+): Promise<void> {
+    await rename(fromKey, toKey);
+    try {
+        await writeRow();
+    } catch (e) {
+        await rename(toKey, fromKey).catch((undo: unknown) => {
+            console.error(`[Mount] Could not move ${toKey} back to ${fromKey} after a failed row write:`, undo);
+        });
+        throw e;
+    }
+}
+
 // A document working copy must be a real SQLite db. The 16-byte magic header is the cheapest proof;
 // a 0-byte or partial download (an empty/failed S3 GET) fails it. Used to refuse opening such a file
 // as a fresh empty doc and re-uploading it over good stored bytes, and by
