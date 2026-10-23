@@ -466,8 +466,8 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 }
 
 // Floating images are stored in unzoomed grid pixels from A1's top-left (the editor's
-// ImgBoxs reads the same fields into left/top/width/height), while the table starts at
-// the used range — so the overlay subtracts the rows and columns the window skipped.
+// FloatingObjectFrame reads the same fields), while the table starts at the used range —
+// so the overlay subtracts the rows and columns the window skipped.
 function gridOffset(sheet: Sheet, minRow: number, minCol: number): { left: number; top: number } {
     return { left: sheetColumnsWidth(sheet, 0, minCol - 1), top: sheetRowsHeight(sheet, 0, minRow - 1) };
 }
