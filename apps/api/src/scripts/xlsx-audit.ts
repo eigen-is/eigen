@@ -35,12 +35,30 @@ import { uriReference } from '../lib/core/opc';
 import { peakRss } from '../lib/core/peak-rss';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip, type ZipWriteEntry } from '../lib/core/zip';
 import { MAX_FORMULA_STRING_LENGTH } from '../lib/document/spreadsheetml';
-import { type ExportMedia, type TransformWarning, toTransferableBuffer } from '../lib/document/transform/protocol';
+import type { TransformWarning } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
-import type { OfficeMedia } from '../lib/export/office-image';
 import type { sheetsToXlsx } from '../lib/export/sheets/to-xlsx';
-import type { ImportedMedia } from '../lib/import/image-types';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
+import {
+    type RoundtripDifference as BaseDifference,
+    type CorpusFile,
+    canonical,
+    cellText,
+    classify,
+    type DifferenceGroup,
+    type Listed,
+    listCorpus,
+    MB,
+    message,
+    officeMedia,
+    type RoundtripGate,
+    type RoundtripMeta,
+    roundtripChild,
+    roundtripLine,
+    runRoundtrip as runGate,
+    seconds,
+    spawnChild,
+} from './office-audit';
 
 const FEATURES = [
     ['sheets', 'Sheets'],
@@ -118,8 +136,6 @@ const SAMPLE_COLUMNS = 26;
 // Wider than any sheet: a cell's row and column as one number.
 const ROW_STRIDE = 1_048_576;
 
-const MB = 1024 * 1024;
-
 type Outcome = 'ok' | 'refused' | 'crash' | 'timeout' | 'memory';
 
 type SheetSummary = { name: string; cells: number; hashes: Record<string, number> };
@@ -172,17 +188,6 @@ type ChildReport =
     | { kind: 'snapshot'; imported: Record<string, number>; sheets: SheetSummary[] }
     | { kind: 'source'; source: Record<string, number> }
     | { kind: 'source'; error: string };
-
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-// Object keys sorted, so two importers building the same map in another order fingerprint alike.
-function canonical(value: unknown): string {
-    return JSON.stringify(value, (_key, inner: unknown) =>
-        inner && typeof inner === 'object' && !Array.isArray(inner)
-            ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-            : inner,
-    );
-}
 
 function bump(counts: Map<Feature, number>, feature: Feature, n = 1): void {
     if (n > 0) counts.set(feature, (counts.get(feature) ?? 0) + n);
@@ -397,7 +402,6 @@ const DEFAULT_TIMEOUT_MS = TRANSFORM_LIMITS.import.deadlineMs;
 const DEFAULT_MAX_RSS_MB = 8192;
 // An import, an export and an import again.
 const DEFAULT_ROUNDTRIP_TIMEOUT_MS = 2 * TRANSFORM_LIMITS.import.deadlineMs + TRANSFORM_LIMITS.export.deadlineMs;
-const POLL_MS = 250;
 const OUTCOMES: Outcome[] = ['ok', 'refused', 'crash', 'timeout', 'memory'];
 
 const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/sheets/to-xlsx.ts');
@@ -420,78 +424,8 @@ function isSheets(value: unknown): value is Sheet[] {
     );
 }
 
-type CorpusFile = { key: string; absolute: string };
-
-// A workbook or template, or one a download suffixed (Zenodo's name.xlsx__content); Excel's lock files (~$name.xlsx)
-// are no packages.
+// A workbook or template, or one a download suffixed (Zenodo's name.xlsx__content).
 const WORKBOOK = /\.xl[st][xm](?![a-z0-9])/i;
-
-export function listCorpus(corpora: string[]): CorpusFile[] {
-    const files = new Map<string, string>();
-    for (const corpus of corpora) {
-        const root = path.resolve(corpus);
-        for (const relative of new Bun.Glob('**/*').scanSync({ cwd: root, onlyFiles: true, dot: true })) {
-            if (!WORKBOOK.test(relative) || path.basename(relative).startsWith('~$')) continue;
-            const key = `${path.basename(root)}/${relative}`;
-            if (files.has(key)) throw new Error(`Two corpora hold ${key}`);
-            files.set(key, path.join(root, relative));
-        }
-    }
-    if (files.size === 0) throw new Error(`No workbooks under ${corpora.join(', ')}`);
-    return [...files].sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, absolute]) => ({ key, absolute }));
-}
-
-// The child's peak as ps sees it, for a child cut before it could say.
-function residentMb(pid: number): number {
-    const ps = Bun.spawnSync(['ps', '-o', 'rss=', '-p', String(pid)]);
-    return Number(ps.stdout.toString().trim() || 0) / 1024;
-}
-
-// A child of this script, cut at the time or memory cap: the JSON lines it reported, in order, whether it was cut, the
-// peak ps saw and, for a child that stopped short, why.
-async function spawnChild<Report>(
-    args: string[],
-    options: { timeoutMs: number; maxRssMb: number; reports: string },
-): Promise<{ reports: Report[]; cut?: 'timeout' | 'memory'; observedMb: number; wallMs: number; why: string }> {
-    fs.rmSync(options.reports, { force: true });
-    const started = performance.now();
-    const child = Bun.spawn([process.execPath, import.meta.path, ...args, '--reports', options.reports], {
-        stdout: 'ignore',
-        stderr: 'pipe',
-    });
-    const stderr = new Response(child.stderr).text();
-    let cut: 'timeout' | 'memory' | undefined;
-    let observedMb = 0;
-    const timer = setTimeout(() => {
-        cut ??= 'timeout';
-        child.kill('SIGKILL');
-    }, options.timeoutMs);
-    for (let exited = false; !exited; ) {
-        observedMb = Math.max(observedMb, residentMb(child.pid));
-        if (observedMb > options.maxRssMb) {
-            cut ??= 'memory';
-            child.kill('SIGKILL');
-        }
-        exited = await Promise.race([child.exited.then(() => true), Bun.sleep(POLL_MS).then(() => false)]);
-    }
-    clearTimeout(timer);
-    const wallMs = performance.now() - started;
-    const reports: Report[] = fs.existsSync(options.reports)
-        ? fs
-              .readFileSync(options.reports, 'utf8')
-              .split('\n')
-              .filter(Boolean)
-              .map((line) => JSON.parse(line))
-        : [];
-    fs.rmSync(options.reports, { force: true });
-    // Why the child stopped short, where it did: Bun ends an uncaught error's report with its own version.
-    const lines = (await stderr).split('\n').map((line) => line.trim());
-    const why =
-        cut ??
-        (lines.find((line) => /error/i.test(line)) ||
-            (child.signalCode ? `signal ${child.signalCode}` : `exit code ${child.exitCode}`));
-    return { reports, cut, observedMb, wallMs, why };
-}
 
 async function importOne(
     file: CorpusFile,
@@ -499,6 +433,7 @@ async function importOne(
 ): Promise<FileResult> {
     fs.mkdirSync(path.dirname(options.cells), { recursive: true });
     const { reports, cut, observedMb, wallMs, why } = await spawnChild<ChildReport>(
+        import.meta.path,
         ['child', file.absolute, '--importer', options.importer, '--cells', options.cells],
         options,
     );
@@ -533,7 +468,7 @@ export async function runAudit(options: {
     const started = performance.now();
     const load = os.loadavg()[0];
     const importer = path.resolve(options.importer ?? DEFAULT_IMPORTER);
-    const files = listCorpus(options.corpora);
+    const files = listCorpus(options.corpora, WORKBOOK, 'workbooks');
     fs.mkdirSync(options.out, { recursive: true });
     for (const folder of ['files', 'cells'])
         fs.rmSync(path.join(options.out, folder), { recursive: true, force: true });
@@ -648,10 +583,6 @@ function kept(feature: Feature, row: Row | undefined): string {
     return row && counted(feature, row) ? `${((row.matched / row.source) * 100).toFixed(1)}%` : '–';
 }
 
-function seconds(ms: number): string {
-    return `${(ms / 1000).toFixed(1)} s`;
-}
-
 function median(values: number[]): number {
     const sorted = values.toSorted((a, b) => a - b);
     return sorted[Math.floor(sorted.length / 2)] ?? 0;
@@ -659,8 +590,6 @@ function median(values: number[]): number {
 
 const outcomeOf = (result: FileResult | undefined) =>
     result ? `${result.outcome}${result.status ? ` ${result.status}` : ''}` : '–';
-
-const cellText = (text: string) => text.replaceAll('|', '\\|').replaceAll('\n', ' ').slice(0, 100);
 
 const TOP_FILES = 15;
 
@@ -986,14 +915,7 @@ export function compareRuns(
 // ── Round trip: the import, our export and its import again ─────────────────────────────────────────────────────
 
 // One thing the two imports hold differently: a sheet's feature at a place, or a cell's key at its cell, with the cells.
-export type RoundtripDifference = {
-    feature: string;
-    sheet: string;
-    at: string;
-    a: unknown;
-    b: unknown;
-    cells?: { a?: Cell; b?: Cell };
-};
+export type RoundtripDifference = BaseDifference & { sheet: string; cells?: { a?: Cell; b?: Cell } };
 
 // What the writer reported cutting, by warning code, and the sheets both imports made.
 export type RoundtripContext = { warnings: ReadonlyMap<string, number>; a: Sheet[]; b: Sheet[] };
@@ -1008,8 +930,6 @@ function cellFields(cell: Cell | null | undefined): Map<string, unknown> {
     }
     return fields;
 }
-
-const shown = (value: unknown) => (value === undefined ? '–' : canonical(value));
 
 // A sheet's maps compared key by key, its lists item by item; a key either holds is compared, so nothing is left out.
 export function diffWorkbooks(a: Sheet[], b: Sheet[]): RoundtripDifference[] {
@@ -1123,11 +1043,7 @@ const VALUE_KEYS = new Set(['cell v', 'cell m', 'cell f', 'cell ct.t', 'cell ct.
 
 // The differences the spec explains (.superpowers/xlsx-writer/SPEC.md § 2, § 3), each kind with why it is no loss or
 // a loss the spec accepts. A difference none matches is unlisted, and fails the gate.
-export const LISTED: {
-    kind: string;
-    why: string;
-    matches(difference: RoundtripDifference, context: RoundtripContext): boolean;
-}[] = [
+export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
     {
         kind: 'default font keys',
         why: "§ 2: the import gives a cell of any but the default format its font whole, and our writer writes a cell whose font is the default with format 0, so a size or face equal to the workbook's default (Inter 10) comes and goes; both draw alike",
@@ -1240,103 +1156,36 @@ export const LISTED: {
     },
 ];
 
-type DifferenceExample = { at: string; a: string; b: string };
-export type DifferenceGroup = { kind: string; listed: boolean; count: number; examples: DifferenceExample[] };
-
-const ROUNDTRIP_EXAMPLES = 3;
-const EXAMPLE_CHARS = 300;
-
-// By kind, the listed ones under their own name, the rest under their feature, most first.
 export function classifyDifferences(context: RoundtripContext): DifferenceGroup[] {
-    const groups = new Map<string, DifferenceGroup>();
-    for (const difference of diffWorkbooks(context.a, context.b)) {
-        const listed = LISTED.find((entry) => entry.matches(difference, context));
-        const kind = listed?.kind ?? difference.feature;
-        const group = groups.get(kind) ?? { kind, listed: listed !== undefined, count: 0, examples: [] };
-        groups.set(kind, group);
-        group.count++;
-        if (group.examples.length < ROUNDTRIP_EXAMPLES)
-            group.examples.push({
-                at: `${difference.sheet}!${difference.at}`,
-                a: shown(difference.a).slice(0, EXAMPLE_CHARS),
-                b: shown(difference.b).slice(0, EXAMPLE_CHARS),
-            });
-    }
-    return [...groups.values()].sort((x, y) => y.count - x.count);
+    return classify(
+        diffWorkbooks(context.a, context.b),
+        LISTED,
+        context,
+        (difference) => `${difference.sheet}!${difference.at}`,
+    );
 }
 
-type RoundtripOutcome = 'ok' | 'skipped' | 'crash' | 'timeout' | 'memory';
-const STAGES = ['import', 'export', 'reimport', 'compare'] as const;
-type Stage = (typeof STAGES)[number];
-
-// What the round trip's child reports, a line a stage.
-type RoundtripReport =
-    | { kind: 'stage'; stage: Stage; ms: number }
-    | { kind: 'failed'; stage: Stage; status?: number; error: string }
-    | { kind: 'done'; warnings: Record<string, number>; groups: DifferenceGroup[]; rssMb: number };
-
-export type RoundtripResult = {
-    file: string;
-    bytes: number;
-    outcome: RoundtripOutcome;
-    // Where a crash happened.
-    stage?: Stage;
-    status?: number;
-    error?: string;
-    ms: Partial<Record<Stage, number>>;
-    rssMb: number;
-    warnings: Record<string, number>;
-    groups: DifferenceGroup[];
+const XLSX_GATE: RoundtripGate = {
+    format: 'xlsx',
+    script: import.meta.path,
+    pattern: WORKBOOK,
+    noun: 'workbooks',
+    writer: DEFAULT_WRITER,
+    timeoutMs: DEFAULT_ROUNDTRIP_TIMEOUT_MS,
+    maxRssMb: DEFAULT_MAX_RSS_MB,
+    listed: LISTED,
 };
-
-export type RoundtripMeta = {
-    corpora: string[];
-    files: number;
-    outcomes: Record<RoundtripOutcome, number>;
-    // Differences, and the files holding any.
-    unlisted: { differences: number; files: number };
-    listed: { differences: number; files: number };
-    maxRssMb: number;
-    totalMs: number;
-    pass: boolean;
-};
-
-// An import's pictures as the export's media prep makes them (export/media.ts): a raster re-encoded as PNG or JPEG, an
-// SVG as it is with its PNG beside it.
-async function officeMedia(media: ImportedMedia[]): Promise<OfficeMedia[]> {
-    const { encodeOfficeImage, withSvgFallbacks } = await import('../lib/export/office-image');
-    const { sharpResize } = await import('../lib/shared/sharp-resize');
-    const prepared: ExportMedia[] = [];
-    for (const { name, contentType, data } of media) {
-        if (contentType === 'image/svg+xml') {
-            prepared.push({ name, contentType, data: toTransferableBuffer(data) });
-            continue;
-        }
-        const item = await encodeOfficeImage(name, contentType, null, (options) => sharpResize(data, options));
-        if (item) prepared.push(item);
-    }
-    return withSvgFallbacks(prepared);
-}
 
 // The round trip's child: the file imported, written by our writer with its pictures prepared as an export prepares
-// them, imported again, and the two imports compared, reporting after each step.
-async function roundtripChild(file: string, options: { writer: string; reports: string }): Promise<void> {
-    const report = (line: RoundtripReport) => fs.appendFileSync(options.reports, `${JSON.stringify(line)}\n`);
+// them, imported again, and the two imports compared.
+async function xlsxRoundtripChild(file: string, options: { writer: string; reports: string }): Promise<void> {
     const { readXlsx } = await import('../lib/import/sheets/from-xlsx');
     const module: unknown = await import(options.writer);
     const sheetsToXlsx =
         typeof module === 'object' && module !== null && 'sheetsToXlsx' in module && module.sheetsToXlsx;
     if (!isWriter(sheetsToXlsx)) throw new Error(`${options.writer} exports no sheetsToXlsx`);
     const limits = { maxMediaBytes: MAX_DECOMPRESSED_BYTES };
-    let stage: Stage = 'import';
-    const step = async <T>(name: Stage, run: () => T | Promise<T>): Promise<T> => {
-        stage = name;
-        const started = performance.now();
-        const value = await run();
-        report({ kind: 'stage', stage: name, ms: performance.now() - started });
-        return value;
-    };
-    try {
+    await roundtripChild(options.reports, async (step) => {
         const data = new Uint8Array(await Bun.file(file).arrayBuffer());
         const a = await step('import', () => readXlsx(data, limits));
         const exported: TransformWarning[] = [];
@@ -1346,169 +1195,19 @@ async function roundtripChild(file: string, options: { writer: string; reports: 
         const b = await step('reimport', () => readXlsx(bytes, limits));
         const warnings = new Map(exported.map((warning) => [warning.code, 'count' in warning ? warning.count : 1]));
         const groups = await step('compare', () => classifyDifferences({ warnings, a: a.sheets, b: b.sheets }));
-        report({ kind: 'done', warnings: Object.fromEntries(warnings), groups, rssMb: peakRss() / MB });
-    } catch (error) {
-        const status = typeof error === 'object' && error !== null && 'status' in error ? error.status : undefined;
-        report({
-            kind: 'failed',
-            stage,
-            ...(typeof status === 'number' && { status }),
-            error: error instanceof Error && stage !== 'import' ? (error.stack ?? error.message) : message(error),
-        });
-    }
+        return { warnings, groups };
+    });
 }
-
-async function roundtripOne(
-    file: CorpusFile,
-    options: { writer: string; timeoutMs: number; maxRssMb: number; reports: string },
-): Promise<RoundtripResult> {
-    const { reports, cut, observedMb, why } = await spawnChild<RoundtripReport>(
-        ['roundtrip-child', file.absolute, '--writer', options.writer],
-        options,
-    );
-    const ms: RoundtripResult['ms'] = {};
-    for (const line of reports) if (line.kind === 'stage') ms[line.stage] = Math.round(line.ms);
-    const failed = reports.find((line) => line.kind === 'failed');
-    const done = reports.find((line) => line.kind === 'done');
-    // The first import refusing the file skips it: the corpus run counts those.
-    const skipped = failed?.stage === 'import' && failed.status !== undefined;
-    return {
-        file: file.key,
-        bytes: fs.statSync(file.absolute).size,
-        outcome: done ? 'ok' : skipped ? 'skipped' : (cut ?? 'crash'),
-        ...(!done && { stage: failed?.stage ?? STAGES.find((stage) => !(stage in ms)) }),
-        status: failed?.status,
-        error: failed?.error ?? (done ? undefined : why),
-        ms,
-        rssMb: Math.round(done?.rssMb ?? observedMb),
-        warnings: done?.warnings ?? {},
-        groups: done?.groups ?? [],
-    };
-}
-
-const differencesIn = (results: RoundtripResult[], listed: boolean) => {
-    const counted = results.map((result) =>
-        result.groups.filter((group) => group.listed === listed).reduce((sum, group) => sum + group.count, 0),
-    );
-    return { differences: counted.reduce((sum, n) => sum + n, 0), files: counted.filter((n) => n > 0).length };
-};
 
 // Pass: no crash, cut or unlisted difference, so every width and height came back to the pixel.
-export async function runRoundtrip(options: {
+export function runRoundtrip(options: {
     corpora: string[];
     out: string;
     writer?: string;
     timeoutMs?: number;
     maxRssMb?: number;
 }): Promise<RoundtripMeta> {
-    const started = performance.now();
-    const files = listCorpus(options.corpora);
-    fs.mkdirSync(options.out, { recursive: true });
-    fs.rmSync(path.join(options.out, 'files'), { recursive: true, force: true });
-    const results: RoundtripResult[] = [];
-    for (const [index, file] of files.entries()) {
-        const result = await roundtripOne(file, {
-            writer: path.resolve(options.writer ?? DEFAULT_WRITER),
-            timeoutMs: options.timeoutMs ?? DEFAULT_ROUNDTRIP_TIMEOUT_MS,
-            maxRssMb: options.maxRssMb ?? DEFAULT_MAX_RSS_MB,
-            reports: path.join(options.out, 'child.jsonl'),
-        });
-        results.push(result);
-        const target = path.join(options.out, 'files', `${file.key}.json`);
-        fs.mkdirSync(path.dirname(target), { recursive: true });
-        fs.writeFileSync(target, `${JSON.stringify(result)}\n`);
-        const unlisted = differencesIn([result], false).differences;
-        console.log(
-            `[${index + 1}/${files.length}] ${file.key}: ${result.outcome}${result.stage ? ` at ${result.stage}` : ''}${unlisted ? `, ${unlisted} unlisted` : ''}`,
-        );
-    }
-    const count = (outcome: RoundtripOutcome) => results.filter((result) => result.outcome === outcome).length;
-    const outcomes = {
-        ok: count('ok'),
-        skipped: count('skipped'),
-        crash: count('crash'),
-        timeout: count('timeout'),
-        memory: count('memory'),
-    };
-    const unlisted = differencesIn(results, false);
-    const meta: RoundtripMeta = {
-        corpora: options.corpora.map((corpus) => path.resolve(corpus)),
-        files: results.length,
-        outcomes,
-        unlisted,
-        listed: differencesIn(results, true),
-        maxRssMb: Math.max(0, ...results.map((result) => result.rssMb)),
-        totalMs: Math.round(performance.now() - started),
-        pass: outcomes.crash + outcomes.timeout + outcomes.memory === 0 && unlisted.differences === 0,
-    };
-    fs.writeFileSync(path.join(options.out, 'run.json'), `${JSON.stringify(meta, null, 2)}\n`);
-    fs.writeFileSync(path.join(options.out, 'summary.md'), roundtripMarkdown(meta, results));
-    return meta;
-}
-
-export function roundtripLine(meta: RoundtripMeta): string {
-    const { outcomes, unlisted, listed } = meta;
-    return `Round trip ${meta.pass ? 'pass' : 'FAIL'}: ${meta.files} files, ${outcomes.ok} imported and written back, ${outcomes.skipped} skipped, ${outcomes.crash} crashes, ${outcomes.timeout + outcomes.memory} cut; ${unlisted.differences} unlisted differences in ${unlisted.files} files, ${listed.differences} listed in ${listed.files}`;
-}
-
-function roundtripMarkdown(meta: RoundtripMeta, results: RoundtripResult[]): string {
-    const kinds = new Map<string, { listed: boolean; count: number; files: number }>();
-    for (const result of results) {
-        for (const group of result.groups) {
-            const entry = kinds.get(group.kind) ?? { listed: group.listed, count: 0, files: 0 };
-            kinds.set(group.kind, entry);
-            entry.count += group.count;
-            entry.files++;
-        }
-    }
-    const why = new Map(LISTED.map((entry) => [entry.kind, entry.why]));
-    const failed = results.filter((result) => result.outcome !== 'ok' && result.outcome !== 'skipped');
-    const differing = results.filter((result) => result.groups.length > 0);
-    const examples = (examples: DifferenceExample[]) =>
-        examples
-            .map((example) => `${cellText(example.at)}: ${cellText(example.a)} → ${cellText(example.b)}`)
-            .join('<br>');
-    return [
-        '# xlsx round trip',
-        '',
-        `Import → our export → import on ${meta.corpora.map((corpus) => `\`${corpus}\``).join(', ')}, the two imports compared.`,
-        '',
-        `**${roundtripLine(meta)}.**`,
-        '',
-        `Peak RSS, largest ${meta.maxRssMb} MB; total ${seconds(meta.totalMs)}.`,
-        '',
-        '## Kinds',
-        '',
-        '| Kind | Listed | Differences | Files | Why |',
-        '|---|---|---:|---:|---|',
-        ...[...kinds]
-            .sort(([, x], [, y]) => Number(x.listed) - Number(y.listed) || y.count - x.count)
-            .map(
-                ([kind, entry]) =>
-                    `| ${kind} | ${entry.listed ? 'listed' : '**unlisted**'} | ${entry.count} | ${entry.files} | ${why.get(kind) ?? ''} |`,
-            ),
-        '',
-        '## Crashed or cut',
-        '',
-        '| File | Outcome | Stage | Message |',
-        '|---|---|---|---|',
-        ...failed.map(
-            (result) =>
-                `| ${result.file} | ${result.outcome} | ${result.stage ?? ''} | ${cellText(result.error ?? '')} |`,
-        ),
-        '',
-        '## Files',
-        '',
-        '| File | Kind | Listed | Differences | Examples (at: first import → second) |',
-        '|---|---|---|---:|---|',
-        ...differing.flatMap((result) =>
-            result.groups.map(
-                (group) =>
-                    `| ${result.file} | ${group.kind} | ${group.listed ? 'listed' : '**unlisted**'} | ${group.count} | ${examples(group.examples)} |`,
-            ),
-        ),
-        '',
-    ].join('\n');
+    return runGate(XLSX_GATE, options);
 }
 
 // ── The held-out set ────────────────────────────────────────────────────────────────────────────────────────────
@@ -1516,7 +1215,7 @@ function roundtripMarkdown(meta: RoundtripMeta, results: RoundtripResult[]): str
 // A seeded draw by hash, half from the real-world files, so it holds at least as many real files as fixtures.
 export function drawHeldout(options: { corpora: string[]; real: string[]; count: number; seed: string }): string[] {
     const rank = (key: string) => new Bun.CryptoHasher('sha256').update(`${options.seed}\n${key}`).digest('hex');
-    const keys = listCorpus(options.corpora).map(({ key }) => key);
+    const keys = listCorpus(options.corpora, WORKBOOK, 'workbooks').map(({ key }) => key);
     const isReal = (key: string) => options.real.some((prefix) => key.startsWith(prefix));
     const ranked = (real: boolean) =>
         keys.filter((key) => isReal(key) === real).sort((x, y) => (rank(x) < rank(y) ? -1 : 1));
@@ -1549,7 +1248,7 @@ if (import.meta.main) {
     if (command === 'child' && rest.length === 1 && values.importer && values.cells && values.reports) {
         await child(rest[0], { importer: values.importer, cells: values.cells, reports: values.reports });
     } else if (command === 'roundtrip-child' && rest.length === 1 && values.writer && values.reports) {
-        await roundtripChild(rest[0], { writer: values.writer, reports: values.reports });
+        await xlsxRoundtripChild(rest[0], { writer: values.writer, reports: values.reports });
     } else if (command === 'roundtrip' && rest.length > 0 && values.out) {
         const meta = await runRoundtrip({
             corpora: rest,
