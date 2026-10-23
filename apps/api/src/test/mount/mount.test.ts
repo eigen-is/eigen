@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -1185,6 +1185,45 @@ describe('trashPath (local path-based storage)', () => {
         expect(await (await mount.readFile(fileId))!.text()).toBe('twice');
     });
 
+    // A crash between the rename and the row write: the only copy is at the trash key, under a live row.
+    test('a trash after a crash between its rename and its row write finishes that trash', async () => {
+        const fileId = await mount.createFile(rootId, 'crashed.txt', 'text/plain', 7, Buffer.from('crashed'));
+        const trashKey = buildStorageKey(fileId, 'crashed.txt');
+        renameSync(join(mount.dataDir, 'crashed.txt'), join(mount.dataDir, '.trash', trashKey));
+
+        await mount.trashPath(fileId);
+
+        expect(readdirSync(join(mount.dataDir, '.trash')).filter((name) => name.startsWith(`${trashKey}.`))).toEqual(
+            [],
+        );
+        const restored = await mount.restorePath(fileId);
+        expect(await (await mount.readFile(restored.id))!.text()).toBe('crashed');
+    });
+
+    test('a trash after a failed row write whose move-back failed too finishes that trash', async () => {
+        const folderId = await mount.createFolder(rootId, 'MoveBackFails');
+        const fileId = await mount.createFile(folderId, 'stuck.txt', 'text/plain', 5, Buffer.from('stuck'));
+        const rename = mount.storage.rename!.bind(mount.storage);
+        const spy = spyOn(mount.storage, 'rename').mockImplementation(async (from, to) => {
+            if (from.startsWith('.trash/')) throw new Error('EIO');
+            await rename(from, to);
+        });
+        try {
+            await withFailingTrashedAtWrite(mount, async () => {
+                await expect(mount.trashPath(fileId)).rejects.toThrow();
+            });
+        } finally {
+            spy.mockRestore();
+        }
+        expect(existsSync(join(mount.dataDir, 'MoveBackFails', 'stuck.txt'))).toBe(false);
+
+        await mount.trashPath(fileId);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(folderId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('stuck');
+    });
+
     test('a move that lands while a trash waits for the lock is the folder the trash records', async () => {
         const fromId = await mount.createFolder(rootId, 'MoveFrom');
         const toId = await mount.createFolder(rootId, 'MoveTo');
@@ -1473,6 +1512,59 @@ describe('restorePath (local path-based storage)', () => {
         const restored = await mount.restorePath(fileId);
         expect(restored.parentId).toBe(folderId);
         expect(await (await mount.readFile(fileId))!.text()).toBe('back');
+    });
+
+    test('a restore onto a leftover folder no row owns keeps the leftover aside in .trash/', async () => {
+        const parentId = await mount.createFolder(rootId, 'LeftoverParent');
+        const folderId = await mount.createFolder(parentId, 'Leftover');
+        await mount.createFile(folderId, 'inside.txt', 'text/plain', 7, Buffer.from('trashed'));
+        await mount.trashPath(folderId);
+        const leftover = join(mount.dataDir, 'LeftoverParent', 'Leftover');
+        mkdirSync(leftover);
+        writeFileSync(join(leftover, 'inside.txt'), 'leftover');
+
+        const restored = await mount.restorePath(folderId);
+
+        expect(restored.name).toBe('Leftover');
+        expect(readFileSync(join(leftover, 'inside.txt'), 'utf8')).toBe('trashed');
+        const trashKey = buildStorageKey(folderId, 'Leftover');
+        const aside = readdirSync(join(mount.dataDir, '.trash')).filter((name) =>
+            name.startsWith(`${trashKey}.stale-`),
+        );
+        expect(aside).toHaveLength(1);
+        expect(readFileSync(join(mount.dataDir, '.trash', aside[0], 'inside.txt'), 'utf8')).toBe('leftover');
+    });
+
+    // A restore's rename landed and its row write did not, or a failed trash could not move the bytes back.
+    test('a restore whose bytes already sit at the target writes the row', async () => {
+        const parentId = await mount.createFolder(rootId, 'AlreadyBack');
+        const fileId = await mount.createFile(parentId, 'back.txt', 'text/plain', 7, Buffer.from('already'));
+        await mount.trashPath(fileId);
+        renameSync(
+            join(mount.dataDir, '.trash', buildStorageKey(fileId, 'back.txt')),
+            join(mount.dataDir, 'AlreadyBack', 'back.txt'),
+        );
+
+        const restored = await mount.restorePath(fileId);
+
+        expect(restored.parentId).toBe(parentId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('already');
+    });
+
+    test('a restore refuses a target whose bytes a live row holds', async () => {
+        const parentId = await mount.createFolder(rootId, 'HeldTarget');
+        const trashedId = await mount.createFile(parentId, 'held.txt', 'text/plain', 7, Buffer.from('trashed'));
+        await mount.trashPath(trashedId);
+        const liveId = await mount.createFile(parentId, 'other.txt', 'text/plain', 4, Buffer.from('live'));
+        // A live row whose bytes sit at another name, as a case-insensitive disk aliases two names.
+        renameSync(join(mount.dataDir, 'HeldTarget', 'other.txt'), join(mount.dataDir, 'HeldTarget', 'held.txt'));
+        await mount.db.update(paths).set({ file: 'held.txt' }).where(eq(paths.id, liveId));
+
+        await expect(mount.restorePath(trashedId)).rejects.toMatchObject({ status: 409 });
+
+        expect(await (await mount.readFile(liveId))!.text()).toBe('live');
+        expect((await mount.getPath(trashedId))!.trashedAt).not.toBeNull();
+        expect(await (await mount.readFile(trashedId))!.text()).toBe('trashed');
     });
 
     test('a restore that waited while its original folder was trashed goes to the root', async () => {

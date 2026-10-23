@@ -28,11 +28,16 @@ Listings, name lookups, shared views and mime queries add `trashedAt IS NULL`, a
 
 Any case or compatibility variant of `.trash` is a reserved name on every mount, so no user item can alias the directory. Both renames take the tree lock exclusively ([STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree)). Trash and restore read the row under their locks, so a move while trash waited cannot leave a stale `trashedFrom`, a second trash of a trashed item is a 404, and a restore whose folder was trashed while it waited goes to the root. A move or rename checks the row is live in the transaction that writes it, so one that waited while a trash committed is a 404 and leaves the bytes in `.trash/`.
 
-## On `local` the bytes move first, and a failed row write moves them back
+## On `local` the bytes move first, and what is on disk decides after a crash
 
-A rename on disk and a row write in `metadata.db` cannot share a transaction. Trash and restore rename the bytes, then write the row, and a row write that throws renames the bytes back (`renameThenWriteRow`). Without that, a live row would point at bytes in `.trash/`: the next save rebuilds the item at its old name, and its next trash fails with `ENOTEMPTY` because the trash key is taken. Restore has the mirror case, a trashed row whose bytes sit at a live name.
+A rename on disk and a row write in `metadata.db` cannot share a transaction. Trash and restore rename the bytes, then write the row, and a row write that throws renames the bytes back (`renameThenWriteRow`). A crash between the two steps, a move-back that fails too, or a `metadata.db` put back from before a trash still leaves a row that disagrees with its bytes. So both read the disk under their locks before they rename, and the trash key stays `.trash/{pathId}.{ext}`, which backup recomputes (`archive-layout.ts`):
 
-A crash between the two steps, or a `metadata.db` put back from before a trash, still leaves that state. So a trash that finds `.trash/{pathId}.{ext}` already there moves it aside to `{key}.stale-{ms}` and logs a warning. Only this row's trash writes that key, and the row is live, so what sits there is no trash anyone can restore. It is kept, not deleted, because it may hold older versions or media the live item lacks. No restore, purge or backup reaches a `.stale-` entry: the operator looks through it and removes it by hand.
+- Trash with the bytes at the trash key only: they are this item's, so it writes the row and skips the rename. That finishes the interrupted trash.
+- Trash with bytes at both keys: only this row's trash writes its trash key and the row is live, so what sits there is an orphan no one can restore. It moves aside, and the trash goes on.
+- Restore with the bytes at the target only: they are this item's, so it writes the row.
+- Restore with bytes at both: the target is a leftover, moved aside before the rename. If a live row's bytes sit there, which a case-insensitive disk allows under another name (same inode), the restore is a 409 and nothing moves.
+
+A moved-aside entry is kept, not deleted, because it may hold older versions or media the item lacks. It goes to `.trash/{pathId}.{ext}.stale-{ms}`, keyed by the item that found it, and the API logs a warning naming both keys. No restore, purge, quota or backup reaches a `.stale-` entry. The operator finds them with `find data -path '*/.trash/*.stale-*'`, looks through them and removes them by hand.
 
 ## Trash closes what is open under the item first
 

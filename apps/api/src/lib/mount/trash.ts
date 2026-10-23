@@ -47,18 +47,18 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
             };
 
             if (mount.isPathBased && mount.storage.rename) {
+                const rename = mount.storage.rename.bind(mount.storage);
                 const trashKey = trashStorageKey(pathId, item.name);
-                // Only this row's trash writes this key and the row is live, so what sits there is restorable by
-                // no one: bytes a lost row write left. Kept aside for the operator, since it may hold old versions.
-                if (fs.existsSync(path.join(mount.dataDir, trashKey))) {
-                    const aside = `${trashKey}.stale-${Date.now()}`;
-                    console.warn(`[Mount] ${trashKey} belongs to no trashed row; moved aside to ${aside}`);
-                    await mount.storage.rename(trashKey, aside);
-                }
                 const oldKey = await mount.getStorageKey(pathId);
-                await renameThenWriteRow(mount.storage.rename.bind(mount.storage), oldKey, trashKey, () =>
-                    writeRow(trashKey),
-                );
+                // Bytes at the trash key alone are this item's, left by a crash or a failed move-back: finish
+                // that trash. Beside bytes at the old key they are an orphan only this row could have written.
+                const atTrashKey = onDisk(mount, trashKey);
+                if (atTrashKey && !onDisk(mount, oldKey)) {
+                    await writeRow(trashKey);
+                } else {
+                    if (atTrashKey) await moveAside(rename, trashKey, trashKey);
+                    await renameThenWriteRow(rename, oldKey, trashKey, () => writeRow(trashKey));
+                }
             } else {
                 await writeRow();
             }
@@ -148,10 +148,27 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
             };
 
             if (mount.isPathBased && mount.storage.rename) {
-                const parentPath = await mount.getStorageKey(targetParentId);
-                const targetKey = parentPath ? `${parentPath}/${restoreName}` : restoreName;
+                const rename = mount.storage.rename.bind(mount.storage);
+                const parentKey = await mount.getStorageKey(targetParentId);
+                const targetKey = parentKey ? `${parentKey}/${restoreName}` : restoreName;
                 const currentKey = await mount.getStorageKey(pathId);
-                await renameThenWriteRow(mount.storage.rename.bind(mount.storage), currentKey, targetKey, writeRow);
+                // The mirror of trash: bytes at the target alone are this item's, left by a restore's lost row write;
+                // beside bytes still in trash they are a leftover, unless a live row's name aliases them on disk.
+                const atTarget = onDisk(mount, targetKey);
+                if (atTarget && (await liveSiblingHolds(mount, targetParentId, parentKey, targetKey))) {
+                    throw new ApiError(
+                        409,
+                        `"${restoreName}" is taken on disk by another item; rename that, then restore`,
+                    );
+                }
+                if (atTarget && !onDisk(mount, currentKey)) {
+                    await writeRow();
+                } else {
+                    if (atTarget) {
+                        await moveAside(rename, targetKey, trashStorageKey(pathId, restoreName));
+                    }
+                    await renameThenWriteRow(rename, currentKey, targetKey, writeRow);
+                }
             } else {
                 await writeRow();
             }
@@ -170,9 +187,45 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
     );
 }
 
-// Bytes first, then the row. A row write that throws moves the bytes back, or row and bytes disagree for good: a live
-// row over bytes in .trash/ (a sync then rebuilds the item at its old key, and its next trash fails ENOTEMPTY), or a
-// trashed row over bytes at a live name.
+// On `local` a key is a path under data/. Not storage.exists(): a folder's key is a directory, which Bun.file misses.
+function onDisk(mount: Mount, key: string): boolean {
+    return fs.existsSync(path.join(mount.dataDir, key));
+}
+
+// Same inode: a case-insensitive disk resolves a live sibling's name onto the target, though no name in the table matches.
+async function liveSiblingHolds(
+    mount: Mount,
+    parentId: string,
+    parentKey: string,
+    targetKey: string,
+): Promise<boolean> {
+    const target = fs.statSync(path.join(mount.dataDir, targetKey));
+    const siblings = await mount.db
+        .select({ file: paths.file })
+        .from(paths)
+        .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
+        .all();
+    return siblings.some((s) => {
+        const key = parentKey ? `${parentKey}/${s.file}` : s.file;
+        const stat = fs.statSync(path.join(mount.dataDir, key), { throwIfNoEntry: false });
+        return stat?.ino === target.ino && stat.dev === target.dev;
+    });
+}
+
+// Bytes no row owns. Kept in .trash/ for the operator, not deleted: they may hold versions or media the item lacks.
+async function moveAside(
+    rename: (oldKey: string, newKey: string) => Promise<void>,
+    key: string,
+    asideBase: string,
+): Promise<void> {
+    const aside = `${asideBase}.stale-${Date.now()}`;
+    console.warn(`[Mount] ${key} belongs to no row; moved aside to ${aside}`);
+    await rename(key, aside);
+}
+
+// Bytes first, then the row. A row write that throws moves the bytes back, or row and bytes disagree: a live row over
+// bytes in .trash/ (a sync rebuilds the item at its old key), or a trashed row over bytes at a live name. A crash or a
+// failed move-back still leaves that, and the next trash or restore finishes by what it finds on disk.
 async function renameThenWriteRow(
     rename: (oldKey: string, newKey: string) => Promise<void>,
     fromKey: string,
