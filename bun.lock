@@ -405,6 +405,7 @@
       },
     },
   },
+  "trustedDependencies": [],
   "patchedDependencies": {
     "@formulajs/formulajs@2.9.3": "patches/@formulajs%2Fformulajs@2.9.3.patch",
   },
