@@ -121,12 +121,11 @@ function readColumns(rest: XmlElement, context: WorksheetContext, config: Worksh
         const to = Math.min(bound(col, 'max'), REFERENCE_COLUMN_COUNT);
         next = Math.max(next, to + 1);
         const width = Number.parseFloat(xmlAttr(col, '', 'width') ?? '');
-        // A custom width of 0 is a column Excel draws as none.
-        const pixels =
-            width > 0 || (width === 0 && isOn(xmlAttr(col, '', 'customWidth')))
-                ? columnWidthToPx(width, context.digitWidth)
-                : undefined;
-        const hidden = isOn(xmlAttr(col, '', 'hidden')) === true;
+        const pixels = width > 0 ? columnWidthToPx(width, context.digitWidth) : undefined;
+        // A custom width of 0 is a column Excel draws as none, as the editor draws a hidden one.
+        const hidden =
+            isOn(xmlAttr(col, '', 'hidden')) === true ||
+            (width === 0 && isOn(xmlAttr(col, '', 'customWidth')) === true);
         if (from > to || (pixels === undefined && !hidden)) continue;
         context.charge(to - from + 1, 0);
         for (let column = from - 1; column < to; column++) {

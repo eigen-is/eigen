@@ -107,8 +107,8 @@ export function sheetGrid(sheet: Sheet, context: GridContext): Grid {
             : `<c r="${labels[c]}${r + 1}"${attributes}/>`;
     };
     const rowAttributes = (r: number): string => {
-        const px = Number(rowlen[r] ?? Number.NaN);
-        const height = px >= 0 && Number.isFinite(px) ? ` ht="${pxToPt(px)}" customHeight="1"` : '';
+        const px = Number(rowlen[r]);
+        const height = px > 0 && Number.isFinite(px) ? ` ht="${pxToPt(px)}" customHeight="1"` : '';
         return `${height}${rowhidden[r] != null ? ' hidden="1"' : ''}`;
     };
 

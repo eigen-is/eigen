@@ -80,14 +80,13 @@ describe("a sheet's grid", () => {
     test('a row keeps its height and hidden flag, with cells or without', () => {
         const { xml } = gridOf({
             celldata: [{ r: 1, c: 0, v: { v: 1 } }],
-            config: { rowlen: { 1: 40, 3: 30, 6: 0 }, rowhidden: { 3: 0, 5: 0 } },
+            config: { rowlen: { 1: 40, 3: 30 }, rowhidden: { 3: 0, 5: 0 } },
         });
         expect(xml).toBe(
             [
                 '<row r="2" ht="30" customHeight="1"><c r="A2"><v>1</v></c></row>',
                 '<row r="4" ht="22.5" customHeight="1" hidden="1"></row>',
                 '<row r="6" hidden="1"></row>',
-                '<row r="7" ht="0" customHeight="1"></row>',
             ].join(''),
         );
     });

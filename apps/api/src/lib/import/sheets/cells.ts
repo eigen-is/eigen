@@ -74,13 +74,14 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
     for (const row of rows) {
         const reference = xmlAttr(row, '', 'r');
         r = indexOf(reference === undefined ? undefined : Number(reference), r, REFERENCE_ROW_COUNT);
-        if (isOn(xmlAttr(row, '', 'hidden')) && !(r in grid.rowhidden)) {
+        const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
+        // A custom height of 0 is a row Excel draws as none, as the editor draws a hidden one.
+        const none = height === 0 && isOn(xmlAttr(row, '', 'customHeight'));
+        if ((none || isOn(xmlAttr(row, '', 'hidden'))) && !(r in grid.rowhidden)) {
             context.charge(1, 0);
             grid.rowhidden[r] = 0;
         }
-        const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
-        // A custom height of 0 is a row Excel draws as none.
-        if (height > 0 || (height === 0 && isOn(xmlAttr(row, '', 'customHeight')))) {
+        if (height > 0) {
             if (!grid.heights.has(r)) context.charge(1, 0);
             grid.heights.set(r, height);
         }
