@@ -232,6 +232,7 @@ for (const mb of [50, 200]) {
         kind: 'import',
         sourceFormat: 'xlsx',
         targetType: 'eigensheets',
+        maxMediaBytes: 0,
         data: new ArrayBuffer(bytes),
         test: { behavior: 'import-ok' },
     };

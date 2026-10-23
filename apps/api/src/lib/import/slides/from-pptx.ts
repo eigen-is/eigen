@@ -11,6 +11,7 @@ import { ApiError } from '../../core/errors';
 import { EMU_PER_POINT, P_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr } from '../../core/xml';
 import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
+import { type ImportedMedia, importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
 import { childOf, withWorkBudget } from './lookup';
@@ -21,11 +22,10 @@ import { readSlideShapes } from './shapes';
 // process; transform.ts writes the result as a Yjs update.
 
 export type PptxSlide = { name: string; background: BackgroundFill | null; elements: NewVectorElement[] };
-export type PptxMedia = { name: string; contentType: string; data: Buffer };
 
 export type PptxDeck = {
     slides: PptxSlide[];
-    media: PptxMedia[];
+    media: ImportedMedia[];
     warnings: TransformWarning[];
     // The page a Convert's new deck takes: the slide size nearest the file's p:sldSz, and the width that keeps the
     // file's pt per px, its own width where the shapes match and PowerPoint's range allows. An Import's is the open
@@ -36,8 +36,6 @@ export type PptxDeck = {
 // The page is the open deck's on an inserting Import…, which the file is fitted into, and none on a Convert or a
 // replace, whose deck takes the file's own.
 export type PptxOptions = { deck?: SlidePage; maxMediaBytes: number };
-
-export const MAX_MEDIA_PARTS = 1000;
 
 // The read's work, charged through lookup.ts: children scanned where a lookup or a colour isn't known yet, colour
 // transforms applied, paragraph and run nodes and characters read, shapes walked, a chart part's elements and points
@@ -82,11 +80,9 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         ? Math.min(frame.width / cx, frame.height / cy)
         : frame.width / (page.slideWidth * EMU_PER_POINT);
 
-    // A random prefix per import, so an Import into a deck that holds an earlier one's pictures overwrites none.
-    const prefix = `pptx-${crypto.randomUUID()}`;
-    const media: PptxMedia[] = [];
-    const names = new Map<string, string | undefined>();
-    let mediaBytes = 0;
+    // Named per import, so an Import into a deck that holds an earlier one's pictures overwrites none. The upload cap
+    // bounds the pictures' bytes, as an upload of each would be bounded.
+    const files = importMedia('pptx', pkg.readMedia, options.maxMediaBytes);
     const losses = new Map<CountedWarningCode, Set<XmlElement>>();
     const deck: DeckWalk = {
         pkg,
@@ -99,22 +95,10 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         weight: 0,
         decorations: new Map(),
         lost: (code, source) => losses.set(code, (losses.get(code) ?? new Set()).add(source)),
+        // Read as it is named, so a picture whose bytes don't read is dropped where it is shown.
         mediaName: (part) => {
-            if (names.has(part.path)) return names.get(part.path);
-            mediaBytes += part.size;
-            if (names.size >= MAX_MEDIA_PARTS || mediaBytes > options.maxMediaBytes)
-                throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
-            // Read as it is named, so a picture whose bytes don't read is dropped where it is shown.
-            const data = pkg.readMedia(part.path);
-            const name = data && `${prefix}-image-${media.length + 1}.${part.extension}`;
-            // A view of the bytes read, not a copy of them.
-            if (data && name)
-                media.push({
-                    name,
-                    contentType: part.contentType,
-                    data: Buffer.from(data.buffer, data.byteOffset, data.byteLength),
-                });
-            names.set(part.path, name);
+            const name = files.name(part);
+            if (name === null) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
             return name;
         },
     };
@@ -129,5 +113,5 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     });
 
     const warnings: TransformWarning[] = [...losses].map(([code, sources]) => ({ code, count: sources.size }));
-    return { slides, media, warnings, page };
+    return { slides, media: files.media, warnings, page };
 }

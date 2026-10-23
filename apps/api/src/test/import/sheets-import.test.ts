@@ -10,7 +10,7 @@ import * as collabSchema from '../../lib/collab/schema';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core';
 import { parseOoxml } from '../../lib/core/ooxml';
-import { openZip } from '../../lib/core/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/core/zip';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { getSharedDrive } from '../../lib/drive/get-drive';
@@ -21,6 +21,7 @@ import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { readLooks } from '../../lib/import/sheets/styles';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import { getUserById } from '../../lib/user';
+import { PIXEL_PNG } from '../fixtures/pptx';
 import { build, deflated } from '../fixtures/raw-zip';
 import { linkRels, rowsXml, SML, sheetXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
@@ -153,7 +154,8 @@ async function readSnapshot(ownerId: string, mountId: string, pathId: string): P
 // /convert and /import commit the Worker's snapshotJson verbatim, so parsing here
 // yields the same Sheet[] a route round-trip would read back — without a Worker spawn.
 function parseXlsx(xlsx: ArrayBuffer | Uint8Array): Sheet[] {
-    const { snapshotJson } = importXlsxToSheetsSnapshot(xlsx instanceof Uint8Array ? toTransferableBuffer(xlsx) : xlsx);
+    const data = xlsx instanceof Uint8Array ? toTransferableBuffer(xlsx) : xlsx;
+    const { snapshotJson } = importXlsxToSheetsSnapshot(data, { maxMediaBytes: MAX_DECOMPRESSED_BYTES });
     return decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
 }
 
@@ -323,6 +325,45 @@ describe('Sheets xlsx import/convert', () => {
         const restored = await readLive(sheetsDoc.id);
         expect(restored.map((sheet) => sheet.name)).toEqual(['Old']);
         expect(restored[0].celldata?.[0]?.v?.v).toBe('Before');
+    });
+
+    // A workbook of one picture, as the export writes it: a sheet's image over B2.
+    async function pictureWorkbook(): Promise<ArrayBuffer> {
+        const image = { id: 'photo', index: 'a0', x: 100, y: 20, width: 40, height: 30, mediaName: 'photo.png' };
+        const media = [{ name: 'photo.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG) }];
+        return toTransferableBuffer(
+            await sheetsToXlsx([{ name: 'Pictures', celldata: [], images: { photo: image } }], { media }),
+        );
+    }
+
+    async function mediaFiles(pathId: string): Promise<Map<string, Uint8Array>> {
+        const home = await getHome(ctx.alice.user.id);
+        const { mount } = await home.drive.resolveFile(mountId, pathId);
+        const media = await mount.getChildByName(pathId, 'media');
+        if (!media) throw new Error('media folder missing');
+        const files = new Map<string, Uint8Array>();
+        for (const child of await mount.listFolder(media.id))
+            files.set(child.name, new Uint8Array((await mount.readBytes(child.id)) ?? new ArrayBuffer(0)));
+        return files;
+    }
+
+    test("convert brings a workbook's pictures in as files of the new sheet's media folder", async () => {
+        const converted = await uploadAndConvert(await pictureWorkbook(), 'pictures.xlsx');
+        const [sheet] = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const [image] = Object.values(sheet.images ?? {});
+        expect(image).toMatchObject({ x: 100, y: 20, width: 40, height: 30 });
+        const files = await mediaFiles(converted.id);
+        expect([...files.keys()]).toEqual([image.mediaName]);
+        expect([...(files.get(image.mediaName) ?? [])]).toEqual([...PIXEL_PNG]);
+    });
+
+    test('each insert names its pictures apart, so a second never overwrites the first', async () => {
+        const sheetsDoc = await uploadAndConvert(await pictureWorkbook(), 'pictures-twice.xlsx');
+        await assertJson<ImportResult>(await importRequest(sheetsDoc.id, await pictureWorkbook(), 'insert'));
+        const sheets = await readLive(sheetsDoc.id);
+        const names = sheets.flatMap((sheet) => Object.values(sheet.images ?? {}).map((image) => image.mediaName));
+        expect(new Set(names).size).toBe(2);
+        expect(new Set((await mediaFiles(sheetsDoc.id)).keys())).toEqual(new Set(names));
     });
 
     test('convert rejects non-.xlsx files', async () => {

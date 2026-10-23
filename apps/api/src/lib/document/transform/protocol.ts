@@ -100,7 +100,13 @@ export type ExtractTextJob = {
 // Pure conversion of uploaded bytes: the transform learns nothing about the
 // destination — no owner, mount, ACL or path. One arm per supported source format,
 // so an impossible pairing (xlsx into an eigendoc) does not compile.
-export type SheetsImportJob = { kind: 'import'; sourceFormat: 'xlsx'; targetType: 'eigensheets' };
+export type SheetsImportJob = {
+    kind: 'import';
+    sourceFormat: 'xlsx';
+    targetType: 'eigensheets';
+    // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
+    maxMediaBytes: number;
+};
 export type DocImportJob = {
     kind: 'import';
     sourceFormat: 'docx';
@@ -194,8 +200,8 @@ export type ExtractTextResult = { text: string };
 // `zoom` is the one htmlToPdf hands WeasyPrint for a PDF document laid out at 1:1: a deck's, from its width.
 export type ExportWorkerResult = { data: ArrayBuffer; zoom?: number };
 // UTF-8 bytes of the lean Sheet[] JSON — the main thread commits the string
-// without parsing it.
-export type SheetsImportWorkerResult = { snapshotJson: ArrayBuffer };
+// without parsing it — plus the pictures its images name, which it writes through Mount.
+export type SheetsImportWorkerResult = { snapshotJson: ArrayBuffer; images: TransformMedia[] };
 // A ready Yjs update plus the images extracted from the docx, its page and its Normal: the main thread
 // only commits the update, the page and the Normal and writes the media through Mount.
 export type DocImportWorkerResult = {
@@ -314,7 +320,11 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
                         r?.update instanceof ArrayBuffer && Array.isArray(r.images) && r.images.every(isTransformMedia)
                     );
                 case 'eigensheets':
-                    return r?.snapshotJson instanceof ArrayBuffer;
+                    return (
+                        r?.snapshotJson instanceof ArrayBuffer &&
+                        Array.isArray(r.images) &&
+                        r.images.every(isTransformMedia)
+                    );
             }
     }
 }
@@ -323,8 +333,8 @@ export function resultBytes(result: TransformResult): number {
     if ('body' in result) return Buffer.byteLength(result.body);
     if ('text' in result) return Buffer.byteLength(result.text);
     if ('data' in result) return result.data.byteLength;
-    if ('snapshotJson' in result) return result.snapshotJson.byteLength;
-    return result.images.reduce((sum, image) => sum + image.data.byteLength, result.update.byteLength);
+    const main = 'snapshotJson' in result ? result.snapshotJson : result.update;
+    return result.images.reduce((sum, image) => sum + image.data.byteLength, main.byteLength);
 }
 
 // Buffers from TextEncoder/ExcelJS can be views over a larger pool, and IPC

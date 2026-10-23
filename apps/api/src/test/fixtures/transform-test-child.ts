@@ -182,7 +182,7 @@ process.on('message', async (message: ChildRequestEnvelope | ParentMediaReply) =
             const snapshotJson = new TextEncoder().encode(JSON.stringify({ received })).buffer as ArrayBuffer;
             const response: ChildResponseEnvelope = {
                 jobId,
-                response: { ok: true, result: { snapshotJson }, warnings: [] },
+                response: { ok: true, result: { snapshotJson, images: [] }, warnings: [] },
             };
             send(response);
             return;

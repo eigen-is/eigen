@@ -7,7 +7,7 @@ import { openPackage, optional, type Relationship, relOfType, relTarget } from '
 import type { XmlElement } from '../../core/xml';
 import { PML, PRESENTATION_TYPE } from '../../document/presentationml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
-import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
+import { type MediaPart, pictureMediaPart } from '../image-types';
 import { IMPORT_MESSAGES, SAVE_AS_PPTX } from '../messages';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 
@@ -32,11 +32,7 @@ const PART_TYPES = {
 };
 export type PartKind = keyof typeof PART_TYPES;
 
-// Pictures are read raw, never parsed, and only these of the types an import stores: the media a slide shows.
-const SLIDE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml']);
-
 export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
-export type MediaPart = { path: string; contentType: string; extension: string; size: number };
 
 export type PptxPackage = {
     presentation: Part;
@@ -126,16 +122,7 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
         related,
         slide: (path) => read(path, 'slide'),
         chart: (from, id) => chartPart(pkg, from.rels, id, 'ppt/charts/'),
-        media: (from, id) => {
-            const path = relTarget(from.rels, id, 'image');
-            if (!path?.startsWith('ppt/')) return undefined;
-            const declared = pkg.contentTypeOf(path);
-            const contentType = declared && (MIME_ALIASES.get(declared) ?? declared);
-            const extension =
-                contentType && SLIDE_IMAGE_TYPES.has(contentType) && IMAGE_EXTENSION_BY_MIME.get(contentType);
-            const entry = pkg.zip.entry(path);
-            return contentType && extension && entry ? { path, contentType, extension, size: entry.size } : undefined;
-        },
+        media: (from, id) => pictureMediaPart(pkg, from.rels, id, 'ppt/'),
         readMedia: (path) => optional(() => pkg.zip.read(path)),
     };
 }

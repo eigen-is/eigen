@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import type { Cell, Sheet, SheetChart, SheetFloatingObject, SheetImage } from '@workspace/lib/sheets';
+import {
+    type Cell,
+    floatingItems,
+    type Sheet,
+    type SheetChart,
+    type SheetFloatingObject,
+    type SheetImage,
+} from '@workspace/lib/sheets';
 import { A_NS, EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/core/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../../lib/core/ooxml-chart';
 import type { PackagePart } from '../../../../lib/core/opc';
@@ -16,7 +23,7 @@ import {
 import type { OfficeMedia } from '../../../../lib/export/office-image';
 import { sheetsToXlsx } from '../../../../lib/export/sheets/to-xlsx';
 import { DRAWING_CONTENT_TYPE, drawingOf, type WorkbookPictures } from '../../../../lib/export/sheets/xlsx/drawing';
-import { xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
+import { readXlsx, xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { PIXEL_PNG } from '../../../fixtures/pptx';
 import { xlsxFixture } from '../../../fixtures/xlsx';
 
@@ -330,6 +337,48 @@ describe('the workbook', () => {
             source: 'range',
             categories: { row: [1, 3], column: [0, 0] },
         });
+    });
+});
+
+describe('pictures read back by the import', () => {
+    test('keep their box, their turn, their bytes and their place among the charts', async () => {
+        const sideways: SheetImage = {
+            ...BELOW,
+            id: 'sideways',
+            index: 'a3',
+            x: 300,
+            y: 200,
+            width: 120,
+            height: 40,
+            angle: 90,
+        };
+        const drawn: SheetImage = { ...BELOW, id: 'drawn', index: 'a4', mediaName: 'drawing.svg', angle: 200 };
+        const summary: Sheet = { ...SUMMARY, images: { below: BELOW, above: ABOVE, sideways, drawn } };
+        const warnings: TransformWarning[] = [];
+        const bytes = await sheetsToXlsx([summary, MY_DATA], { media: [PNG, SVG], warnings });
+        expect(warnings).toEqual([]);
+        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 });
+        const items = floatingItems(sheets[0]);
+        expect(items.map(({ kind, object }) => [kind, boxOf(object), object.angle ?? 0])).toEqual([
+            ['chart', boxOf(INLINE), 0],
+            ['image', boxOf(BELOW), 0],
+            ['chart', boxOf(RANGED), 0],
+            ['image', boxOf(ABOVE), 30],
+            ['image', boxOf(sideways), 90],
+            ['image', boxOf(drawn), 200],
+        ]);
+        const named = new Map(media.map((item) => [item.name, item]));
+        const bytesOf = (object: SheetFloatingObject) =>
+            'mediaName' in object && typeof object.mediaName === 'string'
+                ? [...(named.get(object.mediaName)?.data ?? [])]
+                : [];
+        expect(items.filter(({ kind }) => kind === 'image').map(({ object }) => bytesOf(object))).toEqual([
+            [...PIXEL_PNG],
+            [...PIXEL_PNG],
+            [...PIXEL_PNG],
+            [...new Uint8Array(SVG.data)],
+        ]);
+        expect(media.map(({ contentType }) => contentType)).toEqual(['image/png', 'image/svg+xml']);
     });
 });
 
