@@ -827,10 +827,10 @@ describe('document transform (xlsx import)', () => {
 // change moves it too.
 // The doc's preview body: its first 20 blocks, the truncation marker, media as an embed URL, sanitized.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
-// The doc's HTML download and the document fed to WeasyPrint: one hash, as the golden doc holds nothing that prints
-// otherwise on paper, no band, note, equation or small caps.
+// The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
+// paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '5cb21d5397765e68a4c13d2274e99d1606d7dbc725d16f3a1627141108059f05';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '5cb21d5397765e68a4c13d2274e99d1606d7dbc725d16f3a1627141108059f05';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'ae55c6039177891ead1c5977dfaeebc124627658dd346940818423882d36625f';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
