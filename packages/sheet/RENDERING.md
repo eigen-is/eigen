@@ -46,6 +46,7 @@ The grid itself (cells, text, gridlines, borders, fill colors) is drawn on an HT
 - `state/canvas.ts` holds the `Canvas` facade class (`drawMain()`, `drawRowHeader()`, `drawColumnHeader()`, `drawFreezeLine()`). Per-cell painting lives in `state/render/`: `cellRender` in `cells.ts`, driven by the `collectVisibleCells → renderCells → renderMergedCells` phases.
 - Gridlines are stroked paths in the default stroke color (`state/render/types.ts`), on each track's last pixel: a row or column is its stored size, gridline included (`calcRowColSize` in `state/context.ts`).
 - Cell text is `ctx.fillText()` with font metrics from `getMeasureText()`.
+- Text that overflows into empty neighbours paints once, over its whole span, when the span's last visible cell renders (`cellOverflowRender`); `computeCellOverflowMap` finds the spans for the visible rows on every draw ([SHEETS.md § Text spills into empty neighbours](../../docs/SHEETS.md#text-spills-into-empty-neighbours)).
 - Cell backgrounds are `ctx.fillRect()` with the cell's fill color.
 - Borders use `ctx.setLineDash()` over the 13 border styles of `BORDER_STYLES` (`packages/lib/src/sheets/borders.ts`).
 - With frozen rows or columns, `Sheet/index.tsx` draws each pane separately (`drawFrozenBoth()`, `drawFrozenHorizontal()`, `drawFrozenVertical()`), each with its own scroll offset.

@@ -247,6 +247,12 @@ It overlays the cell text rather than reserving width, because reserving would r
 
 Clicking the chevron opens the list, and a click anywhere else in the cell selects. A viewer sees the chevron but gets no list. The `#sheet-dataVerification-dropdown-btn` element is only an invisible anchor for the portaled menu.
 
+## Text spills into empty neighbours
+
+A text cell overflows into the cells beside it as in Google Sheets and Excel: by default, unless its wrapping is Clip (`tb: '0'`) or Wrap (`tb: '2'`). No `tb` means overflow, so imported and typed cells spill without a setting. Left-aligned text spills right, right-aligned left, centred both ways. It runs over any neighbour without a value, whatever that neighbour's style, and stops at the first one with a value, a space or a formula included, or at a merge. Numbers, tick-box cells and text that fits never spill (`rowOverflowSpans` in `state/render/overflow.ts`, recomputed for the visible rows on every draw).
+
+A source scrolled off-screen still spills into view. Past each edge of the view only the first cell with a value can reach in, since it blocks everything behind it, so each row walks out at most `OVERFLOW_REACH_COLUMNS` (256) empty columns per side to find it. Text from a source further away clips at the edge of the view. The HTML, PDF and preview render doesn't overflow at all: every cell clips ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
+
 ## Painter and hit test read one rect
 
 Each glyph has one geometry function that both the painter and the mousedown hit test call: `checkboxRect`, `dropdownChevronRect` and `cellIndicatorRect`. It is the same split as the filter button's `FILTER_BUTTON_WIDTH`/`HEIGHT`, and it means a glyph and its click target cannot drift apart. The tick box gets its bounds from `cellTextBox` on both sides. Only the box toggles; Space or Enter toggles the focused cell. The chevron's click strip is wider than the glyph but built from the same rect, and both drop out below a minimum column width.

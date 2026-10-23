@@ -356,7 +356,8 @@ export function cellRender(
     let drawRightGridLine = true;
     const overflowInfo = overflowColIn(cellOverflowMap, r, c, colEnd);
 
-    if (cell?.tb === '1' && overflowInfo.colIn) {
+    // Only a spilling source has a value inside its own span.
+    if (overflowInfo.colIn) {
         // Last column of overflow range: render overflow cell content
         if (
             overflowInfo.colLast &&
