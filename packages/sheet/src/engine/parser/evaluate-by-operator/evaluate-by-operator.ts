@@ -63,8 +63,8 @@ for (const operator of symbolOperators) {
     registerOperation(operator.SYMBOL, (...params) => params.find((p) => p instanceof Error) ?? operator(...params));
 }
 
-// The formula functions share one operator: each formulajs name gets the callable that
-// closes over it (`formulaFunction.SYMBOL` is SUPPORTED_FORMULAS).
+// The formula functions share one operator: each formulajs name, and each function the
+// engine adds (`formulaFunction.SYMBOL`), gets the callable that closes over it.
 for (const name of formulaFunction.SYMBOL) {
     registerOperation(name, formulaFunction(name.toUpperCase()));
 }

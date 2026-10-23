@@ -3,10 +3,9 @@ import * as formulajs from '@formulajs/formulajs';
 import { booleanDisplay, update } from '../../../format';
 import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
+import { xlookup, xmatch } from '../../functions/lookup';
 import { toNumber } from '../../helper/number';
 import SUPPORTED_FORMULAS from '../../supported-formulas';
-
-export const SYMBOL = SUPPORTED_FORMULAS;
 
 // Narrow view over the untyped formulajs module: a tree of callable functions
 // keyed by name, optionally nested one level deep (e.g. `FINANCIAL.NPV`).
@@ -62,8 +61,18 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
     },
 };
 
+// Functions formulajs 2.9.3 lacks. Unlike an override, a result of `undefined` is a blank, not a fall-through.
+const FUNCTIONS: Record<string, (params: FormulaArg[]) => FormulaOutput> = {
+    XLOOKUP: xlookup,
+    XMATCH: xmatch,
+};
+
+export const SYMBOL = [...SUPPORTED_FORMULAS, ...Object.keys(FUNCTIONS)];
+
 function func(symbol: string): FormulajsMethod {
     const upper = symbol.toUpperCase();
+    const own = FUNCTIONS[upper];
+    if (own) return (...params) => own(params);
     const override = OVERRIDES[upper];
     return function __formulaFunction(...params: FormulaArg[]): FormulaOutput {
         let result = override?.(params);

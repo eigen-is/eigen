@@ -115,7 +115,7 @@ describe('engine/recalc — recalcSheets', () => {
     });
 
     test('engine error does not clobber a non-error cached value', () => {
-        // Functions this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) return
+        // Functions this build lacks (TEXTJOIN, LET, FILTER, …) return
         // #NAME?. At import, Excel's correct cached value must survive — same
         // freeze-is-safe rationale as volatiles.
         const sheets = [
@@ -163,6 +163,20 @@ describe('engine/recalc — recalcSheets', () => {
         const out = recalcSheets(sheets);
         expect(out[0].data![0][1]?.v).toBe(42);
         expect(out[0].data![1][1]?.v).toBe('No input yet');
+    });
+
+    test('an imported XLOOKUP recalculates after its input changed', () => {
+        // Excel's cached 2 predates the edit of B2 to 5.
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [str('a'), num(1), num(10), formula('=XLOOKUP("b",A1:A2,B1:B2)', num(2))],
+                [str('b'), num(5), num(50), formula('=XLOOKUP("b",A1:A2,B1:C2)', num(2))],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][3]?.v).toBe(5);
+        // A row-wide return is a spill anchor, which holds the row's first value.
+        expect(out[0].data![1][3]?.v).toBe(5);
     });
 
     test('engine error with no cached value still writes the #NAME? sentinel', () => {
