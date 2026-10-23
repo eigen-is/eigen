@@ -22,10 +22,12 @@ import {
     buildDocxWithBody,
     chartParts,
     chartRun,
+    GOLDEN_DOCX_IMAGE_NAME,
     GOLDEN_DOCX_IMAGE_RUN,
     importDocxBody,
     marksOfType,
     nodesOfType,
+    unprefixed,
 } from '../../fixtures/golden-docx';
 import { build, deflated, stored } from '../../fixtures/raw-zip';
 
@@ -1037,10 +1039,10 @@ describe('figures and media', () => {
 
     test('a figure names its media and carries no src', async () => {
         const { json, images } = await importDocxBody(paragraph(picture(381000)));
+        expect(images.map((image) => unprefixed(image.name))).toEqual(['image-1.png']);
         expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['mediaName'], node.attrs?.['src']])).toEqual([
-            ['image-1.png', null],
+            [images[0]?.name, null],
         ]);
-        expect(images.map((image) => image.name)).toEqual(['image-1.png']);
     });
 
     // A file may hold 200 MB of media; each image is the bytes the zip read, not a copy of them.
@@ -1063,7 +1065,9 @@ describe('figures and media', () => {
         );
         const { json, images, warnings } = docxToPmJson(input);
         expect(images).toEqual([]);
-        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(['image-1.png']);
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual([
+            expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME),
+        ]);
         expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
     });
 

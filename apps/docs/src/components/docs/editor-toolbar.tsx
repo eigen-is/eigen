@@ -257,7 +257,6 @@ export const EditorToolbar = ({
                             onAccessDialogOpen={onAccessDialogOpen}
                             onExport={(format) => exportPath(path, format)}
                             onImport={() => setImportPickerOpen(true)}
-                            importLabel="Import docx file…"
                             createLabel="New doc"
                             createType="doc"
                             onCloseAutoFocus={keepActiveEditorFocus}
@@ -635,8 +634,6 @@ export const EditorToolbar = ({
                 path={path}
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}
-                title="Import docx file"
-                progressTitle="Importing docx file"
                 target="eigendoc"
             />
         </>

@@ -28,7 +28,7 @@ beforeAll(async () => {
 function importRequest(body: BodyInit, headers: Record<string, string> = {}): Promise<Response> {
     return authedRequest(
         ctx.alice.user.sessionToken,
-        `/drive/${ctx.alice.user.id}/${mountId}/file/${targetId}/import`,
+        `/drive/${ctx.alice.user.id}/${mountId}/file/${targetId}/import?mode=replace`,
         {
             method: 'POST',
             headers,

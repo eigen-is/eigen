@@ -5,6 +5,7 @@ import { ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../
 import { readVectorFromDoc } from '../../vector/read-vector';
 import { serializeBinding } from '../../vector/types';
 import {
+    frameKeysAfter,
     newElementId,
     newFrameId,
     randomSeed,
@@ -111,6 +112,22 @@ describe('topmostIndex', () => {
         });
         expect(topmostIndex(map)).toBe('a3');
         expect(topmostIndex(new Y.Doc().getMap('elements'))).toBeNull();
+    });
+});
+
+// Two peers each adding a slide after one slide at once write one key twice.
+describe('frameKeysAfter', () => {
+    test('after either of two frames sharing a key, the keys land above both, whatever order the map holds them in', () => {
+        const keysAfter = (ids: string[]) => {
+            const doc = new Y.Doc();
+            for (const id of ids) writeFrameInDoc(doc, { id, index: 'a1' });
+            writeFrameInDoc(doc, { id: 'fr-c', index: 'a2' });
+            const frames = doc.getMap('frames');
+            return ['fr-a', 'fr-b'].map((after) => frameKeysAfter(frames, after, 2));
+        };
+        const keys = keysAfter(['fr-a', 'fr-b']);
+        expect(keysAfter(['fr-b', 'fr-a'])).toEqual(keys);
+        for (const [first, second] of keys) expect('a1' < first && first < second && second < 'a2').toBe(true);
     });
 });
 

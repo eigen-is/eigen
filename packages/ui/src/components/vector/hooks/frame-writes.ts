@@ -1,13 +1,12 @@
-// The editor's frame ops over a canvas Y.Doc: the fractional index arithmetic, the delete/duplicate
-// passes that must also move the frame's ELEMENTS, over the shared writer (write-vector.ts), and the
+// The editor's frame ops over a canvas Y.Doc: the delete/duplicate passes that must also move the
+// frame's ELEMENTS, over the shared writer and its frame keys (write-vector.ts), and the
 // meta keys that size them. Plain functions over the doc, the way element-writes.ts is, so the hook
 // stays the thin React surface.
 
 import {
     elementsInFrame,
     FRAME_FIELDS,
-    generateKeyBetween,
-    isValidFractionalIndex,
+    frameKeysAfter,
     newFrameId,
     readVectorFromDoc,
     type VectorFrame,
@@ -22,30 +21,8 @@ function strField(map: Y.Map<unknown>, key: string): string {
     return typeof value === 'string' ? value : '';
 }
 
-// The frames in stored order, as {id, index} pairs — the index arithmetic every op below does. Skips
-// malformed entries so a corrupt peer write cannot make generateKeyBetween throw (read-vector heals
-// them on read).
-function frameOrder(framesMap: Y.Map<unknown>): { id: string; index: string }[] {
-    const out: { id: string; index: string }[] = [];
-    for (const value of framesMap.values()) {
-        if (!(value instanceof Y.Map)) continue;
-        const id = value.get('id');
-        const index = value.get('index');
-        if (typeof id !== 'string' || typeof index !== 'string') continue;
-        if (!isValidFractionalIndex(index, undefined, undefined)) continue;
-        out.push({ id, index });
-    }
-    return out.sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
-}
-
-// The key that lands a frame directly after `afterId` — at the front for null, at the end when it is
-// unknown. `excludeId` drops the frame being moved from the order it is placed into.
 function keyAfter(framesMap: Y.Map<unknown>, afterId: string | null, excludeId?: string): string {
-    const order = frameOrder(framesMap).filter((f) => f.id !== excludeId);
-    if (afterId === null) return generateKeyBetween(null, order[0]?.index ?? null);
-    const at = order.findIndex((f) => f.id === afterId);
-    if (at === -1) return generateKeyBetween(order[order.length - 1]?.index ?? null, null);
-    return generateKeyBetween(order[at].index, order[at + 1]?.index ?? null);
+    return frameKeysAfter(framesMap, afterId, 1, excludeId)[0];
 }
 
 export function addFrameInDoc(doc: Y.Doc, afterId: string | null): string {

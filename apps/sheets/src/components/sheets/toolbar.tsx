@@ -21,7 +21,6 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: Toolbar
                 canWrite={canWrite}
                 onAccessDialogOpen={onAccessDialogOpen}
                 onImport={() => setImportPickerOpen(true)}
-                importLabel="Import xlsx file…"
                 onExport={(format) => exportPath(path, format)}
                 createLabel="New sheet"
                 createIcon={Sheet}
@@ -32,8 +31,6 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: Toolbar
                 path={path}
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}
-                title="Import xlsx file"
-                progressTitle="Importing xlsx file"
                 target="eigensheets"
             />
         </>

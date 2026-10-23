@@ -1,6 +1,7 @@
 import type { app } from '@apps/api';
 import { treaty } from '@elysiajs/eden';
 import {
+    type DocumentImportOptions,
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SHEETS,
@@ -193,8 +194,16 @@ export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: st
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
 export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: string, format: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/export/${format}`;
-export const getDriveImportUrl = (ownerId: string, mountId: string, pathId: string) =>
-    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import`;
+export const getDriveImportUrl = (
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    { mode, afterFrameId }: DocumentImportOptions,
+) => {
+    const query = new URLSearchParams({ mode });
+    if (afterFrameId) query.set('afterFrameId', afterFrameId);
+    return `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import?${query}`;
+};
 export const getDriveImportFromDriveUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import-from-drive`;
 // Backup artifacts move as raw bodies, not JSON: the download is a browser navigation and the upload

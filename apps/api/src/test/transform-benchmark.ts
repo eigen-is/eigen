@@ -146,7 +146,7 @@ async function exportDownload(pathId: string, format: 'xlsx' | 'html'): Promise<
 }
 
 async function importXlsx(pathId: string, data: ArrayBuffer): Promise<void> {
-    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/import`, {
+    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/import?mode=replace`, {
         method: 'POST',
         body: data,
     });
@@ -276,7 +276,7 @@ if (xlsxPath && fs.existsSync(xlsxPath)) {
     const { path } = await home.drive.resolveFile(mountId, doc.id);
     const buffer = Buffer.from(fs.readFileSync(xlsxPath));
     await measure(`real xlsx: import (${buffer.byteLength} bytes)`, () =>
-        importIntoDocument(home.drive, path, buffer, home.user),
+        importIntoDocument(home.drive, path, buffer, { mode: 'replace' }, home.user),
     );
     console.log(`imported ${xlsxPath}`);
     await runScenario('real xlsx', doc.id, 'xlsx');

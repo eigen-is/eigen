@@ -7,7 +7,7 @@ tags: [slides, getting-started, presentation, canvas]
 related: [slides/create-and-edit, slides/draw-shapes-and-arrows, slides/present, slides/share-and-comment]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-14
+updated: 2026-10-23
 ---
 
 Slides is where you build presentations in Eigen. Each presentation is a collection of slides, 16:9 or 4:3, that you can fill with text and images, reorder in a panel on the left, and then present in full screen from the browser.
@@ -65,6 +65,6 @@ Click the **Present** button in the toolbar to enter full-screen presentation mo
 
 ## Share and export
 
-Open the **File** menu in the toolbar to rename your presentation, share it with other people, or download it. Slides can export to PowerPoint, to PDF, or as a web page (**File → Download → Microsoft PowerPoint (.pptx)**, **PDF (.pdf)**, or **Web Page (.html)**). To bring in a PowerPoint file, use **File → Import slides…** or **Convert to Slides** in Drive: see [Import a PowerPoint presentation](/support/slides/import-powerpoint).
+Open the **File** menu in the toolbar to rename your presentation, share it with other people, or download it. Slides can export to PowerPoint, to PDF, or as a web page (**File → Download → Microsoft PowerPoint (.pptx)**, **PDF (.pdf)**, or **Web Page (.html)**). To bring in a PowerPoint file, use **File → Import…** or **Convert to Slides** in Drive: see [Import a PowerPoint presentation](/support/slides/import-powerpoint).
 
 To share, use **File → Share** or the **Share** button in the top-right corner of the toolbar. See [Share a presentation and comment](/support/slides/share-and-comment) for the full sharing options.

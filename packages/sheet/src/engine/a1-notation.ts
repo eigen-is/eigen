@@ -5,6 +5,7 @@ export {
     quoteSheetName,
     rowIndexToLabel,
     rowLabelToIndex,
+    sheetRefName,
     toLabel,
     unquoteSheetName,
 } from './parser/helper/cell';

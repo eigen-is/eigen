@@ -1,10 +1,10 @@
 import {
     CONVERT_SOURCES,
     type ConvertTarget,
+    type DocumentImportOptions,
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
-    DRIVE_TYPE_FILE,
     type DrivePath,
     EIGEN_DOC_TYPE_INFO,
     isCollabType,
@@ -18,8 +18,8 @@ import { getMaxUploadSize } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { MAX_DECOMPRESSED_BYTES } from '../core/zip';
 import { commitEigendocImport } from '../document/doc';
-import { writeSheetsSnapshotToYjs } from '../document/sheets';
-import { appendSlidesUpdateToYjs, writeSlidesUpdateToYjs } from '../document/slides';
+import { appendSheetsToYjs, writeSheetsSnapshotToYjs } from '../document/sheets';
+import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
 import {
     type DocImportWorkerResult,
     type ImportTransformJob,
@@ -50,7 +50,10 @@ const XLSX_TO_SHEETS: SheetsImportJob = { kind: 'import', sourceFormat: 'xlsx', 
 // Refuse before the copy: a view over a larger pool is copied out, and IPC copies the
 // upload again, so a job the runner will not admit must not pay for it. run() rechecks
 // authoritatively.
-function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<string> {
+function importXlsxSnapshot(
+    buffer: Buffer,
+    signal?: AbortSignal,
+): Promise<{ snapshotJson: string; warnings: TransformWarning[] }> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'xlsx');
     return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), { signal });
@@ -100,7 +103,8 @@ function imagesSize(images: TransformMedia[]): number {
 }
 
 // Through Drive, as an upload is: the ACL check, the drive event an open tab redraws on and the thumbnail. The images
-// count toward the quota, inflated up to the zip cap, and are charged before the first is written.
+// count toward the quota, inflated up to the zip cap, and are charged before the first is written. Each import names its
+// pictures with a prefix of its own, so every one is a create.
 async function saveDocImages(
     drive: DriveLike,
     docPath: DrivePath,
@@ -110,27 +114,15 @@ async function saveDocImages(
     if (images.length === 0) return;
     const mediaFolder = await drive.getChildByName(docPath.mountId, docPath.id, 'media');
     if (!mediaFolder) throw new ApiError(500, 'Document media folder not found');
-    // Extracted names are deterministic (image-1.png, …), so a repeat import overwrites its files in place, credited their
-    // size: a create would rename the collision to one the update doesn't name. Names the new import doesn't produce stay.
-    const existing = await Promise.all(
-        images.map((image) => drive.getChildByName(docPath.mountId, mediaFolder.id, image.name)),
-    );
-    // Anything else under that name is neither written over nor credited, and a create would rename the image away
-    // from the name the document gives it.
-    const blocked = existing.find((path) => path && path.type !== DRIVE_TYPE_FILE);
-    if (blocked) throw new ApiError(409, `media/${blocked.name} is not a file`);
-    const credit = existing.reduce((sum, path) => sum + (path?.size ?? 0), 0);
-    await enforceMountQuota(docPath.ownerId, docPath.mountId, imagesSize(images), credit);
-    for (const [i, image] of images.entries()) {
+    await enforceMountQuota(docPath.ownerId, docPath.mountId, imagesSize(images));
+    for (const image of images) {
         const data = Buffer.from(image.data);
-        const path = existing[i];
-        if (path) await drive.writeFileContent(docPath.mountId, path.id, data, user);
-        else await drive.createFileFromData(docPath.mountId, mediaFolder.id, image.name, image.contentType, data, user);
+        await drive.createFileFromData(docPath.mountId, mediaFolder.id, image.name, image.contentType, data, user);
     }
 }
 
-// A convert that fails after its create (a picture's name taken, quota another write spent) trashes the document it
-// made through Drive's own delete, so the error it answers leaves no half-filled document behind.
+// A convert that fails after its create (quota another write spent) trashes the document it made through Drive's own
+// delete, so the error it answers leaves no half-filled document behind.
 async function fillNewDocument(
     drive: DriveLike,
     newPath: DrivePath,
@@ -178,7 +170,7 @@ export async function convertToDocument(
     const name = sourcePath.name.slice(0, -`.${format}`.length);
 
     if (targetType === 'eigensheets') {
-        const snapshotJson = await importXlsxSnapshot(buffer);
+        const { snapshotJson } = await importXlsxSnapshot(buffer);
         const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
         return fillNewDocument(drive, newPath, user, (doc) => writeSheetsSnapshotToYjs(doc, snapshotJson));
     }
@@ -192,7 +184,7 @@ export async function convertToDocument(
         return fillNewDocument(drive, newPath, user, async (doc) => {
             await saveDocImages(drive, newPath, images, user);
             // A file with no slides makes a deck with none, which the Slides editor seeds as it does a new one.
-            writeSlidesUpdateToYjs(doc, new Uint8Array(update));
+            replaceSlidesInYjs(doc, readSlidesUpdate(new Uint8Array(update)));
         });
     }
 
@@ -205,11 +197,13 @@ export async function convertToDocument(
     });
 }
 
-// Answers the summary of what the file held that did not come over, for the toast.
+// Answers the summary of what the file held that did not come over, for the toast. A replace saves a version first, so
+// the document as it was is one restore away in its version history.
 export async function importIntoDocument(
     drive: DriveLike,
     path: DrivePath,
     buffer: Buffer,
+    { mode, afterFrameId }: DocumentImportOptions,
     user: User,
     signal?: AbortSignal,
 ): Promise<string | null> {
@@ -218,20 +212,25 @@ export async function importIntoDocument(
     // the caller's bytes — the same gate exportDocument applies.
     const containerMime = isCollabType(path.type) ? path.mimeType : '';
     if (containerMime === DRIVE_MIME_SHEETS) {
-        const snapshotJson = await importXlsxSnapshot(buffer, signal);
+        const { snapshotJson, warnings } = await importXlsxSnapshot(buffer, signal);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         signal?.throwIfAborted();
+        if (mode === 'replace') await drive.saveVersion(path.mountId, path.id);
         await requireWritePermission(drive, path, user);
-        writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
-        return null;
+        if (mode === 'replace') writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
+        else appendSheetsToYjs(collabDoc.doc, snapshotJson);
+        return importSummary(warnings);
     }
 
     if (containerMime === DRIVE_MIME_DOC) {
+        // The file's page setup, Normal style and bands can't sit beside the doc's, so a docx only ever replaces.
+        if (mode !== 'replace') throw new ApiError(400, 'A document import replaces the document');
         const { update, page, style, images } = await importDocxUpdate(buffer, signal);
         // Media before the update that names it: an open tab looks each name up once, as the update arrives. The open
-        // and the abort check come before the write check that guards the save.
+        // and the abort check come before the version and the write check that guards the save.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         signal?.throwIfAborted();
+        await drive.saveVersion(path.mountId, path.id);
         await requireWritePermission(drive, path, user);
         await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
@@ -240,22 +239,28 @@ export async function importIntoDocument(
     }
 
     if (containerMime === DRIVE_MIME_SLIDES) {
-        // Refused before the deck is opened for its page. A file of another size is fitted into its frame, letterboxed.
-        // The importer prefixes its picture names per import, so they land beside the deck's media, never over it.
+        // Refused before the deck is opened for its page. An insert fits a file of another size into the deck's frame,
+        // letterboxed; a replace takes the slide size nearest the file's and the file's width, as Convert does. The
+        // importer prefixes its picture names per import, so they land beside the deck's media, never over it.
         documentTransformRunner.assertAdmissible('foreground');
         assertWithinByteCap(buffer.byteLength, 'pptx');
-        const deck = readSlidePage((await drive.getCollabDocument(path.mountId, path.id)).doc);
+        const deck =
+            mode === 'insert' ? readSlidePage((await drive.getCollabDocument(path.mountId, path.id)).doc) : undefined;
         const { update, images, warnings } = await importPptxUpdate(buffer, deck, signal);
+        // A file with no slides has no pictures either: nothing is saved or written.
+        const scene = readSlidesUpdate(new Uint8Array(update));
+        if (scene.frames.length === 0) return PRESENTATION_EMPTY;
         // Opened again: the last tab leaving during the transform closes the deck, and a write into a closed one is lost.
         // As the docx branch: media before the update that names it, the write check last.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         signal?.throwIfAborted();
+        if (mode === 'replace') await drive.saveVersion(path.mountId, path.id);
         await requireWritePermission(drive, path, user);
         await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
-        // A file with no slides has no pictures either, so nothing was written.
-        const appended = appendSlidesUpdateToYjs(collabDoc.doc, new Uint8Array(update));
-        return appended === 0 ? PRESENTATION_EMPTY : importSummary(warnings);
+        if (mode === 'replace') replaceSlidesInYjs(collabDoc.doc, scene);
+        else insertSlidesIntoYjs(collabDoc.doc, scene, afterFrameId);
+        return importSummary(warnings);
     }
 
     throw new ApiError(400, `Import into ${path.mimeType} is not supported`);

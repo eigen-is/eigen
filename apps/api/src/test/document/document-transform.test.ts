@@ -76,7 +76,7 @@ import {
     seedEigendoc,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
-import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
+import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME, unprefixed } from '../fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
 import {
     exportBytes,
@@ -592,10 +592,14 @@ async function buildImportFixture(): Promise<ArrayBuffer> {
 }
 
 async function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
-    return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
-        method: 'POST',
-        body,
-    });
+    return authedRequest(
+        ctx.alice.user.sessionToken,
+        `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import?mode=replace`,
+        {
+            method: 'POST',
+            body,
+        },
+    );
 }
 
 // The xlsx and docx import/convert failure contracts are identical — same routes, same
@@ -1602,7 +1606,8 @@ describe('document transform (eigenvector)', () => {
 // a Yjs commit into a fresh document) over buildGoldenDocx(), so the move
 // off-thread is proven equivalent: the Worker must hand back a Yjs update whose
 // applied document reads back identically, and the extracted image bytes must
-// survive the boundary untouched. Regenerate only for an intentional converter change.
+// survive the boundary untouched. Regenerate only for an intentional converter change. Hashed with the media prefix
+// dropped, as each import draws its own.
 // The JSON hash moved when prose textblocks gained the six paragraph format attributes: each null on every paragraph,
 // heading, title and subtitle, as the golden docx sets no spacing or indent apart from its Normal, and nothing else (the
 // old hash comes back with them stripped).
@@ -1630,15 +1635,15 @@ describe('document transform (docx import)', () => {
 
     test('the reference parse + Yjs commit pipeline matches the pinned goldens', async () => {
         const { json, images } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
-        expect(sha256(JSON.stringify(json))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
+        expect(sha256(unprefixed(JSON.stringify(json)))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
         expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
-            { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },
+            { name: expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME), contentType: 'image/png' },
         ]);
         expect(images[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
 
         const doc = new Y.Doc();
         seedEigendoc(doc, json);
-        expect(sha256(JSON.stringify(readEigendocFromDoc(doc)))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
+        expect(sha256(unprefixed(JSON.stringify(readEigendocFromDoc(doc))))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
         doc.destroy();
     }, 120_000);
 
@@ -1661,12 +1666,12 @@ describe('document transform (docx import)', () => {
         commitEigendocImport(doc, { update: new Uint8Array(update), page, style });
         const committed = readEigendocFromDoc(doc);
         doc.destroy();
-        expect(committed).toEqual(await referenceDocument());
-        expect(sha256(JSON.stringify(committed))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
+        expect(unprefixed(JSON.stringify(committed))).toBe(unprefixed(JSON.stringify(await referenceDocument())));
+        expect(sha256(unprefixed(JSON.stringify(committed)))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
 
         // The extracted image crossed the boundary byte-intact.
         expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
-            { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },
+            { name: expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME), contentType: 'image/png' },
         ]);
         expect(Buffer.from(images[0].data)).toEqual(Buffer.from(TEST_PNG_BYTES));
     }, 120_000);
@@ -1694,7 +1699,7 @@ describe('document transform (docx import)', () => {
 // to the transform process, in its format's words.
 // A convert checks write on the destination folder before anything else it pays for.
 const WRITABLE_DRIVE = { canWrite: async () => true } as unknown as Drive;
-// Import slides… opens the deck for its frame, which a refused import must not pay for either.
+// An insert into a deck opens it for its frame, which a refused import must not pay for either.
 const UNOPENED_DRIVE = {
     getCollabDocument: () => {
         throw new Error('a refused import opened the document');
@@ -1711,9 +1716,13 @@ describe('document transform (input bound)', () => {
         try {
             const upload = Buffer.allocUnsafe(MAX_DECOMPRESSED_BYTES + 1);
             const path = { id: 'too-large', type, mimeType } as DrivePath;
-            const error = await importIntoDocument(UNOPENED_DRIVE, path, upload, {} as unknown as User).catch(
-                (reason: unknown) => reason,
-            );
+            const error = await importIntoDocument(
+                UNOPENED_DRIVE,
+                path,
+                upload,
+                { mode: 'replace' },
+                {} as unknown as User,
+            ).catch((reason: unknown) => reason);
             expect(error).toMatchObject({ status: 413, message });
             expect(runSpy.mock.calls.filter(([request]) => request.kind === 'import')).toHaveLength(0);
         } finally {
@@ -1827,7 +1836,13 @@ describe('document transform (admission)', () => {
             const refuse = refuseAdmissionOnce();
             let error: unknown;
             try {
-                await importIntoDocument(UNOPENED_DRIVE, { id: 'refused', ...target } as DrivePath, upload, user);
+                await importIntoDocument(
+                    UNOPENED_DRIVE,
+                    { id: 'refused', ...target } as DrivePath,
+                    upload,
+                    { mode: 'replace' },
+                    user,
+                );
             } catch (err) {
                 error = err;
             } finally {

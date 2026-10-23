@@ -5,7 +5,7 @@
 
 import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
-import { isValidFractionalIndex } from './fractional-index';
+import { generateNKeysBetween, isValidFractionalIndex, orderByFractionalIndex } from './fractional-index';
 import { DEFAULT_FRAME_BACKGROUND, FRAME_FIELDS, type VectorFrame } from './frames';
 import { baseDefaultsFor, ELEMENT_FIELDS, ELEMENT_KINDS, type StyleDefaults, storedFields } from './kinds';
 import type { NewVectorElement, VectorElementType } from './types';
@@ -88,4 +88,37 @@ export function topmostIndex(map: Y.Map<unknown>): string | null {
         if (topmost === null || idx > topmost) topmost = idx;
     }
     return topmost;
+}
+
+// The frames in stored order, as {id, index} pairs, a shared key ordered by id. Skips malformed entries, as
+// topmostIndex does.
+function frameOrder(framesMap: Y.Map<unknown>): { id: string; index: string }[] {
+    const out: { id: string; index: string }[] = [];
+    for (const value of framesMap.values()) {
+        if (!(value instanceof Y.Map)) continue;
+        const id = value.get('id');
+        const index = value.get('index');
+        if (typeof id !== 'string' || typeof index !== 'string') continue;
+        if (!isValidFractionalIndex(index, undefined, undefined)) continue;
+        out.push({ id, index });
+    }
+    return orderByFractionalIndex(out);
+}
+
+// `count` keys that land frames directly after `afterId`, in order: at the front for null, at the end when it is
+// unknown. `excludeId` drops the frame being moved from the order it is placed into. The editor's new slide, duplicate
+// and move place one; Import… places a file's slides after the current one. Frames sharing the anchor's key, two peers'
+// new slides after one slide, have no key between them, so the keys go above all of them.
+export function frameKeysAfter(
+    framesMap: Y.Map<unknown>,
+    afterId: string | null,
+    count: number,
+    excludeId?: string,
+): string[] {
+    const order = frameOrder(framesMap).filter((f) => f.id !== excludeId);
+    if (afterId === null) return generateNKeysBetween(null, order[0]?.index ?? null, count);
+    const at = order.findIndex((f) => f.id === afterId);
+    if (at === -1) return generateNKeysBetween(order[order.length - 1]?.index ?? null, null, count);
+    const anchor = order[at].index;
+    return generateNKeysBetween(anchor, order.find((f) => f.index > anchor)?.index ?? null, count);
 }

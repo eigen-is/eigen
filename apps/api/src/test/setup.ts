@@ -7,6 +7,7 @@ import { type DrivePath, type MountInfo, type OrgTeam, teamOwnerId } from '@work
 import type { EmailDraft } from '@workspace/lib/types/mail';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
+import type { Snapshot } from '@workspace/lib/types/versioning';
 import { app } from '../app';
 import { auth } from '../lib/auth/auth';
 import { getStorageType, updateServerSettings } from '../lib/config/server-settings';
@@ -267,6 +268,30 @@ export async function driveGet<T = DrivePath>(
 ): Promise<T> {
     const res = await authedRequest(token, driveUrl(ownerId, mountId, ...parts));
     return res.status !== 200 ? ([] as T) : ((await res.json()) as T);
+}
+
+export async function listVersions(
+    token: string,
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+): Promise<Snapshot[]> {
+    return driveGet<Snapshot[]>(token, ownerId, mountId, `file/${pathId}/versions`);
+}
+
+export async function restoreVersion(
+    token: string,
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    snapshotName: string,
+): Promise<void> {
+    const res = await authedRequest(
+        token,
+        `/drive/${ownerId}/${mountId}/file/${pathId}/versions/${encodeURIComponent(snapshotName)}/restore`,
+        { method: 'POST' },
+    );
+    if (res.status !== 200) throw new Error(`restoreVersion failed: ${res.status} ${await res.text()}`);
 }
 
 export type PermissionResult = { canRead: boolean; canWrite: boolean };

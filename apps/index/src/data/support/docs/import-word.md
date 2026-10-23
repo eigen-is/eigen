@@ -12,7 +12,7 @@ You can import a `.docx` file into an open document. The import replaces everyth
 
 <div class="eigen-callout">
 
-Importing replaces the entire document. The previous content is gone after the import completes. If you want to keep it, make a copy of the document first.
+Importing replaces the entire document: its text, headers and footers, and page setup. Eigen saves a version of the document first, so you can get the previous content back from **File → Version history**. See [Restore a previous version of a document](/support/docs/doc-versions).
 
 </div>
 
@@ -20,8 +20,9 @@ Importing replaces the entire document. The previous content is gone after the i
 
 1. Open the document in Docs.
 2. Click **File** in the toolbar.
-3. Click **Import docx file…**.
+3. Click **Import…**.
 4. In the **Import docx file** dialog, browse your Drive and select the `.docx` file you want to use, then click **Select**. To use a file from your computer instead, click **Upload from device** and pick the file from the file chooser.
+5. A dialog reminds you that the file replaces the whole document. Click **Import**, or **Cancel** to leave the document as it is.
 
 An **Importing docx file** dialog shows while the file imports. When it closes, the document content is replaced. Images from the Word file are carried across and stored with the document. They count toward your drive's storage: if they don't fit in the space left, the import stops and the document stays as it was.
 

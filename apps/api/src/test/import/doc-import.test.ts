@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import type { DrivePath } from '@workspace/lib/types/drive';
-import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
+import type { DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
 import { openZip, writeZip } from '../../lib/core/zip';
@@ -21,6 +21,7 @@ import {
     GOLDEN_DOCX_IMAGE_NAME,
     GOLDEN_DOCX_IMAGE_RUN,
     GOLDEN_DOCX_LINK,
+    nodesOfType,
 } from '../fixtures/golden-docx';
 import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
 import {
@@ -32,9 +33,13 @@ import {
     drivePut,
     driveUpload,
     getTestContext,
+    listVersions,
+    restoreVersion,
     setMaxUploadSizeMB,
     TEST_PNG_BYTES,
 } from '../setup';
+
+const REPLACE: DocumentImportOptions = { mode: 'replace' };
 
 // Route contract of docx import and conversion: what lands in the document, what
 // the media folder gets, and the exact error statuses and bodies. Pinned here so
@@ -81,11 +86,12 @@ function convertRequest(pathId: string, targetType = 'eigendoc'): Promise<Respon
     );
 }
 
-function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
-    return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
-        method: 'POST',
-        body,
-    });
+function importRequest(pathId: string, body: ArrayBuffer, mode = 'replace'): Promise<Response> {
+    return authedRequest(
+        ctx.alice.user.sessionToken,
+        `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import?mode=${mode}`,
+        { method: 'POST', body },
+    );
 }
 
 async function readDocJson(pathId: string): Promise<JSONContent> {
@@ -113,6 +119,27 @@ async function readDocMedia(pathId: string, name: string): Promise<Buffer> {
     return Buffer.from(await file.arrayBuffer());
 }
 
+// The media name the document's one figure gives its picture.
+async function docImageName(pathId: string): Promise<string> {
+    const name = nodesOfType(await readDocJson(pathId), 'figure')[0]?.attrs?.['mediaName'];
+    if (typeof name !== 'string') throw new Error('the document names no picture');
+    return name;
+}
+
+async function mediaNames(pathId: string): Promise<string[]> {
+    const home = await getHome(ctx.alice.user.id);
+    const { mount } = await home.drive.resolveFile(mountId, pathId);
+    const mediaFolder = await mount.getChildByName(pathId, 'media');
+    if (!mediaFolder) throw new Error('media folder missing');
+    return (await mount.listFolder(mediaFolder.id)).map((child) => child.name);
+}
+
+function versionNames(pathId: string): Promise<string[]> {
+    return listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, pathId).then((versions) =>
+        versions.map((version) => version.name),
+    );
+}
+
 // Node types the document carries, flattened for order-independent assertions.
 function nodeTypes(json: JSONContent): string[] {
     return (json.content ?? []).map((node) => node.type ?? '');
@@ -132,8 +159,9 @@ describe('Eigendoc docx import/convert', () => {
         expect(JSON.stringify(json)).toContain(GOLDEN_DOCX_LINK);
         // The figure references the extracted image by media name, and the bytes
         // land in the container's media/ folder unchanged.
-        expect(JSON.stringify(json)).toContain(GOLDEN_DOCX_IMAGE_NAME);
-        expect(await readDocMedia(converted.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(TEST_PNG_BYTES));
+        const name = await docImageName(converted.id);
+        expect(name).toMatch(GOLDEN_DOCX_IMAGE_NAME);
+        expect(await readDocMedia(converted.id, name)).toEqual(Buffer.from(TEST_PNG_BYTES));
     }, 120_000);
 
     test('import .docx replaces the existing eigendoc content instead of appending', async () => {
@@ -151,73 +179,87 @@ describe('Eigendoc docx import/convert', () => {
         const json = await readDocJson(docPath.id);
         expect(JSON.stringify(json)).not.toContain('PRIOR CONTENT');
         expect(nodeTypes(json)).toEqual(['heading', 'paragraph', 'bulletList', 'paragraph']);
-        expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(TEST_PNG_BYTES));
+        expect(await readDocMedia(docPath.id, await docImageName(docPath.id))).toEqual(Buffer.from(TEST_PNG_BYTES));
     }, 120_000);
 
-    test('a repeat .docx import overwrites the previous import media', async () => {
+    test('import saves a version first, which restores the document as it was', async () => {
+        const docPath = await createDoc('import-version-target');
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, docPath.id);
+        seedEigendoc(collab.doc, {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'PRIOR CONTENT' }] }],
+        });
+
+        await assertJson(await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES)));
+        const versions = await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docPath.id);
+        expect(versions).toHaveLength(1);
+        await restoreVersion(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docPath.id, versions[0].name);
+        const json = await readDocJson(docPath.id);
+        expect(JSON.stringify(json)).toContain('PRIOR CONTENT');
+        expect(JSON.stringify(json)).not.toContain(GOLDEN_DOCX_HEADING);
+    }, 120_000);
+
+    test('an insert into a document is refused, before anything is written', async () => {
+        const docPath = await createDoc('import-insert-target');
+        const before = await readDocJson(docPath.id);
+        const res = await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES), 'insert');
+        expect(res.status).toBe(400);
+        expect(await res.text()).toBe('A document import replaces the document');
+        expect(await readDocJson(docPath.id)).toEqual(before);
+        expect(await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docPath.id)).toEqual([]);
+    }, 120_000);
+
+    // A version holds the document, not its media folder: each import's pictures stay beside the earlier ones'.
+    test('a replace then a restore shows the restored version its own pictures', async () => {
         const docPath = await createDoc('repeat-import-target');
-        const first = await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES));
-        expect((await assertJson<{ success: boolean }>(first)).success).toBe(true);
+        await assertJson(await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES)));
+        const first = await docImageName(docPath.id);
+        const versions = await versionNames(docPath.id);
 
-        // The second import extracts the same deterministic media names — it must
-        // overwrite them, not 409 after the content was already replaced.
         const altBytes = new Uint8Array([...TEST_PNG_BYTES, 0]);
-        const second = await importRequest(docPath.id, await buildGoldenDocx(altBytes));
-        expect((await assertJson<{ success: boolean }>(second)).success).toBe(true);
+        await assertJson(await importRequest(docPath.id, await buildGoldenDocx(altBytes)));
+        expect(await readDocMedia(docPath.id, await docImageName(docPath.id))).toEqual(Buffer.from(altBytes));
 
-        expect(nodeTypes(await readDocJson(docPath.id))).toEqual(['heading', 'paragraph', 'bulletList', 'paragraph']);
-        expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(altBytes));
+        const [beforeSecond] = (await versionNames(docPath.id)).filter((name) => !versions.includes(name));
+        if (!beforeSecond) throw new Error('the second import saved no version');
+        await restoreVersion(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docPath.id, beforeSecond);
+        expect(await docImageName(docPath.id)).toBe(first);
+        expect(await readDocMedia(docPath.id, first)).toEqual(Buffer.from(TEST_PNG_BYTES));
     }, 120_000);
 
-    // An open tab redraws an image on its drive event, so a re-import's changed picture shows without a reload.
-    test('import writes its media through Drive: a drive event per image, and a fresh updatedAt on a repeat', async () => {
+    // An open tab draws an image once its drive event lands.
+    test('import writes its media through Drive: a drive event per image', async () => {
         const docPath = await createDoc('drive-media-target');
-        const uploaded = (events: SSEvent[], id: string) =>
-            events.filter((event) => event.type === SSEventType.DRIVE_FILE_UPLOADED && event.path.id === id);
-        const first = await collectSSE(ctx.alice.user.id);
+        const sse = await collectSSE(ctx.alice.user.id);
         try {
             await assertJson(await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES)));
         } finally {
-            first.stop();
+            sse.stop();
         }
-        const created = await docMediaPath(docPath.id, GOLDEN_DOCX_IMAGE_NAME);
-        expect(uploaded(first.events, created.id).length).toBeGreaterThan(0);
-
-        // updatedAt has second precision.
-        await Bun.sleep(1010 - (Date.now() % 1000));
-        const second = await collectSSE(ctx.alice.user.id);
-        try {
-            const altBytes = new Uint8Array([...TEST_PNG_BYTES, 0]);
-            await assertJson(await importRequest(docPath.id, await buildGoldenDocx(altBytes)));
-        } finally {
-            second.stop();
-        }
-        const rewritten = await docMediaPath(docPath.id, GOLDEN_DOCX_IMAGE_NAME);
-        expect(rewritten.id).toBe(created.id);
-        expect(rewritten.updatedAt.getTime()).toBeGreaterThan(created.updatedAt.getTime());
-        expect(uploaded(second.events, created.id).length).toBeGreaterThan(0);
+        const created = await docMediaPath(docPath.id, await docImageName(docPath.id));
+        expect(
+            sse.events.some((event) => event.type === SSEventType.DRIVE_FILE_UPLOADED && event.path.id === created.id),
+        ).toBe(true);
     }, 120_000);
 
-    test('a writer the doc is shared with re-imports into it, its media overwritten in place', async () => {
+    test("a writer the doc is shared with re-imports into it, its pictures beside the earlier import's", async () => {
         const docPath = await createDoc('shared-import-target');
         await assertJson(await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES)));
+        const first = await docImageName(docPath.id);
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docPath.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: true }],
         });
         const altBytes = new Uint8Array([...TEST_PNG_BYTES, 0]);
         const res = await authedRequest(
             ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${docPath.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${docPath.id}/import?mode=replace`,
             { method: 'POST', body: await buildGoldenDocx(altBytes) },
         );
         expect((await assertJson<{ success: boolean }>(res)).success).toBe(true);
-        expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(altBytes));
-        const home = await getHome(ctx.alice.user.id);
-        const { mount } = await home.drive.resolveFile(mountId, docPath.id);
-        const mediaFolder = await mount.getChildByName(docPath.id, 'media');
-        expect((await mount.listFolder(mediaFolder?.id ?? '')).map((child) => child.name)).toEqual([
-            GOLDEN_DOCX_IMAGE_NAME,
-        ]);
+        const second = await docImageName(docPath.id);
+        expect(await readDocMedia(docPath.id, second)).toEqual(Buffer.from(altBytes));
+        expect((await mediaNames(docPath.id)).sort()).toEqual([first, second].sort());
     }, 120_000);
 
     // An open tab looks each figure's media name up once, as the update reaches it: a name with no row yet spins forever.
@@ -238,7 +280,7 @@ describe('Eigendoc docx import/convert', () => {
             collab.doc.off('update', onUpdate);
         }
         const rows = await Promise.all((idsAtUpdate ?? []).map((id) => mount.getPath(id)));
-        expect(rows.map((row) => row?.name)).toContain(GOLDEN_DOCX_IMAGE_NAME);
+        expect(rows.map((row) => row?.name)).toContain(await docImageName(docPath.id));
     }, 120_000);
 
     // The Worker reads no config: the job carries the origin, so a link into this instance comes back root-relative.
@@ -311,7 +353,7 @@ describe('Eigendoc docx import/convert', () => {
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, buffer, bob!);
+            await importIntoDocument(bobDrive, path, buffer, REPLACE, bob!);
         } catch (e) {
             error = e;
         }
@@ -324,7 +366,7 @@ describe('Eigendoc docx import/convert', () => {
     test('an import aborted after the transform writes neither media nor update', async () => {
         const docPath = await createDoc('abort-import-target');
         const home = await getHome(ctx.alice.user.id);
-        const { mount, path } = await home.drive.resolveFile(mountId, docPath.id);
+        const { path } = await home.drive.resolveFile(mountId, docPath.id);
         const before = await readDocJson(docPath.id);
         const controller = new AbortController();
         const realGet = home.drive.getCollabDocument.bind(home.drive);
@@ -335,13 +377,12 @@ describe('Eigendoc docx import/convert', () => {
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         try {
             await expect(
-                importIntoDocument(home.drive, path, buffer, home.user, controller.signal),
+                importIntoDocument(home.drive, path, buffer, REPLACE, home.user, controller.signal),
             ).rejects.toMatchObject({ name: 'AbortError' });
         } finally {
             getSpy.mockRestore();
         }
-        const mediaFolder = await mount.getChildByName(docPath.id, 'media');
-        expect(mediaFolder && (await mount.getChildByName(mediaFolder.id, GOLDEN_DOCX_IMAGE_NAME))).toBeNull();
+        expect(await mediaNames(docPath.id)).toEqual([]);
         expect(await readDocJson(docPath.id)).toEqual(before);
     }, 60_000);
 
@@ -375,7 +416,7 @@ describe('Eigendoc docx import/convert', () => {
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, buffer, bob!);
+            await importIntoDocument(bobDrive, path, buffer, REPLACE, bob!);
         } catch (e) {
             error = e;
         } finally {
@@ -385,7 +426,7 @@ describe('Eigendoc docx import/convert', () => {
         expect((error as ApiError).status).toBe(403);
         expect((error as ApiError).message).toBe('No write permission');
         expect(await readDocJson(docPath.id)).toEqual(before);
-        await expect(readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).rejects.toThrow('missing from media/');
+        expect(await mediaNames(docPath.id)).toEqual([]);
     }, 60_000);
 
     test('convert rejects a stored .docx over the upload limit with 413', async () => {
@@ -403,7 +444,7 @@ describe('Eigendoc docx import/convert', () => {
     }, 60_000);
 });
 
-// The extracted images count toward the mount's quota as an upload does; a re-import is credited the images it overwrites.
+// The extracted images count toward the mount's quota as an upload does; a re-import overwrites none, so is credited none.
 describe('docx import quota', () => {
     const IMAGE_BYTES = 256 * 1024;
     const image = (fill: number) => new Uint8Array([...TEST_PNG_BYTES, ...new Uint8Array(IMAGE_BYTES).fill(fill)]);
@@ -447,31 +488,21 @@ describe('docx import quota', () => {
             expect(await res.text()).toBe('Insufficient Storage');
         });
         expect(await readDocJson(docPath.id)).toEqual(before);
-        await expect(readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).rejects.toThrow('missing from media/');
+        expect(await mediaNames(docPath.id)).toEqual([]);
     }, 120_000);
 
-    test('a re-import that fits only on the credit of the images it overwrites goes through', async () => {
+    test("a re-import is charged its images in full, as the earlier import's stay", async () => {
         const docPath = await createDoc('quota-reimport-target');
         await assertJson(await importRequest(docPath.id, await deflatedDocx(image(1))));
+        const before = await readDocJson(docPath.id);
         const docx = await deflatedDocx(image(2));
         await withMountRoom(IMAGE_BYTES / 2, async () => {
-            expect((await assertJson<{ success: boolean }>(await importRequest(docPath.id, docx))).success).toBe(true);
+            const res = await importRequest(docPath.id, docx);
+            expect(res.status).toBe(507);
+            expect(await res.text()).toBe('Insufficient Storage');
         });
-        expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(image(2)));
-    }, 120_000);
-
-    test('a folder where an image would go is not overwritten or credited: the import is refused untouched', async () => {
-        const docPath = await createDoc('quota-folder-in-the-way');
-        const home = await getHome(ctx.alice.user.id);
-        const { mount } = await home.drive.resolveFile(mountId, docPath.id);
-        const mediaFolder = await mount.getChildByName(docPath.id, 'media');
-        if (!mediaFolder) throw new Error('media folder missing');
-        await mount.createFolder(mediaFolder.id, GOLDEN_DOCX_IMAGE_NAME);
-        const before = await readDocJson(docPath.id);
-        const res = await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES));
-        expect(res.status).toBe(409);
         expect(await readDocJson(docPath.id)).toEqual(before);
-        expect((await mount.listFolder(mediaFolder.id)).map((child) => child.name)).toEqual([GOLDEN_DOCX_IMAGE_NAME]);
+        expect(await mediaNames(docPath.id)).toEqual([await docImageName(docPath.id)]);
     }, 120_000);
 
     test('a convert whose images exceed the room is refused before the document is created', async () => {

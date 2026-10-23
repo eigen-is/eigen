@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDriveImportFromDriveUrl, getDriveImportUrl } from '@workspace/lib/api';
-import type { ImportResult } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive';
 import { toast } from 'sonner';
 import { onMutationError } from '../../api-error';
 import { driveKeys } from './keys';
@@ -22,8 +22,16 @@ function toastSummary({ summary }: ImportResult): void {
 export function useImportDocument(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ pathId, file }: { pathId: string; file: File }) => {
-            const url = getDriveImportUrl(ownerId, mountId, pathId);
+        mutationFn: async ({
+            pathId,
+            file,
+            options,
+        }: {
+            pathId: string;
+            file: File;
+            options: DocumentImportOptions;
+        }) => {
+            const url = getDriveImportUrl(ownerId, mountId, pathId, options);
             return importResultOf(await fetch(url, { method: 'POST', body: file, credentials: 'include' }));
         },
         onSuccess: (data, variables) => {
@@ -42,17 +50,19 @@ export function useImportFromDrive(ownerId: string, mountId: string) {
             sourceOwnerId,
             sourceMountId,
             sourcePathId,
+            options,
         }: {
             pathId: string;
             sourceOwnerId: string;
             sourceMountId: string;
             sourcePathId: string;
+            options: DocumentImportOptions;
         }) => {
             const url = getDriveImportFromDriveUrl(ownerId, mountId, pathId);
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sourceOwnerId, sourceMountId, sourcePathId }),
+                body: JSON.stringify({ sourceOwnerId, sourceMountId, sourcePathId, ...options }),
                 credentials: 'include',
             });
             return importResultOf(response);

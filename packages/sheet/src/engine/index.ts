@@ -13,7 +13,7 @@ export {
     unquoteSheetName,
 } from './a1-notation';
 export { createArrayResolver } from './cell-resolver';
-export { renderSheetChartSvg, resolveRangeChartData } from './chart-data';
+export { mapChartRefs, renderSheetChartSvg, resolveRangeChartData } from './chart-data';
 export type {
     CellFormatStyle,
     ComputeMap,
@@ -37,11 +37,12 @@ export {
     update,
 } from './format';
 export { FormulaEngine } from './formula-engine';
-export { functionCopy } from './formula-shift';
+export { functionCopy, renameSheetRefs } from './formula-shift';
 export { iscelldata } from './formula-utils';
 export { recalcSheets, sheetsNeedRecalc } from './recalc';
 export { replaySheetsOps, withMaterializedData } from './replay-ops';
 export { normalizeSheetConfig } from './sheet-config';
+export { copySheetName } from './sheet-name';
 export type {
     CalcChainEntry,
     CellResolver,

@@ -84,6 +84,12 @@ export function isConvertSource(name: string, target: ConvertTarget): boolean {
 // new document's path alone, and shows no summary: the document opens at once.
 export type ImportResult = { success: true; summary: string | null };
 
+// How File › Import… writes the file into the open document: beside what it holds (a deck's slides after the slide
+// `afterFrameId` names, or after its last; a workbook's tabs after its own), or in place of it, a version saved first.
+// A doc is only ever replaced: the file's page setup and headers can't sit beside the doc's.
+export type ImportMode = 'insert' | 'replace';
+export type DocumentImportOptions = { mode: ImportMode; afterFrameId?: string };
+
 // `mime` is the real mime (`application/eigendoc`); `urlSlug` is the route-safe
 // form (`application-eigendoc`) used by `/drive/.../mime/:slug` — the server
 // route reverses dash→slash at handler time.

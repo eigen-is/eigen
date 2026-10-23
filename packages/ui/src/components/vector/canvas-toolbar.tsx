@@ -61,9 +61,8 @@ type CanvasToolbarProps = {
     createLabel: string;
     createIcon: LucideIcon;
     createType: EigenDocType;
-    // The deck's File → Import slides…; the host draws the picker it opens.
+    // The deck's File → Import…; the host draws the picker it opens.
     onImport?: () => void;
-    importLabel?: string;
     // Rows above Move to trash in the File menu (the deck's "Page setup…").
     fileItems?: ReactNode;
     // Rows above the shape tools in the Insert menu (the deck's "New slide").
@@ -95,7 +94,6 @@ export function CanvasToolbar({
     createIcon,
     createType,
     onImport,
-    importLabel,
     fileItems,
     insertItems,
     centerItems,
@@ -115,7 +113,6 @@ export function CanvasToolbar({
                             canWrite={canWrite}
                             onAccessDialogOpen={onAccessDialogOpen}
                             onImport={onImport}
-                            importLabel={importLabel}
                             onExport={(format) => exportPath(path, format)}
                             createLabel={createLabel}
                             createIcon={createIcon}

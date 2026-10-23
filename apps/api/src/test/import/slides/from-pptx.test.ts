@@ -65,7 +65,7 @@ describe('a deck read', () => {
     });
 
     // 11 pt scales to 14.67 pt in the 13.33 in deck: 14.5 on its grid, where the file's 10 in grid keeps 11 pt's px.
-    test("Import slides… snaps on the open deck's grid, not the file's", () => {
+    test("an inserting Import… snaps on the open deck's grid, not the file's", () => {
         const pptx = buildPptx({
             sldSz: '<p:sldSz cx="9144000" cy="5143500"/>',
             slides: [{ shapes: sp({ xfrm: box(0, 0, 900, 100), text: para('Title', ' sz="1100"') }) }],

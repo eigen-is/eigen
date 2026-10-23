@@ -33,7 +33,8 @@ export type PptxDeck = {
     page: SlidePage;
 };
 
-// The page is the open deck's on an Import slides…, which the file is fitted into, and none on a Convert.
+// The page is the open deck's on an inserting Import…, which the file is fitted into, and none on a Convert or a
+// replace, whose deck takes the file's own.
 export type PptxOptions = { deck?: SlidePage; maxMediaBytes: number };
 
 export const MAX_MEDIA_PARTS = 1000;

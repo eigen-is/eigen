@@ -1,5 +1,5 @@
 // The File menu takes the host's own rows above Move to trash: Slides adds Page setup, Vector adds nothing. Only the
-// deck brings slides in from a file, so its File menu alone holds Import slides….
+// deck brings slides in from a file, so its File menu alone holds Import….
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -80,10 +80,10 @@ test('a host with no file items, as Vector, has no Page setup', async () => {
     expect(fileMenuItems()).not.toContain('Page setup…');
 });
 
-test("the deck's File menu imports slides", async () => {
-    await render({ onImport: () => {}, importLabel: 'Import slides…' });
+test("the deck's File menu imports, under the one label every editor's has", async () => {
+    await render({ onImport: () => {} });
     await openFileMenu();
-    expect(fileMenuItems()).toContain('Import slides…');
+    expect(fileMenuItems()).toContain('Import…');
 });
 
 test("the drawing's File menu has no import", async () => {

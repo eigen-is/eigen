@@ -112,8 +112,8 @@ export type SlidesImportJob = {
     kind: 'import';
     sourceFormat: 'pptx';
     targetType: 'eigenslides';
-    // The open deck's page, which Import slides… fits a file of another size into, letterboxed. A Convert passes none:
-    // its new deck takes the slide size nearest the file's, and the file's width.
+    // The open deck's page, which an inserting Import… fits a file of another size into, letterboxed. A Convert and a
+    // replace pass none: the deck takes the slide size nearest the file's, and the file's width.
     deck?: SlidePage;
     // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
     maxMediaBytes: number;

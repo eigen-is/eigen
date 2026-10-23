@@ -320,6 +320,21 @@ An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)
 
 `renderFloatingObjects` (`export/sheets/render.ts`) draws a sheet's images, then its charts in their paint order, as the editor stacks them. A chart is `renderSheetChartSvg`, the editor's own drawing, in a white box at its stored geometry, so the gridlines stop at it as they do on screen. Its ranges read through the render's resolver over every loaded sheet, so a chart on one tab can chart another. The export reads them after the gated recalc and the preview from the stored values. A chart counts like an image for the page size and the window's origin. The overlay's box reaches the farthest image or chart, so the next sheet and the preview's truncated notice start below them, and the preview clips the box to its budget window. The SVG is plain shapes and text, which the sanitizer keeps and WeasyPrint draws ([CHARTS.md](CHARTS.md#the-painter-draws-each-shape-with-its-own-kind-and-the-labels-as-svg-text)).
 
+## An imported tab arrives as an addSheet op, renamed as Duplicate names a copy
+
+File › Import… can add an xlsx's sheets as new tabs ([EXPORT.md § A replace saves a version first](EXPORT.md#a-replace-saves-a-version-first)). `appendSheetsToYjs` (`apps/api/src/lib/document/sheets.ts`) pushes them as one batch of `addSheet` ops after the workbook's own, never as a new snapshot. An open tab applies the batch as it applies a peer's new tab, so it keeps its view and its unflushed ops, where a snapshot write would remount every tab and clear them ([§ An edit is an op in a Y.Array](#an-edit-is-an-op-in-a-yarray)).
+
+Every imported sheet takes a fresh id: the importer numbers its sheets `sheet-0` and on, which a workbook's own ids can match. A sheet whose name the workbook holds is renamed by `copySheetName` (`engine/sheet-name.ts`), the rule the tab menu's Duplicate uses, so `Data` comes in as `Data(Copy)`. The names are compared exactly, as a rename in the tab bar compares them. What the file says about its own sheets follows the new names and ids, so its formulas still read the cells they read in Excel:
+
+| Reference | Names a sheet by | Rewritten through |
+|---|---|---|
+| A formula, a formula conditional format, a list validation's source, a `cellrange` link | Name, `'Data(Copy)'!A1` | `renameSheetRefs` (`engine/formula-shift.ts`) |
+| A `sheet` link | Name | The rename map |
+| A chart's series and categories | Id ([§ A chart is a floating record](#a-chart-is-a-floating-record-whose-refs-name-sheets-by-id)) | `mapChartRefs` |
+| A link cell's `hl` and the calc chain | Id | The new id |
+
+Defined names need nothing: the reader drops them ([SHEETS-TODO.md](SHEETS-TODO.md)). A range written with its sheet on both ends (`'Data'!A1:'Data'!B2`) gets the new name on its first end only, as the formula walker hands the second end's prefix back untouched; Excel writes a range's sheet once.
+
 ## Some xlsx round-trip drifts are decisions
 
 These are deliberate. Where a test pins one, it is in `apps/api/src/test/export/sheets-export.test.ts`. Hyperlinks:

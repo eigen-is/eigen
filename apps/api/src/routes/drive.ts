@@ -45,7 +45,12 @@ import {
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
-import { clientFileEventBody, eigenDocTypeSchema, importFromDriveSchema } from './shared-schemas';
+import {
+    clientFileEventBody,
+    documentImportFromDriveSchema,
+    documentImportSchema,
+    eigenDocTypeSchema,
+} from './shared-schemas';
 
 // One cap for every free-text share note (collaborator email + access request), so a single
 // oversized body can't be persisted or mailed.
@@ -267,7 +272,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import',
-        async ({ params, request, user, server }): Promise<ImportResult> => {
+        async ({ params, query, request, user, server }): Promise<ImportResult> => {
             // Same idle-timeout exemption as the export route: silent while queued + transforming.
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
@@ -282,12 +287,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 drive,
                 path,
                 Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+                query,
                 user,
                 request.signal,
             );
             return { success: true, summary };
         },
-        { auth: true, parse: 'none' },
+        // The body is the file, so the mode rides in the query.
+        { query: documentImportSchema, auth: true, parse: 'none' },
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import-from-drive',
@@ -310,13 +317,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 drive,
                 path,
                 Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+                { mode: body.mode, afterFrameId: body.afterFrameId },
                 user,
                 request.signal,
             );
             return { success: true, summary };
         },
         {
-            body: importFromDriveSchema,
+            body: documentImportFromDriveSchema,
             auth: true,
         },
     )

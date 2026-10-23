@@ -1,4 +1,4 @@
-import { extractLabel, toLabel, unquoteSheetName } from './a1-notation';
+import { extractLabel, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
 import { iscelldata, operatorjson } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
@@ -209,6 +209,18 @@ function splitUnquoted(text: string, separator: string): string[] {
 // A leading `=` is stripped before processing; the returned text never carries one.
 export function functionCopy(txt: string, rowOffset: number, colOffset: number): string {
     return walkFormulaRefs(txt, (ref) => shiftRef(ref, rowOffset, colOffset));
+}
+
+// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`: Import… renames an
+// imported tab whose name the workbook holds. A leading `=` is kept.
+export function renameSheetRefs(txt: string, renames: ReadonlyMap<string, string>): string {
+    if (renames.size === 0 || !txt.includes('!')) return txt;
+    const renamed = walkFormulaRefs(txt, (ref) => {
+        const sheetEnd = ref.lastIndexOf('!');
+        const name = sheetEnd > 0 ? renames.get(unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
+        return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
+    });
+    return txt.startsWith('=') ? `=${renamed}` : renamed;
 }
 
 // Shifts formula-text refs in response to an insert ('add') or delete ('del') row/col

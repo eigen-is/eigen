@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
-import { DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SHEETS, type DrivePath, type ImportResult } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
 import { update } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
@@ -12,6 +12,7 @@ import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core';
 import { parseOoxml } from '../../lib/core/ooxml';
 import { openZip } from '../../lib/core/zip';
+import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
 import { getHome } from '../../lib/home/get-home';
@@ -30,6 +31,8 @@ import {
     drivePut,
     driveUpload,
     getTestContext,
+    listVersions,
+    restoreVersion,
     setMaxUploadSizeMB,
 } from '../setup';
 
@@ -246,7 +249,7 @@ describe('Sheets xlsx import/convert', () => {
         );
         const importRes = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import?mode=replace`,
             { method: 'POST', body: replacement },
         );
         const importBody = await assertJson<{ success: boolean }>(importRes);
@@ -259,6 +262,60 @@ describe('Sheets xlsx import/convert', () => {
         expect(cellMap['0:0']).toBe('New');
         expect(cellMap['0:1']).toBe(99);
         expect(cellMap['1:0']).toBe('Row2');
+    });
+
+    function importRequest(pathId: string, body: ArrayBuffer, mode: 'insert' | 'replace'): Promise<Response> {
+        return authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import?mode=${mode}`,
+            { method: 'POST', body },
+        );
+    }
+
+    async function readLive(pathId: string): Promise<Sheet[]> {
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, pathId);
+        return readSheetsFromDoc(collab.doc, { recalc: false }).sheets;
+    }
+
+    // "Data" holds 5, and "Summary" doubles it across sheets.
+    async function dataAndSummary(): Promise<ArrayBuffer> {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('Data').getCell('A1').value = 5;
+        workbook.addWorksheet('Summary').getCell('A1').value = { formula: 'Data!A1*2', result: 10 };
+        return workbookToBuffer(workbook);
+    }
+
+    test("an insert adds the file's sheets after the workbook's own, renaming a taken name and the refs to it", async () => {
+        const sheetsDoc = await uploadAndConvert(
+            await buildXlsxBuffer([{ a1: 'A1', value: 'Mine' }], 'Data'),
+            'insert-target.xlsx',
+        );
+        await assertJson<ImportResult>(await importRequest(sheetsDoc.id, await dataAndSummary(), 'insert'));
+
+        const sheets = await readLive(sheetsDoc.id);
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Data', 'Data(Copy)', 'Summary']);
+        expect(new Set(sheets.map((sheet) => sheet.id)).size).toBe(3);
+        expect(sheets[0].celldata?.[0]?.v?.v).toBe('Mine');
+        const formula = sheets[2].celldata?.find((cell) => cell.r === 0 && cell.c === 0)?.v;
+        expect(formula).toMatchObject({ f: "='Data(Copy)'!A1*2", v: 10 });
+        expect(await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual([]);
+    });
+
+    test('a replace saves a version first, which restores the workbook as it was', async () => {
+        const sheetsDoc = await uploadAndConvert(
+            await buildXlsxBuffer([{ a1: 'A1', value: 'Before' }], 'Old'),
+            'replace-target.xlsx',
+        );
+        await assertJson<ImportResult>(await importRequest(sheetsDoc.id, await dataAndSummary(), 'replace'));
+        expect((await readLive(sheetsDoc.id)).map((sheet) => sheet.name)).toEqual(['Data', 'Summary']);
+
+        const versions = await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, sheetsDoc.id);
+        expect(versions).toHaveLength(1);
+        await restoreVersion(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, sheetsDoc.id, versions[0].name);
+        const restored = await readLive(sheetsDoc.id);
+        expect(restored.map((sheet) => sheet.name)).toEqual(['Old']);
+        expect(restored[0].celldata?.[0]?.v?.v).toBe('Before');
     });
 
     test('convert rejects non-.xlsx files', async () => {
@@ -307,7 +364,7 @@ describe('Sheets xlsx import/convert', () => {
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'x' }]);
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/import?mode=replace`,
             { method: 'POST', body: buffer },
         );
         expect(res.status).toBe(400);
@@ -355,7 +412,7 @@ describe('Sheets xlsx import/convert', () => {
         const notXlsx = new TextEncoder().encode('this is not a valid xlsx file');
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import?mode=replace`,
             { method: 'POST', body: notXlsx },
         );
         expect(res.status).toBe(400);
@@ -370,7 +427,7 @@ describe('Sheets xlsx import/convert', () => {
         locked.set(Buffer.from('EncryptedPackage', 'utf16le'), 1024);
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import?mode=replace`,
             { method: 'POST', body: locked },
         );
         expect(res.status).toBe(400);
@@ -405,7 +462,7 @@ describe('Sheets xlsx import/convert', () => {
 
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import?mode=replace`,
             { method: 'POST', body: new Uint8Array(bomb) },
         );
         expect(res.status).toBe(413);
@@ -424,7 +481,7 @@ describe('Sheets xlsx import/convert', () => {
 
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import?mode=replace`,
             { method: 'POST', body: await workbookToBuffer(workbook) },
         );
         expect(res.status).toBe(413);
@@ -464,7 +521,7 @@ describe('Sheets xlsx import/convert', () => {
         try {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+                `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import?mode=replace`,
                 { method: 'POST', body: new Uint8Array(2 * 1024 * 1024) },
             );
             expect(res.status).toBe(413);
@@ -490,7 +547,7 @@ describe('Sheets xlsx import/convert', () => {
 
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${spoofed.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${spoofed.id}/import?mode=replace`,
             { method: 'POST', body: await buildXlsxBuffer([{ a1: 'A1', value: 'payload' }]) },
         );
         expect(res.status).toBe(400);
@@ -504,7 +561,7 @@ describe('Sheets xlsx import/convert', () => {
         const replacement = await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]);
         const res = await authedRequest(
             ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import?mode=replace`,
             { method: 'POST', body: replacement },
         );
         expect(res.status).toBe(403);
@@ -535,7 +592,7 @@ describe('Sheets xlsx import/convert', () => {
         const replacement = Buffer.from(await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, replacement, bob!);
+            await importIntoDocument(bobDrive, path, replacement, { mode: 'replace' }, bob!);
         } catch (e) {
             error = e;
         }
@@ -572,7 +629,7 @@ describe('Sheets xlsx import/convert', () => {
         const replacement = Buffer.from(await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, replacement, bob!);
+            await importIntoDocument(bobDrive, path, replacement, { mode: 'replace' }, bob!);
         } catch (e) {
             error = e;
         } finally {
