@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { invalidateCollabDocument } from '../../collab/hooks/keys';
+import { invalidateCollabDocument, invalidateCollabMount } from '../../collab/hooks/keys';
 import { invalidateHomeSize } from '../../home';
 
 export { DEFAULT_MOUNT_ID };
@@ -147,6 +147,7 @@ export function invalidateAclUpdated(
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
     queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
     queryClient.invalidateQueries({ queryKey: driveKeys.permissions(ownerId, mountId, pathId) });
+    invalidateCollabMount(queryClient, ownerId, mountId);
     if (parentId) {
         queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }

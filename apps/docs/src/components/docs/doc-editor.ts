@@ -21,7 +21,6 @@ import { FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts'
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
-    BAND_ROOTS,
     DOC_PROSE_CLASS,
     flattenNestedFootnotes,
     getDocExtensions,
@@ -448,24 +447,32 @@ export function docEditorOptions({
 }
 
 // What useDocEditor takes: docEditorOptions' less what it fills in itself, the doc's media and the provider.
+// `editable` is this tab's write access.
 type UseDocEditorOptions = Omit<DocEditorOptions, 'caret' | 'coarsePointer' | 'media' | 'editor'> & {
     media: DocMedia;
     // Null draws and sets no caret.
     provider: WebsocketProvider | null;
+    // False keeps a writer's editor read-only too: a band's, while another band or the body is being edited.
+    editing?: boolean;
 };
 
 // The body's editor, each band's and the open note's: docEditorOptions with this tab's user and its pointer, plus the sweep of pending
 // images a closed tab left and the font-name pass, both in an editable editor only.
-export function useDocEditor({ media, provider, ...options }: UseDocEditorOptions, deps: DependencyList = []): Editor {
+export function useDocEditor(
+    { media, provider, editing = true, ...options }: UseDocEditorOptions,
+    deps: DependencyList = [],
+): Editor {
     const auth = useAuth();
     const coarsePointer = useIsCoarsePointer();
     const mediaRef = useRef(media);
     mediaRef.current = media;
     const editorRef = useRef<Editor | null>(null);
     const user = auth.user;
+    const editable = options.editable && editing;
     const editor = useEditor(
         docEditorOptions({
             ...options,
+            editable,
             caret:
                 provider && user
                     ? { provider, user: { name: user.name, color: userColor(user.id), userId: user.id } }
@@ -477,6 +484,11 @@ export function useDocEditor({ media, provider, ...options }: UseDocEditorOption
         deps,
     );
     editorRef.current = editor;
+    // TipTap keeps an editor's editable flag across renders, so write access lost or gained while the doc is open, and a
+    // band entered or left, reach it here. Before paint, so an editor never shows a frame editable after it lost that.
+    useLayoutEffect(() => {
+        editor.setEditable(editable, false);
+    }, [editor, editable]);
     // A note's images and fonts are the body's, which sweeps and collapses them.
     const sweeps = options.editable && !('body' in options.target);
 
@@ -524,20 +536,19 @@ export function useBandEditors({
     editing,
     onLeave,
     ...options
-}: Omit<UseDocEditorOptions, 'target'> & { editing: BandRoot | null; onLeave: () => void }): Record<BandRoot, Editor> {
+}: Omit<UseDocEditorOptions, 'target' | 'editing'> & {
+    editing: BandRoot | null;
+    onLeave: () => void;
+}): Record<BandRoot, Editor> {
     // The keymap keeps the handler its editor was built with.
     const onLeaveRef = useRef(onLeave);
     onLeaveRef.current = onLeave;
     const leave = () => onLeaveRef.current();
-    const editors = {
-        header: useDocEditor({ ...options, target: { field: 'header', onLeave: leave } }),
-        footer: useDocEditor({ ...options, target: { field: 'footer', onLeave: leave } }),
-        headerFirst: useDocEditor({ ...options, target: { field: 'headerFirst', onLeave: leave } }),
-        footerFirst: useDocEditor({ ...options, target: { field: 'footerFirst', onLeave: leave } }),
+    const band = (field: BandRoot) => ({ ...options, editing: field === editing, target: { field, onLeave: leave } });
+    return {
+        header: useDocEditor(band('header')),
+        footer: useDocEditor(band('footer')),
+        headerFirst: useDocEditor(band('headerFirst')),
+        footerFirst: useDocEditor(band('footerFirst')),
     };
-    // Before paint, so a band never shows a frame editable after it was left.
-    useLayoutEffect(() => {
-        for (const root of BAND_ROOTS) editors[root].setEditable(root === editing, false);
-    }, [editing, editors.header, editors.footer, editors.headerFirst, editors.footerFirst]);
-    return editors;
 }
