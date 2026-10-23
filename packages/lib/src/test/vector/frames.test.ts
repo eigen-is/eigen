@@ -40,10 +40,17 @@ describe('SLIDE_SIZES', () => {
 
 describe('canvasPxToPt', () => {
     // A drawing prints at CSS's 96 dpi, so that is the pt a canvas px crosses the clipboard as.
-    test('a canvas px is 3/4 pt, and back', () => {
-        expect(canvasPxToPt(20)).toBe(15);
-        expect(canvasPtToPx(15)).toBe(20);
-        expect(canvasPtToPx(canvasPxToPt(48))).toBe(48);
+    test("a drawing's px is 3/4 pt, and back", () => {
+        expect(canvasPxToPt(20, undefined)).toBe(15);
+        expect(canvasPtToPx(15, undefined)).toBe(20);
+        expect(canvasPtToPx(canvasPxToPt(48, undefined), undefined)).toBe(48);
+    });
+
+    // A deck crosses at its own width: 960 pt is 2 px a pt.
+    test("a deck's px is its own pt, and back", () => {
+        expect(canvasPxToPt(88, 960)).toBe(44);
+        expect(canvasPtToPx(44, 960)).toBe(88);
+        expect(canvasPxToPt(48, 720)).toBe(18);
     });
 });
 

@@ -82,7 +82,11 @@ describe("⌘V of another app's items", () => {
         unmount = undefined;
     });
 
-    async function pasteOnCanvas(items: EigenClipboardItem[]): Promise<NewVectorElement[]> {
+    // A deck at DEFAULT_SCENE_META's 960 pt unless a drawing is asked for.
+    async function pasteOnCanvas(
+        items: EigenClipboardItem[],
+        viewport: 'infinite' | 'frame' = 'frame',
+    ): Promise<NewVectorElement[]> {
         const added: NewVectorElement[] = [];
         const addElements = mock((partials: NewVectorElement[]) => {
             added.push(...partials);
@@ -94,7 +98,7 @@ describe("⌘V of another app's items", () => {
                 canEdit: true,
                 textEditingRef: { current: false },
                 containerRef: { current: null },
-                viewport: 'frame',
+                viewport,
                 frameId: 'f1',
                 styleDefaults: VECTOR_STYLE_DEFAULTS,
                 ordered: [],
@@ -137,13 +141,23 @@ describe("⌘V of another app's items", () => {
         ]);
     });
 
-    // A 10 pt cell copied from Sheets: the wire's size is pt, so it lands as 10 pt at 96 dpi, not as 10 px.
-    test("another app's text item lands at its size in pt", async () => {
-        const added = await pasteOnCanvas([
-            { type: 'text', text: 'cell', width: 100, height: 20, typography: { fontSize: 10 } },
-        ]);
+    // A 10 pt cell copied from Sheets: the wire's size is pt, so it lands in a drawing as 10 pt at 96 dpi, not as 10 px.
+    test("another app's text item lands in a drawing at its size in pt", async () => {
+        const added = await pasteOnCanvas(
+            [{ type: 'text', text: 'cell', width: 100, height: 20, typography: { fontSize: 10 } }],
+            'infinite',
+        );
         expect(added).toHaveLength(1);
         expect(added[0]).toMatchObject({ type: 'richtext', fontSize: 40 / 3 });
+    });
+
+    // A 960 pt deck is 2 px a pt, so a 44 pt title lands at 88 px.
+    test("another app's text item lands on a deck at its size in the deck's pt", async () => {
+        const added = await pasteOnCanvas([
+            { type: 'text', text: 'title', width: 100, height: 20, typography: { fontSize: 44 } },
+        ]);
+        expect(added).toHaveLength(1);
+        expect(added[0]).toMatchObject({ type: 'richtext', fontSize: 88 });
     });
 
     test("a canvas copy's chart pastes from its elements item, not as a second chart", async () => {

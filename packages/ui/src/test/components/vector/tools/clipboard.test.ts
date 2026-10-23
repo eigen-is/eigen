@@ -145,6 +145,14 @@ describe('buildSelectionData', () => {
         });
     });
 
+    // A deck crosses at its own width: on a 960 pt deck an 88 px box is 44 pt.
+    test("a deck's text item carries its size in the deck's pt", () => {
+        const title = { ...richtext('t1', 'a0'), fontSize: 88 };
+        const { data } = buildSelectionData([title], ['t1'], meta, 'f1', () => undefined, 960);
+        const text = data.items.find((i) => i.type === 'text');
+        expect(text?.typography?.fontSize).toBe(44);
+    });
+
     test('an image ships the image item beside the elements item, by name and never by bytes', () => {
         const ordered = [rect('r1', 'a0'), image('i1', 'a1', 'photo.png')];
         const { data } = buildSelectionData(ordered, ['r1', 'i1'], meta, '', () => mediaPath);

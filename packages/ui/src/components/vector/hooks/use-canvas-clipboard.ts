@@ -133,9 +133,11 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     // The clipboard PRODUCER (the native elements item, the typed image/text items and the
     // self-contained SVG flavor) + the plain-text flavor live in ../tools/clipboard; this calls them
     // with the live z-order, selection, background, home frame and path resolver.
+    // A deck converts a text item's size at its own width, a drawing at 96 dpi (canvasPxToPt).
+    const slideWidth = viewport === 'frame' ? meta.slideWidth : undefined;
     const buildData = useCallback(
-        () => buildSelectionData(ordered, selectedIds, meta, frameId, resolveMediaPath),
-        [ordered, selectedIds, meta, frameId, resolveMediaPath],
+        () => buildSelectionData(ordered, selectedIds, meta, frameId, resolveMediaPath, slideWidth),
+        [ordered, selectedIds, meta, frameId, resolveMediaPath, slideWidth],
     );
     const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
 
@@ -225,7 +227,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                 // The wire's size is pt; the payload is forgeable, so only a finite number is one.
                 const fontSize =
                     typo.fontSize !== undefined && Number.isFinite(typo.fontSize)
-                        ? canvasPtToPx(typo.fontSize)
+                        ? canvasPtToPx(typo.fontSize, slideWidth)
                         : styleDefaults.fontSize;
                 const { width, height } = measureVectorText(item.text, fontSize, fontFamily);
                 plan.partials.push({
@@ -243,7 +245,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             }
             return plan;
         },
-        [viewportCenterScene, mediaFolderId, styleDefaults],
+        [viewportCenterScene, mediaFolderId, styleDefaults, slideWidth],
     );
 
     // One paste = one undo step: every ADD in one transact, the arrow-binding remap inside the same
@@ -566,10 +568,10 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     // a selection has none. No mutation carries a failure, so this reports its own.
     const downloadImage = useCallback(
         (name: string, ids: string[], background?: string) => {
-            const { data } = buildSelectionData(ordered, ids, meta, frameId, resolveMediaPath);
+            const { data } = buildSelectionData(ordered, ids, meta, frameId, resolveMediaPath, slideWidth);
             downloadCanvasImage(data.items, { name, background, fetchMedia: fetchMediaBlob }).catch(onMutationError);
         },
-        [ordered, meta, frameId, resolveMediaPath, fetchMediaBlob],
+        [ordered, meta, frameId, resolveMediaPath, slideWidth, fetchMediaBlob],
     );
 
     return { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText, downloadImage };

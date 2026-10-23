@@ -21,17 +21,6 @@ export const SLIDE_SIZES: Readonly<Record<SlideSize, Readonly<Extent>>> = {
     '4:3': { width: FRAME_WIDTH, height: 1440 },
 };
 
-// A canvas font size as the pt the shared clipboard's text carries (EigenClipboardTypography), and back. A drawing
-// prints at CSS's 96 dpi, so its px is 3/4 pt. Slides is meant to cross at its deck's own width; until a deck has one,
-// it crosses at a drawing's scale.
-export function canvasPxToPt(px: number): number {
-    return pxToPt(px);
-}
-
-export function canvasPtToPx(pt: number): number {
-    return ptToPx(pt);
-}
-
 // A deck's physical width in pt, `meta.slideWidth` (DEFAULT_SCENE_META holds a new deck's, which the seeder writes;
 // a pptx keeps its own). The frame stays 1920 px wide whatever it is, so this sets the deck's pt per px, and every
 // px↔pt a deck converts goes through the two below: the Size and Letter rows, the pptx reader and writer, the PDF's
@@ -48,6 +37,16 @@ export function slidePxToPt(px: number, slideWidth: number): number {
 
 export function slidePtToPx(pt: number, slideWidth: number): number {
     return (pt * FRAME_WIDTH) / slideWidth;
+}
+
+// A canvas font size as the pt the shared clipboard's text carries (EigenClipboardTypography), and back: a deck's at its
+// own width, a drawing's, which has none, at CSS's 96 dpi, the scale its PDF and SVG print at.
+export function canvasPxToPt(px: number, slideWidth: number | undefined): number {
+    return slideWidth === undefined ? pxToPt(px) : slidePxToPt(px, slideWidth);
+}
+
+export function canvasPtToPx(pt: number, slideWidth: number | undefined): number {
+    return slideWidth === undefined ? ptToPx(pt) : slidePtToPx(pt, slideWidth);
 }
 
 // A stored px size as a deck shows it: pt on fonts.ts' half-point grid. Showing it writes nothing: the stored px changes

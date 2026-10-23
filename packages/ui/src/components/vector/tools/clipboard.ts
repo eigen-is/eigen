@@ -32,6 +32,7 @@ import {
 function foreignItems(
     selected: VectorElement[],
     resolveMediaPath: (name: string) => DrivePath | undefined,
+    slideWidth: number | undefined,
 ): EigenClipboardItem[] {
     const items: EigenClipboardItem[] = [];
     for (const el of selected) {
@@ -52,7 +53,7 @@ function foreignItems(
                     // stopped surviving a copy into docs. Every one has a consumer (see the type).
                     typography: {
                         fontFamily: el.fontFamily,
-                        fontSize: canvasPxToPt(el.fontSize),
+                        fontSize: canvasPxToPt(el.fontSize, slideWidth),
                         textAlign: el.textAlign,
                         color: el.color,
                         fontWeight: el.fontWeight,
@@ -112,7 +113,8 @@ function selectionSvg(
 
 // The full eigen payload for a selection: the native `elements` item (a canvas→canvas paste), the typed
 // image/text items beside it (every other host) and — unless a gate above says otherwise — the SVG
-// flavor for hosts that can place neither.
+// flavor for hosts that can place neither. `slideWidth` is a deck's, the scale its text items' sizes cross at; a
+// drawing has none.
 //
 // It returns the ids it ACTUALLY serialized alongside the payload, and they are not always the
 // selection: an image whose media path doesn't resolve yet (a still-pending upload, or one whose folder
@@ -129,6 +131,7 @@ export function buildSelectionData(
     meta: VectorMeta,
     frameId: string,
     resolveMediaPath: (name: string) => DrivePath | undefined,
+    slideWidth?: number,
 ): { data: EigenClipboardData; serializedIds: string[]; pendingImages: number } {
     const selected: VectorElement[] = [];
     let pendingImages = 0;
@@ -142,7 +145,7 @@ export function buildSelectionData(
     }
     const elementsItem = buildElementsClipboardItem(selected, frameId);
     const items: EigenClipboardItem[] = elementsItem ? [elementsItem] : [];
-    items.push(...foreignItems(selected, resolveMediaPath));
+    items.push(...foreignItems(selected, resolveMediaPath, slideWidth));
     return {
         data: { version: 1, items, svg: selectionSvg(selected, items, meta, resolveMediaPath) },
         serializedIds: selected.map((el) => el.id),
