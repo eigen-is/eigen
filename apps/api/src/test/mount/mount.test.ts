@@ -507,17 +507,19 @@ describe('Mount (local path-based storage)', () => {
     test('a rename the disk refuses leaves the row on the old name, so a trash moves the right bytes', async () => {
         const folderId = await mount.createFolder(rootId, 'RenameRefused');
         const fileId = await mount.createFile(folderId, 'A.txt', 'text/plain', 5, Buffer.from('alpha'));
-        const leftover = join(mount.dataDir, 'RenameRefused', 'B.txt');
-        mkdirSync(leftover);
-        writeFileSync(join(leftover, 'inside.txt'), 'leftover');
-
-        await expect(mount.updatePath(fileId, { name: 'B.txt' })).rejects.toThrow();
+        const spy = spyOn(mount.storage, 'rename').mockImplementation(async () => {
+            throw new Error('EIO');
+        });
+        try {
+            await expect(mount.updatePath(fileId, { name: 'B.txt' })).rejects.toThrow('EIO');
+        } finally {
+            spy.mockRestore();
+        }
 
         expect((await mount.getPath(fileId))!.name).toBe('A.txt');
         expect(await (await mount.readFile(fileId))!.text()).toBe('alpha');
         await mount.trashPath(fileId);
         expect(readFileSync(join(mount.dataDir, '.trash', buildStorageKey(fileId, 'A.txt')), 'utf8')).toBe('alpha');
-        expect(readFileSync(join(leftover, 'inside.txt'), 'utf8')).toBe('leftover');
     });
 
     test('a move whose size invalidation fails keeps its bytes with the row', async () => {

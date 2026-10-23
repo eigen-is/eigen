@@ -51,7 +51,7 @@ import {
     renameThenWriteRow,
     rethrowDuplicateActiveName,
 } from './helpers';
-import { buildStorageKey, isReservedName, validateName } from './names';
+import { buildStorageKey, isReservedName, trashStorageKey, validateName } from './names';
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
@@ -393,7 +393,8 @@ export class Mount {
     // so those must compare equal too. JS toLowerCase() is the stricter fold; only consulted for
     // non-ASCII names on path-based mounts, so ASCII lookups and id-keyed backends keep SQLite's
     // fold. The v7 unique index stays the ASCII race net.
-    // An ASCII query never scans, so a stored-side-only alias (U+212A 'K') or an unfoldable pair (ſ/s) is not caught.
+    // An ASCII query never scans, so a stored-side-only alias (U+212A 'K') or an unfoldable pair (ſ/s) is not caught;
+    // a local rename, move or restore catches those on disk (trash.renameTarget).
     private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
         if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;
         const folded = name.toLowerCase();
@@ -757,12 +758,21 @@ export class Mount {
                             }
                             // Refused before the bytes move: a disk rename replaces a raced sibling's bytes at the
                             // target, and one into its own subtree throws a bare EINVAL.
-                            const parentId = updates.parentId ?? (await this.getPath(pathId))?.parentId;
-                            if (parentId) {
-                                await this.assertUniqueName(parentId, path.posix.basename(newPath), pathId);
-                            }
                             this.db.transaction((tx) => this.assertMovableInTx(tx, pathId, updates.parentId));
-                            await renameThenWriteRow(renameFn.bind(this.storage), oldPath, newPath, writeRow);
+                            const parentId = updates.parentId ?? (await this.getPath(pathId))?.parentId;
+                            const newName = path.posix.basename(newPath);
+                            const rename = renameFn.bind(this.storage);
+                            if (parentId) {
+                                await this.assertUniqueName(parentId, newName, pathId);
+                                const occupant = await trash.renameTarget(this, parentId, newPath, oldPath);
+                                if (occupant === 'live') {
+                                    throw new ApiError(409, `"${newName}" is taken on disk by another item`);
+                                }
+                                if (occupant === 'leftover') {
+                                    await trash.moveAside(rename, newPath, trashStorageKey(pathId, newName));
+                                }
+                            }
+                            await renameThenWriteRow(rename, oldPath, newPath, writeRow);
                         }),
                     );
                 }

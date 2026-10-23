@@ -30,12 +30,13 @@ Any case or compatibility variant of `.trash` is a reserved name on every mount,
 
 ## On `local` the bytes move first, and what is on disk decides after a crash
 
-A rename on disk and a row write in `metadata.db` cannot share a transaction. Trash, restore, rename and move rename the bytes, then write the row, and a row write that throws renames the bytes back (`renameThenWriteRow` in `apps/api/src/lib/mount/helpers.ts`). A disk rename that throws, onto a leftover directory no row owns, writes no row. A crash between the two steps, a move-back that fails too, or a `metadata.db` put back from before a trash still leaves a row that disagrees with its bytes. So trash and restore read the disk under their locks before they rename, and the trash key stays `.trash/{pathId}.{ext}`, which backup recomputes (`archive-layout.ts`):
+A rename on disk and a row write in `metadata.db` cannot share a transaction. Trash, restore, rename and move rename the bytes, then write the row, and a row write that throws renames the bytes back (`renameThenWriteRow` in `apps/api/src/lib/mount/helpers.ts`). A disk rename that throws writes no row. A crash between the two steps, a move-back that fails too, or a `metadata.db` put back from before a trash still leaves a row that disagrees with its bytes. So trash and restore read the disk under their locks before they rename, and the trash key stays `.trash/{pathId}.{ext}`, which backup recomputes (`archive-layout.ts`):
 
 - Trash with the bytes at the trash key only: they are this item's, so it writes the row and skips the rename. That finishes the interrupted trash.
 - Trash with bytes at both keys: only this row's trash writes its trash key and the row is live, so what sits there is an orphan no one can restore. It moves aside, and the trash goes on.
 - Restore with the bytes at the target only: they are this item's, so it writes the row.
 - Restore with bytes at both: the target is a leftover, moved aside before the rename. If a live row's bytes sit there, which a case-insensitive disk allows under another name (same inode), the restore is a 409 and nothing moves.
+- A rename or move reads its target the same way (`renameTarget` in `trash.ts`): a leftover moves aside, a live row's bytes under another name are a 409, and the item's own bytes, which a case-only rename on a case-insensitive disk finds there, are no conflict. APFS folds more than the name check does (`ſ` onto `s`, `ß` onto `ss`), so only the inode catches those.
 
 A moved-aside entry is kept, not deleted, because it may hold older versions or media the item lacks. It goes to `.trash/{pathId}.{ext}.stale-{ms}`, keyed by the item that found it, and the API logs a warning naming both keys. No restore, purge, quota or backup reaches a `.stale-` entry. The operator finds them with `find data -path '*/.trash/*.stale-*'`, looks through them and removes them by hand.
 

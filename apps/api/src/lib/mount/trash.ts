@@ -154,33 +154,17 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                 const currentKey = await mount.getStorageKey(pathId);
                 // The mirror of trash: bytes at the target alone are this item's, left by a restore's lost row write;
                 // beside bytes still in trash they are a leftover, unless a live row's name aliases them on disk.
-                const atTarget = onDisk(mount, targetKey);
-                if (atTarget) {
-                    // Same inode: a case-insensitive disk resolves a live sibling's name onto the target, though no
-                    // name in the table matches.
-                    const target = fs.statSync(path.join(mount.dataDir, targetKey));
-                    const siblings = await mount.db
-                        .select({ file: paths.file })
-                        .from(paths)
-                        .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
-                        .all();
-                    const held = siblings.some((s) => {
-                        const stat = fs.statSync(path.join(mount.dataDir, parentKey, s.file), {
-                            throwIfNoEntry: false,
-                        });
-                        return stat?.ino === target.ino && stat.dev === target.dev;
-                    });
-                    if (held) {
-                        throw new ApiError(
-                            409,
-                            `"${restoreName}" is taken on disk by another item; rename that, then restore`,
-                        );
-                    }
+                const occupant = await renameTarget(mount, targetParentId, targetKey, currentKey);
+                if (occupant === 'live') {
+                    throw new ApiError(
+                        409,
+                        `"${restoreName}" is taken on disk by another item; rename that, then restore`,
+                    );
                 }
-                if (atTarget && !onDisk(mount, currentKey)) {
+                if (occupant === 'leftover' && !onDisk(mount, currentKey)) {
                     await writeRow();
                 } else {
-                    if (atTarget) {
+                    if (occupant === 'leftover') {
                         await moveAside(rename, targetKey, trashStorageKey(pathId, restoreName));
                     }
                     await renameThenWriteRow(rename, currentKey, targetKey, writeRow);
@@ -208,8 +192,33 @@ function onDisk(mount: Mount, key: string): boolean {
     return fs.existsSync(path.join(mount.dataDir, key));
 }
 
+// What a `local` disk rename of sourceKey onto targetKey would replace. `source`: the item itself, as a case-only rename
+// on a case-insensitive disk resolves. `live`: a live sibling's bytes, whose name the disk folds onto the target though
+// no name in the table matches (same inode). `leftover`: bytes no row owns.
+// internal — used by mount/*.ts
+export async function renameTarget(
+    mount: Mount,
+    parentId: string,
+    targetKey: string,
+    sourceKey: string,
+): Promise<'free' | 'source' | 'live' | 'leftover'> {
+    const stat = (key: string) => fs.statSync(path.join(mount.dataDir, key), { throwIfNoEntry: false });
+    const target = stat(targetKey);
+    if (!target) return 'free';
+    const sameInode = (other: fs.Stats | undefined) => other?.ino === target.ino && other.dev === target.dev;
+    if (sameInode(stat(sourceKey))) return 'source';
+    const parentKey = path.posix.dirname(targetKey);
+    const siblings = await mount.db
+        .select({ file: paths.file })
+        .from(paths)
+        .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
+        .all();
+    return siblings.some((s) => sameInode(stat(path.posix.join(parentKey, s.file)))) ? 'live' : 'leftover';
+}
+
 // Bytes no row owns. Kept in .trash/ for the operator, not deleted: they may hold versions or media the item lacks.
-async function moveAside(
+// internal — used by mount/*.ts
+export async function moveAside(
     rename: (oldKey: string, newKey: string) => Promise<void>,
     key: string,
     asideBase: string,
