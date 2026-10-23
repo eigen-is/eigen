@@ -92,14 +92,14 @@ const TYPES = new Map<string, ChartType>([
     ['pie3DChart', 'pie'],
 ]);
 
-const STACKING_BY_GROUPING = new Map<string, ChartStacking>([
+export const STACKING_BY_GROUPING: ReadonlyMap<string, ChartStacking> = new Map<string, ChartStacking>([
     ['clustered', 'none'],
     ['standard', 'none'],
     ['stacked', 'stacked'],
     ['percentStacked', 'percent'],
 ]);
 
-const LEGEND_BY_POSITION = new Map<string, LegendPosition>([
+export const LEGEND_BY_POSITION: ReadonlyMap<string, LegendPosition> = new Map<string, LegendPosition>([
     ['t', 'top'],
     ['b', 'bottom'],
     ['l', 'left'],
@@ -182,16 +182,19 @@ function chartSpec(
     };
     const fillColor = (shape: XmlElement | undefined) =>
         drawingColor(shape && xmlChild(shape, A_NS, 'solidFill'), colors);
+    // Eigen's writer writes an automatic colour as the palette's at its place, so that colour reads back automatic.
+    const automatic = (color: string, index: number) => (color === chartColor(index) ? null : color);
     const markers = type === 'line' && flag(child(group, 'marker')) !== false;
-    const style = (ser: XmlElement): ChartSeriesStyle => {
+    const seriesColor = (ser: XmlElement) => {
         const shape = child(ser, 'spPr');
         const fill = type === 'line' ? shape && xmlChild(shape, A_NS, 'ln') : shape;
-        return {
-            color: fillColor(fill) ?? accent(count(val(child(ser, 'idx'))) ?? 0),
-            markers: markers && val(child(child(ser, 'marker'), 'symbol')) !== 'none',
-            smooth: type === 'line' && flag(child(ser, 'smooth')) === true,
-        };
+        return fillColor(fill) ?? accent(count(val(child(ser, 'idx'))) ?? 0);
     };
+    const style = (ser: XmlElement, index: number): ChartSeriesStyle => ({
+        color: automatic(seriesColor(ser), index),
+        markers: markers && val(child(child(ser, 'marker'), 'symbol')) !== 'none',
+        smooth: type === 'line' && flag(child(ser, 'smooth')) === true,
+    });
 
     const [first] = series;
     const categories = series.map((ser) => child(ser, 'cat')).find(Boolean);
@@ -229,8 +232,11 @@ function chartSpec(
             if (index !== undefined && color) points.set(index, color);
         }
         const vary = flag(child(group, 'varyColors')) !== false;
-        const own = style(first).color;
-        return Array.from({ length: total }, (_, i) => points.get(i) ?? (vary ? accent(i) : own));
+        const own = seriesColor(first);
+        const colors = Array.from({ length: total }, (_, i) => automatic(points.get(i) ?? (vary ? accent(i) : own), i));
+        // A missing slice colour is automatic too.
+        while (colors.length > 0 && colors.at(-1) === null) colors.pop();
+        return colors;
     };
 
     if (data === 'cache') {
@@ -251,7 +257,7 @@ function chartSpec(
                 source: 'inline',
                 categories: categories ? labels : Array.from({ length }, (_, i) => String(i + 1)),
                 series: series.map((ser, i) => ({
-                    ...style(ser),
+                    ...style(ser, i),
                     name: seriesName(ser),
                     values: values[i],
                 })),
@@ -288,10 +294,10 @@ function chartSpec(
         data: {
             source: 'range',
             categories: categoryRange,
-            series: series.map((ser) => {
+            series: series.map((ser, i) => {
                 const name = child(ser, 'tx');
                 return {
-                    ...style(ser),
+                    ...style(ser, i),
                     name: (child(name, 'strRef') && range(name)) ?? seriesName(ser),
                     values: line(range(child(ser, 'val'))),
                 };

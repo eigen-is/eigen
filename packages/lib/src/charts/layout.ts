@@ -58,7 +58,7 @@ const HORIZONTAL_TICK_SPACING = 6;
 // box comes from a peer, so its length must not set the work.
 const MAX_TICK_COUNT = 20;
 // Excalidraw's faint range; Google's gridlines are a light gray.
-const GRIDLINE_OPACITY = 20;
+export const GRIDLINE_OPACITY = 20;
 // Share of the room a label column, a legend or turned category labels may take before they ellipsize or drop.
 const LABEL_SHARE = 0.3;
 const ROTATED = -45;

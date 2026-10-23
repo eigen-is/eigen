@@ -30,7 +30,29 @@ export function sheetRowsHeight(sheet: Pick<Sheet, 'config' | 'defaultRowHeight'
     return tracksLength(from, to, rowhidden, rowlen, sheetDefaultRowHeight(sheet));
 }
 
-// A track is hidden by its key, whatever it holds: the editor stores 0.
+// Where `px` from the grid's start lands across the columns or rows: the track and the pixels into it, so the walk above
+// over the tracks before it plus the offset is `px` again. A hidden track holds no pixel, so a boundary starts the next
+// shown track; past the grid is the last track, the rest its offset. The xlsx export's chart anchors are its cells.
+export function sheetTrackAt(
+    sheet: Pick<Sheet, 'config' | 'defaultColWidth' | 'defaultRowHeight'>,
+    axis: 'column' | 'row',
+    px: number,
+): { index: number; offsetPx: number } {
+    const { colhidden, columnlen, rowhidden, rowlen } = sheet.config ?? {};
+    const [hidden, lengths, fallback, count] =
+        axis === 'column'
+            ? [colhidden, columnlen, sheetDefaultColWidth(sheet), REFERENCE_COLUMN_COUNT]
+            : [rowhidden, rowlen, sheetDefaultRowHeight(sheet), REFERENCE_ROW_COUNT];
+    let start = 0;
+    let length = 0;
+    for (let track = 0; track < count; track++) {
+        length = trackLength(track, hidden, lengths, fallback);
+        if (px < start + length) return { index: track, offsetPx: px - start };
+        start += length;
+    }
+    return { index: count - 1, offsetPx: px - start + length };
+}
+
 function tracksLength(
     from: number,
     to: number,
@@ -39,12 +61,20 @@ function tracksLength(
     fallback: number,
 ): number {
     let length = 0;
-    for (let track = from; track <= to; track++) {
-        if (hidden?.[track] != null) continue;
-        const stored = Number(lengths?.[track] ?? fallback);
-        length += Number.isFinite(stored) ? stored : fallback;
-    }
+    for (let track = from; track <= to; track++) length += trackLength(track, hidden, lengths, fallback);
     return length;
+}
+
+// A track is hidden by its key, whatever it holds: the editor stores 0.
+function trackLength(
+    track: number,
+    hidden: Record<string, number> | undefined,
+    lengths: Record<string, number> | undefined,
+    fallback: number,
+): number {
+    if (hidden?.[track] != null) return 0;
+    const stored = Number(lengths?.[track] ?? fallback);
+    return Number.isFinite(stored) ? stored : fallback;
 }
 
 // The header strips and the cell text size a fresh workbook starts with, which the chart Edit data
