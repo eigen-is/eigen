@@ -1,7 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     baseDefaultsFor,
@@ -17,11 +14,11 @@ import {
     type VectorRichTextElement,
     type VectorScene,
 } from '@workspace/lib/vector';
-import sharp from 'sharp';
 import { exportDocument } from '../../lib/export/export-document';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import { seedVectorDoc } from '../fixtures/golden-documents';
+import { pixelAt, type Raster, type Rgb, rasterize, rasterizer } from '../pdf-test-helpers';
 import { driveGet, drivePost, getTestContext } from '../setup';
 
 // What a canvas PDF looks like, read off its pixels. WeasyPrint 68 loses two things a scaled or shifted
@@ -29,38 +26,6 @@ import { driveGet, drivePost, getTestContext } from '../setup';
 // @page height, and it clips a translucent element to the page as the element's parent's transform
 // maps it. At the old 0.5 a slide lost the later lines of a text box and every translucent element in
 // its lower half; a drawing translated to its content lost its translucent elements.
-
-// The PDF's first page at 72 dpi, one pixel per point: macOS's sips or poppler's pdftoppm.
-const rasterizer = Bun.which('sips') ?? Bun.which('pdftoppm');
-
-type Raster = { data: Buffer; width: number; height: number };
-
-async function rasterize(pdf: Buffer): Promise<Raster> {
-    const dir = await mkdtemp(join(tmpdir(), 'canvas-pdf-'));
-    try {
-        await Bun.write(join(dir, 'page.pdf'), pdf);
-        const args = rasterizer?.endsWith('sips')
-            ? ['-s', 'format', 'png', 'page.pdf', '--out', 'page.png']
-            : ['-png', '-r', '72', '-singlefile', 'page.pdf', 'page'];
-        const proc = Bun.spawn([rasterizer ?? '', ...args], { cwd: dir, stdout: 'ignore', stderr: 'ignore' });
-        expect(await proc.exited).toBe(0);
-        const { data, info } = await sharp(join(dir, 'page.png'))
-            .flatten({ background: '#ffffff' })
-            .raw()
-            .toBuffer({ resolveWithObject: true });
-        return { data, width: info.width, height: info.height };
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
-}
-
-type Rgb = [number, number, number];
-
-// The pixel at a point of the page, in points.
-function pixelAt(page: Raster, x: number, y: number): Rgb {
-    const i = (Math.round(y) * page.width + Math.round(x)) * 3;
-    return [page.data[i], page.data[i + 1], page.data[i + 2]];
-}
 
 // The lowest row, in points, holding a pixel of the text's blue.
 function lowestBlueRow(page: Raster): number {
