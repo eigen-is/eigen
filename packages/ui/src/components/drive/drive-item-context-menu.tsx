@@ -114,7 +114,6 @@ function DriveItemActionsMenu({
                                         onDuplicate(contextItems);
                                         contextMenu.close();
                                     }}
-                                    className="flex items-center"
                                 >
                                     <CopyPlus className="h-4 w-4" />
                                     Duplicate {contextItems.length} items
@@ -129,7 +128,6 @@ function DriveItemActionsMenu({
                                             onMoveTo(contextItems);
                                             contextMenu.close();
                                         }}
-                                        className="flex items-center"
                                     >
                                         <FolderInput className="h-4 w-4" />
                                         Move {contextItems.length} items to…
@@ -141,7 +139,6 @@ function DriveItemActionsMenu({
                                             onCopyTo(contextItems);
                                             contextMenu.close();
                                         }}
-                                        className="flex items-center"
                                     >
                                         <Copy className="h-4 w-4" />
                                         Copy {contextItems.length} items to…
@@ -157,7 +154,6 @@ function DriveItemActionsMenu({
                                         onDelete?.(contextItems);
                                         contextMenu.close();
                                     }}
-                                    className="flex items-center"
                                 >
                                     <Trash2 className="h-4 w-4" />
                                     {contextItems.every(isSharedWithMe)
