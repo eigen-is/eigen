@@ -155,11 +155,27 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                 // The mirror of trash: bytes at the target alone are this item's, left by a restore's lost row write;
                 // beside bytes still in trash they are a leftover, unless a live row's name aliases them on disk.
                 const atTarget = onDisk(mount, targetKey);
-                if (atTarget && (await liveSiblingHolds(mount, targetParentId, parentKey, targetKey))) {
-                    throw new ApiError(
-                        409,
-                        `"${restoreName}" is taken on disk by another item; rename that, then restore`,
-                    );
+                if (atTarget) {
+                    // Same inode: a case-insensitive disk resolves a live sibling's name onto the target, though no
+                    // name in the table matches.
+                    const target = fs.statSync(path.join(mount.dataDir, targetKey));
+                    const siblings = await mount.db
+                        .select({ file: paths.file })
+                        .from(paths)
+                        .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
+                        .all();
+                    const held = siblings.some((s) => {
+                        const stat = fs.statSync(path.join(mount.dataDir, parentKey, s.file), {
+                            throwIfNoEntry: false,
+                        });
+                        return stat?.ino === target.ino && stat.dev === target.dev;
+                    });
+                    if (held) {
+                        throw new ApiError(
+                            409,
+                            `"${restoreName}" is taken on disk by another item; rename that, then restore`,
+                        );
+                    }
                 }
                 if (atTarget && !onDisk(mount, currentKey)) {
                     await writeRow();
@@ -190,26 +206,6 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
 // On `local` a key is a path under data/. Not storage.exists(): a folder's key is a directory, which Bun.file misses.
 function onDisk(mount: Mount, key: string): boolean {
     return fs.existsSync(path.join(mount.dataDir, key));
-}
-
-// Same inode: a case-insensitive disk resolves a live sibling's name onto the target, though no name in the table matches.
-async function liveSiblingHolds(
-    mount: Mount,
-    parentId: string,
-    parentKey: string,
-    targetKey: string,
-): Promise<boolean> {
-    const target = fs.statSync(path.join(mount.dataDir, targetKey));
-    const siblings = await mount.db
-        .select({ file: paths.file })
-        .from(paths)
-        .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
-        .all();
-    return siblings.some((s) => {
-        const key = parentKey ? `${parentKey}/${s.file}` : s.file;
-        const stat = fs.statSync(path.join(mount.dataDir, key), { throwIfNoEntry: false });
-        return stat?.ino === target.ino && stat.dev === target.dev;
-    });
 }
 
 // Bytes no row owns. Kept in .trash/ for the operator, not deleted: they may hold versions or media the item lacks.
