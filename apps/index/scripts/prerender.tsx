@@ -12,7 +12,7 @@ const GEN = join(ROOT, 'src', 'content', '.generated');
 const DOMAIN = process.env['DOMAIN']?.replace(/\/+$/, '');
 const PUBLIC_ORIGIN = DOMAIN ? `https://${DOMAIN}` : undefined;
 const DEFAULT_DESCRIPTION =
-    'Eigen is a self-hosted alternative to Google Workspace: mail, drive, docs, sheets, slides, vector drawings, calendar and chat. Syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV. Opens and saves Word, Excel and PowerPoint files. You control your data.';
+    'Eigen is a self-hosted alternative to Google Workspace: mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat. Syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV. Opens and saves Word, Excel and PowerPoint files. You control your data.';
 
 function publicUrl(path: string): string | undefined {
     if (!PUBLIC_ORIGIN) return undefined;

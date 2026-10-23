@@ -71,7 +71,7 @@ export function HomeComponent() {
                         </p>
                     ) : (
                         <>
-                            <p>Mail, drive, docs, sheets, slides, drawings, calendar and chat.</p>
+                            <p>Mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat.</p>
                             <p>Syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV.</p>
                             <p>Opens and saves Word, Excel and PowerPoint files.</p>
                         </>
