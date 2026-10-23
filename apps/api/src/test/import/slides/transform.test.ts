@@ -3,7 +3,6 @@ import {
     DEFAULT_SCENE_META,
     parseBackgroundFill,
     readVectorFromDoc,
-    SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
     type VectorElement,
     writeElementInDoc,
@@ -19,7 +18,7 @@ import { box, buildPptx, cxn, graphicFrame, PIXEL_PNG, PX, para, pic, rel, solid
 
 // pptx bytes → the transform's update → the deck writer: what a deck holds after a Convert and after an Import.
 
-const JOB = { frame: { width: 1920, height: 1080 }, maxMediaBytes: 35 * 1024 * 1024 };
+const JOB = { maxMediaBytes: 35 * 1024 * 1024 };
 
 const PPTX = buildPptx({
     masters: [
@@ -115,7 +114,7 @@ describe('a pptx converted to a deck', () => {
         expect(warnings).toEqual([{ code: 'tables-dropped', count: 1 }]);
     });
 
-    test("given no frame, makes the deck in the slide size nearest the file's, its slides filling it", () => {
+    test("given no deck, makes the deck in the slide size nearest the file's, its slides filling it", () => {
         const convert = (cx: number, cy: number) => {
             const pptx = buildPptx({
                 sldSz: `<p:sldSz cx="${cx}" cy="${cy}"/>`,
@@ -128,34 +127,39 @@ describe('a pptx converted to a deck', () => {
             writeSlidesUpdateToYjs(doc, new Uint8Array(update));
             expect(doc.getMap('meta').get('background')).toBe(DEFAULT_SCENE_META.background);
             const { meta, frames, elements } = readVectorFromDoc(doc);
-            return { slideSize: meta.slideSize, frame: [frames[0].width, frames[0].height], slide: elements[0] };
+            const { slideSize, slideWidth } = meta;
+            return { slideSize, slideWidth, frame: [frames[0].width, frames[0].height], slide: elements[0] };
         };
         // 4:3 comes in as 4:3, no letterbox.
         const fourThree = convert(9144000, 6858000);
-        expect(fourThree).toMatchObject({ slideSize: '4:3', frame: [1920, 1440] });
+        expect(fourThree).toMatchObject({ slideSize: '4:3', slideWidth: 720, frame: [1920, 1440] });
         expect(fourThree.slide).toMatchObject({ x: 0, y: 0, width: 1920, height: 1440 });
-        // 16:10 is nearest 16:9, letterboxed into it.
+        // 16:10 is nearest 16:9, letterboxed into it: the frame is wider than the file's 10 in, so its pt stay.
         const sixteenTen = convert(9144000, 5715000);
-        expect(sixteenTen).toMatchObject({ slideSize: '16:9', frame: [1920, 1080] });
+        expect(sixteenTen).toMatchObject({ slideSize: '16:9', slideWidth: 800, frame: [1920, 1080] });
         expect(sixteenTen.slide).toMatchObject({ x: 96, y: 0, width: 1728, height: 1080 });
         // A4 is nearest 4:3.
         const a4 = convert(9906000, 6858000);
-        expect(a4).toMatchObject({ slideSize: '4:3', frame: [1920, 1440] });
+        expect(a4).toMatchObject({ slideSize: '4:3', slideWidth: 780, frame: [1920, 1440] });
         expect(a4.slide.width).toBeCloseTo(1920, 6);
         expect(a4.slide.y).toBeCloseTo((1440 - (6858000 * 1920) / 9906000) / 2, 6);
     });
 
-    test("given the deck's frame, a file of another size is letterboxed into it and the deck keeps its meta", () => {
+    test("given the deck's page, a file of another size is letterboxed into it and the deck keeps its meta", () => {
         const doc = new Y.Doc();
         doc.getMap('meta').set('slideSize', '4:3');
+        doc.getMap('meta').set('slideWidth', 720);
         writeFrameInDoc(doc, { id: 'mine', index: 'a0', name: 'Mine' });
         const wide = buildPptx({
             slides: [{ shapes: sp({ xfrm: xfrm(0, 0, 12192000, 6858000), spPr: solid('FF0000') }) }],
         });
-        const { update } = importPptxToSlidesUpdate(toTransferableBuffer(wide), { ...JOB, frame: SLIDE_SIZES['4:3'] });
+        const { update } = importPptxToSlidesUpdate(toTransferableBuffer(wide), {
+            ...JOB,
+            deck: { slideSize: '4:3', slideWidth: 720 },
+        });
         appendSlidesUpdateToYjs(doc, new Uint8Array(update));
         const scene = readVectorFromDoc(doc);
-        expect(scene.meta.slideSize).toBe('4:3');
+        expect(scene.meta).toMatchObject({ slideSize: '4:3', slideWidth: 720 });
         expect(scene.elements[0]).toMatchObject({ x: 0, y: 180, width: 1920, height: 1080 });
     });
 

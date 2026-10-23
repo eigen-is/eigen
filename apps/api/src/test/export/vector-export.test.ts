@@ -284,7 +284,11 @@ describe('Eigenvector export — the pdf-html document (what WeasyPrint is hande
         rendered ??= (async () => {
             const home = await getHome(ctx.alice.user.id);
             const { mount, path } = await home.drive.resolveFile(mountId, vectorPath.id);
-            const bytes = await runDocumentExport({ documentType: 'eigenvector', format: 'pdf-html' }, mount, path);
+            const { data: bytes } = await runDocumentExport(
+                { documentType: 'eigenvector', format: 'pdf-html' },
+                mount,
+                path,
+            );
             return bytes.toString('utf-8');
         })();
         return rendered;

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { slideFontSize, slidePtToPx } from '@workspace/lib/vector';
 import { ApiError } from '../../../lib/core/errors';
 import { MAX_MEDIA_PARTS, MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_SLIDES } from '../../../lib/import/slides/package';
@@ -23,18 +24,48 @@ describe('a deck read', () => {
             OPTIONS,
         );
         expect(deck.slides.map((slide) => slide.name)).toEqual(['Intro', '']);
-        expect(deck.slideSize).toBe('4:3');
+        expect(deck.page).toEqual({ slideSize: '4:3', slideWidth: 720 });
     });
 
     test("the deck's slide size is the one nearest the file's: 16:10 is 16:9, A4 is 4:3", () => {
-        const size = (sldSz: string) => readPptx(buildPptx({ sldSz, slides: [{}] }), OPTIONS).slideSize;
+        const size = (sldSz: string) => readPptx(buildPptx({ sldSz, slides: [{}] }), OPTIONS).page.slideSize;
         expect(size('<p:sldSz cx="12192000" cy="6858000"/>')).toBe('16:9');
         expect(size('<p:sldSz cx="9144000" cy="5715000"/>')).toBe('16:9');
         expect(size('<p:sldSz cx="9906000" cy="6858000"/>')).toBe('4:3');
     });
 
+    // Google's 10 in and PowerPoint's 13.33 in widescreen: the deck keeps the file's width, so the title shows 44 pt, and
+    // its stored px is 44 pt's to the bit, not 44 × 12,700 EMU at the frame's px per EMU.
+    test.each([
+        ['9144000', '5143500', 720],
+        ['12192000', '6858000', 960],
+    ])('a %s EMU wide deck keeps its width, and a 44 pt title imports as 44 pt', (cx, cy, slideWidth) => {
+        const deck = readPptx(
+            buildPptx({
+                sldSz: `<p:sldSz cx="${cx}" cy="${cy}"/>`,
+                slides: [{ shapes: sp({ xfrm: box(0, 0, 900, 100), text: para('Title', ' sz="4400"') }) }],
+            }),
+            OPTIONS,
+        );
+        expect(deck.page).toEqual({ slideSize: '16:9', slideWidth });
+        const fontSize = Number(deck.slides[0].elements[0].fontSize);
+        expect(fontSize).toBe(slidePtToPx(44, slideWidth));
+        expect(slideFontSize(fontSize, slideWidth)).toBe(44);
+    });
+
+    test("a size between half points snaps to the deck's grid, an Import's at the open deck's width", () => {
+        const pptx = buildPptx({
+            sldSz: '<p:sldSz cx="9144000" cy="5143500"/>',
+            slides: [{ shapes: sp({ xfrm: box(0, 0, 900, 100), text: para('Title', ' sz="1033"') }) }],
+        });
+        expect(readPptx(pptx, OPTIONS).slides[0].elements[0].fontSize).toBe(slidePtToPx(10.5, 720));
+        // Into a 13.33 in deck the 10 in slide scales up by a third: 10.33 pt reads 13.77, snapped to 14.
+        const imported = readPptx(pptx, { ...OPTIONS, deck: { slideSize: '16:9', slideWidth: 960 } });
+        expect(imported.slides[0].elements[0].fontSize).toBe(slidePtToPx(14, 960));
+    });
+
     test('a slide size outside what PowerPoint allows is held to its range, a missing one is 4:3', () => {
-        const size = (sldSz: string) => readPptx(buildPptx({ sldSz, slides: [{}] }), OPTIONS).slideSize;
+        const size = (sldSz: string) => readPptx(buildPptx({ sldSz, slides: [{}] }), OPTIONS).page.slideSize;
         // 56 in by 7.5 in, and 1 in by 7.5 in.
         expect(size('<p:sldSz cx="99999999999999" cy="0"/>')).toBe('16:9');
         expect(size('<p:sldSz cx="12" cy="-5"/>')).toBe('4:3');

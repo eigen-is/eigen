@@ -6,17 +6,13 @@ import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { LIGHT_EDITOR_BLOCK_TAGS, LIGHT_EDITOR_TAGS, stripTagsServer, textToParagraphHtml } from '../../core/html';
 import { stripNonXmlChars } from '../../core/xml';
 import { isColorToken, parseFill, serializeFill } from '../fill';
+import { MAX_FONT_SIZE_PX, MIN_FONT_SIZE_PX } from '../frames';
 import { parsePathCommands, serializePath } from '../outline';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_RICHTEXT_PROPS } from '../types';
 
 // Sanity bound on spatial fields. Without a cap one client's corrupt write (say 1e15 from a math bug)
 // freezes every other peer — rough fill cost scales with element area.
 export const MAX_COORD = 1_000_000;
-
-// fontSize feeds line-height math (an arrow label's height = lines × line height), so a hostile
-// value would blow the shared viewBox like an uncapped labelWidth; clamp to the canvas' own range.
-const MIN_FONT_SIZE = 4;
-const MAX_FONT_SIZE = 400;
 
 // Rich text is the first byte-capped string field: one pasted document must not make every peer's read,
 // render and export unbounded. 64 KiB per element, truncated on a UTF-8 boundary. This reader does NOT
@@ -78,8 +74,10 @@ export function size(v: unknown): number {
     return Math.max(0, coord(v));
 }
 
+// fontSize feeds line-height math (an arrow label's height = lines × line height), so a hostile value would blow the
+// shared viewBox like an uncapped labelWidth; clamped to the range every deck reaches. A size in range reads to the bit.
 export function fontSize(v: unknown): number {
-    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, num(v, DEFAULT_FONT_SIZE)));
+    return clampNum(v, MIN_FONT_SIZE_PX, MAX_FONT_SIZE_PX, DEFAULT_FONT_SIZE);
 }
 
 // A font name reaches a CSS declaration list (rich text's style body), where a stray `;` would open a

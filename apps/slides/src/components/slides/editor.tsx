@@ -371,6 +371,7 @@ function SlideEditorInner({
                     undoManager={doc.undoManager}
                     aspectLocked={aspectLocked}
                     onAspectLockChange={setAspectLocked}
+                    slideWidth={doc.meta.slideWidth}
                     emptyTitle="Slide"
                     emptySection={
                         frame ? (

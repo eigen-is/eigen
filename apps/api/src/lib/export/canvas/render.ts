@@ -1,9 +1,9 @@
 import { backgroundCss } from '@workspace/lib/background';
+import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import {
     DEFAULT_PADDING,
-    FRAME_WIDTH,
     isTransparentColor,
     type Layer,
     layerBoxCss,
@@ -15,6 +15,7 @@ import {
     round,
     sceneBounds,
     sceneLayers,
+    slidePxToPt,
     type VectorScene,
 } from '@workspace/lib/vector';
 import { mediaNamesIn } from '../../document/media';
@@ -29,11 +30,13 @@ import { mediaNamesIn } from '../../document/media';
 // WeasyPrint resolves `url(#id)` only within one <svg>, so each layer's references stay inside the one
 // viewport layerInnerHtml gives it.
 
-// A deck page is 254mm (960px at 96dpi) wide: 254 x 142.875mm for 16:9, 254 x 190.5mm for 4:3. Every
-// frame is 1920 wide, so a deck shows and prints at 0.5 — a 1920px sheet would be 20 inches. The screen
-// document scales its pages by it; the PDF document lays them out at 1:1 (renderPrintPage), and it is the
-// zoom htmlToPdf hands WeasyPrint for a deck.
-export const DECK_SCALE = 960 / FRAME_WIDTH;
+// A deck page is the deck's own width: a new deck's 720 pt is 960 px at 96 dpi, 254 x 142.875 mm for 16:9 and
+// 254 x 190.5 mm for 4:3, so its 1920 px frame shows and prints at 0.5 (a 1920 px sheet would be 20 in). The screen
+// document scales its pages by it; the PDF document lays them out at 1:1 (renderPrintPage), and it is the zoom
+// htmlToPdf hands WeasyPrint for a deck.
+export function deckScale(slideWidth: number): number {
+    return ptToPx(slidePxToPt(1, slideWidth));
+}
 
 // The media a deck or drawing names: its images, and the frame backgrounds, which the scene keeps as stored JSON.
 export function sceneMediaNames(scene: VectorScene): Set<string> {

@@ -989,8 +989,7 @@ export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
             for (const field of FRAME_FIELDS) yFrame.set(field, frameField(frame, field));
             framesMap.set(frame.id, yFrame);
         }
-        metaMap.set('background', scene.meta.background);
-        metaMap.set('slideSize', scene.meta.slideSize);
+        for (const [key, value] of Object.entries(scene.meta)) metaMap.set(key, value);
     });
 }
 

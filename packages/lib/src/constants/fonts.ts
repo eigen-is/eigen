@@ -65,7 +65,11 @@ export const MAX_FONT_SIZE = 400;
 // Any peer, paste or file writes a size, so only a finite number is one; it lands in the range, in Word's half points.
 export function readFontSize(value: unknown): number | undefined {
     if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(value * 2) / 2));
+    return snapFontSize(value);
+}
+
+export function snapFontSize(size: number): number {
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(size * 2) / 2));
 }
 
 export function nextFontSize(size: number, by: 1 | -1): number {

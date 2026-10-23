@@ -2,6 +2,7 @@
 // a drawing is the same canvas with no frames at all. Every frame of a deck has the deck's slide size —
 // elements may overhang and the frame clips them.
 
+import { MAX_FONT_SIZE, MIN_FONT_SIZE, snapFontSize } from '../constants/fonts';
 import { serializeBackgroundFill } from './fill';
 import type { Point } from './geometry';
 import type { Extent } from './viewport';
@@ -18,6 +19,37 @@ export const SLIDE_SIZES: Readonly<Record<SlideSize, Readonly<Extent>>> = {
     '16:9': { width: FRAME_WIDTH, height: 1080 },
     '4:3': { width: FRAME_WIDTH, height: 1440 },
 };
+
+// A deck's physical width in pt, `meta.slideWidth` (DEFAULT_SCENE_META holds a new deck's, Google's 10 in; a pptx keeps
+// its own). The frame stays 1920 px wide whatever it is, so this sets the deck's pt per px, and every px↔pt a deck
+// converts goes through the two below: the font-size control, the pptx reader and writer, the PDF's sheet. Bounded by
+// PowerPoint's 1 to 56 in.
+export const MIN_SLIDE_WIDTH = 72;
+export const MAX_SLIDE_WIDTH = 4032;
+
+export function slidePxToPt(px: number, slideWidth: number): number {
+    return (px * slideWidth) / FRAME_WIDTH;
+}
+
+export function slidePtToPx(pt: number, slideWidth: number): number {
+    return (pt * FRAME_WIDTH) / slideWidth;
+}
+
+// A stored px size as a deck shows it: pt on fonts.ts' half-point grid. Showing it writes nothing: the stored px changes
+// only when the user sets a size, so a box pasted between a deck and a drawing keeps its size to the bit.
+export function slideFontSize(px: number, slideWidth: number): number {
+    return snapFontSize(slidePxToPt(px, slideWidth));
+}
+
+// A size an importer writes, on the half-point grid at the deck's scale, so a 44 pt title shows 44.
+export function snapSlideFontSize(px: number, slideWidth: number): number {
+    return slidePtToPx(slideFontSize(px, slideWidth), slideWidth);
+}
+
+// The px range a stored size may hold: fonts.ts' pt range on the widest and the narrowest slide, so every deck reaches
+// all of it. A drawing has no page and takes the same range.
+export const MIN_FONT_SIZE_PX = slidePtToPx(MIN_FONT_SIZE, MAX_SLIDE_WIDTH);
+export const MAX_FONT_SIZE_PX = slidePtToPx(MAX_FONT_SIZE, MIN_SLIDE_WIDTH);
 
 // The slide size closest in shape to a page of any size, for an importer: widescreen and 16:10 read as
 // 16:9, 4:3 and A4 as 4:3.

@@ -32,8 +32,10 @@ import {
     parsePoints,
     pointsBounds,
     rectOutline,
+    SLIDE_SIZES,
     type StrokeStyle,
     scaledPathCommands,
+    slidePxToPt,
     type TextAlign,
     type VectorArrowElement,
     type VectorElement,
@@ -50,7 +52,13 @@ import { ApiError } from '../../core/errors';
 import { A_NS, AHYP_NS, EMU_PER_POINT, P_NS, R_NS } from '../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
 import { cssColorToHex } from '../../document/colors';
-import { PML, PPTX_SLIDE_SIZES, PRESENTATION_TYPE, THEME_TYPE } from '../../document/presentationml';
+import {
+    PML,
+    PRESENTATION_TYPE,
+    SCREEN_SLIDE_TYPES,
+    SCREEN_SLIDE_WIDTH,
+    THEME_TYPE,
+} from '../../document/presentationml';
 import { canvasTextValue } from '../../document/prose-css';
 import {
     blipXml,
@@ -65,9 +73,14 @@ import { isElement } from '../sanitize';
 // the scene sanitizeSceneHtml returns, and media by name as the Office media prep hands it over (an SVG beside its PNG).
 export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], title: string): Uint8Array {
     if (scene.frames.length === 0) throw new ApiError(400, 'The deck is empty');
-    const size = PPTX_SLIDE_SIZES[scene.meta.slideSize];
+    // The deck's own physical size: its width, and its slide size's height at the deck's pt per px.
+    const { slideSize, slideWidth } = scene.meta;
+    const cx = Math.round(slideWidth * EMU_PER_POINT);
+    const cy = Math.round(slidePxToPt(SLIDE_SIZES[slideSize].height, slideWidth) * EMU_PER_POINT);
+    const type = slideWidth === SCREEN_SLIDE_WIDTH ? ` type="${SCREEN_SLIDE_TYPES[slideSize]}"` : '';
     const deck: Deck = {
-        scale: size.cx / scene.frames[0].width,
+        scale: slidePxToPt(1, slideWidth) * EMU_PER_POINT,
+        slideWidth,
         media: new Map(media.map((item) => [item.name, item])),
         images: new Map(),
         byId: new Map(scene.elements.map((el) => [el.id, el])),
@@ -90,7 +103,7 @@ export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], titl
         parts: [
             [
                 'ppt/presentation.xml',
-                `<p:presentation ${NAMESPACES} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${size.cx}" cy="${size.cy}"${size.type ? ` type="${size.type}"` : ''}/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+                `<p:presentation ${NAMESPACES} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${cx}" cy="${cy}"${type}/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
                 PRESENTATION_TYPE,
             ],
             ['ppt/_rels/presentation.xml.rels', relationshipsXml(presentationRelationships)],
@@ -131,7 +144,7 @@ const NAMESPACES = `xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:p="${P_NS}"`;
 
 // Text sizes and spacing in 100ths of a point, at the deck's scale.
 function centipoints(slide: Slide, px: number): number {
-    return Math.round((px * slide.deck.scale * 100) / EMU_PER_POINT);
+    return Math.round(slidePxToPt(px, slide.deck.slideWidth) * 100);
 }
 
 const GROUP_PROPERTIES =
@@ -173,7 +186,9 @@ const THEME_XML = (() => {
 
 // What one export accumulates: each media name's parts once, whichever slide shows it first.
 type Deck = {
+    // EMU per px, and the deck's width in pt, which its text sizes convert at.
     scale: number;
+    slideWidth: number;
     media: Map<string, OfficeMedia>;
     images: Map<string, Image>;
     // The elbow router reads the shapes an arrow is bound to.

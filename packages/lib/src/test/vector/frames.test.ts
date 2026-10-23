@@ -7,6 +7,10 @@ import {
     nearestSlideSize,
     pointInFrame,
     SLIDE_SIZES,
+    slideFontSize,
+    slidePtToPx,
+    slidePxToPt,
+    snapSlideFontSize,
     type VectorFrame,
 } from '../../vector/frames';
 import { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
@@ -27,6 +31,31 @@ describe('SLIDE_SIZES', () => {
     // switch moves nothing off the page.
     test('16:9 is 1920x1080 and 4:3 keeps the width at 1920x1440', () => {
         expect(SLIDE_SIZES).toEqual({ '16:9': { width: 1920, height: 1080 }, '4:3': { width: 1920, height: 1440 } });
+    });
+});
+
+describe("a deck's pt", () => {
+    // Google's 10 in deck is 8/3 px a pt; PowerPoint's 13.33 in widescreen 2.
+    test('converts at the deck width, both ways', () => {
+        expect(slidePtToPx(44, 960)).toBe(88);
+        expect(slidePxToPt(88, 960)).toBe(44);
+        expect(slidePxToPt(slidePtToPx(44, 720), 720)).toBe(44);
+        expect(slidePxToPt(48, 720)).toBe(18);
+    });
+
+    // What the pptx reader computes for Google's 44 pt title: 44 × 12,700 EMU at 1920 / 9,144,000 px an EMU.
+    test('shows a stored px on the half-point grid, in fonts.ts range', () => {
+        expect(slideFontSize(117.33333333333334, 720)).toBe(44);
+        expect(slideFontSize(117.4, 720)).toBe(44);
+        expect(slideFontSize(29, 720)).toBe(11);
+        expect(slideFontSize(28.1, 720)).toBe(10.5);
+        expect(slideFontSize(0.01, 720)).toBe(1);
+        expect(slideFontSize(1e6, 720)).toBe(400);
+    });
+
+    test("snaps an imported size to the deck's half points", () => {
+        expect(snapSlideFontSize(117.33333333333334, 720)).toBe(slidePtToPx(44, 720));
+        expect(snapSlideFontSize(88.4, 960)).toBe(88);
     });
 });
 

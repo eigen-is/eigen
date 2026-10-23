@@ -8,8 +8,7 @@ export const PML = 'application/vnd.openxmlformats-officedocument.presentationml
 export const PRESENTATION_TYPE = `${PML}.presentation.main+xml`;
 export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
 
-// The EMU size PowerPoint gives each of a deck's slide sizes; a frame's width sets EMU per px.
-export const PPTX_SLIDE_SIZES: Record<SlideSize, { cx: number; cy: number; type?: string }> = {
-    '16:9': { cx: 12_192_000, cy: 6_858_000 },
-    '4:3': { cx: 9_144_000, cy: 6_858_000, type: 'screen4x3' },
-};
+// The on-screen show sizes ST_SlideSizeType names, both 10 in (720 pt) wide; a deck of another width is custom, the
+// attribute's default, which the writer leaves out.
+export const SCREEN_SLIDE_WIDTH = 720;
+export const SCREEN_SLIDE_TYPES: Record<SlideSize, string> = { '16:9': 'screen16x9', '4:3': 'screen4x3' };

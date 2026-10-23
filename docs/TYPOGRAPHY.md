@@ -66,6 +66,10 @@ A name the map doesn't know falls back on its entry in the file's `fontTable.xml
 
 `FontPicker` (`packages/ui/src/components/media/font-picker.tsx`) lists `EIGEN_FONTS`, each item previewed in its own face. The docs toolbar and the sheets format toolbar use it directly. The canvas uses it through `FontRow` (`packages/ui/src/components/properties-panel/`) in the rich-text and arrow property sections. A new registry entry shows up in all of them.
 
+## A size is pt on a page and px on a drawing
+
+Docs, Sheets and Slides show and take a font size in pt, on the half-point grid and the 1 to 400 pt range of `readFontSize` and `snapFontSize` (`packages/lib/src/constants/fonts.ts`), through the one `FontSizeStepper` with 1 pt steps, as Google's apps do. A doc and a sheet store pt. The canvas stores px, because Slides and Vector share it and a drawing has no page: a deck converts at its own physical width ([SLIDES.md](SLIDES.md#a-deck-has-a-physical-width-so-its-text-sizes-read-in-pt)), and a drawing shows whole px. Showing a size never rewrites it.
+
 ## A new font touches six places
 
 The registry drives the pickers and the sheet lists. The other places keep their own list of faces, so a new font touches six:

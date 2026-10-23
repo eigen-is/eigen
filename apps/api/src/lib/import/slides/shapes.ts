@@ -9,6 +9,7 @@ import {
     type StrokeStyle,
     type StyleDefaults,
     serializeFill,
+    snapSlideFontSize,
     TRANSPARENT_COLOR,
     type VectorElementPatch,
 } from '@workspace/lib/vector';
@@ -334,7 +335,7 @@ function readShape(walk: Walk, leaf: Leaf): void {
     };
     // Counted once for the shape, however many slides show it.
     const lost: Lost = (code) => walk.deck.lost(code, shape);
-    const text = source && richTextOf(source, theme, walk.deck.scale, lost);
+    const text = source && richTextOf(source, theme, walk.deck, lost);
     if (text && body && own && placeholderKind(own.type) === 'title' && !walk.copied) walk.out.title ||= titleOf(body);
     const { box } = placed;
     const textBox = text && source ? turned(box, verticalTurnOf(source, lost)) : box;
@@ -622,7 +623,7 @@ function placeholderBox(walk: Walk, shape: XmlElement, what: Dropped, box: Box, 
         strokeStyle: 'dashed',
         corners: 'straight',
         color,
-        fontSize: Math.min(32, Math.max(12, box.height / 4)),
+        fontSize: snapSlideFontSize(Math.min(32, Math.max(12, box.height / 4)), walk.deck.slideWidth),
         textAlign: 'center',
         verticalAlign: 'center',
     });

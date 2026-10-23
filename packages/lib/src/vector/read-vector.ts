@@ -6,9 +6,10 @@
 import type * as Y from 'yjs';
 import { parseBackgroundFill, serializeBackgroundFill } from './fill';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
-import { SLIDE_SIZE_KEYS, SLIDE_SIZES, type SlideSize, type VectorFrame } from './frames';
+import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, SLIDE_SIZE_KEYS, SLIDE_SIZES, type VectorFrame } from './frames';
 import { ELEMENT_KINDS, isBindable, isVectorElementType } from './kinds';
 import {
+    clampNum,
     color,
     coord,
     isYMapLike,
@@ -28,6 +29,7 @@ import {
     DEFAULT_SCENE_META,
     parseBinding,
     parseIdList,
+    type SlidePage,
     STROKE_STYLES,
     serializeIdList,
     type VectorElement,
@@ -42,7 +44,7 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const framesMap = doc.getMap('frames');
     const metaMap = doc.getMap('meta');
 
-    const slideSize = readSlideSize(doc);
+    const { slideSize, slideWidth } = readSlidePage(doc);
     const frames = readFrames(framesMap, SLIDE_SIZES[slideSize]);
     const elements: VectorElement[] = [];
     for (const value of elementsMap.values()) {
@@ -58,12 +60,16 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const ordered = syncInvalidIndices(orderByFractionalIndex(elements));
 
     const background = color(metaMap.get('background'), DEFAULT_SCENE_META.background);
-    return { elements: ordered, frames, meta: { background, slideSize } };
+    return { elements: ordered, frames, meta: { background, slideSize, slideWidth } };
 }
 
-// The deck's slide size alone, for a writer that fits what it adds to the deck's frames.
-export function readSlideSize(doc: Y.Doc): SlideSize {
-    return oneOf(doc.getMap('meta').get('slideSize'), SLIDE_SIZE_KEYS, DEFAULT_SCENE_META.slideSize);
+// The deck's slide size and physical width alone, for a writer that fits what it adds to the deck's frames.
+export function readSlidePage(doc: Y.Doc): SlidePage {
+    const meta = doc.getMap('meta');
+    return {
+        slideSize: oneOf(meta.get('slideSize'), SLIDE_SIZE_KEYS, DEFAULT_SCENE_META.slideSize),
+        slideWidth: clampNum(meta.get('slideWidth'), MIN_SLIDE_WIDTH, MAX_SLIDE_WIDTH, DEFAULT_SCENE_META.slideWidth),
+    };
 }
 
 // Frames are ordered by fractional index like elements, and heal the same way. Every frame takes the

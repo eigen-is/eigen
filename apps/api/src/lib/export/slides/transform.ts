@@ -2,6 +2,7 @@ import { readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import {
     type ExportMediaLoader,
+    type ExportWorkerResult,
     type SlidesExportFormat,
     type TransformWarning,
     toTransferableBuffer,
@@ -20,7 +21,7 @@ export async function renderEigenslidesExport(
     format: SlidesExportFormat,
     title: string,
     loadMedia: ExportMediaLoader,
-): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
+): Promise<ExportWorkerResult & { warnings: TransformWarning[] }> {
     if (format !== 'pptx') return renderEigenslidesHtml(doc, format, title, loadMedia);
     const { eigenslidesToPptx } = await import('./to-pptx');
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));

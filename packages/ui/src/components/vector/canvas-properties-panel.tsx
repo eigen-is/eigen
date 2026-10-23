@@ -116,6 +116,8 @@ type CanvasPropertiesPanelProps = {
     // ObjectTransform resizeMode share one ephemeral setting.
     aspectLocked: boolean;
     onAspectLockChange: (locked: boolean) => void;
+    // The deck's physical width in pt, so its text sizes read in pt; a drawing passes none and reads px.
+    slideWidth?: number;
 };
 
 export function CanvasPropertiesPanel({
@@ -129,6 +131,7 @@ export function CanvasPropertiesPanel({
     emptySection,
     aspectLocked,
     onAspectLockChange,
+    slideWidth,
 }: CanvasPropertiesPanelProps) {
     const selectedIds = selectedElements.map((el) => el.id);
     const byId = new Map(selectedElements.map((el) => [el.id, el]));
@@ -295,6 +298,7 @@ export function CanvasPropertiesPanel({
                     <KindSection
                         elements={selectedElements}
                         scene={sceneById}
+                        slideWidth={slideWidth}
                         onChange={applyToAll}
                         onChangeEach={applyToEach}
                         onReplace={applyReplace}

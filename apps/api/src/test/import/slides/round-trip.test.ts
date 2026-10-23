@@ -122,7 +122,7 @@ function roundTrip(elements = ELEMENTS) {
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
     const media = [{ name: 'pic.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG.slice()) }];
     const bytes = eigenslidesToPptx(scene, media, 'Round trip.eigenslides');
-    return { sent: scene.elements, deck: readPptx(bytes, { frame: FRAME, maxMediaBytes: 1024 * 1024 }) };
+    return { sent: scene.elements, deck: readPptx(bytes, { deck: scene.meta, maxMediaBytes: 1024 * 1024 }) };
 }
 
 function expectPx(found: number | undefined, wanted: number) {
@@ -347,7 +347,7 @@ describe("a shape's overlapping paths imported, exported and read back", () => {
             `<a:path w="10" h="10"><a:moveTo><a:pt x="${from}" y="${from}"/></a:moveTo><a:lnTo><a:pt x="${to}" y="${from}"/></a:lnTo><a:lnTo><a:pt x="${to}" y="${to}"/></a:lnTo><a:lnTo><a:pt x="${from}" y="${to}"/></a:lnTo><a:close/></a:path>`;
         const geometry = `<a:custGeom><a:avLst/><a:gdLst/><a:pathLst>${rect(0, 10)}${rect(2, 4)}</a:pathLst></a:custGeom>`;
         const shapes = sp({ xfrm: box(100, 100, 200, 200), spPr: `${geometry}${solidFill('993300')}` });
-        const imported = readPptx(buildPptx({ slides: [{ shapes }] }), { frame: FRAME, maxMediaBytes: 1024 * 1024 });
+        const imported = readPptx(buildPptx({ slides: [{ shapes }] }), { maxMediaBytes: 1024 * 1024 });
         const { deck } = roundTrip(imported.slides[0].elements);
         const back = deck.slides[0].elements;
         expect(back.map((found) => [found.type, String(found.path).split('M').length - 1])).toEqual([

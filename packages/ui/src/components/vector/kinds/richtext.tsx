@@ -10,6 +10,7 @@ import {
     AlignmentPicker,
     ColorRow,
     FontRow,
+    FontSizeRow,
     getMergedValue,
     isMixed,
     MergedNumberInput,
@@ -87,11 +88,10 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
     );
 }
 
-export function RichTextPanelSection({ elements, onChange }: KindPanelSectionProps) {
+export function RichTextPanelSection({ elements, slideWidth, onChange, onChangeEach }: KindPanelSectionProps) {
     // The panel mounts a kind's section only for a SOLE-kind selection, so this narrows rather than filters.
     const boxes = elements.filter((el): el is VectorRichTextElement => el.type === 'richtext');
     const fontFamily = getMergedValue(boxes, (el) => el.fontFamily);
-    const fontSize = getMergedValue(boxes, (el) => el.fontSize);
     const fontWeight = getMergedValue(boxes, (el) => el.fontWeight);
     const fontStyle = getMergedValue(boxes, (el) => el.fontStyle);
     const textDecoration = getMergedValue(boxes, (el) => el.textDecoration);
@@ -106,15 +106,13 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
         <>
             <PropertySection title="Text">
                 <FontRow value={fontFamily} onChange={(f) => onChange({ fontFamily: f })} />
-                <PropertyRow label="Size">
-                    <MergedNumberInput
-                        value={fontSize}
-                        onChange={(v) => onChange({ fontSize: v })}
-                        min={8}
-                        max={200}
-                        step={1}
-                    />
-                </PropertyRow>
+                <FontSizeRow
+                    sizes={boxes.map((el) => el.fontSize)}
+                    slideWidth={slideWidth}
+                    onChange={(size) =>
+                        onChangeEach((el) => (el.type === 'richtext' ? { fontSize: size(el.fontSize) } : {}))
+                    }
+                />
                 <ColorRow label="Color" value={color} onChange={(c) => onChange({ color: c })} />
                 <PropertyRow label="Style">
                     <div className="flex items-center gap-1">

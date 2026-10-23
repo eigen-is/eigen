@@ -67,14 +67,18 @@ async function deckExportHtml(
     html: string,
     slideSize: SlideSize = '16:9',
 ): Promise<string> {
+    return new TextDecoder().decode((await deckExport(format, html, slideSize)).data);
+}
+
+function deckExport(format: DocumentExportFormat, html: string, slideSize: SlideSize, slideWidth = 720) {
     const scene = buildGoldenDeckScene();
     const doc = new Y.Doc();
     seedDeckDoc(doc, {
         ...scene,
         elements: scene.elements.map((el) => ('html' in el ? { ...el, html } : el)),
-        meta: { ...scene.meta, slideSize },
+        meta: { ...scene.meta, slideSize, slideWidth },
     });
-    return new TextDecoder().decode((await renderEigenslidesHtml(doc, format, 'Deck', async () => [])).data);
+    return renderEigenslidesHtml(doc, format, 'Deck', async () => []);
 }
 
 describe('renderEigenslidesHtml', () => {
@@ -103,6 +107,16 @@ describe('renderEigenslidesHtml', () => {
         const pages = screen.match(/<div class="page-fit" style="[^"]*">/g) ?? [];
         expect(pages.length).toBe(buildGoldenDeckScene().frames.length);
         for (const page of pages) expect(page).toContain(`--page-ar:960/${height}`);
+    });
+
+    // A PowerPoint widescreen deck is 960 pt, 1280 px at 96 dpi, wide: the PDF's zoom and the download's pages follow it.
+    test.each([
+        [720, 0.5, 960],
+        [960, 2 / 3, 1280],
+    ])('a %s pt wide deck prints and shows at its own width', async (slideWidth, zoom, width) => {
+        expect((await deckExport('pdf-html', '<p>hi</p>', '16:9', slideWidth)).zoom).toBe(zoom);
+        const screen = new TextDecoder().decode((await deckExport('html', '<p>hi</p>', '16:9', slideWidth)).data);
+        expect(screen).toContain(`--page-w:${width}px`);
     });
 
     test('keeps the embedded font faces the document needs', async () => {

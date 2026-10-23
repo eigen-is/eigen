@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, styling, fill, stroke, colors, text]
 related: [vector/draw-shapes-and-text, vector/connect-with-arrows, vector/arrange-and-align]
 order: 50
-updated: 2026-09-11
+updated: 2026-10-23
 ---
 
 Select an object in a drawing and the panel on the right fills with its style controls. The sections change to match what you picked: a shape has a fill, an arrow does not, text has its own typography rows. This page lists every section, in the order it appears, and what each control does.
@@ -31,7 +31,7 @@ Shown only for text objects. It styles the text itself. The box behind the text 
 | Control | What it does |
 |---|---|
 | **Font** | The typeface |
-| **Size** | Text size, from 8 to 200 |
+| **Size** | Text size in whole pixels, from 8 to 200 |
 | **Color** | Text color |
 | **Style** | **Bold**, **Italic**, **Underline**, and **Strikethrough** toggles |
 | **Align** | Horizontal alignment: left, center, right, or justify |

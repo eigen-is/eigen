@@ -3,7 +3,14 @@ import { Window } from 'happy-dom';
 import * as Y from 'yjs';
 import { escapeHtml } from '../../core/html';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
-import { SLIDE_SIZES } from '../../vector/frames';
+import {
+    MAX_FONT_SIZE_PX,
+    MAX_SLIDE_WIDTH,
+    MIN_FONT_SIZE_PX,
+    MIN_SLIDE_WIDTH,
+    SLIDE_SIZES,
+    slideFontSize,
+} from '../../vector/frames';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
 import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES, MAX_HTML_DEPTH } from '../../vector/kinds/read-fields';
 import { readVectorFromDoc } from '../../vector/read-vector';
@@ -46,7 +53,7 @@ describe('readVectorFromDoc', () => {
         });
         const scene = readVectorFromDoc(doc);
         expect(scene.elements.map((e) => e.id)).toEqual(['first', 'second']);
-        expect(scene.meta).toEqual({ background: '#ffffff', slideSize: '16:9' });
+        expect(scene.meta).toEqual({ background: '#ffffff', slideSize: '16:9', slideWidth: 720 });
     });
 
     test('applies defaults for missing fields and ignores foreign keys', () => {
@@ -492,8 +499,21 @@ describe('readVectorFromDoc', () => {
             writeElement(elements, 'txt', { type: 'richtext', index: 'a1', html: 'x', fontSize: 0.001 });
         });
         const [ar, txt] = readVectorFromDoc(doc).elements;
-        expect(ar).toMatchObject({ fontSize: 400 });
-        expect(txt).toMatchObject({ fontSize: 4 });
+        expect(ar).toMatchObject({ fontSize: MAX_FONT_SIZE_PX });
+        expect(txt).toMatchObject({ fontSize: MIN_FONT_SIZE_PX });
+    });
+
+    // The range is fonts.ts' 1 to 400 pt on every deck: 400 pt on the narrowest, 1 pt on the widest.
+    test("the fontSize range reaches every deck's whole pt range", () => {
+        expect(slideFontSize(MAX_FONT_SIZE_PX, MIN_SLIDE_WIDTH)).toBe(400);
+        expect(slideFontSize(MIN_FONT_SIZE_PX, MAX_SLIDE_WIDTH)).toBe(1);
+    });
+
+    test('a fontSize in range reads to the bit, however many decimals it has', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'txt', { type: 'richtext', index: 'a0', html: 'x', fontSize: 117.33333333333334 });
+        });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ fontSize: 117.33333333333334 });
     });
 
     test('clamps richtext padding to the box range', () => {
@@ -1095,6 +1115,19 @@ describe('readVectorFromDoc — the slide size', () => {
             expect(readVectorFromDoc(doc).meta.slideSize).toBe('16:9');
             expect(sizes(doc)).toEqual([SLIDE_SIZES['16:9'], SLIDE_SIZES['16:9']]);
         }
+    });
+
+    test("a deck without a width is Google's 10 in; a stored one reads as it is, held to PowerPoint's range", () => {
+        const widthOf = (width?: unknown) => {
+            const doc = deckSized();
+            if (width !== undefined) doc.getMap('meta').set('slideWidth', width);
+            return readVectorFromDoc(doc).meta.slideWidth;
+        };
+        expect(widthOf()).toBe(720);
+        expect(widthOf(960)).toBe(960);
+        expect(widthOf(1e9)).toBe(MAX_SLIDE_WIDTH);
+        expect(widthOf(-5)).toBe(MIN_SLIDE_WIDTH);
+        for (const forged of ['960', Number.NaN, null, {}]) expect(widthOf(forged)).toBe(720);
     });
 
     test("a peer's size change reaches every frame on the next read", () => {

@@ -8,6 +8,7 @@ import { toDataUriMap } from '../../document/media';
 import {
     type DocumentExportFormat,
     type ExportMediaLoader,
+    type ExportWorkerResult,
     htmlExportMode,
     type TransformWarning,
     toTransferableText,
@@ -15,7 +16,7 @@ import {
 import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { type CanvasPage, DECK_SCALE, framePages, renderFittedPage, renderPrintPage, sceneMediaNames } from './render';
+import { type CanvasPage, deckScale, framePages, renderFittedPage, renderPrintPage, sceneMediaNames } from './render';
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
 // PDF all leave through here, so there is one @page rule, one font block and one reset instead of a
@@ -23,7 +24,7 @@ import { type CanvasPage, DECK_SCALE, framePages, renderFittedPage, renderPrintP
 // orchestration lives in export-document.ts): no Mount, no preview cache.
 
 // A screen document scales its pages; a PDF document has no scale to take, because it lays each page out
-// at 1:1 and htmlToPdf's zoom scales it onto the sheet (DECK_SCALE says why).
+// at 1:1 and htmlToPdf's zoom scales it onto the sheet (deckScale says why).
 type CanvasDocumentOptions = { title: string; pages: CanvasPage[]; resolveMedia?: MediaResolver } & (
     | { mode: 'screen'; scale: number }
     | { mode: 'pdf' }
@@ -62,7 +63,7 @@ export async function renderEigenslidesHtml(
     format: DocumentExportFormat,
     title: string,
     loadMedia: ExportMediaLoader,
-): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
+): Promise<ExportWorkerResult & { warnings: TransformWarning[] }> {
     // Rich text is filtered per element before the compositor lays it out, so a <style> block in a
     // text box cannot reach the document — which carries the generated @font-face rules of its own.
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
@@ -71,11 +72,12 @@ export async function renderEigenslidesHtml(
     const pages = framePages(scene, resolveMedia);
     // Nothing to print, and nothing to size a page from.
     if (pages.length === 0) throw new ApiError(400, 'The deck is empty');
-    const html = canvasHtmlDocument(
-        htmlExportMode(format) === 'pdf'
-            ? { title, pages, mode: 'pdf', resolveMedia }
-            : { title, pages, mode: 'screen', scale: DECK_SCALE, resolveMedia },
-    );
+    const scale = deckScale(scene.meta.slideWidth);
+    if (htmlExportMode(format) === 'pdf') {
+        const html = canvasHtmlDocument({ title, pages, mode: 'pdf', resolveMedia });
+        return { data: toTransferableText(html), zoom: scale, warnings: [] };
+    }
+    const html = canvasHtmlDocument({ title, pages, mode: 'screen', scale, resolveMedia });
     return { data: toTransferableText(html), warnings: [] };
 }
 

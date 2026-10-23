@@ -3,6 +3,7 @@ export { AlignmentPicker } from './alignment-picker';
 export { BackgroundFillBlock } from './background-fill-block';
 export { ColorRow } from './color-row';
 export { FontRow } from './font-row';
+export { FontSizeRow } from './font-size-row';
 export { MergedNumberInput } from './merged-number-input';
 export { MergedSelect, numToStr } from './merged-select';
 export { MergedSlider } from './merged-slider';

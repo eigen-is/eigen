@@ -157,9 +157,9 @@ export async function runTransformToBytes(
     drivePath: DrivePath,
     job: ExportTransformJob,
     opts: TransformOptions,
-): Promise<Buffer> {
-    const { data } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
-    return Buffer.from(data);
+): Promise<{ data: Buffer; zoom?: number }> {
+    const { data, zoom } = await runDocumentTransform(mount, drivePath, opts, (source) => ({ ...job, source }));
+    return { data: Buffer.from(data), zoom };
 }
 
 // The bytes-sourced counterpart of runDocumentTransform: the input is the file itself, read from

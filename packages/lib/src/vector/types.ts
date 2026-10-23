@@ -271,7 +271,10 @@ export type FixedSegment = { index: number; start: [number, number]; end: [numbe
 // arrow's whole pin state, decoded from the one JSON scalar.
 type ParsedFixedSegments = { segments: FixedSegment[]; startIsSpecial: boolean; endIsSpecial: boolean };
 
-export type VectorMeta = { background: string; slideSize: SlideSize };
+// `slideWidth` is the deck's physical width in pt (frames.ts).
+export type VectorMeta = { background: string; slideSize: SlideSize; slideWidth: number };
+// A deck's page: its shape and its physical width.
+export type SlidePage = Pick<VectorMeta, 'slideSize' | 'slideWidth'>;
 
 export type VectorScene = { elements: VectorElement[]; frames: VectorFrame[]; meta: VectorMeta };
 
@@ -311,8 +314,8 @@ export const DEFAULT_LINE_ROUNDNESS: Roundness = 'round';
 // arrows keep their meaning.
 const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
 
-// Canvas-level defaults (the `meta` root).
-export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', slideSize: '16:9' };
+// Canvas-level defaults (the `meta` root). A new deck is Google's: 16:9 and 10 in wide.
+export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', slideSize: '16:9', slideWidth: 720 };
 
 // Shared element defaults, adopted from Excalidraw's DEFAULT_ELEMENT_PROPS.
 export const DEFAULT_ELEMENT_PROPS = {

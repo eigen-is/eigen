@@ -197,16 +197,18 @@ suite('canvas PDF — text, opaque and translucent elements print wherever they 
         expectHalfRed(at(placed.red));
     }
 
-    // A deck page is 960 px, 720 pt, wide whatever the slide size: a scene pixel is 0.375 pt.
+    // A deck page is the deck's width whatever the slide size: a new deck's 720 pt, where a scene pixel is 0.375 pt, and
+    // a PowerPoint widescreen deck's 960 pt, where it is 0.5.
     test.each([
-        ['16:9', 405],
-        ['4:3', 540],
+        ['16:9', 720, 405],
+        ['4:3', 720, 540],
+        ['16:9', 960, 540],
     ] as const)(
-        'a %s slide prints all of its lower half',
-        async (slideSize: SlideSize, pageHeight) => {
+        'a %s slide %s pt wide prints all of its lower half',
+        async (slideSize: SlideSize, slideWidth, pageHeight) => {
             const { width, height } = SLIDE_SIZES[slideSize];
             const placed = area('f', 0, 0, height);
-            const page = await exportPdf('slides', `lower-half-${slideSize.replace(':', 'x')}`, {
+            const page = await exportPdf('slides', `lower-half-${slideSize.replace(':', 'x')}-${slideWidth}`, {
                 elements: placed.elements,
                 frames: [
                     {
@@ -218,10 +220,10 @@ suite('canvas PDF — text, opaque and translucent elements print wherever they 
                         background: serializeBackgroundFill({ type: 'solid', color: '#ffffff' }),
                     },
                 ],
-                meta: { ...DEFAULT_SCENE_META, slideSize },
+                meta: { ...DEFAULT_SCENE_META, slideSize, slideWidth },
             });
-            expect([page.width, page.height]).toEqual([720, pageHeight]);
-            expectPrinted(page, placed, height, 0, 720 / width);
+            expect([page.width, page.height]).toEqual([slideWidth, pageHeight]);
+            expectPrinted(page, placed, height, 0, slideWidth / width);
         },
         120_000,
     );

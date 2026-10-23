@@ -20,15 +20,17 @@ import { PPTX_STYLE } from './shapes';
 // appends the update through document/slides.ts, which reads it back through the canvas reader, and writes the media.
 export function importPptxToSlidesUpdate(
     data: ArrayBuffer,
-    job: Pick<SlidesImportJob, 'frame' | 'maxMediaBytes'>,
+    job: Pick<SlidesImportJob, 'deck' | 'maxMediaBytes'>,
 ): SlidesImportWorkerResult & { warnings: TransformWarning[] } {
-    const { slides, media, warnings, slideSize } = readPptx(Buffer.from(data), job);
+    const { slides, media, warnings, page } = readPptx(Buffer.from(data), job);
     let update: Uint8Array;
     try {
         const doc = new Y.Doc();
         doc.transact(() => {
             // A Convert's deck takes it; Import slides… leaves the open deck's meta alone.
-            doc.getMap('meta').set('slideSize', slideSize);
+            const meta = doc.getMap('meta');
+            meta.set('slideSize', page.slideSize);
+            meta.set('slideWidth', page.slideWidth);
             const frameKeys = generateNKeysBetween(null, null, slides.length);
             const elementKeys = generateNKeysBetween(
                 null,
