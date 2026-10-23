@@ -96,39 +96,38 @@ export async function getTrashedFrom(mount: Mount, pathId: string): Promise<stri
 }
 
 export async function restorePath(mount: Mount, pathId: string): Promise<DrivePath> {
-    const row = await mount.db.select().from(paths).where(eq(paths.id, pathId)).get();
-    if (!row) throw new ApiError(404, 'Path not found');
-    if (!row.trashedFrom) throw new ApiError(400, 'Item is not in trash');
-
     const root = await mount.getRootFolder();
     if (!root) throw new ApiError(500, 'Root folder not found');
 
-    let targetParentId = root.id;
-    const originalParent = await mount.getPath(row.trashedFrom);
-    if (originalParent && !originalParent.trashedAt) {
-        targetParentId = originalParent.id;
-    }
-
-    // A legacy row named `.trash` (pre-guard) counts as a conflict too — restoring it verbatim
-    // would alias the real trash dir. The row is still trashed, so it never matches itself.
-    let restoreName = row.name;
-    const conflict = isReservedName(restoreName) || (await mount.getChildByName(targetParentId, restoreName)) !== null;
-    if (conflict) {
-        const siblings = await mount.db
-            .select({ name: paths.name })
-            .from(paths)
-            .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
-            .all();
-        const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
-        restoreName = getUniqueFileName(row.name, usedNames);
-    }
-
     return mount.withPathLock(pathId, () =>
         mount.withTreeExclusive(async () => {
-            // A create raced past the pre-lock check may own this key on `local`, and a storage rename replaces.
-            await mount.assertUniqueName(targetParentId, restoreName);
+            // Read under the lock: a trash of the original folder while this waited would restore into it, and on
+            // `local` a create since a pre-lock name check owns the key a storage rename replaces.
+            const row = await mount.db.select().from(paths).where(eq(paths.id, pathId)).get();
+            if (!row) throw new ApiError(404, 'Path not found');
+            if (!row.trashedFrom) throw new ApiError(400, 'Item is not in trash');
 
-            // On `local` the re-check above 409'd a raced create before any bytes moved; elsewhere the index does.
+            let targetParentId = root.id;
+            const originalParent = await mount.getPath(row.trashedFrom);
+            if (originalParent && !originalParent.trashedAt) {
+                targetParentId = originalParent.id;
+            }
+
+            // A legacy row named `.trash` (pre-guard) counts as a conflict too — restoring it verbatim
+            // would alias the real trash dir. The row is still trashed, so it never matches itself.
+            let restoreName = row.name;
+            const conflict =
+                isReservedName(restoreName) || (await mount.getChildByName(targetParentId, restoreName)) !== null;
+            if (conflict) {
+                const siblings = await mount.db
+                    .select({ name: paths.name })
+                    .from(paths)
+                    .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
+                    .all();
+                const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
+                restoreName = getUniqueFileName(row.name, usedNames);
+            }
+
             const now = new Date();
             const writeRow = async (): Promise<void> => {
                 try {

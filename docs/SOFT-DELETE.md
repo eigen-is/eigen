@@ -26,7 +26,7 @@ Listings, name lookups, shared views and mime queries add `trashedAt IS NULL`, a
 - A folder is renamed to `.trash/{pathId}`. Its descendants keep their `file` values and resolve through the renamed folder.
 - Restore renames it back and sets `file` to the restored name.
 
-Any case or compatibility variant of `.trash` is a reserved name on every mount, so no user item can alias the directory. Both renames take the tree lock exclusively ([STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree)). Trash reads the row again under its locks, so a move while it waited cannot leave a stale `trashedFrom`, and a second trash of a trashed item is a 404.
+Any case or compatibility variant of `.trash` is a reserved name on every mount, so no user item can alias the directory. Both renames take the tree lock exclusively ([STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree)). Trash and restore read the row under their locks, so a move while trash waited cannot leave a stale `trashedFrom`, a second trash of a trashed item is a 404, and a restore whose folder was trashed while it waited goes to the root. A move or rename checks the row is live in the transaction that writes it, so one that waited while a trash committed is a 404 and leaves the bytes in `.trash/`.
 
 ## On `local` the bytes move first, and a failed row write moves them back
 

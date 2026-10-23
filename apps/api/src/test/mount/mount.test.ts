@@ -1184,6 +1184,46 @@ describe('trashPath (local path-based storage)', () => {
         expect(restored.parentId).toBe(folderId);
         expect(await (await mount.readFile(fileId))!.text()).toBe('twice');
     });
+
+    test('a move that lands while a trash waits for the lock is the folder the trash records', async () => {
+        const fromId = await mount.createFolder(rootId, 'MoveFrom');
+        const toId = await mount.createFolder(rootId, 'MoveTo');
+        const fileId = await mount.createFile(fromId, 'moving.txt', 'text/plain', 6, Buffer.from('moving'));
+
+        let release!: () => void;
+        const held = mount.withPathLock(fileId, () => new Promise<void>((resolve) => (release = resolve)));
+        const move = mount.updatePath(fileId, { parentId: toId });
+        await Bun.sleep(20);
+        const trash = mount.trashPath(fileId);
+        await Bun.sleep(20);
+        release();
+        await Promise.all([held, move, trash]);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(toId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('moving');
+    });
+
+    test('a move that waited while a trash committed is refused and leaves the bytes in trash', async () => {
+        const fromId = await mount.createFolder(rootId, 'TrashFirstFrom');
+        const toId = await mount.createFolder(rootId, 'TrashFirstTo');
+        const fileId = await mount.createFile(fromId, 'first.txt', 'text/plain', 5, Buffer.from('first'));
+
+        let release!: () => void;
+        const held = mount.withPathLock(fileId, () => new Promise<void>((resolve) => (release = resolve)));
+        const trash = mount.trashPath(fileId);
+        await Bun.sleep(20);
+        const move = mount.updatePath(fileId, { parentId: toId });
+        await Bun.sleep(20);
+        release();
+        await Promise.all([held, trash]);
+        await expect(move).rejects.toMatchObject({ status: 404 });
+
+        expect((await mount.getPath(fileId))!.parentId).toBe(rootId);
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(fromId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('first');
+    });
 });
 
 // A trigger stands in for a metadata.db that fails mid-write (corruption, a full disk): any write to trashedAt aborts.
@@ -1433,6 +1473,23 @@ describe('restorePath (local path-based storage)', () => {
         const restored = await mount.restorePath(fileId);
         expect(restored.parentId).toBe(folderId);
         expect(await (await mount.readFile(fileId))!.text()).toBe('back');
+    });
+
+    test('a restore that waited while its original folder was trashed goes to the root', async () => {
+        const parentId = await mount.createFolder(rootId, 'TrashedWhileWaiting');
+        const fileId = await mount.createFile(parentId, 'waiting.txt', 'text/plain', 7, Buffer.from('waiting'));
+        await mount.trashPath(fileId);
+
+        let release!: () => void;
+        const held = mount.withPathLock(fileId, () => new Promise<void>((resolve) => (release = resolve)));
+        const restore = mount.restorePath(fileId);
+        await Bun.sleep(20);
+        await mount.trashPath(parentId);
+        release();
+        await held;
+
+        expect((await restore).parentId).toBe(rootId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('waiting');
     });
 });
 
