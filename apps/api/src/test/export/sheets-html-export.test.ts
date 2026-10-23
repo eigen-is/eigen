@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { Cell, ConditionalFormatRule, Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
-import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_FONT_SIZE, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
@@ -168,6 +168,13 @@ describe('Sheets HTML export — class-based styles', () => {
     test('the inline table style carries the body font stack with entity quotes', () => {
         const { html } = renderSheetsPreviewHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
         expect(html).toContain(`font-family:${FONT_STACK_SANS.replaceAll('"', '&quot;')};`);
+    });
+
+    // An unsized cell draws at the grid's default, in pt as the grid draws it.
+    test('the table sets the grid default font size', () => {
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
+        const table = classesFor(out, 'border-collapse:collapse');
+        expect(classesFor(out, `font-size:${SHEET_DEFAULT_FONT_SIZE}pt;`)).toEqual(table);
     });
 
     test('non-last sheets carry the page-break class next to .sheet', () => {

@@ -155,7 +155,7 @@ A typed number is stored as a number in `v`, unless the cell is text-formatted. 
 
 ## A copy puts the cells on text/plain as TSV
 
-A range copy writes three flavors: the HTML table with the cells' styles, the Eigen clipboard payload, and TSV on `text/plain` with tabs between cells and newlines between rows. `rangeValueToClipboard` (`state/modules/selection.ts`) builds the table and the TSV in one pass over the same cells, each cell's display text with General numbers at 15 digits. A cell holding a tab, a line break or a leading quote is quoted and its quotes doubled, as Google writes it, through `cellsToTsv` in `@workspace/lib/clipboard`; a quote inside text stays as it is, so `12" pizza` pastes as typed. The Eigen text item carries the same cells unquoted, tabs and newlines between them, because Docs reads it as text rather than as TSV. The plain text is what a paste into a text field, a chart's Edit data grid or another app without an HTML reader gets, so it has to keep the grid's shape. The plain-text paste in Sheets itself splits on tabs and newlines and doesn't unquote, so a quoted multi-line cell pasted as plain text lands split ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
+A range copy writes three flavors: the HTML table with the cells' styles, the Eigen clipboard payload, and TSV on `text/plain` with tabs between cells and newlines between rows. `rangeValueToClipboard` (`state/modules/selection.ts`) builds the table and the TSV in one pass over the same cells, each cell's display text with General numbers at 15 digits. A cell holding a tab, a line break or a leading quote is quoted and its quotes doubled, as Google writes it, through `cellsToTsv` in `@workspace/lib/clipboard`; a quote inside text stays as it is, so `12" pizza` pastes as typed. The Eigen text item carries the same cells unquoted, tabs and newlines between them, because Docs reads it as text rather than as TSV. The HTML table writes a cell's font size in pt, the unit every font size on the clipboard is in ([CLIPBOARD.md](CLIPBOARD.md#a-font-size-crosses-in-pt)), and the table paste reads a size in pt as pt and in px at 96 dpi. The plain text is what a paste into a text field, a chart's Edit data grid or another app without an HTML reader gets, so it has to keep the grid's shape. The plain-text paste in Sheets itself splits on tabs and newlines and doesn't unquote, so a quoted multi-line cell pasted as plain text lands split ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
 
 ## Enter and Tab commit an edit and move on
 
@@ -288,6 +288,8 @@ The server renders a workbook to HTML, PDF and xlsx in `apps/api/src/lib/export/
 A real workbook repeats a few hundred styles across hundreds of thousands of cells. DOMPurify on jsdom CSS-parses every inline `style` attribute it sanitizes, but passes class attributes and style-element text through as strings. With inline styles a real workbook's export was 82 MB and took 104 s, mostly CSS parsing.
 
 The preview (`renderSheetsPreviewHtml`) keeps inline styles, because its body fragment embeds without a `<head>` ([PREVIEWS.md](PREVIEWS.md)). Its bytes are golden-pinned in `apps/api/src/test/preview/sheets-preview.test.ts`.
+
+The table sets an unsized cell's font size to `SHEET_DEFAULT_FONT_SIZE` pt, the grid's own default, so a cell without a size prints at the size the grid draws it.
 
 ## The stylesheet is guarded in two places
 

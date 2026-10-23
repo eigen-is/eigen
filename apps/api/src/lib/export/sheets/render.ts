@@ -9,6 +9,7 @@ import {
     cellFontName,
     type MergeCell,
     mergedBorderSides,
+    SHEET_DEFAULT_FONT_SIZE,
     type Sheet,
     type SheetConfig,
     sheetColumnsWidth,
@@ -421,7 +422,7 @@ function renderSheet(
     const divClass = isLast || !forStylesheet ? 'sheet' : `sheet ${internStyle(styles, 'page-break-after:always')}`;
     const pageBreak = isLast || forStylesheet ? '' : ' style="page-break-after:always"';
     const q = fontQuote(forStylesheet);
-    const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
+    const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>`;
     const html = `<div class="${divClass}"${pageBreak}>
 ${withOverlay(table, tableWidth, minRow, minCol)}

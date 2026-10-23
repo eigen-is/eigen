@@ -1,9 +1,10 @@
-import { bundledFontOfStack } from '@workspace/lib/constants/fonts';
+import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import {
     BORDER_SIDE_CSS,
     type CellBorderSides,
     type ConditionalFormatRule,
     type DataVerificationRule,
+    SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
 import {
     cloneDeep,
@@ -1211,12 +1212,10 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                             const ff = bundledFontOfStack(td.style.fontFamily || styles['font-family'] || '');
                             if (ff) cell.ff = ff;
-                            const fs = Math.round(
-                                styles['font-size']
-                                    ? parseInt(styles['font-size'].replace('pt', ''), 10)
-                                    : (parseInt(td.style.fontSize || '13', 10) * 72) / 96,
-                            );
-                            cell.fs = fs;
+                            cell.fs =
+                                readCssFontSize(td.style.fontSize) ??
+                                readCssFontSize(styles['font-size'] ?? '') ??
+                                SHEET_DEFAULT_FONT_SIZE;
 
                             cell.fc = td.style.color || styles.color;
 
