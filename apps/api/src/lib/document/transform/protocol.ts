@@ -148,7 +148,10 @@ export type CountedWarningCode =
     | 'even-bands-dropped'
     | 'band-images-unanchored'
     | 'band-content-dropped'
-    | 'band-blocks-cut';
+    | 'band-blocks-cut'
+    | 'conditional-formats-dropped'
+    | 'validations-dropped'
+    | 'validation-prompts-cut';
 
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }
