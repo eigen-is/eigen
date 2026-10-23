@@ -1,4 +1,4 @@
-import { COMMENT_STATUS_LABELS, type useCommentFilter } from '@workspace/lib/comments';
+import { COMMENT_STATUS_FILTERS, COMMENT_STATUS_LABELS, type useCommentFilter } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { CircleDot, FilterX, Palette, Users } from 'lucide-react';
@@ -85,7 +85,7 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
                     </>
                 }
                 value={status}
-                options={(['open', 'resolved', 'all'] as const).map((s) => ({
+                options={COMMENT_STATUS_FILTERS.map((s) => ({
                     value: s,
                     label: COMMENT_STATUS_LABELS[s],
                 }))}
