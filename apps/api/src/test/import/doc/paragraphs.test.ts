@@ -102,6 +102,9 @@ describe('the page', () => {
             width: 279.4,
             height: 215.9,
             margin: { top: mm(567), right: mm(567), bottom: mm(567), left: mm(567) },
+            // Word's 709 twips, within the 567 twip margins.
+            headerDistance: mm(567),
+            footerDistance: mm(567),
             differentFirstPage: false,
         });
         expect(warnings).toEqual([]);

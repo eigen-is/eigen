@@ -2,7 +2,14 @@ import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import { type NormalStyle, PAGE_NUMBER_TEXT, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
+import {
+    DEFAULT_PAGE_SETUP,
+    type NormalStyle,
+    PAGE_NUMBER_TEXT,
+    PAGE_ROOT,
+    pageRecord,
+    STYLE_ROOT,
+} from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { MATHML_NAMESPACE, type MathNode, type MathRow, writeMathml, writeText } from '@workspace/math';
 import { JSDOM } from 'jsdom';
@@ -89,8 +96,7 @@ describe('doc export — the page', () => {
         const doc = seededDoc();
         const page = { width: 279.4, height: 215.9, margin: { top: 10, right: 10, bottom: 10, left: 10 } };
         const map = doc.getMap(PAGE_ROOT);
-        for (const [key, value] of Object.entries(pageRecord({ ...page, differentFirstPage: false })))
-            map.set(key, value);
+        for (const [key, value] of Object.entries(pageRecord({ ...DEFAULT_PAGE_SETUP, ...page }))) map.set(key, value);
         return doc;
     }
 
@@ -110,6 +116,15 @@ describe('doc export — the page', () => {
         expect(xml.match(/<w:pgMar\b[^>]*>/)?.[0]).toBe(
             '<w:pgMar w:top="567" w:right="567" w:bottom="567" w:left="567" w:header="567" w:footer="567" w:gutter="0"/>',
         );
+    });
+
+    test("docx writes the bands' distances from the edge the doc stores", async () => {
+        const doc = seededDoc();
+        doc.getMap(PAGE_ROOT).set('headerDistance', 8);
+        doc.getMap(PAGE_ROOT).set('footerDistance', 15);
+        const pgMar = (await docxDocumentXml(doc)).match(/<w:pgMar\b[^>]*>/)?.[0];
+        expect(pgMar).toContain('w:header="454"');
+        expect(pgMar).toContain('w:footer="850"');
     });
 
     test('docx opens on the first paragraph, not an empty one', async () => {
@@ -1538,6 +1553,15 @@ describe('doc export — headers and footers', () => {
         expect(css).toContain(
             '@page :first { @top-center { content: element(headerFirst); } @bottom-center { content: element(footerFirst); } }',
         );
+    });
+
+    test('a band sits the distance from the edge the doc stores', async () => {
+        const doc = bandedDoc(1, false);
+        doc.getMap(PAGE_ROOT).set('headerDistance', 8);
+        doc.getMap(PAGE_ROOT).set('footerDistance', 15);
+        const css = await exportStyle('pdf-html', doc);
+        expect(css).toMatch(/@top-center \{[^}]*padding-top: 8mm;/);
+        expect(css).toMatch(/@bottom-center \{[^}]*padding-bottom: 15mm;/);
     });
 
     // A margin narrower than 1.27 cm holds the band at its edge.

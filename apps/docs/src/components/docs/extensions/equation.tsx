@@ -69,7 +69,7 @@ export function MathMount({ math, className }: { math: Element; className?: stri
 
 export type EquationOptions = {
     onOpenComment: (cardId: string) => void;
-    // None in a band or on a phone, which have no Equation panel: Enter there splits the paragraph, as on a figure.
+    // None on a phone, which has no Equation panel: Enter there splits the paragraph, as on a figure.
     onEdit: (() => void) | undefined;
 };
 

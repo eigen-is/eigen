@@ -1,5 +1,6 @@
 // Page setup is Google Docs' Pages tab: orientation, paper size and margins in centimetres. A writer changes the
-// doc's page with OK; a viewer reads it.
+// doc's page with OK; a viewer reads it. A band's Header format… and Footer format… open Google's Headers & footers
+// dialog: the bands' distances from the paper's edge, in centimetres, and Different first page, applied with Apply.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -12,7 +13,7 @@ const Y = await import('yjs');
 const { DEFAULT_PAGE_SETUP, PAGE_ROOT, PAPER_SIZES, pageRecord, readPageSetup } = await import(
     '@workspace/lib/docs/eigendoc'
 );
-const { PageSetupDialog } = await import('../../../components/docs/page-setup-dialog');
+const { HeadersAndFootersDialog, PageSetupDialog } = await import('../../../components/docs/page-setup-dialog');
 const { createDocUndoManager, writePageSetup } = await import('../../../components/docs/page-setup');
 
 function control(label: string): HTMLElement | null {
@@ -125,6 +126,8 @@ test('Landscape turns the paper, and a size picked then keeps the orientation', 
                 width: 279.4,
                 height: 215.9,
                 margin: { top: 25.4, right: 20, bottom: 20, left: 20 },
+                headerDistance: 12.7,
+                footerDistance: 12.7,
                 differentFirstPage: false,
             },
         ],
@@ -168,10 +171,10 @@ test('any page the doc reads opens with OK enabled, its margins shrunk or not', 
 
 test("OK leaves a collaborator's change to a field the user didn't touch", async () => {
     const opened: PageSetup = {
+        ...DEFAULT_PAGE_SETUP,
         width: 215.9,
         height: 279.4,
         margin: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
-        differentFirstPage: false,
     };
     const doc = new Y.Doc();
     for (const [key, value] of Object.entries(pageRecord(opened))) doc.getMap(PAGE_ROOT).set(key, value);
@@ -188,10 +191,10 @@ test("OK leaves a collaborator's change to a field the user didn't touch", async
     writePageSetup(doc, createDocUndoManager(doc), from, to);
 
     expect(readPageSetup(doc.getMap(PAGE_ROOT).toJSON())).toEqual({
+        ...opened,
         width: 279.4,
         height: 215.9,
         margin: { ...opened.margin, top: 30 },
-        differentFirstPage: false,
     });
 });
 
@@ -251,4 +254,66 @@ test('a viewer sees the page read-only, with one Close button', async () => {
     expect(button('Cancel')).toBeUndefined();
     await click(button('Close'));
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+async function renderBandFormat(setup: PageSetup = DEFAULT_PAGE_SETUP) {
+    onOpenChange.mockClear();
+    onSetupChange.mockClear();
+    ({ unmount } = await renderInDocument(
+        createElement(HeadersAndFootersDialog, { open: true, onOpenChange, setup, onSetupChange }),
+    ));
+}
+
+const distances = () =>
+    ['Header (centimetres from top)', 'Footer (centimetres from bottom)'].map((label) => {
+        const input = control(label);
+        return input instanceof HTMLInputElement ? input.value : null;
+    });
+
+test('Headers and footers shows the distances from the edge in centimetres, and Different first page', async () => {
+    await renderBandFormat({ ...DEFAULT_PAGE_SETUP, headerDistance: 9.5, differentFirstPage: true });
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('Headers and footers');
+    expect(dialog()?.querySelector('legend')?.textContent).toBe('Margins');
+    expect(distances()).toEqual(['0.95', '1.27']);
+    expect(control('Different first page')?.getAttribute('aria-checked')).toBe('true');
+});
+
+test('Apply writes the distances and Different first page; an untouched distance keeps its exact size', async () => {
+    const setup = { ...DEFAULT_PAGE_SETUP, footerDistance: 12.345 };
+    await renderBandFormat(setup);
+    await type('Header (centimetres from top)', '1');
+    await click(control('Different first page'));
+    await click(button('Apply'));
+    expect(onSetupChange.mock.calls).toEqual([[setup, { ...setup, headerDistance: 10, differentFirstPage: true }]]);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test.each([
+    ['a header past its 2 cm margin', 'Header (centimetres from top)', '2.5'],
+    ['a negative footer distance', 'Footer (centimetres from bottom)', '-1'],
+    ['an empty distance', 'Header (centimetres from top)', ''],
+])('%s shows an error and Apply does nothing', async (_, label, value) => {
+    await renderBandFormat();
+    await type(label, value);
+    expect(dialog()?.querySelector('[role="alert"]')?.textContent).toBe(
+        'The header must be 0 to 2 cm from the top and the footer 0 to 2 cm from the bottom, within their margins.',
+    );
+    expect(button('Apply')?.disabled).toBe(true);
+    await click(button('Apply'));
+    expect(onSetupChange).not.toHaveBeenCalled();
+});
+
+test('Headers and footers writes through the page map, as one undo step', async () => {
+    const doc = new Y.Doc();
+    const undoManager = createDocUndoManager(doc);
+    await renderBandFormat(readPageSetup(doc.getMap(PAGE_ROOT).toJSON()));
+    await type('Footer (centimetres from bottom)', '0.8');
+    await click(button('Apply'));
+    const [[from, to] = []] = onSetupChange.mock.calls;
+    if (!from || !to) throw new Error('OK wrote nothing');
+    writePageSetup(doc, undoManager, from, to);
+    expect(doc.getMap(PAGE_ROOT).toJSON()).toEqual({ footerDistance: 8 });
+
+    undoManager.undo();
+    expect(doc.getMap(PAGE_ROOT).toJSON()).toEqual({});
 });

@@ -164,8 +164,8 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
 // Word draws a margin a section leaves out at 1 in; a size it leaves out is the default A4.
 const WORD_MARGIN_MM = ptToMm(72);
 
-// Through the one reader of a stored page, so a file's page is clamped as a peer's is. w:orient is not read: Word draws
-// the page w by h whatever it says.
+// Through the one reader of a stored page, so a file's page is clamped as a peer's is, a band's distance from the edge
+// within its margin too. w:orient is not read: Word draws the page w by h whatever it says.
 function sectionPage(sectPr: XmlElement | undefined): PageSetup {
     const size = wChild(sectPr, 'pgSz');
     const margin = wChild(sectPr, 'pgMar');
@@ -180,6 +180,8 @@ function sectionPage(sectPr: XmlElement | undefined): PageSetup {
         marginRight: mm(margin, 'right') ?? WORD_MARGIN_MM,
         marginBottom: mm(margin, 'bottom') ?? WORD_MARGIN_MM,
         marginLeft: mm(margin, 'left') ?? WORD_MARGIN_MM,
+        headerDistance: mm(margin, 'header'),
+        footerDistance: mm(margin, 'footer'),
     });
 }
 

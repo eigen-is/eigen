@@ -919,6 +919,8 @@ describe('document transform (eigendoc)', () => {
             width: 279.4,
             height: 215.9,
             margin: { top: 10, right: 10, bottom: 10, left: 10 },
+            headerDistance: 8,
+            footerDistance: 10,
             differentFirstPage: false,
         };
         const { mount, path: seeded } = await seedGoldenDocument('letter-doc', 'doc', (doc) => {

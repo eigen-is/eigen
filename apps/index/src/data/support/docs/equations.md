@@ -6,12 +6,12 @@ category: Basics
 tags: [docs, equations, math, latex, editor]
 related: [docs/images-and-tables, docs/export, docs/comments]
 order: 56
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
 You can put math in a document, from a quick x² in a sentence to a formula on a line of its own. You write each equation in LaTeX, the notation most math tools use, and a preview shows how it will look as you type.
 
-You need edit access to insert or change an equation. On a phone, equations show in the document, but you can't insert or edit them. The same goes for a header or footer while you edit it.
+You need edit access to insert or change an equation. On a phone, equations show in the document, but you can't insert or edit them. In a header or footer you can change an equation that's there, but you can't insert one.
 
 ## Insert an equation
 

@@ -1,6 +1,6 @@
 // Headers and footers are edited in place, as in Google Docs: a writer on a desktop or a tablet double-clicks a margin,
 // or picks Insert › Page elements, Format › Headers and footers or a page-number preset, and the caret goes into the
-// band on the page. While a band is edited the toolbar and the menus act on it, the body dims and stays editable, and
+// band on the page. While a band is edited the toolbar and the menus act on it, the body stays as it is and editable, and
 // Esc or a click in the body leaves. A viewer and a phone see the bands read-only, with no way in.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { TiptapEditorHTMLElement } from '@tiptap/core';
@@ -13,6 +13,7 @@ const window = installHappyDom();
 
 const Y = await import('yjs');
 const { WebsocketProvider } = await import('y-websocket');
+const { NodeSelection } = await import('@tiptap/pm/state');
 const { act, createElement, useState } = await import('react');
 const { formatForDisplay } = await import('@tanstack/react-hotkeys');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
@@ -185,7 +186,7 @@ const bodyView = () => document.querySelector<TiptapEditorHTMLElement>('.tiptap-
 // The bands that take the caret now.
 const editing = () => BAND_ROOTS.filter((root) => bandView(root)?.getAttribute('contenteditable') === 'true');
 
-// The labels on a margin's dashed rules, top to bottom.
+// The labels on a margin's rules, top to bottom.
 const labels = (edge: 'header' | 'footer') =>
     [...(margin(edge)?.querySelectorAll('[data-band-label]') ?? [])].map((label) => label.textContent);
 
@@ -343,10 +344,20 @@ test('a press beside the body and the band keeps the caret in the band', async (
     expect(press(bandView('header')?.querySelector('p'))).toBe(true);
 });
 
-test('the dimmed body prints at full strength', async () => {
+// Google leaves the body as it is while a header or footer is edited.
+test('the body is not dimmed while a band is edited', async () => {
     await render(WRITER);
     await doubleClick('header');
-    expect(document.querySelector('.tiptap-wrapper')?.className).toContain('print:opacity-100');
+    expect(document.querySelector('.tiptap-wrapper')?.className).not.toContain('opacity');
+});
+
+// Google's bar has solid light-grey lines on its top and bottom edges.
+test('the band bar has solid edges', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    const classes = document.querySelector('[data-band-rule]')?.className ?? '';
+    expect(classes).toContain('border-y');
+    expect(classes).not.toContain('dashed');
 });
 
 test('a menu closed with Esc hands focus back to the band being edited, and Options to the band too', async () => {
@@ -367,6 +378,29 @@ test('Options › Page setup… keeps focus in the dialog it opens', async () =>
     await openMenu('Options');
     await pick('Page setup…');
     expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
+});
+
+// Google's Header format… and Footer format… open one dialog, which writes the page as Page setup does.
+test('Options › Footer format… sets the footer’s distance from the bottom, which the page draws and ⌘Z takes back', async () => {
+    await render(WRITER);
+    await doubleClick('footer');
+    await openMenu('Options');
+    expect(menuItems()).not.toContain('Header format…');
+    await pick('Footer format…');
+    const field = [...document.querySelectorAll('label')].find(
+        (l) => l.textContent === 'Footer (centimetres from bottom)',
+    );
+    const input = field && document.getElementById(field.htmlFor);
+    if (!(input instanceof HTMLInputElement)) throw new Error('no footer distance field');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '0.8');
+    await act(async () => input.dispatchEvent(new Event('input', { bubbles: true })));
+    await inBrowserFrames(() => button('Apply')?.click());
+
+    expect(doc.getMap(PAGE_ROOT).get('footerDistance')).toBe(8);
+    expect(margin('footer')?.style.paddingBottom).toBe('8mm');
+    await pressEscape(bandView('footer'));
+    await act(async () => void bodyView()?.editor?.commands.undo());
+    expect(doc.getMap(PAGE_ROOT).get('footerDistance')).toBeUndefined();
 });
 
 // Y's undo manager moves the undone step onto the redo stack after the transaction that undid it, so with a step still
@@ -428,12 +462,79 @@ test('word count from a band counts the body, and gives focus back to the band',
     expect(document.activeElement === bandView('header')).toBe(true);
 });
 
-test('the table panel stays closed while a band is edited', async () => {
+test('a table selected in the body closes its panel as a band is entered', async () => {
     await render(WRITER);
     await act(async () => void bodyView()?.editor?.commands.insertTable({ rows: 2, cols: 2 }));
     expect(document.body.textContent).toContain('Columns');
     await doubleClick('header');
     expect(document.body.textContent).not.toContain('Columns');
+});
+
+const headerEditor = () => {
+    const header = bandView('header')?.editor;
+    if (!header) throw new Error('no header editor');
+    return header;
+};
+
+const columns = (root: string) => doc.getXmlFragment(root).toString().split('<tableheader').length - 1;
+
+test('a table in the band being edited opens the table panel, which writes the band, its own undo taking it back', async () => {
+    write('default', 'Hello');
+    await render(WRITER);
+    await doubleClick('header');
+    const header = headerEditor();
+    await act(async () => void header.commands.insertTable({ rows: 2, cols: 2 }));
+    yUndoPluginKey.getState(header.state)?.undoManager.stopCapturing();
+    expect(document.body.textContent).toContain('Columns');
+
+    // The panel sits outside the page, so a press in it leaves the band edited.
+    const after = button('After');
+    await act(async () => void after?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+    await act(async () => after?.click());
+    expect(editing()).toEqual(['header']);
+    expect(columns('header')).toBe(3);
+    expect(doc.getXmlFragment('default').toString()).toBe('<paragraph>Hello</paragraph>');
+
+    await openMenu('Edit');
+    await pick(`Undo${formatForDisplay('Mod+Z')}`);
+    expect(columns('header')).toBe(2);
+});
+
+test('an image in the band being edited opens the Image panel, aligned only, writing the band', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    const header = headerEditor();
+    await act(async () => {
+        header.commands.insertContent({ type: 'figure', attrs: { src: 'data:image/png;base64,', width: 100 } });
+        header.commands.setNodeSelection(1);
+    });
+    const toggles = [...document.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')];
+    expect(toggles.map((t) => t.getAttribute('aria-label'))).toEqual(['Align left', 'Align center', 'Align right']);
+
+    await act(async () => toggles[2]?.click());
+    expect(doc.getXmlFragment('header').toString()).toContain('alignment="right"');
+    expect(editing()).toEqual(['header']);
+});
+
+test('an equation a click selects in the band being edited opens the Equation panel, which writes the band', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    const header = headerEditor();
+    await act(async () => void header.commands.insertEquation());
+    // Inserted, it is selected as by an arrow, which opens no panel.
+    expect(document.querySelector('textarea[aria-label="LaTeX"]')).toBeNull();
+    await act(async () => void header.commands.setTextSelection(1));
+    await act(async () =>
+        header.view.dispatch(
+            header.state.tr.setSelection(NodeSelection.create(header.state.doc, 1)).setMeta('pointer', true),
+        ),
+    );
+    const field = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="LaTeX"]');
+    expect(field).not.toBeNull();
+
+    await act(async () => button('On its own line')?.click());
+    expect(doc.getXmlFragment('header').toString()).toContain('display="true"');
+    expect(doc.getXmlFragment('default').toString()).not.toContain('equation');
 });
 
 // The trigger draws the paragraph's alignment, so its first icon names it.
@@ -463,7 +564,7 @@ test('the toolbar, the menus and undo act on the band being edited', async () =>
     expect(button(`Bold (${formatForDisplay('Mod+B')})`)?.getAttribute('data-variant')).toBe('ghost');
 });
 
-test('in a band, Insert offers no page break, and an image goes into the band and lands there after leaving', async () => {
+test('in a band, Insert greys out the page break, and an image goes into the band and lands there after leaving', async () => {
     await render({ ...WRITER, mediaFolderId: 'media' });
     await openMenu('Insert');
     expect(menuItems()).toContain(`Page break${formatForDisplay('Mod+Enter')}`);
@@ -471,7 +572,12 @@ test('in a band, Insert offers no page break, and an image goes into the band an
 
     await doubleClick('header');
     await openMenu('Insert');
-    expect(menuItems().filter((item) => item?.startsWith('Page break'))).toEqual([]);
+    const greyed = (name: string) =>
+        [...document.querySelectorAll('[role="menuitem"]')]
+            .find((item) => item.textContent?.trim().startsWith(name))
+            ?.getAttribute('aria-disabled');
+    expect(['Page break', 'Code block', 'Equation'].map(greyed)).toEqual(['true', 'true', 'true']);
+    expect(greyed('Table')).not.toBe('true');
     await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
 
     const input = document.querySelector<HTMLInputElement>('input[type="file"]');

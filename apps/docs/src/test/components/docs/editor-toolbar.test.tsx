@@ -718,8 +718,11 @@ test("in a band, Insert, Format and the style picker offer only what the band's 
     const band = new Editor({ extensions: getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] }) });
     await render(1920, true, { active: band });
     await openMenu('Insert');
-    expect(menuItems().filter((item) => item?.startsWith('Page break') || item === 'Code block')).toEqual([]);
-    expect(menuItems()).toContain('Table');
+    const disabled = [...document.querySelectorAll('[role="menuitem"][aria-disabled="true"]')].map((item) =>
+        item.textContent?.trim(),
+    );
+    expect(disabled.filter((item) => item?.startsWith('Page break') || item === 'Code block').length).toBe(2);
+    expect(disabled).not.toContain('Table');
 
     await openMenu('Format');
     await openSubmenu('Paragraph styles');
@@ -1163,6 +1166,16 @@ test('Insert has no Equation without a way to edit it', async () => {
     await render(1920, true);
     await openMenu('Insert');
     expect(openMenuEntries()).not.toContain('Equation');
+});
+
+// Google greys out what a header can't hold; the open note's rule shows the same.
+test('Insert greys out, rather than hides, what a note or a band can’t hold', async () => {
+    await render(1920, true, { onInsertEquation: () => {}, inNote: true, active: editor });
+    await openMenu('Insert');
+    const greyed = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
+        .filter((item) => item.getAttribute('aria-disabled') === 'true')
+        .map((item) => item.textContent?.trim());
+    expect(greyed).toEqual(expect.arrayContaining(['Chart', 'Horizontal rule', 'Table', 'Code block']));
 });
 
 // Print is the server's PDF in a tab of its own, so the headers and footers print; browser print is the fallback.

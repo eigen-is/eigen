@@ -62,6 +62,24 @@ describe('docx import — headers and footers', () => {
         expect(parses.mock.calls.some(([input]) => Buffer.from(input).includes('Letterhead'))).toBe(false);
     });
 
+    // Word's Header from top and Footer from bottom, which a doc stores beside its margins.
+    test("the section's header and footer distances become the doc's, within its margins", async () => {
+        const pgMar = (header: number, footer: number) =>
+            `<w:pgMar w:top="1440" w:right="1440" w:bottom="1134" w:left="1440" w:header="${header}" w:footer="${footer}"/>`;
+        const bands = [{ id: 'h1', kind: 'header', xml: paragraph(run('Acme')) }] as const;
+        const { page } = await docxWith([...bands], { sectPr: pgMar(567, 1000) });
+        expect(page.headerDistance).toBeCloseTo(10, 2);
+        expect(page.footerDistance).toBeCloseTo(17.639, 3);
+
+        const past = await docxWith([...bands], { sectPr: pgMar(2000, 1200) });
+        expect(past.page.headerDistance).toBe(past.page.margin.top);
+        expect(past.page.footerDistance).toBe(past.page.margin.bottom);
+
+        // Word's own 1.27 cm where the section names none.
+        const none = await docxWith([...bands]);
+        expect([none.page.headerDistance, none.page.footerDistance]).toEqual([12.7, 12.7]);
+    });
+
     // Word inherits a reference a section leaves out from the section before it.
     test("a final section without references takes an earlier section's", async () => {
         const docx = await buildDocxWithBody(

@@ -1,6 +1,5 @@
 export type { BandEdge, BandRoot } from './bands';
 export {
-    BAND_DISTANCE_MM,
     BAND_EXCLUDED_NODES,
     BAND_ROOTS,
     bandEdge,

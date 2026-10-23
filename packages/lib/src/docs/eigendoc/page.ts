@@ -1,7 +1,15 @@
 // In millimetres because paper is defined in them; pagePx and pageTwips return this shape in their unit. Orientation is width > height.
 export type PageMargin = { top: number; right: number; bottom: number; left: number };
-// differentFirstPage: page 1 takes the headerFirst and footerFirst bands instead of header and footer.
-export type PageSetup = { width: number; height: number; margin: PageMargin; differentFirstPage: boolean };
+// headerDistance and footerDistance: a band's distance from the paper's top or bottom edge, Word's Header from top and
+// Footer from bottom. differentFirstPage: page 1 takes the headerFirst and footerFirst bands instead of header and footer.
+export type PageSetup = {
+    width: number;
+    height: number;
+    margin: PageMargin;
+    headerDistance: number;
+    footerDistance: number;
+    differentFirstPage: boolean;
+};
 
 const A4 = { name: 'A4', width: 210, height: 297 } as const;
 
@@ -26,6 +34,9 @@ export const DEFAULT_PAGE_SETUP: PageSetup = {
     width: A4.width,
     height: A4.height,
     margin: { top: 20, right: 20, bottom: 20, left: 20 },
+    // Word's and Google's 1.27 cm.
+    headerDistance: 12.7,
+    footerDistance: 12.7,
     differentFirstPage: false,
 };
 
@@ -49,7 +60,7 @@ export const MAX_PAPER_MM = 558.8;
 // The least text column and text height the margins leave.
 export const MIN_TEXT_MM = 25;
 
-export function pageRecord({ width, height, margin, differentFirstPage }: PageSetup) {
+export function pageRecord({ width, height, margin, headerDistance, footerDistance, differentFirstPage }: PageSetup) {
     return {
         width,
         height,
@@ -57,6 +68,8 @@ export function pageRecord({ width, height, margin, differentFirstPage }: PageSe
         marginRight: margin.right,
         marginBottom: margin.bottom,
         marginLeft: margin.left,
+        headerDistance,
+        footerDistance,
         differentFirstPage,
     };
 }
@@ -66,7 +79,8 @@ type PageKey = Exclude<keyof ReturnType<typeof pageRecord>, 'differentFirstPage'
 const DEFAULT_PAGE_RECORD = pageRecord(DEFAULT_PAGE_SETUP);
 
 // The one reader of a stored page (callers pass `map.toJSON()`): any peer writes the map, so every key is checked.
-// Margins that leave too little text shrink in proportion rather than reset, so a near miss stays near.
+// Margins that leave too little text shrink in proportion rather than reset, so a near miss stays near. A band sits
+// between the paper's edge and its margin, never in the body's column: the editor, the PDF and the docx place it here.
 export function readPageSetup(record: Record<string, unknown>): PageSetup {
     const mm = (key: PageKey) => {
         const value = record[key];
@@ -85,16 +99,20 @@ export function readPageSetup(record: Record<string, unknown>): PageSetup {
     const height = paper('height');
     const [left, right] = fit(width, 'marginLeft', 'marginRight');
     const [top, bottom] = fit(height, 'marginTop', 'marginBottom');
+    const distance = (key: 'headerDistance' | 'footerDistance', margin: number) =>
+        Math.min(margin, Math.max(0, mm(key)));
     return {
         width,
         height,
         margin: { top, right, bottom, left },
+        headerDistance: distance('headerDistance', top),
+        footerDistance: distance('footerDistance', bottom),
         differentFirstPage: record['differentFirstPage'] === true,
     };
 }
 
 function convert(setup: PageSetup, fromMm: (mm: number) => number): PageSetup {
-    const { width, height, margin } = setup;
+    const { width, height, margin, headerDistance, footerDistance } = setup;
     return {
         ...setup,
         width: fromMm(width),
@@ -105,6 +123,8 @@ function convert(setup: PageSetup, fromMm: (mm: number) => number): PageSetup {
             bottom: fromMm(margin.bottom),
             left: fromMm(margin.left),
         },
+        headerDistance: fromMm(headerDistance),
+        footerDistance: fromMm(footerDistance),
     };
 }
 

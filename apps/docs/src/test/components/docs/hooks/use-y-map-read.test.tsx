@@ -15,6 +15,8 @@ const LETTER_LANDSCAPE: PageSetup = {
     width: 279.4,
     height: 215.9,
     margin: { top: 25.4, right: 12.7, bottom: 25.4, left: 30 },
+    headerDistance: 15,
+    footerDistance: 10,
     differentFirstPage: false,
 };
 
