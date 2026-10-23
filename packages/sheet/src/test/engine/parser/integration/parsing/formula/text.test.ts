@@ -417,6 +417,9 @@ describe('.parse() text formulas', () => {
     it('TEXT', () => {
         expect(parser!.parse('TEXT()')).toMatchObject({ error: '#VALUE!', result: null });
         expect(parser!.parse('TEXT(1234.99)')).toMatchObject({ error: '#VALUE!', result: null });
+        // An empty format_text, typed or a blank cell, is empty text, as in Excel.
+        expect(parser!.parse('TEXT(1234.99, "")')).toMatchObject({ error: null, result: '' });
+        expect(parser!.parse('TEXT("abc", A1)')).toMatchObject({ error: null, result: '' });
         expect(parser!.parse('TEXT(1234.5, "0.00")')).toMatchObject({
             error: null,
             result: '1234.50',

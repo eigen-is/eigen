@@ -137,7 +137,9 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
         const [value, mask] = params;
         if (value instanceof Error) return value;
         if (mask instanceof Error) return mask;
-        if (mask === undefined || mask === null || mask === '') throw Error(ERROR_VALUE);
+        if (params.length < 2) throw Error(ERROR_VALUE);
+        // An empty format_text, typed or a blank cell, is empty text: TEXT(5,"") = "".
+        if (mask == null || mask === '') return '';
         // Excel hands a boolean through as its text, whatever the mask: TEXT(TRUE,"0") = "TRUE".
         if (typeof value === 'boolean') return update(String(mask), booleanDisplay(value));
         // A blank argument is 0, as in Excel.
