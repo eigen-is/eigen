@@ -65,7 +65,7 @@ describe('the import mode', () => {
     test('rides in the query of an upload, whose body is the file', async () => {
         fetchCalls.length = 0;
         await importFrom('device', { success: true, summary: null });
-        expect(fetchCalls[0]?.url).toEndWith('/file/deck/import?mode=insert&afterFrameId=fr%201');
+        expect(fetchCalls[0]?.url).toEndWith('/file/deck/import?mode=insert&afterFrameId=fr+1');
     });
 
     test('rides in the body of a Drive pick, beside its source', async () => {

@@ -199,8 +199,11 @@ export const getDriveImportUrl = (
     mountId: string,
     pathId: string,
     { mode, afterFrameId }: DocumentImportOptions,
-) =>
-    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import?mode=${mode}${afterFrameId ? `&afterFrameId=${encodeURIComponent(afterFrameId)}` : ''}`;
+) => {
+    const query = new URLSearchParams({ mode });
+    if (afterFrameId) query.set('afterFrameId', afterFrameId);
+    return `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import?${query}`;
+};
 export const getDriveImportFromDriveUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import-from-drive`;
 // Backup artifacts move as raw bodies, not JSON: the download is a browser navigation and the upload

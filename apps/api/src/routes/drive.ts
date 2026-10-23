@@ -45,7 +45,12 @@ import {
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
-import { clientFileEventBody, documentImportSchema, eigenDocTypeSchema, importFromDriveSchema } from './shared-schemas';
+import {
+    clientFileEventBody,
+    documentImportFromDriveSchema,
+    documentImportSchema,
+    eigenDocTypeSchema,
+} from './shared-schemas';
 
 // One cap for every free-text share note (collaborator email + access request), so a single
 // oversized body can't be persisted or mailed.
@@ -319,7 +324,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return { success: true, summary };
         },
         {
-            body: t.Object({ ...importFromDriveSchema.properties, ...documentImportSchema.properties }),
+            body: documentImportFromDriveSchema,
             auth: true,
         },
     )
