@@ -1,7 +1,8 @@
-import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
+import type { FormulaOutput, FormulaValue } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
 import { toGrid } from '../helper/array';
 import { dateToSerial, toNumber } from '../helper/number';
+import { type FunctionArg, OMITTED, supplied } from '../omitted';
 
 const MATCH_MODES = new Set([0, -1, 1, 2]);
 const SEARCH_MODES = new Set([1, -1, 2, -2]);
@@ -38,23 +39,25 @@ function wildcard(pattern: string): RegExp {
 }
 
 // The lookup vector and its orientation: a column searches down, a row across; anything wider is #VALUE!.
-function vector(arg: FormulaArg): [FormulaValue[], 'column' | 'row'] {
-    const grid = toGrid(arg);
+function vector(arg: FunctionArg): [FormulaValue[], 'column' | 'row'] {
+    const grid = toGrid(supplied(arg));
     if (grid[0].length === 1) return [grid.map((row) => row[0]), 'column'];
     if (grid.length === 1) return [grid[0], 'row'];
     throw Error(ERROR_VALUE);
 }
 
-function lookupValue(arg: FormulaArg): FormulaValue {
+// An empty lookup value is 0, as in MATCH(,A1:A5,0).
+function lookupValue(arg: FunctionArg): FormulaValue {
+    if (arg === OMITTED) return 0;
     if (arg instanceof Date) return dateToSerial(arg);
     if (arg instanceof Error) throw arg;
     if (Array.isArray(arg)) throw Error(ERROR_VALUE);
     return arg;
 }
 
-function mode(arg: FormulaArg, fallback: number, allowed: Set<number>): number {
+function mode(arg: FunctionArg, fallback: number, allowed: Set<number>): number {
     if (arg instanceof Error) throw arg;
-    const value = arg == null ? fallback : toNumber(arg);
+    const value = arg == null || arg === OMITTED ? fallback : toNumber(arg);
     if (value === undefined || !allowed.has(value)) throw Error(ERROR_VALUE);
     return value;
 }
@@ -108,7 +111,7 @@ function search(lookup: FormulaValue, values: FormulaValue[], matchMode: number,
     return linear(lookup, values, indices, matchMode);
 }
 
-export function xmatch(params: FormulaArg[]): FormulaOutput {
+export function xmatch(params: FunctionArg[]): FormulaOutput {
     const [lookup, lookupArray, matchMode, searchMode] = params;
     if (params.length < 2) throw Error(ERROR_NOT_AVAILABLE);
     const [values] = vector(lookupArray);
@@ -123,11 +126,11 @@ export function xmatch(params: FormulaArg[]): FormulaOutput {
 }
 
 // A return_array wider than one cell gives the matched row (or column) as an array.
-export function xlookup(params: FormulaArg[]): FormulaOutput {
+export function xlookup(params: FunctionArg[]): FormulaOutput {
     const [lookup, lookupArray, returnArray, ifNotFound, matchMode, searchMode] = params;
     if (params.length < 3) throw Error(ERROR_NOT_AVAILABLE);
     const [values, orientation] = vector(lookupArray);
-    const result = toGrid(returnArray);
+    const result = toGrid(supplied(returnArray));
     if ((orientation === 'column' ? result.length : result[0].length) !== values.length) throw Error(ERROR_VALUE);
     const index = search(
         lookupValue(lookup),
@@ -136,7 +139,7 @@ export function xlookup(params: FormulaArg[]): FormulaOutput {
         mode(searchMode, 1, SEARCH_MODES),
     );
     if (index === -1) {
-        if (params.length > 3) return ifNotFound;
+        if (params.length > 3 && ifNotFound !== OMITTED) return ifNotFound;
         throw Error(ERROR_NOT_AVAILABLE);
     }
     const hit = orientation === 'column' ? [result[index]] : result.map((row) => [row[index]]);

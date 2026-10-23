@@ -67,6 +67,13 @@ describe('MAXIFS and MINIFS', () => {
         expect(value('=MAXIFS(A1:A6,B1:B6,1/0)')).toBe('#DIV/0!');
     });
 
+    test('an empty criterion matches the cells it matches for SUMIFS, an empty range is #VALUE!', () => {
+        expect(value('=SUMIFS(E1:E6,B1:B6,)')).toBe(0);
+        expect(value('=MAXIFS(E1:E6,B1:B6,)')).toBe(0);
+        expect(value('=MAXIFS(,B1:B6,1)')).toBe('#VALUE!');
+        expect(value('=MINIFS(A1:A6,,1)')).toBe('#VALUE!');
+    });
+
     test('a criterion matches exactly the cells SUMIFS sums', () => {
         for (const criterion of ['"a"', '"A"', '"<>a"', '">1"', '"=2"', '1', '"*"', '"b"', '"z"']) {
             for (const range of ['B1:B6', 'C1:C6']) {

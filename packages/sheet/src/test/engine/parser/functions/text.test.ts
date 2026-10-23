@@ -89,6 +89,13 @@ describe('TEXTJOIN', () => {
         expect(value('=textjoin("/",TRUE,DATE(2026,1,5))')).toBe('46027');
     });
 
+    test('an empty delimiter is "", an empty ignore_empty FALSE, an empty text argument an empty text', () => {
+        expect(value('=TEXTJOIN(,TRUE,"a","b")')).toBe('ab');
+        expect(value('=TEXTJOIN(",",,"a","","b")')).toBe('a,,b');
+        expect(value('=TEXTJOIN(",",TRUE,"a",,"b")')).toBe('a,b');
+        expect(value('=TEXTJOIN(",",FALSE,"a",,"b")')).toBe('a,,b');
+    });
+
     test('nothing to join is an empty text', () => {
         expect(value('=TEXTJOIN(",",TRUE,Pairs!A3:B3)')).toBe('');
     });

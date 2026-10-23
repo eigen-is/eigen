@@ -7,6 +7,7 @@ import { xlookup, xmatch } from '../../functions/lookup';
 import { maxifs, minifs } from '../../functions/statistical';
 import { textjoin } from '../../functions/text';
 import { toNumber } from '../../helper/number';
+import { type FunctionArg, OMITTED } from '../../omitted';
 import SUPPORTED_FORMULAS from '../../supported-formulas';
 
 // Narrow view over the untyped formulajs module: a tree of callable functions keyed by name, a dotted
@@ -147,8 +148,9 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
     'ERFC.PRECISE': ([x]) => formulajs.ERFC(x),
 };
 
-// Functions formulajs 2.9.3 lacks. Unlike an override, a result of `undefined` is a blank, not a fall-through.
-const FUNCTIONS: Record<string, (params: FormulaArg[]) => FormulaOutput> = {
+// Functions formulajs 2.9.3 lacks. Unlike an override, a result of `undefined` is a blank, not a fall-through,
+// and an empty argument arrives as OMITTED, for each to read as Excel reads that parameter.
+const FUNCTIONS: Record<string, (params: FunctionArg[]) => FormulaOutput> = {
     MAXIFS: maxifs,
     MINIFS: minifs,
     TEXTJOIN: textjoin,
@@ -158,12 +160,44 @@ const FUNCTIONS: Record<string, (params: FormulaArg[]) => FormulaOutput> = {
 
 export const SYMBOL = [...SUPPORTED_FORMULAS, ...DOTTED_FUNCTIONS, ...Object.keys(FUNCTIONS)];
 
-function func(symbol: string): FormulajsMethod {
+// The text parameters of formulajs's text functions, by position, or all of them. Excel reads an empty argument
+// as "" there and as 0 everywhere else: SUM(1,,2) is 3, ROUND(2.5,) 3, IF(TRUE,,1) 0, VLOOKUP's range_lookup FALSE.
+const TEXT_PARAMETERS: Record<string, number[] | 'all'> = {
+    CLEAN: [0],
+    CODE: [0],
+    CONCAT: 'all',
+    CONCATENATE: 'all',
+    EXACT: [0, 1],
+    FIND: [0, 1],
+    LEFT: [0],
+    LEN: [0],
+    LOWER: [0],
+    MID: [0],
+    NUMBERVALUE: [0, 1, 2],
+    PROPER: [0],
+    REGEXEXTRACT: [0, 1],
+    REGEXMATCH: [0, 1],
+    REGEXREPLACE: [0, 1, 2],
+    REPLACE: [0, 3],
+    REPT: [0],
+    RIGHT: [0],
+    SEARCH: [0, 1],
+    SPLIT: [0, 1],
+    SUBSTITUTE: [0, 1, 2],
+    TRIM: [0],
+    UNICODE: [0],
+    UPPER: [0],
+};
+
+function func(symbol: string): (...params: FunctionArg[]) => FormulaOutput {
     const upper = symbol.toUpperCase();
     const own = FUNCTIONS[upper];
     if (own) return (...params) => own(params);
     const override = OVERRIDES[upper];
-    return function __formulaFunction(...params: FormulaArg[]): FormulaOutput {
+    const text = TEXT_PARAMETERS[upper];
+    const empty = (i: number) => (text === 'all' || text?.includes(i) ? '' : 0);
+    return function __formulaFunction(...args: FunctionArg[]): FormulaOutput {
+        const params = args.map((arg, i) => (arg === OMITTED ? empty(i) : arg));
         let result = override?.(params);
         if (result === undefined) {
             const resolved = resolveFormula(upper.split('.'));

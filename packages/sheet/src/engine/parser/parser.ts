@@ -10,7 +10,7 @@ import type {
     RangeCell,
 } from '../types';
 import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, valueIsError } from './error';
-import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator';
+import evaluateByOperator, { callFunction } from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
 import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
 import { invertNumber, toNumber } from './helper/number';
@@ -34,7 +34,7 @@ class Parser {
             throwError: (errorName: string) => this._throwError(errorName),
             callVariable: (variable: string) => this._callVariable(variable),
             evaluateByOperator,
-            callFunction: evaluateByOperator,
+            callFunction,
             cellValue: (value: string) => this._callCellValue(value),
             rangeValue: (start: string, end: string) => this._callRangeValue(start, end),
         };

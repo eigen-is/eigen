@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import evaluateByOperator from '../../../../../engine/parser/evaluate-by-operator/evaluate-by-operator';
+import evaluateByOperator, {
+    callFunction,
+} from '../../../../../engine/parser/evaluate-by-operator/evaluate-by-operator';
 
 describe('evaluate-by-operator dispatch', () => {
     test('arithmetic operators propagate Error operands instead of silently coercing', () => {
@@ -21,7 +23,7 @@ describe('evaluate-by-operator dispatch', () => {
         const result = evaluateByOperator('+', ['', 1]);
         expect(result).toBeInstanceOf(Error);
         expect((result as Error).message).toBe('#VALUE!');
-        expect(evaluateByOperator('IFERROR', [result, 'fallback'])).toBe('fallback');
+        expect(callFunction('IFERROR', [result, 'fallback'])).toBe('fallback');
     });
 
     test('comparison operators propagate Error operands, the left one first', () => {
@@ -34,16 +36,16 @@ describe('evaluate-by-operator dispatch', () => {
         }
     });
 
-    test('function-name operator passes Error operands through to formulajs', () => {
+    test('a function call passes Error operands through to formulajs', () => {
         // formulajs IF inspects `test` for Error and propagates; otherwise it
         // returns the chosen branch verbatim. The dispatcher must not filter
         // Error operands ahead of the call or short-circuiting breaks.
         const err = new Error('#VALUE!');
         // IF(FALSE, Error, "ok") → "ok" (untaken branch's Error is discarded).
-        expect(evaluateByOperator('IF', [false, err, 'ok'])).toBe('ok');
+        expect(callFunction('IF', [false, err, 'ok'])).toBe('ok');
         // IF(TRUE, Error, "ok") → propagates the Error from the taken branch.
-        expect(evaluateByOperator('IF', [true, err, 'ok'])).toBe(err);
+        expect(callFunction('IF', [true, err, 'ok'])).toBe(err);
         // IF(Error, ...) → formulajs returns the Error from the test arg.
-        expect(evaluateByOperator('IF', [err, 1, 2])).toBe(err);
+        expect(callFunction('IF', [err, 1, 2])).toBe(err);
     });
 });

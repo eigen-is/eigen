@@ -139,6 +139,15 @@ describe('XLOOKUP', () => {
         expect(value('=SUM(XLOOKUP(20,Across!A1:D1,Across!A1:D3))')).toBe(22);
     });
 
+    test('an empty if_not_found is #N/A, an empty mode its default, an empty array #VALUE!', () => {
+        expect(value('=XLOOKUP(25,A1:A6,B1:B6,,-1)')).toBe('banana');
+        expect(value('=XLOOKUP(25,A1:A6,B1:B6,,)')).toBe('#N/A');
+        expect(value('=XLOOKUP("apple",B1:B6,A1:A6,,,-1)')).toBe(40);
+        expect(value('=XLOOKUP(30,A1:A6,B1:B6,"none",,)')).toBe('Cherry');
+        expect(value('=XLOOKUP(30,A1:A6,)')).toBe('#VALUE!');
+        expect(value('=XLOOKUP(30,,B1:B6)')).toBe('#VALUE!');
+    });
+
     test('a date lookup value finds its serial', () => {
         expect(value('=XLOOKUP(DATE(2026,1,6),F1:F6,B1:B6)')).toBe('banana');
     });
@@ -163,8 +172,21 @@ describe('XMATCH', () => {
         expect(value('=XMATCH(G1,E1:E6)')).toBe(5);
     });
 
+    test('an empty mode is its default', () => {
+        expect(value('=XMATCH(25,A1:A6,-1,)')).toBe(2);
+        expect(value('=XMATCH("apple",B1:B6,,-1)')).toBe(4);
+    });
+
     test('a miss is #N/A, a 2-D lookup_array #VALUE!', () => {
         expect(value('=XMATCH(25,A1:A6)')).toBe('#N/A');
         expect(value('=XMATCH(30,A1:B6)')).toBe('#VALUE!');
+    });
+});
+
+describe('VLOOKUP', () => {
+    test('an empty range_lookup is FALSE, an exact match, as in Excel', () => {
+        expect(value('=VLOOKUP(25,A1:B6,2)')).toBe('banana');
+        expect(value('=VLOOKUP(25,A1:B6,2,)')).toBe('#N/A');
+        expect(value('=VLOOKUP(30,A1:B6,2,)')).toBe('Cherry');
     });
 });
