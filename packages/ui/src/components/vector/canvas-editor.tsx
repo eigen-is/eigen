@@ -1491,6 +1491,12 @@ export function CanvasEditor({
             onDoubleClick={onDoubleClick}
             onContextMenu={onContextMenu}
             onPaste={onPaste}
+            // A press is the canvas' gesture. With text selected over the scene, Safari drags that selection
+            // from any press (Chrome from selectable text), and the page then gets no pointerup. A text
+            // editor keeps its own drag.
+            onDragStart={(e) => {
+                if (!isTypingTarget()) e.preventDefault();
+            }}
             {...fileDropProps}
         >
             {/* The scene: plain SCENE units, one layer div per element. pointer-events-none — hit
@@ -1737,6 +1743,7 @@ export function CanvasEditor({
                     onDoubleClick={(e) => e.stopPropagation()}
                     onContextMenu={(e) => e.stopPropagation()}
                     onPaste={(e) => e.stopPropagation()}
+                    onDragStart={(e) => e.stopPropagation()}
                 >
                     <EditDialog
                         element={editDialogElement}
