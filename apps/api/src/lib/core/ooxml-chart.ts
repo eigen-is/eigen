@@ -17,7 +17,9 @@ import {
     type ChartType,
     type LegendPosition,
 } from '@workspace/lib/types/chart';
-import { numberDisplay, parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
+// The two engine modules a chart reads, not the engine: a docx or pptx import never evaluates the formula engine.
+import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
+import { numberDisplay } from '@workspace/sheet/engine/format';
 import { type DrawingTheme, drawingColor, drawingLines, readColorMap } from './drawingml';
 import { A_NS, alternativeFor, C_NS, isAlternateContent, isOn } from './ooxml';
 import { type OoxmlPackage, optional, type Relationship, relTarget } from './opc';

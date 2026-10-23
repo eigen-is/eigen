@@ -5,7 +5,9 @@
   "private": true,
   "exports": {
     ".": "./src/index.ts",
-    "./engine": "./src/engine/index.ts"
+    "./engine": "./src/engine/index.ts",
+    "./engine/a1-notation": "./src/engine/a1-notation.ts",
+    "./engine/format": "./src/engine/format.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
