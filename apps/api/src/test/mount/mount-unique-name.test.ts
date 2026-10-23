@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { MOUNT_DB_CONFIG } from '../../lib/mount/db-config';
@@ -229,12 +229,64 @@ describe('concurrent same-name create → exactly one 409', () => {
 
         const children = await mount.listFolder(rootId);
         expect(children.filter((c) => c.name === 'same.txt').length).toBe(1);
+        // On `local` the loser's disk rename must not replace the winner's bytes.
+        expect(await (await mount.readFile(one))!.text()).toBe('1');
+        expect(await (await mount.readFile(two))!.text()).toBe('2');
 
         await mount.closeAllDatabases();
     }
 
     test('raced rename to the same name → 409, path-based (local)', () => renameRaceOnBackend('local'));
     test('raced rename to the same name → 409, id-based (local-key)', () => renameRaceOnBackend('local-key'));
+
+    // The upload passes its name check and holds the tree lock through its row write; the rename waits on it.
+    // `Y.txt` lands on `y.txt` on a case-insensitive disk (APFS, NTFS).
+    test.each([
+        ['y.txt', 'exact'],
+        ['Y.txt', 'folded'],
+    ])('a rename to %s raced by an upload of y.txt keeps the upload, path-based (local)', async (target, mountId) => {
+        const config = createTestMountConfig(`rename-upload-race-${mountId}`, 'local');
+        const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+        const renamed = await mount.createFile(rootId, 'x.txt', 'text/plain', 1, Buffer.from('x'));
+
+        const [rename, upload] = await Promise.allSettled([
+            mount.updatePath(renamed, { name: target }),
+            mount.createFile(rootId, 'y.txt', 'text/plain', 6, Buffer.from('upload')),
+        ]);
+
+        expect(rename.status).toBe('rejected');
+        expect(((rename as PromiseRejectedResult).reason as ApiError).status).toBe(409);
+        expect(upload.status).toBe('fulfilled');
+        const uploaded = (upload as PromiseFulfilledResult<string>).value;
+        expect(await (await mount.readFile(uploaded))!.text()).toBe('upload');
+        expect(await (await mount.readFile(renamed))!.text()).toBe('x');
+
+        await mount.closeAllDatabases();
+    });
+
+    // A disk rename of a folder replaces an empty one at its target.
+    test('a folder rename raced by an empty folder of the target name keeps that folder, path-based (local)', async () => {
+        const config = createTestMountConfig('rename-folder-race', 'local');
+        const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+        const renamed = await mount.createFolder(rootId, 'Old');
+        await mount.createFile(renamed, 'inside.txt', 'text/plain', 6, Buffer.from('inside'));
+
+        const [rename, create] = await Promise.allSettled([
+            mount.updatePath(renamed, { name: 'New' }),
+            mount.createFolder(rootId, 'New'),
+        ]);
+
+        expect(rename.status).toBe('rejected');
+        expect(create.status).toBe('fulfilled');
+        expect(existsSync(join(mount.dataDir, 'New'))).toBe(true);
+        expect(existsSync(join(mount.dataDir, 'Old', 'inside.txt'))).toBe(true);
+
+        await mount.closeAllDatabases();
+    });
 
     // Pins the translation's precision: rethrowDuplicateActiveName must map ONLY the
     // idx_paths_unique_active_name violation to 409. A duplicate paths.id (PRIMARY KEY) through the

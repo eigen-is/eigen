@@ -756,7 +756,12 @@ export class Mount {
                                 await writeRow();
                                 return;
                             }
-                            // Refused before the bytes move: a disk rename into its own subtree throws a bare EINVAL.
+                            // Refused before the bytes move: a disk rename replaces a raced sibling's bytes at the
+                            // target, and one into its own subtree throws a bare EINVAL.
+                            const parentId = updates.parentId ?? (await this.getPath(pathId))?.parentId;
+                            if (parentId) {
+                                await this.assertUniqueName(parentId, path.posix.basename(newPath), pathId);
+                            }
                             this.db.transaction((tx) => this.assertMovableInTx(tx, pathId, updates.parentId));
                             await renameThenWriteRow(renameFn.bind(this.storage), oldPath, newPath, writeRow);
                         }),
