@@ -1,6 +1,6 @@
-// The chart overlay on a mounted Workbook: each chart of the current sheet draws its range as SVG, redrawn
-// only when a sheet it reads changes; a click selects it, Delete removes it, Escape lets go, and its ⋮ menu
-// edits, deletes and downloads it.
+// A chart's own part of the floating frame on a mounted Workbook: it draws its range as SVG, redrawn only when a
+// sheet it reads changes, a double-click opens its editor, and its menu downloads it as SVG. What every floating
+// object does is in floating-objects.test.tsx.
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
@@ -99,7 +99,7 @@ async function mount(allowEdit = true) {
         await act(async () => root.unmount());
         container.remove();
     };
-    const box = () => container.querySelector<HTMLElement>('[data-chart-id="c1"]');
+    const box = () => container.querySelector<HTMLElement>('[data-floating-id="c1"]');
     const step = (run: (w: WorkbookInstance) => void) =>
         act(async () => {
             if (!workbook.current) throw new Error('workbook did not mount');
@@ -108,14 +108,6 @@ async function mount(allowEdit = true) {
     const charts = () => workbook.current?.getAllSheets()[0].charts;
     return { container, box, step, charts, editors };
 }
-
-const press = (target: EventTarget, type: string, init: KeyboardEventInit | PointerEventInit = {}) =>
-    act(async () => {
-        const event = type.startsWith('key')
-            ? new KeyboardEvent(type, { bubbles: true, ...init })
-            : new PointerEvent(type, { bubbles: true, button: 0, ...init });
-        target.dispatchEvent(event);
-    });
 
 const clickCell = (container: HTMLElement) =>
     act(async () => {
@@ -134,7 +126,7 @@ test('a range chart draws as SVG at its box, labelled from its cells', async () 
     const svg = el?.querySelector('svg')?.outerHTML ?? '';
     for (const label of ['>Scores<', '>Ajax<', '>PSV<', '>Points<']) expect(svg).toContain(label);
     // A double-click opens the editor, so it must not select the drawing's text.
-    expect(el?.classList.contains('select-none')).toBe(true);
+    expect(el?.firstElementChild?.classList.contains('select-none')).toBe(true);
 });
 
 test('a source cell edit redraws the chart; an edit on another sheet or a selection does not', async () => {
@@ -156,63 +148,9 @@ test('a source cell edit redraws the chart; an edit on another sheet or a select
     }
 });
 
-test('a click selects the chart and Delete removes it as one undo step', async () => {
-    const { box, charts, step } = await mount();
-    const el = box();
-    if (!el) throw new Error('no chart');
-    await press(el, 'pointerdown');
-    await press(el, 'pointerup');
-    expect(box()?.getAttribute('data-active')).toBe('true');
-    await press(document.activeElement ?? el, 'keydown', { key: 'Delete' });
-    expect(charts()).toEqual({});
-    await step((w) => w.undo());
-    expect(charts()?.c1).toEqual(chart);
-});
-
-test('Escape lets go of the selected chart', async () => {
-    const { box } = await mount();
-    const el = box();
-    if (!el) throw new Error('no chart');
-    await press(el, 'pointerdown');
-    await press(el, 'pointerup');
-    await press(document.activeElement ?? el, 'keydown', { key: 'Escape' });
-    expect(box()?.getAttribute('data-active')).toBeNull();
-});
-
-test('dragging the chart moves it in one write', async () => {
-    const { box, charts, step } = await mount();
-    const el = box();
-    if (!el) throw new Error('no chart');
-    await press(el, 'pointerdown', { clientX: 10, clientY: 10 });
-    await press(document, 'pointermove', { clientX: 30, clientY: 15 });
-    await press(document, 'pointermove', { clientX: 60, clientY: 20 });
-    await press(document, 'pointerup', { clientX: 60, clientY: 20 });
-    expect(charts()?.c1).toMatchObject({ x: 350, y: 20, width: 400 });
-    await step((w) => w.undo());
-    expect(charts()?.c1).toMatchObject({ x: 300, y: 10 });
-});
-
-test('a cancelled pointer, a touch pan the browser took, moves nothing on the next tap', async () => {
-    const { box, container, charts } = await mount();
-    const el = box();
-    if (!el) throw new Error('no chart');
-    await press(el, 'pointerdown', { clientX: 10, clientY: 10, pointerType: 'touch' });
-    await press(document, 'pointermove', { clientX: 30, clientY: 40, pointerType: 'touch' });
-    await press(document, 'pointercancel', { pointerType: 'touch' });
-    expect(box()?.style.left).toBe('300px');
-    await press(document, 'pointermove', { clientX: 90, clientY: 90, pointerType: 'touch' });
-    await press(document, 'pointerup', { clientX: 90, clientY: 90, pointerType: 'touch' });
-    expect(charts()?.c1).toEqual(chart);
-    expect(box()?.style.left).toBe('300px');
-    // Only the selected chart keeps the browser from panning the grid under a finger.
-    expect(box()?.classList.contains('touch-none')).toBe(true);
-    await clickCell(container);
-    expect(box()?.classList.contains('touch-none')).toBe(false);
-});
-
 test('a double-click opens the chart editor, and the editor follows the chart', async () => {
     const { box, container, editors, step } = await mount();
-    const el = box();
+    const el = box()?.firstElementChild;
     if (!el) throw new Error('no chart');
     await act(async () => el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
     expect(editors.at(-1)).toMatchObject({
@@ -229,10 +167,10 @@ test('a double-click opens the chart editor, and the editor follows the chart', 
     expect(editors.at(-1)).toBeNull();
 });
 
-async function openMenu(el: HTMLElement) {
-    const trigger = el.querySelector('button[aria-label="Chart menu"]');
-    if (!trigger) throw new Error('no ⋮ button');
-    await press(trigger, 'pointerdown');
+async function openMenu(el: Element) {
+    await act(async () => {
+        el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 5, clientY: 5 }));
+    });
 }
 
 async function pick(label: string) {
@@ -243,30 +181,14 @@ async function pick(label: string) {
     await act(async () => item.click());
 }
 
-test('⋮ Edit the chart opens the editor, Delete chart, red and last, removes it', async () => {
-    const { box, editors, charts } = await mount();
-    const el = box();
-    if (!el) throw new Error('no chart');
-    await openMenu(el);
-    expect(menuRows()).toEqual(['Edit the chart', '—', 'Download chart', '—', 'Delete chart']);
-    expect(document.querySelector('[data-variant="destructive"]')?.textContent).toBe('Delete chart');
-    await pick('Edit the chart');
-    expect(editors.at(-1)?.chart.id).toBe('c1');
-    await openMenu(el);
-    await pick('Delete chart');
-    expect(charts()).toEqual({});
-});
-
-test('⋮ Download chart → SVG saves the painter’s svg on white, for a viewer too', async () => {
+test('Download chart → SVG saves the painter’s svg on white, for a viewer too', async () => {
     const saved = spyOn(download, 'downloadBlob').mockImplementation(() => {});
     try {
         const { box } = await mount(false);
-        const el = box();
+        const el = box()?.firstElementChild;
         if (!el) throw new Error('no chart');
         await openMenu(el);
-        expect([...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim())).toEqual([
-            'Download chart',
-        ]);
+        expect(menuRows()).toEqual(['Download chart']);
         await act(async () => {
             document
                 .querySelector('[role="menuitem"][aria-haspopup="menu"]')

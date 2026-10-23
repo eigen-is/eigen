@@ -32,7 +32,7 @@ type Props = {
 };
 
 export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
-    const { context, setContext, refs } = useContext(WorkbookContext);
+    const { context, setContext } = useContext(WorkbookContext);
     const [editing, setEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const editable = useRef<HTMLSpanElement>(null);
@@ -207,10 +207,10 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         if (isDropPlaceholder) return;
         setContext((draftCtx) => {
             changeSheet(draftCtx, sheet.id!);
-            deselectFloatingObject(draftCtx, refs.globalCache);
+            deselectFloatingObject(draftCtx);
             cancelNormalSelected(draftCtx);
         });
-    }, [isDropPlaceholder, setContext, sheet, refs.globalCache]);
+    }, [isDropPlaceholder, setContext, sheet]);
 
     const onRootKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLDivElement>) => {

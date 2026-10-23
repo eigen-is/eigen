@@ -1,8 +1,8 @@
-import { floatingItems, type SheetFloatingKind, sheetFloatingBox } from '@workspace/lib/sheets';
-import { type Box, type ZOp, zOrderKeys } from '@workspace/lib/vector';
+import { floatingItems, nextFloatingIndex, type SheetFloatingKind, sheetFloatingBox } from '@workspace/lib/sheets';
+import { type Box, DUPLICATE_OFFSET, type ZOp, zOrderKeys } from '@workspace/lib/vector';
 import type { Patch } from 'immer';
+import { v4 as uuidv4 } from 'uuid';
 import type { Context } from '../context';
-import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
 
 // What images and charts share. Each writer touches one object of the current sheet and nothing else, field by field,
@@ -42,6 +42,22 @@ export function reorderFloatingObject(ctx: Context, { kind, id }: FloatingRef, o
     }
 }
 
+// A copy one step down and right of the original, above every object, selected, as Vector's Duplicate.
+export function duplicateFloatingObject(ctx: Context, { kind, id }: FloatingRef) {
+    const sheet = editableCurrentSheet(ctx);
+    const original = sheet?.[FIELD[kind]]?.[id];
+    if (!sheet || !original) return;
+    const copy = uuidv4();
+    const placed = {
+        id: copy,
+        index: nextFloatingIndex(sheet),
+        ...sheetFloatingBox({ ...original, x: original.x + DUPLICATE_OFFSET, y: original.y + DUPLICATE_OFFSET }),
+    };
+    if (kind === 'image' && sheet.images?.[id]) sheet.images[copy] = { ...sheet.images[id], ...placed };
+    if (kind === 'chart' && sheet.charts?.[id]) sheet.charts[copy] = { ...sheet.charts[id], ...placed };
+    ctx.activeObject = { kind, id: copy, editor: false };
+}
+
 export function deleteFloatingObject(ctx: Context, { kind, id }: FloatingRef) {
     const objects = editableCurrentSheet(ctx)?.[FIELD[kind]];
     if (objects?.[id]) delete objects[id];
@@ -52,9 +68,8 @@ export function selectFloatingObject(ctx: Context, ref: FloatingRef, editor = fa
     ctx.activeObject = { ...ref, editor: ref.kind === 'chart' && (editor || ctx.activeObject?.editor === true) };
 }
 
-export function deselectFloatingObject(ctx: Context, globalCache: GlobalCache) {
+export function deselectFloatingObject(ctx: Context) {
     ctx.activeObject = undefined;
-    globalCache.image = undefined;
 }
 
 export function deleteActiveObject(ctx: Context) {

@@ -1,5 +1,5 @@
 import type { useCommentLifecycle } from '@workspace/lib/comments';
-import type { SheetChart } from '@workspace/lib/sheets';
+import type { SheetChart, SheetFloatingItem } from '@workspace/lib/sheets';
 import { SHEET_COLUMN_HEADER_HEIGHT, SHEET_DEFAULT_FONT_SIZE, SHEET_ROW_HEADER_WIDTH } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -8,7 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { v4 as uuidv4 } from 'uuid';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
-import type { Image, Selection, Sheet, SheetConfig } from './types';
+import type { Selection, Sheet, SheetConfig } from './types';
 
 // Cell value as accepted by setCellValue / surfaced through update hooks. Covers
 // raw scalar input from the formula bar / paste path plus the `Cell` object form
@@ -148,10 +148,10 @@ export type Hooks = {
     // inserting it as one floating image. `imageItems` is the re-upload
     // manifest; a pasted svg with no image items rides onPasteImageFile instead.
     onPasteSvgFile?: (svg: string, imageItems: EigenClipboardImageItem[]) => void;
-    // Fired whenever the active floating image changes (selected, deselected, or its geometry
-    // committed), so the app can mount/refresh its image properties panel. `null` when nothing is
-    // active.
-    onActiveImageChange?: (image: Image | null) => void;
+    // Fired whenever the selected image or chart changes (selected, deselected, or its record written),
+    // so the app can mount and refresh its properties panel. `null` when nothing is selected. The item
+    // is one reference per record, so the app's setState bails while nothing changed.
+    onActiveObjectChange?: (item: SheetFloatingItem | null) => void;
     // Fired when a chart's editor opens or closes and while it is open, as the chart or the sheet names
     // change, so the app can mount its chart editor sidebar.
     onChartEditorChange?: (editor: ChartEditorState | null) => void;
@@ -177,10 +177,9 @@ export type Settings = {
     hooks?: Hooks;
     currency?: string;
     fontList?: unknown[];
-    // Ephemeral aspect-lock state for the active image's ObjectTransform. The app owns it
-    // (via `useAspectLock`) so the same ON/OFF drives both the canvas handles and the panel checkbox;
-    // never stored on an element.
-    imageAspectLocked?: boolean;
+    // Keep aspect ratio for the selected image's or chart's corner grips. The app owns it (via
+    // `useAspectLock`) so the same ON/OFF drives both the grips and the panel checkbox; never stored.
+    aspectLocked?: boolean;
 };
 
 export const defaultSettings: Required<Settings> = {
@@ -212,5 +211,5 @@ export const defaultSettings: Required<Settings> = {
     hooks: {},
     currency: '€',
     fontList: [],
-    imageAspectLocked: false,
+    aspectLocked: false,
 };

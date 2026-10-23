@@ -24,8 +24,7 @@ The fork's class and id prefix is `sheet-`. One engine-private class keeps a bar
           freeze lines
           formula range highlights
           <InputBox>                            SheetOverlay/InputBox.tsx   (ContentEditable over canvas)
-          <ImgBoxs>                             ImgBoxs/index.tsx
-          <ChartBoxs>                           ChartBoxs/index.tsx
+          <FloatingObjects>                     FloatingObjects/index.tsx
           <LinkEditCard>                        LinkEditCard/index.tsx
           <DropDownList>                        DataVerification/DropdownList.tsx
           cell right-click menu anchor          ContextMenu/useSheetContextMenu.tsx (shared ContextMenuAnchor; column/row anchors live in the headers)
@@ -134,15 +133,13 @@ The autofilter range border and the per-column buttons are painted on the canvas
 - The glyphs follow Google's (a lazy `Path2D`): a bare strainer when idle, a filled green funnel when the column has an active filter, and a green wash on hover.
 - Geometry comes from `filterOptions.items` (`createFilterOptions` in `state/modules/filter.ts`) and the shared `FILTER_BUTTON_WIDTH`/`FILTER_BUTTON_HEIGHT`, the values the mousedown hit test reads too ([SHEETS.md § Painter and hit test read one rect](../../docs/SHEETS.md#painter-and-hit-test-read-one-rect)).
 
-### 7. Images (React DOM + `<img>`)
+### 7. Images and charts (React DOM)
 
-**File**: `ImgBoxs/index.tsx`
+**File**: `FloatingObjects/index.tsx`
 
-- The active image sits at `z-index: 20` and wears the shared `ObjectTransform` ring (`packages/ui/src/components/transform/`) for resize and rotate.
-- An inactive image sits at `z-index: 19`: an `<img>` in an `overflow-hidden` div.
-- ID: `sheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`).
-
-Charts (`ChartBoxs/index.tsx`) follow images in the same pane region, so a chart paints above an image at the same z-index. Each draws the painter's SVG in a white box at 19, the selected one at 20 with an `ObjectTransform` ring that resizes but doesn't rotate, and the chart draws unrotated whatever angle it stores ([ROADMAP](../../docs/ROADMAP.md)). Why a chart redraws only when its cells change: [SHEETS.md § A chart on the grid redraws only when a cell matrix it reads changes](../../docs/SHEETS.md#a-chart-on-the-grid-redraws-only-when-a-cell-matrix-it-reads-changes).
+- One `FloatingObjectFrame` per image or chart, in `floatingItems` order, so DOM order is paint order and an image above a chart in the index draws above it.
+- Not selected at `z-index: 19`, selected at 20, wearing the shared `ObjectTransform` ring (`packages/ui/src/components/transform/`) for resize and rotate, both kinds.
+- The frame is an unrotated positioned box; the content turns inside it, so a hit follows the turned shape. An image is an `<img>` (`ImageContent`), a chart the painter's SVG on the background color (`ChartContent`). Why a chart redraws only when its cells change: [SHEETS.md § A chart on the grid redraws only when a cell matrix it reads changes](../../docs/SHEETS.md#a-chart-on-the-grid-redraws-only-when-a-cell-matrix-it-reads-changes).
 
 ### 8. Comments
 
@@ -222,13 +219,11 @@ Scrolling is the browser's own. `cellArea` (`overflow: auto`, holding a full-siz
 | 16 | Move / extend indicators | SheetOverlay |
 | 18 | Copy selection borders (dashed) | SheetOverlay |
 | 19 | Cell editor (InputBox) | SheetOverlay/InputBox |
-| 19 | Images (inactive) | ImgBoxs |
-| 20 | Active image (with resize handles) | ImgBoxs |
-| 19 | Charts (not selected) | ChartBoxs |
-| 20 | Selected chart (with resize handles) | ChartBoxs |
+| 19 | Images and charts (not selected) | FloatingObjects |
+| 20 | Selected image or chart (with the transform ring) | FloatingObjects |
 | 50 | Data verification dropdown (portaled shadcn) | DataVerification/DropdownList |
 
-The SheetOverlay, InputBox, ImgBoxs and ChartBoxs values live inside `.sheet-cell-overlay-layer` (`z-index: 1`), in per-pane region viewports whose translated content divs are each a stacking context ([§ Scrolling](#scrolling)). So they order those elements only among themselves within a pane, and across panes the region clip rects do not overlap. The layer as a whole sits above the canvas and the cell-flow spacer. The header values (10 and 11 for the highlights, 12 for the resize handle, 20 for the freeze handle) are likewise scoped to each header region wrapper. Across wrappers, DOM order decides: the passive regions, then the hover region, then the freeze-handle wrapper on top.
+The SheetOverlay, InputBox and FloatingObjects values live inside `.sheet-cell-overlay-layer` (`z-index: 1`), in per-pane region viewports whose translated content divs are each a stacking context ([§ Scrolling](#scrolling)). So they order those elements only among themselves within a pane, and across panes the region clip rects do not overlap. The layer as a whole sits above the canvas and the cell-flow spacer. The header values (10 and 11 for the highlights, 12 for the resize handle, 20 for the freeze handle) are likewise scoped to each header region wrapper. Across wrappers, DOM order decides: the passive regions, then the hover region, then the freeze-handle wrapper on top.
 
 ## Key Performance Patterns
 

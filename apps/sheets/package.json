@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
-    "typecheck": "bun check --no-script"
+    "typecheck": "bun check --no-script",
+    "test": "bun test"
   },
   "dependencies": {
     "@workspace/sheet": "workspace:*",

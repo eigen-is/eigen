@@ -1,12 +1,11 @@
 import { CHART_MAX_SIDE } from '@workspace/lib/charts';
 import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
-import { set } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import { type Context, getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
 import { mergeBorder } from '.';
-import { editableCurrentSheet, updateFloatingBox } from './floating';
+import { editableCurrentSheet } from './floating';
 
 // A pending upload's name is swapped for the real one on every sheet: the user may have switched tabs since the insert.
 export function replaceImageMediaName(ctx: Context, oldName: string, newName: string) {
@@ -82,50 +81,4 @@ export function insertImage(ctx: Context, mediaName: string, width: number, heig
     const images = (sheet.images ??= {});
     const box = sheetFloatingBox({ ...selectedCellOrigin(ctx), width: width * scale, height: height * scale, angle });
     images[id] = { id, index: nextFloatingIndex(sheet), mediaName, ...box };
-}
-
-function getImagePosition() {
-    const box = document.getElementById('sheet-modal-dialog-activeImage');
-    if (!box) return undefined;
-    const { width, height } = box.getBoundingClientRect();
-    const left = box.offsetLeft;
-    const top = box.offsetTop;
-    return { left, top, width, height };
-}
-
-export function onImageMoveStart(_ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
-    const position = getImagePosition();
-    if (position) {
-        const { top, left } = position;
-        set(globalCache, 'image', {
-            cursorMoveStartPosition: { x: e.pageX, y: e.pageY },
-            imgInitialPosition: { left, top },
-        });
-    }
-}
-
-export function onImageMove(ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
-    if (ctx.allowEdit === false) return false;
-    const image = globalCache?.image;
-    const img = document.getElementById('sheet-modal-dialog-activeImage');
-    if (img && image) {
-        const { x: startX, y: startY } = image.cursorMoveStartPosition!;
-        let { top, left } = image.imgInitialPosition!;
-        left += e.pageX - startX;
-        top += e.pageY - startY;
-        if (top < 0) top = 0;
-        (img as HTMLDivElement).style.left = `${left}px`;
-        (img as HTMLDivElement).style.top = `${top}px`;
-        return true;
-    }
-    return false;
-}
-
-export function onImageMoveEnd(ctx: Context, globalCache: GlobalCache) {
-    if (!globalCache.image) return;
-    const position = getImagePosition();
-    globalCache.image = undefined;
-    if (position && ctx.activeObject?.kind === 'image') {
-        updateFloatingBox(ctx, ctx.activeObject, { x: position.left, y: position.top });
-    }
 }

@@ -28,7 +28,7 @@ export function handleRowHeaderMouseDown(
         return;
     }
     // Cancel active image item
-    deselectFloatingObject(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     const rect = container.getBoundingClientRect();
     const mouseY = e.pageY - rect.top - window.scrollY;
@@ -333,7 +333,7 @@ export function handleColumnHeaderMouseDown(
         return;
     }
     // Cancel active image item
-    deselectFloatingObject(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;

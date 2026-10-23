@@ -320,10 +320,6 @@ export type GlobalCache = {
     scrollTop: number;
     scrollListeners: Set<() => void>;
     notifyScrollListeners: () => void;
-    image?: {
-        imgInitialPosition: Rect | undefined;
-        cursorMoveStartPosition: { x: number; y: number } | undefined;
-    };
     linkCard?: {
         mouseEnter?: boolean;
     };

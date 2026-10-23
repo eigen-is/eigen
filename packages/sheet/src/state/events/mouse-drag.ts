@@ -1,14 +1,6 @@
 import { cloneDeep, isNil } from 'es-toolkit/compat';
 import type { Context } from '../context';
-import {
-    cancelPaintModel,
-    onCellsMove,
-    onCellsMoveEnd,
-    onFormulaRangeDragEnd,
-    onImageMove,
-    onImageMoveEnd,
-    rangeDrag,
-} from '../modules';
+import { cancelPaintModel, onCellsMove, onCellsMoveEnd, onFormulaRangeDragEnd, rangeDrag } from '../modules';
 import { mergeMoveMain } from '../modules/cell';
 import { type CellGlyph, cellGlyphAt } from '../modules/cell-glyph';
 import { onDropCellSelect, onDropCellSelectEnd } from '../modules/drop-cell';
@@ -377,7 +369,6 @@ export function handleOverlayMouseMove(
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
 ) {
-    if (onImageMove(ctx, globalCache, e)) return;
     onCellsMove(ctx, globalCache, e, scrollEl, container);
 
     if (!ctx.selectionActive && !ctx.scrolling) {
@@ -409,7 +400,6 @@ export function handleOverlayMouseUp(
     fxInput: HTMLDivElement | null,
 ) {
     const rect = container.getBoundingClientRect();
-    onImageMoveEnd(ctx, globalCache);
     onFormulaRangeDragEnd(ctx);
     onCellsMoveEnd(ctx, globalCache, e, scrollEl, container);
     if (

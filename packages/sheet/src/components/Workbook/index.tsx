@@ -8,7 +8,7 @@ import {
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
-import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_FONT_SIZE, type SheetFloatingItem } from '@workspace/lib/sheets';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -369,16 +369,22 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             }
         }, [context.currentSheetId, context.selections, mergedSettings.hooks]);
 
-        // Surface the active floating image to the app so it can mount its properties panel. Fires on
-        // select/deselect and after a geometry commit; immer keeps the record's reference while it is
-        // unchanged, so the app's setState bails when nothing moved.
+        // Surface the selected image or chart to the app so it can mount its properties panel. Fires on
+        // select and deselect and after a write; immer keeps the record's reference while it is unchanged,
+        // and the item is memoized on it, so the app's setState bails when nothing moved.
         const currentSheetIndex = getSheetIndex(context, context.currentSheetId);
         const currentSheet = context.sheets[currentSheetIndex ?? -1];
         const { activeObject } = context;
         const activeImage = activeObject?.kind === 'image' ? currentSheet?.images?.[activeObject.id] : undefined;
+        const activeChart = activeObject?.kind === 'chart' ? currentSheet?.charts?.[activeObject.id] : undefined;
+        const activeItem = useMemo((): SheetFloatingItem | null => {
+            if (activeImage) return { kind: 'image', object: activeImage };
+            if (activeChart) return { kind: 'chart', object: activeChart };
+            return null;
+        }, [activeImage, activeChart]);
         useEffect(() => {
-            mergedSettings.hooks?.onActiveImageChange?.(activeImage ?? null);
-        }, [activeImage, mergedSettings.hooks]);
+            mergedSettings.hooks?.onActiveObjectChange?.(activeItem);
+        }, [activeItem, mergedSettings.hooks]);
 
         const editingChart = activeObject?.editor ? currentSheet?.charts?.[activeObject.id] : undefined;
         // Rebuilt on every sheet change while the editor is open: a renamed sheet renames its data range,
@@ -590,7 +596,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 }
                 // A selected floating image takes precedence over the pending cell copy: its
                 // copy is a pure image — eigen JSON only, no text/plain and no png, as vector's is (a
-                // native copy event can't await a media/ blob fetch, so png is dropped).
+                // native copy event can't await a media/ blob fetch, so png is dropped). A cut deletes it.
                 const activeImg = activeObject?.kind === 'image' ? sheet?.images?.[activeObject.id] : undefined;
                 if (activeImg && floating) {
                     const source = mergedSettings.hooks?.resolveImagePath?.(activeImg.mediaName);
@@ -605,6 +611,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             box: { width: activeImg.width, height: activeImg.height, angle: activeImg.angle },
                         });
                         writeEigenClipboard(e, { version: 1, items: [item] });
+                        if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                         return;
                     }
                 }
@@ -628,13 +635,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onPaste = useCallback(
             (e: ClipboardEvent) => {
-                // deal with multi instance case, only the focused sheet handles the paste; a selected chart
-                // holds the focus
+                // deal with multi instance case, only the focused sheet handles the paste; a selected image or
+                // chart holds the focus
                 const { activeElement } = document;
                 if (
                     cellInput.current === activeElement ||
                     activeElement?.className === 'sheet-overlay' ||
-                    (activeElement?.matches('[data-chart-id]') && workbookContainer.current?.contains(activeElement))
+                    (activeElement?.matches('[data-floating-id]') && workbookContainer.current?.contains(activeElement))
                 ) {
                     const { clipboardData } = e;
                     if (!clipboardData) return;

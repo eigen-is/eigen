@@ -84,4 +84,16 @@ describe('nextFloatingIndex', () => {
         const malformed: Sheet = { name: 'S', images: { i1: image('i1', 'a0') }, charts: { c1: chart('c1', '') } };
         expect(() => nextFloatingIndex(malformed)).not.toThrow();
     });
+
+    // A malformed key sorts as a string, so 'zz' or 'a10' paints above every valid key a repair in memory would put
+    // the insert at: the repair is written back to the record, as a z-order move writes its own.
+    test.each(['zz', 'a10'])('lands above a malformed key %p on top, and writes its repair', (top) => {
+        const sheet: Sheet = { name: 'S', images: { i1: image('i1', 'a0') }, charts: { c1: chart('c1', top) } };
+        const index = nextFloatingIndex(sheet);
+        const repaired = sheet.charts?.c1.index ?? '';
+        expect(repaired).not.toBe(top);
+        expect(repaired > 'a0').toBe(true);
+        expect(index > repaired).toBe(true);
+        expect(sheet.images?.i1.index).toBe('a0');
+    });
 });

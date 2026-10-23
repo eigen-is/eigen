@@ -30,10 +30,12 @@ export function isFloatingMap(value: unknown): value is Record<string, unknown> 
 }
 
 // The index of an object inserted above every image and chart. Tied and malformed keys, which concurrent inserts and
-// files leave behind, are repaired in memory first, because generateKeyBetween throws on them.
+// files leave behind, are repaired on the sheet's own records first, so the caller writes the repair with its insert, as
+// a z-order move does: generateKeyBetween throws on them, and a malformed key such as 'zz' still sorts above any key
+// the insert could take.
 export function nextFloatingIndex(sheet: Sheet): string {
-    const keys = syncInvalidIndices(floatingItems(sheet).map(({ object: { id, index } }) => ({ id, index })));
-    return generateKeyBetween(keys.at(-1)?.index ?? null, null);
+    const objects = syncInvalidIndices(floatingItems(sheet).map(({ object }) => object));
+    return generateKeyBetween(objects.at(-1)?.index ?? null, null);
 }
 
 // Excel's grid at the default track sizes: an object's corner lies on it.

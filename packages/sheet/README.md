@@ -60,7 +60,7 @@ In-progress work (see SHEETS-TODO.md for the canonical list):
 |-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
 | `src/engine/`     | DOM-free formula evaluator, parser, dependency graph, ref shifter, conditional-format evaluator. **No imports from `state/`.** Server-importable. |
 | `src/state/`      | Workbook context + immer reducers + DOM-coupled orchestration (selection, paste, drag-fill, cut/copy, image, hyperlink). Imports from `engine/`.  |
-| `src/components/` | React UI — `Workbook`, `Sheet`, `MenuBar`, `SheetOverlay`, `FxEditor`, `SheetTab`, `ContextMenu`, `DataVerification`, `LinkEditCard`, `ImgBoxs`.  |
+| `src/components/` | React UI — `Workbook`, `Sheet`, `MenuBar`, `SheetOverlay`, `FxEditor`, `SheetTab`, `ContextMenu`, `DataVerification`, `LinkEditCard`, `FloatingObjects`.  |
 | `src/hooks/`      | Shared React hooks (`useFormulaAutocomplete`, …).                                                                                                 |
 | `src/index.ts`    | Package entry — re-exports `Workbook` and the public surface.                                                                                     |
 
