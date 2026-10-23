@@ -7,6 +7,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { FUNCTION_CATEGORIES } from '../../../components/InsertFunctionDialog';
+import formulaFunction from '../../../engine/parser/evaluate-by-operator/operator/formula-function';
 import { FUNCTION_LIST } from '../../../state/modules/function-list';
 
 // Categories the dialog has no tab for, so their functions are search-only.
@@ -31,5 +32,12 @@ describe('FUNCTION_LIST categories', () => {
         // The dialog's own predicate (InsertFunctionDialog: `v.t === selectedType`).
         const names = FUNCTION_LIST.filter((fn) => fn.t === array!.t).map((fn) => fn.n);
         expect(names).toContain('UNIQUE');
+    });
+});
+
+describe('FUNCTION_LIST names', () => {
+    test('every function offered is one the engine evaluates', () => {
+        const registered = new Set(formulaFunction.SYMBOL.map((name) => name.toUpperCase()));
+        expect(FUNCTION_LIST.filter((fn) => !registered.has(fn.n)).map((fn) => fn.n)).toEqual([]);
     });
 });
