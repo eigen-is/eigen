@@ -6,6 +6,8 @@ import {
     type ChildAck,
     type ChildMediaRequest,
     type ChildResponseEnvelope,
+    COUNTED_WARNING_CODES,
+    type CountedWarningCode,
     type DocumentTransformRequest,
     type DocumentTransformResponse,
     type ExportMedia,
@@ -157,46 +159,23 @@ export function limitedCommand(command: string[], deadlineMs: number, memoryLimi
 // Each arm of the closed warning union carries exactly one payload field; settle()
 // renders them after the job left `active`, so an unknown code or a missing payload
 // has to be refused here rather than throw with nobody left to settle the request.
-// Keyed by the union so a future arm is a compile error here — a switch default
-// would silently turn every success carrying the new warning into invalid-response.
-const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, unknown>) => boolean> = {
+// A counted code is in COUNTED_WARNING_CODES; any other arm is keyed here, so a new one is a
+// compile error rather than every success carrying it turning into invalid-response.
+const WARNING_VALIDATORS: Record<
+    Exclude<TransformWarning['code'], CountedWarningCode>,
+    (w: Record<string, unknown>) => boolean
+> = {
     'recalc-failed': (w) => typeof w['message'] === 'string',
-    'corrupt-blobs-skipped': (w) => typeof w['count'] === 'number',
     'byte-guard-truncated': (w) => typeof w['bytes'] === 'number',
-    'blocks-flattened': (w) => typeof w['count'] === 'number',
-    'images-unshown': (w) => typeof w['count'] === 'number',
-    'images-dropped': (w) => typeof w['count'] === 'number',
-    'mirrors-dropped': (w) => typeof w['count'] === 'number',
-    'graphics-dropped': (w) => typeof w['count'] === 'number',
-    'tables-dropped': (w) => typeof w['count'] === 'number',
-    'charts-dropped': (w) => typeof w['count'] === 'number',
-    'diagrams-dropped': (w) => typeof w['count'] === 'number',
-    'objects-dropped': (w) => typeof w['count'] === 'number',
-    'shapes-simplified': (w) => typeof w['count'] === 'number',
-    'fills-simplified': (w) => typeof w['count'] === 'number',
-    'text-simplified': (w) => typeof w['count'] === 'number',
-    'section-pages-dropped': (w) => typeof w['count'] === 'number',
-    'even-bands-dropped': (w) => typeof w['count'] === 'number',
-    'band-images-unanchored': (w) => typeof w['count'] === 'number',
-    'band-content-dropped': (w) => typeof w['count'] === 'number',
-    'band-blocks-cut': (w) => typeof w['count'] === 'number',
-    'conditional-formats-dropped': (w) => typeof w['count'] === 'number',
-    'validations-dropped': (w) => typeof w['count'] === 'number',
-    'validation-prompts-cut': (w) => typeof w['count'] === 'number',
-    'sheet-names-changed': (w) => typeof w['count'] === 'number',
-    'cells-dropped': (w) => typeof w['count'] === 'number',
-    'texts-cut': (w) => typeof w['count'] === 'number',
-    'formulas-dropped': (w) => typeof w['count'] === 'number',
-    'number-formats-dropped': (w) => typeof w['count'] === 'number',
-    'cell-formats-dropped': (w) => typeof w['count'] === 'number',
-    'links-dropped': (w) => typeof w['count'] === 'number',
 };
+const COUNTED_CODES = new Set<string>(COUNTED_WARNING_CODES);
 
 function isValidWarning(warning: unknown): boolean {
     if (!warning || typeof warning !== 'object') return false;
     const w = warning as Record<string, unknown>;
     const code = w['code'];
-    const validate = typeof code === 'string' && WARNING_VALIDATORS[code as TransformWarning['code']];
+    if (typeof code === 'string' && COUNTED_CODES.has(code)) return typeof w['count'] === 'number';
+    const validate = typeof code === 'string' && WARNING_VALIDATORS[code as keyof typeof WARNING_VALIDATORS];
     return validate ? validate(w) : false;
 }
 
