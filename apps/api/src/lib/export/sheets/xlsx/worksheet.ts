@@ -178,8 +178,8 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
                   ? cellrangeLocation(linkAddress, context)
                   : undefined;
         const target = linkType === 'webpage' ? resolveWebLink(linkAddress) : null;
-        if (location === undefined && target === null) continue;
-        if (items.length >= MAX_SHEET_LINKS) {
+        // An address no editor opens, a script's among them, or a range that is none.
+        if ((location === undefined && target === null) || items.length >= MAX_SHEET_LINKS) {
             context.lost('links-dropped');
             continue;
         }

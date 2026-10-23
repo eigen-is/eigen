@@ -115,8 +115,8 @@ describe('a worksheet part', () => {
         );
     });
 
-    test('links are a block of their own: web links by relationship, places in the workbook by location, the whole range kept', () => {
-        const { xml, relationships } = partOf(
+    test('links are a block of their own: web links by relationship, places in the workbook by location, the whole range kept; one it cannot write is counted', () => {
+        const { xml, relationships, lost } = partOf(
             {
                 name: 'Sheet1',
                 celldata: [
@@ -152,6 +152,7 @@ describe('a worksheet part', () => {
             { type: `${R}/hyperlink`, target: 'https://example.com/a%20b', external: true },
             { type: `${R}/hyperlink`, target: 'https://example.com/x!B2', external: true },
         ]);
+        expect(lost).toEqual(['links-dropped', 'links-dropped']);
     });
 
     test('a drawing is the first relationship, the links after it', () => {
