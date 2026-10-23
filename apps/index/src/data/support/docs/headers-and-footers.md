@@ -4,7 +4,7 @@ description: "Put text, images, and page numbers at the top and bottom of a docu
 type: how-to
 category: Editing
 tags: [docs, headers, footers, page-numbers, layout]
-related: [docs/print, docs/export]
+related: [docs/print, docs/page-setup, docs/export]
 order: 55
 updated: 2026-10-23
 ---
@@ -38,7 +38,7 @@ While you edit a header, choose **Options → Header format…** on the bar, or 
 
 ## Remove a header or footer
 
-Double-click the header or footer, then choose **Options → Remove header** or **Options → Remove footer** on the bar. **Options → Page setup…** opens the paper and margin settings.
+Double-click the header or footer, then choose **Options → Remove header** or **Options → Remove footer** on the bar. **Options → Page setup…** opens the paper and margin settings. See [Set the paper size, orientation, and margins](/support/docs/page-setup).
 
 ## Good to know
 

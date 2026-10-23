@@ -3,7 +3,7 @@ title: "Import a Word document"
 description: "Replace the contents of a document with text, headings, and images from a .docx file."
 type: how-to
 tags: [docs, import, word, docx]
-related: [docs/export, docs/create-and-edit]
+related: [docs/export, docs/create-and-edit, docs/page-setup]
 order: 100
 updated: 2026-10-23
 ---
@@ -51,7 +51,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Footnotes stay footnotes, with their formatting and links, and endnotes become footnotes. A footnote with a custom mark, such as *, gets a number instead.
 - The header and footer come across, with page numbers and page counts, and the first page's own header and footer when the Word file has them. An image that floats in a header or footer comes in on a line of its own.
 - A page break, "Page break before" in Word's paragraph settings, and a section break that starts a new page all start a new page in Eigen.
-- The paper size, orientation, and margins. A document has one page setup, so when the Word file's sections differ, the last section's is used.
+- The paper size, orientation, and margins (see [Set the paper size, orientation, and margins](/support/docs/page-setup)). A document has one page setup, so when the Word file's sections differ, the last section's is used.
 - Blank lines stay, except the ones right before a new page.
 - Equations become equations you can edit, and one that Word shows on its own line stays on its own line. A very large equation comes in as its text. See [Insert and edit equations](/support/docs/equations).
 - A Word file you downloaded from Eigen keeps its code blocks' languages.
