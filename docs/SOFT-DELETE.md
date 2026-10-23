@@ -37,6 +37,7 @@ A rename on disk and a row write in `metadata.db` cannot share a transaction. Tr
 - Restore with the bytes at the target only: they are this item's, so it writes the row.
 - Restore with bytes at both: the target is a leftover, moved aside before the rename. If a live row's bytes sit there, which a case-insensitive disk allows under another name (same inode), the restore is a 409 and nothing moves.
 - A rename or move reads its target the same way (`renameTarget` in `trash.ts`): a leftover moves aside, a live row's bytes under another name are a 409, and the item's own bytes, which a case-only rename on a case-insensitive disk finds there, are no conflict. APFS folds more than the name check does (`ſ` onto `s`, `ß` onto `ss`), so only the inode catches those.
+- A create of a file or folder reads its key the same way, under the shared tree lock right before its write: a leftover moves aside rather than being overwritten or, for a folder, adopted, and a live row's bytes under another name are a 409.
 
 A moved-aside entry is kept, not deleted, because it may hold older versions or media the item lacks. It goes to `.trash/{pathId}.{ext}.stale-{ms}`, keyed by the item that found it, and the API logs a warning naming both keys. No restore, purge, quota or backup reaches a `.stale-` entry. The operator finds them with `find data -path '*/.trash/*.stale-*'`, looks through them and removes them by hand.
 

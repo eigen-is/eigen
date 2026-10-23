@@ -394,7 +394,7 @@ export class Mount {
     // non-ASCII names on path-based mounts, so ASCII lookups and id-keyed backends keep SQLite's
     // fold. The v7 unique index stays the ASCII race net.
     // An ASCII query never scans, so a stored-side-only alias (U+212A 'K') or an unfoldable pair (ſ/s) is not caught;
-    // a local rename, move or restore catches those on disk (trash.renameTarget).
+    // a local create, rename, move or restore catches those on disk (trash.renameTarget).
     private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
         if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;
         const folded = name.toLowerCase();
@@ -467,6 +467,19 @@ export class Mount {
         return this.isPathBased ? this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
     }
 
+    // Under the tree lock, right before a create's write: on `local` the disk folds names the check above misses
+    // (ſ onto s), and a crash can leave bytes no row owns at the key, which a write would replace or a mkdir adopt.
+    private async claimCreateKey(parentId: string, key: string, id: string, name: string): Promise<void> {
+        if (!this.isPathBased || !this.storage.rename) return;
+        const occupant = await trash.renameTarget(this, parentId, key);
+        if (occupant === 'live') {
+            throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+        }
+        if (occupant === 'leftover') {
+            await trash.moveAside(this.storage.rename.bind(this.storage), key, trashStorageKey(id, name));
+        }
+    }
+
     async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
         name = validateName(name);
         const folderId = randomUUID();
@@ -479,7 +492,9 @@ export class Mount {
             // Under the lock: on `local` a rename that took it first owns the key this write replaces.
             await this.assertUniqueName(parentId, name);
             if (this.isPathBased && this.storage.mkdir) {
-                await this.storage.mkdir(await this.resolveWriteKey(parentId, fileValue));
+                const key = await this.resolveWriteKey(parentId, fileValue);
+                await this.claimCreateKey(parentId, key, folderId, name);
+                await this.storage.mkdir(key);
             }
 
             await this.insertPathRow({
@@ -525,9 +540,11 @@ export class Mount {
         await this.withTreeShared(async () => {
             // Under the lock: on `local` a rename that took it first owns the key this write replaces.
             await this.assertUniqueName(parentId, name);
+            const storageKey = await this.resolveWriteKey(parentId, fileValue);
+            await this.claimCreateKey(parentId, storageKey, fileId, name);
             // Storage write before DB insert (crash safety: orphaned file > orphaned row)
             if (data !== undefined) {
-                await this.storage.write(await this.resolveWriteKey(parentId, fileValue), data);
+                await this.storage.write(storageKey, data);
             }
 
             await this.insertPathRow({
@@ -570,6 +587,7 @@ export class Mount {
             // Under the lock: on `local` a rename that took it first owns the key this write replaces.
             await this.assertUniqueName(parentId, name);
             const storageKey = await this.resolveWriteKey(parentId, fileValue);
+            await this.claimCreateKey(parentId, storageKey, fileId, name);
 
             await this.uploadFromTemp(storageKey, tempId);
 

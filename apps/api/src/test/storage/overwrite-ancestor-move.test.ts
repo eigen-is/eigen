@@ -340,12 +340,13 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
         expect(await storage.exists(trashedKey)).toBe(false);
     });
 
-    // The upload passes its name check while the rename waits, then queues behind it.
+    // The create passes its name check while the rename waits, then queues behind it.
     test.each([
-        ['an upload', false],
-        ['an upload from a temp file', true],
-    ])('%s queued behind a rename to its name answers 409 and keeps the renamed bytes', async (_, fromTemp) => {
-        const { mount, storage, folderId, fileId } = await fileInFolder(`create-behind-rename-${fromTemp}`);
+        ['an upload', 'file'],
+        ['an upload from a temp file', 'temp'],
+        ['a folder create', 'folder'],
+    ] as const)('%s queued behind a rename to its name answers 409 and keeps the renamed bytes', async (_, kind) => {
+        const { mount, storage, folderId, fileId } = await fileInFolder(`create-behind-rename-${kind}`);
         const tempId = randomUUID();
         const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('UPLOAD'));
         try {
@@ -355,9 +356,12 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
             const rename = mount.updatePath(fileId, { name: 'new.txt' });
             await renameQueued;
             const createQueued = mount.armTreeWait();
-            const create = fromTemp
-                ? mount.createFileFromTemp(folderId, 'new.txt', 'text/plain', size, hash, tempId)
-                : mount.createFile(folderId, 'new.txt', 'text/plain', size, Buffer.from('UPLOAD'));
+            const create =
+                kind === 'folder'
+                    ? mount.createFolder(folderId, 'new.txt')
+                    : kind === 'temp'
+                      ? mount.createFileFromTemp(folderId, 'new.txt', 'text/plain', size, hash, tempId)
+                      : mount.createFile(folderId, 'new.txt', 'text/plain', size, Buffer.from('UPLOAD'));
             await createQueued;
             hold.resolve();
             await Promise.all([held, rename]);

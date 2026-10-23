@@ -1,10 +1,12 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { MOUNT_DB_CONFIG } from '../../lib/mount/db-config';
 import { Mount } from '../../lib/mount/mount';
+import { writeTempWithHash } from '../../lib/storage';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 const UNIQUE_INDEX = 'idx_paths_unique_active_name';
@@ -322,7 +324,10 @@ describe('concurrent same-name create → exactly one 409', () => {
     });
 });
 
-describe('a local rename onto bytes already on disk', () => {
+type CreateKind = 'folder' | 'file' | 'temp file';
+const CREATE_KINDS: CreateKind[] = ['folder', 'file', 'temp file'];
+
+describe('a local rename or create onto bytes already on disk', () => {
     const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-rename-on-disk-${Date.now()}`);
     mkdirSync(TEST_DIR, { recursive: true });
     // APFS folds ſ to s and ß to ss, which no name check in the table matches; a case-sensitive disk keeps them apart.
@@ -391,6 +396,58 @@ describe('a local rename onto bytes already on disk', () => {
 
         await mount.closeAllDatabases();
     });
+
+    async function create(mount: Mount, kind: CreateKind, parentId: string, name: string): Promise<string> {
+        if (kind === 'folder') return mount.createFolder(parentId, name);
+        if (kind === 'file') return mount.createFile(parentId, name, 'text/plain', 3, Buffer.from('new'));
+        const tempId = randomUUID();
+        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Buffer.from('new'));
+        try {
+            return await mount.createFileFromTemp(parentId, name, 'text/plain', size, hash, tempId);
+        } finally {
+            await mount.cleanupTemp(tempId);
+        }
+    }
+
+    test.each(CREATE_KINDS)('a %s create onto a leftover no row owns moves it aside into .trash/', async (kind) => {
+        const { mount, rootId } = await localMount(`create-onto-leftover-${kind}`);
+        const name = kind === 'folder' ? 'docs' : 'y.txt';
+        const leftover = kind === 'folder' ? join(name, 'old.txt') : name;
+        if (kind === 'folder') mkdirSync(join(mount.dataDir, name));
+        writeFileSync(join(mount.dataDir, leftover), 'leftover');
+
+        const created = await create(mount, kind, rootId, name);
+
+        const aside = movedAside(mount);
+        expect(aside).toHaveLength(1);
+        expect(aside[0].startsWith(kind === 'folder' ? `${created}.stale-` : `${created}.txt.stale-`)).toBe(true);
+        const asideLeftover = join(mount.dataDir, '.trash', aside[0], kind === 'folder' ? 'old.txt' : '');
+        expect(readFileSync(asideLeftover, 'utf8')).toBe('leftover');
+        if (kind === 'folder') expect(readdirSync(join(mount.dataDir, name))).toEqual([]);
+        else expect(await (await mount.readFile(created))!.text()).toBe('new');
+
+        await mount.closeAllDatabases();
+    });
+
+    test.skipIf(!foldsBeyondLowerCase).each(CREATE_KINDS)(
+        'a %s create of ſ beside s answers 409 and keeps the sibling',
+        async (kind) => {
+            const { mount, rootId } = await localMount(`create-fold-${kind}`);
+            const name = kind === 'folder' ? 'ſ' : 'ſ.txt';
+            const siblingName = kind === 'folder' ? 's' : 's.txt';
+            const sibling =
+                kind === 'folder'
+                    ? await mount.createFolder(rootId, siblingName)
+                    : await mount.createFile(rootId, siblingName, 'text/plain', 5, Buffer.from('other'));
+
+            await expect(create(mount, kind, rootId, name)).rejects.toMatchObject({ status: 409 });
+
+            expect((await mount.listFolder(rootId)).map((c) => c.name)).toEqual([siblingName]);
+            if (kind !== 'folder') expect(await (await mount.readFile(sibling))!.text()).toBe('other');
+
+            await mount.closeAllDatabases();
+        },
+    );
 });
 
 describe('v7 dedup covers the folder restore-from-trash cohort', () => {

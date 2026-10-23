@@ -192,21 +192,21 @@ function onDisk(mount: Mount, key: string): boolean {
     return fs.existsSync(path.join(mount.dataDir, key));
 }
 
-// What a `local` disk rename of sourceKey onto targetKey would replace. `source`: the item itself, as a case-only rename
-// on a case-insensitive disk resolves. `live`: a live sibling's bytes, whose name the disk folds onto the target though
-// no name in the table matches (same inode). `leftover`: bytes no row owns.
+// What a `local` disk rename of sourceKey onto targetKey, or a create at targetKey, would replace. `source`: the item
+// itself, as a case-only rename on a case-insensitive disk resolves. `live`: a live sibling's bytes, whose name the disk
+// folds onto the target though no name in the table matches (same inode). `leftover`: bytes no row owns.
 // internal — used by mount/*.ts
 export async function renameTarget(
     mount: Mount,
     parentId: string,
     targetKey: string,
-    sourceKey: string,
+    sourceKey?: string,
 ): Promise<'free' | 'source' | 'live' | 'leftover'> {
     const stat = (key: string) => fs.statSync(path.join(mount.dataDir, key), { throwIfNoEntry: false });
     const target = stat(targetKey);
     if (!target) return 'free';
     const sameInode = (other: fs.Stats | undefined) => other?.ino === target.ino && other.dev === target.dev;
-    if (sameInode(stat(sourceKey))) return 'source';
+    if (sourceKey !== undefined && sameInode(stat(sourceKey))) return 'source';
     const parentKey = path.posix.dirname(targetKey);
     const siblings = await mount.db
         .select({ file: paths.file })
