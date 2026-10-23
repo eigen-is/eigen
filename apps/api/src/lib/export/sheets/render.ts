@@ -9,10 +9,10 @@ import {
     cellFontName,
     type MergeCell,
     mergedBorderSides,
-    SHEET_DEFAULT_COL_WIDTH,
-    SHEET_DEFAULT_ROW_HEIGHT,
     type Sheet,
     type SheetConfig,
+    sheetDefaultColWidth,
+    sheetDefaultRowHeight,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { orderByFractionalIndex } from '@workspace/lib/vector';
@@ -228,21 +228,25 @@ function clipRulesToWindow(
 }
 
 // Laid-out pixels across `[from, to]`, hidden tracks contributing nothing — the one place the
-// stored-length-or-default rule lives, for both the grid's own size and the floating overlay's offset.
-function colSpan(config: SheetConfig, from: number, to: number): number {
+// stored-length-or-default rule lives, for the grid's tracks, its size and the floating overlay's offset.
+function colSpan(sheet: Sheet, from: number, to: number): number {
+    const { colhidden, columnlen } = sheet.config ?? {};
+    const fallback = sheetDefaultColWidth(sheet);
     let width = 0;
     for (let c = from; c <= to; c++) {
-        if (config.colhidden?.[c]) continue;
-        width += cssLength(config.columnlen?.[c], SHEET_DEFAULT_COL_WIDTH);
+        if (colhidden?.[c]) continue;
+        width += cssLength(columnlen?.[c], fallback);
     }
     return width;
 }
 
-function rowSpan(config: SheetConfig, from: number, to: number): number {
+function rowSpan(sheet: Sheet, from: number, to: number): number {
+    const { rowhidden, rowlen } = sheet.config ?? {};
+    const fallback = sheetDefaultRowHeight(sheet);
     let height = 0;
     for (let r = from; r <= to; r++) {
-        if (config.rowhidden?.[r]) continue;
-        height += cssLength(config.rowlen?.[r], SHEET_DEFAULT_ROW_HEIGHT);
+        if (rowhidden?.[r]) continue;
+        height += cssLength(rowlen?.[r], fallback);
     }
     return height;
 }
@@ -251,13 +255,13 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     const config = sheet.config ?? {};
     const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
     const blank = maxRow < 0 || maxCol < 0;
-    const offset = blank ? { left: 0, top: 0 } : gridOffset(config, minRow, minCol);
+    const offset = blank ? { left: 0, top: 0 } : gridOffset(sheet, minRow, minCol);
     // The overlay draws at the stored grid coordinate, so an image or chart parked past the used
     // range is still on the page.
     const extent = floatingExtent(sheet, offset);
     return {
-        width: Math.max(blank ? 0 : colSpan(config, minCol, maxCol), extent.width),
-        height: Math.max(blank ? 0 : rowSpan(config, minRow, maxRow), extent.height),
+        width: Math.max(blank ? 0 : colSpan(sheet, minCol, maxCol), extent.width),
+        height: Math.max(blank ? 0 : rowSpan(sheet, minRow, maxRow), extent.height),
     };
 }
 
@@ -291,10 +295,10 @@ function renderSheet(
     // stretch the fragment and collapse the thumbnail scaled by it. With no images or charts the table is
     // emitted bare, so a workbook without them renders exactly the markup it always did.
     const withOverlay = (table: string, tableWidth: number, minRow: number, minCol: number): string => {
-        const offset = gridOffset(config, minRow, minCol);
+        const offset = gridOffset(sheet, minRow, minCol);
         const clip = budget && {
-            width: colSpan(config, minCol, minCol + budget.maxCols - 1),
-            height: rowSpan(config, minRow, minRow + budget.maxRows - 1),
+            width: colSpan(sheet, minCol, minCol + budget.maxCols - 1),
+            height: rowSpan(sheet, minRow, minRow + budget.maxRows - 1),
         };
         const overlay = renderFloatingObjects(sheet, mediaUrls, resolver, offset, styles, clip);
         if (!overlay) return table;
@@ -376,7 +380,7 @@ function renderSheet(
     const cols: string[] = [];
     let tableWidth = 0;
     for (const c of renderCols) {
-        const w = cssLength(config.columnlen?.[c], SHEET_DEFAULT_COL_WIDTH);
+        const w = colSpan(sheet, c, c);
         tableWidth += w;
         cols.push(`<col ${styleAttr(styles, `width:${w}px`)}>`);
     }
@@ -384,7 +388,7 @@ function renderSheet(
 
     const rows: string[] = [];
     for (const r of renderRows) {
-        const h = cssLength(config.rowlen?.[r], SHEET_DEFAULT_ROW_HEIGHT);
+        const h = rowSpan(sheet, r, r);
         const cells: string[] = [];
         const rowMerges = merges.filter((m) => m.r <= r && r < m.r + m.rs);
 
@@ -494,8 +498,8 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 // Floating images are stored in unzoomed grid pixels from A1's top-left (the editor's
 // ImgBoxs reads the same fields into left/top/width/height), while the table starts at
 // the used range — so the overlay subtracts the rows and columns the window skipped.
-function gridOffset(config: SheetConfig, minRow: number, minCol: number): { left: number; top: number } {
-    return { left: colSpan(config, 0, minCol - 1), top: rowSpan(config, 0, minRow - 1) };
+function gridOffset(sheet: Sheet, minRow: number, minCol: number): { left: number; top: number } {
+    return { left: colSpan(sheet, 0, minCol - 1), top: rowSpan(sheet, 0, minRow - 1) };
 }
 
 type FloatingBox = { x: number; y: number; width: number; height: number };
@@ -744,14 +748,14 @@ function getRenderBounds(
 
     let minCol = 0;
     let left = 0;
-    while (minCol < bounds.minCol && left + colSpan(config, minCol, minCol) <= x) {
-        left += colSpan(config, minCol, minCol);
+    while (minCol < bounds.minCol && left + colSpan(sheet, minCol, minCol) <= x) {
+        left += colSpan(sheet, minCol, minCol);
         minCol++;
     }
     let minRow = 0;
     let top = 0;
-    while (minRow < bounds.minRow && top + rowSpan(config, minRow, minRow) <= y) {
-        top += rowSpan(config, minRow, minRow);
+    while (minRow < bounds.minRow && top + rowSpan(sheet, minRow, minRow) <= y) {
+        top += rowSpan(sheet, minRow, minRow);
         minRow++;
     }
     return { ...bounds, minRow, minCol };

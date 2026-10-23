@@ -1,5 +1,6 @@
+import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
-import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import {
     cellDisplay,
     cellWrapsText,
@@ -8,7 +9,6 @@ import {
 } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import { optional } from '../../core/opc';
-import { DEFAULT_ROW_HEIGHT_PT } from '../../document/spreadsheetml';
 import { IMPORT_MESSAGES, importError, ONLY_CHART_SHEETS, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
 import { readBudget, readInBatches, readPackage } from './package';
@@ -98,15 +98,20 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
                 Math.max(grid.rows, DEFAULT_SHEET_ROW_COUNT) * Math.max(grid.columns, DEFAULT_SHEET_COLUMN_COUNT);
             if (emitted.slots > MAX_GRID_SLOTS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
             const { merge = {}, columnlen = {} } = worksheet.config;
+            const columnWidth = sheetDefaultColWidth(worksheet.sheet);
+            const rowHeight = sheetDefaultRowHeight(worksheet.sheet);
             const tallest = new Map<number, number>();
             for (const { r, c, v } of grid.celldata) {
-                const height = estimateCellHeight(v, c, r, merge, columnlen);
-                if (height > Math.max(SHEET_DEFAULT_ROW_HEIGHT, tallest.get(r) ?? 0)) tallest.set(r, height);
+                const height = estimateCellHeight(v, c, r, merge, columnlen, columnWidth);
+                if (height > Math.max(rowHeight, tallest.get(r) ?? 0)) tallest.set(r, height);
             }
             const rowlen: NonNullable<SheetConfig['rowlen']> = {};
             for (const [r, height] of tallest) rowlen[r] = Math.round(height);
-            for (const [r, points] of grid.heights)
-                if (points !== DEFAULT_ROW_HEIGHT_PT) rowlen[r] = Math.round(points * PT_TO_PX);
+            // A row at the sheet's default height has none of its own.
+            for (const [r, points] of grid.heights) {
+                const pixels = Math.round(ptToPx(points));
+                if (pixels !== rowHeight) rowlen[r] = pixels;
+            }
             const config: SheetConfig = { ...worksheet.config };
             if (Object.keys(rowlen).length > 0) config.rowlen = rowlen;
             if (Object.keys(grid.rowhidden).length > 0) config.rowhidden = grid.rowhidden;
@@ -144,7 +149,6 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
 }
 
 const DEFAULT_FONT_SIZE = 11;
-const PT_TO_PX = 4 / 3;
 const LINE_HEIGHT_FACTOR = 1.35;
 
 function estimateCellHeight(
@@ -153,9 +157,10 @@ function estimateCellHeight(
     r: number,
     merge: NonNullable<SheetConfig['merge']>,
     colWidthPx: Record<number, number>,
+    defaultColWidth: number,
 ): number {
     const fontSize = converted.fs ?? DEFAULT_FONT_SIZE;
-    const lineHeightPx = fontSize * PT_TO_PX * LINE_HEIGHT_FACTOR;
+    const lineHeightPx = ptToPx(fontSize) * LINE_HEIGHT_FACTOR;
     if (!cellWrapsText(converted)) {
         return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + 6 : 0;
     }
@@ -163,13 +168,13 @@ function estimateCellHeight(
     const text = String(cellDisplay(converted) ?? '');
     if (!text) return lineHeightPx + 6;
 
-    let cellWidth = colWidthPx[c] ?? SHEET_DEFAULT_COL_WIDTH;
+    let cellWidth = colWidthPx[c] ?? defaultColWidth;
     const mergeKey = `${r}_${c}`;
     const mergeInfo = merge[mergeKey];
     if (mergeInfo?.cs && mergeInfo.cs > 1) {
         cellWidth = 0;
         for (let ci = mergeInfo.c; ci < mergeInfo.c + mergeInfo.cs; ci++) {
-            cellWidth += colWidthPx[ci] ?? SHEET_DEFAULT_COL_WIDTH;
+            cellWidth += colWidthPx[ci] ?? defaultColWidth;
         }
     }
 

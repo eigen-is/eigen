@@ -65,7 +65,7 @@ Everything that is the cell (value, formula, number format, colors, font, rotati
 | Hyperlinks | `sheet.hyperlink` | The link outlives edits to its text |
 | Row and column geometry | `config.rowlen`, `columnlen`, `rowhidden`, `colhidden` | Keyed by axis, not by cell |
 
-`parseCellKey` is the one `"r_c"` parser. Insert and delete re-key borders, validation and hyperlinks through `shiftCellKeyedForInsert`/`Delete` (`engine/rowcol.ts`); merges have their own shifter. A track nobody resized stores no size and falls back to `SHEET_DEFAULT_COL_WIDTH` and `SHEET_DEFAULT_ROW_HEIGHT` (`packages/lib/src/sheets/defaults.ts`), which the editor, the importer and the export all read, so screen and export share one pitch.
+`parseCellKey` is the one `"r_c"` parser. Insert and delete re-key borders, validation and hyperlinks through `shiftCellKeyedForInsert`/`Delete` (`engine/rowcol.ts`); merges have their own shifter. A track nobody resized stores no size and falls back to its sheet's `defaultColWidth` and `defaultRowHeight`, or to `SHEET_DEFAULT_COL_WIDTH` and `SHEET_DEFAULT_ROW_HEIGHT` on a sheet without them. Only the xlsx import sets a sheet's own, so an Excel sheet keeps Excel's pitch. The editor, the importer and the export all read them through `sheetDefaultColWidth` and `sheetDefaultRowHeight` (`packages/lib/src/sheets/defaults.ts`), so screen and export share one pitch.
 
 `conditionalFormatRules` and `alternateFormatRules` stay arrays, because order is rule priority (Excel's model, exported as xlsx priorities). Two clients appending a rule at once can disagree on that order, visible only where rules overlap ([the proposal](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md#what-diverges-today)).
 
@@ -319,9 +319,10 @@ These are deliberate. Where a test pins one, it is in `apps/api/src/test/export/
 - A `sheet` link re-imports as a `cellrange` link at `'Name'!A1`, and a range link keeps only its top-left cell, because ExcelJS's internal-link pattern needs a single trailing cell ref. A bare ref gains its own sheet's quoted prefix. A webpage URL with exactly one `!` and a cell-shaped tail is misread as internal by that pattern.
 - Imported link cells keep Excel's font, while the link dialog sets blue and underline. Forcing the dialog style at import would clobber theme-styled link cells.
 
-Column widths:
+Column widths and row heights:
 
-- A width counts the file's default font's digits ([TYPOGRAPHY.md](TYPOGRAPHY.md#the-xlsx-export-makes-inter-the-workbooks-default-font)). Only a file whose default font is Inter, an Eigen export, converts through Inter's 9 px digit; any other imports at 8 px a character, so an Excel column 8.43 characters wide is 67 px where Excel draws 64.
+- A width counts the file's default font's digits ([TYPOGRAPHY.md](TYPOGRAPHY.md#the-xlsx-export-makes-inter-the-workbooks-default-font)). Only a file whose default font is Inter, an Eigen export, converts through Inter's 9 px digit; any other imports at 8 px a character. So a Calibri column Excel draws 64 px wide, stored as 9.140625, is 73 px.
+- An unsized column takes the sheet's default width, read by the same digit. `sheetFormatPr`'s `defaultColWidth` counts its padding already. Without it Excel pads `baseColWidth` (8 when absent) by 5 px and rounds up to a multiple of 8 px, so Excel's 64 px default imports at 72 px. The default row height is points to pixels, and Excel's 15 pt when the file names none.
 
 Rules and comments:
 

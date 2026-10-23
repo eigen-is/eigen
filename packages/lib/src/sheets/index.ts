@@ -17,6 +17,8 @@ export {
     SHEET_DEFAULT_FONT_SIZE,
     SHEET_DEFAULT_ROW_HEIGHT,
     SHEET_ROW_HEADER_WIDTH,
+    sheetDefaultColWidth,
+    sheetDefaultRowHeight,
 } from './defaults';
 export { cellFontName, SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from './fonts';
 export { columnIndexToLabel, columnLabelToIndex } from './labels';

@@ -1,4 +1,5 @@
 import { EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
+import { pxToPt } from '@workspace/lib/docs/eigendoc';
 import {
     BORDER_STYLES,
     type BorderSide,
@@ -19,6 +20,8 @@ import {
     SHEET_DEFAULT_FONT_SIZE,
     type Sheet,
     type SingleRange,
+    sheetDefaultColWidth,
+    sheetDefaultRowHeight,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { escapeXml } from '@workspace/lib/xml';
@@ -37,7 +40,6 @@ import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from 
 import { cssColorToHex } from '../../document/colors';
 import {
     DAY_MS,
-    DEFAULT_ROW_HEIGHT_PT,
     DV_XLSX_DATE_OPERATOR,
     DV_XLSX_OPERATOR,
     EXCEL_EPOCH_MS,
@@ -82,9 +84,15 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 
     for (const [sheetIndex, sheet] of sheets.entries()) {
         const tabColor = sheet.color ? argbOf(sheet.color) : undefined;
+        const defaultRowHeight = pxToPt(sheetDefaultRowHeight(sheet));
         const worksheet = workbook.addWorksheet(sheet.name, {
             state: sheet.hide === 1 && sheetIndex !== activeTab ? 'hidden' : 'visible',
-            ...(tabColor && { properties: { tabColor: { argb: tabColor } } }),
+            // sheetFormatPr: an unsized column or row opens in Excel at the size it has here.
+            properties: {
+                defaultColWidth: sheetDefaultColWidth(sheet) / SHEET_DEFAULT_DIGIT_WIDTH,
+                defaultRowHeight,
+                ...(tabColor && { tabColor: { argb: tabColor } }),
+            },
         });
         const config = sheet.config ?? {};
 
@@ -151,7 +159,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 
         if (config.rowlen) {
             for (const [row, px] of Object.entries(config.rowlen)) {
-                worksheet.getRow(Number(row) + 1).height = px * (3 / 4);
+                worksheet.getRow(Number(row) + 1).height = pxToPt(px);
             }
         }
 
@@ -160,8 +168,8 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
                 const wsRow = worksheet.getRow(Number(row) + 1);
                 wsRow.hidden = true;
                 // exceljs only emits a row element when it has cells or a height — give
-                // data-less hidden rows the default height so hidden="1" survives.
-                if (!wsRow.height && wsRow.cellCount === 0) wsRow.height = DEFAULT_ROW_HEIGHT_PT;
+                // data-less hidden rows the sheet's default height so hidden="1" survives.
+                if (!wsRow.height && wsRow.cellCount === 0) wsRow.height = defaultRowHeight;
             }
         }
 
