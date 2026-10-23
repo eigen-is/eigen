@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1944 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1945 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (184)
+## Components (185)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -84,6 +84,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
 | `ChartDataDialog` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-data-dialog.tsx |
 | `ChartEditor` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-editor.tsx |
+| `ChartSections` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-sections.tsx |
 | `InlineChartDataDialog` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-data-dialog.tsx |
 | `ChatCreateWizard` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-create-wizard.tsx |
 | `ChatMessageInput` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |

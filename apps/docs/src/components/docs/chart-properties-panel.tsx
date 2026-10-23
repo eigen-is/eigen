@@ -1,11 +1,9 @@
 import { type Editor, useEditorState } from '@tiptap/react';
 import { isSketchCapped, parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import { CHART_DEFAULT_SIZE, type ChartAttrs, readChartAttrs } from '@workspace/lib/docs/eigendoc';
-import { parseFill, serializeFill } from '@workspace/lib/vector';
-import { ChartEditor, InlineChartDataDialog } from '@workspace/ui/components/charts';
+import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
     holdCapture,
-    PaintSections,
     PropertiesPanel,
     PropertyGestureContext,
     PropertyHistoryContext,
@@ -64,26 +62,15 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
             <PropertyHistoryContext.Provider value={history}>
                 <PropertiesPanel title="Chart">
                     {spec && (
-                        <ChartEditor
+                        <ChartSections
                             spec={spec}
                             onChange={(next) => write({ spec: JSON.stringify(next) })}
+                            look={look}
+                            onLookChange={write}
+                            sketchCapped={spec.data.source === 'inline' && isSketchCapped(spec, spec.data)}
                             onEditData={onEditData}
                         />
                     )}
-                    <PaintSections
-                        fill={look.fill}
-                        fillStyle={parseFill(look.fill).style}
-                        marksHatch
-                        strokeColor={look.strokeColor}
-                        strokeWidth={look.strokeWidth}
-                        strokeStyle={look.strokeStyle}
-                        strokeOptional
-                        roughness={look.roughness}
-                        color={look.color}
-                        sketchCapped={spec?.data.source === 'inline' && isSketchCapped(spec, spec.data)}
-                        onFill={(next) => write({ fill: serializeFill(next(parseFill(look.fill))) })}
-                        onChange={write}
-                    />
                     <FigureLayoutSection
                         layout={layout}
                         alignment={alignment}
