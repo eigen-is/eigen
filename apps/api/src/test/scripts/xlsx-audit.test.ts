@@ -372,10 +372,11 @@ describe('round trip', () => {
         ]);
     }, 60_000);
 
-    test('a difference the spec explains is listed under its kind, any other under its feature', () => {
+    test('a difference the writer explains is listed under its kind, any other under its feature', () => {
         const sheet = (cell: Sheet['celldata']): Sheet[] => [{ name: 'S', celldata: cell }];
         const groups = classifyDifferences({
             warnings: new Map(),
+            media: { a: new Map(), b: new Map() },
             a: sheet([
                 { r: 0, c: 0, v: { v: 'a', fs: 10 } },
                 { r: 0, c: 1, v: { v: 1, m: '1' } },
@@ -389,5 +390,40 @@ describe('round trip', () => {
             ['default font keys', true, 2],
             ['cell fs', false, 1],
         ]);
+    });
+
+    test('a sheet name is listed as repaired only as the writer repairs it', () => {
+        const names = (...names: string[]): Sheet[] => names.map((name) => ({ name }));
+        const classify = (b: Sheet[]) =>
+            classifyDifferences({
+                warnings: new Map([['sheet-names-changed', 1]]),
+                a: names('History', 'Data'),
+                b,
+                media: { a: new Map(), b: new Map() },
+            }).map(({ kind, listed, count }) => [kind, listed, count]);
+        expect(classify(names('History (2)', 'Data'))).toEqual([['sheet names repaired', true, 1]]);
+        expect(classify(names('History (2)', 'Other'))).toEqual([
+            ['sheet names repaired', true, 1],
+            ['sheet name', false, 1],
+        ]);
+    });
+
+    test("a picture over the same box whose media changed its type or its pixels differs, whatever it's named", () => {
+        const image = (mediaName: string): Sheet[] => [
+            { name: 'S', images: { i: { id: 'i', index: 'a0', x: 0, y: 0, width: 10, height: 10, mediaName } } },
+        ];
+        const classify = (b: { contentType: string; width: number; height: number }) =>
+            classifyDifferences({
+                warnings: new Map(),
+                a: image('one.png'),
+                b: image('two.png'),
+                media: {
+                    a: new Map([['one.png', { contentType: 'image/png', width: 4, height: 4 }]]),
+                    b: new Map([['two.png', b]]),
+                },
+            }).map(({ kind, listed, count }) => [kind, listed, count]);
+        expect(classify({ contentType: 'image/png', width: 4, height: 4 })).toEqual([]);
+        expect(classify({ contentType: 'image/jpeg', width: 4, height: 4 })).toEqual([['images', false, 1]]);
+        expect(classify({ contentType: 'image/png', width: 2, height: 2 })).toEqual([['images', false, 1]]);
     });
 });
