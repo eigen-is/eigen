@@ -1,5 +1,5 @@
-// The one order every context and ⋮ menu draws its rows in (docs/LAYOUT.md § Menus). A host passes each row to the
-// group it belongs to; the order lives here, so no menu can drift from it.
+// The one order every context and ⋮ menu draws its rows in (docs/LAYOUT.md § Menus draw their rows in one order). A
+// host passes each row to the group it belongs to; the order lives here, so no menu can drift from it.
 
 import { Fragment, type ReactNode } from 'react';
 import { DropdownMenuSeparator } from '../dropdown-menu';

@@ -50,7 +50,8 @@ export type FileActionId =
     | 'import-mail'
     | 'import-calendar';
 
-// The menu group a file action's row sits in, named as MenuSections names it (docs/LAYOUT.md § Menus).
+// The menu group a file action's row sits in, named as MenuSections names it (docs/LAYOUT.md § Menus draw their rows in
+// one order).
 export type FileActionGroup = 'open' | 'convert' | 'output';
 
 export type FileAction = {
