@@ -59,6 +59,18 @@ describe('rowOverflowSpans', () => {
         expect(rowOverflowSpans(0, centred, edges(10), 0, 9, width)).toEqual({ 5: { r: 0, stc: 3, edc: 7 } });
     });
 
+    // The painter lays text out 2px in from its side of a box that gives up 2px to the grid line.
+    test('text that ends within 4px of its edge spills, whichever way it is aligned', () => {
+        const nearly = () => 97;
+        const left = row(10, { 5: text('Nearly') });
+        expect(rowOverflowSpans(0, left, edges(10), 0, 9, nearly)).toEqual({ 5: { r: 0, stc: 5, edc: 6 } });
+        const right = row(10, { 5: text('Nearly', { ht: 2 }) });
+        expect(rowOverflowSpans(0, right, edges(10), 0, 9, nearly)).toEqual({ 5: { r: 0, stc: 4, edc: 5 } });
+        const centred = row(10, { 5: text('Nearly', { ht: 0 }) });
+        expect(rowOverflowSpans(0, centred, edges(10), 0, 9, nearly)).toEqual({ 5: { r: 0, stc: 4, edc: 6 } });
+        expect(rowOverflowSpans(0, left, edges(10), 0, 9, () => 96)).toBe(undefined);
+    });
+
     test('numbers and text that fits never spill', () => {
         const cells = row(10, { 0: { v: 123456789, m: '123456789', ct: { fa: 'General', t: 'n' } }, 4: text('ok') });
         expect(rowOverflowSpans(0, cells, edges(10), 0, 9, width)).toBe(undefined);
