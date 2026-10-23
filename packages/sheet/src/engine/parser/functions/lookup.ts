@@ -1,5 +1,5 @@
-import type { FormulaOutput, FormulaValue } from '../../types';
-import { ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
+import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
+import { ERROR_NOT_AVAILABLE, ERROR_REF, ERROR_VALUE } from '../error';
 import { toGrid } from '../helper/array';
 import { dateToSerial, toNumber } from '../helper/number';
 import { type FunctionArg, OMITTED, supplied } from '../omitted';
@@ -142,4 +142,26 @@ export function xlookup(params: FunctionArg[]): FormulaOutput {
     }
     const hit = orientation === 'column' ? [result[index]] : result.map((row) => [row[index]]);
     return hit.length === 1 && hit[0].length === 1 ? hit[0][0] : hit;
+}
+
+// An override: formulajs reads a row_num or column_num of 0 as 1, where Excel gives the whole column or row.
+export function index(params: FormulaArg[]): FormulaOutput | undefined {
+    const [array, row, column] = params;
+    // A blank cell is 0 too.
+    const whole = (arg: FormulaArg) => arg === 0 || arg == null;
+    if (!whole(row) && !(params.length > 2 && whole(column))) return undefined;
+    const grid = toGrid(array);
+    // A lone index of 0 is the whole array, whether it is one row, one column or both.
+    if (params.length < 3) return grid;
+    const position = (arg: FormulaArg, size: number) => {
+        if (arg instanceof Error) throw arg;
+        const value = Math.trunc(toNumber(arg ?? 0) ?? Number.NaN);
+        if (!(value >= 0)) throw Error(ERROR_VALUE);
+        if (value > size) throw Error(ERROR_REF);
+        return value;
+    };
+    const r = position(row, grid.length);
+    const c = position(column, grid[0].length);
+    if (r === 0 && c === 0) return grid;
+    return r === 0 ? grid.map((line) => [line[c - 1]]) : [grid[r - 1]];
 }

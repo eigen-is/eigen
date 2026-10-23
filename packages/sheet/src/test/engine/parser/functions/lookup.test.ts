@@ -199,3 +199,31 @@ describe('VLOOKUP', () => {
         expect(value('=VLOOKUP(30,A1:B6,2,)')).toBe('Cherry');
     });
 });
+
+describe('INDEX', () => {
+    test('a row_num of 0, empty or a blank cell is the whole column, a column_num of 0 or empty the whole row', () => {
+        expect(value('=SUM(INDEX(C1:D6,,1))')).toBe(23);
+        expect(value('=SUM(INDEX(C1:D6,0,2))')).toBe(38);
+        expect(value('=SUM(INDEX(C1:D6,G1,2))')).toBe(38);
+        expect(value('=SUM(INDEX(C1:D6,2,))')).toBe(12.5);
+        expect(value('=SUM(INDEX(C1:D6,3,0))')).toBe(11);
+        expect(value('=SUM(INDEX(C1:D6,0,0))')).toBe(61);
+        expect(value('=SUM(INDEX(C1:C6,0))')).toBe(23);
+    });
+
+    test('a whole column shows its first cell, and a fraction truncates', () => {
+        expect(value('=INDEX(C1:D6,0,2)')).toBe(3);
+        expect(value('=SUM(INDEX(C1:D6,2.9,0))')).toBe(12.5);
+    });
+
+    test('an index past the array is #REF!, a negative one #VALUE!', () => {
+        expect(value('=INDEX(C1:D6,7,0)')).toBe('#REF!');
+        expect(value('=INDEX(C1:D6,0,3)')).toBe('#REF!');
+        expect(value('=INDEX(C1:D6,-1,0)')).toBe('#VALUE!');
+    });
+
+    test('a row and a column still give one cell', () => {
+        expect(value('=INDEX(C1:D6,2,2)')).toBe(12);
+        expect(value('=INDEX(B1:B6,3)')).toBe('Cherry');
+    });
+});

@@ -3,7 +3,7 @@ import * as formulajs from '@formulajs/formulajs';
 import { booleanDisplay, update } from '../../../format';
 import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
-import { xlookup, xmatch } from '../../functions/lookup';
+import { index, xlookup, xmatch } from '../../functions/lookup';
 import { maxifs, minifs } from '../../functions/statistical';
 import { concatenate, textjoin } from '../../functions/text';
 import { toNumber } from '../../helper/number';
@@ -139,6 +139,8 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
 
     CONCAT: concatenate,
     CONCATENATE: concatenate,
+
+    INDEX: index,
 
     'CEILING.MATH': withSignificance(formulajs.CEILING.MATH),
     'CEILING.PRECISE': withSignificance(formulajs.CEILING.PRECISE),
