@@ -103,17 +103,6 @@ const CREATION_ORDER = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'fre
 type CreationToolType = (typeof CREATION_ORDER)[number];
 export const CREATION_TOOL_TYPES: readonly CreationToolType[] = CREATION_ORDER;
 
-// The EIGEN_FONTS families a scene draws text in, each kind answering for its own elements: by default
-// its `fontFamily` field on an element with text, a chart the font in its spec. So the SVG export inlines
-// the @font-face block of a new text-bearing kind the day it declares the field, instead of dropping its glyphs.
-export function sceneFontFamilies(elements: VectorElement[]): Set<string> {
-    const families = new Set<string>();
-    for (const el of elements) {
-        for (const family of ELEMENT_KINDS[el.type].fontFamilies(el)) families.add(family);
-    }
-    return families;
-}
-
 // The stored-key whitelist every writer iterates and the reader materializes: the base fields plus every
 // kind's own, in registry order, de-duplicated. Walking the registry, not a hand list, is what stores a
 // new kind's fields the day it joins ELEMENT_KINDS.

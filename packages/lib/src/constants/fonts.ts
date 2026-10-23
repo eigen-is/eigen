@@ -185,3 +185,71 @@ export function bundledFontOfStack(stack: string): string | undefined {
         .map((family) => bundledFont(family.replace(/['"]/g, '')))
         .find((bundled) => bundled !== undefined);
 }
+
+// smallCaps: the face has the OpenType smcp glyphs, the only small caps WeasyPrint draws.
+type EigenFontFace = {
+    family: string;
+    file: string;
+    weight: string;
+    style: 'normal' | 'italic';
+    smallCaps?: true;
+};
+
+// The woff2 faces of EIGEN_FONTS, each a file under packages/ui/src/assets/fonts/: the files fonts.css loads, which an
+// export (the API's export/fonts.ts) and a downloaded image (the canvas's image writer) embed.
+export const FONT_FACES = [
+    { family: 'Inter', file: 'inter/Inter-Variable.woff2', weight: '100 900', style: 'normal' },
+    { family: 'Inter', file: 'inter/Inter-Variable-Italic.woff2', weight: '100 900', style: 'italic' },
+    {
+        family: 'Source Serif 4',
+        file: 'source-serif/SourceSerif4-Variable.woff2',
+        weight: '200 900',
+        style: 'normal',
+        smallCaps: true,
+    },
+    {
+        family: 'Source Serif 4',
+        file: 'source-serif/SourceSerif4-Variable-Italic.woff2',
+        weight: '200 900',
+        style: 'italic',
+    },
+    {
+        family: 'JetBrains Mono',
+        file: 'jetbrains-mono/JetBrainsMono-Variable.woff2',
+        weight: '100 800',
+        style: 'normal',
+    },
+    { family: 'Excalifont', file: 'excalifont/Excalifont-Regular.woff2', weight: '400', style: 'normal' },
+] as const satisfies readonly EigenFontFace[];
+
+export type BundledFontFace = (typeof FONT_FACES)[number];
+export type FontFaceFile = BundledFontFace['file'];
+
+// The faces of just the given families (EIGEN_FONTS names); an unknown family has none.
+export function fontFacesOf(families: Iterable<string>): BundledFontFace[] {
+    const wanted = new Set(families);
+    return FONT_FACES.filter((face) => wanted.has(face.family));
+}
+
+// The faces text drawn in these families and styles needs, each once: a family's italic face for an italic or oblique
+// run, its upright one otherwise and where it has no italic, which the browser slants.
+export function fontFacesFor(uses: Iterable<{ family: string; style: string }>): BundledFontFace[] {
+    const wanted = new Set<string>();
+    for (const { family, style } of uses) {
+        const italic =
+            style !== 'normal' && FONT_FACES.some((face) => face.family === family && face.style === 'italic');
+        wanted.add(`${family}|${italic ? 'italic' : 'normal'}`);
+    }
+    return FONT_FACES.filter((face) => wanted.has(`${face.family}|${face.style}`));
+}
+
+// One face as the @font-face rule that embeds it, its bytes a data: URI.
+export function fontFaceCss(face: BundledFontFace, dataUri: string): string {
+    return `@font-face {
+    font-family: "${face.family}";
+    src: url("${dataUri}") format("woff2");
+    font-weight: ${face.weight};
+    font-style: ${face.style};
+    font-display: swap;
+}`;
+}

@@ -116,7 +116,7 @@ function opacityCss(opacity: number): { opacity: string } | null {
 
 // The class every rich-text body wraps in. It carries the descendant rules an inline style cannot
 // reach — list markers, blockquote rule, link underline (packages/ui/src/styles/canvas-text.css,
-// which the app imports and the export document and the svg download embed).
+// which the app imports and the export document embeds).
 export const RICH_TEXT_CLASS = 'eigen-canvas-text';
 
 // The layer's body as one HTML string — everything a DOM host mounts inside the layer box, so the live

@@ -76,7 +76,7 @@ async function renderExport(
         }
         case 'eigenvector': {
             const { renderEigenvectorExport } = await import('../../export/vector/transform');
-            return renderEigenvectorExport(doc, request.format, request.title, loadMedia);
+            return renderEigenvectorExport(doc, request.title, loadMedia);
         }
     }
 }

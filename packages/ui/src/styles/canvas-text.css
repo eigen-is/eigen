@@ -1,6 +1,6 @@
 /* Rich-text body rendering — the descendant rules an element's inline style cannot reach. Applied by
    layerInnerHtml (live canvas, compositor) and by sceneToSvg's foreignObject wrapper, so a box reads
-   the same in the editor, a thumbnail, present mode, a preview, an export and a downloaded SVG. */
+   the same in the editor, a thumbnail, present mode, a preview and an export. */
 /* Loaded after eigen-prose.css on the FE (cascade-wins over `.tiptap`); embedded standalone in the
    canvas export and preview documents. */
 
@@ -14,8 +14,7 @@
 }
 
 /* A blank line is stored as an empty paragraph, which lays out 0 tall; the editor shows it one line
-   tall only through ProseMirror's trailing break, which the stored html does not carry. No angle
-   brackets in this file: the SVG download embeds it in an XML style element. */
+   tall only through ProseMirror's trailing break, which the stored html does not carry. */
 .eigen-canvas-text p:empty {
     min-height: 1lh;
 }

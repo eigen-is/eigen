@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1898 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1914 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -533,7 +533,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (425)
+## Types (433)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -556,9 +556,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentAssigneeFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CreateCommentCardInput` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
+| `BundledFontFace` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `BytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `FontFaceFile` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `SpecialMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `StandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -860,6 +862,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `IndexedElement` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `Layer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `MarqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `MeasuredChar` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
+| `MeasuredDisc` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
+| `MeasuredRichText` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
+| `MeasuredRule` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
+| `MeasuredText` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
+| `MeasuredTextStyle` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `NewVectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `ObjectFit` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -963,7 +971,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (971)
+## Utilities & constants (979)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1145,6 +1153,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `hasRichHtmlBeyondMarker` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `htmlTableCells` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/table.ts |
 | `inlineClipboardSvgMedia` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `inlineSvgMedia` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `materializeClipboardSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `needsReUpload` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `parseTsv` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/table.ts |
@@ -1216,6 +1225,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_STICKIES_INDICATOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EML_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `emptyContact` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
+| `FONT_FACES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `fontFaceCss` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `fontFacesFor` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `fontFacesOf` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `fontLineHeight` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `fontNameToCss` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `FOOTNOTE_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
@@ -1627,6 +1640,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `boundShape` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `buildElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `canvasImageFaces` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
+| `canvasImageScene` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `canvasPtToPx` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `canvasPxToPt` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `capabilitiesOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
@@ -1807,6 +1822,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `RICH_TEXT_CLASS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `richTextCssText` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/richtext.ts |
 | `richTextFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/richtext.ts |
+| `richTextSvg` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `round` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `round4` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
@@ -1814,7 +1830,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `scaledPathCommands` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `scaleNormalizedPath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `sceneBounds` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
-| `sceneFontFamilies` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `sceneLayers` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `sceneReadingOrder` | `@workspace/lib/vector` | packages/lib/src/vector/search-scene.ts |
 | `sceneToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
@@ -1865,6 +1880,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `writeFrameInDoc` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `escapeXml` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `escapeXmlText` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
+| `spliceAfterSvgOpenTag` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `stripNonXmlChars` | `@workspace/lib/xml` | packages/lib/src/core/xml.ts |
 | `fromDom` | `@workspace/math` | packages/math/src/dom.ts |
 | `LATEX_COMMANDS` | `@workspace/math` | packages/math/src/latex-commands.ts |

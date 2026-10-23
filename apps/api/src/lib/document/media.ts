@@ -57,18 +57,6 @@ export async function buildPreviewUrlMap(mount: Mount, drivePath: DrivePath): Pr
     );
 }
 
-// Splice a block right after the root `<svg …>` open tag (both svg font injectors use this).
-// Anchoring on the tag — not the document's first `>` — keeps an XML prolog, DOCTYPE, or comment
-// ahead of the root intact (an uploaded .svg may carry one; splicing before the root breaks it).
-// No open tag → the svg is returned untouched.
-export function spliceAfterSvgOpenTag(svg: string, block: string): string {
-    const start = svg.search(/<svg[\s>]/);
-    if (start === -1) return svg;
-    const end = svg.indexOf('>', start);
-    if (end === -1) return svg;
-    return svg.slice(0, end + 1) + block + svg.slice(end + 1);
-}
-
 // The Worker side of export media: the transferred buffers become the data: URIs the
 // export renderers embed.
 export function toDataUriMap(media: TransformMedia[]): Map<string, string> {

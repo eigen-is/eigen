@@ -27,7 +27,6 @@ export type ExportResult = {
 const EXPORT_ENVELOPES = {
     html: { workerFormat: 'html', contentType: 'text/html; charset=utf-8', extension: 'html' },
     pdf: { workerFormat: 'pdf-html', contentType: 'application/pdf', extension: 'pdf' },
-    svg: { workerFormat: 'svg', contentType: 'image/svg+xml', extension: 'svg' },
     xlsx: { workerFormat: 'xlsx', contentType: XLSX_MIME, extension: 'xlsx' },
     docx: { workerFormat: 'docx', contentType: DOCX_MIME, extension: 'docx' },
     pptx: { workerFormat: 'pptx', contentType: PPTX_MIME, extension: 'pptx' },

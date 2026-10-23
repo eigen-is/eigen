@@ -10,7 +10,6 @@ import {
     SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
     type StyleDefaults,
-    sceneToSvg,
     VECTOR_STYLE_DEFAULTS,
     type VectorChartElement,
     type VectorScene,
@@ -18,7 +17,6 @@ import {
 import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
 import { renderEigenslidesHtml } from '../../lib/export/canvas/transform';
-import { toXmlDocument } from '../../lib/export/sanitize';
 import { renderEigenvectorExport } from '../../lib/export/vector/transform';
 import { seedVectorDoc } from '../fixtures/golden-documents';
 
@@ -74,25 +72,8 @@ describe('a chart in the canvas exports', () => {
     const chart = chartElement(VECTOR_STYLE_DEFAULTS);
     const scene: VectorScene = { elements: [chart], frames: [], meta: DEFAULT_SCENE_META };
 
-    test('the SVG download keeps the chart as drawn: shapes and text, no foreignObject', async () => {
-        const svg = decode((await renderEigenvectorExport(docOf(scene), 'svg', 'Drawing', async () => [])).data);
-        // The same XML serialization of the unsanitized drawing: the sanitizer dropped nothing.
-        const drawn = toXmlDocument(sceneToSvg(scene));
-        const body = drawn.slice(drawn.indexOf('>') + 1, drawn.lastIndexOf('</svg>'));
-        expect(body.startsWith('<g transform="translate(40 60)">')).toBe(true);
-        expect(svg).toContain(body);
-        // canvas-text.css rides along in the <defs>, and its comments name one
-        expect(svg).not.toContain('<foreignObject');
-        expect(svg).toContain('Q1 &lt;draft&gt; &amp; more</text>');
-        expect(svg).toContain('font-weight="600"');
-        expect(svg).toContain('transform="rotate(-90 ');
-        expect(svg).toContain('opacity="0.2"');
-        // the chart's font is embedded, since the file has no app CSS to load it from
-        expect(svg).toContain('font-family: "Excalifont"');
-    });
-
     test('the PDF page holds the chart layer the live canvas mounts', async () => {
-        const html = decode((await renderEigenvectorExport(docOf(scene), 'pdf-html', 'Drawing', async () => [])).data);
+        const html = decode((await renderEigenvectorExport(docOf(scene), 'Drawing', async () => [])).data);
         const layer = elementLayer(chart);
         if (!layer) throw new Error('a chart always draws');
         const bodies = layerBodies(html, '.canvas-page > div');

@@ -1,26 +1,23 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { readVectorFromDoc } from '@workspace/lib/vector';
-import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
-import { EXPORT_CSP, sanitizeSceneHtml } from '../../lib/export/sanitize';
+import { sanitizeSceneHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import {
     buildGoldenVectorScene,
     GOLDEN_MEDIA_NAME,
-    GOLDEN_VECTOR_LABEL,
-    GOLDEN_VECTOR_TEXT,
     seedDocumentMedia,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
 import { authedRequest, driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // Response contract of GET /drive/:ownerId/:mountId/file/:pathId/export/:format for
-// eigenvector: the svg download inlines fonts + media as the drawing's own SVG, the pdf
-// download is the same SVG on a white page rendered by WeasyPrint, and both share the
-// route's content-type / filename / error behavior with the other document types.
+// eigenvector: the pdf download is the drawing as compositor layers on a page WeasyPrint renders,
+// sharing the route's content-type / filename / error behavior with the other document types. The
+// drawing's SVG is the editor's own (packages/ui's canvas image writer), so the route refuses svg.
 
 const mountId = 'default';
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -54,6 +51,14 @@ beforeAll(async () => {
     emptyPath = await seedVector('Empty Drawing', false);
 });
 
+// The document WeasyPrint is handed for a drawing's PDF.
+async function pdfHtmlOf(pathId: string): Promise<string> {
+    const home = await getHome(ctx.alice.user.id);
+    const { mount, path } = await home.drive.resolveFile(mountId, pathId);
+    const { data: bytes } = await runDocumentExport({ documentType: 'eigenvector', format: 'pdf-html' }, mount, path);
+    return bytes.toString('utf-8');
+}
+
 function exportRequest(pathId: string, format: string) {
     return authedRequest(
         ctx.alice.user.sessionToken,
@@ -62,66 +67,18 @@ function exportRequest(pathId: string, format: string) {
 }
 
 describe('Eigenvector export route — response contract', () => {
-    test('svg export serves the drawing SVG with fonts and media inlined', async () => {
-        const res = await exportRequest(vectorPath.id, 'svg');
-        expect(res.status).toBe(200);
-        expect(res.headers.get('content-type')).toBe('image/svg+xml');
-        expect(res.headers.get('content-disposition')).toBe('attachment; filename="Vector Contract.svg"');
-        expect(res.headers.get('content-security-policy')).toBe(EXPORT_CSP);
-
-        const svg = await res.text();
-        expect(svg.startsWith('<svg')).toBe(true);
-        // A rich-text box rides in a <foreignObject>, which the export sanitizer keeps only because
-        // the vector transform declares it an HTML integration point — without that the box's markup
-        // is dropped and the drawing exports wordless.
-        expect(svg).toContain('<foreignObject');
-        // Not just present somewhere: the box's MARKUP survives inside the foreignObject. Drop the
-        // integration-point declaration and DOMPurify keeps the element while emptying its HTML body.
-        const body = svg.slice(svg.indexOf('<foreignObject'), svg.indexOf('</foreignObject>'));
-        expect(body).toContain('<p>');
-        expect(body).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
-        // The rich-text box and the bound arrow label both render, the payload still escaped.
-        expect(svg).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
-        expect(svg).toContain(GOLDEN_VECTOR_LABEL);
-        // Fonts are inlined for the families the text actually uses (Excalifont here).
-        expect(svg).toContain('@font-face');
-        expect(svg).toContain('Excalifont');
-        expect(svg).toContain('data:font/woff2;base64,');
-        // Media resolves to an embedded data: URI, never an external href WeasyPrint could fetch.
-        expect(svg).toContain('data:image/');
-        expect(svg).not.toMatch(/href="https?:/);
-    }, 120_000);
-
-    test('the DOM-box kinds export their paint as the roughjs drawable', async () => {
-        const res = await exportRequest(vectorPath.id, 'svg');
-        const svg = await res.text();
-        // The image's border is the same drawable the shapes draw, inside the element's own <g> and
-        // after the clipped picture, so a border never sits under the pixels it frames.
-        expect(svg).toMatch(/<g clip-path="url\(#image-clip-v-image\)"><image[^>]*\/><\/g><g stroke-linecap="round">/);
-        // A rich-text box paints its backdrop BEFORE its foreignObject, so the text stacks over it.
-        const foreign = svg.indexOf('<foreignObject');
-        const textGroup = svg.slice(svg.lastIndexOf('<g transform=', foreign), foreign);
-        expect(textGroup).toContain('<g stroke-linecap="round">');
-        expect(textGroup).toContain('<path ');
-        // And the box's border is that drawable, not a CSS border on the text div.
-        expect(svg).not.toMatch(/class="eigen-canvas-text" style="[^"]*border:/);
-    }, 120_000);
-
-    test('an unsupported format is rejected with 400', async () => {
-        const res = await exportRequest(vectorPath.id, 'xlsx');
-        expect(res.status).toBe(400);
-        expect(await res.text()).toContain('not supported');
-    }, 60_000);
+    test.each(['xlsx', 'svg'])(
+        'an unsupported format, %s, is rejected with 400',
+        async (format) => {
+            const res = await exportRequest(vectorPath.id, format);
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('not supported');
+        },
+        60_000,
+    );
 });
 
 describe('Eigenvector export — empty drawing', () => {
-    test('svg export of an empty drawing returns the empty document, not an error', async () => {
-        const res = await exportRequest(emptyPath.id, 'svg');
-        expect(res.status).toBe(200);
-        const svg = await res.text();
-        expect(svg.startsWith('<svg')).toBe(true);
-    }, 60_000);
-
     test('pdf export of an empty drawing is rejected with 400', async () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, emptyPath.id);
@@ -150,10 +107,8 @@ describe('Eigenvector export — SVG media sanitization', () => {
             'image/svg+xml',
         );
 
-        const res = await exportRequest(created.id, 'svg');
-        expect(res.status).toBe(200);
-        const svg = await res.text();
-        const b64 = svg.match(/data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)/)?.[1];
+        const html = await pdfHtmlOf(created.id);
+        const b64 = html.match(/data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)/)?.[1];
         expect(b64).toBeTruthy();
         const embedded = Buffer.from(b64 ?? '', 'base64').toString('utf8');
         expect(embedded).toContain('<rect');
@@ -166,7 +121,7 @@ describe('Eigenvector export — SVG media sanitization', () => {
 describe('Eigenvector export — rich-text HTML sanitization', () => {
     test('a hostile rich-text body exports with scripts, handlers and external refs stripped', async () => {
         // `html` is raw TipTap markup any collaborator can write, and the reader only caps and cleans it
-        // (no tag filtering), so the assembled SVG must go through DOMPurify before it is served.
+        // (no tag filtering), so the assembled document must go through DOMPurify before WeasyPrint reads it.
         const created = await seedVector('Evil Text', false);
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, created.id);
@@ -185,14 +140,12 @@ describe('Eigenvector export — rich-text HTML sanitization', () => {
             ),
         });
 
-        const res = await exportRequest(created.id, 'svg');
-        expect(res.status).toBe(200);
-        const svg = await res.text();
-        expect(svg).toContain('safe');
-        expect(svg).not.toContain('<script');
-        expect(svg).not.toContain('onerror');
-        expect(svg).not.toContain('onclick');
-        expect(svg).not.toContain('javascript:');
+        const html = await pdfHtmlOf(created.id);
+        expect(html).toContain('safe');
+        expect(html).not.toContain('<script');
+        expect(html).not.toContain('onerror');
+        expect(html).not.toContain('onclick');
+        expect(html).not.toContain('javascript:');
     }, 120_000);
 });
 
@@ -246,51 +199,12 @@ describe('Eigenvector export — rich-text nesting', () => {
     });
 });
 
-describe('Eigenvector export — the .svg download is XML', () => {
-    test('void tags and entities in a rich-text box come out as well-formed XML', async () => {
-        // A .svg file is parsed by an XML parser (browser, Inkscape, librsvg), where an unclosed <br>
-        // or a bare &nbsp; is a FATAL error: the whole drawing renders as nothing. LightEditor writes
-        // both, so the SVG arm must serialize the foreignObject body as XHTML.
-        const created = await seedVector('XML Text', false);
-        const home = await getHome(ctx.alice.user.id);
-        const collab = await home.drive.getCollabDocument(mountId, created.id);
-        const scene = buildGoldenVectorScene();
-        seedVectorDoc(collab.doc, {
-            ...scene,
-            elements: scene.elements.map((el) =>
-                el.type === 'richtext'
-                    ? {
-                          ...el,
-                          html: '<p>line&nbsp;one<br>line two</p><p><img src="data:image/gif;base64,R0lGOD"></p>',
-                      }
-                    : el,
-            ),
-        });
-
-        const res = await exportRequest(created.id, 'svg');
-        expect(res.status).toBe(200);
-        const svg = await res.text();
-        expect(svg).toContain('line two');
-        // The oracle: an XML parser accepts the bytes we serve. jsdom throws on a malformed document.
-        expect(() => new JSDOM(svg, { contentType: 'application/xml' })).not.toThrow();
-    }, 120_000);
-});
-
 describe('Eigenvector export — the pdf-html document (what WeasyPrint is handed)', () => {
     // One render for every assertion below: the document is deterministic, and a transform Worker
     // per test would be seven more spawns for the same bytes.
     let rendered: Promise<string> | null = null;
     function pdfHtml(): Promise<string> {
-        rendered ??= (async () => {
-            const home = await getHome(ctx.alice.user.id);
-            const { mount, path } = await home.drive.resolveFile(mountId, vectorPath.id);
-            const { data: bytes } = await runDocumentExport(
-                { documentType: 'eigenvector', format: 'pdf-html' },
-                mount,
-                path,
-            );
-            return bytes.toString('utf-8');
-        })();
+        rendered ??= pdfHtmlOf(vectorPath.id);
         return rendered;
     }
 

@@ -5,7 +5,7 @@ type: how-to
 tags: [drive, download, export]
 related: [drive/get-started, drive/preview-a-file, drive/upload-files]
 order: 50
-updated: 2026-10-13
+updated: 2026-10-23
 ---
 
 You can download any uploaded file from Drive to your computer. Documents, spreadsheets, presentations, and drawings created in Eigen can be exported as standard formats such as Word, Excel, or PDF.
@@ -37,7 +37,7 @@ Available formats:
 - **Document:** Microsoft Word (.docx), PDF (.pdf), Web Page (.html)
 - **Spreadsheet:** Microsoft Excel (.xlsx), PDF (.pdf), Web Page (.html)
 - **Presentation:** Microsoft PowerPoint (.pptx), PDF (.pdf), Web Page (.html)
-- **Drawing:** SVG image (.svg), PDF (.pdf)
+- **Drawing:** PDF (.pdf). To download a drawing as an SVG image, open it in Vector and use **File → Download**.
 
 <div class="eigen-callout">
 

@@ -223,31 +223,38 @@ export async function inlineClipboardSvgMedia(
     svg: string,
     resolve: (name: string) => Promise<Blob | null>,
 ): Promise<string | null> {
-    const refs = listEigenMediaRefs(svg);
-    if (refs.length === 0) return svg;
+    const { dataUris, failed } = await resolveSvgMedia(svg, resolve);
+    let total = 0;
+    for (const dataUri of dataUris.values()) {
+        total += dataUri.length;
+        if (total > INLINE_SVG_SOFT_CAP_BYTES) return null;
+    }
+    return stripEigenMediaRefs(replaceEigenMediaHrefs(svg, dataUris), failed);
+}
 
+// The same inline with no cap, for a downloaded image: a file, not a clipboard entry.
+export async function inlineSvgMedia(svg: string, resolve: (name: string) => Promise<Blob | null>): Promise<string> {
+    const { dataUris, failed } = await resolveSvgMedia(svg, resolve);
+    return stripEigenMediaRefs(replaceEigenMediaHrefs(svg, dataUris), failed);
+}
+
+async function resolveSvgMedia(
+    svg: string,
+    resolve: (name: string) => Promise<Blob | null>,
+): Promise<{ dataUris: Map<string, string>; failed: Set<string> }> {
     const resolved = await Promise.all(
-        refs.map(async (name) => {
+        listEigenMediaRefs(svg).map(async (name) => {
             const blob = await resolve(name).catch(() => null);
             return { name, dataUri: blob ? await blobToDataUri(blob) : null };
         }),
     );
-
     const dataUris = new Map<string, string>();
     const failed = new Set<string>();
-    let total = 0;
     for (const { name, dataUri } of resolved) {
-        if (!dataUri) {
-            failed.add(name);
-            continue;
-        }
-        total += dataUri.length;
-        if (total > INLINE_SVG_SOFT_CAP_BYTES) return null;
-        dataUris.set(name, dataUri);
+        if (dataUri) dataUris.set(name, dataUri);
+        else failed.add(name);
     }
-
-    // Swap each resolved ref's exact `href="…"` for its data URI, then strip the failures.
-    return stripEigenMediaRefs(replaceEigenMediaHrefs(svg, dataUris), failed);
+    return { dataUris, failed };
 }
 
 // The SVG a paste consumer should materialize, together with the typed items that back its

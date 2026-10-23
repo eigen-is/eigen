@@ -3,6 +3,7 @@
 // tools/clipboard, the paste DECISIONS in tools/paste-elements; this hook owns the events, the
 // transacts and the placement.
 
+import { onMutationError } from '@workspace/lib/api-error';
 import {
     classifyPaste,
     clipboardTextItemHasContent,
@@ -43,6 +44,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
+import { downloadCanvasImage } from '../canvas-image';
 import { measureVectorText } from '../text-measure';
 import { remapPastedArrows } from '../tools/binding';
 import { buildSelectionData, selectionPlainText } from '../tools/clipboard';
@@ -560,5 +562,15 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         });
     };
 
-    return { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText };
+    // Download image: the payload a copy of `ids` writes, drawn by the browser. A whole drawing passes its background;
+    // a selection has none. No mutation carries a failure, so this reports its own.
+    const downloadImage = useCallback(
+        (name: string, ids: string[], background?: string) => {
+            const { data } = buildSelectionData(ordered, ids, meta, frameId, resolveMediaPath);
+            downloadCanvasImage(data.items, { name, background, fetchMedia: fetchMediaBlob }).catch(onMutationError);
+        },
+        [ordered, meta, frameId, resolveMediaPath, fetchMediaBlob],
+    );
+
+    return { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText, downloadImage };
 }

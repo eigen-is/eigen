@@ -5,7 +5,7 @@
 
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { useIsCompactToolbar } from '@workspace/lib/media';
-import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import { type DrivePath, type EigenDocType, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { ImagePlus } from 'lucide-react';
 import type { ReactNode, RefObject } from 'react';
@@ -114,6 +114,13 @@ export function CanvasToolbar({
                             onAccessDialogOpen={onAccessDialogOpen}
                             onImport={onImport}
                             onExport={(format) => exportPath(path, format)}
+                            // A drawing's SVG is the browser's, which lays its text out as the canvas does; the
+                            // export route, with no layout engine, serves every other format.
+                            onDownloadSvg={
+                                createType === 'vector'
+                                    ? () => canvasRef.current?.downloadDrawing(stripEigenExtension(path.name))
+                                    : undefined
+                            }
                             createLabel={createLabel}
                             createIcon={createIcon}
                             createType={createType}
