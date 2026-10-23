@@ -7,6 +7,7 @@ import {
     MAX_FONT_SIZE,
     MIN_FONT_SIZE,
     nextFontSize,
+    readCssFontSize,
     readFontSize,
 } from '../../constants/fonts';
 
@@ -90,6 +91,20 @@ describe('font sizes', () => {
         expect(nextFontSize(10.5, -1)).toBe(9.5);
         expect(nextFontSize(MAX_FONT_SIZE, 1)).toBe(MAX_FONT_SIZE);
         expect(nextFontSize(MIN_FONT_SIZE, -1)).toBe(MIN_FONT_SIZE);
+    });
+});
+
+describe('readCssFontSize', () => {
+    test('pt reads as pt and px at 96 dpi, on the half-point grid', () => {
+        expect(readCssFontSize('14pt')).toBe(14);
+        expect(readCssFontSize('12.0pt')).toBe(12);
+        expect(readCssFontSize('16px')).toBe(12);
+        expect(readCssFontSize('34.6667px')).toBe(26);
+    });
+
+    // Relative to what the source drew around it, so no size of its own.
+    test.each([['1.2em'], ['120%'], ['large'], ['']])('%p is no size', (value) => {
+        expect(readCssFontSize(value)).toBeUndefined();
     });
 });
 

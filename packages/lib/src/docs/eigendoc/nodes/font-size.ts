@@ -2,7 +2,7 @@ import { Extension } from '@tiptap/core';
 import type { Mark, Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import { nextFontSize, readFontSize, SMALL_FONT_SIZE } from '../../../constants/fonts';
+import { nextFontSize, readCssFontSize, readFontSize, SMALL_FONT_SIZE } from '../../../constants/fonts';
 import { DEFAULT_NORMAL_STYLE, type NormalStyle } from '../normal-style';
 
 declare module '@tiptap/core' {
@@ -19,9 +19,6 @@ declare module '@tiptap/core' {
 }
 
 type FontSizeOptions = { normalStyle: () => NormalStyle };
-
-// pt and px are a size; em, rem, % and keywords are relative to what the source drew around them.
-const ABSOLUTE_SIZE = /^(\d*\.?\d+)(pt|px)$/;
 
 // The size text draws at in pt: its mark's, Small's, or its block's, which a paragraph takes from the doc's Normal and
 // a heading or a title sets on the page. A heading's is read once per type and level, and only from a mounted view.
@@ -90,11 +87,7 @@ export const EigenFontSize = Extension.create<FontSizeOptions, FontSizeOptions>(
                 attributes: {
                     fontSize: {
                         default: null,
-                        parseHTML: (element) => {
-                            const match = ABSOLUTE_SIZE.exec(element.style.fontSize);
-                            const size = match && Number(match[1]) * (match[2] === 'px' ? 0.75 : 1);
-                            return readFontSize(size) ?? null;
-                        },
+                        parseHTML: (element) => readCssFontSize(element.style.fontSize) ?? null,
                         renderHTML: (attributes) => {
                             const size = readFontSize(attributes['fontSize']);
                             return size === undefined ? {} : { style: `font-size: ${size}pt` };

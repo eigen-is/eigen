@@ -31,6 +31,10 @@
 // can place: vector's foreign-paste writes all ten onto the rich-text box it creates, and docs maps
 // the six it has nodes/marks for (family, color, alignment, bold, italic, underline/strike). Nothing
 // goes on this wire that no consumer reads.
+//
+// `fontSize` is pt, as is every font size in the HTML beside the payload: one unit each app converts with its own
+// scale. Docs and Sheets store pt; a canvas converts its px through canvasPxToPt / canvasPtToPx (vector/frames.ts).
+// A canvas→canvas copy keeps its px to the bit in the `elements` item instead.
 export type EigenClipboardTypography = {
     fontFamily?: string;
     fontSize?: number;

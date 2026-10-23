@@ -1,5 +1,5 @@
 import { escapeHtml } from '@workspace/lib/html';
-import { type BorderSide, columnIndexToLabel, type MergeCell } from '@workspace/lib/sheets';
+import { type BorderSide, columnIndexToLabel, type MergeCell, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { booleanDisplay, cellWrapsText, dropRuns, numberDisplay, parseCellInput, richText } from '../../engine/format';
@@ -968,7 +968,7 @@ export function getFontStyleByCell(
         if (key === 'ff' && typeof value === 'string' && value) {
             style.fontFamily = `'${value}', sans-serif`;
         }
-        if (key === 'fs' && valueNum !== 10) {
+        if (key === 'fs' && valueNum !== SHEET_DEFAULT_FONT_SIZE) {
             style.fontSize = `${valueNum}pt`;
         }
         if ((key === 'fc' && value !== '#000000') || checksCF?.textColor) {

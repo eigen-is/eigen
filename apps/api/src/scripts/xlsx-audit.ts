@@ -68,8 +68,8 @@ const FEATURES = [
 
 export type Feature = (typeof FEATURES)[number][0];
 
-// What the snapshot can't tell: a shared formula's copy is a formula like any other there, and Sheet has no charts.
-const SOURCE_ONLY = new Set<Feature>(['sharedFormulas', 'charts']);
+// What the snapshot can't tell: a shared formula's copy is a formula like any other there.
+const SOURCE_ONLY = new Set<Feature>(['sharedFormulas']);
 
 // Compared per sheet as a whole, in the snapshot's own shape.
 const CONFIG_FEATURES = ['merge', 'columnlen', 'rowlen', 'rowhidden', 'colhidden', 'borderInfo'] as const;
@@ -81,6 +81,7 @@ const SHEET_FIELDS = [
     'dataVerification',
     'conditionalFormatRules',
     'images',
+    'charts',
     'hide',
     'color',
 ] as const;
@@ -237,6 +238,7 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
         bump(counts, 'validations', size(sheet.dataVerification));
         bump(counts, 'hyperlinks', size(sheet.hyperlink));
         bump(counts, 'images', sheet.images?.length ?? 0);
+        bump(counts, 'charts', size(sheet.charts));
         const hashes = Object.fromEntries([
             ...CONFIG_FEATURES.map((key) => [key, Bun.hash.crc32(canonical(config[key] ?? null))]),
             ...SHEET_FIELDS.map((key) => [key, Bun.hash.crc32(canonical(fields.get(key) ?? null))]),
@@ -303,7 +305,8 @@ export function tallySource(bytes: Uint8Array): Map<Feature, number> {
     bump(counts, 'sheets', book.match(SHEET_ENTRY)?.length ?? 0);
     bump(counts, 'hiddenSheets', book.match(HIDDEN_SHEET)?.length ?? 0);
     for (const name of zip.names()) {
-        if (/^chart[^/]*\.xml$/.test(inFolder(name, 'charts'))) bump(counts, 'charts');
+        // Not Excel 2016's chartEx parts, which the reader leaves out.
+        if (/^chart(?!Ex)[^/]*\.xml$/.test(inFolder(name, 'charts'))) bump(counts, 'charts');
         if (PART.test(inFolder(name, 'drawings'))) bump(counts, 'images', read(name).match(PICTURE)?.length ?? 0);
         if (!PART.test(inFolder(name, 'worksheets'))) continue;
         const xml = read(name);

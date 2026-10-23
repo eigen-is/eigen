@@ -225,8 +225,9 @@ test('a copy writes an italic mark in Heading 6 upright and pastes it back as th
     expect(target.getJSON()).toEqual(expected.getJSON());
 });
 
-// A title's look is its node's, which Google Docs and Word don't read: the copy writes the size and color the page
-// draws it in on the p, the body's color left to the target, and a paste here reads the node from its data-type.
+// A title's look is its node's, which Google Docs and Word don't read: the copy writes the size, in pt as the clipboard
+// carries every size, and color the page draws it in on the p, the body's color left to the target, and a paste here
+// reads the node from its data-type.
 // happy-dom computes no nested CSS, so the page's look is stubbed.
 test('a copy writes the title and subtitle look inline and pastes them back as the nodes', async () => {
     const content = [
@@ -250,8 +251,8 @@ test('a copy writes the title and subtitle look inline and pastes them back as t
     expect(
         [...html.querySelectorAll<HTMLElement>('p')].map((p) => [p.dataset['type'], p.style.fontSize, p.style.color]),
     ).toEqual([
-        ['title', '34.6667px', ''],
-        ['subtitle', '20px', 'rgb(102, 102, 102)'],
+        ['title', '26pt', ''],
+        ['subtitle', '15pt', 'rgb(102, 102, 102)'],
         [undefined, '', ''],
     ]);
 

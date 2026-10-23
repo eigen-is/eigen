@@ -1,3 +1,5 @@
+import { pxToPt } from '../docs/eigendoc/page';
+
 // lineHeight: its single line as a multiple of its size, (usWinAscent + usWinDescent) / unitsPerEm of its Regular, as Word
 // and Google Docs draw it; the API's fonts.test.ts pins each against the TTF.
 export type EigenFont = {
@@ -66,6 +68,17 @@ export const MAX_FONT_SIZE = 400;
 export function readFontSize(value: unknown): number | undefined {
     if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
     return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(value * 2) / 2));
+}
+
+// pt and px are a size; em, rem, % and keywords are relative to what the source drew around them.
+const ABSOLUTE_SIZE = /^(\d*\.?\d+)(pt|px)$/;
+
+// A CSS font-size as a size in pt: pt as it is, px at CSS's 96 dpi.
+export function readCssFontSize(css: string): number | undefined {
+    const match = ABSOLUTE_SIZE.exec(css.trim());
+    if (!match) return undefined;
+    const size = Number(match[1]);
+    return readFontSize(match[2] === 'px' ? pxToPt(size) : size);
 }
 
 export function nextFontSize(size: number, by: 1 | -1): number {

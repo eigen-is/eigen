@@ -4,8 +4,12 @@ import { installHappyDom } from '../../../happy-dom';
 // ⌘C/⌘X leave the clipboard to a live text selection outside the canvas — the user is copying that
 // run, not the shapes behind it. The canvas surface is `select-none`, so nothing on it ever collapses
 // a selection made elsewhere: the pointerdown that selects an element drops it instead. ⌘V places
-// another app's chart item as a chart element, and a canvas copy's own elements item as itself.
+// another app's chart item as a chart element, another app's text item at its size in pt, and a canvas copy's own
+// elements item as itself.
 installHappyDom();
+// A pasted text box is measured on a 2d canvas, which happy-dom does not implement.
+// biome-ignore lint/suspicious/noExplicitAny: test-only DOM stub happy-dom does not implement
+(window.HTMLCanvasElement.prototype as any).getContext = () => ({ font: '', measureText: () => ({ width: 40 }) });
 
 const { createElement } = await import('react');
 const { sampleChartSpec } = await import('@workspace/lib/charts');
@@ -71,7 +75,7 @@ describe('dropOutsideTextSelection', () => {
     });
 });
 
-describe('⌘V of a chart item', () => {
+describe("⌘V of another app's items", () => {
     let unmount: (() => Promise<void>) | undefined;
     afterEach(async () => {
         await unmount?.();
@@ -131,6 +135,15 @@ describe('⌘V of a chart item', () => {
         expect(added).toEqual([
             { type: 'chart', x: 960 - 600.5 / 2, y: 540 - 371 / 2, width: 600.5, height: 371, angle: 0, chart: spec },
         ]);
+    });
+
+    // A 10 pt cell copied from Sheets: the wire's size is pt, so it lands as 10 pt at 96 dpi, not as 10 px.
+    test("another app's text item lands at its size in pt", async () => {
+        const added = await pasteOnCanvas([
+            { type: 'text', text: 'cell', width: 100, height: 20, typography: { fontSize: 10 } },
+        ]);
+        expect(added).toHaveLength(1);
+        expect(added[0]).toMatchObject({ type: 'richtext', fontSize: 40 / 3 });
     });
 
     test("a canvas copy's chart pastes from its elements item, not as a second chart", async () => {

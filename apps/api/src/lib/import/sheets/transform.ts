@@ -14,7 +14,7 @@ export function importXlsxToSheetsSnapshot(data: ArrayBuffer): {
     warnings: TransformWarning[];
 } {
     const warnings: TransformWarning[] = [];
-    const { sheets, computed } = recalcImportedSheets(xlsxToSheets(new Uint8Array(data)), warnings);
+    const { sheets, computed } = recalcImportedSheets(xlsxToSheets(new Uint8Array(data), warnings), warnings);
     return { snapshotJson: toTransferableText(encodeSheetsSnapshot(sheets, { computed })), warnings };
 }
 

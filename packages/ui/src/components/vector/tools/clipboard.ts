@@ -18,6 +18,7 @@ import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/type
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     buildElementsClipboardItem,
+    canvasPxToPt,
     eigenMediaHref,
     sceneToSvg,
     type VectorElement,
@@ -51,7 +52,7 @@ function foreignItems(
                     // stopped surviving a copy into docs. Every one has a consumer (see the type).
                     typography: {
                         fontFamily: el.fontFamily,
-                        fontSize: el.fontSize,
+                        fontSize: canvasPxToPt(el.fontSize),
                         textAlign: el.textAlign,
                         color: el.color,
                         fontWeight: el.fontWeight,

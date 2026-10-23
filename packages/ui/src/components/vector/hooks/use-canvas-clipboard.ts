@@ -24,9 +24,9 @@ import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom'
 import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
+    canvasPtToPx,
     IMAGE_CASCADE_OFFSET,
     type NewVectorElement,
-    num,
     type Point,
     pasteAnchorOffset,
     readClipboardTypography,
@@ -220,7 +220,11 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                 if (item.type !== 'text' || !clipboardTextItemHasContent(item)) continue;
                 const typo = item.typography ?? {};
                 const fontFamily = typo.fontFamily ?? styleDefaults.fontFamily;
-                const fontSize = num(typo.fontSize, styleDefaults.fontSize);
+                // The wire's size is pt; the payload is forgeable, so only a finite number is one.
+                const fontSize =
+                    typo.fontSize !== undefined && Number.isFinite(typo.fontSize)
+                        ? canvasPtToPx(typo.fontSize)
+                        : styleDefaults.fontSize;
                 const { width, height } = measureVectorText(item.text, fontSize, fontFamily);
                 plan.partials.push({
                     type: 'richtext',

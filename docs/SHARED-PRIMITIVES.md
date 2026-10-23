@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1879 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1884 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -959,7 +959,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (956)
+## Utilities & constants (961)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1249,6 +1249,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MIN_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `nextFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `PPTX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
+| `readCssFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `readFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_LIFECYCLE_RULE_ID` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
@@ -1462,8 +1463,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SHEET_DEFAULT_FONT_SIZE` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_DEFAULT_ROW_HEIGHT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `SHEET_ROW_HEADER_WIDTH` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `sheetColumnsWidth` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetDefaultColWidth` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `sheetDefaultRowHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
+| `sheetRowsHeight` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `fetchImportBlob` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `postImportBytes` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `previewCountLines` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
@@ -1619,6 +1622,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `boundShape` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `buildElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
+| `canvasPtToPx` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `canvasPxToPt` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `capabilitiesOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `chromeTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `clamp` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |

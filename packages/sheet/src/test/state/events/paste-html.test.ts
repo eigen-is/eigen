@@ -12,7 +12,7 @@
 // never assert on internal call sequences.
 
 import { describe, expect, it, spyOn } from 'bun:test';
-import { SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_FONT_SIZE, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -210,6 +210,29 @@ describe('HTML-table paste — style extraction', () => {
         pasteHtml(ctx, '<table><tr><td style="font-family: Wingdings">x</td><td>y</td></tr></table>');
         expect(ctx.sheets[0].data![0][0]?.ff).toBeUndefined();
         expect(ctx.sheets[0].data![0][1]?.ff).toBeUndefined();
+    });
+
+    // Eigen's own copy writes a size inline in pt; a web page's is often px, which is 3/4 pt at 96 dpi.
+    it('reads a font size in pt as pt and in px at 96 dpi, inline or from the class block', () => {
+        const ctx = makeCtx();
+        pasteHtml(
+            ctx,
+            '<html><head><style>\n<!--td\n\t{color:black;}\n.xl72\n\t{font-size:16px;}\n.xl73\n\t{font-size:12.0pt;}\n-->\n</style></head><body><table><tr>' +
+                '<td style="font-size:14pt">a</td>' +
+                '<td style="font-size:16px">b</td>' +
+                '<td class=xl72>c</td>' +
+                '<td class=xl73>d</td>' +
+                '<td>e</td>' +
+                '</tr></table></body></html>',
+        );
+
+        expect(ctx.sheets[0].data![0].slice(0, 5).map((cell) => cell?.fs)).toEqual([
+            14,
+            12,
+            12,
+            12,
+            SHEET_DEFAULT_FONT_SIZE,
+        ]);
     });
 
     it('sets cl=1 for a <s> strikethrough inside the td', () => {
