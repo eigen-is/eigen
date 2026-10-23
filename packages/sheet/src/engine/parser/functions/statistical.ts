@@ -29,10 +29,10 @@ function extremeIfs(params: FunctionArg[], pick: (a: number, b: number) => numbe
         tests.push([cells.flat(), criterion(pairs[i + 1])]);
     }
     let result: number | undefined;
-    grid.flat().forEach((value, i) => {
-        if (typeof value !== 'number' || !tests.every(([cells, test]) => test(cells[i]))) return;
+    for (const [i, value] of grid.flat().entries()) {
+        if (typeof value !== 'number' || !tests.every(([cells, test]) => test(cells[i]))) continue;
         result = result === undefined ? value : pick(result, value);
-    });
+    }
     return result ?? 0;
 }
 
