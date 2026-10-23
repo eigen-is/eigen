@@ -8,35 +8,29 @@ import { useEffect, useRef } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 
-// The Arrange row: send-to-back / send-backward / bring-forward / bring-to-front. Presentational —
-// the host owns what each op does.
+// Every z-order op's label and hotkey, front first as Google Slides' Order ▸ lists them.
+export const Z_ORDER_ROWS: readonly { op: ZOp; label: string; hotkey: string }[] = [
+    { op: 'toFront', label: 'Bring to front', hotkey: 'Mod+Shift+]' },
+    { op: 'forward', label: 'Bring forward', hotkey: 'Mod+]' },
+    { op: 'backward', label: 'Send backward', hotkey: 'Mod+[' },
+    { op: 'toBack', label: 'Send to back', hotkey: 'Mod+Shift+[' },
+];
+
+const BUTTON_ICONS = { toBack: SendToBack, backward: ChevronDown, forward: ChevronUp, toFront: BringToFront };
+
+// The Arrange row, back to front. Presentational — the host owns what each op does.
 export function ZOrderButtons({ onApply }: { onApply: (op: ZOp) => void }) {
     return (
         <div className="flex items-center gap-1">
-            <TooltipButton
-                className="h-7 w-7"
-                icon={SendToBack}
-                tooltipText="Send to back"
-                onClick={() => onApply('toBack')}
-            />
-            <TooltipButton
-                className="h-7 w-7"
-                icon={ChevronDown}
-                tooltipText="Send backward"
-                onClick={() => onApply('backward')}
-            />
-            <TooltipButton
-                className="h-7 w-7"
-                icon={ChevronUp}
-                tooltipText="Bring forward"
-                onClick={() => onApply('forward')}
-            />
-            <TooltipButton
-                className="h-7 w-7"
-                icon={BringToFront}
-                tooltipText="Bring to front"
-                onClick={() => onApply('toFront')}
-            />
+            {Z_ORDER_ROWS.toReversed().map(({ op, label }) => (
+                <TooltipButton
+                    key={op}
+                    className="h-7 w-7"
+                    icon={BUTTON_ICONS[op]}
+                    tooltipText={label}
+                    onClick={() => onApply(op)}
+                />
+            ))}
         </div>
     );
 }
@@ -56,9 +50,9 @@ export function useZOrderHotkeys(enabled: boolean, onApply: (op: ZOp) => void): 
             const { enabled: on, onApply: apply } = stateRef.current;
             if (!on || isTypingTarget()) return;
             e.preventDefault();
-            const op: ZOp =
-                e.code === 'BracketLeft' ? (e.shiftKey ? 'toBack' : 'backward') : e.shiftKey ? 'toFront' : 'forward';
-            apply(op);
+            const hotkey = `Mod+${e.shiftKey ? 'Shift+' : ''}${e.code === 'BracketLeft' ? '[' : ']'}`;
+            const row = Z_ORDER_ROWS.find((r) => r.hotkey === hotkey);
+            if (row) apply(row.op);
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
