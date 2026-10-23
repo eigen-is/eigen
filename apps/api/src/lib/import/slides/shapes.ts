@@ -1,6 +1,7 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
     type Arrowhead,
+    isBordered,
     isTransparentColor,
     type NewVectorElement,
     normalizeAngle,
@@ -366,8 +367,11 @@ function readShape(walk: Walk, leaf: Leaf): void {
         textOnTop();
     };
     if (kind?.type === 'rectangle' && kind.corners === 'straight') {
-        if (text) push(walk, { type: 'richtext', ...textBox, ...text, ...paint, corners: 'straight' });
-        else if (painted) push(walk, { type: 'rectangle', ...box, ...paint, corners: 'straight' });
+        if (text) {
+            // The canvas insets a bordered box's text past its border too, where PowerPoint's inset runs from the edge.
+            const padding = isBordered(paint) ? Math.max(0, text.padding - paint.strokeWidth) : text.padding;
+            push(walk, { type: 'richtext', ...textBox, ...text, padding, ...paint, corners: 'straight' });
+        } else if (painted) push(walk, { type: 'rectangle', ...box, ...paint, corners: 'straight' });
     } else if (kind) shapeAndText(kind);
     else if (geometry === 'pie') shapeAndText({ type: 'pie', ...pieAngles(shaped?.geom, placed) });
     else if (linear) {

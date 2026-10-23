@@ -222,6 +222,24 @@ describe('a deck exported and read back', () => {
         }
     });
 
+    test("keeps a bordered text box's text inside its border, where the canvas draws it", () => {
+        const bordered: NewVectorElement = {
+            type: 'richtext',
+            x: 100,
+            y: 100,
+            width: 400,
+            height: 200,
+            angle: 0,
+            html: '<p>Boxed</p>',
+            strokeColor: '#222222',
+            strokeWidth: 4,
+            padding: 12,
+            corners: 'straight',
+        };
+        const [found] = roundTrip([bordered]).deck.slides[0].elements;
+        expectPx(found.padding, 12);
+    });
+
     test("keeps the slide's name, which no title gives it", () => {
         expect(roundTrip([], 'Agenda').deck.slides[0].name).toBe('Agenda');
     });
