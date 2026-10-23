@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { openZip } from '../../../lib/core/zip';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
@@ -215,6 +216,38 @@ describe("the losses of ExcelJS's export", () => {
                     { r: 0, c: 1, v: { v: 2, f: '=1+1' } },
                 ],
                 hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
+                conditionalFormatRules: [
+                    {
+                        type: 'default',
+                        cellrange: [{ row: [0, 3], column: [1, 1] }],
+                        format: { textColor: null, cellColor: '#FFC7CE' },
+                        conditionName: 'greaterThan',
+                        conditionRange: [],
+                        conditionValue: ['1'],
+                    },
+                ],
+                dataVerification: {
+                    '1_0': {
+                        type: 'dropdown',
+                        type2: '',
+                        value1: 'Yes,No',
+                        value2: '',
+                        prohibitInput: false,
+                        hintShow: false,
+                        hintValue: '',
+                    },
+                },
+                charts: {
+                    chart: {
+                        id: 'chart',
+                        index: 'a0',
+                        x: 120,
+                        y: 40,
+                        width: 300,
+                        height: 200,
+                        spec: JSON.stringify(sampleChartSpec('column')),
+                    },
+                },
             },
         ];
         const first = await sheetsToXlsx(sheets, { title: 'Book' });
@@ -226,8 +259,9 @@ describe("the losses of ExcelJS's export", () => {
     });
 });
 
-// Re-recorded when the writer's bytes change on purpose.
-const GOLDEN_XLSX_SHA256 = '002bb5e58673070eddace6f094de33fa9f58ce4dec069af816315408f4d5d023';
+// Re-recorded when the writer's bytes change on purpose. Last: the workbook gained a rule, a validation and a chart, so
+// the hash pins the rules' and the drawing's parts as the sheet part wires them in.
+const GOLDEN_XLSX_SHA256 = '7896dcf9ac4abb356254193f22b0eb343e99e6804dc9bcca15c44ea109bd9d11';
 
 describe('the package', () => {
     test("declares Excel's parts and their types", async () => {

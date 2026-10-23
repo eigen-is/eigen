@@ -5,8 +5,10 @@ import { EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/core/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../../lib/core/ooxml-chart';
 import type { PackagePart } from '../../../../lib/core/opc';
 import { hasXmlName, type XmlElement, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
+import { openZip } from '../../../../lib/core/zip';
 import { pxToColumnWidth } from '../../../../lib/document/spreadsheetml';
 import type { CountedWarningCode, TransformWarning } from '../../../../lib/document/transform/protocol';
+import { sheetsToXlsx } from '../../../../lib/export/sheets/to-xlsx';
 import { DRAWING_CONTENT_TYPE, drawingOf } from '../../../../lib/export/sheets/xlsx/drawing';
 import { xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { xlsxFixture } from '../../../fixtures/xlsx';
@@ -168,6 +170,55 @@ describe('drawingOf', () => {
         const { sheets } = roundTrip([SUMMARY]);
         const ranged = Object.values(sheets[0].charts ?? {}).find((chart) => chart.y === 30);
         expect(parseChartSpec(ranged?.spec ?? '')?.data).toMatchObject({ source: 'range', categories: null });
+    });
+});
+
+describe('the workbook', () => {
+    // My Data's cells as a stored sheet holds them, beside its dense data.
+    const stored: Sheet = {
+        ...MY_DATA,
+        celldata: DATA.flatMap((row, r) => row.map((v, c) => ({ r, c, v }))),
+    };
+
+    test("writes each sheet's drawing beside it, and the import lands each chart where it was, a turned one upright", async () => {
+        const turned: SheetChart = { ...RANGED, angle: 30, color: '#AA0000', strokeColor: '#00AA00' };
+        const summary: Sheet = { ...SUMMARY, charts: byId(INLINE, turned) };
+        const warnings: TransformWarning[] = [];
+        const bytes = await sheetsToXlsx([summary, stored], { warnings });
+        expect(warnings).toEqual([]);
+        const zip = openZip(bytes);
+        const part = (path: string) => new TextDecoder().decode(zip.read(path) ?? new Uint8Array());
+        expect(part('xl/worksheets/sheet1.xml')).toContain('<drawing r:id="rId1"/></worksheet>');
+        expect(part('xl/worksheets/_rels/sheet1.xml.rels')).toContain('Target="../drawings/drawing1.xml"');
+        expect(part('[Content_Types].xml')).toContain(
+            `<Override PartName="/xl/drawings/drawing1.xml" ContentType="${DRAWING_CONTENT_TYPE}"/>`,
+        );
+        expect(zip.names().filter((name) => name.startsWith('xl/drawings/drawing'))).toEqual([
+            'xl/drawings/drawing1.xml',
+        ]);
+        // Its labels and axes in the stored look's colours.
+        expect(part('xl/charts/chart1_2.xml')).toContain('<a:srgbClr val="AA0000">');
+        expect(part('xl/charts/chart1_2.xml')).toContain('<a:srgbClr val="00AA00">');
+        const [read] = xlsxToSheets(bytes);
+        const charts = Object.values(read.charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
+        expect(charts.map(boxOf)).toEqual([INLINE, turned].map(boxOf));
+        expect(charts.map((chart) => chart.angle ?? 0)).toEqual([0, 0]);
+        expect(charts.map((chart) => parseChartSpec(chart.spec))).toEqual(
+            [INLINE, turned].map((chart) => parseChartSpec(chart.spec)),
+        );
+    });
+
+    test('a chart names its sheet as the workbook writes it, and stacks in paint order among the images', async () => {
+        const image = { id: 'picture', index: 'a0V', x: 0, y: 0, width: 10, height: 10, mediaName: 'a.png' };
+        const summary: Sheet = { ...SUMMARY, images: { picture: image } };
+        const history: Sheet = { ...stored, name: 'History' };
+        const [read] = xlsxToSheets(await sheetsToXlsx([summary, history]));
+        const charts = Object.values(read.charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
+        expect(charts.map(boxOf)).toEqual([INLINE, RANGED].map(boxOf));
+        expect(parseChartSpec(charts[1].spec)?.data).toMatchObject({
+            source: 'range',
+            categories: { row: [1, 3], column: [0, 0] },
+        });
     });
 });
 

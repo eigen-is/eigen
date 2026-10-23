@@ -1,18 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { ConditionalFormatRule, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
-import ExcelJS from 'exceljs';
+import { parseOoxml, SML_NS } from '../../lib/core/ooxml';
+import { type XmlElement, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
+import type { TransformWarning } from '../../lib/document/transform/protocol';
 import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
-
-// Conditional formats and validations are ExcelJS's until xlsx/rules.ts writes them.
-const EXCELJS = { writer: 'exceljs' } as const;
-
-async function exportWithExcelJS(sheets: Sheet[]): Promise<ExcelJS.Workbook> {
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(Buffer.from(await sheetsToXlsx(sheets, EXCELJS)));
-    return wb;
-}
 
 // The raw XML, for what the import doesn't read back: the form a part is written in.
 function readZipEntry(bytes: Uint8Array, path: string): string {
@@ -23,33 +16,55 @@ function readZipEntry(bytes: Uint8Array, path: string): string {
 
 // The committed regression net: every export feature must close the full loop back through the importer onto the
 // engine encoding.
-async function roundTrip(sheets: Sheet[], options?: typeof EXCELJS): Promise<Sheet[]> {
-    return xlsxToSheets(await sheetsToXlsx(sheets, options));
+async function roundTrip(sheets: Sheet[]): Promise<Sheet[]> {
+    return xlsxToSheets(await sheetsToXlsx(sheets));
 }
 
 function cellAt(sheet: Sheet, r: number, c: number) {
     return sheet.celldata?.find((cell) => cell.r === r && cell.c === c)?.v;
 }
 
-function getSheet(wb: ExcelJS.Workbook, name: string): ExcelJS.Worksheet {
-    const ws = wb.getWorksheet(name);
-    if (!ws) throw new Error(`${name} missing`);
-    return ws;
+// A rule as the first sheet part writes it: its attributes, its formulas and, for a scale or a bar, its stops' types and
+// colours.
+type WrittenRule = { attributes: Record<string, string>; formulas: string[]; cfvos: string[]; colors: string[] };
+
+function writtenRule(element: XmlElement): WrittenRule {
+    const nested = xmlElements(element).flatMap((child) => xmlElements(child));
+    return {
+        attributes: element.attributes,
+        formulas: xmlElements(element)
+            .filter((child) => child.local.startsWith('formula'))
+            .map(xmlText),
+        cfvos: nested.filter((child) => child.local === 'cfvo').map((cfvo) => cfvo.attributes['type']),
+        colors: nested.filter((child) => child.local === 'color').map((color) => color.attributes['rgb']),
+    };
 }
 
-// Same untyped-but-real exceljs property the importer reads (lib/doc/worksheet.js).
-type CfReadBlock = {
-    ref: string;
-    rules: {
-        type: string;
-        priority: number;
-        operator?: string;
-        formulae?: (string | number)[];
-    }[];
-};
+function writtenWorksheet(bytes: Uint8Array): XmlElement {
+    const worksheet = parseOoxml(readZipEntry(bytes, 'xl/worksheets/sheet1.xml'));
+    if (!worksheet) throw new Error('sheet1.xml unreadable');
+    return worksheet;
+}
 
-function readCfBlocks(ws: ExcelJS.Worksheet): CfReadBlock[] {
-    return (ws as unknown as { conditionalFormattings?: CfReadBlock[] }).conditionalFormattings ?? [];
+// Each conditional format block's rules by its sqref.
+function writtenFormats(bytes: Uint8Array): Map<string, WrittenRule[]> {
+    return new Map(
+        xmlChildren(writtenWorksheet(bytes), SML_NS, 'conditionalFormatting').map((block) => [
+            block.attributes['sqref'],
+            xmlChildren(block, SML_NS, 'cfRule').map(writtenRule),
+        ]),
+    );
+}
+
+// Each validation by its sqref.
+function writtenValidations(bytes: Uint8Array): Map<string, WrittenRule> {
+    const [validations] = xmlChildren(writtenWorksheet(bytes), SML_NS, 'dataValidations');
+    return new Map(
+        (validations ? xmlChildren(validations, SML_NS, 'dataValidation') : []).map((validation) => [
+            validation.attributes['sqref'],
+            writtenRule(validation),
+        ]),
+    );
 }
 
 // Fixture rules in the exact shape the importer emits, so round-trips can assert
@@ -381,14 +396,15 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 1, v: { v: 12 } }], conditionalFormatRules: rules },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'CF');
-        const blocks = readCfBlocks(ws);
-        expect(blocks).toHaveLength(2);
-        // Engine order is last-write-wins; Excel priority 1 wins → last rule gets priority 1.
-        expect(blocks[0].rules[0]).toMatchObject({ type: 'cellIs', operator: 'lessThanOrEqual', priority: 2 });
-        expect(blocks[1].rules[0]).toMatchObject({ type: 'cellIs', operator: 'greaterThan', priority: 1 });
+        // Engine order is last-write-wins; Excel priority 1 wins → last rule gets priority 1. One range is one block.
+        const written = writtenFormats(await sheetsToXlsx(sheets));
+        expect([...written.keys()]).toEqual(['B1:B5']);
+        expect(written.get('B1:B5')?.map(({ attributes }) => attributes)).toMatchObject([
+            { type: 'cellIs', operator: 'lessThanOrEqual', priority: '2', dxfId: '0' },
+            { type: 'cellIs', operator: 'greaterThan', priority: '1', dxfId: '1' },
+        ]);
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
@@ -425,19 +441,23 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 3 } }], conditionalFormatRules: rules },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'CF');
-        const blocks = readCfBlocks(ws);
-        expect(blocks[0].rules[0].formulae).toEqual(['2', '5']);
-        expect(blocks[1].rules[0].formulae).toEqual(['"say ""hi"""']);
-        // exceljs synthesizes the SEARCH formula from the (pre-escaped) text + range top-left.
-        expect(blocks[2].rules[0].formulae).toEqual(['NOT(ISERROR(SEARCH("say ""hi""",A1)))']);
+        const written = writtenFormats(await sheetsToXlsx(sheets));
+        expect(written.get('A1:A4')?.map(({ formulas }) => formulas)).toEqual([['2', '5'], ['"say ""hi"""']]);
+        // Excel's containsText carries its SEARCH formula, at the first range's top-left.
+        expect(written.get('A1:A4 C1:C4')).toMatchObject([
+            {
+                attributes: { type: 'containsText', text: 'say "hi"' },
+                formulas: ['NOT(ISERROR(SEARCH("say ""hi""",A1)))'],
+            },
+        ]);
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
     // A number test that backtracks is quadratic in a run of digits: 100,000 of them took 9 s.
-    test('quotes a text operand of 100,000 digits in linear time', async () => {
+    // Past Excel's 255 characters a quoted string drops the rule, counted.
+    test('weighs a text operand of 100,000 digits in linear time and drops it', async () => {
         const operand = `${'1'.repeat(100_000)}x`;
         const rule: ConditionalFormatRule = {
             type: 'default',
@@ -448,9 +468,11 @@ describe('Sheets xlsx export — conditional formatting', () => {
             conditionValue: [operand],
         };
         const started = performance.now();
-        const buffer = await sheetsToXlsx([{ name: 'CF', celldata: [], conditionalFormatRules: [rule] }], EXCELJS);
+        const warnings: TransformWarning[] = [];
+        const buffer = await sheetsToXlsx([{ name: 'CF', celldata: [], conditionalFormatRules: [rule] }], { warnings });
         expect(performance.now() - started).toBeLessThan(1_000);
-        expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain(`<formula>&quot;${operand}&quot;</formula>`);
+        expect(writtenFormats(buffer).size).toBe(0);
+        expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 1 }]);
     });
 
     test('exports formula rules as expression sans leading equals', async () => {
@@ -467,10 +489,11 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }], conditionalFormatRules: rules },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'CF');
-        expect(readCfBlocks(ws)[0].rules[0]).toMatchObject({ type: 'expression', formulae: ['LEN(B2)>2'] });
+        expect(writtenFormats(await sheetsToXlsx(sheets)).get('B2:B4')).toMatchObject([
+            { attributes: { type: 'expression' }, formulas: ['LEN(B2)>2'] },
+        ]);
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
@@ -491,12 +514,13 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }], conditionalFormatRules: rules },
         ];
-        const blocks = readCfBlocks(getSheet(await exportWithExcelJS(sheets), 'CF'));
-        expect(blocks).toHaveLength(1);
-        expect(blocks[0].ref).toBe('B2:B4 D2:D4');
-        expect(blocks[0].rules[0]).toMatchObject({ type: 'expression', formulae: ['LEN(B2)>2'] });
+        const written = writtenFormats(await sheetsToXlsx(sheets));
+        expect([...written.keys()]).toEqual(['B2:B4 D2:D4']);
+        expect(written.get('B2:B4 D2:D4')).toMatchObject([
+            { attributes: { type: 'expression' }, formulas: ['LEN(B2)>2'] },
+        ]);
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
@@ -521,12 +545,17 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 5 } }], conditionalFormatRules: rules },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'CF');
-        const flat = readCfBlocks(ws).flatMap((b) => b.rules);
-        expect(flat.filter((r) => r.type === 'top10')).toHaveLength(4);
-        expect(flat.filter((r) => r.type === 'aboveAverage')).toHaveLength(2);
+        const written = writtenFormats(await sheetsToXlsx(sheets)).get('A1:A10') ?? [];
+        expect(written.map(({ attributes }) => attributes)).toMatchObject([
+            { type: 'top10', rank: '7' },
+            { type: 'top10', rank: '15', percent: '1' },
+            { type: 'top10', rank: '3', bottom: '1' },
+            { type: 'top10', rank: '20', percent: '1', bottom: '1' },
+            { type: 'aboveAverage' },
+            { type: 'aboveAverage', aboveAverage: '0' },
+        ]);
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
@@ -552,13 +581,13 @@ describe('Sheets xlsx export — conditional formatting', () => {
                 conditionalFormatRules: rules,
             },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'CF');
-        const blocks = readCfBlocks(ws);
-        const colorScale = blocks[1].rules[0] as unknown as { color: { argb: string }[]; cfvo: { type: string }[] };
-        expect(colorScale.color.map((c) => c.argb)).toEqual(['FF0000FF', 'FFFFFF00', 'FFFF0000']);
-        expect(colorScale.cfvo.map((c) => c.type)).toEqual(['min', 'percentile', 'max']);
+        const written = writtenFormats(await sheetsToXlsx(sheets));
+        expect(written.get('B1:B5')).toMatchObject([
+            { cfvos: ['min', 'percentile', 'max'], colors: ['FF0000FF', 'FFFFFF00', 'FFFF0000'] },
+        ]);
+        expect(written.get('A1:A5')).toMatchObject([{ cfvos: ['min', 'max'], colors: ['FF638EC6'] }]);
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
@@ -585,16 +614,19 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'CF');
-        const blocks = readCfBlocks(ws);
-        expect(blocks).toHaveLength(1);
-        expect(blocks[0].rules[0]).toMatchObject({ type: 'cellIs', operator: 'equal', priority: 1 });
+        const warnings: TransformWarning[] = [];
+        const written = writtenFormats(await sheetsToXlsx(sheets, { warnings }));
+        expect([...written.keys()]).toEqual(['A1:A5']);
+        expect(written.get('A1:A5')?.map(({ attributes }) => attributes)).toMatchObject([
+            { type: 'cellIs', operator: 'equal', priority: '1' },
+        ]);
+        expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 2 }]);
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].conditionalFormatRules).toEqual([rules[2]]);
     });
 
-    test('exports duplicate and unique value rules as COUNTIF expressions', async () => {
+    test("exports duplicate and unique value rules as Excel's own, which re-import as themselves", async () => {
         const rules: ConditionalFormatRule[] = [
             {
                 type: 'default',
@@ -616,42 +648,15 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'CF');
-        const blocks = readCfBlocks(ws);
-        expect(blocks[0].rules[0]).toMatchObject({
-            type: 'expression',
-            priority: 2,
-            formulae: ['COUNTIF($A$1:$A$5,A1)>1'],
-        });
-        expect(blocks[1].rules[0]).toMatchObject({
-            type: 'expression',
-            priority: 1,
-            formulae: ['COUNTIF($C$2:$C$4,C2)=1'],
-        });
+        const written = writtenFormats(await sheetsToXlsx(sheets));
+        expect(written.get('A1:A5')).toMatchObject([{ attributes: { type: 'duplicateValues', priority: '2' } }]);
+        expect(written.get('C2:C4')).toMatchObject([{ attributes: { type: 'uniqueValues', priority: '1' } }]);
 
-        // Accepted rule-type drift: re-imports as engine formula rules with the same colors.
-        const rt = await roundTrip(sheets, EXCELJS);
-        expect(rt[0].conditionalFormatRules).toEqual([
-            {
-                type: 'default',
-                cellrange: [{ row: [0, 4], column: [0, 0] }],
-                format: { textColor: null, cellColor: '#FFDD00' },
-                conditionName: 'formula',
-                conditionRange: [],
-                conditionValue: ['=COUNTIF($A$1:$A$5,A1)>1'],
-            },
-            {
-                type: 'default',
-                cellrange: [{ row: [1, 3], column: [2, 2] }],
-                format: { textColor: '#AA0000', cellColor: null },
-                conditionName: 'formula',
-                conditionRange: [],
-                conditionValue: ['=COUNTIF($C$2:$C$4,C2)=1'],
-            },
-        ]);
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
-    test('sums COUNTIFs across ranges for a multi-range duplicateValue rule', async () => {
+    test('writes a multi-range duplicateValue rule as one block over its ranges', async () => {
         const format = { textColor: null, cellColor: '#DDDDDD' };
         const rules: ConditionalFormatRule[] = [
             {
@@ -671,30 +676,11 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'CF');
-        const blocks = readCfBlocks(ws);
-        expect(blocks[0]).toMatchObject({
-            ref: 'A1:A5 C1:C10 E1',
-            rules: [
-                {
-                    type: 'expression',
-                    formulae: ['COUNTIF($A$1:$A$5,A1)+COUNTIF($C$1:$C$10,A1)+COUNTIF($E$1,A1)>1'],
-                },
-            ],
-        });
+        const written = writtenFormats(await sheetsToXlsx(sheets));
+        expect(written.get('A1:A5 C1:C10 E1')).toMatchObject([{ attributes: { type: 'duplicateValues' } }]);
 
-        // It re-imports as one formula rule over the same ranges, anchored at the first one like Excel.
-        const rt = await roundTrip(sheets, EXCELJS);
-        expect(rt[0].conditionalFormatRules).toEqual([
-            {
-                type: 'default',
-                cellrange: rules[0].cellrange,
-                format,
-                conditionName: 'formula',
-                conditionRange: [],
-                conditionValue: ['=COUNTIF($A$1:$A$5,A1)+COUNTIF($C$1:$C$10,A1)+COUNTIF($E$1,A1)>1'],
-            },
-        ]);
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 });
 
@@ -714,16 +700,16 @@ describe('Sheets xlsx export — data validation', () => {
             },
             { name: 'Other Sheet', celldata: [{ r: 0, c: 1, v: { v: 'Option 1' } }] },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'Main');
-        expect(ws.getCell('B2').dataValidation).toMatchObject({
-            type: 'list',
-            allowBlank: true,
-            formulae: ['"Red,Green,Blue"'],
+        // Equal rules coalesce into one rectangle.
+        const written = writtenValidations(await sheetsToXlsx(sheets));
+        expect(written.get('B2:B3')).toMatchObject({
+            attributes: { type: 'list', allowBlank: '1' },
+            formulas: ['"Red,Green,Blue"'],
         });
-        expect(ws.getCell('B4').dataValidation.formulae).toEqual(['"say ""hi"",plain"']);
-        expect(ws.getCell('B5').dataValidation.formulae).toEqual(["'Other Sheet'!$B$1:$B$5"]);
+        expect(written.get('B4')?.formulas).toEqual(['"say ""hi"",plain"']);
+        expect(written.get('B5')?.formulas).toEqual(["'Other Sheet'!$B$1:$B$5"]);
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].dataVerification).toEqual({ '1_1': literal, '2_1': literal, '3_1': quoted, '4_1': ref });
     });
 
@@ -738,27 +724,23 @@ describe('Sheets xlsx export — data validation', () => {
             '6_0': dvRule({ type: 'date', type2: 'earlierThan', value1: '2024-03-01' }),
         };
         const sheets: Sheet[] = [{ name: 'DV', celldata: [{ r: 0, c: 0, v: { v: 5 } }], dataVerification: rules }];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'DV');
-        expect(ws.getCell('A1').dataValidation).toMatchObject({
-            type: 'whole',
-            operator: 'between',
-            formulae: [1, 10],
+        const written = writtenValidations(await sheetsToXlsx(sheets));
+        // between is the default operator; dates are serials.
+        expect(written.get('A1')).toMatchObject({ attributes: { type: 'whole' }, formulas: ['1', '10'] });
+        expect(written.get('A2')).toMatchObject({
+            attributes: { type: 'decimal', operator: 'greaterThan' },
+            formulas: ['2.5'],
         });
-        expect(ws.getCell('A2').dataValidation).toMatchObject({
-            type: 'decimal',
-            operator: 'greaterThan',
-            formulae: [2.5],
+        expect(written.get('A3')?.attributes).toMatchObject({ type: 'decimal', operator: 'notEqual' });
+        expect(written.get('A4')).toMatchObject({
+            attributes: { type: 'textLength', operator: 'lessThanOrEqual' },
+            formulas: ['5'],
         });
-        expect(ws.getCell('A3').dataValidation).toMatchObject({ type: 'decimal', operator: 'notEqual' });
-        expect(ws.getCell('A4').dataValidation).toMatchObject({
-            type: 'textLength',
-            operator: 'lessThanOrEqual',
-            formulae: [5],
-        });
-        expect(ws.getCell('A6').dataValidation).toMatchObject({ type: 'date', operator: 'lessThanOrEqual' });
-        expect(ws.getCell('A7').dataValidation).toMatchObject({ type: 'date', operator: 'lessThan' });
+        expect(written.get('A5')?.formulas).toEqual(['45292', '45657']);
+        expect(written.get('A6')?.attributes).toMatchObject({ type: 'date', operator: 'lessThanOrEqual' });
+        expect(written.get('A7')?.attributes).toMatchObject({ type: 'date', operator: 'lessThan' });
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].dataVerification).toEqual(rules);
     });
 
@@ -774,12 +756,13 @@ describe('Sheets xlsx export — data validation', () => {
                 },
             },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'DV');
-        expect(ws.getCell('A1').dataValidation).toMatchObject({ type: 'decimal', formulae: [1, 10] });
-        expect(ws.getCell('A2').dataValidation).toBeUndefined();
-        expect(ws.getCell('A3').dataValidation).toBeUndefined();
+        const warnings: TransformWarning[] = [];
+        const written = writtenValidations(await sheetsToXlsx(sheets, { warnings }));
+        expect([...written.keys()]).toEqual(['A1']);
+        expect(written.get('A1')).toMatchObject({ attributes: { type: 'decimal' }, formulas: ['1', '10'] });
+        expect(warnings).toEqual([{ code: 'validations-dropped', count: 2 }]);
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].dataVerification).toEqual({
             '0_0': dvRule({ type: 'number', type2: 'between', value1: '1', value2: '10' }),
         });
@@ -797,16 +780,16 @@ describe('Sheets xlsx export — data validation', () => {
                 },
             },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'DV');
-        expect(ws.getCell('B2').dataValidation).toMatchObject({
-            type: 'custom',
-            formulae: ['ISNUMBER(SEARCH("foo",B2))'],
+        const written = writtenValidations(await sheetsToXlsx(sheets));
+        expect(written.get('B2')).toMatchObject({
+            attributes: { type: 'custom' },
+            formulas: ['ISNUMBER(SEARCH("foo",B2))'],
         });
-        expect(ws.getCell('B3').dataValidation.formulae).toEqual(['NOT(ISNUMBER(SEARCH("bar",B3)))']);
-        expect(ws.getCell('B4').dataValidation.formulae).toEqual(['EXACT(B4,"say ""hi""")']);
+        expect(written.get('B3')?.formulas).toEqual(['NOT(ISNUMBER(SEARCH("bar",B3)))']);
+        expect(written.get('B4')?.formulas).toEqual(['EXACT(B4,"say ""hi""")']);
 
         // Custom rules have no engine equivalent — accepted one-way drift (D4).
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].dataVerification).toBeUndefined();
     });
 
@@ -820,12 +803,12 @@ describe('Sheets xlsx export — data validation', () => {
                 },
             },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'DV');
-        expect(ws.getCell('A1').dataValidation).toBeUndefined();
-        expect(ws.getCell('A1').value).toBe('done');
+        const buffer = await sheetsToXlsx(sheets);
+        expect(writtenValidations(buffer).size).toBe(0);
 
-        const rt = await roundTrip(sheets, EXCELJS);
-        expect(rt[0].dataVerification).toBeUndefined();
+        const [sheet] = xlsxToSheets(buffer);
+        expect(sheet.dataVerification).toBeUndefined();
+        expect(cellAt(sheet, 0, 0)?.v).toBe('done');
     });
 
     test('exports hint prompts and prohibit-input error style', async () => {
@@ -844,15 +827,14 @@ describe('Sheets xlsx export — data validation', () => {
                 dataVerification: { '0_0': hinted, '1_0': blocking },
             },
         ];
-        const ws = getSheet(await exportWithExcelJS(sheets), 'DV');
-        expect(ws.getCell('A1').dataValidation).toMatchObject({
-            showInputMessage: true,
-            prompt: 'Choose Yes or No',
-        });
-        expect(ws.getCell('A1').dataValidation.showErrorMessage).toBeFalsy();
-        expect(ws.getCell('A2').dataValidation).toMatchObject({ showErrorMessage: true, errorStyle: 'stop' });
+        const written = writtenValidations(await sheetsToXlsx(sheets));
+        expect(written.get('A1')?.attributes).toMatchObject({ showInputMessage: '1', prompt: 'Choose Yes or No' });
+        expect(written.get('A1')?.attributes['showErrorMessage']).toBeUndefined();
+        // stop is Excel's default error style.
+        expect(written.get('A2')?.attributes).toMatchObject({ showErrorMessage: '1' });
+        expect(written.get('A2')?.attributes['errorStyle']).toBeUndefined();
 
-        const rt = await roundTrip(sheets, EXCELJS);
+        const rt = await roundTrip(sheets);
         expect(rt[0].dataVerification).toEqual({ '0_0': hinted, '1_0': blocking });
     });
 });
@@ -1247,7 +1229,7 @@ describe('Sheets xlsx export — colors', () => {
             },
             { type: 'dataBar', cellrange: [{ row: [0, 0], column: [2, 2] }], format: ['#63c'] },
         ];
-        const buffer = await sheetsToXlsx([{ name: 'Sheet1', celldata: [], conditionalFormatRules: rules }], EXCELJS);
+        const buffer = await sheetsToXlsx([{ name: 'Sheet1', celldata: [], conditionalFormatRules: rules }]);
         const argbs = [...readZipEntry(buffer, 'xl/styles.xml').matchAll(/rgb="([0-9A-Fa-f]+)"/g)].map(
             ([, argb]) => argb,
         );

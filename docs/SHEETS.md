@@ -313,7 +313,7 @@ On mobile the comments pane takes the whole width, so `editor.tsx` hides the wor
 
 ## The full export styles cells by class
 
-The server renders a workbook to HTML, PDF and xlsx in `apps/api/src/lib/export/sheets/`, from the `Sheet[]` that `readSheetsFromDoc` returns. The transform, the route and the xlsx writer are in [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-only).
+The server renders a workbook to HTML, PDF and xlsx in `apps/api/src/lib/export/sheets/`, from the `Sheet[]` that `readSheetsFromDoc` returns. The transform, the route and the xlsx writer are in [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-and-charts).
 
 `renderSheetsHtml` interns every style it emits (cell, row height, column width, data bar, rotation, image) into a workbook-global registry of classes and returns `{ html, css }`. The document builders put the rules in a body `<style>` element, which goes through `sanitizeExportHtml` with the markup.
 
@@ -346,7 +346,7 @@ A sheet with images or charts wraps its table in a `position:relative` box, and 
 
 The stored coordinates are grid pixels from A1, while the table starts at the used range. So the overlay subtracts the rows and columns above and left of that window. An object above or left of the used range pulls the window back to where it starts, so the offset never goes negative and the page covers it. The page size, the window's origin and the preview's clip all count the box an object covers as it turns (`getElementBounds`), so a rotated object stays on the page. One that turns past A1 tucks under the editor's headers, but a page has none, so the export moves it right or down until it starts on the page. The overlay's box reaches the farthest one, so the next sheet and the preview's truncated notice start below them, and the preview clips the box to its budget window. `apps/api/src/test/export/sheets-pdf.test.ts` reads a rotated chart off WeasyPrint's pixels; it skips where WeasyPrint or a rasterizer is missing, as on CI.
 
-An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export drops images and charts, an open [ROADMAP](ROADMAP.md) row.
+An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export writes charts as chart parts ([CHARTS.md](CHARTS.md#a-chart-goes-to-office-as-a-cchartspace-that-reads-back-as-the-same-spec)) and drops images, an open [ROADMAP](ROADMAP.md) row.
 
 ## Charts draw in the overlay as inline SVG
 

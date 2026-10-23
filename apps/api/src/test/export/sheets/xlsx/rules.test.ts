@@ -9,27 +9,19 @@ import type {
 import { parseOoxml } from '../../../../lib/core/ooxml';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
 import { rulesXml } from '../../../../lib/export/sheets/xlsx/rules';
-import type { StyleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
+import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
 import { readRules } from '../../../../lib/import/sheets/rules';
-import type { DxfLook } from '../../../../lib/import/sheets/styles';
+import { readDxfs } from '../../../../lib/import/sheets/styles';
 import { sheetXml } from '../../../fixtures/xlsx';
 
-// A sheet's conditional formats and data validations, written and read back through the reader, whose dxfs are the
-// looks the registry interned.
+// A sheet's conditional formats and data validations, written and read back through the reader, with the dxfs the
+// registry wrote.
 
 function roundTrip(sheet: Partial<Sheet>) {
-    const looks: DxfLook[] = [];
-    const ids = new Map<string, number>();
-    const styles: StyleRegistry = {
-        dxf(format) {
-            const key = JSON.stringify(format);
-            const id = ids.get(key) ?? looks.push(format) - 1;
-            ids.set(key, id);
-            return id;
-        },
-    };
     const lost: CountedWarningCode[] = [];
+    const styles = styleRegistry((code) => lost.push(code));
     const xml = rulesXml({ name: 'Sheet1', ...sheet }, styles, (code) => lost.push(code));
+    const looks = readDxfs(parseOoxml(styles.xml()) ?? undefined, []);
     const read = readRules(parseOoxml(sheetXml({ after: xml })) ?? undefined, {
         dxfs: looks,
         palette: [],
