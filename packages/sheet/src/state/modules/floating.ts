@@ -20,6 +20,9 @@ export type FloatingRef = { kind: SheetFloatingKind; id: string };
 
 const FIELD = { image: 'images', chart: 'charts' } as const;
 
+// The fields of a box a gesture writes, each only when it changed.
+export const FLOATING_BOX_FIELDS = ['x', 'y', 'width', 'height', 'angle'] as const;
+
 // The current sheet, when this client may write to it.
 export function editableCurrentSheet(ctx: Context) {
     if (ctx.allowEdit === false) return undefined;
@@ -32,7 +35,7 @@ export function updateFloatingBox(ctx: Context, { kind, id }: FloatingRef, field
     const object = editableCurrentSheet(ctx)?.[FIELD[kind]]?.[id];
     if (!object) return;
     const clamped = sheetFloatingBox({ ...object, ...fields });
-    for (const field of ['x', 'y', 'width', 'height', 'angle'] as const) {
+    for (const field of FLOATING_BOX_FIELDS) {
         if (field in fields) object[field] = clamped[field];
     }
 }

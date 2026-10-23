@@ -4,15 +4,21 @@ import { ObjectTransform } from '@workspace/ui';
 import type { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { type ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { WorkbookContext } from '../../context';
-import { deselectFloatingObject, selectFloatingObject, updateFloatingBox } from '../../state';
+import { deselectFloatingObject, FLOATING_BOX_FIELDS, selectFloatingObject, updateFloatingBox } from '../../state';
 
 // Resize floors (scene px === screen px; the grid is unzoomed).
 const MIN_SIZE = { image: 20, chart: 40 };
 
+// Every frame and the ring share one level, so DOM order is paint order.
+const FRAME_Z = 19;
+
 type FloatingObjectFrameProps = {
     item: SheetFloatingItem;
     active: boolean;
+    // Where the selected object's ring renders: after every frame, so it draws above them all.
+    ringLayer: HTMLElement | null;
     longPress: ReturnType<ReturnType<typeof useLongPress<SheetFloatingItem>>['bind']>;
     onContextMenu: (e: React.MouseEvent) => void;
     children: (box: Box) => ReactNode;
@@ -20,7 +26,14 @@ type FloatingObjectFrameProps = {
 
 // One image or chart on the grid: select, move, resize, rotate, Escape and the menu, the same for both kinds. The
 // kind draws only its content. Each gesture previews locally and writes once at its end, only the fields it changed.
-export function FloatingObjectFrame({ item, active, longPress, onContextMenu, children }: FloatingObjectFrameProps) {
+export function FloatingObjectFrame({
+    item,
+    active,
+    ringLayer,
+    longPress,
+    onContextMenu,
+    children,
+}: FloatingObjectFrameProps) {
     const { context, setContext, settings } = useContext(WorkbookContext);
     const { kind, object } = item;
     const ref = { kind, id: object.id };
@@ -86,7 +99,7 @@ export function FloatingObjectFrame({ item, active, longPress, onContextMenu, ch
             data-active={active || undefined}
             tabIndex={-1}
             className="absolute outline-none"
-            style={{ left: box.x, top: box.y, width: box.width, height: box.height, zIndex: active ? 20 : 19 }}
+            style={{ left: box.x, top: box.y, width: box.width, height: box.height, zIndex: FRAME_Z }}
             onKeyDown={(e) => {
                 if (e.key !== 'Escape') return;
                 e.stopPropagation();
@@ -122,26 +135,29 @@ export function FloatingObjectFrame({ item, active, longPress, onContextMenu, ch
             >
                 {children(box)}
             </div>
-            {active && canEdit && (
-                <ObjectTransform
-                    box={box}
-                    // The ring fills this already-positioned box; x and y in `box` still drive the resize.
-                    boxToStyle={() => ({ left: 0, top: 0, width: box.width, height: box.height })}
-                    screenDeltaToScene={(dx, dy) => ({ dx, dy })}
-                    showRotate
-                    resizeMode={settings.aspectLocked ? 'aspect-default' : 'free'}
-                    minSize={MIN_SIZE[kind]}
-                    onTransform={setPreview}
-                    onGestureEnd={() => setPreview(null)}
-                    onCommit={(next, start) => {
-                        const fields: Partial<Box> = {};
-                        for (const field of ['x', 'y', 'width', 'height', 'angle'] as const) {
-                            if (next[field] !== start[field]) fields[field] = next[field];
-                        }
-                        setContext((ctx) => updateFloatingBox(ctx, ref, fields));
-                    }}
-                />
-            )}
+            {active &&
+                canEdit &&
+                ringLayer &&
+                createPortal(
+                    <ObjectTransform
+                        box={box}
+                        boxToStyle={({ x, y, width, height }) => ({ left: x, top: y, width, height, zIndex: FRAME_Z })}
+                        screenDeltaToScene={(dx, dy) => ({ dx, dy })}
+                        showRotate
+                        resizeMode={settings.aspectLocked ? 'aspect-default' : 'free'}
+                        minSize={MIN_SIZE[kind]}
+                        onTransform={setPreview}
+                        onGestureEnd={() => setPreview(null)}
+                        onCommit={(next, start) => {
+                            const fields: Partial<Box> = {};
+                            for (const field of FLOATING_BOX_FIELDS) {
+                                if (next[field] !== start[field]) fields[field] = next[field];
+                            }
+                            setContext((ctx) => updateFloatingBox(ctx, ref, fields));
+                        }}
+                    />,
+                    ringLayer,
+                )}
         </div>
     );
 }

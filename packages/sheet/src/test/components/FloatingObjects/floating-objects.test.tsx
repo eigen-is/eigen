@@ -403,3 +403,14 @@ test('the overlay draws the box sheetFloatingBox clamps a stored one to', async 
     expect(frame('i1')?.style.left).toBe('0px');
     expect(Number.parseFloat(frame('i1')?.style.width ?? '')).toBeLessThan(1e4);
 });
+
+// Selecting keeps an object in its place in the paint order; only its ring draws above every object.
+test('a selected lower object stays under the one above it, its ring above both', async () => {
+    const { container, content, frame } = await mount();
+    await click(content('i1'));
+    expect(frame('i1')?.style.zIndex).toBe(frame('c1')?.style.zIndex);
+    const ring = container.querySelector('.eigen-selection-ring');
+    if (!ring || !frame('c1')) throw new Error('no ring');
+    expect(frame('c1')?.compareDocumentPosition(ring)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(frame('i1')?.contains(ring)).toBe(false);
+});
