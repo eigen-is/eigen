@@ -35,7 +35,7 @@ Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` and 
 - **Image sizes in Docs** — the Image panel and an image's handle show its width in cm
 - **Menus** — every menu orders its rows the same way, with Delete last and in red. A choice, such as a style or an alignment, is a submenu with a check on the current one. A canvas object's menu gets Cut, Copy, Paste and an **Order** submenu. In Docs, a table cell and an equation get a right-click menu of their own
 - **Pictures and charts in Sheets** — they share one frame: move, resize and rotate them, and stack them together with ⌘[ and ⌘]. A chart has one panel, with its data range inside and Arrange at the end, as in Vector and Slides
-- **Accent colors** — chart series, calendars, labels and collaborator carets take colors in one order that starts with Eigen's pink and keeps neighbours easy to tell apart, for color-blind readers too
+- **Accent colors** — chart series, calendars, labels and collaborator carets take colors in one order that starts with Eigen's pink and keeps neighbors easy to tell apart, for color-blind readers too
 - **Clear formatting** — in Docs it keeps comments and links, as in Google Docs, and has a shortcut: ⌘\ (Ctrl+\)
 
 ### Fixed
