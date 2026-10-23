@@ -5,37 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
-Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` and `.pptx` itself, on one core the three formats share. Docs gets equations, page setup, headers and footers, and footnotes, and charts come to every app. Reload open documents after the update: a tab from 0.3.3 deletes the equations, footnotes and charts it receives.
+The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` and `.pptx` files with its own code, shared by all three formats. Docs gets equations, page setup, headers and footers, and footnotes, and every app gets charts. Reload open documents after you update: a tab that still runs 0.3.3 deletes any equations, footnotes and charts it receives.
 
 ### Added
 
-- **Word, Excel and PowerPoint files** — Drive converts one to an Eigen file, Import brings one into the open document, and Download writes one. Charts come in as charts you can edit. Word files keep equations, headers and footers, footnotes and page setup, Excel files their hidden sheets and pictures, and PowerPoint files their shapes, pictures and backgrounds
-- **Import** — adds a file's sheets or slides to the open one, or replaces the open document after saving a version
-- **Equations** — in Docs, typed as LaTeX with a live preview or picked from symbols. Math pasted from Word for the web or a web page becomes an equation, and PDF, web page and Word downloads keep it
-- **Charts** — column, bar, line and pie charts in Docs, Sheets, Slides and Vector, with their numbers in a small sheet. In Sheets a chart follows its cells. A chart pastes between apps as a live chart, takes a shape's fill, stroke and sketch, and turns into shapes in Vector and Slides
-- **SVG downloads** — a chart, or a selection in Vector or Slides, saves as an SVG picture, for viewers too. A Vector drawing downloads as SVG with its text kept as text, and Drive offers it as PDF
-- **Page setup** — paper size, orientation and margins in Docs, which the editor, print and every download follow. Slides switches between 16:9 and 4:3
-- **Headers and footers** — in Docs, with a different first page, page numbers and page count, on every page in print, PDF and Word
-- **Footnotes** — numbered notes in Docs, printed at the foot of their page in the PDF
-- **Docs formatting** — line and paragraph spacing, indents, font size on the toolbar, table cell colors, and Normal text updated to match the text at the cursor
+- **Word, Excel and PowerPoint files** — convert one in Drive to an Eigen document, import one into the document you have open, or download your work as one. Charts stay charts you can edit. Word files keep their equations, headers and footers, footnotes and page setup. Excel files keep their hidden sheets and pictures, and PowerPoint files their shapes, pictures and backgrounds
+- **Import** — bring a file's sheets or slides into the spreadsheet or deck you have open, or replace the whole document with it. Eigen saves a version before it replaces anything
+- **Equations** — type LaTeX in Docs and see the result as you type, or pick symbols from a list. Math pasted from Word for the web or a web page becomes an equation too. PDF, web page and Word downloads keep your equations
+- **Charts** — add a column, bar, line or pie chart in Docs, Sheets, Slides and Vector, and edit its numbers in a small sheet. In Sheets a chart follows the cells it shows. Copy a chart into another app and it stays a live chart. Charts take a shape's fill, stroke and sketch style, and in Vector and Slides you can turn one into shapes
+- **SVG downloads** — download a chart, or a selection in Vector or Slides, as an SVG picture, also when you can only view. A Vector drawing downloads as SVG from the editor and as PDF from Drive. Text in the SVG stays real text
+- **Page setup** — choose the paper size, orientation and margins in Docs. The editor, printing and every download follow them. In Slides, switch between 16:9 and 4:3
+- **Headers and footers** — add them in Docs, with a different first page if you want, page numbers and a page count. They appear on every page when you print or download a PDF or Word file
+- **Footnotes** — add numbered notes in Docs. In the PDF they print at the bottom of their page
+- **More formatting in Docs** — line and paragraph spacing, indents, font size on the toolbar and colors for table cells. Normal text can take the look of the text at the cursor
 
 ### Changed
 
-- **Find and replace** — ⇧⌘H in every editor, as in Google Docs
-- **Print in Docs** — prints from a PDF, so headers, footers and page numbers print
-- **Nested numbered lists** — number 1. a. i. by depth. An existing nested list that showed 1. 2. 3. shows a. or i.: set it to 1. 2. 3. again
-- **Sheets** — text runs over into empty cells beside it, and columns are as wide as in Excel. IFS, IFNA and some other newer Excel functions calculate. Pictures and charts share one frame to move, resize, rotate and stack. A large workbook imports when its cells fit, and a password-protected one says so
-- **Menus** — every menu orders its rows the same way, with Delete last and in red, and a choice is a submenu with a check on the current one. Canvas objects, and tables and equations in Docs, get fuller right-click menus
-- **Accent colors** — charts, calendars, labels and collaborator carets share one color order that starts with Eigen's pink and stays easy to tell apart, for color-blind readers too
+- **Find and replace** — ⇧⌘H opens it in every editor, as in Google Docs
+- **Printing from Docs** — goes through a PDF, so headers, footers and page numbers print too
+- **Nested numbered lists** — number by level: 1., then a., then i. A nested list that showed 1. 2. 3. at every level shows a. or i. instead. To keep 1. 2. 3., set it again
+- **Sheets** — text spills into the empty cells next to it, numbers and dates line up on the right unless you align them, and columns are as wide as in Excel. IFS, IFNA and some other newer Excel functions calculate. Pictures and charts move, resize, rotate and stack the same way. Large workbooks import as long as their cells fit, and a password-protected file tells you so
+- **Menus** — every menu orders its items the same way, with Delete last and in red. Where you pick one of several options, a submenu shows a check next to the current one. Shapes and pictures on a canvas, and tables and equations in Docs, get fuller right-click menus
+- **Accent colors** — charts, calendars, labels and collaborators' cursors share one set of colors. The order starts with Eigen's pink and keeps colors next to each other easy to tell apart, also for color-blind readers
 - **Clear formatting** — in Docs it keeps comments and links, and ⌘\ runs it
 
 ### Fixed
 
-- **Access** — an open Docs editor turns read-only when your write access is removed, and a sharing change reaches every open document in the drive
-- **Docs** — a collaborator's edit or an undo no longer turns a file name such as plan.md into a link, and a wrapped image leaves room for the text and lists beside it
-- **Sheets** — copied cells paste into other apps as rows and columns, a pasted cell keeps its font, Tab and Ctrl+arrow move as in Excel, and a cell with mixed formatting counts in sorting, filters and formulas
+- **Access** — when your write access to a document is removed, its open Docs editor turns read-only. A sharing change reaches every open document in the drive
+- **Docs** — a collaborator's edit or an undo no longer turns a file name like plan.md into a link. A wrapped image leaves room for the text and lists beside it
+- **Sheets** — cells copied into another app paste as rows and columns, a pasted cell keeps its font, Tab and Ctrl+arrow move as in Excel, and a cell with mixed formatting counts in sorting, filters and formulas
 - **Trash** — on local storage, a crash during a trash or a restore no longer leaves the file out of reach
-- **Large files** — a file too large for the server's memory is refused instead of taking the server down
+- **Large files** — a file too big for the server's memory is refused instead of taking the server down
 
 ## [0.3.3] - 2026-10-13
 
