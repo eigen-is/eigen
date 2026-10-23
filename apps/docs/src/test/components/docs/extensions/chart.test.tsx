@@ -58,6 +58,11 @@ test("a chart draws the painter's SVG at its stored size, its labels as text, in
     expect(box.querySelector('.figcaption')?.textContent).toBe('Points');
 });
 
+test('a chart draws its stored look', async () => {
+    const { box } = await mount({ attrs: { strokeColor: '#336699', roughness: 2, seed: 5 } });
+    expect(box.querySelector('svg')?.innerHTML).toContain('stroke="#336699"');
+});
+
 test('a chart whose spec does not parse draws the placeholder', async () => {
     const { box } = await mount({ attrs: { spec: '{' } });
     expect(box.querySelector('svg text')?.textContent).toBe("This chart can't be shown");

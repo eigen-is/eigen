@@ -56,6 +56,8 @@ type BackgroundFillBlockProps = {
     // Extra rows for this block, rendered under the paint body while a paint is set — the vector Fill's
     // hatch-style row lives here, because the hatch is half of the same stored fill.
     children?: ReactNode;
+    // Render the rows with no paint too: a chart's hatch is its bars', which draw whatever the background.
+    keepChildren?: boolean;
 };
 
 export function BackgroundFillBlock({
@@ -68,6 +70,7 @@ export function BackgroundFillBlock({
     onPickImage,
     imagePreviewUrl,
     children,
+    keepChildren = false,
 }: BackgroundFillBlockProps) {
     const current: Segment | '' = mixed ? '' : value === null ? 'none' : value.type;
 
@@ -129,7 +132,7 @@ export function BackgroundFillBlock({
                 />
             )}
 
-            {(mixed || value !== null) && children}
+            {(keepChildren || mixed || value !== null) && children}
         </PropertySection>
     );
 }

@@ -9,7 +9,7 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 installHappyDom();
 
 const { buildTextClipboardItem, classifyPaste } = await import('@workspace/lib/clipboard');
-const { sampleChartSpec } = await import('@workspace/lib/charts');
+const { FLAT_CHART_LOOK, sampleChartSpec } = await import('@workspace/lib/charts');
 const { DOCUMENT_FONT, EIGEN_FONTS } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
@@ -303,6 +303,16 @@ test('a text item pastes its text literally', async () => {
     expect(blocks(target)).toEqual([['if a<b and c>d then'], ['AT&amp;T']]);
 });
 
+const LOOK = {
+    fill: JSON.stringify({ type: 'solid', color: '#ffeeaa', style: 'zigzag' }),
+    color: '#ffffff',
+    strokeColor: '#336699',
+    strokeWidth: 4,
+    strokeStyle: 'dotted',
+    roughness: 2,
+    seed: 77,
+} as const;
+
 // A chart writes its item for the other apps, and within Docs pastes back whole through the docs HTML, alone or
 // beside a figure.
 test('a chart copies and pastes back whole within Docs, alone or beside a figure', async () => {
@@ -316,6 +326,7 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
             alignment: 'center',
             layout: 'wrap-left',
             commentCardId: null,
+            ...LOOK,
         },
     };
     const chartsIn = (editor: Editor) => {
@@ -327,7 +338,13 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
     };
 
     const alone = copy([paragraph(text('a'), chart)]);
-    expect(alone.eigen?.items.at(-1)).toEqual({ type: 'chart', spec: chart.attrs.spec, width: 300, height: 200 });
+    expect(alone.eigen?.items.at(-1)).toEqual({
+        type: 'chart',
+        spec: chart.attrs.spec,
+        width: 300,
+        height: 200,
+        look: LOOK,
+    });
     expect(chartsIn(await paste(alone))).toEqual([chart.attrs]);
 
     const beside = copy([paragraph(figure('a.png'), chart)]);
@@ -343,8 +360,8 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
 test('a chart item from another app pastes as a chart, capped at the column', async () => {
     const spec = JSON.stringify(sampleChartSpec('line'));
     const items = [
-        { type: 'chart' as const, spec, width: 400.5, height: 250.25 },
-        { type: 'chart' as const, spec, width: 1200, height: 675 },
+        { type: 'chart' as const, spec, width: 400.5, height: 250.25, look: LOOK },
+        { type: 'chart' as const, spec, width: 1200, height: 675, look: FLAT_CHART_LOOK },
     ];
     const target = await paste({ eigen: { version: 1, items }, html: '', text: '', files: [], imageFiles: [] });
     const charts: Record<string, unknown>[] = [];
@@ -352,8 +369,8 @@ test('a chart item from another app pastes as a chart, capped at the column', as
         if (node.type.name === 'chart') charts.push(node.attrs);
     });
     expect(charts).toMatchObject([
-        { spec, width: 400.5, height: 250.25 },
-        { spec, width: 600, height: 337.5 },
+        { spec, width: 400.5, height: 250.25, ...LOOK },
+        { spec, width: 600, height: 337.5, ...FLAT_CHART_LOOK },
     ]);
 });
 

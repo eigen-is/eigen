@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1879 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1887 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (181)
+## Components (182)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -168,6 +168,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MergedNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-number-input.tsx |
 | `MergedSelect` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-select.tsx |
 | `MergedSlider` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-slider.tsx |
+| `PaintSections` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/paint-sections.tsx |
 | `PropertiesPanel` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `PropertyCheckbox` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-checkbox.tsx |
 | `PropertyNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-number-input.tsx |
@@ -532,7 +533,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (422)
+## Types (423)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -789,6 +790,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChartLabel` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartLayout` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartLayoutInput` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartLook` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartPaint` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSeriesStyle` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartShape` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -959,7 +961,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (956)
+## Utilities & constants (962)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1094,23 +1096,28 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHART_MESSAGES` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `chartColor` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartLabel` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `chartPaintOf` | `@workspace/lib/charts` | packages/lib/src/charts/look.ts |
+| `chartPointCount` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `chartSearchText` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `DEFAULT_CHART_FONT` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `DEFAULT_CHART_SERIES_STYLE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsChartSpecBytes` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsInlineGridLimits` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `fitsInlineGrid` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
-| `FLAT_CHART_PAINT` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
+| `FLAT_CHART_LOOK` | `@workspace/lib/charts` | packages/lib/src/charts/look.ts |
 | `formatTickValue` | `@workspace/lib/charts` | packages/lib/src/charts/ticks.ts |
 | `INLINE_GRID_MAX_CATEGORIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `INLINE_GRID_MAX_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `isSketchCapped` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `layoutChart` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `layoutChartMessage` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `MAX_CHART_LABEL_LENGTH` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `MAX_CHART_POINTS` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `MAX_CHART_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `MAX_CHART_SPEC_BYTES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `MAX_SKETCH_POINTS` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `parseChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `readChartLook` | `@workspace/lib/charts` | packages/lib/src/charts/look.ts |
 | `sampleChartSpec` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `commandNeedsSpace` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `COMMANDS_HELP` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
@@ -1550,6 +1557,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_KINDS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_VERIFY_STATUSES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `CHART_BLANKS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `CHART_LOOK_FIELDS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_STACKINGS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_TYPES` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |

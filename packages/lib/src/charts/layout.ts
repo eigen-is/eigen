@@ -124,7 +124,7 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     const legend = placeLegend(ctx, spec.legend, items, frame);
     frame = legend.frame;
 
-    const marks = chartPointCount(spec, data) > MAX_SKETCH_POINTS ? flatMarks(ctx) : ctx;
+    const marks = isSketchCapped(spec, data) ? flatMarks(ctx) : ctx;
     const plot =
         spec.type === 'pie'
             ? layoutPie(marks, spec, categories, values[0], frame)
@@ -137,6 +137,11 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
 export function chartPointCount(spec: ChartSpec, data: ChartData): number {
     const plotted = spec.type === 'pie' ? data.series.slice(0, 1) : data.series;
     return plotted.reduce((sum, series) => sum + series.values.length, 0);
+}
+
+// Whether the chart's data marks draw flat whatever its look, which a panel says.
+export function isSketchCapped(spec: ChartSpec, data: ChartData): boolean {
+    return chartPointCount(spec, data) > MAX_SKETCH_POINTS;
 }
 
 // The context the data marks draw in past MAX_SKETCH_POINTS: unsketched and solid, its labels still the chart's.
