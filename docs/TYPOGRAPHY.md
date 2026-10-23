@@ -87,4 +87,4 @@ A `--font-*` token in `globals.css` is needed only when the font fills a new cat
 
 - [EXPORT.md](EXPORT.md): how exports embed the fonts
 - [SHEETS.md](SHEETS.md): the sheet engine that stores `ff`
-- [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-and-charts): the xlsx writer
+- [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-charts-and-pictures): the xlsx writer
