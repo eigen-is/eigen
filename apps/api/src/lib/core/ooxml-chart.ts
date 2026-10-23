@@ -410,15 +410,16 @@ function seriesName(ser: XmlElement | undefined): string {
     return chartLabel(text ?? `Series${(count(val(child(ser, 'idx'))) ?? 0) + 1}`);
 }
 
-// A c:tx's text: rich text, a literal, or a ref's cached cells, joined as Excel joins a name over several cells.
+// A c:tx's text: rich text, a literal, or a ref's cached cells, joined as Excel joins a name over several cells. A label
+// is one line, so a cell's line break is a space, as a rich text's is.
 function cachedText(tx: XmlElement | undefined): string | undefined {
     if (!tx) return undefined;
     const rich = child(tx, 'rich');
     if (rich) return drawingLines(rich).join(' ').trim();
     const literal = child(tx, 'v');
-    if (literal) return xmlText(literal);
     const points = children(child(child(tx, 'strRef'), 'strCache'), 'pt');
-    return points.map((point) => xmlTrimmedText(child(point, 'v'))).join(' ');
+    const text = literal ? xmlText(literal) : points.map((point) => xmlTrimmedText(child(point, 'v'))).join(' ');
+    return text.replace(/[\r\n]/g, ' ');
 }
 
 // A c:cat's or c:val's point container: a ref's cache or a literal.

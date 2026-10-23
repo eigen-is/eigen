@@ -509,9 +509,11 @@ describe('the title', () => {
         expect(spec(space(bar() + AXES, { head: rich })).title).toBe('Sales 2024 by region');
     });
 
-    test("a title from a cell is the cell's cached text", () => {
+    test("a title from a cell is the cell's cached text, its line breaks spaces as a rich title's", () => {
         const cell = `<c:title><c:tx>${strRef('Sheet1!$A$1', ['From cell'])}</c:tx></c:title>`;
         expect(spec(space(bar() + AXES, { head: cell })).title).toBe('From cell');
+        const lines = `<c:title><c:tx>${strRef('Sheet1!$A$1', ['From\ncell'])}</c:tx></c:title>`;
+        expect(spec(space(bar() + AXES, { head: lines })).title).toBe('From cell');
     });
 
     test('a title with no text is the series name for one series, Chart Title for more', () => {
