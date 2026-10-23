@@ -1,8 +1,10 @@
 import { parseChartSpec } from '@workspace/lib/charts';
+import { buildChartClipboardItem } from '@workspace/lib/clipboard';
 import { nextFloatingIndex, type SheetChart, sheetFloatingBox } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
+import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import type { Box } from '@workspace/lib/vector';
-import { renderSheetChartSvg } from '../../engine/chart-data';
+import { inlineChartSpec, renderSheetChartSvg } from '../../engine/chart-data';
 import { type ChartRangeRefusal, currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
@@ -87,4 +89,11 @@ export function sheetChartSvg(ctx: Context, chart: SheetChart): string {
     const svg = renderSheetChartSvg(chart, createContextResolver(ctx));
     drawings.set(chart, { sheetIds, reads: sheetIds.map(cellsOf), svg });
     return svg;
+}
+
+// The chart as another app reads it, its ranges read into inline data: what a copy writes and Download image draws.
+// Null for a chart inlineChartSpec can't inline.
+export function sheetChartClipboardItem(ctx: Context, chart: SheetChart): EigenClipboardChartItem | null {
+    const inline = inlineChartSpec(chart, createContextResolver(ctx));
+    return inline ? buildChartClipboardItem({ spec: inline, box: chart }) : null;
 }
