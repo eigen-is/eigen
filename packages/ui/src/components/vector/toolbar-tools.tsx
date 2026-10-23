@@ -11,7 +11,7 @@ export function ToolMenuItems({ tools, setTool }: { tools: VectorToolEntry[]; se
         <>
             {tools.map((entry) => (
                 <DropdownMenuItem key={entry.tool} onClick={() => setTool(entry.tool)}>
-                    <entry.icon className="h-4 w-4 mr-2" /> {entry.label}
+                    <entry.icon className="h-4 w-4" /> {entry.label}
                     {entry.shortcut && <DropdownMenuShortcut>{entry.shortcut}</DropdownMenuShortcut>}
                 </DropdownMenuItem>
             ))}

@@ -129,7 +129,7 @@ function MobileClusterKebab({
                 <DropdownMenuContent align="end" onCloseAutoFocus={onCloseAutoFocus}>
                     {onRename && (
                         <DropdownMenuItem onClick={onRename}>
-                            <Pencil className="mr-2" />
+                            <Pencil />
                             Edit
                         </DropdownMenuItem>
                     )}
@@ -138,20 +138,20 @@ function MobileClusterKebab({
                     {mobileMenuItems}
                     {onToggleActivityPanel && (
                         <DropdownMenuItem onClick={onToggleActivityPanel}>
-                            <Activity className="mr-2" />
+                            <Activity />
                             Activity
                         </DropdownMenuItem>
                     )}
                     {watchTarget && <WatchMenuItem {...watchTarget} />}
                     {onToggleCommentPanel && (
                         <DropdownMenuItem onClick={onToggleCommentPanel}>
-                            <MessageSquare className="mr-2" />
+                            <MessageSquare />
                             {assignedCommentCount ? `Comments (${assignedCommentCount})` : 'Comments'}
                         </DropdownMenuItem>
                     )}
                     {canWrite && (
                         <DropdownMenuItem onClick={onAccessDialogOpen}>
-                            <UserRoundPlus className="mr-2" />
+                            <UserRoundPlus />
                             Share
                         </DropdownMenuItem>
                     )}

@@ -92,7 +92,7 @@ export const PageNumberItems = ({ editor, onPreset }: PageNumberItemsProps) => (
                     .run()
             }
         >
-            <Files className="h-4 w-4 mr-2" /> Page count
+            <Files className="h-4 w-4" /> Page count
         </DropdownMenuItem>
     </>
 );

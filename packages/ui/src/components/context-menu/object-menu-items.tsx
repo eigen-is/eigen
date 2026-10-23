@@ -24,16 +24,16 @@ export function ArrangeMenuItems({ onApply }: { onApply: (op: ZOp) => void }) {
     return (
         <>
             <DropdownMenuItem onClick={() => onApply('toFront')}>
-                <ArrowUpToLine className="h-4 w-4 mr-2" /> Bring to front
+                <ArrowUpToLine className="h-4 w-4" /> Bring to front
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onApply('forward')}>
-                <ChevronUp className="h-4 w-4 mr-2" /> Bring forward
+                <ChevronUp className="h-4 w-4" /> Bring forward
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onApply('backward')}>
-                <ChevronDown className="h-4 w-4 mr-2" /> Send backward
+                <ChevronDown className="h-4 w-4" /> Send backward
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onApply('toBack')}>
-                <ArrowDownToLine className="h-4 w-4 mr-2" /> Send to back
+                <ArrowDownToLine className="h-4 w-4" /> Send to back
             </DropdownMenuItem>
         </>
     );
@@ -55,17 +55,17 @@ export function ClipboardMenuItems({
         <>
             {onCopy && (
                 <DropdownMenuItem onClick={onCopy}>
-                    <Copy className="h-4 w-4 mr-2" /> Copy
+                    <Copy className="h-4 w-4" /> Copy
                 </DropdownMenuItem>
             )}
             {onCut && (
                 <DropdownMenuItem onClick={onCut}>
-                    <Scissors className="h-4 w-4 mr-2" /> Cut
+                    <Scissors className="h-4 w-4" /> Cut
                 </DropdownMenuItem>
             )}
             {onPaste && (
                 <DropdownMenuItem onClick={onPaste}>
-                    <ClipboardPaste className="h-4 w-4 mr-2" /> Paste
+                    <ClipboardPaste className="h-4 w-4" /> Paste
                 </DropdownMenuItem>
             )}
         </>
@@ -80,12 +80,12 @@ export function ObjectActionMenuItems({ onDuplicate, onDelete }: { onDuplicate?:
         <>
             {onDuplicate && (
                 <DropdownMenuItem onClick={onDuplicate}>
-                    <CopyPlus className="h-4 w-4 mr-2" /> Duplicate
+                    <CopyPlus className="h-4 w-4" /> Duplicate
                 </DropdownMenuItem>
             )}
             {onDelete && (
                 <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                    <Trash2 className="h-4 w-4 mr-2" /> Delete
+                    <Trash2 className="h-4 w-4" /> Delete
                 </DropdownMenuItem>
             )}
         </>
@@ -98,7 +98,7 @@ export function DownloadImageMenuItem({ path }: { path?: DrivePath | null }) {
     if (!path) return null;
     return (
         <DropdownMenuItem onClick={() => downloadDriveFile(path)}>
-            <Download className="h-4 w-4 mr-2" /> Download original image
+            <Download className="h-4 w-4" /> Download original image
         </DropdownMenuItem>
     );
 }

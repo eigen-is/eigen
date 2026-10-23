@@ -415,7 +415,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                     <DropdownMenuContent align="start">
                                         {selectedTeam && (
                                             <DropdownMenuItem onClick={() => setSelectedTeamId(null)}>
-                                                <User className="h-4 w-4 mr-2" />
+                                                <User className="h-4 w-4" />
                                                 Personal chat
                                             </DropdownMenuItem>
                                         )}
@@ -425,7 +425,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                                 onClick={() => setSelectedTeamId(team.id)}
                                                 disabled={team.id === selectedTeamId}
                                             >
-                                                <Users className="h-4 w-4 mr-2" />
+                                                <Users className="h-4 w-4" />
                                                 {team.name}
                                             </DropdownMenuItem>
                                         ))}

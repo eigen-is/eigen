@@ -142,13 +142,13 @@ export function CanvasToolbar({
                                 <ToolMenuItems tools={INSERT_TOOLS} setTool={setTool} />
                                 {onInsertImage && (
                                     <DropdownMenuItem onClick={onInsertImage}>
-                                        <ImagePlus className="h-4 w-4 mr-2" /> Image
+                                        <ImagePlus className="h-4 w-4" /> Image
                                         <DropdownMenuShortcut>{INSERT_IMAGE_KEY}</DropdownMenuShortcut>
                                     </DropdownMenuItem>
                                 )}
                                 <DropdownMenuSub>
                                     <DropdownMenuSubTrigger>
-                                        <ChartIcon className="h-4 w-4 mr-2" /> {ELEMENT_KIND_UI.chart.label}
+                                        <ChartIcon className="h-4 w-4" /> {ELEMENT_KIND_UI.chart.label}
                                     </DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         {CHART_TYPE_OPTIONS.map((option) => (
@@ -156,7 +156,7 @@ export function CanvasToolbar({
                                                 key={option.value}
                                                 onClick={() => canvasRef.current?.insertChart(option.value)}
                                             >
-                                                <option.icon className="h-4 w-4 mr-2" /> {option.label}
+                                                <option.icon className="h-4 w-4" /> {option.label}
                                             </DropdownMenuItem>
                                         ))}
                                     </DropdownMenuSubContent>

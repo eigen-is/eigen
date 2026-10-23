@@ -7,7 +7,7 @@ export const WORD_COUNT_HOTKEY = 'Mod+Shift+C';
 
 export const WordCountItem = ({ onClick }: { onClick: () => void }) => (
     <DropdownMenuItem onClick={onClick}>
-        <WholeWord className="h-4 w-4 mr-2" /> Word count
+        <WholeWord className="h-4 w-4" /> Word count
         <DropdownMenuShortcut>{formatForDisplay(WORD_COUNT_HOTKEY)}</DropdownMenuShortcut>
     </DropdownMenuItem>
 );

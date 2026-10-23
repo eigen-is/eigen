@@ -69,7 +69,7 @@ function TrashRoute() {
                             close();
                         }}
                     >
-                        <RotateCcw className="h-4 w-4 mr-2" /> Restore{suffix}
+                        <RotateCcw className="h-4 w-4" /> Restore{suffix}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
@@ -79,7 +79,7 @@ function TrashRoute() {
                         }}
                         className="text-destructive"
                     >
-                        <Trash2 className="h-4 w-4 mr-2" /> Delete{suffix} permanently
+                        <Trash2 className="h-4 w-4" /> Delete{suffix} permanently
                     </DropdownMenuItem>
                 </>
             );

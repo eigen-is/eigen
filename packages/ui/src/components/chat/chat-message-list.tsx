@@ -438,7 +438,7 @@ export function ChatMessageList({
                                     contextMenu.close();
                                 }}
                             >
-                                <Download className="h-4 w-4 mr-2" /> Save attachments
+                                <Download className="h-4 w-4" /> Save attachments
                             </DropdownMenuItem>
                         )}
                         {menuActions?.canEdit && onEditMessage && (
@@ -448,7 +448,7 @@ export function ChatMessageList({
                                     contextMenu.close();
                                 }}
                             >
-                                <Pencil className="h-4 w-4 mr-2" /> Edit
+                                <Pencil className="h-4 w-4" /> Edit
                             </DropdownMenuItem>
                         )}
                         {menuActions?.canDelete && onDeleteMessage && (
@@ -459,7 +459,7 @@ export function ChatMessageList({
                                     contextMenu.close();
                                 }}
                             >
-                                <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                <Trash2 className="h-4 w-4" /> Delete
                             </DropdownMenuItem>
                         )}
                     </>

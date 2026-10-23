@@ -71,7 +71,7 @@ export function DriveNewMenu({ rootPath, condensed = false }: DriveNewMenuProps)
                 <DropdownMenuContent align={condensed ? 'center' : 'start'}>
                     {createItems.map(({ kind, icon: Icon, label, onSelect }) => (
                         <DropdownMenuItem key={kind} onClick={onSelect}>
-                            <Icon className="h-4 w-4 mr-2" />
+                            <Icon className="h-4 w-4" />
                             {label}
                         </DropdownMenuItem>
                     ))}

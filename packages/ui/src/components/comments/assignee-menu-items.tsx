@@ -20,7 +20,7 @@ export function AssigneeMenuItems({ members, currentUserEmail, assignee, onAssig
     const users = usePublicUsers(listed.map((m) => m.email));
     return (
         <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="gap-2">
+            <DropdownMenuSubTrigger>
                 <UserPlus className="h-4 w-4" /> Assign to
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="max-w-64">

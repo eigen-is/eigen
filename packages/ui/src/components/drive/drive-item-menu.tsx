@@ -94,7 +94,7 @@ export function DriveItemMenuItems({
         <>
             {canOpen && onItemOpen && (
                 <DropdownMenuItem onClick={run(() => onItemOpen(item))} className="flex items-center">
-                    <ArrowRight className="h-4 w-4 mr-2" />
+                    <ArrowRight className="h-4 w-4" />
                     Open
                 </DropdownMenuItem>
             )}
@@ -103,7 +103,7 @@ export function DriveItemMenuItems({
                     onClick={run(() => window.open(href, '_blank', 'noopener,noreferrer'))}
                     className="flex items-center"
                 >
-                    <ExternalLink className="h-4 w-4 mr-2" />
+                    <ExternalLink className="h-4 w-4" />
                     Open in new tab
                 </DropdownMenuItem>
             )}
@@ -120,7 +120,7 @@ export function DriveItemMenuItems({
             {exportFormats.length > 0 && onExport && (
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
-                        <FileDown className="h-4 w-4 mr-2" />
+                        <FileDown className="h-4 w-4" />
                         Download
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
@@ -134,31 +134,31 @@ export function DriveItemMenuItems({
             )}
             {onRename && (
                 <DropdownMenuItem onClick={run(() => onRename(item))} className="flex items-center">
-                    <Pencil className="h-4 w-4 mr-2" />
+                    <Pencil className="h-4 w-4" />
                     Rename
                 </DropdownMenuItem>
             )}
             {onMoveTo && (
                 <DropdownMenuItem onClick={run(() => onMoveTo([item]))} className="flex items-center">
-                    <FolderInput className="h-4 w-4 mr-2" />
+                    <FolderInput className="h-4 w-4" />
                     Move to…
                 </DropdownMenuItem>
             )}
             {onCopyTo && (
                 <DropdownMenuItem onClick={run(() => onCopyTo([item]))} className="flex items-center">
-                    <Copy className="h-4 w-4 mr-2" />
+                    <Copy className="h-4 w-4" />
                     Copy to…
                 </DropdownMenuItem>
             )}
             {onDuplicate && (
                 <DropdownMenuItem onClick={run(() => onDuplicate([item]))} className="flex items-center">
-                    <CopyPlus className="h-4 w-4 mr-2" />
+                    <CopyPlus className="h-4 w-4" />
                     Duplicate
                 </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled={isPending} onClick={run(toggle)} className="flex items-center">
-                {direct ? <BellRing className="h-4 w-4 mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
+                {direct ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
                 {label}
             </DropdownMenuItem>
 
@@ -167,29 +167,29 @@ export function DriveItemMenuItems({
                     <DropdownMenuSeparator />
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
-                            <UserRoundPlus className="h-4 w-4 mr-2" />
+                            <UserRoundPlus className="h-4 w-4" />
                             Share
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             <DropdownMenuItem onClick={run(() => onShareClick(item))}>
-                                <UserRoundPlus className="h-4 w-4 mr-2" />
+                                <UserRoundPlus className="h-4 w-4" />
                                 Share
                             </DropdownMenuItem>
                             {onEmailCollaborators && accessible && (
                                 <DropdownMenuItem onClick={run(() => onEmailCollaborators(item))}>
-                                    <Mail className="h-4 w-4 mr-2" />
+                                    <Mail className="h-4 w-4" />
                                     Email collaborators
                                 </DropdownMenuItem>
                             )}
                             <DropdownMenuItem
                                 onClick={run(() => copyToClipboard(getDriveShareUrl(item), 'Link copied to clipboard'))}
                             >
-                                <Link className="h-4 w-4 mr-2" />
+                                <Link className="h-4 w-4" />
                                 Copy link
                             </DropdownMenuItem>
                             {mailEnabled && (
                                 <DropdownMenuItem onClick={run(() => openMailComposeWith({ attachments: [item] }))}>
-                                    <Mail className="h-4 w-4 mr-2" />
+                                    <Mail className="h-4 w-4" />
                                     Mail to…
                                 </DropdownMenuItem>
                             )}
@@ -202,7 +202,7 @@ export function DriveItemMenuItems({
                 <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={run(() => onDelete([item]))} className="flex items-center">
-                        <Trash2 className="h-4 w-4 mr-2" />
+                        <Trash2 className="h-4 w-4" />
                         Move to trash
                     </DropdownMenuItem>
                 </>

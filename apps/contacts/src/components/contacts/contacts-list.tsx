@@ -61,10 +61,10 @@ export function ContactsListToolbar({
                     <KebabTrigger />
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={onImportClick}>
-                            <Upload className="h-4 w-4 mr-2" /> Import contacts…
+                            <Upload className="h-4 w-4" /> Import contacts…
                         </DropdownMenuItem>
                         <DropdownMenuItem disabled={isExporting} onClick={() => void exportContacts()}>
-                            <Download className="h-4 w-4 mr-2" /> Export all contacts
+                            <Download className="h-4 w-4" /> Export all contacts
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>

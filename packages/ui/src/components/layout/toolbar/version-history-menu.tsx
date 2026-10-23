@@ -25,11 +25,11 @@ export function VersionHistoryMenu({
     return (
         <>
             <DropdownMenuItem onSelect={() => save.mutate()} disabled={save.isPending}>
-                <Save className="h-4 w-4 mr-2" /> Save version now
+                <Save className="h-4 w-4" /> Save version now
             </DropdownMenuItem>
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
-                    <History className="h-4 w-4 mr-2" /> Version history
+                    <History className="h-4 w-4" /> Version history
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-[240px]">
                     {data && data.length > 0 ? (

@@ -131,50 +131,50 @@ export const FormatMenu = ({
     <ToolbarMenu label="Format" onCloseAutoFocus={keepEditorFocus}>
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-                <Type className="h-4 w-4 mr-2" /> Text
+                <Type className="h-4 w-4" /> Text
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleBold().run()}>
-                    <Bold className="h-4 w-4 mr-2" /> Bold
+                    <Bold className="h-4 w-4" /> Bold
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleItalic().run()}>
-                    <Italic className="h-4 w-4 mr-2" /> Italic
+                    <Italic className="h-4 w-4" /> Italic
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleUnderline().run()}>
-                    <Underline className="h-4 w-4 mr-2" /> Underline
+                    <Underline className="h-4 w-4" /> Underline
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleStrike().run()}>
-                    <Strikethrough className="h-4 w-4 mr-2" /> Strikethrough
+                    <Strikethrough className="h-4 w-4" /> Strikethrough
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleSuperscript().run()}>
-                    <Superscript className="h-4 w-4 mr-2" /> Superscript
+                    <Superscript className="h-4 w-4" /> Superscript
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleSubscript().run()}>
-                    <Subscript className="h-4 w-4 mr-2" /> Subscript
+                    <Subscript className="h-4 w-4" /> Subscript
                 </DropdownMenuItem>
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
-                        <ALargeSmall className="h-4 w-4 mr-2" /> Size
+                        <ALargeSmall className="h-4 w-4" /> Size
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                         <DropdownMenuItem onClick={() => editor.chain().focus().stepFontSize(1).run()}>
-                            <AArrowUp className="h-4 w-4 mr-2" /> Increase font size
+                            <AArrowUp className="h-4 w-4" /> Increase font size
                             <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+.')}</DropdownMenuShortcut>
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => editor.chain().focus().stepFontSize(-1).run()}>
-                            <AArrowDown className="h-4 w-4 mr-2" /> Decrease font size
+                            <AArrowDown className="h-4 w-4" /> Decrease font size
                             <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+,')}</DropdownMenuShortcut>
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCode().run()}>
-                    <Code className="h-4 w-4 mr-2" /> Inline code
+                    <Code className="h-4 w-4" /> Inline code
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCaps('small').run()}>
-                    <CaseSensitive className="h-4 w-4 mr-2" /> Small caps
+                    <CaseSensitive className="h-4 w-4" /> Small caps
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCaps('all').run()}>
-                    <CaseUpper className="h-4 w-4 mr-2" /> All caps
+                    <CaseUpper className="h-4 w-4" /> All caps
                     <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+A')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -196,7 +196,7 @@ export const FormatMenu = ({
         </DropdownMenuSub>
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-                <TypeOutline className="h-4 w-4 mr-2" /> Font
+                <TypeOutline className="h-4 w-4" /> Font
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 {EIGEN_FONTS.map((font) => (
@@ -212,13 +212,13 @@ export const FormatMenu = ({
         <DropdownMenuSeparator />
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-                <Heading2 className="h-4 w-4 mr-2" /> Paragraph styles
+                <Heading2 className="h-4 w-4" /> Paragraph styles
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 {/* Google's own submenu: the doc's Normal is the one style it holds. */}
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
-                        <Pilcrow className="mr-2 h-4 w-4" /> Normal text
+                        <Pilcrow className="h-4 w-4" /> Normal text
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                         <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
@@ -237,18 +237,18 @@ export const FormatMenu = ({
                         key={name}
                         onClick={() => editor.chain().focus().toggleNode(type, 'paragraph', attrs).run()}
                     >
-                        <Icon className="mr-2 h-4 w-4" /> {name}
+                        <Icon className="h-4 w-4" /> {name}
                     </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleBlockquote().run()}>
-                    <Quote className="mr-2 h-4 w-4" /> Quote
+                    <Quote className="h-4 w-4" /> Quote
                 </DropdownMenuItem>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-                <AlignLeft className="h-4 w-4 mr-2" /> Align and indent
+                <AlignLeft className="h-4 w-4" /> Align and indent
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 {TEXT_ALIGNS.map((alignment) => {
@@ -258,28 +258,28 @@ export const FormatMenu = ({
                             key={alignment}
                             onClick={() => editor.chain().focus().setTextAlign(alignment).run()}
                         >
-                            <Icon className="h-4 w-4 mr-2" /> {label}
+                            <Icon className="h-4 w-4" /> {label}
                         </DropdownMenuItem>
                     );
                 })}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => editor.chain().focus().stepIndent(1).run()}>
-                    <ListIndentIncrease className="h-4 w-4 mr-2" /> Increase indent
+                    <ListIndentIncrease className="h-4 w-4" /> Increase indent
                     <DropdownMenuShortcut>{formatForDisplay('Mod+]')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().stepIndent(-1).run()}>
-                    <ListIndentDecrease className="h-4 w-4 mr-2" /> Decrease indent
+                    <ListIndentDecrease className="h-4 w-4" /> Decrease indent
                     <DropdownMenuShortcut>{formatForDisplay('Mod+[')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onIndentationOptions}>
-                    <Ruler className="h-4 w-4 mr-2" /> Indentation options…
+                    <Ruler className="h-4 w-4" /> Indentation options…
                 </DropdownMenuItem>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-                <UnfoldVertical className="h-4 w-4 mr-2" /> Line & paragraph spacing
+                <UnfoldVertical className="h-4 w-4" /> Line & paragraph spacing
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 <DropdownMenuRadioGroup value={active.lineSpacing === undefined ? '' : String(active.lineSpacing)}>
@@ -304,8 +304,8 @@ export const FormatMenu = ({
                             .run()
                     }
                 >
-                    <BetweenHorizontalStart className="h-4 w-4 mr-2" /> {active.spaceBefore ? 'Remove' : 'Add'} space
-                    before paragraph
+                    <BetweenHorizontalStart className="h-4 w-4" /> {active.spaceBefore ? 'Remove' : 'Add'} space before
+                    paragraph
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     disabled={!active.paragraphSpacing}
@@ -317,34 +317,34 @@ export const FormatMenu = ({
                             .run()
                     }
                 >
-                    <BetweenHorizontalEnd className="h-4 w-4 mr-2" /> {active.spaceAfter ? 'Remove' : 'Add'} space after
+                    <BetweenHorizontalEnd className="h-4 w-4" /> {active.spaceAfter ? 'Remove' : 'Add'} space after
                     paragraph
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onCustomSpacing}>
-                    <Settings2 className="h-4 w-4 mr-2" /> Custom spacing…
+                    <Settings2 className="h-4 w-4" /> Custom spacing…
                 </DropdownMenuItem>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-                <List className="h-4 w-4 mr-2" /> Bullets and numbering
+                <List className="h-4 w-4" /> Bullets and numbering
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger disabled={!active.orderedListType}>
-                        <Settings2 className="h-4 w-4 mr-2" /> List options
+                        <Settings2 className="h-4 w-4" /> List options
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                         <DropdownMenuItem onClick={onRestartNumbering}>
-                            <ListRestart className="h-4 w-4 mr-2" /> Restart numbering
+                            <ListRestart className="h-4 w-4" /> Restart numbering
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuSeparator />
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
-                        <ListOrdered className="h-4 w-4 mr-2" /> Numbered list
+                        <ListOrdered className="h-4 w-4" /> Numbered list
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                         <DropdownMenuRadioGroup value={active.orderedListType}>
@@ -361,10 +361,10 @@ export const FormatMenu = ({
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>
-                    <List className="h-4 w-4 mr-2" /> Bulleted list
+                    <List className="h-4 w-4" /> Bulleted list
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
-                    <CheckSquare className="h-4 w-4 mr-2" /> Checklist
+                    <CheckSquare className="h-4 w-4" /> Checklist
                 </DropdownMenuItem>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
@@ -372,11 +372,11 @@ export const FormatMenu = ({
         {onEnterBand && onPageNumbers && (
             <>
                 <DropdownMenuItem onClick={() => onEnterBand('header')}>
-                    <PanelTop className="h-4 w-4 mr-2" /> Headers and footers
+                    <PanelTop className="h-4 w-4" /> Headers and footers
                 </DropdownMenuItem>
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
-                        <Hash className="h-4 w-4 mr-2" /> Page numbers
+                        <Hash className="h-4 w-4" /> Page numbers
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                         <PageNumberItems editor={editor} onPreset={onPageNumbers} />
@@ -385,56 +385,56 @@ export const FormatMenu = ({
             </>
         )}
         <DropdownMenuItem onClick={onPageSetup}>
-            <RotateCwSquare className="h-4 w-4 mr-2" /> Page orientation
+            <RotateCwSquare className="h-4 w-4" /> Page orientation
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuSub>
             <DropdownMenuSubTrigger disabled={!active.table}>
-                <Table className="h-4 w-4 mr-2" /> Table
+                <Table className="h-4 w-4" /> Table
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>
-                    <TABLE_ACTION_ICONS.addRowBefore className="h-4 w-4 mr-2" /> Insert row above
+                    <TABLE_ACTION_ICONS.addRowBefore className="h-4 w-4" /> Insert row above
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>
-                    <TABLE_ACTION_ICONS.addRowAfter className="h-4 w-4 mr-2" /> Insert row below
+                    <TABLE_ACTION_ICONS.addRowAfter className="h-4 w-4" /> Insert row below
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()}>
-                    <TABLE_ACTION_ICONS.addColumnBefore className="h-4 w-4 mr-2" /> Insert column left
+                    <TABLE_ACTION_ICONS.addColumnBefore className="h-4 w-4" /> Insert column left
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
-                    <TABLE_ACTION_ICONS.addColumnAfter className="h-4 w-4 mr-2" /> Insert column right
+                    <TABLE_ACTION_ICONS.addColumnAfter className="h-4 w-4" /> Insert column right
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>
-                    <TABLE_ACTION_ICONS.deleteRow className="h-4 w-4 mr-2" /> Delete row
+                    <TABLE_ACTION_ICONS.deleteRow className="h-4 w-4" /> Delete row
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>
-                    <TABLE_ACTION_ICONS.deleteColumn className="h-4 w-4 mr-2" /> Delete column
+                    <TABLE_ACTION_ICONS.deleteColumn className="h-4 w-4" /> Delete column
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().deleteTable().run()}>
-                    <TABLE_ACTION_ICONS.deleteTable className="h-4 w-4 mr-2" /> Delete table
+                    <TABLE_ACTION_ICONS.deleteTable className="h-4 w-4" /> Delete table
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => editor.chain().focus().distributeColumns().run()}>
-                    <TABLE_ACTION_ICONS.distributeColumns className="h-4 w-4 mr-2" /> Distribute columns
+                    <TABLE_ACTION_ICONS.distributeColumns className="h-4 w-4" /> Distribute columns
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                     disabled={!active.canMergeCells}
                     onClick={() => editor.chain().focus().mergeCells().run()}
                 >
-                    <TABLE_ACTION_ICONS.mergeCells className="h-4 w-4 mr-2" /> Merge cells
+                    <TABLE_ACTION_ICONS.mergeCells className="h-4 w-4" /> Merge cells
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     disabled={!active.canSplitCell}
                     onClick={() => editor.chain().focus().splitCell().run()}
                 >
-                    <TABLE_ACTION_ICONS.splitCell className="h-4 w-4 mr-2" /> Unmerge cells
+                    <TABLE_ACTION_ICONS.splitCell className="h-4 w-4" /> Unmerge cells
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
-                    <TABLE_ACTION_ICONS.toggleHeaderRow className="h-4 w-4 mr-2" /> Toggle header row
+                    <TABLE_ACTION_ICONS.toggleHeaderRow className="h-4 w-4" /> Toggle header row
                 </DropdownMenuItem>
                 <ColorPickerMenuItem
                     icon={PaintBucket}
@@ -449,17 +449,17 @@ export const FormatMenu = ({
         </DropdownMenuSub>
         <DropdownMenuSub>
             <DropdownMenuSubTrigger disabled={!active.figure}>
-                <ImageIcon className="h-4 w-4 mr-2" /> Image
+                <ImageIcon className="h-4 w-4" /> Image
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 <DropdownMenuItem onClick={onReplaceImage}>
-                    <ImagePlus className="h-4 w-4 mr-2" /> Replace image
+                    <ImagePlus className="h-4 w-4" /> Replace image
                 </DropdownMenuItem>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={clearFormatting}>
-            <RemoveFormatting className="h-4 w-4 mr-2" /> Clear formatting
+            <RemoveFormatting className="h-4 w-4" /> Clear formatting
         </DropdownMenuItem>
     </ToolbarMenu>
 );

@@ -88,7 +88,7 @@ export function useContactMenu() {
                             close();
                         }}
                     >
-                        <Mail className="h-4 w-4 mr-2" />
+                        <Mail className="h-4 w-4" />
                         {eligible.length === 1 ? 'Send email' : `Send email to ${eligible.length} contacts`}
                     </DropdownMenuItem>
                 )}
@@ -109,7 +109,7 @@ export function useContactMenu() {
                             close();
                         }}
                     >
-                        <MessageSquare className="h-4 w-4 mr-2" />
+                        <MessageSquare className="h-4 w-4" />
                         {eligible.length === 1 ? 'Start chat' : `Start chat with ${eligible.length} contacts`}
                     </DropdownMenuItem>
                 )}
@@ -120,7 +120,7 @@ export function useContactMenu() {
                             close();
                         }}
                     >
-                        <Printer className="h-4 w-4 mr-2" /> Print
+                        <Printer className="h-4 w-4" /> Print
                     </DropdownMenuItem>
                 )}
                 {canExport && (
@@ -131,7 +131,7 @@ export function useContactMenu() {
                             close();
                         }}
                     >
-                        <Download className="h-4 w-4 mr-2" />
+                        <Download className="h-4 w-4" />
                         {contacts.length === 1 ? 'Export vCard' : `Export ${contacts.length} vCards`}
                     </DropdownMenuItem>
                 )}
@@ -145,7 +145,7 @@ export function useContactMenu() {
                             close();
                         }}
                     >
-                        <Pencil className="h-4 w-4 mr-2" /> Edit
+                        <Pencil className="h-4 w-4" /> Edit
                     </DropdownMenuItem>
                 )}
                 {onDelete && contacts.length > 0 && !hasSelf && (
@@ -155,7 +155,7 @@ export function useContactMenu() {
                             close();
                         }}
                     >
-                        <Trash2 className="h-4 w-4 mr-2" />
+                        <Trash2 className="h-4 w-4" />
                         {contacts.length === 1 ? 'Delete' : `Delete ${contacts.length} contacts`}
                     </DropdownMenuItem>
                 )}

@@ -334,13 +334,13 @@ function SlideEditorInner({
                     onImport={() => setImportPickerOpen(true)}
                     fileItems={
                         <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
-                            <FileSliders className="h-4 w-4 mr-2" /> Page setup…
+                            <FileSliders className="h-4 w-4" /> Page setup…
                         </DropdownMenuItem>
                     }
                     insertItems={
                         <>
                             <DropdownMenuItem onClick={() => addSlideAfter(frameId)}>
-                                <Plus className="h-4 w-4 mr-2" /> New slide
+                                <Plus className="h-4 w-4" /> New slide
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                         </>
@@ -454,14 +454,14 @@ function SlideEditorInner({
                 {menuFrameId && (
                     <>
                         <DropdownMenuItem onClick={() => addSlideAbove(menuFrameId)}>
-                            <ArrowUpToLine className="h-4 w-4 mr-2" /> New slide above
+                            <ArrowUpToLine className="h-4 w-4" /> New slide above
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => addSlideAfter(menuFrameId)}>
-                            <ArrowDownToLine className="h-4 w-4 mr-2" /> New slide below
+                            <ArrowDownToLine className="h-4 w-4" /> New slide below
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => duplicateSlide(menuFrameId)}>
-                            <CopyPlus className="h-4 w-4 mr-2" /> Duplicate
+                            <CopyPlus className="h-4 w-4" /> Duplicate
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
@@ -469,7 +469,7 @@ function SlideEditorInner({
                             disabled={doc.frames.length <= 1}
                             onClick={() => deleteFrame(menuFrameId)}
                         >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            <Trash2 className="h-4 w-4" /> Delete
                         </DropdownMenuItem>
                     </>
                 )}

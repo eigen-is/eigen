@@ -279,7 +279,7 @@ export function DriveBrowser({
                             newFolderMenu.close();
                         }}
                     >
-                        <FolderPlus className="h-4 w-4 mr-2" />
+                        <FolderPlus className="h-4 w-4" />
                         New folder
                     </DropdownMenuItem>
                 </ContextMenuAnchor>

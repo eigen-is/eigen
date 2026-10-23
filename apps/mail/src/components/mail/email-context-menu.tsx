@@ -60,7 +60,7 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <Printer className="mr-2" />
+                        <Printer />
                         Print
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -75,7 +75,7 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <Reply className="mr-2" />
+                        <Reply />
                         Reply
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -84,7 +84,7 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <ReplyAll className="mr-2" />
+                        <ReplyAll />
                         Reply All
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -93,7 +93,7 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <Forward className="mr-2" />
+                        <Forward />
                         Forward
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -107,7 +107,7 @@ export function EmailContextMenu({
                         onClose();
                     }}
                 >
-                    <Archive className="mr-2" />
+                    <Archive />
                     {isSingleSelect ? 'Archive' : `Archive ${messageIds.length} emails`}
                 </DropdownMenuItem>
             )}
@@ -118,7 +118,7 @@ export function EmailContextMenu({
                         onClose();
                     }}
                 >
-                    <AlertTriangle className="mr-2" />
+                    <AlertTriangle />
                     Report Spam
                 </DropdownMenuItem>
             )}
@@ -128,7 +128,7 @@ export function EmailContextMenu({
                     onClose();
                 }}
             >
-                <Trash2 className="mr-2" />
+                <Trash2 />
                 {isSingleSelect ? 'Delete' : `Delete ${messageIds.length} emails`}
             </DropdownMenuItem>
 
@@ -144,7 +144,7 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <Download className="mr-2" />
+                        <Download />
                         Download
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />

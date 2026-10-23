@@ -321,7 +321,7 @@ export function DriveAccessListEdit({
                                     onClick={() => handleAddTeam(team.id)}
                                     disabled={directList.some((i: DirectAccessItem) => i.id === teamOwnerId(team.id))}
                                 >
-                                    <Users className="h-4 w-4 mr-2" />
+                                    <Users className="h-4 w-4" />
                                     {team.name}
                                 </DropdownMenuItem>
                             ))}
