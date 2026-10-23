@@ -30,7 +30,7 @@ Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` and 
 - **Find and replace** — opens on ⇧⌘H (Ctrl+Shift+H, or Ctrl+H on Windows and Linux) in every editor, as in Google Docs. In Docs, ⇧⌘H no longer highlights text
 - **Print in Docs** — File → **Print** and ⌘P open the document as a PDF to print from, so headers, footers and page numbers print. Offline, Docs prints from the browser without them and says so
 - **Nested numbered lists** — a numbered list inside another numbers 1. a. i. by depth. In existing documents, a nested list that showed 1. 2. 3. now shows a. or i.: choose Format → Bullets and numbering → Numbered list → **1. 2. 3.** in it again
-- **Sheets** — text runs over into empty cells beside it, as in Excel, unless set to Clip or Wrap. A column is as wide on screen as in Excel. In an imported workbook IFS, IFNA, SWITCH, CONCAT and the other newer Excel functions Sheets knows calculate
+- **Sheets** — text runs over into empty cells beside it, as in Excel, unless set to Clip or Wrap. A column is as wide on screen as in Excel. XLOOKUP, IFS, IFNA and Excel's other newer functions calculate
 - **Excel import** — a workbook with more than 10,000 merged ranges, 500 sheets or 2 million rows imports when its cells fit, where it was refused. A password-protected file says so
 - **Image sizes in Docs** — the Image panel and an image's handle show its width in cm
 - **Menus** — every menu orders its rows the same way, with Delete last and in red. A choice, such as a style or an alignment, is a submenu with a check on the current one. A canvas object's menu gets Cut, Copy, Paste and an **Order** submenu. In Docs, a table cell and an equation get a right-click menu of their own
