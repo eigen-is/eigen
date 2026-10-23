@@ -11,14 +11,17 @@ import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import {
     auditImported,
     auditSource,
+    classifyDocx,
     compareRuns,
     compareTallies,
     type Feature,
     runAudit,
+    runRoundtrip,
     type Tally,
 } from '../../scripts/docx-audit';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 import { buildDocxWithBody } from '../fixtures/golden-docx';
+import { PIXEL_PNG } from '../fixtures/pptx';
 
 // The audit measures a docx importer against what Word shows, so what it counts is pinned here: Word's semantics on
 // the source side, the eigendoc JSON on the other, and one measure for every importer.
@@ -823,4 +826,146 @@ describe('runs', () => {
         );
         expect(names).toEqual(['from-docx', 'foreign']);
     }, 60_000);
+});
+
+describe('round trip', () => {
+    const WRITER = fileURLToPath(new URL('../../lib/export/doc/to-docx.ts', import.meta.url));
+    const script = fileURLToPath(new URL('../../scripts/docx-audit.ts', import.meta.url));
+    const text = (value: string, ...marks: { type: string; attrs?: Record<string, unknown> }[]): JSONContent => ({
+        type: 'text',
+        text: value,
+        ...(marks.length > 0 && { marks }),
+    });
+    const figure = { type: 'figure', attrs: { mediaName: 'pixel.png', width: 40, alignment: 'center' } };
+    // A heading, marks and a link, a list, a table and a picture, which our writer gives a paragraph of its own.
+    const DOC: JSONContent = {
+        type: 'doc',
+        content: [
+            { type: 'heading', attrs: { level: 1 }, content: [text('A heading')] },
+            {
+                type: 'paragraph',
+                content: [
+                    text('Plain, '),
+                    text('bold', { type: 'bold' }),
+                    text(' and a link', { type: 'link', attrs: { href: 'https://eigen.is/' } }),
+                ],
+            },
+            {
+                type: 'bulletList',
+                content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [text('An item')] }] }],
+            },
+            {
+                type: 'table',
+                content: [
+                    {
+                        type: 'tableRow',
+                        content: ['One', 'Two'].map((cell) => ({
+                            type: 'tableCell',
+                            content: [{ type: 'paragraph', content: [text(cell)] }],
+                        })),
+                    },
+                ],
+            },
+            { type: 'paragraph', content: [text('Before the picture'), figure, text('after it')] },
+        ],
+    };
+    const docx = async () =>
+        new Uint8Array(
+            await eigendocToDocx(
+                DOC,
+                {},
+                DEFAULT_PAGE_SETUP,
+                DEFAULT_NORMAL_STYLE,
+                [{ name: 'pixel.png', contentType: 'image/png', data: PIXEL_PNG.slice().buffer, width: 1, height: 1 }],
+                'Round trip',
+                undefined,
+            ),
+        );
+    const corpus = async (name: string, files: Record<string, Uint8Array | string>) => {
+        const dir = path.join(scratch, name);
+        for (const [file, bytes] of Object.entries(files)) await Bun.write(path.join(dir, file), bytes);
+        return dir;
+    };
+    // Its own directory: Bun's resolver keeps a listing of a directory it loaded a module from.
+    const writer = async (name: string, source: string) => {
+        const module = path.join(fs.mkdtempSync(path.join(scratch, 'writer-')), `${name}.ts`);
+        await Bun.write(module, source);
+        return module;
+    };
+
+    test('our writer brings its own doc back; a refused file is skipped', async () => {
+        const dir = await corpus('roundtrip', { 'doc.docx': await docx(), 'bad.docx': 'no zip' });
+        const out = path.join(scratch, 'out-roundtrip');
+        const meta = await runRoundtrip({ corpora: [dir], out, timeoutMs: 30_000 });
+        expect(meta.outcomes).toEqual({ ok: 1, skipped: 1, crash: 0, timeout: 0, memory: 0 });
+        expect([meta.pass, meta.unlisted, meta.listed]).toEqual([
+            true,
+            { differences: 0, files: 0 },
+            { differences: 0, files: 0 },
+        ]);
+    }, 60_000);
+
+    test('a writer that changes a run, moves a heading a level and drops a picture fails the gate, each by kind', async () => {
+        const dir = await corpus('mutated', { 'doc.docx': await docx() });
+        const planted = await writer(
+            'planted',
+            `import { eigendocToDocx as write } from ${JSON.stringify(WRITER)};
+            export function eigendocToDocx(json, ...rest) {
+                const copy = structuredClone(json);
+                const [heading, paragraph] = copy.content;
+                heading.attrs.level = 2;
+                paragraph.content[0].text = 'Changed, ';
+                for (const block of copy.content)
+                    block.content = block.content?.filter((node) => node.type !== 'figure');
+                return write(copy, ...rest);
+            }`,
+        );
+        const out = path.join(scratch, 'out-mutated');
+        const run = Bun.spawnSync([process.execPath, script, 'roundtrip', dir, '--out', out, '--writer', planted]);
+        expect(run.exitCode).toBe(1);
+        expect(run.stdout.toString()).toContain('\nRound trip FAIL: 1 files, 1 imported and written back, 0 skipped');
+        const summary = fs.readFileSync(path.join(out, 'summary.md'), 'utf8');
+        for (const row of [
+            '| heading level | **unlisted** | 1 | 1 |',
+            '| text | **unlisted** | 1 | 1 |',
+            '| blocks | **unlisted** | 1 | 1 |',
+        ])
+            expect(summary).toContain(row);
+        expect(summary).toContain('| mutated/doc.docx | text | **unlisted** | 1 | body.1.0: "Plain, " → "Changed, " |');
+    }, 60_000);
+
+    test('a writer that throws is a crash, at its stage', async () => {
+        const dir = await corpus('throws', { 'doc.docx': await docx() });
+        const planted = await writer('throws', 'export function eigendocToDocx() { throw new Error("writer broke"); }');
+        const out = path.join(scratch, 'out-throws');
+        const meta = await runRoundtrip({ corpora: [dir], out, writer: planted, timeoutMs: 30_000 });
+        expect([meta.pass, meta.outcomes.crash]).toEqual([false, 1]);
+        const result = JSON.parse(fs.readFileSync(path.join(out, 'files/throws/doc.docx.json'), 'utf8'));
+        expect([result.outcome, result.stage, result.error.split('\n')[0]]).toEqual([
+            'crash',
+            'export',
+            'Error: writer broke',
+        ]);
+    }, 60_000);
+
+    test('a chart that comes back a picture is listed; one that comes back as anything else is not', () => {
+        const imported = (...content: JSONContent[]) => ({
+            json: { type: 'doc', content: [{ type: 'paragraph', content }] },
+            bands: {},
+            page: DEFAULT_PAGE_SETUP,
+            style: DEFAULT_NORMAL_STYLE,
+            images: [],
+            warnings: [],
+        });
+        const chart = { type: 'chart', attrs: { spec: '{}', width: 200, height: 100 } };
+        const groups = (back: JSONContent) =>
+            classifyDocx({
+                a: imported(chart),
+                b: imported(back),
+                pictures: { a: new Map(), b: new Map() },
+                prepared: new Map(),
+            }).map(({ kind, listed }) => [kind, listed]);
+        expect(groups({ type: 'figure', attrs: { mediaName: 'chart.svg' } })).toEqual([['charts as pictures', true]]);
+        expect(groups(text('Chart'))).toEqual([['node', false]]);
+    });
 });

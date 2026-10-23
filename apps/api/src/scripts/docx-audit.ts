@@ -4,16 +4,28 @@
 // Usage:
 //   bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]
 //   bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>
+//   bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--timeout <s>] [--max-rss <MB>]
 //
 // The importer module exports `docxToPmJson` with from-docx.ts's signature. It runs in a Worker, and the source is read
 // in another, so a hang is cut at the time cap and a crash is a result; every importer is measured by the same code.
 // The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
+//
+// roundtrip is the docx writer's gate (office-audit.ts): each file the reader imports is written by the writer
+// (`--writer`, to-docx.ts's signature) and imported again, and the two eigendoc JSON documents, their bands, page and
+// Normal compared node by node, a picture by its type and pixel size.
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
 import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
-import type { TitleType } from '@workspace/lib/docs/eigendoc';
+import {
+    BAND_ROOTS,
+    bandHasContent,
+    isFigureFrameNode,
+    PROSE_TEXTBLOCKS,
+    pageTwips,
+    type TitleType,
+} from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
     C_NS,
@@ -30,6 +42,7 @@ import {
     W14_NS,
     WP_NS,
 } from '../lib/core/ooxml';
+import { uriReference } from '../lib/core/opc';
 import {
     trimXmlSpace,
     XML_NAMESPACE,
@@ -42,6 +55,8 @@ import {
 } from '../lib/core/xml';
 import { openZip } from '../lib/core/zip';
 import { cssColorToHex } from '../lib/document/colors';
+import { docSchema } from '../lib/document/doc-schema';
+import { readStoredEquation } from '../lib/document/equation';
 import { nodeLook } from '../lib/document/looks';
 import {
     BORDER_SIDES,
@@ -52,11 +67,27 @@ import {
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
 } from '../lib/document/wordml';
+import type { eigendocToDocx } from '../lib/export/doc/to-docx';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
 import { isBodySizedRun } from '../lib/import/doc/paragraphs';
 import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
+import {
+    canonical,
+    classify,
+    type DifferenceGroup,
+    type Listed,
+    message,
+    officeMedia,
+    type RoundtripDifference,
+    type RoundtripGate,
+    type RoundtripMeta,
+    roundtripChild,
+    roundtripLine,
+    runRoundtrip as runGate,
+    seconds,
+} from './office-audit';
 
 const FEATURES = [
     ['text', 'Visible text (words)'],
@@ -1525,10 +1556,6 @@ function percent(matched: number, source: number): string {
     return source > 0 ? `${((matched / source) * 100).toFixed(1)}%` : '–';
 }
 
-function seconds(ms: number): string {
-    return `${(ms / 1000).toFixed(1)} s`;
-}
-
 function summaryMarkdown(meta: RunMeta, results: FileResult[]): string {
     const rows = aggregate(results);
     const text = rows.get('text');
@@ -1693,8 +1720,6 @@ type WorkerReply =
 
 // What a request comes to: the worker's reply, or the worker cut at the cap or gone.
 type Outcome = WorkerReply | { kind: 'timeout' } | { kind: 'died'; error: string };
-
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 function isSourceTally(value: unknown): value is SourceTally {
     return (
@@ -1888,6 +1913,407 @@ export async function runAudit(options: {
     return meta;
 }
 
+// ── Round trip: the import, our export and its import again ─────────────────────────────────────────────────────
+
+type Imported = ReturnType<typeof docxToPmJson>;
+
+// A picture as the doc shows it: its type and its size in pixels, none for one sharp can't read.
+type Picture = { contentType: string; width?: number; height?: number };
+
+// What the two imports hold, the first with its textblocks split as the writer splits them, each picture by its media
+// name, and the media the export was handed, by the first import's name.
+export type DocxRoundtripContext = {
+    a: Imported;
+    b: Imported;
+    pictures: { a: ReadonlyMap<string, Picture>; b: ReadonlyMap<string, Picture> };
+    prepared: ReadonlyMap<string, Picture>;
+    // The places of the captions the writer kept for a figure it had no picture for.
+    captions?: ReadonlySet<string>;
+};
+
+type Pictures = DocxRoundtripContext['pictures'];
+
+const entries = (value: unknown) =>
+    new Map<string, unknown>(value && typeof value === 'object' ? Object.entries(value) : []);
+
+// A node's types and text, a figure's caption with them: what pairs it with its copy.
+const nodeKey = (node: JSONContent): string =>
+    node.text ??
+    `${node.type}${node.type === 'figure' ? `[${node.attrs?.['caption'] ?? ''}]` : ''}(${(node.content ?? []).map(nodeKey).join(',')})`;
+
+// Past this many pairs a list of children pairs by position.
+const MAX_ALIGNED = 4_000_000;
+
+type Step = [number, number] | { x: JSONContent[]; y: JSONContent[]; at: number };
+
+// The children paired as the longest run of the same key in order; between two pairs, a stretch as long on both sides
+// pairs by position, and one that isn't is a single difference of blocks.
+function align(a: JSONContent[], b: JSONContent[]): Step[] {
+    const [keysA, keysB] = [a.map(nodeKey), b.map(nodeKey)];
+    let start = 0;
+    while (start < a.length && start < b.length && keysA[start] === keysB[start]) start++;
+    let end = 0;
+    while (end < a.length - start && end < b.length - start && keysA[a.length - 1 - end] === keysB[b.length - 1 - end])
+        end++;
+    const [n, m] = [a.length - start - end, b.length - start - end];
+    const pairs: [number, number][] = [];
+    for (let i = 0; i < start; i++) pairs.push([i, i]);
+    if (n * m <= MAX_ALIGNED) {
+        const longest = new Uint32Array((n + 1) * (m + 1));
+        for (let i = n - 1; i >= 0; i--)
+            for (let j = m - 1; j >= 0; j--)
+                longest[i * (m + 1) + j] =
+                    keysA[start + i] === keysB[start + j]
+                        ? longest[(i + 1) * (m + 1) + j + 1] + 1
+                        : Math.max(longest[(i + 1) * (m + 1) + j], longest[i * (m + 1) + j + 1]);
+        for (let i = 0, j = 0; i < n && j < m; ) {
+            if (keysA[start + i] === keysB[start + j]) pairs.push([start + i++, start + j++]);
+            else if (longest[(i + 1) * (m + 1) + j] >= longest[i * (m + 1) + j + 1]) i++;
+            else j++;
+        }
+    }
+    for (let k = end; k > 0; k--) pairs.push([a.length - k, b.length - k]);
+    const steps: Step[] = [];
+    let [i, j] = [0, 0];
+    for (const [pi, pj] of [...pairs, [a.length, b.length]]) {
+        const [x, y] = [a.slice(i, pi), b.slice(j, pj)];
+        if (x.length === y.length) for (let k = 0; k < x.length; k++) steps.push([i + k, j + k]);
+        else steps.push({ x, y, at: i });
+        if (pi < a.length) steps.push([pi, pj]);
+        [i, j] = [pi + 1, pj + 1];
+    }
+    return steps;
+}
+
+// Node by node, children aligned: a node's type, each of its attrs and marks, and its text; a figure's media by the
+// picture it names, as an import names its media afresh. A node of another type is a difference of the two nodes.
+function diffContent(a: JSONContent[], b: JSONContent[], at: string, pictures: Pictures): RoundtripDifference[] {
+    const differences: RoundtripDifference[] = [];
+    const note = (feature: string, place: string, x: unknown, y: unknown) => {
+        if (canonical(x) !== canonical(y)) differences.push({ feature, at: place, a: x, b: y });
+    };
+    const walk = (x: JSONContent, y: JSONContent, place: string) => {
+        if (x.type !== y.type) {
+            differences.push({ feature: 'node', at: place, a: x, b: y });
+            return;
+        }
+        const type = x.type ?? '';
+        const [left, right] = [entries(x.attrs), entries(y.attrs)];
+        for (const key of new Set([...left.keys(), ...right.keys()])) {
+            if (type === 'figure' && key === 'mediaName') {
+                const picture = (side: ReadonlyMap<string, Picture>, name: unknown) =>
+                    typeof name === 'string' ? (side.get(name) ?? null) : name;
+                note('figure media', place, picture(pictures.a, left.get(key)), picture(pictures.b, right.get(key)));
+            } else note(`${type} ${key}`, place, left.get(key), right.get(key));
+        }
+        if (x.text !== undefined || y.text !== undefined) note('text', place, x.text, y.text);
+        const marks = (node: JSONContent) => new Map((node.marks ?? []).map((mark) => [mark.type, mark.attrs ?? {}]));
+        const [marksA, marksB] = [marks(x), marks(y)];
+        for (const mark of new Set([...marksA.keys(), ...marksB.keys()]))
+            note(`mark ${mark}`, place, marksA.get(mark), marksB.get(mark));
+        children(x.content ?? [], y.content ?? [], place);
+    };
+    const children = (x: JSONContent[], y: JSONContent[], place: string) => {
+        for (const step of align(x, y)) {
+            if (Array.isArray(step)) walk(x[step[0]], y[step[1]], `${place}.${step[0]}`);
+            else differences.push({ feature: 'blocks', at: `${place}.${step.at}`, a: step.x, b: step.y });
+        }
+    };
+    children(a, b, at);
+    return differences;
+}
+
+// The doc's body and bands, its page and its Normal key by key.
+export function diffDocs(a: Imported, b: Imported, pictures: Pictures): RoundtripDifference[] {
+    const differences: RoundtripDifference[] = [];
+    const keyed = (prefix: string, x: object, y: object) => {
+        const [left, right] = [entries(x), entries(y)];
+        for (const key of new Set([...left.keys(), ...right.keys()])) {
+            const [valueA, valueB] = [left.get(key), right.get(key)];
+            if (canonical(valueA) !== canonical(valueB))
+                differences.push({ feature: `${prefix} ${key}`, at: '', a: valueA, b: valueB });
+        }
+    };
+    keyed('page', a.page, b.page);
+    keyed('normal', a.style, b.style);
+    differences.push(...diffContent(a.json.content ?? [], b.json.content ?? [], 'body', pictures));
+    for (const root of BAND_ROOTS) {
+        const [x, y] = [a.bands[root], b.bands[root]];
+        if (x && y) differences.push(...diffContent(x.content ?? [], y.content ?? [], root, pictures));
+        else if (x || y) differences.push({ feature: 'band', at: root, a: x?.type, b: y?.type });
+    }
+    return differences;
+}
+
+// The node at a difference's place in the first import, its root's children counted from there.
+function nodeAt(imported: Imported, at: string): JSONContent | undefined {
+    const [root, ...path] = at.split('.');
+    const band = BAND_ROOTS.find((name) => name === root);
+    const start = root === 'body' ? imported.json : band && imported.bands[band];
+    return path.reduce<JSONContent | undefined>((node, index) => node?.content?.[Number(index)], start);
+}
+
+const isBlockFigure = (node: JSONContent) =>
+    isFigureFrameNode(node.type) && node.attrs?.['layout'] !== 'wrap-left' && node.attrs?.['layout'] !== 'wrap-right';
+
+// Adjacent text of the same marks as one node, as the schema joins it.
+function joined(nodes: JSONContent[]): JSONContent[] {
+    const out: JSONContent[] = [];
+    for (const node of nodes) {
+        const last = out.at(-1);
+        if (last?.type === 'text' && node.type === 'text' && canonical(last.marks) === canonical(node.marks))
+            out[out.length - 1] = { ...last, text: `${last.text}${node.text}` };
+        else out.push(node);
+    }
+    return out;
+}
+
+// The first import as the writer lays it out (blocksOf and figureOf in to-docx.ts), each change a difference of its own:
+// a textblock's block figures each stand in a paragraph of their own and a display equation in a piece of its own, the
+// pieces sharing the textblock's margins, the first the one above, the last the one below, none at a split; a wrapped
+// figure floats before the piece that holds it, which the reader reads back at its start; a figure the export has no
+// picture for writes its caption alone, as a paragraph, or nothing. `captions` holds those paragraphs' places.
+export function asWritten(
+    imported: Imported,
+    prepared: ReadonlyMap<string, Picture>,
+): { imported: Imported; changes: RoundtripDifference[]; captions: Set<string> } {
+    const changes: RoundtripDifference[] = [];
+    const captions = new Set<string>();
+    const paragraphAttrs = docSchema().nodeFromJSON({ type: 'paragraph' }).toJSON().attrs;
+    const unwritten = (node: JSONContent) => node.type === 'figure' && !prepared.has(String(node.attrs?.['mediaName']));
+    const blocks = (nodes: JSONContent[], at: string): JSONContent[] => {
+        const out: JSONContent[] = [];
+        for (const node of nodes) {
+            const place = `${at}.${out.length}`;
+            if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
+                out.push(node.content ? { ...node, content: blocks(node.content, place) } : node);
+                continue;
+            }
+            const pieces: JSONContent[] = [];
+            let inline: JSONContent[] = [];
+            const floating: JSONContent[] = [];
+            let split = false;
+            const flush = () => {
+                pieces.push({ ...node, content: joined([...floating.splice(0), ...inline]) });
+                inline = [];
+            };
+            for (const child of node.content ?? []) {
+                if (isFigureFrameNode(child.type) && unwritten(child)) {
+                    changes.push({ feature: 'picture left out', at: place, a: child, b: undefined });
+                    const caption = child.attrs?.['caption'];
+                    if (inline.length > 0) flush();
+                    if (typeof caption === 'string' && caption) {
+                        captions.add(`${at}.${out.length + pieces.length}`);
+                        pieces.push({
+                            type: 'paragraph',
+                            attrs: paragraphAttrs,
+                            content: [{ type: 'text', text: caption }],
+                        });
+                    }
+                } else if (isFigureFrameNode(child.type) && !isBlockFigure(child)) {
+                    if (inline.some((held) => held.type !== 'text' || held.text?.trim()))
+                        changes.push({ feature: 'wrapped figure moved', at: place, a: child, b: undefined });
+                    floating.push(child);
+                } else if (isBlockFigure(child)) {
+                    if (inline.length > 0) flush();
+                    pieces.push({ type: 'paragraph', attrs: paragraphAttrs, content: [child] });
+                    split = true;
+                } else if (child.type === 'equation' && child.attrs?.['display'] === true) {
+                    if (inline.length > 0) flush();
+                    inline.push(child);
+                    flush();
+                    split = true;
+                } else inline.push(child);
+            }
+            if (inline.length > 0 || floating.length > 0 || !pieces.some((piece) => piece.type === node.type)) flush();
+            if (pieces.length === 1 && pieces[0].type === node.type) {
+                const [piece] = pieces;
+                const same = canonical(piece.content ?? []) === canonical(node.content ?? []);
+                out.push(same ? node : { ...piece, content: piece.content?.length ? piece.content : undefined });
+                continue;
+            }
+            if (split) changes.push({ feature: 'textblock split', at: place, a: node.type, b: pieces.length });
+            for (const [i, piece] of pieces.entries()) {
+                if (piece.attrs === paragraphAttrs) {
+                    out.push(piece);
+                    continue;
+                }
+                const attrs = { ...piece.attrs };
+                if (i > 0) attrs['spaceBefore'] = null;
+                if (i < pieces.length - 1) attrs['spaceAfter'] = null;
+                out.push({ ...piece, attrs, content: piece.content?.length ? piece.content : undefined });
+            }
+        }
+        return out;
+    };
+    const bands = Object.fromEntries(
+        Object.entries(imported.bands).map(([root, band]) => [
+            root,
+            { ...band, content: blocks(band.content ?? [], root) },
+        ]),
+    );
+    return {
+        imported: {
+            ...imported,
+            json: { ...imported.json, content: blocks(imported.json.content ?? [], 'body') },
+            bands,
+        },
+        changes,
+        captions,
+    };
+}
+
+const isNode = (value: unknown): value is JSONContent => typeof value === 'object' && value !== null && 'type' in value;
+
+// The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
+// matches is unlisted, and fails the gate.
+export const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = [
+    {
+        kind: 'charts as pictures',
+        why: 'The writer draws a chart as a picture, its SVG with a PNG beside it, so it comes back a figure; until the writer writes a native chart',
+        matches: ({ feature, a, b }) =>
+            feature === 'node' && isNode(a) && isNode(b) && a.type === 'chart' && b.type === 'figure',
+    },
+    {
+        kind: 'figures and display equations split their textblock',
+        why: 'Word holds a picture in a paragraph and a display equation in a paragraph of their own, so the writer splits the textblock around each block figure and display equation, the pieces sharing its margins',
+        matches: ({ feature }) => feature === 'textblock split',
+    },
+    {
+        kind: 'wrapped figures float before their paragraph',
+        why: "A wrapped figure is written as a floating frame before the paragraph that holds it, as Word anchors one, so it comes back at that paragraph's start",
+        matches: ({ feature }) => feature === 'wrapped figure moved',
+    },
+    {
+        kind: 'unreadable pictures left out',
+        why: "A picture the export can't re-encode as PNG or JPEG (a WMF, an EMF, a damaged file) is left out of the docx, as of the HTML and PDF exports; its caption stays as a paragraph",
+        matches: ({ feature, at }, { captions }) =>
+            feature === 'picture left out' ||
+            [...(captions ?? [])].some((caption) => at === caption || at.startsWith(`${caption}.`)),
+    },
+    {
+        kind: 'pictures re-encoded',
+        why: 'The export re-encodes a raster as PNG (a lossless source) or JPEG, no larger than OFFICE_IMAGE_MAX_SIZE, so its type or size comes back as the export made it',
+        matches: ({ feature, at, b }, context) => {
+            const name = nodeAt(context.a, at)?.attrs?.['mediaName'];
+            return feature === 'figure media' && canonical(b) === canonical(context.prepared.get(String(name)));
+        },
+    },
+    {
+        kind: 'bands left empty',
+        why: 'A header or footer that held only a picture the export left out comes back empty, and an empty band is no band to the reader',
+        matches: ({ feature, at, b }, { a }) => {
+            const band = a.bands[BAND_ROOTS.find((root) => root === at) ?? 'header'];
+            return (
+                feature === 'band' &&
+                b === undefined &&
+                band !== undefined &&
+                !bandHasContent(docSchema().nodeFromJSON(band), readStoredEquation)
+            );
+        },
+    },
+    {
+        kind: 'page in whole twips',
+        why: "The page's size and margins are written in whole twips, Word's unit, so a size in mm comes back to the twip",
+        matches: ({ feature }, { a, b }) =>
+            feature.startsWith('page ') && canonical(pageTwips(a.page)) === canonical(pageTwips(b.page)),
+    },
+    {
+        kind: 'link targets as URI references',
+        why: "A link's target is written as a relationship's URI, so a character a URI can't hold comes back escaped",
+        matches: ({ feature, a, b }) => {
+            const [x, y] = [entries(a), entries(b)];
+            const href = x.get('href');
+            return (
+                feature === 'mark link' &&
+                typeof href === 'string' &&
+                y.get('href') === uriReference(href) &&
+                canonical({ ...Object.fromEntries(x), href: null }) ===
+                    canonical({ ...Object.fromEntries(y), href: null })
+            );
+        },
+    },
+];
+
+export function classifyDocx(context: DocxRoundtripContext): DifferenceGroup[] {
+    const { imported, changes, captions } = asWritten(context.a, context.prepared);
+    return classify([...changes, ...diffDocs(imported, context.b, context.pictures)], DOCX_LISTED, {
+        ...context,
+        a: imported,
+        captions,
+    });
+}
+
+// Each picture's type and size as sharp reads it.
+async function picturesOf(media: { name: string; contentType: string; data: ArrayBuffer | Uint8Array }[]) {
+    const { default: sharp } = await import('sharp');
+    const pictures = new Map<string, Picture>();
+    for (const { name, contentType, data } of media) {
+        const { width, height } = await sharp(new Uint8Array(data))
+            .metadata()
+            .catch(() => ({ width: undefined, height: undefined }));
+        pictures.set(name, { contentType, ...(width && height && { width, height }) });
+    }
+    return pictures;
+}
+
+const DOCUMENT = /\.do[ct][xm](?![a-z0-9])/i;
+const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/doc/to-docx.ts');
+
+function isWriter(value: unknown): value is typeof eigendocToDocx {
+    return typeof value === 'function';
+}
+
+const DOCX_GATE: RoundtripGate = {
+    format: 'docx',
+    script: import.meta.path,
+    pattern: DOCUMENT,
+    noun: 'documents',
+    writer: DEFAULT_WRITER,
+    listed: DOCX_LISTED,
+};
+
+// The round trip's child: the file imported, written by our writer with its pictures prepared as an export prepares
+// them, charts and pasted pictures drawn as the export draws them, imported again, and the two imports compared.
+async function docxRoundtripChild(file: string, options: { writer: string; reports: string }): Promise<void> {
+    const { docxToPmJson: read } = await import('../lib/import/doc/from-docx');
+    const { chartFigureMedia, pastedFigureMedia } = await import('../lib/export/doc/to-docx');
+    const module: unknown = await import(options.writer);
+    const write = typeof module === 'object' && module !== null && 'eigendocToDocx' in module && module.eigendocToDocx;
+    if (!isWriter(write)) throw new Error(`${options.writer} exports no eigendocToDocx`);
+    await roundtripChild(options.reports, async (step) => {
+        const data = Buffer.from(await Bun.file(file).arrayBuffer());
+        const a = await step('import', () => read(data));
+        let media: Awaited<ReturnType<typeof officeMedia>> = [];
+        const bytes = await step('export', async () => {
+            const roots = [a.json, ...Object.values(a.bands)];
+            const drawn = [...(await pastedFigureMedia(roots)), ...(await chartFigureMedia(roots))];
+            media = await officeMedia(a.images, drawn);
+            return write(a.json, a.bands, a.page, a.style, media, path.basename(file), undefined);
+        });
+        const b = await step('reimport', () => read(Buffer.from(bytes)));
+        const groups = await step('compare', async () =>
+            classifyDocx({
+                a,
+                b,
+                pictures: { a: await picturesOf(a.images), b: await picturesOf(b.images) },
+                prepared: await picturesOf(media),
+            }),
+        );
+        return { warnings: new Map(), groups };
+    });
+}
+
+export function runRoundtrip(options: {
+    corpora: string[];
+    out: string;
+    writer?: string;
+    timeoutMs?: number;
+    maxRssMb?: number;
+}): Promise<RoundtripMeta> {
+    return runGate(DOCX_GATE, options);
+}
+
 declare var self: Worker;
 
 // The worker side: reads a source, or loads the importer once and then imports one file per message.
@@ -1942,9 +2368,25 @@ if (import.meta.main && Bun.isMainThread) {
             importer: { type: 'string' },
             name: { type: 'string' },
             timeout: { type: 'string' },
+            writer: { type: 'string' },
+            'max-rss': { type: 'string' },
+            reports: { type: 'string' },
         },
     });
-    if (positionals[0] === 'compare' && positionals.length === 3) {
+    const [command, ...rest] = positionals;
+    if (command === 'roundtrip-child' && rest.length === 1 && values.writer && values.reports) {
+        await docxRoundtripChild(rest[0], { writer: values.writer, reports: values.reports });
+    } else if (command === 'roundtrip' && rest.length > 0 && values.out) {
+        const meta = await runRoundtrip({
+            corpora: rest,
+            out: values.out,
+            writer: values.writer,
+            timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
+            maxRssMb: values['max-rss'] ? Number(values['max-rss']) : undefined,
+        });
+        console.log(`${roundtripLine(meta)}: ${path.join(values.out, 'summary.md')}`);
+        if (!meta.pass) process.exit(1);
+    } else if (command === 'compare' && positionals.length === 3) {
         console.log(compareRuns(positionals[1], positionals[2]));
     } else if (positionals.length === 1 && values.out) {
         const meta = await runAudit({
@@ -1959,7 +2401,11 @@ if (import.meta.main && Bun.isMainThread) {
         );
     } else {
         console.error(
-            'Usage: bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]\n       bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>',
+            [
+                'Usage: bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]',
+                '       bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>',
+                '       bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--timeout <s>] [--max-rss <MB>]',
+            ].join('\n'),
         );
         process.exit(1);
     }

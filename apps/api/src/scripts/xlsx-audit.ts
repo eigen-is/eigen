@@ -45,6 +45,7 @@ import {
     canonical,
     cellText,
     classify,
+    DEFAULT_MAX_RSS_MB,
     type DifferenceGroup,
     type Listed,
     listCorpus,
@@ -399,9 +400,6 @@ const WARM_UP = xlsxPackage([{ name: 'S', body: '<sheetData><row r="1"><c r="A1"
 
 const DEFAULT_IMPORTER = path.join(import.meta.dir, '../lib/import/sheets/from-xlsx.ts');
 const DEFAULT_TIMEOUT_MS = TRANSFORM_LIMITS.import.deadlineMs;
-const DEFAULT_MAX_RSS_MB = 8192;
-// An import, an export and an import again.
-const DEFAULT_ROUNDTRIP_TIMEOUT_MS = 2 * TRANSFORM_LIMITS.import.deadlineMs + TRANSFORM_LIMITS.export.deadlineMs;
 const OUTCOMES: Outcome[] = ['ok', 'refused', 'crash', 'timeout', 'memory'];
 
 const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/sheets/to-xlsx.ts');
@@ -1171,8 +1169,6 @@ const XLSX_GATE: RoundtripGate = {
     pattern: WORKBOOK,
     noun: 'workbooks',
     writer: DEFAULT_WRITER,
-    timeoutMs: DEFAULT_ROUNDTRIP_TIMEOUT_MS,
-    maxRssMb: DEFAULT_MAX_RSS_MB,
     listed: LISTED,
 };
 

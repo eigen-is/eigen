@@ -6,12 +6,17 @@ import * as fs from 'node:fs';
 import path from 'node:path';
 import { peakRss } from '../lib/core/peak-rss';
 import { type ExportMedia, toTransferableBuffer } from '../lib/document/transform/protocol';
+import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/office-image';
 import type { ImportedMedia } from '../lib/import/image-types';
 
 export const MB = 1024 * 1024;
 
 const POLL_MS = 250;
+
+export const DEFAULT_MAX_RSS_MB = 8192;
+// An import, an export and an import again.
+const DEFAULT_ROUNDTRIP_TIMEOUT_MS = 2 * TRANSFORM_LIMITS.import.deadlineMs + TRANSFORM_LIMITS.export.deadlineMs;
 
 export const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
@@ -185,8 +190,6 @@ export type RoundtripGate = {
     pattern: RegExp;
     noun: string;
     writer: string;
-    timeoutMs: number;
-    maxRssMb: number;
     listed: readonly { kind: string; why: string }[];
 };
 
@@ -252,8 +255,9 @@ async function roundtripOne(
     for (const line of reports) if (line.kind === 'stage') ms[line.stage] = Math.round(line.ms);
     const failed = reports.find((line) => line.kind === 'failed');
     const done = reports.find((line) => line.kind === 'done');
-    // The first import refusing the file skips it: the corpus run counts those.
-    const skipped = failed?.stage === 'import' && failed.status !== undefined;
+    // The first import refusing the file skips it, as the writer refusing what it made does (an empty deck): the
+    // corpus run counts those.
+    const skipped = (failed?.stage === 'import' || failed?.stage === 'export') && failed.status !== undefined;
     return {
         file: file.key,
         bytes: fs.statSync(file.absolute).size,
@@ -288,8 +292,8 @@ export async function runRoundtrip(
     for (const [index, file] of files.entries()) {
         const result = await roundtripOne(gate, file, {
             writer: path.resolve(options.writer ?? gate.writer),
-            timeoutMs: options.timeoutMs ?? gate.timeoutMs,
-            maxRssMb: options.maxRssMb ?? gate.maxRssMb,
+            timeoutMs: options.timeoutMs ?? DEFAULT_ROUNDTRIP_TIMEOUT_MS,
+            maxRssMb: options.maxRssMb ?? DEFAULT_MAX_RSS_MB,
             reports: path.join(options.out, 'child.jsonl'),
         });
         results.push(result);
