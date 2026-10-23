@@ -1493,10 +1493,13 @@ export function CanvasEditor({
             onContextMenu={onContextMenu}
             onPaste={onPaste}
             // A press is the canvas' gesture. With text selected over the scene, Safari drags that selection
-            // from any press (Chrome from selectable text), and the page then gets no pointerup. A text
-            // editor keeps its own drag.
+            // from any press (Chrome from selectable text), and the page then gets no pointerup. A drag that
+            // starts in a text editor stays its own; a selection's drag starts at its text node.
             onDragStart={(e) => {
-                if (!isTypingTarget()) e.preventDefault();
+                const from = e.target instanceof Text ? e.target.parentElement : e.target;
+                const editor =
+                    from instanceof HTMLTextAreaElement || (from instanceof HTMLElement && from.isContentEditable);
+                if (!editor) e.preventDefault();
             }}
             {...fileDropProps}
         >
