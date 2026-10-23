@@ -28,10 +28,8 @@ export const IMPORT_MESSAGES: Record<ImportFormat, { tooLarge: string; invalid: 
     },
 };
 
-// The refusals only a spreadsheet has: a row or column past the grid, or more cells than the cap; a workbook whose
-// sheets are all charts.
+// The refusal only a spreadsheet has: a row or column past the grid, or more cells than the cap.
 export const TOO_MANY_CELLS = 'Spreadsheet has too many cells';
-export const ONLY_CHART_SHEETS = "This workbook only has chart sheets, which Eigen can't open yet";
 
 // The zip's and the XML's messages speak of archives and markup; the user uploaded a document, a spreadsheet or a
 // presentation, so a refusal is told in the format's words. An out-of-memory passes as it is: the transform process

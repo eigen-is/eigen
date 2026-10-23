@@ -42,7 +42,7 @@ describe('the workbook', () => {
     });
 
     // A package read as OPC reads it, not by where Excel puts the parts.
-    test('is found through the package relationships, its sheets through its own; a chartsheet or link is no sheet', () => {
+    test('is found through the package relationships, its sheets through its own, a chartsheet among them; a link is no sheet', () => {
         const rel = (id: string, type: string, target: string, mode = '') =>
             `<Relationship Id="${id}" Type="${R}/${type}" Target="${target}"${mode}/>`;
         const book = readPackage(
@@ -62,7 +62,10 @@ describe('the workbook', () => {
                 { name: 'book/look.xml', data: `<styleSheet xmlns="${SML}"/>` },
             ]),
         );
-        expect(book.sheets).toEqual([{ name: 'Grid', path: 'grid/one.xml', hidden: false }]);
+        expect(book.sheets).toEqual([
+            { name: 'Grid', path: 'grid/one.xml', hidden: false },
+            { name: 'Chart', path: 'book/charts/one.xml', hidden: false, chartSheet: true },
+        ]);
         expect(book.date1904).toBe(true);
         expect(book.styles?.local).toBe('styleSheet');
         expect(book.theme).toBeUndefined();

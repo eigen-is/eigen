@@ -15,14 +15,13 @@ import { IMPORT_MESSAGES } from '../messages';
 // The xlsx package: the workbook part, its sheets and the parts every sheet shares, and a part's children read a batch
 // at a time, since a sheet's grid and the shared strings can each be the whole decompressed cap.
 
-export type WorkbookSheet = { name: string; path: string; hidden: boolean };
+// A chart sheet is a sheet without a grid, holding its drawing's chart.
+export type WorkbookSheet = { name: string; path: string; hidden: boolean; chartSheet?: true };
 
 export type XlsxPackage = {
     pkg: OoxmlPackage;
-    // In the workbook's order: worksheets only, as a chartsheet holds no grid.
+    // In the workbook's order.
     sheets: WorkbookSheet[];
-    // Whether the workbook names a chartsheet, which the reader skips.
-    hasChartSheets: boolean;
     date1904: boolean;
     styles?: XmlElement;
     theme?: XmlElement;
@@ -39,13 +38,13 @@ export function readPackage(bytes: Uint8Array): XlsxPackage {
     const rels = pkg.relationships(workbookPath);
     const located = (type: string, path: string) => relOfType(rels, type) ?? path;
     const list = xmlChild(workbook, SML_NS, 'sheets');
-    let hasChartSheets = false;
     const entries = (list ? xmlChildren(list, SML_NS, 'sheet') : []).flatMap((sheet): WorkbookSheet[] => {
         const name = xmlAttr(sheet, '', 'name');
         const rel = rels.get(xmlAttr(sheet, R_NS, 'id') ?? '');
-        if (rel?.type.endsWith('/chartsheet')) hasChartSheets = true;
-        if (name === undefined || !rel || rel.external || !rel.type.endsWith('/worksheet')) return [];
-        return [{ name, path: rel.target, hidden: (xmlAttr(sheet, '', 'state') ?? 'visible') !== 'visible' }];
+        const chartSheet = rel?.type.endsWith('/chartsheet');
+        if (name === undefined || !rel || rel.external || !(chartSheet || rel.type.endsWith('/worksheet'))) return [];
+        const hidden = (xmlAttr(sheet, '', 'state') ?? 'visible') !== 'visible';
+        return [{ name, path: rel.target, hidden, ...(chartSheet && { chartSheet }) }];
     });
     // One sheet per part, named and placed by the last entry naming it; read per entry, a part would be inflated and
     // parsed again for each.
@@ -55,7 +54,6 @@ export function readPackage(bytes: Uint8Array): XlsxPackage {
     return {
         pkg,
         sheets,
-        hasChartSheets,
         date1904: isOn(properties && xmlAttr(properties, '', 'date1904')) === true,
         // A damaged styles or theme part costs the looks, not the workbook.
         styles: optional(() => pkg.part(located('styles', 'xl/styles.xml'))),
@@ -82,6 +80,8 @@ export const MAX_XLSX_ELEMENTS = 16_000_000;
 export type ReadBudget = {
     // Throws past MAX_XLSX_ELEMENTS.
     chargeElements(count: number): void;
+    // Charged only when what is left covers it: a chart past it is left out, not the workbook.
+    spendElements(count: number): boolean;
     // Called with what is about to be parsed whole: a sheet's or the shared strings' part past its batches, or a part
     // whose cut can't be checked. These never pass through openPackage's part(), so they have a budget of its values
     // of their own, together across the parts; the corpus's most is 1.6 MB and 50,000 tags. Throws past it.
@@ -94,6 +94,11 @@ export function readBudget(): ReadBudget {
         chargeElements(count) {
             spent.elements += count;
             if (spent.elements > MAX_XLSX_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+        },
+        spendElements(count) {
+            if (spent.elements + count > MAX_XLSX_ELEMENTS) return false;
+            spent.elements += count;
+            return true;
         },
         chargeWhole(text) {
             spent.wholeBytes += text.length;

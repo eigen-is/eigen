@@ -7,10 +7,13 @@ import {
     DEFAULT_SHEET_COLUMN_COUNT,
     DEFAULT_SHEET_ROW_COUNT,
 } from '@workspace/sheet/engine';
+import { IDENTITY_COLOR_MAP, readColorScheme } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { optional } from '../../core/opc';
-import { IMPORT_MESSAGES, importError, ONLY_CHART_SHEETS, TOO_MANY_CELLS } from '../messages';
+import type { TransformWarning } from '../../document/transform/protocol';
+import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
+import { type Drawing, placeCharts, readDrawing } from './drawing';
 import { readBudget, readInBatches, readPackage } from './package';
 import { readRules } from './rules';
 import { readSharedStrings } from './strings';
@@ -39,8 +42,9 @@ export const MAX_GRID_SLOTS = 110_000_000;
 // Every worksheet's grid and what lies past it, charged against the output budget as it is read. The cells count what
 // they emit, a value, a rich string's run, a border, a row's height or hidden flag, a merged or linked cell, a column's
 // width, a rule's range or a validated cell, and the grids recalc materialises; the text counts every value, display,
-// run, formula, link and rule text, each shared string and shared formula once per copy.
-export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
+// run, formula, link and rule text, each shared string and shared formula once per copy. A chart sheet is a sheet
+// without a grid. What was left out is counted in `warnings`.
+export function xlsxToSheets(bytes: Uint8Array, warnings: TransformWarning[] = []): Sheet[] {
     try {
         const book = readPackage(bytes);
         const budget = readBudget();
@@ -65,10 +69,14 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
         // and a later one is numbered as Excel numbers a copy, past every name the workbook holds.
         const taken = new Set(book.sheets.map(({ name }) => name.toLowerCase()));
         const named = new Set<string>();
-        for (const { name: written, path, hidden } of book.sheets) {
+        // A chart's refs name sheets as the workbook writes them: the first of a name is the one they mean.
+        const sheetIds = new Map<string, string>();
+        const drawings: Drawing[] = [];
+        for (const { name: written, path, hidden, chartSheet } of book.sheets) {
             const part = book.pkg.zip.read(path);
             if (!part) continue;
             const id = `sheet-${sheets.length}`;
+            if (!sheetIds.has(written.toLowerCase())) sheetIds.set(written.toLowerCase(), id);
             let name = written;
             for (let copy = 2; named.has(name.toLowerCase()); copy++) {
                 name = `${written} (${copy})`;
@@ -136,10 +144,19 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
                 }),
             };
             sheets.push(sheet);
+            const drawing = readDrawing(book.pkg, rest, rels);
+            if (drawing) drawings.push({ sheet, chartSheet: chartSheet === true, ...drawing });
         }
         // An import replaces the document's sheets: none read is a file it can't read, never an empty spreadsheet.
-        if (sheets.length === 0)
-            throw new ApiError(400, book.hasChartSheets ? ONLY_CHART_SHEETS : IMPORT_MESSAGES.xlsx.invalid);
+        if (sheets.length === 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
+        const dropped = placeCharts(drawings, {
+            pkg: book.pkg,
+            theme: { scheme: readColorScheme(book.theme), map: IDENTITY_COLOR_MAP },
+            sheetIds,
+            spend: budget.spendElements,
+            charge,
+        });
+        if (dropped > 0) warnings.push({ code: 'charts-dropped', count: dropped });
         // Excel refuses to hide every sheet, and the editor opens on one it shows.
         if (sheets.every((sheet) => sheet.hide === 1)) delete sheets[0].hide;
         return sheets;
