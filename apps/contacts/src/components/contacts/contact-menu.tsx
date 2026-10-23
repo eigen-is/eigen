@@ -16,12 +16,11 @@ import { Download, Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-r
 import { type ReactNode, useState } from 'react';
 
 // One "is this card me?" test for every contact surface: a card is you if it carries your
-// X-EIGEN-ID self-link (eigenId) or shares your account email — the two proxies the list and
-// the detail page used to check separately.
+// X-EIGEN-ID self-link (eigenId) or shares your account email.
 export function isSelfContact(contact: Contact, user: AuthUser | null): boolean {
     if (user && contact.eigenId === user.id) return true;
     const myEmail = (user?.email ?? '').trim().toLowerCase();
-    return myEmail.length > 0 && (contact.email ?? []).some((e) => e.trim().toLowerCase() === myEmail);
+    return myEmail.length > 0 && contact.email.some((e) => e.trim().toLowerCase() === myEmail);
 }
 
 export type ContactMenuActions = {
@@ -60,11 +59,9 @@ export function useContactMenu() {
 
         // Send email / Start chat act on everyone selected who isn't me and has an address — self is
         // silently dropped. Each contact contributes its first email (the single-select convention).
-        const eligible = contacts.filter(
-            (c) => !isSelfContact(c, user) && (c.email ?? []).some((e) => e.trim().length > 0),
-        );
+        const eligible = contacts.filter((c) => !isSelfContact(c, user) && c.email.some((e) => e.trim().length > 0));
         const eligiblePeople = eligible.map((c) => ({
-            email: (c.email ?? []).find((e) => e.trim().length > 0)?.trim() ?? '',
+            email: c.email.find((e) => e.trim().length > 0)?.trim() ?? '',
             name: `${c.firstName} ${c.lastName}`.trim(),
         }));
         const canReach = eligible.length > 0;
@@ -101,7 +98,7 @@ export function useContactMenu() {
                                     // the wizard directly, pre-filled with every eligible person.
                                     if (eligible.length === 1) {
                                         void startChat(
-                                            (eligible[0].email ?? []).filter((e) => e.trim().length > 0),
+                                            eligible[0].email.filter((e) => e.trim().length > 0),
                                             eligiblePeople[0].name,
                                         );
                                     } else {
