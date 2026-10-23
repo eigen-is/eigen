@@ -1,4 +1,9 @@
-import { DEFAULT_CHART_SERIES_STYLE, MAX_CHART_POINTS, MAX_CHART_SERIES, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    DEFAULT_CHART_SERIES_STYLE,
+    defaultChartPresentation,
+    MAX_CHART_POINTS,
+    MAX_CHART_SERIES,
+} from '@workspace/lib/charts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
@@ -181,8 +186,8 @@ export function suggestChartSpec(ref: CellRangeRef, resolver: CellResolver): Cha
     const title = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '');
     const corner = range.headerRow && range.headerColumn && !range.seriesInRows;
     const axisTitle = corner ? cellLabel(resolver.getCell(ref.sheetId, ref.row[0], ref.column[0])) : '';
-    const sample = sampleChartSpec('column');
-    return { ...sample, title, categoryAxis: { ...sample.categoryAxis, title: axisTitle }, data };
+    const defaults = defaultChartPresentation('column');
+    return { ...defaults, type: 'column', title, categoryAxis: { ...defaults.categoryAxis, title: axisTitle }, data };
 }
 
 // Excel's current region: a single cell grows to the block of filled cells around it, the way Google

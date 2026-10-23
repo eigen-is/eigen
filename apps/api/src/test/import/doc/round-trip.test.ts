@@ -176,7 +176,7 @@ describe('a chart', () => {
                 attrs: {
                     mediaName: expect.stringMatching(/^docx-[0-9a-f-]{36}-image-1\.svg$/),
                     src: null,
-                    alt: 'Points scored',
+                    alt: "Where a star's light goes",
                     caption: 'Points',
                     commentCardId: null,
                     width: 480,

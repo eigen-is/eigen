@@ -2390,7 +2390,7 @@ describe('docx writer — figures', () => {
                     part: 'image1.png',
                     embed: 'rId5',
                     svg: 'rId6',
-                    descr: 'Points scored',
+                    descr: "Where a star's light goes",
                 }),
                 'center',
                 23,
@@ -2400,7 +2400,7 @@ describe('docx writer — figures', () => {
         const zip = await unzip(json, undefined, media);
         const svg = await part(zip, 'word/media/image1.svg');
         expect([xmlAttr(svg, '', 'width'), xmlAttr(svg, '', 'height')]).toEqual(['480', '300']);
-        expect(entryText(zip, 'word/media/image1.svg')).toMatch(/<text[^>]*>Team 1<\/text>/);
+        expect(entryText(zip, 'word/media/image1.svg')).toMatch(/<text[^>]*>UV<\/text>/);
         const { format, width, height } = await sharp(zip.read('word/media/image1.png')).metadata();
         expect([format, width, height]).toEqual(['png', 480, 300]);
     });

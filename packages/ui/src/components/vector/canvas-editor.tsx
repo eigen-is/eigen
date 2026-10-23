@@ -863,7 +863,7 @@ export function CanvasEditor({
         ],
     );
 
-    // Insert → Chart: Google's sample at the viewport center, selected, one undo step.
+    // Insert → Chart: the sample chart at the viewport center, selected, one undo step.
     const insertChart = useCallback(
         (type: ChartType) => {
             const id = sealed(undoManager, () =>

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     chartColor,
     chartSearchText,
+    defaultChartPresentation,
     exceedsInlineGridLimits,
     fitsInlineGrid,
     INLINE_GRID_MAX_CATEGORIES,
@@ -70,17 +71,31 @@ describe('sampleChartSpec', () => {
         }
     });
 
-    test("Google's sample: Points scored, two periods over four teams; pie draws one series and names each slice", () => {
+    test("the sample: where a star's light goes, three sources over six bands; pie draws the Sun", () => {
         const column = sampleChartSpec('column');
-        expect(column.title).toBe('Points scored');
+        expect(column.title).toBe("Where a star's light goes");
+        expect(column.categoryAxis.title).toBe('Wavelength');
+        expect(column.valueAxis.title).toBe('Share of light (%)');
         expect(column.legend).toBe('top');
         expect(column.valueAxis.gridlines).toBe(true);
-        expect(column.data).toMatchObject({ source: 'inline', categories: ['Team 1', 'Team 2', 'Team 3', 'Team 4'] });
-        expect(column.data.series.map((s) => s.name)).toEqual(['Period 1', 'Period 2']);
+        expect(column.data).toMatchObject({
+            source: 'inline',
+            categories: ['UV', 'Blue', 'Green', 'Red', 'IR-A', 'IR-B/C'],
+        });
+        expect(column.data.series.map((s) => s.name)).toEqual(['Sun', 'Bulb', 'Hot star']);
         expect(column.stacking).toBe('none');
         const pie = sampleChartSpec('pie');
         expect(pie.legend).toBe('none');
-        expect(pie.data.series).toHaveLength(1);
+        expect(pie.data.series.map((s) => s.name)).toEqual(['Sun']);
+    });
+
+    test("each source's shares are positive and sum to 100, so every type and the pie draw them", () => {
+        const { data } = sampleChartSpec('column');
+        if (data.source !== 'inline') throw new Error(data.source);
+        for (const { values } of data.series) {
+            expect(values.every((value) => value !== null && value > 0)).toBe(true);
+            expect(values.reduce<number>((sum, value) => sum + (value ?? 0), 0)).toBeCloseTo(100, 9);
+        }
     });
 
     test("the sample draws in Google's Inter", () => {
@@ -91,13 +106,18 @@ describe('sampleChartSpec', () => {
 describe('chartSearchText', () => {
     test("a chart's titles, series names and categories, a line each; none for a spec that doesn't parse", () => {
         expect(chartSearchText(sampleChartSpec('line')).split('\n')).toEqual([
-            'Points scored',
-            'Period 1',
-            'Period 2',
-            'Team 1',
-            'Team 2',
-            'Team 3',
-            'Team 4',
+            "Where a star's light goes",
+            'Wavelength',
+            'Share of light (%)',
+            'Sun',
+            'Bulb',
+            'Hot star',
+            'UV',
+            'Blue',
+            'Green',
+            'Red',
+            'IR-A',
+            'IR-B/C',
         ]);
         expect(chartSearchText(null)).toBe('');
     });
@@ -142,14 +162,15 @@ describe('parseChartSpec', () => {
 
     test('a missing or invalid presentation field reads its default, so a field added later reads on old charts', () => {
         const { blanks, valueAxis, ...rest } = chart();
-        expect(parseChartSpec(JSON.stringify(rest))).toEqual(chart());
+        const defaults = defaultChartPresentation('column');
+        expect(parseChartSpec(JSON.stringify(rest))).toEqual(chart({ valueAxis: defaults.valueAxis }));
         expect(parseChartSpec(stored({ legend: 'center' }))?.legend).toBe('top');
         expect(parseChartSpec(stored({ type: 'pie', legend: 'center' }))?.legend).toBe('none');
         expect(parseChartSpec(stored({ blanks: 'skip' }))?.blanks).toBe('gap');
         expect(parseChartSpec(stored({ stacking: 'yes' }))?.stacking).toBe('none');
         expect(parseChartSpec(stored({ title: 7 }))?.title).toBe('');
         expect(parseChartSpec(stored({ valueAxis: { min: 'Infinity', gridlines: 1, format: 3 } }))?.valueAxis).toEqual(
-            valueAxis,
+            defaults.valueAxis,
         );
         expect(
             parseChartSpec(stored({ categoryAxis: { title: 'T', visible: 0, reversed: 'yes' } }))?.categoryAxis,

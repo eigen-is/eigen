@@ -53,7 +53,7 @@ test("a chart draws the painter's SVG at its stored size, its labels as text, in
     const svg = box.querySelector('svg');
     expect(svg?.getAttribute('width')).toBe('400');
     expect(svg?.getAttribute('height')).toBe('250');
-    expect([...(svg?.querySelectorAll('text') ?? [])].map((t) => t.textContent)).toContain('Team 1');
+    expect([...(svg?.querySelectorAll('text') ?? [])].map((t) => t.textContent)).toContain('UV');
     expect(box.getAttribute('data-layout')).toBe('wrap-left');
     expect(box.querySelector('.figcaption')?.textContent).toBe('Points');
 });

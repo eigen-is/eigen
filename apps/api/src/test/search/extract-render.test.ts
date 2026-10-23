@@ -112,7 +112,7 @@ describe('extractCollabText', () => {
             ],
         });
         expect((await extractCollabText('eigendoc', doc)).text).toBe(
-            'Before Team photo Scores by team Points scored Period 1 Team 1 Team 2 Team 3 Team 4',
+            "Before Team photo Scores by team Where a star's light goes Wavelength Share of light (%) Sun UV Blue Green Red IR-A IR-B/C",
         );
         doc.destroy();
     });

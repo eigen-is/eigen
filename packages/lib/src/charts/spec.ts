@@ -59,9 +59,9 @@ export function exceedsInlineGridLimits(data: InlineChartData): boolean {
     return !fitsInlineGrid(data.series.length, rows);
 }
 
-// What Insert → Chart starts from and what a missing or invalid presentation field reads as, so a field
+// What a new chart starts from and what a missing or invalid presentation field reads as, so a field
 // added later reads its default from charts stored before it.
-function defaultPresentation(type: ChartType): Omit<ChartSpec, 'type' | 'data'> {
+export function defaultChartPresentation(type: ChartType): Omit<ChartSpec, 'type' | 'data'> {
     return {
         stacking: 'none',
         title: '',
@@ -77,22 +77,29 @@ function defaultPresentation(type: ChartType): Omit<ChartSpec, 'type' | 'data'> 
 // A new series, made in Eigen: its color automatic, so the palette colors it by position.
 export const DEFAULT_CHART_SERIES_STYLE: ChartSeriesStyle = { color: null, markers: false, smooth: false };
 
-// Google's sample for Insert → Chart.
+// Insert → Chart's sample, one dataset for every type since the Type switch keeps the data: the share of a source's
+// light per band, Planck's B(λ,T) = 2hc²/λ⁵ / (e^(hc/λkT) − 1) integrated over the band and divided by σT⁴/π. Bands in nm:
+// UV < 400, Blue 400–500, Green 500–600, Red 600–700, IR-A 700–1400, IR-B/C > 1400. Sun 5772 K, bulb 3000 K, hot
+// star 10000 K; rounded to 0.1 by largest remainder, so each sums to 100. A pie draws the Sun.
 export function sampleChartSpec(type: ChartType): ChartSpec {
-    const categories = ['Team 1', 'Team 2', 'Team 3', 'Team 4'];
-    const periods = [
-        { name: 'Period 1', values: [42, 65, 38, 80] },
-        { name: 'Period 2', values: [58, 47, 71, 63] },
+    const categories = ['UV', 'Blue', 'Green', 'Red', 'IR-A', 'IR-B/C'];
+    const sources = [
+        { name: 'Sun', values: [12.2, 12.6, 12.8, 11.3, 37.1, 14.0] },
+        { name: 'Bulb', values: [0.2, 1.1, 2.6, 4.4, 43.3, 48.4] },
+        { name: 'Hot star', values: [48.1, 15.3, 10.4, 7.0, 15.5, 3.7] },
     ];
+    const defaults = defaultChartPresentation(type);
     return {
-        ...defaultPresentation(type),
+        ...defaults,
         type,
-        title: 'Points scored',
+        title: "Where a star's light goes",
+        categoryAxis: { ...defaults.categoryAxis, title: 'Wavelength' },
+        valueAxis: { ...defaults.valueAxis, title: 'Share of light (%)' },
         data: {
             source: 'inline',
             categories,
-            series: (type === 'pie' ? periods.slice(0, 1) : periods).map((period) => ({
-                ...period,
+            series: (type === 'pie' ? sources.slice(0, 1) : sources).map((source) => ({
+                ...source,
                 ...DEFAULT_CHART_SERIES_STYLE,
             })),
         },
@@ -138,7 +145,7 @@ function invalid(): never {
 function chartSpec(v: unknown): ChartSpec {
     const spec = record(v);
     const type = member(prop(spec, 'type'), CHART_TYPES);
-    const defaults = defaultPresentation(type);
+    const defaults = defaultChartPresentation(type);
     const categoryAxis = optionalRecord(prop(spec, 'categoryAxis'));
     const valueAxis = optionalRecord(prop(spec, 'valueAxis'));
     const min = finiteOr(prop(valueAxis, 'min'), defaults.valueAxis.min);

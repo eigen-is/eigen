@@ -14,6 +14,7 @@ export {
     chartSearchText,
     DEFAULT_CHART_FONT,
     DEFAULT_CHART_SERIES_STYLE,
+    defaultChartPresentation,
     exceedsChartSpecBytes,
     exceedsInlineGridLimits,
     fitsInlineGrid,

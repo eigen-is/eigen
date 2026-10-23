@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1923 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1924 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -973,7 +973,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (986)
+## Utilities & constants (987)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1114,6 +1114,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chartSearchText` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `DEFAULT_CHART_FONT` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `DEFAULT_CHART_SERIES_STYLE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `defaultChartPresentation` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsChartSpecBytes` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `exceedsInlineGridLimits` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `fitsInlineGrid` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
