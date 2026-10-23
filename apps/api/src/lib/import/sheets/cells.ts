@@ -168,7 +168,6 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
             // numfmt renders a bare serial under General as a number, so a date without a format it can draw shows as
             // m/d/yyyy.
             cell.m = date ? update(look.numFmt ?? 'm/d/yyyy', value) : numberDisplay(value, look.numFmt);
-            if (!look.aligned) cell.ht = 2;
         } else cell.m = typeof value === 'boolean' ? booleanDisplay(value) : value;
     }
     if (formula) cell.f = `=${formula}`;

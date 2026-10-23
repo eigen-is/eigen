@@ -562,10 +562,12 @@ function buildCellStyle(
         if (cellColor) parts.push(`background:${cellColor}`);
         // Rotated cells skip ht/vt — the rotated span is absolutely-positioned in the
         // cell (see wrapForRotation) so neither alignment property has anything to act
-        // on. Non-rotated cells emit text-align if the user picked one, plus a single
-        // vertical-align (default `middle`, matching the canvas painter).
+        // on. Non-rotated cells emit the user's text-align, else right for a number or date as
+        // the canvas painter and Excel draw one, plus a single vertical-align (default `middle`).
         if (!rotated) {
-            if (v.ht != null && v.ht in HORIZONTAL_ALIGN) parts.push(`text-align:${HORIZONTAL_ALIGN[v.ht]}`);
+            const picked = v.ht != null && v.ht in HORIZONTAL_ALIGN ? HORIZONTAL_ALIGN[v.ht] : undefined;
+            const align = picked ?? (typeof v.v === 'number' ? 'right' : undefined);
+            if (align) parts.push(`text-align:${align}`);
             const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
             parts.push(`vertical-align:${valign}`);
         }

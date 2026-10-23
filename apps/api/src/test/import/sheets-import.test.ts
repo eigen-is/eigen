@@ -1026,7 +1026,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(sheets[0].config?.borderInfo).toEqual({ '0_1': { b: { style: 1, color: '#000000' } } });
     });
 
-    test('convert right-aligns numbers without explicit alignment', async () => {
+    test('convert leaves a number without explicit alignment to align by its type', async () => {
         const buffer = buildXlsxBuffer([
             { a1: 'A1', value: 'text' },
             { a1: 'B1', value: 42 },
@@ -1034,7 +1034,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         const sheets = parseXlsx(buffer);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.ht).toBeUndefined();
-        expect(byCoord.get('0:1')?.ht).toBe(2);
+        expect(byCoord.get('0:1')?.ht).toBeUndefined();
     });
 
     test('convert resolves ARGB colors for font and fill and skips pattern none', async () => {

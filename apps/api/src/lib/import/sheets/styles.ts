@@ -34,8 +34,6 @@ export type Look = {
     // The cell's ct.fa: numFmt with month and minute in the Google convention.
     fa?: string;
     isDate: boolean;
-    // The format names a horizontal alignment, General too, so a number keeps it rather than aligning right.
-    aligned: boolean;
     border?: CellBorderSides;
 };
 
@@ -62,7 +60,7 @@ const BORDER_STYLE_MAP = new Map<string, number>(
     Object.entries(BORDER_STYLES).map(([ord, { name }]) => [name, Number(ord)]),
 );
 
-export const NO_LOOK: Look = { cell: {}, font: {}, aligned: false, isDate: false };
+export const NO_LOOK: Look = { cell: {}, font: {}, isDate: false };
 
 // Excel allows a workbook 250 formats of its own. A format's date test and canonical form cost per character, and so
 // does every display through it: one past Excel's length reads as General, and cell formats that name more formats
@@ -115,7 +113,6 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
             cell: { ...font, ...(bg && { bg }), ...(alignment && alignmentLook(alignment)) },
             font,
             ...(resolved.get(id('numFmtId')) ?? resolve(id('numFmtId'))),
-            aligned: Boolean(alignment && xmlAttr(alignment, '', 'horizontal')),
             border: borders[id('borderId')],
         };
     });

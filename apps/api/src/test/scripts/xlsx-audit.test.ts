@@ -314,11 +314,11 @@ describe('round trip', () => {
         expect([meta.pass, meta.unlisted, meta.listed]).toEqual([
             true,
             { differences: 0, files: 0 },
-            { differences: 11, files: 2 },
+            { differences: 1, files: 1 },
         ]);
         const summary = fs.readFileSync(path.join(out, 'summary.md'), 'utf8');
         expect(summary).toContain(
-            '**Round trip pass: 3 files, 2 imported and written back, 1 skipped, 0 crashes, 0 cut; 0 unlisted differences in 0 files, 11 listed in 2.**',
+            '**Round trip pass: 3 files, 2 imported and written back, 1 skipped, 0 crashes, 0 cut; 0 unlisted differences in 0 files, 1 listed in 1.**',
         );
         expect(summary).toContain(
             '| roundtrip/history.xlsx | sheet names repaired | listed | 1 | History!0: "History" → "History (2)" |',
@@ -382,12 +382,11 @@ describe('round trip', () => {
             ]),
             b: sheet([
                 { r: 0, c: 0, v: { v: 'a', ff: 'Inter' } },
-                { r: 0, c: 1, v: { v: 1, m: '1', ht: 2, fs: 11 } },
+                { r: 0, c: 1, v: { v: 1, m: '1', fs: 11 } },
             ]),
         });
         expect(groups.map(({ kind, listed, count }) => [kind, listed, count])).toEqual([
             ['default font keys', true, 2],
-            ['number alignment', true, 1],
             ['cell fs', false, 1],
         ]);
     });

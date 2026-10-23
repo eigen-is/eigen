@@ -1139,12 +1139,6 @@ export const LISTED: {
             (feature === 'cell ct.s' && canonical(withoutDefaultFont(a)) === canonical(withoutDefaultFont(b))),
     },
     {
-        kind: 'number alignment',
-        why: '§ 2: the import aligns a number right (ht 2) unless its format names a horizontal alignment, and a source\'s `horizontal="general"` names one Eigen has no value for, so the export writes none and the number comes back right-aligned',
-        matches: ({ feature, a, b, cells }) =>
-            feature === 'cell ht' && a === undefined && b === 2 && typeof cells?.b?.v === 'number',
-    },
-    {
         kind: 'merged-cell values',
         why: "§ 3.5: a merge's other cells write only their look, as Excel shows the first cell's value over the merge; a value the source held under it is not written",
         matches: ({ feature, a, b, cells }) =>
@@ -1152,9 +1146,7 @@ export const LISTED: {
             isConstituent(cells?.b) &&
             cells?.b?.v === undefined &&
             cells?.b?.f === undefined &&
-            (VALUE_KEYS.has(feature) ||
-                (feature === 'cell ct.fa' && a === 'General' && b === undefined) ||
-                (feature === 'cell ht' && a === 2 && b === undefined)),
+            (VALUE_KEYS.has(feature) || (feature === 'cell ct.fa' && a === 'General' && b === undefined)),
     },
     {
         kind: 'single-cell merges',

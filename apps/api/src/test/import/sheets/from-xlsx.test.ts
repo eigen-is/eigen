@@ -383,7 +383,7 @@ describe('the reader', () => {
             {
                 name: 'Sheet1',
                 celldata: [
-                    { r: 0, c: 0, v: { v: 1, m: '1', ht: 2, ct: { fa: 'General', t: 'n' } } },
+                    { r: 0, c: 0, v: { v: 1, m: '1', ct: { fa: 'General', t: 'n' } } },
                     { r: 0, c: 1, v: { v: 'x', m: 'x', ct: { fa: 'General', t: 's' } } },
                 ],
             },

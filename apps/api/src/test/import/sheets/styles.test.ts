@@ -141,11 +141,11 @@ describe('an alignment', () => {
                 '<xf><alignment horizontal="general" vertical="bottom"/></xf>',
             ),
         );
-        expect(a).toMatchObject({ cell: { ht: 0, vt: 0, tb: '2', rt: 45 }, aligned: true });
-        expect(b).toMatchObject({ cell: { ht: 2, vt: 1, rt: -45 }, aligned: true });
-        expect(c).toMatchObject({ cell: { rt: 'vertical' }, aligned: false });
-        // General names an alignment Eigen draws by default, so a number keeps no right alignment.
-        expect(d).toMatchObject({ cell: { vt: 2 }, aligned: true });
+        expect(a).toMatchObject({ cell: { ht: 0, vt: 0, tb: '2', rt: 45 } });
+        expect(b).toMatchObject({ cell: { ht: 2, vt: 1, rt: -45 } });
+        expect(c).toMatchObject({ cell: { rt: 'vertical' } });
+        // General is no alignment: Eigen aligns by type, a number right, as Excel does.
+        expect(d.cell).toEqual({ vt: 2 });
     });
 });
 
@@ -171,12 +171,12 @@ describe('the cell formats', () => {
         const [first] = looks(
             `${font('<b/>')}<fills><fill><patternFill patternType="solid"><fgColor rgb="FF00FF00"/></patternFill></fill></fills>${xfs('<xf fontId="1" fillId="0" numFmtId="9"/>')}`,
         );
-        expect(first).toEqual({ cell: {}, font: {}, aligned: false, isDate: false });
+        expect(first).toEqual({ cell: {}, font: {}, isDate: false });
     });
 
     test('an index past its list takes nothing from it', () => {
         const [, look] = looks(xfs('<xf/>', '<xf fontId="7" fillId="7" borderId="7"/>'));
-        expect(look).toEqual({ cell: {}, font: {}, aligned: false, isDate: false });
+        expect(look).toEqual({ cell: {}, font: {}, isDate: false });
     });
 
     test('no styles part is no looks', () => {
