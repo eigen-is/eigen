@@ -1,5 +1,6 @@
 import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
+import { toGrid } from '../helper/array';
 import { dateToSerial, toNumber } from '../helper/number';
 
 const MATCH_MODES = new Set([0, -1, 1, 2]);
@@ -34,17 +35,6 @@ function wildcard(pattern: string): RegExp {
         else source += escapeRegExp(char);
     }
     return new RegExp(`^${source}$`, 'is');
-}
-
-function isGrid(arg: FormulaValue[] | FormulaValue[][]): arg is FormulaValue[][] {
-    return Array.isArray(arg[0]);
-}
-
-// A range arrives as rows of cells, a single cell as its value, an array variable as one row.
-function toGrid(arg: FormulaArg): FormulaValue[][] {
-    if (arg instanceof Error) throw arg;
-    if (!Array.isArray(arg)) return [[arg]];
-    return isGrid(arg) ? arg : [arg];
 }
 
 // The lookup vector and its orientation: a column searches down, a row across; anything wider is #VALUE!.
