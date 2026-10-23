@@ -1,4 +1,4 @@
-// Insert → Chart from the selection, and the Setup writes the chart editor makes.
+// Insert → Chart from the selection, and the data range writes the chart panel makes.
 import { expect, test } from 'bun:test';
 import { parseChartSpec } from '@workspace/lib/charts';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
@@ -54,12 +54,12 @@ function insert(ctx: Context) {
     return { refused, next, chart: next.sheets[0].charts?.new };
 }
 
-test('charts the selection below itself at Google’s size, selected with its editor open', () => {
+test('charts the selection below itself at Google’s size, selected', () => {
     const { refused, next, chart } = insert(workbook({ row: [0, 4], column: [0, 3] }));
     expect(refused).toBeUndefined();
     // A1 is the left edge, the bottom of row 5 the top (visibledatarow is the bottom of each row).
     expect(chart).toMatchObject({ x: 0, y: 100, width: 600, height: 371 });
-    expect(next.activeObject).toEqual({ kind: 'chart', id: 'new', editor: true });
+    expect(next.activeObject).toEqual({ kind: 'chart', id: 'new' });
     const spec = parseChartSpec(chart?.spec ?? '');
     expect(spec).toMatchObject({ type: 'column', title: 'North, South and East', categoryAxis: { title: 'Month' } });
     expect(spec?.data).toMatchObject({
@@ -87,9 +87,9 @@ test('a viewer inserts nothing', () => {
 test('the new chart takes the selection from a selected image', () => {
     const { next } = insert({
         ...workbook({ row: [0, 4], column: [0, 3] }),
-        activeObject: { kind: 'image', id: 'img', editor: false },
+        activeObject: { kind: 'image', id: 'img' },
     });
-    expect(next.activeObject).toEqual({ kind: 'chart', id: 'new', editor: true });
+    expect(next.activeObject).toEqual({ kind: 'chart', id: 'new' });
 });
 
 test('a selection or a table around one cell past the values a chart draws is refused as too much data', () => {

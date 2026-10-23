@@ -55,8 +55,8 @@ export type Context = {
     addDefaultRows: number;
     fullscreenmode: boolean;
     devicePixelRatio: number;
-    // The selected image or chart on the current sheet, and whether a chart's editor sidebar is open.
-    activeObject?: FloatingRef & { editor: boolean };
+    // The selected image or chart on the current sheet.
+    activeObject?: FloatingRef;
     presences?: Presence[];
     // Transient find highlight state (UI-only, never persisted/synced — like
     // formulaRangeHighlight; filterPatch drops non-sheets[*] patches).

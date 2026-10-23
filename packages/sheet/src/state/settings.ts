@@ -23,10 +23,10 @@ export type CommentInfo = {
     indicatorColor: string | null;
 };
 
-// The chart whose editor sidebar is open, on the current sheet; every sheet's name, for its data range;
-// the categories and series names its range resolves to, which name a pie's slices and the series rows; and
-// whether its resolved data has more points than the sketch draws.
-export type ChartEditorState = {
+// The selected chart, on the current sheet; every sheet's name, for its data range; the categories and series
+// names its range resolves to, which name a pie's slices and the series rows; and whether its resolved data has
+// more points than the sketch draws.
+export type ChartPanelState = {
     chart: SheetChart;
     sheetId: string;
     sheets: { id: string; name: string }[];
@@ -154,9 +154,9 @@ export type Hooks = {
     // so the app can mount and refresh its properties panel. `null` when nothing is selected. The item
     // is one reference per record, so the app's setState bails while nothing changed.
     onActiveObjectChange?: (item: SheetFloatingItem | null) => void;
-    // Fired when a chart's editor opens or closes and while it is open, as the chart or the sheet names
-    // change, so the app can mount its chart editor sidebar.
-    onChartEditorChange?: (editor: ChartEditorState | null) => void;
+    // Fired when a chart is selected or deselected and while it is selected, as the chart or the sheet names
+    // change, so the app can show the chart's sections in its panel.
+    onChartPanelChange?: (panel: ChartPanelState | null) => void;
 };
 
 export type Settings = {

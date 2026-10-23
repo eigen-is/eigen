@@ -156,10 +156,10 @@ describe('floating writers', () => {
 
     test('selecting one kind lets go of the other, and Delete removes the selected one', () => {
         const selected = produce(workbook(), (ctx: Context) => {
-            selectFloatingObject(ctx, { kind: 'chart', id: 'c1' }, true);
+            selectFloatingObject(ctx, { kind: 'chart', id: 'c1' });
             selectFloatingObject(ctx, { kind: 'image', id: 'i1' });
         });
-        expect(selected.activeObject).toEqual({ kind: 'image', id: 'i1', editor: false });
+        expect(selected.activeObject).toEqual({ kind: 'image', id: 'i1' });
         const { next, ops } = author(selected, deleteActiveObject);
         expect(ops).toEqual([{ op: 'remove', id: S, path: ['images', 'i1'] }]);
         expect(next.activeObject).toBeUndefined();

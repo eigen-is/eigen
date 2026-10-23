@@ -28,7 +28,7 @@ import {
     api,
     applySheetView,
     type CellWithRowAndCol,
-    type ChartEditorState,
+    type ChartPanelState,
     COPY_ACTION_TABLE_MARKER,
     type Context,
     createContextResolver,
@@ -386,28 +386,27 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             mergedSettings.hooks?.onActiveObjectChange?.(activeItem);
         }, [activeItem, mergedSettings.hooks]);
 
-        const editingChart = activeObject?.editor ? currentSheet?.charts?.[activeObject.id] : undefined;
-        // Rebuilt on every sheet change while the editor is open: a renamed sheet renames its data range,
+        // Rebuilt on every sheet change while a chart is selected: a renamed sheet renames its data range,
         // and an edited cell its slices. Memoized, so the app's setState bails out when nothing changed.
         // biome-ignore lint/correctness/useExhaustiveDependencies: the resolver reads context.sheets alone; depending on `context` would rebuild on every selection and scroll
-        const chartEditor = useMemo((): ChartEditorState | null => {
-            if (!editingChart) return null;
-            const spec = parseChartSpec(editingChart.spec);
+        const chartPanel = useMemo((): ChartPanelState | null => {
+            if (!activeChart) return null;
+            const spec = parseChartSpec(activeChart.spec);
             const data = spec?.data;
             const resolver = createContextResolver(context);
             const resolved = data?.source === 'range' ? resolveRangeChartData(data, resolver) : data;
             return {
-                chart: editingChart,
+                chart: activeChart,
                 sheetId: context.currentSheetId,
                 sheets: context.sheets.map(({ id, name }) => ({ id: id ?? '', name })),
                 categories: typeof resolved === 'object' ? resolved.categories : [],
                 seriesNames: data?.source === 'range' ? data.series.map((s) => seriesName(s.name, resolver)) : [],
                 sketchCapped: spec !== null && typeof resolved === 'object' && isSketchCapped(spec, resolved),
             };
-        }, [editingChart, context.currentSheetId, context.sheets]);
+        }, [activeChart, context.currentSheetId, context.sheets]);
         useEffect(() => {
-            mergedSettings.hooks?.onChartEditorChange?.(chartEditor);
-        }, [chartEditor, mergedSettings.hooks]);
+            mergedSettings.hooks?.onChartPanelChange?.(chartPanel);
+        }, [chartPanel, mergedSettings.hooks]);
 
         const providerValue = useMemo(
             () => ({
@@ -576,7 +575,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onCopy = useCallback(
             (e: ClipboardEvent) => {
-                // A text field beside a selected chart or image (the chart editor's title, the image panel's
+                // A text field beside a selected chart or image (the chart panel's title, the image panel's
                 // width) copies its own text.
                 const floating = !isTypingTarget();
                 // A selected chart copies itself with its ranges read into inline data, the one thing every

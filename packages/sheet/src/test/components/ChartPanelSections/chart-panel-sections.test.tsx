@@ -1,6 +1,6 @@
-// The chart editor sidebar over a mounted Workbook, wired the way the Sheets app wires it: Setup reads the
-// chart's block back from its refs and rewrites them, the Customise rows write the spec, each change one
-// undo step.
+// The selected chart's sections over a mounted Workbook, wired the way the Sheets app wires its panel: a click
+// selects the chart and shows them, the data range reads the chart's block back from its refs and rewrites them,
+// the Customise rows write the spec, each change one undo step.
 import { afterEach, expect, test } from 'bun:test';
 import { MAX_SKETCH_POINTS, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
@@ -13,10 +13,11 @@ installHappyDom();
 const { act, createElement, createRef, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { Workbook } = await import('../../../components/Workbook');
-const { ChartEditorPanel } = await import('../../../components/ChartEditorPanel');
+const { PropertyGestureContext } = await import('@workspace/ui/components/properties-panel');
+const { ChartPanelSections } = await import('../../../components/ChartPanelSections');
 const { CHART_RANGE_REFUSALS } = await import('../../../engine/chart-range');
 type Sheet = import('../../../state').Sheet;
-type ChartEditorState = import('../../../state').ChartEditorState;
+type ChartPanelState = import('../../../state').ChartPanelState;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
 const ref = (row: [number, number], column: [number, number], sheetId = 's1'): CellRangeRef => ({
@@ -86,7 +87,7 @@ async function mount(chart: SheetChart) {
         { id: 's2', name: 'Two', order: 1, row: 20, column: 10, celldata: [...table, ...rows], config: {} },
     ];
     function Host() {
-        const [editor, setEditor] = useState<ChartEditorState | null>(null);
+        const [panel, setPanel] = useState<ChartPanelState | null>(null);
         return createElement(
             'div',
             null,
@@ -95,9 +96,14 @@ async function mount(chart: SheetChart) {
                 data,
                 showToolbar: false,
                 showFormulaBar: false,
-                hooks: { onChartEditorChange: setEditor },
+                hooks: { onChartPanelChange: setPanel },
             }),
-            editor && createElement(ChartEditorPanel, { key: editor.chart.id, editor, workbook }),
+            panel &&
+                createElement(
+                    PropertyGestureContext.Provider,
+                    { value: () => workbook.current?.beginGesture() ?? (() => {}) },
+                    createElement(ChartPanelSections, { key: panel.chart.id, panel, workbook }),
+                ),
         );
     }
     await act(async () => root.render(createElement(Host)));
@@ -108,7 +114,9 @@ async function mount(chart: SheetChart) {
 
     const box = container.querySelector('[data-floating-id="c1"] > *');
     if (!box) throw new Error('no chart');
-    await act(async () => box.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
+    // One click: the sections show for a selected chart, with no editor to open.
+    await act(async () => box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })));
+    await act(async () => document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 })));
 
     const spec = (): ChartSpec | null => parseChartSpec(workbook.current?.getAllSheets()[0].charts?.c1.spec ?? '');
     const field = (selector: string) => {
@@ -165,7 +173,24 @@ async function mount(chart: SheetChart) {
     return { container, spec, field, type, toggle, undo, stored, drawn, choose };
 }
 
-test('Setup shows the chart’s block and how it reads', async () => {
+test('a selected chart shows the shared sections, its data range rows inside the Chart section', async () => {
+    const { container, field } = await mount(rangeChart());
+    const headings = [...container.querySelectorAll('h4')].map((h) => h.textContent);
+    expect(headings).toEqual([
+        'Chart',
+        'Horizontal axis',
+        'Vertical axis',
+        'Series',
+        'Labels',
+        'Fill',
+        'Stroke',
+        'Sketch',
+    ]);
+    const section = field('input[aria-label="Data range"]').closest('.border-b');
+    expect(section?.querySelector('h4')?.textContent).toBe('Chart');
+});
+
+test('the data range shows the chart’s block and how it reads', async () => {
     const { field, toggle } = await mount(rangeChart());
     expect(field('input[aria-label="Data range"]').value).toBe('A1:B4');
     expect(toggle('Switch rows/columns')?.getAttribute('aria-checked')).toBe('false');

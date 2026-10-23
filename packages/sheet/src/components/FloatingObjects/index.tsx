@@ -2,10 +2,8 @@ import { floatingItems, type SheetFloatingItem } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
 import { downloadChartImage } from '@workspace/ui/components/charts';
 import { ObjectContextMenu, useContextMenu } from '@workspace/ui/components/context-menu';
-import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { useZOrderHotkeys } from '@workspace/ui/components/properties-panel';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
-import { ChartColumn } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import {
@@ -40,8 +38,6 @@ export function FloatingObjects() {
         select(item);
         contextMenu.openAt(item, x, y);
     });
-    const openChartEditor = (item: SheetFloatingItem) =>
-        setContext((ctx) => selectFloatingObject(ctx, refOf(item), true));
 
     useZOrderHotkeys(canEdit && activeObject != null, (op: ZOp) => {
         if (activeObject) setContext((ctx) => reorderFloatingObject(ctx, activeObject, op));
@@ -64,7 +60,6 @@ export function FloatingObjects() {
                         select(item);
                         contextMenu.handleContextMenu(e, item);
                     }}
-                    onDoubleClick={item.kind === 'chart' && canEdit ? () => openChartEditor(item) : undefined}
                 >
                     {(box) =>
                         item.kind === 'image' ? (
@@ -94,17 +89,6 @@ export function FloatingObjects() {
                         deleteFloatingObject(ctx, menuRef);
                         deselectFloatingObject(ctx);
                     })
-                }
-                hostSections={
-                    menuItem?.kind === 'chart'
-                        ? {
-                              create: (
-                                  <DropdownMenuItem onClick={() => openChartEditor(menuItem)}>
-                                      <ChartColumn className="h-4 w-4" /> Edit chart
-                                  </DropdownMenuItem>
-                              ),
-                          }
-                        : undefined
                 }
             />
         </div>
