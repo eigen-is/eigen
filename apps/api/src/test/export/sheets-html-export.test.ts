@@ -139,6 +139,24 @@ describe('Sheets HTML export — class-based styles', () => {
         expect(out.html).toContain(`<col class="${width[0]}">`);
     });
 
+    // The editor hides a row or a column by its key, storing 0, as the xlsx import does.
+    test('hidden rows and columns are left out of the table and its size', () => {
+        const sheet = makeSheet([
+            { r: 0, c: 0, v: { v: 'shown' } },
+            { r: 1, c: 1, v: { v: 'hidden row' } },
+            { r: 2, c: 2, v: { v: 'hidden column' } },
+        ]);
+        sheet.config = { rowhidden: { 1: 0 }, colhidden: { 2: 0 } };
+        const { html } = renderSheetsHtml([sheet], NO_MEDIA);
+        expect(html).toContain('>shown<');
+        expect(html).not.toContain('hidden row');
+        expect(html).not.toContain('hidden column');
+        expect(getSheetContentSize(sheet)).toEqual({
+            width: 2 * SHEET_DEFAULT_COL_WIDTH,
+            height: 2 * SHEET_DEFAULT_ROW_HEIGHT,
+        });
+    });
+
     test('the table style interns with real quotes around the body font stack', () => {
         const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
         const table = classesFor(out, 'border-collapse:collapse');

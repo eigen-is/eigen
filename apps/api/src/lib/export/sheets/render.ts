@@ -11,8 +11,8 @@ import {
     mergedBorderSides,
     type Sheet,
     type SheetConfig,
-    sheetDefaultColWidth,
-    sheetDefaultRowHeight,
+    sheetColumnsWidth,
+    sheetRowsHeight,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { orderByFractionalIndex } from '@workspace/lib/vector';
@@ -227,30 +227,6 @@ function clipRulesToWindow(
     return clipped;
 }
 
-// Laid-out pixels across `[from, to]`, hidden tracks contributing nothing — the one place the
-// stored-length-or-default rule lives, for the grid's tracks, its size and the floating overlay's offset.
-function colSpan(sheet: Sheet, from: number, to: number): number {
-    const { colhidden, columnlen } = sheet.config ?? {};
-    const fallback = sheetDefaultColWidth(sheet);
-    let width = 0;
-    for (let c = from; c <= to; c++) {
-        if (colhidden?.[c]) continue;
-        width += cssLength(columnlen?.[c], fallback);
-    }
-    return width;
-}
-
-function rowSpan(sheet: Sheet, from: number, to: number): number {
-    const { rowhidden, rowlen } = sheet.config ?? {};
-    const fallback = sheetDefaultRowHeight(sheet);
-    let height = 0;
-    for (let r = from; r <= to; r++) {
-        if (rowhidden?.[r]) continue;
-        height += cssLength(rowlen?.[r], fallback);
-    }
-    return height;
-}
-
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
     const { minRow, minCol, maxRow, maxCol } = getRenderBounds(sheet, config);
@@ -260,8 +236,8 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     // range is still on the page.
     const extent = floatingExtent(sheet, offset);
     return {
-        width: Math.max(blank ? 0 : colSpan(sheet, minCol, maxCol), extent.width),
-        height: Math.max(blank ? 0 : rowSpan(sheet, minRow, maxRow), extent.height),
+        width: Math.max(blank ? 0 : sheetColumnsWidth(sheet, minCol, maxCol), extent.width),
+        height: Math.max(blank ? 0 : sheetRowsHeight(sheet, minRow, maxRow), extent.height),
     };
 }
 
@@ -297,8 +273,8 @@ function renderSheet(
     const withOverlay = (table: string, tableWidth: number, minRow: number, minCol: number): string => {
         const offset = gridOffset(sheet, minRow, minCol);
         const clip = budget && {
-            width: colSpan(sheet, minCol, minCol + budget.maxCols - 1),
-            height: rowSpan(sheet, minRow, minRow + budget.maxRows - 1),
+            width: sheetColumnsWidth(sheet, minCol, minCol + budget.maxCols - 1),
+            height: sheetRowsHeight(sheet, minRow, minRow + budget.maxRows - 1),
         };
         const overlay = renderFloatingObjects(sheet, mediaUrls, resolver, offset, styles, clip);
         if (!overlay) return table;
@@ -322,7 +298,7 @@ function renderSheet(
     let truncated = false;
     const renderCols: number[] = [];
     for (let c = minCol; c <= maxCol; c++) {
-        if (config.colhidden?.[c]) continue;
+        if (config.colhidden?.[c] != null) continue;
         if (budget && renderCols.length >= budget.maxCols) {
             truncated = true;
             break;
@@ -333,7 +309,7 @@ function renderSheet(
     const renderRows: number[] = [];
     let cellCount = 0;
     for (let r = minRow; r <= maxRow; r++) {
-        if (config.rowhidden?.[r]) continue;
+        if (config.rowhidden?.[r] != null) continue;
         if (budget && (renderRows.length >= budget.maxRows || cellCount + renderCols.length > budget.maxCells)) {
             truncated = true;
             break;
@@ -380,7 +356,7 @@ function renderSheet(
     const cols: string[] = [];
     let tableWidth = 0;
     for (const c of renderCols) {
-        const w = colSpan(sheet, c, c);
+        const w = sheetColumnsWidth(sheet, c, c);
         tableWidth += w;
         cols.push(`<col ${styleAttr(styles, `width:${w}px`)}>`);
     }
@@ -388,7 +364,7 @@ function renderSheet(
 
     const rows: string[] = [];
     for (const r of renderRows) {
-        const h = rowSpan(sheet, r, r);
+        const h = sheetRowsHeight(sheet, r, r);
         const cells: string[] = [];
         const rowMerges = merges.filter((m) => m.r <= r && r < m.r + m.rs);
 
@@ -499,7 +475,7 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 // ImgBoxs reads the same fields into left/top/width/height), while the table starts at
 // the used range — so the overlay subtracts the rows and columns the window skipped.
 function gridOffset(sheet: Sheet, minRow: number, minCol: number): { left: number; top: number } {
-    return { left: colSpan(sheet, 0, minCol - 1), top: rowSpan(sheet, 0, minRow - 1) };
+    return { left: sheetColumnsWidth(sheet, 0, minCol - 1), top: sheetRowsHeight(sheet, 0, minRow - 1) };
 }
 
 type FloatingBox = { x: number; y: number; width: number; height: number };
@@ -748,14 +724,14 @@ function getRenderBounds(
 
     let minCol = 0;
     let left = 0;
-    while (minCol < bounds.minCol && left + colSpan(sheet, minCol, minCol) <= x) {
-        left += colSpan(sheet, minCol, minCol);
+    while (minCol < bounds.minCol && left + sheetColumnsWidth(sheet, minCol, minCol) <= x) {
+        left += sheetColumnsWidth(sheet, minCol, minCol);
         minCol++;
     }
     let minRow = 0;
     let top = 0;
-    while (minRow < bounds.minRow && top + rowSpan(sheet, minRow, minRow) <= y) {
-        top += rowSpan(sheet, minRow, minRow);
+    while (minRow < bounds.minRow && top + sheetRowsHeight(sheet, minRow, minRow) <= y) {
+        top += sheetRowsHeight(sheet, minRow, minRow);
         minRow++;
     }
     return { ...bounds, minRow, minCol };
