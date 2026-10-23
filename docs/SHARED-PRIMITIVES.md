@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1946 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1947 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -980,7 +980,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1002)
+## Utilities & constants (1003)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1525,6 +1525,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_MIME_SLIDES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_STICKIES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_VECTOR` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DRIVE_SORT_KEYS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_DOC` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_FILE` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

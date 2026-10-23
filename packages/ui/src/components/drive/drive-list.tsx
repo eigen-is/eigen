@@ -2,6 +2,7 @@ import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
+import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     ChoiceMenuItems,
@@ -62,7 +63,7 @@ function SortMenuItems() {
     return (
         <ChoiceMenuItems
             value={sortKey}
-            options={(Object.keys(SORT_LABELS) as DriveSortKey[]).map((key) => ({
+            options={DRIVE_SORT_KEYS.map((key) => ({
                 value: key,
                 label: (
                     <>
