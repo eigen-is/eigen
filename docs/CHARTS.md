@@ -64,7 +64,7 @@ A document or a sheet has no element to take a paint from, so it draws through `
 
 The placeholder draws its line in Inter, since a spec that doesn't parse names no font.
 
-So previews and exports need nothing for charts. The SVG download, the PDF page, a deck's HTML and the preview all draw the chart through the kind, and the export sanitizer keeps every shape and label; `apps/api/src/test/export/chart-export.test.ts` proves it. The SVG download embeds the fonts `sceneFontFamilies` collects, and each kind answers for its own elements (`fontFamilies`), so the chart kind gives the font its labels draw in without the export asking for charts by type. A placeholder adds none, so its line falls back to the viewer's fonts unless another element embeds Inter. The live canvas loads nothing extra: the app's `@font-face` rules load a face the first time SVG text uses it.
+So previews and exports need nothing for charts. The editor's downloaded SVG, the PDF page, a deck's HTML and the preview all draw the chart through the kind, and the export sanitizer keeps every shape and label; `apps/api/src/test/export/chart-export.test.ts` proves it. The downloaded SVG embeds the faces `canvasImageFaces` collects, and each kind answers for its own elements (`fontFamilies`), so the chart kind gives the font its labels draw in without the writer asking for charts by type. A placeholder adds none, so its line falls back to the viewer's fonts unless another element embeds Inter. The live canvas loads nothing extra: the app's `@font-face` rules load a face the first time SVG text uses it.
 
 ## A doc's chart draws flat at its own size
 
@@ -90,7 +90,7 @@ Convert to shapes, a row in the canvas object menu and a button in the chart's p
 
 `replaceElementInDoc` (`packages/ui/src/components/vector/hooks/element-writes.ts`) deletes the chart and writes the shapes in one transaction, at keys between the chart's index and the next one above it, so they keep the chart's place in the stacking order. Both run it through `convertElementToShapes` as one sealed undo step, so one ⌘Z brings the chart back, and selects the shapes, since the canvas has no groups to put them in. An arrow bound to the chart keeps its endpoints and loses its binding, as on a delete. The action is one way and has no ⌘K entry, because the palette has no canvas element actions.
 
-The converted labels are rich text, each its own layer. The live canvas, a preview and the PDF mount a rich-text layer as HTML, so they draw the labels, but the SVG download wraps rich text in `foreignObject`, which some SVG viewers don't draw. That is every rich-text box's limitation, not the chart's.
+The converted labels are rich text, each its own layer. The live canvas, a preview and the PDF mount a rich-text layer as HTML, and the downloaded SVG writes it as SVG text the browser measured ([EXPORT.md](EXPORT.md#a-drawing-downloads-its-own-svg-and-prints-as-layers)), so all of them draw the labels.
 
 ## One chart editor edits a spec, and the host writes it
 
