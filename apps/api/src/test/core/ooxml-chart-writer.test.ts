@@ -126,8 +126,12 @@ describe('writeChart with range data', () => {
 
     test("a pie keeps its slice colours, an automatic one automatic, and its first series' look", () => {
         const spec = rangeSpec('pie', { sliceColors: [null, '#abcdef'] }, RANGE_SERIES.slice(0, 1));
-        const xml = writeChart(spec, { ranges });
-        expect(throughRanges(spec)).toEqual(axesOf(spec));
+        const cache: ChartData = {
+            categories: ['North', 'South', 'East'],
+            series: [{ ...DEFAULT_CHART_SERIES_STYLE, color: chartColor(0), name: 'Sales', values: [1, 2, 3] }],
+        };
+        const xml = writeChart(spec, { ranges, cache });
+        expect(throughRanges(spec, cache)).toEqual(axesOf(spec));
         // Excel draws the palette's colour for the automatic slices, explicitly.
         const colors = find(root(xml), 'dPt').map((point) => find(point, 'srgbClr', A_NS)[0]);
         expect(colors.map((color) => xmlAttr(color, '', 'val'))).toEqual([

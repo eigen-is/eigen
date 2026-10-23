@@ -118,7 +118,7 @@ function slicesXml(spec: ChartSpec, points: number): string {
     }).join('');
 }
 
-// A series' name, categories and values, and how many points it plots.
+// A series' name, categories and values, and how many points it plots: a range series its cache's, none without one.
 type Source = { name: string; data: string; points: number };
 
 function inlineSource(categories: string[], name: string, values: (number | null)[]): Source {
@@ -161,7 +161,7 @@ function rangeSource(
             categories ? `<c:cat><c:strRef>${formula(categories)}${strCache(cache.categories)}</c:strRef></c:cat>` : '',
             values ? `<c:val><c:numRef>${formula(values)}${numCache}</c:numRef></c:val>` : '',
         ].join(''),
-        points: values ? (values.row[1] - values.row[0] + 1) * (values.column[1] - values.column[0] + 1) : 0,
+        points: cache.series?.values.length ?? 0,
     };
 }
 

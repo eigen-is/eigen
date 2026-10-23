@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { MAX_CHART_POINTS, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import {
     type Cell,
     floatingItems,
+    REFERENCE_ROW_COUNT,
     type Sheet,
     type SheetChart,
     type SheetFloatingObject,
@@ -202,6 +203,28 @@ describe('drawingOf', () => {
         const mixed: Sheet = { ...SUMMARY, charts: { ...SUMMARY.charts, ...broken.charts } };
         expect(drawingOf(mixed, 1, [mixed, MY_DATA], noPictures(), (code) => lost.push(code))?.parts).toHaveLength(4);
         expect(lost).toEqual(['charts-dropped', 'charts-dropped']);
+    });
+
+    // B2:B4 resolves to three slices; a whole column, an area and one point too many resolve to none.
+    test.each([
+        ['B2:B4', range([1, 3], [1, 1]), 3],
+        ['a whole column', range([0, REFERENCE_ROW_COUNT - 1], [1, 1]), 0],
+        ['an area', range([1, 3], [0, 1]), 0],
+        ['one point too many', range([0, MAX_CHART_POINTS], [1, 1]), 0],
+    ])('a pie over %s writes a slice per point its cells resolve to', (_, values, slices) => {
+        const spec = JSON.stringify({
+            ...sampleChartSpec('pie'),
+            data: {
+                source: 'range',
+                categories: null,
+                series: [{ name: 'Sales', values, color: null, markers: false, smooth: false }],
+            },
+        });
+        const pie: Sheet = { ...SUMMARY, charts: byId({ ...RANGED, spec }) };
+        const drawing = drawingOf(pie, 1, [pie, MY_DATA], noPictures(), () => {});
+        const part = drawing ? xml(drawing.parts[2]) : '';
+        expect(part.match(/<c:dPt>/g)?.length ?? 0).toBe(slices);
+        expect(part.length).toBeLessThan(10_000);
     });
 
     test("a chart naming a sheet the workbook doesn't hold keeps its other refs", () => {
