@@ -54,7 +54,7 @@ While an image is selected, a panel headed **Image** opens on the right of the e
 
 Type a value in any of them to place or size the image exactly. **Keep aspect ratio** is ticked for an image, so the width and height stay in proportion while you resize, whether you drag a corner or type a number. Untick it to change them freely. The **Arrange** buttons move the image in front of or behind other images and charts.
 
-If the comments panel is open, it takes the same space. Close it to get the image panel back.
+If the comments panel is open, it takes the same space. Close it to get the image panel back. On a phone the image panel doesn't open.
 
 <div class="eigen-callout">
 

@@ -6,7 +6,7 @@ category: Basics
 tags: [mobile, phone, getting-started, layout]
 related: [getting-started/your-first-steps, getting-started/search-and-command-palette]
 order: 6
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
 Eigen runs in the browser on your phone, with the same account and the same files as on your computer. The apps rearrange themselves for the smaller screen rather than shrinking. This page covers what moves where, and the few things a phone cannot do.
@@ -39,13 +39,15 @@ A deck fills the screen one slide at a time. Swipe left or right to move between
 
 The row of sheet tabs along the bottom is hidden on a narrow screen, because a tab strip and a spreadsheet cannot both fit. Two buttons stay in its place: **All sheets**, which lists every sheet so you can switch, and **+** to add one.
 
+A selected image or chart opens no panel on a phone. You can still drag it, and press and hold it for its menu.
+
 ## Boards on a phone
 
 A board's columns are as wide as the screen, so you see one at a time and swipe sideways to reach the next. The **Activity** panel is a computer-only view, so it is not available on a phone. Comments on a card still are.
 
 ## Controls fold into menus
 
-Rows of icons turn into one **⋮** menu. In a document, spreadsheet, presentation, drawing, or board, that menu collects what the toolbar icons do on a computer: **Edit** to rename, **Find in document**, **Word count**, **Activity**, **Watch**, **Comments**, and **Share**. Which of them you see depends on the app and on whether you can edit the file.
+Rows of icons turn into one **⋮** menu. In a document, spreadsheet, presentation, drawing, or board, that menu collects what the toolbar icons do on a computer: **Edit** to rename, **Find in document**, **Word count**, **Activity**, **Comments**, **Share**, and **Watch**. Which of them you see depends on the app and on whether you can edit the file.
 
 In Calendar, **Today** and the month or week choice move into a **View options** menu on the right of the toolbar. In Docs, the formatting row folds into a **Format** menu, which holds **Text**, **Font**, **Paragraph styles**, **Align and indent**, **Line & paragraph spacing**, **Bullets and numbering**, **Table**, **Image**, and **Clear formatting**. **Table** works when the cursor is in a table, and **Image** when an image is selected.
 

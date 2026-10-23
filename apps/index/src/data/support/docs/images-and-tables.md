@@ -55,7 +55,7 @@ On a wide screen, selecting an image also opens the **Image** panel on the right
 
 Right-click an image and choose **Download original image**. You get the image file at its full size and in its own format. This works with view access too.
 
-The same menu has **Cut**, **Copy**, and **Delete** for the image, and **Add comment**, to comment on the image itself. See [Comment and discuss](/support/docs/comments).
+The same menu has **Cut**, **Copy**, and **Delete** for the image, and **Add comment**, to comment on the image itself. With view access it has **Copy**. See [Comment and discuss](/support/docs/comments).
 
 ## Add a chart
 
@@ -80,7 +80,7 @@ You can paste cells copied from a spreadsheet or a table in a document into the 
 
 You can copy a chart from Sheets, Slides, or Vector and paste it into a document, where it stays a chart you can edit. A chart wider than the page shrinks to fit. Headers, footers, and footnotes don't take a chart pasted from another app. Copying a chart in a document and pasting it into Sheets, Slides, or Vector works the same way. A chart keeps its look wherever you paste it.
 
-Right-click a chart and choose **Download image** to save it as an SVG picture on a white background, named after its title. This works with view access too. The same menu has **Cut**, **Copy**, and **Delete**.
+Right-click a chart and choose **Download image** to save it as an SVG picture on a white background, named after its title. This works with view access too. The same menu has **Cut**, **Copy**, and **Delete**, and with view access **Copy**.
 
 A chart prints and downloads as a PDF, a web page, or a Word file, in its look. In the Word file it is a picture, so you can't change its data in Word. See [Export to Word, PDF, or HTML](/support/docs/export).
 

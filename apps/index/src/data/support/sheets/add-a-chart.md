@@ -35,7 +35,7 @@ Below that you pick the axis titles, whether each axis shows (**Show axis**), wh
 
 Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets the chart's background, and its **Style** how the bars and slices are drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag**. Solid bars and slices have no outline; hatched ones get an outline in their own color. **Stroke** sets the color, width, and style of the axes and gridlines, and **Sketch** how rough the chart looks, from **Architect** (clean) to **Cartoonist**. A new chart starts clean and solid, like a Google Sheets chart. A chart with more than 200 values (for a pie, more than 200 slices) draws its bars, lines, and slices smooth and solid whatever the sketch, so it stays quick to show; the **Sketch** section says so. The chart prints and downloads in its look.
 
-Click a cell to deselect the chart and close the panel.
+Click a cell to deselect the chart and close the panel. On a phone the chart panel doesn't open.
 
 ## Move, resize, rotate, and remove a chart
 
