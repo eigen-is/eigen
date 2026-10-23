@@ -5,7 +5,6 @@ import {
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
-    DRIVE_TYPE_FILE,
     type DrivePath,
     EIGEN_DOC_TYPE_INFO,
     isCollabType,
@@ -104,7 +103,8 @@ function imagesSize(images: TransformMedia[]): number {
 }
 
 // Through Drive, as an upload is: the ACL check, the drive event an open tab redraws on and the thumbnail. The images
-// count toward the quota, inflated up to the zip cap, and are charged before the first is written.
+// count toward the quota, inflated up to the zip cap, and are charged before the first is written. Each import names its
+// pictures with a prefix of its own, so every one is a create.
 async function saveDocImages(
     drive: DriveLike,
     docPath: DrivePath,
@@ -114,27 +114,15 @@ async function saveDocImages(
     if (images.length === 0) return;
     const mediaFolder = await drive.getChildByName(docPath.mountId, docPath.id, 'media');
     if (!mediaFolder) throw new ApiError(500, 'Document media folder not found');
-    // Extracted names are deterministic (image-1.png, …), so a repeat import overwrites its files in place, credited their
-    // size: a create would rename the collision to one the update doesn't name. Names the new import doesn't produce stay.
-    const existing = await Promise.all(
-        images.map((image) => drive.getChildByName(docPath.mountId, mediaFolder.id, image.name)),
-    );
-    // Anything else under that name is neither written over nor credited, and a create would rename the image away
-    // from the name the document gives it.
-    const blocked = existing.find((path) => path && path.type !== DRIVE_TYPE_FILE);
-    if (blocked) throw new ApiError(409, `media/${blocked.name} is not a file`);
-    const credit = existing.reduce((sum, path) => sum + (path?.size ?? 0), 0);
-    await enforceMountQuota(docPath.ownerId, docPath.mountId, imagesSize(images), credit);
-    for (const [i, image] of images.entries()) {
+    await enforceMountQuota(docPath.ownerId, docPath.mountId, imagesSize(images));
+    for (const image of images) {
         const data = Buffer.from(image.data);
-        const path = existing[i];
-        if (path) await drive.writeFileContent(docPath.mountId, path.id, data, user);
-        else await drive.createFileFromData(docPath.mountId, mediaFolder.id, image.name, image.contentType, data, user);
+        await drive.createFileFromData(docPath.mountId, mediaFolder.id, image.name, image.contentType, data, user);
     }
 }
 
-// A convert that fails after its create (a picture's name taken, quota another write spent) trashes the document it
-// made through Drive's own delete, so the error it answers leaves no half-filled document behind.
+// A convert that fails after its create (quota another write spent) trashes the document it made through Drive's own
+// delete, so the error it answers leaves no half-filled document behind.
 async function fillNewDocument(
     drive: DriveLike,
     newPath: DrivePath,

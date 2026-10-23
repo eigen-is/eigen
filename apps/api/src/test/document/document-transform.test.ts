@@ -76,7 +76,7 @@ import {
     seedEigendoc,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
-import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
+import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME, unprefixed } from '../fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
 import {
     exportBytes,
@@ -1598,7 +1598,8 @@ describe('document transform (eigenvector)', () => {
 // a Yjs commit into a fresh document) over buildGoldenDocx(), so the move
 // off-thread is proven equivalent: the Worker must hand back a Yjs update whose
 // applied document reads back identically, and the extracted image bytes must
-// survive the boundary untouched. Regenerate only for an intentional converter change.
+// survive the boundary untouched. Regenerate only for an intentional converter change. Hashed with the media prefix
+// dropped, as each import draws its own.
 // The JSON hash moved when prose textblocks gained the six paragraph format attributes: each null on every paragraph,
 // heading, title and subtitle, as the golden docx sets no spacing or indent apart from its Normal, and nothing else (the
 // old hash comes back with them stripped).
@@ -1626,15 +1627,15 @@ describe('document transform (docx import)', () => {
 
     test('the reference parse + Yjs commit pipeline matches the pinned goldens', async () => {
         const { json, images } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
-        expect(sha256(JSON.stringify(json))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
+        expect(sha256(unprefixed(JSON.stringify(json)))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
         expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
-            { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },
+            { name: expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME), contentType: 'image/png' },
         ]);
         expect(images[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
 
         const doc = new Y.Doc();
         seedEigendoc(doc, json);
-        expect(sha256(JSON.stringify(readEigendocFromDoc(doc)))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
+        expect(sha256(unprefixed(JSON.stringify(readEigendocFromDoc(doc))))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
         doc.destroy();
     }, 120_000);
 
@@ -1657,12 +1658,12 @@ describe('document transform (docx import)', () => {
         commitEigendocImport(doc, { update: new Uint8Array(update), page, style });
         const committed = readEigendocFromDoc(doc);
         doc.destroy();
-        expect(committed).toEqual(await referenceDocument());
-        expect(sha256(JSON.stringify(committed))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
+        expect(unprefixed(JSON.stringify(committed))).toBe(unprefixed(JSON.stringify(await referenceDocument())));
+        expect(sha256(unprefixed(JSON.stringify(committed)))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
 
         // The extracted image crossed the boundary byte-intact.
         expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
-            { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },
+            { name: expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME), contentType: 'image/png' },
         ]);
         expect(Buffer.from(images[0].data)).toEqual(Buffer.from(TEST_PNG_BYTES));
     }, 120_000);

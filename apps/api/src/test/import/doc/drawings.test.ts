@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
-import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
+import {
+    GOLDEN_DOCX_IMAGE_RUN,
+    importDocxBody,
+    marksOfType,
+    nodesOfType,
+    unprefixed,
+} from '../../fixtures/golden-docx';
 
 // Pictures: one media file per image part, named from its content type, placed as Word places it.
 
@@ -19,8 +25,12 @@ describe('media', () => {
             contentTypes: '<Default Extension="wmf" ContentType="image/x-wmf"/>',
             media: { 'word/media/image1.wmf': BYTES },
         });
-        expect(images.map(({ name, contentType }) => [name, contentType])).toEqual([['image-1.wmf', 'image/x-wmf']]);
-        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(['image-1.wmf']);
+        expect(images.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+            ['image-1.wmf', 'image/x-wmf'],
+        ]);
+        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(
+            images.map(({ name }) => name),
+        );
         expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
     });
 
@@ -30,7 +40,7 @@ describe('media', () => {
             contentTypes: '<Override PartName="/word/media/b.jpg" ContentType="image/jpg"/>',
             media: { 'word/media/a.gif': BYTES, 'word/media/b.jpg': BYTES },
         });
-        expect(images.map(({ name, contentType }) => [name, contentType])).toEqual([
+        expect(images.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
             ['image-1.gif', 'image/gif'],
             ['image-2.jpeg', 'image/jpeg'],
         ]);
@@ -40,8 +50,8 @@ describe('media', () => {
         const { json, images } = await importDocxBody(paragraph(`${picture('rId4')}${picture('rId4')}`));
         expect(images).toHaveLength(1);
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual([
-            'image-1.png',
-            'image-1.png',
+            images[0]?.name,
+            images[0]?.name,
         ]);
     });
 
@@ -55,7 +65,9 @@ describe('media', () => {
             contentTypes: '<Default Extension="svg" ContentType="image/svg+xml"/>',
             media: { 'word/media/pixel.png': BYTES, 'word/media/image1.svg': new TextEncoder().encode('<svg/>') },
         });
-        expect(images.map(({ name, contentType }) => [name, contentType])).toEqual([['image-1.svg', 'image/svg+xml']]);
+        expect(images.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+            ['image-1.svg', 'image/svg+xml'],
+        ]);
     });
 });
 
@@ -66,7 +78,7 @@ describe('relationship targets', () => {
                 rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="${target}"${mode}/>`,
                 media: { [path]: BYTES },
             })
-        ).images.map(({ name, contentType }) => [name, contentType]);
+        ).images.map(({ name, contentType }) => [unprefixed(name), contentType]);
 
     test("a target with '..' resolves against the part's folder", async () => {
         expect(await imageAt('../media/x.png', 'media/x.png')).toEqual([['image-1.png', 'image/png']]);

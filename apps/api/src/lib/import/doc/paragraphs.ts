@@ -50,6 +50,8 @@ export type Reader = {
     fontTable: FontTable;
     styles: Styles;
     numbering: Numbering;
+    // A random prefix per import, so a replace's pictures land beside the ones a restored version names.
+    mediaPrefix: string;
     images: MediaPart[];
     imageNames: Map<string, string>;
     // Each note by type and id, its part beside it, and each as read at its depth: a note is read once per depth
@@ -118,6 +120,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         fontTable,
         styles,
         numbering: readNumbering(pkg.numbering, styles),
+        mediaPrefix: `docx-${crypto.randomUUID()}`,
         images: [],
         imageNames: new Map(),
         noteElements: noteElements(pkg),

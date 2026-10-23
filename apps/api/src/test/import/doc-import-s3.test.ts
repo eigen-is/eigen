@@ -48,17 +48,18 @@ describe('Eigendoc docx import into an S3 mount', () => {
         // Uploaded, so the read below comes from the bucket and not from the staged copy.
         await mount.drainPendingUploads({ flushNow: true });
         const mediaFolder = await mount.getChildByName(docPath.id, 'media');
-        const image = mediaFolder && (await mount.getChildByName(mediaFolder.id, GOLDEN_DOCX_IMAGE_NAME));
-        if (!image) throw new Error(`${GOLDEN_DOCX_IMAGE_NAME} missing from media/`);
+        const [image] = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
+        if (!image) throw new Error('media/ holds no picture');
+        expect(image.name).toMatch(GOLDEN_DOCX_IMAGE_NAME);
         const key = await mount.getStorageKey(image.id);
         const before = s3.fake.gets.get(key) ?? 0;
         const file = await mount.readFile(image.id);
-        if (!file) throw new Error(`${GOLDEN_DOCX_IMAGE_NAME} unreadable`);
+        if (!file) throw new Error(`${image.name} unreadable`);
         expect(Buffer.from(await file.arrayBuffer())).toEqual(Buffer.from(TEST_PNG_BYTES));
         expect(s3.fake.gets.get(key) ?? 0).toBeGreaterThan(before);
 
         const json = readEigendocFromDoc((await drive.getCollabDocument(MOUNT_ID, docPath.id)).doc);
-        expect(JSON.stringify(json)).toContain(GOLDEN_DOCX_IMAGE_NAME);
+        expect(JSON.stringify(json)).toContain(image.name);
         expect(
             sse.events.some((event) => event.type === SSEventType.DRIVE_FILE_UPLOADED && event.path.id === image.id),
         ).toBe(true);

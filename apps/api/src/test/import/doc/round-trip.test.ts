@@ -174,7 +174,7 @@ describe('a chart', () => {
             {
                 type: 'figure',
                 attrs: {
-                    mediaName: 'image-1.svg',
+                    mediaName: expect.stringMatching(/^docx-[0-9a-f-]{36}-image-1\.svg$/),
                     src: null,
                     alt: 'Points scored',
                     caption: 'Points',

@@ -9,6 +9,7 @@ import {
     buildDocxWithBands,
     buildDocxWithBody,
     type DocxBand,
+    GOLDEN_DOCX_IMAGE_NAME,
     GOLDEN_DOCX_IMAGE_RUN,
     nodesOfType,
 } from '../../fixtures/golden-docx';
@@ -159,8 +160,8 @@ describe('docx import — headers and footers', () => {
             },
         ]);
         const [figure] = nodesOfType(bands.header ?? {}, 'figure');
-        expect(figure?.attrs).toMatchObject({ mediaName: 'image-1.png', layout: 'block', alignment: 'right' });
-        expect(images.map(({ name }) => name)).toEqual(['image-1.png']);
+        expect(images.map(({ name }) => name)).toEqual([expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME)]);
+        expect(figure?.attrs).toMatchObject({ mediaName: images[0]?.name, layout: 'block', alignment: 'right' });
         expect(warnings).toContainEqual({ code: 'band-images-unanchored', count: 1 });
     });
 
