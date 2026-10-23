@@ -189,6 +189,7 @@ const TEXT_PARAMETERS: Record<string, number[] | 'all'> = {
     SEARCH: [0, 1],
     SPLIT: [0, 1],
     SUBSTITUTE: [0, 1, 2],
+    TEXT: [1],
     TRIM: [0],
     UNICODE: [0],
     UPPER: [0],

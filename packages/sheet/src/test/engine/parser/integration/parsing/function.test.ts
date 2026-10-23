@@ -37,6 +37,7 @@ describe('.parse() function', () => {
         expect(parser!.parse('LEFT("abc",)')).toMatchObject({ error: null, result: '' });
         expect(parser!.parse('SUBSTITUTE("abc","a",)')).toMatchObject({ error: null, result: 'bc' });
         expect(parser!.parse('CONCATENATE("a",,"b")')).toMatchObject({ error: null, result: 'ab' });
+        expect(parser!.parse('TEXT(5,)')).toEqual(parser!.parse('TEXT(5,"")'));
     });
 
     test('empty parentheses are no arguments, not one empty one', () => {
