@@ -703,12 +703,19 @@ export class Mount {
             const set = { updatedAt: new Date(), ...values };
             const targetParentId = updates.parentId;
             try {
-                if (targetParentId === undefined) {
+                if (updates.name === undefined && targetParentId === undefined) {
                     await this.db.update(paths).set(set).where(eq(paths.id, pathId));
                 } else {
-                    // One sync transaction: no raced opposite move lands between the check and the UPDATE.
+                    // One sync transaction: no raced trash or opposite move lands between the checks and the UPDATE.
+                    // A trash that committed while this waited keeps its row: on `local` a move would carry it out of .trash/.
                     this.db.transaction((tx) => {
-                        this.assertNotOwnAncestorInTx(tx, pathId, targetParentId);
+                        const row = tx
+                            .select({ trashedAt: paths.trashedAt })
+                            .from(paths)
+                            .where(eq(paths.id, pathId))
+                            .get();
+                        if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
+                        if (targetParentId !== undefined) this.assertNotOwnAncestorInTx(tx, pathId, targetParentId);
                         tx.update(paths).set(set).where(eq(paths.id, pathId)).run();
                     });
                 }
