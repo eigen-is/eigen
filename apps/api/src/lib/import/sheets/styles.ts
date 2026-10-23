@@ -12,7 +12,7 @@ import { readColorScheme, SCHEME_SLOTS } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
-import { maxDigitWidth } from '../../document/spreadsheetml';
+import { BUILTIN_NUMBER_FORMATS, MAX_NUMBER_FORMAT_LENGTH, maxDigitWidth } from '../../document/spreadsheetml';
 import { IMPORT_MESSAGES } from '../messages';
 
 // The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
@@ -62,45 +62,11 @@ const BORDER_STYLE_MAP = new Map<string, number>(
     Object.entries(BORDER_STYLES).map(([ord, { name }]) => [name, Number(ord)]),
 );
 
-// ECMA-376 § 18.8.30's built-in formats that name one code whatever the locale.
-const BUILTIN_FORMATS = new Map<number, string>([
-    [0, 'General'],
-    [1, '0'],
-    [2, '0.00'],
-    [3, '#,##0'],
-    [4, '#,##0.00'],
-    [9, '0%'],
-    [10, '0.00%'],
-    [11, '0.00E+00'],
-    [12, '# ?/?'],
-    [13, '# ??/??'],
-    [14, 'mm-dd-yy'],
-    [15, 'd-mmm-yy'],
-    [16, 'd-mmm'],
-    [17, 'mmm-yy'],
-    [18, 'h:mm AM/PM'],
-    [19, 'h:mm:ss AM/PM'],
-    [20, 'h:mm'],
-    [21, 'h:mm:ss'],
-    [22, 'm/d/yy h:mm'],
-    [37, '#,##0 ;(#,##0)'],
-    [38, '#,##0 ;[Red](#,##0)'],
-    [39, '#,##0.00 ;(#,##0.00)'],
-    [40, '#,##0.00 ;[Red](#,##0.00)'],
-    [45, 'mm:ss'],
-    [46, '[h]:mm:ss'],
-    [47, 'mmss.0'],
-    [48, '##0.0E+0'],
-    [49, '@'],
-]);
-
 export const NO_LOOK: Look = { cell: {}, font: {}, aligned: false, isDate: false };
 
-// Excel's own limits are a format of 255 characters and 250 of the workbook's own. A format's date test and canonical
-// form cost per character, and so does every display through it: a longer one reads as General, and cell formats that
-// name more formats than four times Excel's allowance are refused. The corpus's longest is 76 characters, its most
-// formats 126.
-const MAX_NUMBER_FORMAT_LENGTH = 255;
+// Excel allows a workbook 250 formats of its own. A format's date test and canonical form cost per character, and so
+// does every display through it: one past Excel's length reads as General, and cell formats that name more formats
+// than four times Excel's allowance are refused. The corpus's longest is 76 characters, its most formats 126.
 const MAX_NUMBER_FORMATS = 1000;
 
 export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePalette): Look[] {
@@ -108,7 +74,7 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
         const parent = styleSheet && xmlChild(styleSheet, SML_NS, group);
         return parent ? xmlChildren(parent, SML_NS, item) : [];
     };
-    const formats = new Map(BUILTIN_FORMATS);
+    const formats = new Map(BUILTIN_NUMBER_FORMATS);
     for (const numFmt of list('numFmts', 'numFmt')) {
         const code = xmlAttr(numFmt, '', 'formatCode');
         if (code) formats.set(Number(xmlAttr(numFmt, '', 'numFmtId')), code);

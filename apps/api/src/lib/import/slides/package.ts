@@ -1,10 +1,11 @@
 import type { NewVectorElement } from '@workspace/lib/vector';
+import { THEME_TYPE } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../core/ooxml';
 import { chartPart } from '../../core/ooxml-chart';
 import { openPackage, optional, type Relationship, relOfType, relTarget } from '../../core/opc';
 import type { XmlElement } from '../../core/xml';
-import { PML, PRESENTATION_TYPE, THEME_TYPE } from '../../document/presentationml';
+import { PML, PRESENTATION_TYPE } from '../../document/presentationml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { IMPORT_MESSAGES, SAVE_AS_PPTX } from '../messages';

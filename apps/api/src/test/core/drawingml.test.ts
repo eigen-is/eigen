@@ -7,9 +7,10 @@ import {
     readColorMap,
     readColorScheme,
     SCHEME_SLOTS,
+    themeXml,
 } from '../../lib/core/drawingml';
 import { A_NS, parseOoxml } from '../../lib/core/ooxml';
-import { xmlElements } from '../../lib/core/xml';
+import { xmlAttr, xmlChild, xmlElements } from '../../lib/core/xml';
 
 const STRICT_A = 'http://purl.oclc.org/ooxml/drawingml/main';
 
@@ -65,6 +66,20 @@ describe("a theme's colour scheme", () => {
             `<a:theme xmlns:a="${A_NS}"><a:themeElements><a:clrScheme><a:dk1/><a:accent1><a:srgbClr val="nothex"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2></a:clrScheme></a:themeElements></a:theme>`,
         );
         expect(Object.fromEntries(readColorScheme(partial ?? undefined))).toEqual({ accent2: '#ed7d31' });
+    });
+});
+
+describe('the theme the writers write', () => {
+    test('reads back as every slot, its major and minor font the document font', () => {
+        const written = parseOoxml(themeXml('A & B'));
+        expect([...readColorScheme(written ?? undefined).keys()]).toEqual([...SCHEME_SLOTS]);
+        const elements = written && xmlChild(written, A_NS, 'themeElements');
+        const fonts = elements && xmlChild(elements, A_NS, 'fontScheme');
+        for (const name of ['majorFont', 'minorFont']) {
+            const font = fonts && xmlChild(fonts, A_NS, name);
+            const latin = font && xmlChild(font, A_NS, 'latin');
+            expect(latin && xmlAttr(latin, '', 'typeface')).toBe('A & B');
+        }
     });
 });
 

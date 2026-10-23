@@ -1,3 +1,4 @@
+import type { EigenFont } from '@workspace/lib/constants/fonts';
 import { SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 
 // Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
@@ -71,6 +72,59 @@ export function columnWidthToPx(width: number, digit: number): number {
 
 export function pxToColumnWidth(px: number, digit: number): number {
     return Math.trunc((px * 256) / digit) / 256;
+}
+
+// Excel's limits on a formula's characters and a number format's.
+export const MAX_FORMULA_LENGTH = 8192;
+export const MAX_NUMBER_FORMAT_LENGTH = 255;
+
+// ECMA-376 § 18.8.30's built-in formats that name one code whatever the locale.
+export const BUILTIN_NUMBER_FORMATS = new Map<number, string>([
+    [0, 'General'],
+    [1, '0'],
+    [2, '0.00'],
+    [3, '#,##0'],
+    [4, '#,##0.00'],
+    [9, '0%'],
+    [10, '0.00%'],
+    [11, '0.00E+00'],
+    [12, '# ?/?'],
+    [13, '# ??/??'],
+    [14, 'mm-dd-yy'],
+    [15, 'd-mmm-yy'],
+    [16, 'd-mmm'],
+    [17, 'mmm-yy'],
+    [18, 'h:mm AM/PM'],
+    [19, 'h:mm:ss AM/PM'],
+    [20, 'h:mm'],
+    [21, 'h:mm:ss'],
+    [22, 'm/d/yy h:mm'],
+    [37, '#,##0 ;(#,##0)'],
+    [38, '#,##0 ;[Red](#,##0)'],
+    [39, '#,##0.00 ;(#,##0.00)'],
+    [40, '#,##0.00 ;[Red](#,##0.00)'],
+    [45, 'mm:ss'],
+    [46, '[h]:mm:ss'],
+    [47, 'mmss.0'],
+    [48, '##0.0E+0'],
+    [49, '@'],
+]);
+
+// A font's category as styles.xml's <family> numbers it (ECMA-376 Part 1 § 18.8.18).
+export const FONT_FAMILY_NUMBER: Record<EigenFont['category'], number> = {
+    serif: 1,
+    'sans-serif': 2,
+    monospace: 3,
+    'hand-drawn': 4,
+};
+
+// A character XML can't hold is written _xHHHH_, and _x005F_ escapes the underscore of a literal one.
+const ESCAPED = /_x([0-9A-Fa-f]{4})_/g;
+
+export function decodeEscapes(text: string): string {
+    return text.includes('_x')
+        ? text.replace(ESCAPED, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
+        : text;
 }
 
 // A number as a rule's operand holds it, unquoted; anything else is a reference, a function or a quoted string.

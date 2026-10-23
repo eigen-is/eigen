@@ -1,4 +1,4 @@
-import { EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { pxToPt } from '@workspace/lib/docs/eigendoc';
 import {
     BORDER_STYLES,
@@ -43,6 +43,7 @@ import {
     DV_XLSX_DATE_OPERATOR,
     DV_XLSX_OPERATOR,
     EXCEL_EPOCH_MS,
+    FONT_FAMILY_NUMBER,
     NUMERIC,
     pxToColumnWidth,
     withFuturePrefixes,
@@ -51,14 +52,6 @@ import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-styl
 
 // Sheet[] -> XLSX workbook bytes. Runs in the transform process (child.ts owns execution, export-document.ts the
 // orchestration), so it never reaches the Mount.
-
-// A font's category as styles.xml's <family> numbers it (ECMA-376 Part 1 § 18.8.18).
-const FONT_FAMILY_NUMBER: Record<EigenFont['category'], number> = {
-    serif: 1,
-    'sans-serif': 2,
-    monospace: 3,
-    'hand-drawn': 4,
-};
 
 const DEFAULT_FONT_XML = `<font><color theme="1"/><family val="${FONT_FAMILY_NUMBER[SHEET_DEFAULT_FONT.category]}"/><sz val="${SHEET_DEFAULT_FONT_SIZE}"/><name val="${escapeXml(SHEET_DEFAULT_FONT.name)}"/></font>`;
 
