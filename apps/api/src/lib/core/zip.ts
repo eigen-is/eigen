@@ -1,4 +1,4 @@
-import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import { constants, deflateRawSync, inflateRawSync } from 'node:zlib';
 import { ApiError, isOutOfMemory } from './errors';
 
 // What OOXML packages use: stored and deflated entries, ZIP64, one disk. The directory's sizes are capped
@@ -270,12 +270,18 @@ function findExtra(
     return undefined;
 }
 
-export type ZipWriteEntry = { name: string; data: Uint8Array | string; store?: boolean };
+// A part too large to hold whole may come as chunks, pulled when the writer reaches it.
+export type ZipWriteEntry = {
+    name: string;
+    data: Uint8Array | string | (() => Iterable<Uint8Array | string>);
+    store?: boolean;
+};
 
 const utf8Encoder = new TextEncoder();
 // Every entry is dated the DOS epoch, 1 January 1980 at midnight, so one input always zips to the same bytes.
 const DOS_TIME = 0;
 const DOS_DAY = (1 << 5) | 1;
+const EMPTY_FINAL_BLOCK = new Uint8Array([0x03, 0x00]);
 
 // Deflates unless `store`. No ZIP64: past 4 GB or 65,534 entries it throws, as a sentinel value would need one.
 export function writeZip(files: Iterable<ZipWriteEntry>): Uint8Array {
@@ -287,10 +293,10 @@ export function writeZip(files: Iterable<ZipWriteEntry>): Uint8Array {
         if (names.has(file.name)) throw new Error(`${file.name} is zipped twice`);
         names.add(file.name);
         const name = utf8Encoder.encode(file.name);
-        const data = typeof file.data === 'string' ? utf8Encoder.encode(file.data) : file.data;
-        const body = file.store ? data : deflateRawSync(data);
-        const localSize = 30 + name.length + body.length;
-        if (name.length > MAX16 || data.length >= MAX32 || offset + localSize >= MAX32 || names.size >= MAX16) {
+        const { body, size, crc32 } = entryBody(file);
+        const compressedSize = body.reduce((sum, chunk) => sum + chunk.length, 0);
+        const localSize = 30 + name.length + compressedSize;
+        if (name.length > MAX16 || size >= MAX32 || offset + localSize >= MAX32 || names.size >= MAX16) {
             throw new Error('The zip needs ZIP64');
         }
         const flags = name.some((byte) => byte > 0x7f) ? UTF8_FLAG : 0;
@@ -300,13 +306,13 @@ export function writeZip(files: Iterable<ZipWriteEntry>): Uint8Array {
             [file.store ? 0 : 8, 2],
             [DOS_TIME, 2],
             [DOS_DAY, 2],
-            [Bun.hash.crc32(data), 4],
-            [body.length, 4],
-            [data.length, 4],
+            [crc32, 4],
+            [compressedSize, 4],
+            [size, 4],
             [name.length, 2],
             [0, 2],
         ];
-        chunks.push(record([[LOCAL, 4], ...shared], name), body);
+        chunks.push(record([[LOCAL, 4], ...shared], name), ...body);
         central.push(record([[CENTRAL, 4], [20, 2], ...shared, [0, 2], [0, 2], [0, 2], [0, 4], [offset, 4]], name));
         offset += localSize;
     }
@@ -330,6 +336,34 @@ export function writeZip(files: Iterable<ZipWriteEntry>): Uint8Array {
         at += chunk.length;
     }
     return out;
+}
+
+// libdeflate can't stream, and holding a 4M-cell sheet whole for it costs 0.4 GB, so chunks go through zlib.
+function entryBody(file: ZipWriteEntry): { body: Uint8Array[]; size: number; crc32: number } {
+    if (typeof file.data !== 'function') {
+        const data = typeof file.data === 'string' ? utf8Encoder.encode(file.data) : file.data;
+        const body = file.store
+            ? data
+            : Bun.deflateSync(onArrayBuffer(data) ? data : data.slice(), { library: 'libdeflate' });
+        return { body: [body], size: data.length, crc32: Bun.hash.crc32(data) };
+    }
+    const body: Uint8Array[] = [];
+    let size = 0;
+    let crc32 = 0;
+    for (const chunk of file.data()) {
+        const data = typeof chunk === 'string' ? utf8Encoder.encode(chunk) : chunk;
+        size += data.length;
+        crc32 = Bun.hash.crc32(data, crc32);
+        // A sync flush ends each chunk on a byte boundary, so the next deflate continues the stream.
+        body.push(file.store ? data : deflateRawSync(data, { finishFlush: constants.Z_SYNC_FLUSH }));
+    }
+    if (!file.store) body.push(EMPTY_FINAL_BLOCK);
+    return { body, size, crc32 };
+}
+
+// Bun's types take no view of a SharedArrayBuffer, which no entry is.
+function onArrayBuffer(data: Uint8Array): data is Uint8Array<ArrayBuffer> {
+    return data.buffer instanceof ArrayBuffer;
 }
 
 type Field = [value: number, width: 2 | 4];

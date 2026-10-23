@@ -831,8 +831,9 @@ const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efa
 // paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '5cb21d5397765e68a4c13d2274e99d1606d7dbc725d16f3a1627141108059f05';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'ae55c6039177891ead1c5977dfaeebc124627658dd346940818423882d36625f';
-// The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image.
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
+// The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
+// libdeflate.
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '02981966a4877d645e6f9b188e3bd4d98699edb69b5794ff3fc7619201042d37';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
 // The two exports embed canvas-text.css whole, its comments too, so they last moved with its header comment.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';

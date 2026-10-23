@@ -187,8 +187,9 @@ export function relationshipsXml(relationships: Relationship[]): string {
     return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
 }
 
-// A format's XML part: its path, its XML and, unless an extension's Default covers it, its content type.
-export type PackagePart = [path: string, xml: string, contentType?: string];
+// A format's XML part: its path, its XML whole or as chunks (core/zip) and, unless an extension's Default covers it, its
+// content type.
+export type PackagePart = [path: string, xml: string | (() => Iterable<string>), contentType?: string];
 
 const XML_DECLARATION = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
@@ -238,7 +239,16 @@ export function writePackage({
             name: '[Content_Types].xml',
             data: `${XML_DECLARATION}<Types xmlns="${CONTENT_TYPES_NS}">${types.join('')}</Types>`,
         },
-        ...all.map(([name, xml]) => ({ name, data: `${XML_DECLARATION}${xml}` })),
+        ...all.map(([name, xml]) => ({
+            name,
+            data:
+                typeof xml === 'string'
+                    ? `${XML_DECLARATION}${xml}`
+                    : function* () {
+                          yield XML_DECLARATION;
+                          yield* xml();
+                      },
+        })),
         ...files,
     ]);
 }

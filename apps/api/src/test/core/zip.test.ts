@@ -911,6 +911,35 @@ describe('writeZip', () => {
         }
     });
 
+    test('deflates a whole entry with libdeflate', () => {
+        const data = bytesOf(`<sheetData>${'<row r="1"><c r="A1"><v>1</v></c></row>'.repeat(2000)}</sheetData>`);
+        const entry = openZip(writeZip([{ name: 'sheet.xml', data }])).entry('sheet.xml');
+        expect(entry?.compressedSize).toBe(Bun.deflateSync(data, { library: 'libdeflate' }).length);
+    });
+
+    test('deflates an entry given as chunks one at a time, its CRC carried across them', async () => {
+        const chunks = ['<sheetData>', bytesOf('<row r="1"/>'.repeat(5000)), '', 'Ünïcode — text', '</sheetData>'];
+        const whole = Buffer.concat(chunks.map(bytesOf));
+        const chunked = [
+            { name: 'sheet.xml', data: () => chunks },
+            { name: 'stored.xml', data: () => chunks, store: true },
+            { name: 'empty.xml', data: () => [] },
+        ];
+        const bytes = writeZip(chunked);
+        const zip = openZip(bytes);
+        const jszip = await JSZip.loadAsync(bytes);
+        for (const [name, data] of [
+            ['sheet.xml', whole],
+            ['stored.xml', whole],
+            ['empty.xml', Buffer.alloc(0)],
+        ] as const) {
+            expect(Buffer.from(zip.read(name) ?? [])).toEqual(data);
+            expect(Buffer.from((await jszip.file(name)?.async('uint8array')) ?? [])).toEqual(data);
+        }
+        expect(zip.entry('sheet.xml')?.method).toBe(8);
+        expect(zip.entry('stored.xml')?.method).toBe(0);
+    });
+
     test('flags a non-ASCII name as UTF-8', () => {
         expect(Buffer.from(writeZip([{ name: 'café.png', data: '' }])).readUInt16LE(6)).toBe(0x0800);
         expect(Buffer.from(writeZip([{ name: 'cafe.png', data: '' }])).readUInt16LE(6)).toBe(0);
