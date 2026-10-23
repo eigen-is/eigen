@@ -265,11 +265,36 @@ describe('isCheckboxClick', () => {
     // A cell without its own alignment centres the 10px box, at x 31..41, y 5..15.
     const box = cellTextBox(0, 0, 74, 20);
 
-    // As Google centres it: ticked, unticked and empty boxes sit in one place, unless the cell has its own alignment.
-    test('a tick box is centred unless its cell is aligned', () => {
-        const ticked = { v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } };
-        expect([ticked, { ...ticked, v: false, m: 'FALSE' }, null, {}].map(checkboxAlign)).toEqual([0, 0, 0, 0]);
-        expect([1, 2, 0].map((ht) => checkboxAlign({ ...ticked, ht }))).toEqual([1, 2, 0]);
+    // As Google centres it: ticked, unticked and empty boxes sit in one place. A box with a label beside it sits left,
+    // so the label keeps the cell's width; the cell's own alignment places either.
+    const YES_NO: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
+    const ticked = { v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } };
+    test('a tick box drawn alone is centred, one with a label left, unless its cell is aligned', () => {
+        const alone = [
+            [ticked, 'TRUE'],
+            [{ ...ticked, v: false, m: 'FALSE' }, 'FALSE'],
+            [null, null],
+            [{}, ''],
+        ] as const;
+        expect(alone.map(([cell, value]) => checkboxAlign(cell, TICK_BOX, value))).toEqual([0, 0, 0, 0]);
+        expect(checkboxAlign({ v: 'Done', m: 'Done' }, TICK_BOX, 'Done')).toBe(1);
+        // A rule with its own values labels every box, so an empty one stays in its column.
+        expect(checkboxAlign({ v: 'Yes', m: 'Yes' }, YES_NO, 'Yes')).toBe(1);
+        expect(checkboxAlign(null, YES_NO, null)).toBe(1);
+        expect([1, 2, 0].map((ht) => checkboxAlign({ ...ticked, ht }, TICK_BOX, 'TRUE'))).toEqual([1, 2, 0]);
+        expect([1, 2, 0].map((ht) => checkboxAlign({ v: 'Yes', m: 'Yes', ht }, YES_NO, 'Yes'))).toEqual([1, 2, 0]);
+    });
+
+    test('a click finds a labelled box at the left, where the painter draws it', () => {
+        const ctx = tickBoxContext([
+            [{ v: 'Yes', m: 'Yes' }, null, null, null],
+            [null, null, null, null],
+            [null, null, null, null],
+            [null, null, null, null],
+        ]);
+        ctx.sheets[0].dataVerification = { '0_0': YES_NO };
+        expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(true);
+        expect(isCheckboxClick(ctx, 0, 0, box, 36, 9)).toBe(false);
     });
 
     test('places the box by the cell alignment', () => {

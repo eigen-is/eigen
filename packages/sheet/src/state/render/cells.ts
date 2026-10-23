@@ -194,7 +194,11 @@ export function nullCellRender(
         // range reads as one uniform column.
         if (rule.type === 'checkbox') {
             const verticalAlign = Number(normalizedAttr(flowdata, r, c, 'vt'));
-            drawTickBox(renderCtx, checkboxRect(box, checkboxAlign(flowdata?.[r]?.[c]), verticalAlign), false);
+            drawTickBox(
+                renderCtx,
+                checkboxRect(box, checkboxAlign(flowdata?.[r]?.[c], rule, null), verticalAlign),
+                false,
+            );
         } else if (rule.type === 'dropdown') {
             renderDropdownChevron(pass, r, c, box);
         }
@@ -377,7 +381,7 @@ export function cellRender(
         renderCtx.rect(box.left, box.top, box.width, box.height);
         renderCtx.clip();
 
-        const rect = checkboxRect(box, checkboxAlign(cell), verticalAlign);
+        const rect = checkboxRect(box, checkboxAlign(cell, rule, value), verticalAlign);
         drawTickBox(renderCtx, rect, isCheckboxChecked(rule, value));
 
         if (showsCheckboxLabel(rule, value)) {

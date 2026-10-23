@@ -153,7 +153,7 @@ Once built, the map is kept current cell by cell. Local writers register what th
 
 A typed number is stored as a number in `v`, unless the cell is text-formatted. Pasted plain text goes through the same `setCellValue` parse as typing. A formula's text result stays text (`=TEXT(5,"000")` is `"005"`). Copying a General number writes 15 significant digits (`copiedNumberText`), not the 11-character display, so a paste elsewhere keeps the precision.
 
-A cell without its own horizontal alignment takes Excel's General alignment by its value (`normalizedCellAttr` in `state/modules/cell.ts`): a number or a date right, a boolean or an error centred, text left. The painter, the text layout and the overflow read it there. A tick box is the exception: it sits where the cell's own alignment puts it, else centred, as in Google Sheets, so a ticked, an unticked and an empty cell's box sit in one place (`checkboxAlign`).
+A cell without its own horizontal alignment takes Excel's General alignment by its value (`normalizedCellAttr` in `state/modules/cell.ts`): a number or a date right, a boolean or an error centred, text left. The painter, the text layout and the overflow read it there. A tick box is the exception: it sits where the cell's own alignment puts it. Else a box drawn alone is centred, as in Google Sheets, so a ticked, an unticked and an empty cell's box sit in one place, and a box with a label beside it sits left, so the label keeps the cell's width; a rule with its own values labels every box, an empty one's included, so its column stays one (`checkboxAlign`, which the painter and the click share).
 
 ## A copy puts the cells on text/plain as TSV
 

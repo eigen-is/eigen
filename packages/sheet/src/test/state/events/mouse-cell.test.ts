@@ -39,9 +39,9 @@ function tickBoxContext(): Context {
     return ctx;
 }
 
-// A2's painted tick box. A2 spans x 0..74, y 20..40; an unaligned tick box is centred, and the vt an
+// A2's painted tick box. A2 spans x 0..74, y 20..40; an unaligned box drawn alone is centred, and the vt an
 // empty style yields is NaN, the painter's middle default.
-const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), checkboxAlign(null), Number.NaN);
+const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), checkboxAlign(null, TICK_BOX, 'FALSE'), Number.NaN);
 
 function mouseDownAt(ctx: Context, x: number, y: number) {
     const container = win.document.createElement('div') as unknown as HTMLDivElement;
