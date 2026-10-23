@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "typecheck": "bun check --no-script && bun check --no-script -p tsconfig.test.json",
     "test": "bun test"
   },
   "devDependencies": {

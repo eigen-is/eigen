@@ -118,7 +118,7 @@ Eigen sends no mail in development: the API logs each message's sender, recipien
 ```bash
 bun run lint           # Lint + format check (Biome)
 bun run lint:fix       # Auto-fix lint + format
-bun run typecheck      # Type check all packages
+bun run typecheck      # Type check all packages (bun check, the TypeScript port)
 bun run test           # Run all tests
 bun run check          # lint + typecheck + repo guards + tests (run this before submitting a PR)
 ```

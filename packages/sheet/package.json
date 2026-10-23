@@ -10,7 +10,7 @@
     "./engine/format": "./src/engine/format.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun check --no-script",
     "test": "bun test"
   },
   "dependencies": {
