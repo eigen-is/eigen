@@ -265,10 +265,8 @@ describe('writeChart with inline data', () => {
         expect(read(writeChart(spec), 'cache')).toEqual(spec);
     });
 
-    // An xlsx reads its refs first and falls back to the caches for a literal.
-    test("a literal can't be read as a range", () => {
-        expect(readChart(root(writeChart(sampleChartSpec('column'))), { theme, data: { ranges: ids } })).toEqual({
-            unsupported: { title: "Where a star's light goes", name: 'Clustered Column' },
-        });
+    test('a literal read through ranges reads as its literals', () => {
+        const spec = sampleChartSpec('column');
+        expect(read(writeChart(spec), { ranges: ids })).toEqual(spec);
     });
 });

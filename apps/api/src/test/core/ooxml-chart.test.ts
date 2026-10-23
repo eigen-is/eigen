@@ -662,7 +662,7 @@ describe('range data for a workbook', () => {
         });
     });
 
-    test('a quoted sheet name, one holding a !, a non-Latin one, relative refs and a reversed range; an unknown sheet or #REF! is no range', () => {
+    test('a quoted sheet name, one holding a !, a non-Latin one, relative refs and a reversed range; #REF! is no range, and an unknown sheet reads the caches', () => {
         const series = (f: string) =>
             `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>Lit</c:v></c:tx><c:val><c:numRef><c:f>${f}</c:f></c:numRef></c:val></c:ser></c:barChart>`;
         const values = (f: string) => {
@@ -679,30 +679,40 @@ describe('range data for a workbook', () => {
             row: [1048575, 1048575],
             column: [16383, 16383],
         });
-        expect(values('Nope!$B$2:$B$4')).toBeNull();
+        expect(byRange(space(series('Nope!$B$2:$B$4') + AXES)).data.source).toBe('inline');
         expect(values('Sheet1!#REF!')).toBeNull();
         expect(byRange(space(series('Sheet1!B2') + AXES)).data.series[0]?.name).toBe('Lit');
     });
 
-    test('a ref the model cannot hold is no spec', () => {
+    test('a ref the model cannot hold, or a literal, reads the caches instead', () => {
         const series = (f: string) =>
             `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numRef><c:f>${f}</c:f></c:numRef></c:val></c:ser></c:barChart>`;
         for (const f of ['(Sheet1!$B$2,Sheet1!$B$4)', 'Sheet1!$B:$B', 'Sheet1!$XFE$1', 'Sheet1!B0', 'B2:B4', '']) {
-            expect('unsupported' in read(space(series(f) + AXES), ranges)).toBe(true);
+            expect(byRange(space(series(f) + AXES)).data.source).toBe('inline');
         }
         const literal = `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numLit><c:ptCount val="1"/><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val></c:ser></c:barChart>`;
-        expect('unsupported' in read(space(literal + AXES), ranges)).toBe(true);
+        expect(byRange(space(literal + AXES)).data).toMatchObject({ source: 'inline', series: [{ values: [1] }] });
+    });
+
+    test('a pie over more cells than the spec holds slices for is no spec, with its caches or without', () => {
+        const pie = (cache: string) =>
+            space(
+                `<c:pieChart><c:varyColors val="1"/><c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numRef><c:f>Sheet1!$B$1:$B$2001</c:f>${cache}</c:numRef></c:val></c:ser></c:pieChart>`,
+            );
+        expect('unsupported' in read(pie(''), ranges)).toBe(true);
+        expect('unsupported' in read(pie('<c:numCache><c:ptCount val="3"/></c:numCache>'), ranges)).toBe(true);
     });
 
     // The sheet draws a row or a column of values or categories, never an area.
-    test('a values or categories ref over more than one row and column is no spec, with its title', () => {
+    test('a values or categories ref over more than one row and column reads the caches', () => {
         const head = title('Sales');
         const areaValues = space(bar().replace('Sheet1!$B$2:$B$4', 'Sheet1!$B$2:$C$4') + AXES, { head });
         const cat = strRef('Sheet1!$A$2:$B$4', CATEGORIES);
         const areaCategories = space(bar([{ idx: 0, name: 'A', values: [1, 2, 3], cat }]) + AXES, { head });
         for (const xml of [areaValues, areaCategories]) {
-            expect(read(xml, ranges)).toEqual({ unsupported: { title: 'Sales', name: 'Clustered Column' } });
-            expect('spec' in read(xml)).toBe(true);
+            const cached = read(xml);
+            expect('spec' in cached && cached.spec.title).toBe('Sales');
+            expect(read(xml, ranges)).toEqual(cached);
         }
     });
 

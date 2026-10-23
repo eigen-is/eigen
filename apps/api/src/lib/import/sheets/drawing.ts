@@ -133,18 +133,11 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
         }
     }
 
-    // By the cells it names; a ref the sheet can't follow, a literal, a defined name, several areas, an area or a sheet
-    // not in the workbook, brings the caches' numbers inline instead, which show but follow no cell.
+    // By the cells it names, else by its caches.
     function specOf(root: XmlElement): string | undefined {
         if (specs.has(root)) return specs.get(root);
-        let missed = false;
-        const ranges = (name: string) => {
-            const id = context.sheetIds.get(name.toLowerCase());
-            if (id === undefined) missed = true;
-            return id;
-        };
-        const ranged = readChart(root, { theme: context.theme, data: { ranges } });
-        const read = 'spec' in ranged && !missed ? ranged : readChart(root, { theme: context.theme, data: 'cache' });
+        const ranges = (name: string) => context.sheetIds.get(name.toLowerCase());
+        const read = readChart(root, { theme: context.theme, data: { ranges } });
         const spec = 'spec' in read ? JSON.stringify(read.spec) : undefined;
         specs.set(root, spec);
         return spec;

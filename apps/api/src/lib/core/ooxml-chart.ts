@@ -28,7 +28,9 @@ import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, x
 // A DrawingML chart part, c:chartSpace, the same in a docx, an xlsx and a pptx, read into a ChartSpec. A chart the spec
 // can't draw as the file does is no spec, with its title for the caller to show instead: never a different chart.
 
-// docx and pptx draw from the caches, which hold every value; an xlsx's refs name its own sheets, by the importer's ids.
+// docx and pptx draw from the caches, which hold every value; an xlsx's refs name its own sheets, by the importer's ids,
+// and a ref they can't follow (a literal, a defined name, several areas, an area, a sheet not in the workbook) brings the
+// caches' numbers inline instead, which show but follow no cell.
 export type ChartSource = 'cache' | { ranges: (sheetName: string) => string | undefined };
 
 // name is PowerPoint's for the chart's type, as Insert Chart lists it (Clustered Column, Pie of Pie, Combo), or none.
@@ -114,6 +116,8 @@ export const LEGEND_BY_POSITION: ReadonlyMap<string, LegendPosition> = new Map<s
 const alternative = alternativeFor(new Set(['c', 'a', 'r']));
 
 const UNSUPPORTED = new Error('unsupported chart');
+// More points than the spec holds: no spec from the caches either.
+const TOO_MANY_POINTS = new Error('too many chart points');
 
 function unsupported(): never {
     throw UNSUPPORTED;
@@ -131,9 +135,10 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
         const spec = parseChartSpec(
             JSON.stringify({ ...chartSpec(chart, plotArea, group, colors, data), title, fontFamily: chartFont(root) }),
         );
-        if (spec) return { spec };
+        return spec ? { spec } : unsupported();
     } catch (error) {
-        if (error !== UNSUPPORTED) throw error;
+        if (error !== UNSUPPORTED && error !== TOO_MANY_POINTS) throw error;
+        if (error === UNSUPPORTED && data !== 'cache') return readChart(root, { theme, data: 'cache' });
     }
     return { unsupported: { title, name: chartName(groups) } };
 }
@@ -230,7 +235,7 @@ function chartSpec(
     };
     const slices = (total: number): ChartSpec['sliceColors'] => {
         if (type !== 'pie' || !first) return [];
-        if (total > MAX_CHART_POINTS) unsupported();
+        if (total > MAX_CHART_POINTS) throw TOO_MANY_POINTS;
         const points = new Map<number, string>();
         for (const point of children(first, 'dPt')) {
             const index = count(val(child(point, 'idx')));
@@ -439,7 +444,7 @@ function cachedPoints(cache: XmlElement | undefined): (string | undefined)[] {
         total = 0;
         for (const point of points) total = Math.max(total, (count(xmlAttr(point, '', 'idx')) ?? -1) + 1);
     }
-    if (total > MAX_CHART_POINTS) unsupported();
+    if (total > MAX_CHART_POINTS) throw TOO_MANY_POINTS;
     const values = new Array<string | undefined>(total).fill(undefined);
     for (const point of points) {
         const index = count(xmlAttr(point, '', 'idx'));
@@ -462,8 +467,8 @@ function cellRange(formula: string, sheetId: (sheetName: string) => string | und
         Math.max(range.start.col, range.end.col),
     ];
     if (rows[1] >= REFERENCE_ROW_COUNT || columns[1] >= REFERENCE_COLUMN_COUNT) unsupported();
-    const id = sheetId(unquoteSheetName(formula.slice(0, bang)));
-    return id === undefined ? null : { sheetId: id, row: rows, column: columns };
+    const id = sheetId(unquoteSheetName(formula.slice(0, bang))) ?? unsupported();
+    return { sheetId: id, row: rows, column: columns };
 }
 
 // An element's children in the chart namespace, an mc:AlternateContent read as the choice this reader understands.
