@@ -109,7 +109,7 @@ export function FileMenu({
                 )}
 
                 {/* Section 2: Export & Rename */}
-                {(canDownload || canWrite) && <DropdownMenuSeparator />}
+                <DropdownMenuSeparator />
                 {canDownload && (
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
@@ -146,7 +146,7 @@ export function FileMenu({
                 )}
 
                 {/* Section 4: Version history & Print */}
-                {(canWrite || children) && <DropdownMenuSeparator />}
+                <DropdownMenuSeparator />
                 {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
                 {children}
 

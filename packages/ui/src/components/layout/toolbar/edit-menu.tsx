@@ -59,9 +59,9 @@ export function EditMenu({
                     {children}
                 </>
             )}
-            {canEdit && selectionItems && <DropdownMenuSeparator />}
+            <DropdownMenuSeparator />
             {selectionItems}
-            {(canEdit || selectionItems) && docSearchBar && <DropdownMenuSeparator />}
+            <DropdownMenuSeparator />
             {docSearchBar && (
                 <DropdownMenuItem
                     onClick={() => {

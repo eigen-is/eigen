@@ -2,6 +2,7 @@
 // Tools reaches everyone, viewers included.
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { collapseSeparators } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 const window = installHappyDom();
@@ -91,11 +92,13 @@ const menuItems = () => [...document.querySelectorAll('[role="menuitem"]')].map(
 
 // The last-opened menu's items in order, a separator as '—'.
 const openMenuEntries = () =>
-    [
-        ...([...document.querySelectorAll('[role="menu"]')]
-            .at(-1)
-            ?.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="separator"]') ?? []),
-    ].map((entry) => (entry.getAttribute('role') === 'separator' ? '—' : entry.textContent?.trim()));
+    collapseSeparators(
+        [
+            ...([...document.querySelectorAll('[role="menu"]')]
+                .at(-1)
+                ?.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="separator"]') ?? []),
+        ].map((entry) => (entry.getAttribute('role') === 'separator' ? '—' : entry.textContent?.trim())),
+    );
 
 // A menu trigger by its text, or by its name when it is an icon.
 const menuTrigger = (label: string) =>
@@ -1056,12 +1059,16 @@ test('Mod+Shift+C opens the word count, for a viewer too', async () => {
 // Google Docs' Edit menu, Paste aside: Cut and Copy, then Select all and Delete, each group set apart.
 const editEntries = async () => {
     await openMenu('Edit');
-    return openMenuEntries().map((entry, index) => {
-        const item = [...document.querySelectorAll('[role="menu"]')]
-            .at(-1)
-            ?.querySelectorAll('[role="menuitem"], [role="separator"]')[index];
-        return item?.hasAttribute('data-disabled') ? `${entry} (disabled)` : entry;
-    });
+    const items = [...document.querySelectorAll('[role="menu"]')]
+        .at(-1)
+        ?.querySelectorAll('[role="menuitem"], [role="separator"]');
+    return collapseSeparators(
+        [...(items ?? [])].map((item) =>
+            item.getAttribute('role') === 'separator'
+                ? '—'
+                : `${item.textContent?.trim()}${item.hasAttribute('data-disabled') ? ' (disabled)' : ''}`,
+        ),
+    );
 };
 
 const TWO_WORDS = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello world' }] }] };
