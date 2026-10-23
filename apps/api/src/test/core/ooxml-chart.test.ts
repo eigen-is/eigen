@@ -516,6 +516,13 @@ describe('the title', () => {
         expect(spec(space(bar() + AXES, { head: lines })).title).toBe('From cell');
     });
 
+    test("a literal title's and a series name's line breaks are a space each, a Windows one too", () => {
+        const named = bar([{ idx: 0, name: 'Plan&#13;&#10;2024', values: [1] }]);
+        expect(spec(space(named + AXES)).data.series[0]?.name).toBe('Plan 2024');
+        const literal = '<c:title><c:tx><c:v>From&#13;&#10;Excel&#13;old&#10;Mac</c:v></c:tx></c:title>';
+        expect(spec(space(bar() + AXES, { head: literal })).title).toBe('From Excel old Mac');
+    });
+
     test('a title with no text is the series name for one series, Chart Title for more', () => {
         const auto = '<c:title><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>';
         expect(spec(space(bar(one) + AXES, { head: auto })).title).toBe('Revenue');

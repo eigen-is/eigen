@@ -424,7 +424,7 @@ function cachedText(tx: XmlElement | undefined): string | undefined {
     const literal = child(tx, 'v');
     const points = children(child(child(tx, 'strRef'), 'strCache'), 'pt');
     const text = literal ? xmlText(literal) : points.map((point) => xmlTrimmedText(child(point, 'v'))).join(' ');
-    return text.replace(/[\r\n]/g, ' ');
+    return text.replace(/\r?\n|\r/g, ' ');
 }
 
 // A c:cat's or c:val's point container: a ref's cache or a literal.
