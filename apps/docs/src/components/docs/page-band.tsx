@@ -117,17 +117,25 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
                     </div>
                 );
             })}
+            {/* On hover it can't take room as a band does, so it fills the margin, and the space before it, the band's
+                distance, gives way where a line doesn't fit after it: it never covers the body. */}
             {onEnter && !roots.some(shows) && (
-                <span
-                    className="pointer-events-none absolute text-xs text-muted-foreground invisible pointer-fine:group-hover:visible"
-                    style={
-                        edge === 'header'
-                            ? { top: `${distance}mm`, left: `${left}mm` }
-                            : { bottom: `${distance}mm`, left: `${left}mm` }
-                    }
+                <div
+                    data-band-hint
+                    className={cn(
+                        'pointer-events-none absolute flex overflow-hidden text-xs text-muted-foreground invisible pointer-fine:group-hover:visible',
+                        edge === 'header' ? 'flex-col' : 'flex-col-reverse',
+                    )}
+                    style={{
+                        [edge === 'header' ? 'top' : 'bottom']: 0,
+                        height: `${room}mm`,
+                        left: `${left}mm`,
+                        right: `${right}mm`,
+                    }}
                 >
-                    Double-click to add a {edge}
-                </span>
+                    <div style={{ flexBasis: `${distance}mm` }} />
+                    <span>Double-click to add a {edge}</span>
+                </div>
             )}
         </div>
     );
