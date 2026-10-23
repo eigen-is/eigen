@@ -3,7 +3,6 @@ import { parseChartSpec } from '@workspace/lib/charts';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
-import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
 import { appendSheetsToYjs, readSheetsFromDoc, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
@@ -12,6 +11,7 @@ import { importIntoDocument } from '../../lib/import/import-document';
 import type { Mount } from '../../lib/mount';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
 import { readPersistedDoc } from '../fixtures/transform-results';
+import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
 // Persisted workbook → Sheet[] plus whether recalc fell back, the way every reader
@@ -671,18 +671,26 @@ describe('document/sheets — patch op replay', () => {
     });
 
     test('xlsx import e2e: formula-only cells get engine-computed v/m persisted; volatile stays empty', async () => {
-        // Generator-blank case: exceljs writes formula-only cells (no cached
-        // result) when `result` is omitted. Driven through the real import seam
+        // Generator-blank case: a generator writes formula-only cells (no cached
+        // result). Driven through the real import seam
         // (importIntoDocument — the same call routes/drive.ts's /import makes),
         // so this covers xlsxToSheets → recalcSheets → writeSheetsToYjs end to end.
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Sheet1');
-        worksheet.getCell('A1').value = 10;
-        worksheet.getCell('A2').value = 32;
-        worksheet.getCell('B1').value = { formula: 'A1+A2' };
-        worksheet.getCell('B2').value = { formula: 'SUM(A1:A2)*2' };
-        worksheet.getCell('C1').value = { formula: 'NOW()' };
-        const buffer = Buffer.from(new Uint8Array(await workbook.xlsx.writeBuffer()));
+        const buffer = Buffer.from(
+            xlsxFixture({
+                sheets: [
+                    {
+                        name: 'Sheet1',
+                        data: rowsXml([
+                            ['A1', 10],
+                            ['A2', 32],
+                            ['B1', { formula: 'A1+A2' }],
+                            ['B2', { formula: 'SUM(A1:A2)*2' }],
+                            ['C1', { formula: 'NOW()' }],
+                        ]),
+                    },
+                ],
+            }),
+        );
 
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,

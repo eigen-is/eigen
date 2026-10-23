@@ -85,6 +85,7 @@ import {
     previewBody,
     readPersistedDoc,
 } from '../fixtures/transform-results';
+import { linkRels, OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import {
     authedRequest,
     driveGet,
@@ -567,29 +568,48 @@ const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '76fbe3b4fd94331790f9d314eed3a79d1133686b6
 // import recalc must correct, styles, a date format, a merge, a column width, a
 // second sheet and a hyperlink.
 async function buildImportFixture(): Promise<ArrayBuffer> {
-    const workbook = new ExcelJS.Workbook();
-    const data = workbook.addWorksheet('Data');
-    data.getCell('A1').value = 'Region';
-    data.getCell('B1').value = 'Count';
-    data.getCell('A2').value = 'North';
-    data.getCell('B2').value = 42;
-    data.getCell('A3').value = 'South';
-    data.getCell('B3').value = 7;
-    data.getCell('B4').value = { formula: 'SUM(B2:B3)', result: 999 };
-    data.getCell('A1').font = { bold: true, color: { argb: 'FF0000FF' } };
-    data.getCell('B1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
-    const dated = data.getCell('C2');
-    dated.value = new Date(Date.UTC(2024, 2, 15));
-    dated.numFmt = 'dd/mm/yyyy';
-    data.getColumn(1).width = 18;
-    data.mergeCells('A6:B6');
-    data.getCell('A6').value = 'Merged footer';
-
-    const notes = workbook.addWorksheet('Notes');
-    notes.getCell('A1').value = 'Second sheet';
-    notes.getCell('A2').value = { text: 'link', hyperlink: 'https://example.com/report' };
-
-    return toTransferableBuffer(new Uint8Array(await workbook.xlsx.writeBuffer()));
+    return toTransferableBuffer(
+        xlsxFixture({
+            colors: OFFICE_COLORS,
+            styles: styleSheet({
+                numFmts: { 164: 'dd/mm/yyyy' },
+                fonts: ['<font><b/><color rgb="FF0000FF"/></font>'],
+                fills: ['<fill><patternFill patternType="solid"><fgColor rgb="FFEEEEEE"/></patternFill></fill>'],
+                xfs: [
+                    '<xf numFmtId="0" fontId="1" fillId="0" borderId="0"/>',
+                    '<xf numFmtId="0" fontId="0" fillId="2" borderId="0"/>',
+                    '<xf numFmtId="164" fontId="0" fillId="0" borderId="0"/>',
+                ],
+            }),
+            parts: [linkRels(2, ['https://example.com/report'])],
+            sheets: [
+                {
+                    name: 'Data',
+                    before: '<cols><col min="1" max="1" width="18" customWidth="1"/></cols>',
+                    data: rowsXml([
+                        ['A1', 'Region', 1],
+                        ['B1', 'Count', 2],
+                        ['A2', 'North'],
+                        ['B2', 42],
+                        ['C2', 45366, 3], // 2024-03-15
+                        ['A3', 'South'],
+                        ['B3', 7],
+                        ['B4', { formula: 'SUM(B2:B3)', result: 999 }],
+                        ['A6', 'Merged footer'],
+                    ]),
+                    after: '<mergeCells count="1"><mergeCell ref="A6:B6"/></mergeCells>',
+                },
+                {
+                    name: 'Notes',
+                    data: rowsXml([
+                        ['A1', 'Second sheet'],
+                        ['A2', 'link'],
+                    ]),
+                    after: '<hyperlinks><hyperlink ref="A2" r:id="rId1"/></hyperlinks>',
+                },
+            ],
+        }),
+    );
 }
 
 async function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
