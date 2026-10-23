@@ -461,6 +461,61 @@ test('Clear formatting takes away every paragraph format in the selection', asyn
     expect(editor.getJSON().content?.[1]?.attrs?.['textAlign']).toBeNull();
 });
 
+// As Google's does: a comment's anchor and a link aren't formatting.
+test.each([
+    [
+        'the toolbar button',
+        async () => {
+            const button = document.querySelector<HTMLElement>(
+                '[role="toolbar"][aria-label="Formatting"] button[aria-label="Clear formatting"]',
+            );
+            await act(async () => button?.click());
+        },
+    ],
+    [
+        'Format › Clear formatting',
+        async () => {
+            await openMenu('Format');
+            await clickItem('Clear formatting');
+        },
+    ],
+])('%s keeps comments and links', async (_, clear) => {
+    const link = { type: 'link', attrs: { href: 'https://eigen.is' } };
+    const comment = { type: 'comment', attrs: { cardId: 'card-1' } };
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            {
+                type: 'heading',
+                attrs: { level: 2 },
+                content: [
+                    {
+                        type: 'text',
+                        text: 'Noted',
+                        marks: [{ type: 'bold' }, { type: 'textStyle', attrs: { color: '#ff0000' } }, comment],
+                    },
+                    { type: 'text', text: ' here', marks: [{ type: 'italic' }, link] },
+                    { type: 'equation', attrs: { mathml: '', commentCardId: 'card-2' } },
+                ],
+            },
+        ],
+    });
+    editor.commands.selectAll();
+    await render(1920, true);
+    await clear();
+    const block = editor.state.doc.firstChild;
+    expect(block?.type.name).toBe('paragraph');
+    const runs: [string, unknown[]][] = [];
+    block?.forEach((node) => {
+        runs.push([node.text ?? node.attrs['commentCardId'], node.marks.map((mark) => mark.toJSON())]);
+    });
+    expect(runs).toEqual([
+        ['Noted', [comment]],
+        [' here', [{ ...link, attrs: expect.objectContaining(link.attrs) }]],
+        ['card-2', []],
+    ]);
+});
+
 test('Custom spacing… and Indentation options… open their dialogs', async () => {
     await openSpacing(formatted({}));
     await clickItem('Custom spacing…');

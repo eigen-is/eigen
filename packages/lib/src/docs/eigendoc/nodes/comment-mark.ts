@@ -11,6 +11,8 @@ declare module '@tiptap/core' {
 
 export const CommentMarkSchema = Mark.create({
     name: 'comment',
+    // A card's anchor, not formatting: Clear formatting (`unsetAllMarks`) keeps it.
+    clearable: false,
 
     addAttributes() {
         return {

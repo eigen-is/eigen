@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, formatting, text]
 related: [docs/format-text]
 order: 60
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
 When text has accumulated bold, italic, color, font changes, or other styles you no longer want, you can strip them all in one step rather than toggling each one off individually.
@@ -19,7 +19,7 @@ Clearing formatting removes three kinds of style at once:
 - **Block styles**: titles, subtitles, headings, blockquotes, code blocks, and lists. These are converted to normal paragraphs.
 - **Paragraph formatting**: alignment, line spacing, the space before and after a paragraph, and indents. The paragraphs take the document's own.
 
-Links are also removed as part of the inline marks. If you want to keep a link, remove it separately first using the **Remove link** button.
+Links and comments stay. To remove a link as well, select it and click the **Remove link** button.
 
 ## Clear formatting with the toolbar button
 

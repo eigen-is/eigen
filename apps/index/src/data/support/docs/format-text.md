@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, formatting, fonts, font size, headings, normal text, lists, numbering, color, alignment, indent, line spacing, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-10-19
+updated: 2026-10-23
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font and its size, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.
@@ -147,6 +147,6 @@ On the first item, the whole list starts at that number. On a later item, the li
 
 ## Remove all formatting
 
-To strip every style from selected text in one step, click the **Clear formatting** button in the toolbar, or choose **Clear formatting** from the **Format** menu. This removes bold, italic, color, font changes, and any other marks, leaving plain text.
+To strip every style from selected text in one step, click the **Clear formatting** button in the toolbar, or choose **Clear formatting** from the **Format** menu. This removes bold, italic, color, font changes, and the other text styles, leaving plain text. Links and comments stay.
 
 See [Clear formatting](/support/docs/clear-formatting) for more detail on what gets removed and when to use it.
