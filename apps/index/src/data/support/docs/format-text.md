@@ -147,6 +147,6 @@ On the first item, the whole list starts at that number. On a later item, the li
 
 ## Remove all formatting
 
-To strip every style from selected text in one step, click the **Clear formatting** button in the toolbar, or choose **Clear formatting** from the **Format** menu. This removes bold, italic, color, font changes, and the other text styles, leaving plain text. Links and comments stay.
+To strip every style from selected text in one step, click the **Clear formatting** button in the toolbar, choose **Clear formatting** from the **Format** menu, or press Cmd+\\ (Mac) or Ctrl+\\ (Windows). This removes bold, italic, color, font changes, and the other text styles, leaving plain text. Links and comments stay.
 
 See [Clear formatting](/support/docs/clear-formatting) for more detail on what gets removed and when to use it.

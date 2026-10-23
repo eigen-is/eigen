@@ -238,7 +238,7 @@ export const EditorToolbar = ({
     };
 
     const clearFormatting = () => {
-        editor.chain().focus().clearNodes().unsetAllMarks().run();
+        editor.chain().focus().clearFormatting().run();
     };
 
     const handleImageFromDevice = (files: File[]) => {
@@ -525,7 +525,7 @@ export const EditorToolbar = ({
 
                                     <TooltipButton
                                         icon={RemoveFormatting}
-                                        tooltipText="Clear formatting"
+                                        tooltipText={`Clear formatting (${formatForDisplay('Mod+\\')})`}
                                         onClick={clearFormatting}
                                     />
                                 </>

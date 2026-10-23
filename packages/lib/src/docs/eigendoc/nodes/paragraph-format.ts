@@ -28,6 +28,7 @@ declare module '@tiptap/core' {
         paragraphFormat: {
             setParagraphFormat: (format: { [key in ParagraphFormatKey]?: number | null }) => ReturnType;
             stepIndent: (by: 1 | -1) => ReturnType;
+            clearFormatting: () => ReturnType;
         };
     }
 }
@@ -92,6 +93,11 @@ export const EigenParagraphFormat = Extension.create<{ types: string[]; textColu
                         });
                     return found;
                 },
+            // Every mark but a comment's and a link's, which are `clearable: false`, and every block and paragraph format.
+            clearFormatting:
+                () =>
+                ({ chain }) =>
+                    chain().clearNodes().unsetAllMarks().run(),
             // To the next multiple of Google's step within the text column, a list item a level deeper or shallower.
             // True either way, as ⌘[ is the browser's Back.
             stepIndent:
@@ -123,6 +129,7 @@ export const EigenParagraphFormat = Extension.create<{ types: string[]; textColu
         return {
             'Mod-]': () => this.editor.commands.stepIndent(1),
             'Mod-[': () => this.editor.commands.stepIndent(-1),
+            'Mod-\\': () => this.editor.commands.clearFormatting(),
         };
     },
 });

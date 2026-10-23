@@ -36,6 +36,10 @@ The **Format** menu works on any screen, also when the toolbar doesn't show the 
 2. Click the **Format** menu in the toolbar.
 3. Click **Clear formatting** at the bottom of the menu.
 
+## Clear formatting from the keyboard
+
+Press Cmd+\\ (Mac) or Ctrl+\\ (Windows and Linux). It works in the body, and in a header or footer you are editing.
+
 ## What is not removed
 
 Clearing formatting acts only on selected text. Text outside the selection is not changed. Tables and images within the selection stay in place; the command removes styles from the text around them, not the elements themselves.
