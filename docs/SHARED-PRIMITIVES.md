@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1933 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1938 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (183)
+## Components (184)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -115,6 +115,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ClipboardMenuItems` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `ContextMenuAnchor` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/context-menu-anchor.tsx |
 | `DownloadImageMenuItem` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
+| `DownloadOriginalImageMenuItem` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `MenuSections` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `ObjectContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-context-menu.tsx |
 | `OrderMenuSub` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
@@ -978,7 +979,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (991)
+## Utilities & constants (995)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1657,10 +1658,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `buildElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `canvasImageFaces` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
+| `canvasImageName` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `canvasImageScene` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `canvasPtToPx` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `canvasPxToPt` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `capabilitiesOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `chartImageName` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `chromeTransform` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `clamp` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `clampFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
@@ -1922,6 +1925,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ATTENDEE_STATUS_ICON` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
 | `ATTENDEE_STATUS_LABEL` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
 | `CHART_TYPE_OPTIONS` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-types.ts |
+| `downloadChartImage` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/download-chart-image.ts |
 | `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
@@ -1968,6 +1972,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
+| `stubCanvasImageFonts` | `@workspace/ui/test/canvas-image` | packages/ui/src/test/canvas-image.ts |
 | `drivePath` | `@workspace/ui/test/drive-path` | packages/ui/src/test/drive-path.ts |
 | `installHappyDom` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 | `collapseSeparators` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |

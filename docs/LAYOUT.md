@@ -78,13 +78,13 @@ Every right-click menu and every ⋮ menu composes `MenuSections` (`packages/ui/
 | `organize` | Move to, Copy to, Archive, labels, color, assign, resolve, hide, sort, filter, Clear contents |
 | `arrange` | A canvas object's or a sheet image's or chart's `OrderMenuSub` (Google Slides' Order ▸), a sheet tab's Move left and right |
 | `convert` | Convert to shapes, Convert to Sheet, Document or Slides |
-| `output` | Download, Export, Print, Save to Drive, Import to… |
+| `output` | Download, Export, Print, Save to Drive, Import to…; an object's Download original image and Download image |
 | `collaborate` | Add comment, Share ▸, Watch |
 | `destructive` | Delete, Move to trash, Remove…, Delete row or column |
 
 Shared rows know their group. A `FileAction` in `packages/lib/src/core/file-actions.ts` names one (`open`, `convert` or `output`), and `FileActionMenuItems` draws all three in their places, or one when the host passes `group`, as Drive does to put Quick preview by Open. The comment rows take the groups themselves on a card's own menu; in a menu about something else (a cell, an image) the host draws `part="rows"` in its collaborate group and `part="delete"` in its destructive group, so the comment's Delete sits with the cell's.
 
-`DropdownMenuSeparator` hides itself when it opens the menu, follows another separator or has no row after it. A row component may render nothing (`DownloadImageMenuItem` with no path, the comment rows for a viewer), and the separator before it then goes too, so no host writes separator logic of its own. Tests read a menu as a user sees it through `menuRows` and `collapseSeparators` in `packages/ui/src/test/menu-rows.ts`, since happy-dom draws no CSS.
+`DropdownMenuSeparator` hides itself when it opens the menu, follows another separator or has no row after it. A row component may render nothing (`DownloadOriginalImageMenuItem` with no path, `DownloadImageMenuItem` with nothing to draw, the comment rows for a viewer), and the separator before it then goes too, so no host writes separator logic of its own. Tests read a menu as a user sees it through `menuRows` and `collapseSeparators` in `packages/ui/src/test/menu-rows.ts`, since happy-dom draws no CSS.
 
 Menubar menus (File, Edit, Format) keep Google's order, which a user knows from Docs, but their destructive rows are red too.
 

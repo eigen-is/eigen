@@ -67,7 +67,7 @@ A document or a sheet has no element, so it draws through `renderChartSpecSvg` (
 
 The placeholder draws its line in Inter, since a spec that doesn't parse names no font.
 
-So previews and exports need nothing for charts. The editor's downloaded SVG, the PDF page, a deck's HTML and the preview all draw the chart through the kind, and the export sanitizer keeps every shape and label; `apps/api/src/test/export/chart-export.test.ts` proves it. The downloaded SVG embeds the faces `canvasImageFaces` collects, and each kind answers for its own elements (`fontFamilies`), so the chart kind gives the font its labels draw in without the writer asking for charts by type. A placeholder adds none, so its line falls back to the viewer's fonts unless another element embeds Inter. The live canvas loads nothing extra: the app's `@font-face` rules load a face the first time SVG text uses it.
+So previews and exports need nothing for charts. The editor's downloaded SVG, the Download image a chart's menu offers in every app, the PDF page, a deck's HTML and the preview all draw the chart through the kind, and the export sanitizer keeps every shape and label; `apps/api/src/test/export/chart-export.test.ts` proves it. The downloaded SVG embeds the faces `canvasImageFaces` collects, and each kind answers for its own elements (`fontFamilies`), so the chart kind gives the font its labels draw in without the writer asking for charts by type. A placeholder adds none, so its line falls back to the viewer's fonts unless another element embeds Inter. The live canvas loads nothing extra: the app's `@font-face` rules load a face the first time SVG text uses it.
 
 ## A doc's chart draws its look at its own size
 
