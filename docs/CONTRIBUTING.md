@@ -8,7 +8,7 @@ This page covers the ways you can help, how to get Eigen running on your own mac
 
 ## Current state
 
-A lot has happened since that first blog post. Mail, Drive, Docs, Sheets, Slides, Stickies, Calendar, Contacts, Chat, and an Admin panel are all working. Real-time collaboration, CalDAV sync, file sharing, document export, passkey login. It's a real thing now.
+A lot has happened since that first blog post. Mail, Drive, Docs, Sheets, Slides, Vector, Stickies, Calendar, Contacts, Chat, and an Admin panel are all working. Real-time collaboration, CalDAV sync, file sharing, document export, passkey login. It's a real thing now.
 
 But it's still early. Rough edges everywhere, missing features, architecture decisions that could still go either way. If you like working on something where your input actually matters, this is that kind of project.
 

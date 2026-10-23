@@ -6,10 +6,10 @@ category: Basics
 tags: [getting-started, overview, apps]
 related: [getting-started/your-first-steps, drive/get-started]
 order: 1
-updated: 2026-09-24
+updated: 2026-10-23
 ---
 
-Eigen is a self-hosted alternative to Google Workspace. Simple and secure. You control your data. Your mail, files, calendar, and more live in one place. This page is a quick tour of what Eigen is and the apps it includes.
+Eigen is a self-hosted alternative to Google Workspace. Simple and secure. You control your data. Your mail, files, calendar, and more live in one place. It syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV, and WebDAV, and it opens and saves Word, Excel, and PowerPoint files. This page is a quick tour of what Eigen is and the apps it includes.
 
 ## One workspace, your own data
 
