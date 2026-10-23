@@ -399,6 +399,8 @@ describe('a data validation', () => {
                 list('A1', "'Other Sheet'!$B$1:$B$5"),
                 list('A2', '=$C$1:$C$3'),
                 list('A3', 'MyNamedRange'),
+                // A name shaped like a cell past Excel's last column.
+                list('A8', 'UkRegion2'),
                 list('A4', '""'),
                 '<dataValidation type="custom" sqref="A5"><formula1>A5&gt;0</formula1></dataValidation>',
                 '<dataValidation sqref="A6"/>',

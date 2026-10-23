@@ -16,6 +16,7 @@ import {
     DV_XLSX_OPERATOR,
     DV_XLSX_TYPE,
     EXCEL_EPOCH_MS,
+    inExcelGrid,
     MAX_FORMULA_LENGTH,
     MAX_FORMULA_STRING_LENGTH,
     NUMERIC,
@@ -216,6 +217,8 @@ function validationOf(
 ): { type: string; operator?: string; formulas: string[] } | undefined {
     if (rule.type === 'dropdown') {
         // A range reads the same list for every cell, as the engine reads it, where Excel would shift a relative one.
+        // A ref past Excel's grid is a defined name an older import kept, which no list here resolves.
+        if (iscelldata(rule.value1) && !inExcelGrid(rule.value1)) return undefined;
         const source = iscelldata(rule.value1) ? absoluteRef(rule.value1) : quoted(rule.value1);
         return rule.value1 && fitsExcel(source) ? { type: 'list', formulas: [source] } : undefined;
     }

@@ -1,6 +1,12 @@
 import type { EigenFont } from '@workspace/lib/constants/fonts';
 import type { ConditionalFormatConditionName } from '@workspace/lib/sheets';
-import { SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
+import {
+    columnLabelToIndex,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    SHEET_DEFAULT_DIGIT_WIDTH,
+    SHEET_DEFAULT_FONT,
+} from '@workspace/lib/sheets';
 
 // Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
 // format shares is core/ooxml.ts.
@@ -87,6 +93,22 @@ export const MAX_CELL_FORMATS = 64_000;
 export const MAX_SHEET_LINKS = 65_530;
 // The characters Excel refuses in a sheet's name; it refuses a quote at either end too.
 export const SHEET_NAME_FORBIDDEN = /[\\/?*[\]:]/g;
+
+// A ref's cells, past its sheet's name, all in Excel's grid: a defined name shaped like a cell (UkRegion2) names a
+// column past XFD.
+export function inExcelGrid(ref: string): boolean {
+    return ref
+        .slice(ref.lastIndexOf('!') + 1)
+        .split(':')
+        .every((end) => {
+            const column = end.replace(/[^A-Za-z]/g, '');
+            const row = end.replace(/\D/g, '');
+            return (
+                (!column || columnLabelToIndex(column) < REFERENCE_COLUMN_COUNT) &&
+                (!row || Number(row) <= REFERENCE_ROW_COUNT)
+            );
+        });
+}
 
 // ECMA-376 § 18.8.30's built-in formats that name one code whatever the locale.
 export const BUILTIN_NUMBER_FORMATS = new Map<number, string>([

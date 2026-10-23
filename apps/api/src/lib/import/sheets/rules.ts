@@ -19,6 +19,7 @@ import {
     DV_OPERATOR,
     DV_TYPE,
     EXCEL_EPOCH_MS,
+    inExcelGrid,
     NUMERIC,
     withoutFuturePrefixes,
 } from '../../document/spreadsheetml';
@@ -382,5 +383,5 @@ function listSource(raw: string | undefined): string | null {
     const inner = unquoteXlsxLiteral(raw);
     if (inner != null) return inner.length > 0 ? inner : null;
     const ref = raw.startsWith('=') ? raw.slice(1) : raw;
-    return iscelldata(ref) ? ref : null;
+    return iscelldata(ref) && inExcelGrid(ref) ? ref : null;
 }

@@ -286,11 +286,17 @@ describe('a data validation', () => {
                 '6_0': validation({ type: 'number', type2: 'include' }),
                 '7_0': validation({ type: 'dropdown', type2: '', value1: 'x'.repeat(255), value2: '' }),
                 '8_0': validation({ type: 'number', type2: 'equal', hintShow: true, hintValue: 'p'.repeat(300) }),
+                // Shaped like a cell past Excel's last column: a defined name an older import kept.
+                '9_0': validation({ type: 'dropdown', type2: '', value1: 'UkRegion2', value2: '' }),
             },
         });
         expect(Object.keys(dataVerification ?? {})).toEqual(['7_0', '8_0']);
         expect(dataVerification?.['8_0']?.hintValue).toBe('p'.repeat(255));
-        expect(lost).toEqual([...Array(6).fill('validations-dropped'), 'validation-prompts-cut']);
+        expect(lost).toEqual([
+            ...Array(6).fill('validations-dropped'),
+            'validation-prompts-cut',
+            'validations-dropped',
+        ]);
     });
 
     test('conditional formats come before validations, as CT_Worksheet orders them', () => {
