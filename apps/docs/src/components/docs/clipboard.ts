@@ -1,6 +1,7 @@
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
+import { CHART_DEFAULT_SIZE } from '@workspace/lib/charts';
 import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
     buildChartClipboardItem,
@@ -12,7 +13,6 @@ import {
 } from '@workspace/lib/clipboard';
 import { getFontName, readCssFontSize } from '@workspace/lib/constants/fonts';
 import {
-    CHART_DEFAULT_SIZE,
     ITALIC_HEADING_LEVELS,
     ITALIC_HEADING_SELECTOR,
     PAGE_NUMBER_TEXT,

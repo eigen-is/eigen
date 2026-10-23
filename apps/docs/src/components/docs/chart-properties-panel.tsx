@@ -1,6 +1,6 @@
 import { type Editor, useEditorState } from '@tiptap/react';
-import { isSketchCapped, parseChartSpec, readChartLook } from '@workspace/lib/charts';
-import { CHART_DEFAULT_SIZE, type ChartAttrs, readChartAttrs } from '@workspace/lib/docs/eigendoc';
+import { CHART_DEFAULT_SIZE, isSketchCapped, parseChartSpec, readChartLook } from '@workspace/lib/charts';
+import { type ChartAttrs, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
     holdCapture,

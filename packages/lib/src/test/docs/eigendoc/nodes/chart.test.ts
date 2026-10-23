@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { createDocument, Editor, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
-import { CHART_MAX_SIDE, FLAT_CHART_LOOK, sampleChartSpec } from '../../../../charts';
-import { CHART_DEFAULT_SIZE, chartSvg, getDocExtensions, readChartAttrs } from '../../../../docs/eigendoc';
+import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, FLAT_CHART_LOOK, sampleChartSpec } from '../../../../charts';
+import { chartSvg, getDocExtensions, readChartAttrs } from '../../../../docs/eigendoc';
 import type { ChartLook } from '../../../../types/chart';
 import { serializeFill } from '../../../../vector/fill';
 import { installHappyDom } from '../../../happy-dom';

@@ -31,6 +31,8 @@ export const MAX_CHART_SPEC_BYTES = 64 * 1024;
 export const MAX_CHART_SERIES = 32;
 export const MAX_CHART_POINTS = 2000;
 export const MAX_CHART_LABEL_LENGTH = 200;
+// Google's inserted chart, which fits the default page's 642 px text column.
+export const CHART_DEFAULT_SIZE = { width: 600, height: 371 };
 // No chart is drawn wider or taller than the largest page, Word's 22 inches (2112 px): a side past it runs the layout
 // for seconds in every viewer and the export, and at a trillion px overflows the painter's stack.
 export const CHART_MAX_SIDE = Math.round(mmToPx(MAX_PAPER_MM));

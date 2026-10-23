@@ -1112,6 +1112,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `viewerTimeZone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `CHART_DEFAULT_SIZE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `CHART_MAX_SIDE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `CHART_MESSAGES` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `chartColor` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
@@ -1334,7 +1335,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BAND_ROOTS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `bandEdge` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `bandHasContent` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
-| `CHART_DEFAULT_SIZE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `chartSvg` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `cmText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `DEFAULT_NORMAL_STYLE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |

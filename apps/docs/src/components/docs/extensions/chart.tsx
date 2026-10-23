@@ -1,13 +1,7 @@
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
-import { parseChartSpec } from '@workspace/lib/charts';
-import {
-    CHART_DEFAULT_SIZE,
-    ChartNode,
-    chartSvg,
-    readChartAttrs,
-    setFigureAttributes,
-} from '@workspace/lib/docs/eigendoc';
+import { CHART_DEFAULT_SIZE, parseChartSpec } from '@workspace/lib/charts';
+import { ChartNode, chartSvg, readChartAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { useCallback, useMemo, useRef } from 'react';
 import {
