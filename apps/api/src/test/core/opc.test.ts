@@ -319,6 +319,19 @@ describe('a written package', () => {
     test('is the same bytes for the same input', () => {
         expect(Buffer.from(write()).equals(Buffer.from(write()))).toBe(true);
     });
+
+    test('writes a part given as chunks after its declaration', () => {
+        const bytes = writePackage({
+            main: 'doc/main.xml',
+            title: 'Report',
+            defaults: {},
+            parts: [['doc/main.xml', () => ['<main>', '<a/>', '</main>'], 'text/main']],
+            files: [],
+        });
+        expect(decoder.decode(openZip(bytes).read('doc/main.xml'))).toBe(
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<main><a/></main>',
+        );
+    });
 });
 
 function thrownBy(error: unknown): never {

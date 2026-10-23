@@ -204,6 +204,19 @@ describe('a bar chart', () => {
         expect(read.data.series.map((s) => s.color)).toEqual(['#70ad4780', ACCENTS[1], chartColor(7)]);
     });
 
+    // Eigen's writer writes an automatic colour as its palette slot's, so the round trip keeps it automatic.
+    test("a series' colour equal to the palette's at its place reads as automatic", () => {
+        const fill = (color: string) =>
+            `<c:spPr><a:solidFill><a:srgbClr val="${color.slice(1)}"/></a:solidFill></c:spPr>`;
+        const series = [
+            { idx: 0, name: 'A', values: [1], extra: fill(chartColor(0)) },
+            { idx: 1, name: 'B', values: [2], extra: fill(chartColor(0)) },
+            { idx: 2, name: 'C', values: [3], extra: fill(chartColor(2).toUpperCase()) },
+        ];
+        const read = spec(space(bar(series) + AXES));
+        expect(read.data.series.map((s) => s.color)).toEqual([null, chartColor(0), null]);
+    });
+
     test('series draw in their c:order, and one without a name is named as Excel names it', () => {
         const series = `<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:idx val="0"/><c:order val="1"/><c:val>${numRef('Sheet1!$B$2', [1])}</c:val></c:ser><c:ser><c:idx val="1"/><c:order val="0"/><c:tx><c:v>Literal</c:v></c:tx><c:val>${numRef('Sheet1!$C$2', [2])}</c:val></c:ser><c:axId val="1"/><c:axId val="2"/></c:barChart>`;
         expect(spec(space(series + AXES)).data.series.map((s) => s.name)).toEqual(['Literal', 'Series1']);
@@ -252,6 +265,13 @@ describe('a pie chart', () => {
             categories: CATEGORIES,
             series: [{ name: 'Share', color: ACCENTS[0], markers: false, smooth: false, values: [10, 20, 30] }],
         });
+    });
+
+    test("a slice colour equal to the palette's at its place reads as automatic, the automatic tail left out", () => {
+        const slices = [chartColor(0), '#112233', chartColor(2), chartColor(3)];
+        const points = slices.map((color, i) => slice(i, color.slice(1))).join('');
+        const plot = `<c:pieChart><c:varyColors val="1"/>${ser({ idx: 0, name: 'S', values: [1, 2, 3, 4], extra: points })}</c:pieChart>`;
+        expect(spec(space(plot)).sliceColors).toEqual([null, '#112233']);
     });
 
     test('a 3D pie is flattened; a doughnut or a pie of pie is no spec', () => {

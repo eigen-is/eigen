@@ -1,3 +1,5 @@
+import type { EigenFont } from '@workspace/lib/constants/fonts';
+import type { ConditionalFormatConditionName } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 
 // Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
@@ -73,8 +75,109 @@ export function pxToColumnWidth(px: number, digit: number): number {
     return Math.trunc((px * 256) / digit) / 256;
 }
 
+// Excel's limits on a formula's characters and a number format's, and on a string a formula quotes, a list
+// validation's literal among them.
+export const MAX_FORMULA_LENGTH = 8192;
+export const MAX_NUMBER_FORMAT_LENGTH = 255;
+export const MAX_FORMULA_STRING_LENGTH = 255;
+// Excel's limits on a cell's text, a sheet's name, a workbook's cell formats and a sheet's links.
+export const MAX_TEXT_LENGTH = 32_767;
+export const MAX_SHEET_NAME_LENGTH = 31;
+export const MAX_CELL_FORMATS = 64_000;
+export const MAX_SHEET_LINKS = 65_530;
+// The characters Excel refuses in a sheet's name; it refuses a quote at either end too.
+export const SHEET_NAME_FORBIDDEN = /[\\/?*[\]:]/g;
+
+// ECMA-376 § 18.8.30's built-in formats that name one code whatever the locale.
+export const BUILTIN_NUMBER_FORMATS = new Map<number, string>([
+    [0, 'General'],
+    [1, '0'],
+    [2, '0.00'],
+    [3, '#,##0'],
+    [4, '#,##0.00'],
+    [9, '0%'],
+    [10, '0.00%'],
+    [11, '0.00E+00'],
+    [12, '# ?/?'],
+    [13, '# ??/??'],
+    [14, 'mm-dd-yy'],
+    [15, 'd-mmm-yy'],
+    [16, 'd-mmm'],
+    [17, 'mmm-yy'],
+    [18, 'h:mm AM/PM'],
+    [19, 'h:mm:ss AM/PM'],
+    [20, 'h:mm'],
+    [21, 'h:mm:ss'],
+    [22, 'm/d/yy h:mm'],
+    [37, '#,##0 ;(#,##0)'],
+    [38, '#,##0 ;[Red](#,##0)'],
+    [39, '#,##0.00 ;(#,##0.00)'],
+    [40, '#,##0.00 ;[Red](#,##0.00)'],
+    [45, 'mm:ss'],
+    [46, '[h]:mm:ss'],
+    [47, 'mmss.0'],
+    [48, '##0.0E+0'],
+    [49, '@'],
+]);
+
+// A font's category as styles.xml's <family> numbers it (ECMA-376 Part 1 § 18.8.18).
+export const FONT_FAMILY_NUMBER: Record<EigenFont['category'], number> = {
+    serif: 1,
+    'sans-serif': 2,
+    monospace: 3,
+    'hand-drawn': 4,
+};
+
+// A character XML can't hold is written _xHHHH_, and _x005F_ escapes the underscore of a literal one.
+const ESCAPED = /_x([0-9A-Fa-f]{4})_/g;
+
+export function decodeEscapes(text: string): string {
+    return text.includes('_x')
+        ? text.replace(ESCAPED, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
+        : text;
+}
+
+// A control character XML 1.0 can't hold, and a literal escape's underscore. Tab, line feed and carriage return XML
+// holds, and the C1 controls past U+007F.
+const UNESCAPED = /[\p{Cc}\uFFFE\uFFFF]|_(?=x[0-9A-Fa-f]{4}_)/gu;
+
+export function encodeEscapes(text: string): string {
+    return text.replace(UNESCAPED, (char) => {
+        const code = char.charCodeAt(0);
+        const held = char === '\t' || char === '\n' || char === '\r' || (code >= 0x7f && code < 0xfffe);
+        return held ? char : `_x${code.toString(16).toUpperCase().padStart(4, '0')}_`;
+    });
+}
+
 // A number as a rule's operand holds it, unquoted; anything else is a reference, a function or a quoted string.
 export const NUMERIC = /^-?(?:\d+(?:\.\d*)?|\.\d+)$/;
+
+// A cellIs rule's operators, which the engine's comparisons are named after.
+export const CF_CELL_IS_CONDITION = new Map<string, ConditionalFormatConditionName>([
+    ['greaterThan', 'greaterThan'],
+    ['greaterThanOrEqual', 'greaterThanOrEqual'],
+    ['lessThan', 'lessThan'],
+    ['lessThanOrEqual', 'lessThanOrEqual'],
+    ['equal', 'equal'],
+    ['notEqual', 'notEqual'],
+    ['between', 'between'],
+    ['notBetween', 'notBetween'],
+]);
+
+// A data validation's type and the engine's for it, one list both ways. Excel's decimal admits any number, as the
+// engine's number does, while number_decimal rejects integers: it writes as decimal and reads back as number.
+const DV_TYPES: [string, string][] = [
+    ['list', 'dropdown'],
+    ['whole', 'number_integer'],
+    ['decimal', 'number'],
+    ['textLength', 'text_length'],
+    ['date', 'date'],
+];
+export const DV_TYPE = new Map(DV_TYPES);
+export const DV_XLSX_TYPE = new Map([
+    ...DV_TYPES.map(([type, engineType]): [string, string] => [engineType, type]),
+    ['number_decimal', 'decimal'],
+]);
 
 type DvOperator =
     | 'between'

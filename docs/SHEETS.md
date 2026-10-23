@@ -49,7 +49,7 @@ A write on a path that then rejects the operation still ships an op and costs th
 
 A border belongs to the cell it was drawn on. The painter draws each cell's own sides at coordinates that coincide with the neighbor's, so the pixels match without a mirror. A shared edge never creates the neighbor's key, because that would be the whole-object `add` of [§ Creating a collection ships it whole](#creating-a-collection-ships-it-whole-so-every-collection-exists). A neighbor entry that already exists gets its facing side overridden, so the edge just drawn wins on screen. One result a user can see: copying B1 alone does not pick up A1's right edge. When two neighbors disagree on a shared edge, as after many xlsx imports, the higher-index one wins (B1's left over A1's right), so the color can't flip with the viewport's walk order.
 
-A header click selects a whole axis, so it is clipped to the used extent first (`clipToUsedExtent`); one click must not write a key for every row. Cells filled in later rows show no border, an accepted divergence from Excel and Google. Merges are a read-time filter. `mergeEdgeSides` (`packages/lib/src/sheets/borders.ts`) is the one predicate. The canvas calls it per cell, and the xlsx and HTML exports fold a merge's cells onto its top-left cell through `mergedBorderSides`, because ExcelJS shares one style across a merge and the HTML has one `<td>`. When several cells of a merge write the same outer edge, the last one folded wins. Storage stays raw, so an unmerge shows the sides again.
+A header click selects a whole axis, so it is clipped to the used extent first (`clipToUsedExtent`); one click must not write a key for every row. Cells filled in later rows show no border, an accepted divergence from Excel and Google. Merges are a read-time filter. `mergeEdgeSides` (`packages/lib/src/sheets/borders.ts`) is the one predicate. The canvas calls it per cell, and the HTML export folds a merge's cells onto its top-left cell through `mergedBorderSides`, because the HTML has one `<td>`. When several cells of a merge write the same outer edge, the last one folded wins. The xlsx export writes each cell its own sides, as Excel stores them. Storage stays raw, so an unmerge shows the sides again.
 
 Only the canvas border pass skips hidden rows and columns. Every carry path (cut, move, fill, the format painter, copy as HTML) reads the merge-filtered sides through `getBorderInfoCompute`, which keeps them, so a drag-fill from a hidden source keeps its border. A row or column insert clones the borders of the row or column at the insert index onto the new ones, as validation rules do (`shiftCellKeyedForInsert` in `engine/rowcol.ts`). So inserting above the top row of a bordered block repeats that row's top edge.
 
@@ -313,7 +313,7 @@ On mobile the comments pane takes the whole width, so `editor.tsx` hides the wor
 
 ## The full export styles cells by class
 
-The server renders a workbook to HTML, PDF and xlsx in `apps/api/src/lib/export/sheets/`, from the `Sheet[]` that `readSheetsFromDoc` returns. The transform, the route and the xlsx writer are in [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-only).
+The server renders a workbook to HTML, PDF and xlsx in `apps/api/src/lib/export/sheets/`, from the `Sheet[]` that `readSheetsFromDoc` returns. The transform, the route and the xlsx writer are in [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-and-charts).
 
 `renderSheetsHtml` interns every style it emits (cell, row height, column width, data bar, rotation, image) into a workbook-global registry of classes and returns `{ html, css }`. The document builders put the rules in a body `<style>` element, which goes through `sanitizeExportHtml` with the markup.
 
@@ -346,7 +346,7 @@ A sheet with images or charts wraps its table in a `position:relative` box, and 
 
 The stored coordinates are grid pixels from A1, while the table starts at the used range. So the overlay subtracts the rows and columns above and left of that window. An object above or left of the used range pulls the window back to where it starts, so the offset never goes negative and the page covers it. The page size, the window's origin and the preview's clip all count the box an object covers as it turns (`getElementBounds`), so a rotated object stays on the page. One that turns past A1 tucks under the editor's headers, but a page has none, so the export moves it right or down until it starts on the page. The overlay's box reaches the farthest one, so the next sheet and the preview's truncated notice start below them, and the preview clips the box to its budget window. `apps/api/src/test/export/sheets-pdf.test.ts` reads a rotated chart off WeasyPrint's pixels; it skips where WeasyPrint or a rasterizer is missing, as on CI.
 
-An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export drops images and charts, an open [ROADMAP](ROADMAP.md) row.
+An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export writes charts as chart parts ([CHARTS.md](CHARTS.md#a-chart-goes-to-office-as-a-cchartspace-that-reads-back-as-the-same-spec)) and drops images, an open [ROADMAP](ROADMAP.md) row.
 
 ## Charts draw in the overlay as inline SVG
 
@@ -371,7 +371,7 @@ Defined names need nothing: the reader drops them ([SHEETS-TODO.md](SHEETS-TODO.
 
 These are deliberate. Where a test pins one, it is in `apps/api/src/test/export/sheets-export.test.ts`. Hyperlinks:
 
-- A `sheet` link re-imports as a `cellrange` link at `'Name'!A1`, and a range link keeps only its top-left cell, because ExcelJS's internal-link pattern needs a single trailing cell ref. A bare ref gains its own sheet's quoted prefix. A webpage URL with exactly one `!` and a cell-shaped tail is misread as internal by that pattern.
+- A `sheet` link re-imports as a `cellrange` link at `'Name'!A1`, because the location names a cell. A `sheet` link to a name no sheet holds is a defined name's, as the import reads a location without a cell, and keeps its location. A bare ref gains its own sheet's quoted prefix.
 - Imported link cells keep Excel's font, while the link dialog sets blue and underline. Forcing the dialog style at import would clobber theme-styled link cells.
 
 Column widths and row heights:

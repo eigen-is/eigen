@@ -48,17 +48,12 @@ import {
 } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
+import { THEME_TYPE, themeXml } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { A_NS, AHYP_NS, EMU_PER_POINT, P_NS, R_NS } from '../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
 import { cssColorToHex } from '../../document/colors';
-import {
-    PML,
-    PRESENTATION_TYPE,
-    SCREEN_SLIDE_TYPES,
-    SCREEN_SLIDE_WIDTH,
-    THEME_TYPE,
-} from '../../document/presentationml';
+import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../document/presentationml';
 import { canvasTextValue } from '../../document/prose-css';
 import {
     blipXml,
@@ -127,7 +122,7 @@ export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], titl
                 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
                 relationshipsXml([{ type: `${R_NS}/slideMaster`, target: '../slideMasters/slideMaster1.xml' }]),
             ],
-            ['ppt/theme/theme1.xml', THEME_XML, THEME_TYPE],
+            ['ppt/theme/theme1.xml', themeXml(DOCUMENT_FONT), THEME_TYPE],
             ...slides.flatMap(({ xml, relationships }, i): PackagePart[] => [
                 [`ppt/slides/slide${i + 1}.xml`, xml, `${PML}.slide+xml`],
                 [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
@@ -154,35 +149,6 @@ const GROUP_PROPERTIES =
 const MASTER_XML = `<p:sldMaster ${NAMESPACES}><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree>${GROUP_PROPERTIES}</p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`;
 
 const LAYOUT_XML = `<p:sldLayout ${NAMESPACES} type="blank" preserve="1"><p:cSld name="Blank"><p:spTree>${GROUP_PROPERTIES}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
-
-// Every shape writes its own colors and fonts, so the theme only has to be valid: Eigen's document font, plain colors.
-const THEME_XML = (() => {
-    const colors = [
-        ['dk1', '000000'],
-        ['lt1', 'FFFFFF'],
-        ['dk2', '1E1E1E'],
-        ['lt2', 'F5F5F5'],
-        ['accent1', '1971C2'],
-        ['accent2', 'E03131'],
-        ['accent3', '2F9E44'],
-        ['accent4', 'F08C00'],
-        ['accent5', '6741D9'],
-        ['accent6', '0C8599'],
-        ['hlink', '1971C2'],
-        ['folHlink', '6741D9'],
-    ].map(([name, value]) => `<a:${name}><a:srgbClr val="${value}"/></a:${name}>`);
-    const font = `<a:latin typeface="${DOCUMENT_FONT}"/><a:ea typeface=""/><a:cs typeface=""/>`;
-    const placeholder = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
-    const three = (xml: string) => xml.repeat(3);
-    return [
-        `<a:theme xmlns:a="${A_NS}" name="Eigen"><a:themeElements><a:clrScheme name="Eigen">${colors.join('')}</a:clrScheme>`,
-        `<a:fontScheme name="Eigen"><a:majorFont>${font}</a:majorFont><a:minorFont>${font}</a:minorFont></a:fontScheme>`,
-        `<a:fmtScheme name="Eigen"><a:fillStyleLst>${three(placeholder)}</a:fillStyleLst>`,
-        `<a:lnStyleLst>${three(`<a:ln w="6350">${placeholder}</a:ln>`)}</a:lnStyleLst>`,
-        `<a:effectStyleLst>${three('<a:effectStyle><a:effectLst/></a:effectStyle>')}</a:effectStyleLst>`,
-        `<a:bgFillStyleLst>${three(placeholder)}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`,
-    ].join('');
-})();
 
 // What one export accumulates: each media name's parts once, whichever slide shows it first.
 type Deck = {

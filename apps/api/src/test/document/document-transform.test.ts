@@ -85,6 +85,7 @@ import {
     previewBody,
     readPersistedDoc,
 } from '../fixtures/transform-results';
+import { linkRels, OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import {
     authedRequest,
     driveGet,
@@ -567,29 +568,48 @@ const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '76fbe3b4fd94331790f9d314eed3a79d1133686b6
 // import recalc must correct, styles, a date format, a merge, a column width, a
 // second sheet and a hyperlink.
 async function buildImportFixture(): Promise<ArrayBuffer> {
-    const workbook = new ExcelJS.Workbook();
-    const data = workbook.addWorksheet('Data');
-    data.getCell('A1').value = 'Region';
-    data.getCell('B1').value = 'Count';
-    data.getCell('A2').value = 'North';
-    data.getCell('B2').value = 42;
-    data.getCell('A3').value = 'South';
-    data.getCell('B3').value = 7;
-    data.getCell('B4').value = { formula: 'SUM(B2:B3)', result: 999 };
-    data.getCell('A1').font = { bold: true, color: { argb: 'FF0000FF' } };
-    data.getCell('B1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
-    const dated = data.getCell('C2');
-    dated.value = new Date(Date.UTC(2024, 2, 15));
-    dated.numFmt = 'dd/mm/yyyy';
-    data.getColumn(1).width = 18;
-    data.mergeCells('A6:B6');
-    data.getCell('A6').value = 'Merged footer';
-
-    const notes = workbook.addWorksheet('Notes');
-    notes.getCell('A1').value = 'Second sheet';
-    notes.getCell('A2').value = { text: 'link', hyperlink: 'https://example.com/report' };
-
-    return toTransferableBuffer(new Uint8Array(await workbook.xlsx.writeBuffer()));
+    return toTransferableBuffer(
+        xlsxFixture({
+            colors: OFFICE_COLORS,
+            styles: styleSheet({
+                numFmts: { 164: 'dd/mm/yyyy' },
+                fonts: ['<font><b/><color rgb="FF0000FF"/></font>'],
+                fills: ['<fill><patternFill patternType="solid"><fgColor rgb="FFEEEEEE"/></patternFill></fill>'],
+                xfs: [
+                    '<xf numFmtId="0" fontId="1" fillId="0" borderId="0"/>',
+                    '<xf numFmtId="0" fontId="0" fillId="2" borderId="0"/>',
+                    '<xf numFmtId="164" fontId="0" fillId="0" borderId="0"/>',
+                ],
+            }),
+            parts: [linkRels(2, ['https://example.com/report'])],
+            sheets: [
+                {
+                    name: 'Data',
+                    before: '<cols><col min="1" max="1" width="18" customWidth="1"/></cols>',
+                    data: rowsXml([
+                        ['A1', 'Region', 1],
+                        ['B1', 'Count', 2],
+                        ['A2', 'North'],
+                        ['B2', 42],
+                        ['C2', 45366, 3], // 2024-03-15
+                        ['A3', 'South'],
+                        ['B3', 7],
+                        ['B4', { formula: 'SUM(B2:B3)', result: 999 }],
+                        ['A6', 'Merged footer'],
+                    ]),
+                    after: '<mergeCells count="1"><mergeCell ref="A6:B6"/></mergeCells>',
+                },
+                {
+                    name: 'Notes',
+                    data: rowsXml([
+                        ['A1', 'Second sheet'],
+                        ['A2', 'link'],
+                    ]),
+                    after: '<hyperlinks><hyperlink ref="A2" r:id="rId1"/></hyperlinks>',
+                },
+            ],
+        }),
+    );
 }
 
 async function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
@@ -831,8 +851,9 @@ const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efa
 // paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '5cb21d5397765e68a4c13d2274e99d1606d7dbc725d16f3a1627141108059f05';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'ae55c6039177891ead1c5977dfaeebc124627658dd346940818423882d36625f';
-// The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image.
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
+// The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
+// libdeflate.
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '02981966a4877d645e6f9b188e3bd4d98699edb69b5794ff3fc7619201042d37';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
 // The two exports embed canvas-text.css whole, its comments too, so they last moved with its header comment.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';

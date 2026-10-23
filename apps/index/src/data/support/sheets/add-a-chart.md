@@ -75,6 +75,6 @@ A pasted chart keeps its look, and a chart copied from Docs, Slides, or Vector p
 
 <div class="eigen-callout">
 
-Charts appear in the PDF and web page downloads and in the preview of the file in Drive. They are not included when you download the spreadsheet as Excel.
+Charts appear in the PDF and web page downloads and in the preview of the file in Drive. When you download the spreadsheet as Excel, each chart comes along as a chart you can edit in Excel. A rotated chart sits upright there, and a sketched or hatched look is drawn plain.
 
 </div>

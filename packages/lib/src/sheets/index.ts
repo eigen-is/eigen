@@ -21,6 +21,7 @@ export {
     sheetDefaultColWidth,
     sheetDefaultRowHeight,
     sheetRowsHeight,
+    sheetTrackAt,
 } from './defaults';
 export {
     floatingItems,

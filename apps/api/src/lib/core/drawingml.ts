@@ -1,8 +1,9 @@
+import { escapeXml } from '@workspace/lib/xml';
 import { A_NS } from './ooxml';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from './xml';
 
 // DrawingML, the drawing vocabulary docx, xlsx and pptx share: a theme's colours, a colour element with its
-// transforms, and a text body's plain text.
+// transforms, a text body's plain text, and the theme the writers write.
 
 // A theme's colours by slot name (dk1, lt1, accent1…), each '#rrggbb'.
 export type ColorScheme = ReadonlyMap<string, string>;
@@ -37,6 +38,40 @@ export const IDENTITY_COLOR_MAP: ColorMap = new Map([
 ]);
 
 const NO_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
+
+export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
+
+// Every shape and cell the writers write holds its own colours and fonts, so their theme only has to be valid: plain
+// colours, and the document's font.
+const THEME_COLORS: Record<string, string> = {
+    dk1: '000000',
+    lt1: 'FFFFFF',
+    dk2: '1E1E1E',
+    lt2: 'F5F5F5',
+    accent1: '1971C2',
+    accent2: 'E03131',
+    accent3: '2F9E44',
+    accent4: 'F08C00',
+    accent5: '6741D9',
+    accent6: '0C8599',
+    hlink: '1971C2',
+    folHlink: '6741D9',
+};
+
+export function themeXml(font: string): string {
+    const colors = SCHEME_SLOTS.map((slot) => `<a:${slot}><a:srgbClr val="${THEME_COLORS[slot]}"/></a:${slot}>`);
+    const typefaces = `<a:latin typeface="${escapeXml(font)}"/><a:ea typeface=""/><a:cs typeface=""/>`;
+    const placeholder = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
+    const three = (xml: string) => xml.repeat(3);
+    return [
+        `<a:theme xmlns:a="${A_NS}" name="Eigen"><a:themeElements><a:clrScheme name="Eigen">${colors.join('')}</a:clrScheme>`,
+        `<a:fontScheme name="Eigen"><a:majorFont>${typefaces}</a:majorFont><a:minorFont>${typefaces}</a:minorFont></a:fontScheme>`,
+        `<a:fmtScheme name="Eigen"><a:fillStyleLst>${three(placeholder)}</a:fillStyleLst>`,
+        `<a:lnStyleLst>${three(`<a:ln w="6350">${placeholder}</a:ln>`)}</a:lnStyleLst>`,
+        `<a:effectStyleLst>${three('<a:effectStyle><a:effectLst/></a:effectStyle>')}</a:effectStyleLst>`,
+        `<a:bgFillStyleLst>${three(placeholder)}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`,
+    ].join('');
+}
 
 // A theme part's a:clrScheme; a slot with no colour is left out.
 export function readColorScheme(theme: XmlElement | undefined): ColorScheme {

@@ -12,10 +12,9 @@ import {
 
 // Materialized doc → export bytes. Runs inside the transform Worker (worker.ts owns
 // execution; the format logic stays here in export/, pure over Sheet[] + title).
-// Per-format renderers load lazily so an HTML export never evaluates ExcelJS.
+// Per-format renderers load lazily so an HTML export never evaluates the xlsx writer.
 // Recalc failure serves replayed values with a warning — an export must never fail
-// because recalc hiccuped. Floating images embed as data: URIs; xlsx ignores them —
-// ExcelJS has no writer this exporter uses for a floating picture.
+// because recalc hiccuped. Floating images embed as data: URIs; xlsx ignores them.
 export async function renderEigensheetsExport(
     doc: Y.Doc,
     format: SheetExportFormat,
@@ -41,7 +40,7 @@ export async function renderEigensheetsExport(
         }
         case 'xlsx': {
             const { sheetsToXlsx } = await import('./to-xlsx');
-            return { data: toTransferableBuffer(await sheetsToXlsx(sheets)), warnings };
+            return { data: toTransferableBuffer(await sheetsToXlsx(sheets, { title, warnings })), warnings };
         }
     }
 }
