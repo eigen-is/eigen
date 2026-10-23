@@ -1,4 +1,4 @@
-import { normalizeAngle } from '@workspace/lib/vector';
+import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { A_NS } from './ooxml';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from './xml';
@@ -41,6 +41,22 @@ export const IDENTITY_COLOR_MAP: ColorMap = new Map([
 const NO_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
 
 export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
+
+// A stored colour token (#rgb, #rrggbb, #rrggbbaa) as an a:srgbClr, its alpha times `opacity` beside it; null for
+// transparent or anything else.
+export function colorXml(color: string, opacity = 1): string | null {
+    const digits = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
+    if (!digits || isTransparentColor(color)) return null;
+    const rgb = digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits.slice(0, 6);
+    const alpha = (digits.length === 8 ? Number.parseInt(digits.slice(6), 16) / 255 : 1) * opacity;
+    const share = alpha < 1 ? `<a:alpha val="${Math.round(alpha * 100_000)}"/>` : '';
+    return `<a:srgbClr val="${rgb.toUpperCase()}">${share}</a:srgbClr>`;
+}
+
+export function solidFillXml(color: string, opacity = 1): string {
+    const rgb = colorXml(color, opacity);
+    return rgb ? `<a:solidFill>${rgb}</a:solidFill>` : '<a:noFill/>';
+}
 
 // Every shape and cell the writers write holds its own colours and fonts, so their theme only has to be valid: plain
 // colours, and the document's font.

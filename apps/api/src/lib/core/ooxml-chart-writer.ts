@@ -11,10 +11,11 @@ import type {
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
-import { isTransparentColor, parseFill } from '@workspace/lib/vector';
+import { parseFill } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 // The one engine module a chart's refs need, not the engine: a docx or pptx export never evaluates the formula engine.
 import { quoteSheetName } from '@workspace/sheet/engine/a1-notation';
+import { solidFillXml } from './drawingml';
 import { A_NS, C_NS, EMU_PER_PX, R_NS } from './ooxml';
 import { LEGEND_BY_POSITION, PERCENT_AXIS_FORMAT, STACKING_BY_GROUPING } from './ooxml-chart';
 
@@ -45,7 +46,7 @@ export function writeChart(spec: ChartSpec, { ranges, cache, look = FLAT_CHART_L
     const plot = spec.type === 'pie' ? group : `${group}${axesXml(spec, look)}`;
     const legend = spec.legend === 'none' ? '' : legendXml(spec.legend);
     const background = parseFill(look.fill);
-    const fill = background.type === 'solid' ? solidFill(background.color) : '<a:noFill/>';
+    const fill = background.type === 'solid' ? solidFillXml(background.color) : '<a:noFill/>';
     return [
         `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}">`,
         '<c:date1904 val="0"/><c:lang val="en-US"/><c:roundedCorners val="0"/><c:chart>',
@@ -93,16 +94,16 @@ function seriesXml(spec: ChartSpec, look: ChartLook, ranges: Ranges, cache: Char
             const head = `<c:idx val="${i}"/><c:order val="${i}"/>${source.name}`;
             if (spec.type === 'line') {
                 const marker = markers
-                    ? `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solidFill(color)}<a:ln>${solidFill(color)}</a:ln></c:spPr></c:marker>`
+                    ? `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solidFillXml(color)}<a:ln>${solidFillXml(color)}</a:ln></c:spPr></c:marker>`
                     : '<c:marker><c:symbol val="none"/></c:marker>';
-                const line = `<c:spPr><a:ln w="${width}" cap="rnd">${solidFill(color)}<a:round/></a:ln></c:spPr>`;
+                const line = `<c:spPr><a:ln w="${width}" cap="rnd">${solidFillXml(color)}<a:round/></a:ln></c:spPr>`;
                 return `<c:ser>${head}${line}${marker}${source.data}<c:smooth val="${smooth ? 1 : 0}"/></c:ser>`;
             }
             if (spec.type === 'pie') {
                 const points = i === 0 ? slicesXml(spec, source.points) : '';
-                return `<c:ser>${head}<c:spPr>${solidFill(color)}</c:spPr>${points}${PIE_LABELS}${source.data}</c:ser>`;
+                return `<c:ser>${head}<c:spPr>${solidFillXml(color)}</c:spPr>${points}${PIE_LABELS}${source.data}</c:ser>`;
             }
-            return `<c:ser>${head}<c:spPr>${solidFill(color)}</c:spPr><c:invertIfNegative val="0"/>${source.data}</c:ser>`;
+            return `<c:ser>${head}<c:spPr>${solidFillXml(color)}</c:spPr><c:invertIfNegative val="0"/>${source.data}</c:ser>`;
         })
         .join('');
 }
@@ -114,7 +115,7 @@ const PIE_LABELS =
 function slicesXml(spec: ChartSpec, points: number): string {
     return Array.from({ length: points }, (_, i) => {
         const color = spec.sliceColors[i] ?? chartColor(i);
-        return `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr>${solidFill(color)}</c:spPr></c:dPt>`;
+        return `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr>${solidFillXml(color)}</c:spPr></c:dPt>`;
     }).join('');
 }
 
@@ -190,7 +191,7 @@ function axesXml(spec: ChartSpec, look: ChartLook): string {
     const sideways = spec.type === 'bar';
     const maxMin = sideways !== categoryAxis.reversed;
     const stroke = (opacity = 1) =>
-        `<a:ln w="${Math.round(look.strokeWidth * EMU_PER_PX)}">${solidFill(look.strokeColor, opacity)}</a:ln>`;
+        `<a:ln w="${Math.round(look.strokeWidth * EMU_PER_PX)}">${solidFillXml(look.strokeColor, opacity)}</a:ln>`;
     const deleted = (visible: boolean) => `<c:delete val="${visible ? 0 : 1}"/>`;
     const noTicks = '<c:majorTickMark val="none"/><c:minorTickMark val="none"/>';
     const scaling = (orientation: string, bounds = '') =>
@@ -239,17 +240,7 @@ function legendXml(position: Exclude<LegendPosition, 'none'>): string {
 
 // Every label's colour and the spec's font.
 function textProperties(color: string, font: string): string {
-    return `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr>${solidFill(color)}<a:latin typeface="${escapeXml(font)}"/></a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`;
-}
-
-// A colour token (#rgb, #rrggbb, #rrggbbaa) as DrawingML, its alpha times `opacity` beside it; transparent is no fill.
-function solidFill(color: string, opacity = 1): string {
-    if (isTransparentColor(color)) return '<a:noFill/>';
-    const digits = color.slice(1);
-    const rgb = digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits.slice(0, 6);
-    const alpha = (digits.length === 8 ? Number.parseInt(digits.slice(6), 16) / 255 : 1) * opacity;
-    const share = alpha < 1 ? `<a:alpha val="${Math.round(alpha * 100_000)}"/>` : '';
-    return `<a:solidFill><a:srgbClr val="${rgb.toUpperCase()}">${share}</a:srgbClr></a:solidFill>`;
+    return `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr>${solidFillXml(color)}<a:latin typeface="${escapeXml(font)}"/></a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`;
 }
 
 function turned<K, V>(read: ReadonlyMap<K, V>): Map<V, K> {
