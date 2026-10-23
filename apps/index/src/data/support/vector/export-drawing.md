@@ -32,6 +32,8 @@ Text in the SVG stays text, in the fonts the drawing uses, laid out line for lin
 
 If the drawing has a background color, the SVG includes it. A drawing with a transparent background stays transparent.
 
+To download only part of a drawing, select it, right-click, and choose **Download image**. That SVG has no background, and a chart on its own gets a white one. See [Arrange and align](/support/vector/arrange-and-align#the-right-click-menu).
+
 Right-to-left text, such as Arabic or Hebrew, and emoji can look different in the SVG than on the canvas.
 
 ## PDF

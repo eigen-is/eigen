@@ -55,7 +55,7 @@ Right-click a chart, or press and hold it on a touch screen, for its menu:
 - **Duplicate** puts a copy on top, a little down and to the right.
 - **Edit chart** opens the **Chart editor**.
 - **Order** brings the chart in front of the charts and images it overlaps, or sends it behind them.
-- **Download chart** → **SVG (.svg)** saves the chart as a picture. This works with view access too.
+- **Download image** saves the chart as an SVG picture on a white background, named after its title. This works with view access too. A chart that shows **#REF!** or has too much data doesn't have it.
 - **Delete** removes it.
 
 Charts and images stack together. With a chart selected, **⌘]** brings it forward a step and **⌘[** sends it back a step, and adding **Shift** brings it to the front or sends it to the back. Use **Ctrl** in place of **⌘** on Windows.
