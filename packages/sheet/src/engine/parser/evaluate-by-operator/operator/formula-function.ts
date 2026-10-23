@@ -4,6 +4,7 @@ import { booleanDisplay, update } from '../../../format';
 import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
 import { xlookup, xmatch } from '../../functions/lookup';
+import { maxifs, minifs } from '../../functions/statistical';
 import { textjoin } from '../../functions/text';
 import { toNumber } from '../../helper/number';
 import SUPPORTED_FORMULAS from '../../supported-formulas';
@@ -148,6 +149,8 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
 
 // Functions formulajs 2.9.3 lacks. Unlike an override, a result of `undefined` is a blank, not a fall-through.
 const FUNCTIONS: Record<string, (params: FormulaArg[]) => FormulaOutput> = {
+    MAXIFS: maxifs,
+    MINIFS: minifs,
     TEXTJOIN: textjoin,
     XLOOKUP: xlookup,
     XMATCH: xmatch,
