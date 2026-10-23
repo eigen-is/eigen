@@ -1,9 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import ExcelJS from 'exceljs';
 import { EXPORT_CSP } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
+import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
 import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
 
@@ -68,14 +68,13 @@ describe('Sheets export route — response contract', () => {
 
         const buffer = Buffer.from(await res.arrayBuffer());
         expect(buffer.subarray(0, 2).toString()).toBe('PK');
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(buffer);
-        expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
-        const dashboard = workbook.getWorksheet('Dashboard');
-        expect(dashboard?.getCell('A2').value).toMatchObject({ text: 'Region 1' });
-        expect(dashboard?.getCell('B2').value).toBe(48);
+        const sheets = xlsxToSheets(buffer);
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
+        const cell = (r: number, c: number) => sheets[0].celldata?.find((entry) => entry.r === r && entry.c === c)?.v;
+        expect(cell(1, 0)?.v).toBe('Region 1');
+        expect(cell(1, 1)?.v).toBe(48);
         // The server-side recalc ran before the workbook was built.
-        expect(dashboard?.getCell('F2').value).toMatchObject({ formula: 'SUM(B2:E2)', result: GOLDEN_ROW1_TOTAL });
+        expect(cell(1, 5)).toMatchObject({ f: '=SUM(B2:E2)', v: GOLDEN_ROW1_TOTAL });
     }, 60_000);
 
     test('an unsupported format is rejected with 400', async () => {
