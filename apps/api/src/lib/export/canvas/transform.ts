@@ -1,4 +1,5 @@
-import { type MediaResolver, readVectorFromDoc, round } from '@workspace/lib/vector';
+import { ptToPx } from '@workspace/lib/docs/eigendoc';
+import { type MediaResolver, readVectorFromDoc, round, slidePxToPt } from '@workspace/lib/vector';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
@@ -16,7 +17,7 @@ import {
 import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { type CanvasPage, deckScale, framePages, renderFittedPage, renderPrintPage, sceneMediaNames } from './render';
+import { type CanvasPage, framePages, renderFittedPage, renderPrintPage, sceneMediaNames } from './render';
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
 // PDF all leave through here, so there is one @page rule, one font block and one reset instead of a
@@ -24,7 +25,7 @@ import { type CanvasPage, deckScale, framePages, renderFittedPage, renderPrintPa
 // orchestration lives in export-document.ts): no Mount, no preview cache.
 
 // A screen document scales its pages; a PDF document has no scale to take, because it lays each page out
-// at 1:1 and htmlToPdf's zoom scales it onto the sheet (deckScale says why).
+// at 1:1 and htmlToPdf's zoom scales it onto the sheet.
 type CanvasDocumentOptions = { title: string; pages: CanvasPage[]; resolveMedia?: MediaResolver } & (
     | { mode: 'screen'; scale: number }
     | { mode: 'pdf' }
@@ -72,7 +73,10 @@ export async function renderEigenslidesHtml(
     const pages = framePages(scene, resolveMedia);
     // Nothing to print, and nothing to size a page from.
     if (pages.length === 0) throw new ApiError(400, 'The deck is empty');
-    const scale = deckScale(scene.meta.slideWidth);
+    // A deck page is the deck's own width: a new deck's 960 pt is 1280 px at 96 dpi, 338.67 x 190.5 mm for 16:9, so its
+    // 1920 px frame shows and prints at 2/3 (a 1920 px sheet would be 20 in). The screen document scales its pages by
+    // it; the PDF document lays them out at 1:1 (renderPrintPage), and it is the zoom htmlToPdf hands WeasyPrint.
+    const scale = ptToPx(slidePxToPt(1, scene.meta.slideWidth));
     if (htmlExportMode(format) === 'pdf') {
         const html = canvasHtmlDocument({ title, pages, mode: 'pdf', resolveMedia });
         return { data: toTransferableText(html), zoom: scale, warnings: [] };
