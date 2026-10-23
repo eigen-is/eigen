@@ -130,8 +130,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.6854705810117458,
         });
         expect(parser!.parse('BETA.DIST(2, 8, 10, TRUE, 1, 3)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.6854705810117458,
         });
     });
 
@@ -142,8 +142,8 @@ describe('.parse() statistical formulas', () => {
         });
         expect(parser!.parse('BETAINV(0.6854705810117458, 8, 10, 1, 3)')).toBeMatchCloseTo({ error: null, result: 2 });
         expect(parser!.parse('BETA.INV(0.6854705810117458, 8, 10, 1, 3)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1.9999999999999998,
         });
     });
 
@@ -169,118 +169,118 @@ describe('.parse() statistical formulas', () => {
             result: 0.205078125,
         });
         expect(parser!.parse('BINOM.DIST(6, 10, 0.5, FALSE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.205078125,
         });
     });
 
     it('BINOM.DIST.RANGE', () => {
         expect(parser!.parse('BINOM.DIST.RANGE()')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser!.parse('BINOM.DIST.RANGE(60)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser!.parse('BINOM.DIST.RANGE(60, 0.5)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 8.673617379884035e-19,
         });
         expect(parser!.parse('BINOM.DIST.RANGE(60, 0.5, 34)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.060616586840172675,
         });
     });
 
     it('BINOM.INV', () => {
         expect(parser!.parse('BINOM.INV()')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser!.parse('BINOM.INV(6)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser!.parse('BINOM.INV(6, 0.5)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser!.parse('BINOM.INV(6, 0.5, 0.7)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 4,
         });
     });
 
     it('CHISQ.DIST', () => {
         expect(parser!.parse('CHISQ.DIST()')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: NaN,
         });
         expect(parser!.parse('CHISQ.DIST(0.5)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser!.parse('CHISQ.DIST(0.5, 1)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.4393912894677035,
         });
         expect(parser!.parse('CHISQ.DIST(0.5, 1, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.5204998778130242,
         });
     });
 
     it('CHISQ.DIST.RT', () => {
         expect(parser!.parse('CHISQ.DIST.RT()')).toMatchObject({
-            error: '#NAME?',
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('CHISQ.DIST.RT(0.5)')).toMatchObject({
-            error: '#NAME?',
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('CHISQ.DIST.RT(0.5, 1)')).toMatchObject({
-            error: '#NAME?',
+            error: '#NUM!',
             result: null,
         });
         expect(parser!.parse('CHISQ.DIST.RT(3, 5)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.6999858358786271,
         });
     });
 
     it('CHISQ.INV', () => {
         expect(parser!.parse('CHISQ.INV()')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser!.parse('CHISQ.INV(0.5)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser!.parse('CHISQ.INV(0.5, 6)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 5.348120627447116,
         });
     });
 
     it('CHISQ.INV.RT', () => {
         expect(parser!.parse('CHISQ.INV.RT()')).toMatchObject({
-            error: '#NAME?',
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('CHISQ.INV.RT(0.5)')).toMatchObject({
-            error: '#NAME?',
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('CHISQ.INV.RT(-1, 2)')).toMatchObject({
-            error: '#NAME?',
+            error: '#NUM!',
             result: null,
         });
         expect(parser!.parse('CHISQ.INV.RT(0.4, 6)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 6.2107571945266935,
         });
     });
 
@@ -352,27 +352,27 @@ describe('.parse() statistical formulas', () => {
             result: 0.30164098631305825,
         });
         expect(parser!.parse('CONFIDENCE.NORM(0.5, 1, 5)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.30164098631305825,
         });
     });
 
     it('CONFIDENCE.T', () => {
         expect(parser!.parse('CONFIDENCE.T()')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: NaN,
         });
         expect(parser!.parse('CONFIDENCE.T(0.5)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: NaN,
         });
         expect(parser!.parse('CONFIDENCE.T(0.5, 1)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: NaN,
         });
         expect(parser!.parse('CONFIDENCE.T(0.5, 1, 5)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.33124980616238564,
         });
     });
 
@@ -504,8 +504,8 @@ describe('.parse() statistical formulas', () => {
         parser!.setVariable('bar', [9, 7, 12, 15, 17]);
 
         expect(parser!.parse('COVARIANCE.P(foo, bar)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 5.2,
         });
     });
 
@@ -514,8 +514,8 @@ describe('.parse() statistical formulas', () => {
         parser!.setVariable('bar', [5, 11, 12]);
 
         expect(parser!.parse('COVARIANCE.S(foo, bar)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 9.666666666666668,
         });
     });
 
@@ -546,8 +546,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.8646647167633873,
         });
         expect(parser!.parse('EXPON.DIST(0.2, 10, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.8646647167633873,
         });
     });
 
@@ -573,8 +573,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.9897419523940192,
         });
         expect(parser!.parse('F.DIST(15, 6, 4, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.9897419523940192,
         });
     });
 
@@ -596,8 +596,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.010258047605980813,
         });
         expect(parser!.parse('F.DIST.RT(15, 6, 4)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.010258047605980813,
         });
     });
 
@@ -619,8 +619,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.31438998832176823,
         });
         expect(parser!.parse('F.INV(0.1, 6, 4)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.31438998832176823,
         });
     });
 
@@ -642,8 +642,8 @@ describe('.parse() statistical formulas', () => {
             result: 4.009749312673953,
         });
         expect(parser!.parse('F.INV.RT(0.1, 6, 4)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 4.009749312673953,
         });
     });
 
@@ -730,8 +730,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.0004367074309130214,
         });
         expect(parser!.parse('GAMMA.DIST(1, 3, 7, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.0004367074309130214,
         });
     });
 
@@ -753,8 +753,8 @@ describe('.parse() statistical formulas', () => {
             result: 1233.435565298214,
         });
         expect(parser!.parse('GAMMA.INV(1, 3, 7)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1233.435565298214,
         });
     });
 
@@ -771,12 +771,12 @@ describe('.parse() statistical formulas', () => {
 
     it('GAMMALN.PRECISE', () => {
         expect(parser!.parse('GAMMALN.PRECISE()')).toMatchObject({
-            error: '#NAME?',
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('GAMMALN.PRECISE(4)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1.7917594692280547,
         });
     });
 
@@ -943,8 +943,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.0390835557068005,
         });
         expect(parser!.parse('LOGNORM.DIST(4, 3.5, 1.2, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.0390835557068005,
         });
     });
 
@@ -963,8 +963,8 @@ describe('.parse() statistical formulas', () => {
         });
         expect(parser!.parse('LOGNORMINV(0.0390835557068005, 3.5, 1.2)')).toBeMatchCloseTo({ error: null, result: 4 });
         expect(parser!.parse('LOGNORM.INV(0.0390835557068005, 3.5, 1.2)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 4.000000000000001,
         });
     });
 
@@ -1020,8 +1020,8 @@ describe('.parse() statistical formulas', () => {
             result: [2, 3, 1],
         });
         expect(parser!.parse('MODE.MULT(foo)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: [2, 3, 1],
         });
         expect(parser!.parse('MODEMULT(bar)')).toMatchObject({
             error: '#VALUE!',
@@ -1038,8 +1038,8 @@ describe('.parse() statistical formulas', () => {
             result: 4,
         });
         expect(parser!.parse('MODE.SNGL(foo)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 4,
         });
         expect(parser!.parse('MODESNGL(bar)')).toMatchObject({
             error: '#VALUE!',
@@ -1069,8 +1069,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.3135140584781766,
         });
         expect(parser!.parse('NEGBINOM.DIST(10, 5, 0.25, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.3135140584781766,
         });
     });
 
@@ -1096,8 +1096,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.8413447460685429,
         });
         expect(parser!.parse('NORM.DIST(1, 0, 1, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.8413447460685429,
         });
     });
 
@@ -1119,8 +1119,8 @@ describe('.parse() statistical formulas', () => {
             result: 141.4213562373095,
         });
         expect(parser!.parse('NORM.INV(1, 0, 1)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 141.4213562373095,
         });
     });
 
@@ -1138,8 +1138,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.8413447460685429,
         });
         expect(parser!.parse('NORM.S.DIST(1, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.8413447460685429,
         });
     });
 
@@ -1153,8 +1153,8 @@ describe('.parse() statistical formulas', () => {
             result: 141.4213562373095,
         });
         expect(parser!.parse('NORM.S.INV(1)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 141.4213562373095,
         });
     });
 
@@ -1304,8 +1304,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.19914827347145578,
         });
         expect(parser!.parse('POISSON.DIST(1, 3, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.19914827347145578,
         });
     });
 
@@ -1344,8 +1344,8 @@ describe('.parse() statistical formulas', () => {
             result: 40,
         });
         expect(parser!.parse('QUARTILE.EXC(foo, 2)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 40,
         });
         expect(parser!.parse('QUARTILEEXC(foo, 4)')).toMatchObject({
             error: '#NUM!',
@@ -1369,8 +1369,8 @@ describe('.parse() statistical formulas', () => {
             result: 7.5,
         });
         expect(parser!.parse('QUARTILE.INC(foo, 2)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 7.5,
         });
         expect(parser!.parse('QUARTILEINC(foo, 4)')).toMatchObject({
             error: '#NUM!',
@@ -1394,8 +1394,8 @@ describe('.parse() statistical formulas', () => {
             result: 1,
         });
         expect(parser!.parse('RANK.AVG(88, foo, 1)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser!.parse('RANKAVG("dwe", foo, 1)')).toMatchObject({
             error: '#VALUE!',
@@ -1415,8 +1415,8 @@ describe('.parse() statistical formulas', () => {
             result: 4,
         });
         expect(parser!.parse('RANK.EQ(2, foo)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 4,
         });
         expect(parser!.parse('RANKEQ("dwe", foo, TRUE)')).toMatchObject({
             error: '#VALUE!',
@@ -1516,15 +1516,15 @@ describe('.parse() statistical formulas', () => {
             result: 0.303193339354144,
         });
         expect(parser!.parse('SKEW.P(foo)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.303193339354144,
         });
         expect(parser!.parse('SKEWP(bar)')).toMatchObject({
             error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('SKEW.P(bar)')).toMatchObject({
-            error: '#NAME?',
+            error: '#VALUE!',
             result: null,
         });
     });
@@ -1585,8 +1585,8 @@ describe('.parse() statistical formulas', () => {
             result: 26.054558142482477,
         });
         expect(parser!.parse('STDEV.P(foo)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 26.054558142482477,
         });
     });
 
@@ -1598,8 +1598,8 @@ describe('.parse() statistical formulas', () => {
             result: 27.46391571984349,
         });
         expect(parser!.parse('STDEV.S(foo)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 27.46391571984349,
         });
     });
 
@@ -1688,31 +1688,31 @@ describe('.parse() statistical formulas', () => {
 
     it('T.DIST.2T', () => {
         expect(parser!.parse('T.DIST.2T()')).toMatchObject({
-            error: '#NAME?',
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('T.DIST.2T(1)')).toMatchObject({
-            error: '#NAME?',
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('T.DIST.2T(1, 6)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.3559176837495821,
         });
     });
 
     it('T.DIST.RT', () => {
         expect(parser!.parse('T.DIST.RT()')).toMatchObject({
-            error: '#NAME?',
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('T.DIST.RT(1)')).toMatchObject({
-            error: '#NAME?',
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('T.DIST.RT(1, 6)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.17795884187479105,
         });
     });
 
@@ -1730,23 +1730,23 @@ describe('.parse() statistical formulas', () => {
             result: -1.4397557472652731,
         });
         expect(parser!.parse('T.INV(0.1, 6)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: -1.4397557472652731,
         });
     });
 
     it('T.INV.2T', () => {
         expect(parser!.parse('T.INV.2T()')).toMatchObject({
-            error: '#NAME?',
+            error: '#NUM!',
             result: null,
         });
         expect(parser!.parse('T.INV.2T(0.1)')).toMatchObject({
-            error: '#NAME?',
+            error: '#NUM!',
             result: null,
         });
         expect(parser!.parse('T.INV.2T(0.1, 6)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1.9431802743487374,
         });
     });
 
@@ -1798,8 +1798,8 @@ describe('.parse() statistical formulas', () => {
             result: 1.25,
         });
         expect(parser!.parse('VAR.P(1, 2, 3, 4)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1.25,
         });
     });
 
@@ -1822,12 +1822,12 @@ describe('.parse() statistical formulas', () => {
             result: 1.6666666666666667,
         });
         expect(parser!.parse('VAR.S(1, 2, 3, 4)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1.6666666666666667,
         });
         expect(parser!.parse('VAR.S(1, 2, 3, 4, TRUE, "foo")')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 1.6666666666666667,
         });
     });
 
@@ -1901,8 +1901,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.10516068318563021,
         });
         expect(parser!.parse('WEIBULL.DIST(1, 2, 3, TRUE)')).toMatchObject({
-            error: '#NAME?',
-            result: null,
+            error: null,
+            result: 0.10516068318563021,
         });
     });
 });
