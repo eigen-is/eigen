@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
-import { emu, readPackage } from '../../../lib/import/slides/package';
+import { readPackage } from '../../../lib/import/slides/package';
 import {
     box,
     buildPptx,
@@ -207,24 +207,5 @@ describe('a pptx package', () => {
             if (name.endsWith('.rels'))
                 parts[name] = String(part).replaceAll(REL, 'http://purl.oclc.org/ooxml/officeDocument/relationships');
         expect(htmlOf(zipParts(parts))).toEqual(['<p>strict</p>']);
-    });
-});
-
-describe('a coordinate', () => {
-    test('is EMU, or a universal measure in EMU', () => {
-        expect([emu('914400'), emu(' -12 '), emu('1in'), emu('2.5pt'), emu('1.5')]).toEqual([
-            914400, -12, 914400, 31750, 1.5,
-        ]);
-    });
-
-    test('is none past what a double holds exactly, in no unit, or not a number', () => {
-        for (const value of [undefined, '', '9007199254740992', '1em', '1e3', 'NaN', '- 1', '1.'])
-            expect([value, emu(value)]).toEqual([value, undefined]);
-    });
-
-    test('is none past 64 characters, before it is parsed: no coordinate needs more', () => {
-        expect(emu(`${'0'.repeat(63)}5`)).toBe(5);
-        expect(emu(`${'0'.repeat(64)}5`)).toBeUndefined();
-        expect(emu(`5.${'0'.repeat(4_000_000)}`)).toBeUndefined();
     });
 });

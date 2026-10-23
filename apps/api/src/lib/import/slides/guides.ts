@@ -1,7 +1,6 @@
-import { A_NS } from '../../core/ooxml';
+import { A_NS, emu } from '../../core/ooxml';
 import { type XmlElement, xmlAttr } from '../../core/xml';
 import { cachedBy, charge, childrenOf } from './lookup';
-import { emu } from './package';
 
 // DrawingML's shape guides (ECMA-376 §20.1.9.11), as a custGeom and the presets compute their points: lengths in EMU,
 // angles in 60,000ths of a degree. A formula is its operator and up to three arguments, each a number or a guide's name;

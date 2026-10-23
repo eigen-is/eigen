@@ -17,6 +17,8 @@ export const TBL_NS = 'http://schemas.openxmlformats.org/drawingml/2006/table';
 // Word's drawing of a SmartArt, the shapes and their text as laid out.
 export const DSP_NS = 'http://schemas.microsoft.com/office/drawing/2008/diagram';
 export const SML_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+// A worksheet's or chart sheet's drawing: the anchors that place its pictures and charts over the grid.
+export const XDR_NS = 'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing';
 // Excel 2010's SpreadsheetML extensions, and the formulas and references they hold.
 export const X14_NS = 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
 export const XM_NS = 'http://schemas.microsoft.com/office/excel/2006/main';
@@ -46,6 +48,7 @@ const STRICT_NAMESPACES = new Map([
     [`${STRICT}/drawingml/picture`, PIC_NS],
     [`${STRICT}/drawingml/chart`, C_NS],
     [`${STRICT}/drawingml/diagram`, DGM_NS],
+    [`${STRICT}/drawingml/spreadsheetDrawing`, XDR_NS],
     [`${STRICT}/officeDocument/math`, M_NS],
     [`${STRICT}/spreadsheetml/main`, SML_NS],
     [`${STRICT}/presentationml/main`, P_NS],
@@ -90,6 +93,19 @@ export const POINTS_PER_UNIT = new Map([
     ['cm', 72 / 2.54],
     ['mm', 72 / 25.4],
 ]);
+
+// ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
+// Past 64 characters it is none unread: no coordinate needs more, and a file's 4 MB one would be parsed at each use.
+const MAX_COORDINATE_CHARS = 64;
+
+export function emu(value: string | undefined): number | undefined {
+    if (value === undefined || value.length > MAX_COORDINATE_CHARS) return undefined;
+    const [, number, unit = ''] = value.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
+    const points = POINTS_PER_UNIT.get(unit);
+    const result =
+        unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;
+    return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
+}
 
 // ── Values ──────────────────────────────────────────────────────────────────────────────────────────────────────
 

@@ -3,8 +3,19 @@ import { join } from 'node:path';
 import { chartColor, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
 import { type DrawingTheme, IDENTITY_COLOR_MAP } from '../../lib/core/drawingml';
+import { ApiError } from '../../lib/core/errors';
 import { A_NS, C_NS, MC_NS, parseOoxml } from '../../lib/core/ooxml';
-import { type ChartRead, readChart } from '../../lib/core/ooxml-chart';
+import {
+    CHART_CONTENT_TYPE,
+    CHART_NOT_IMPORTED,
+    type ChartRead,
+    chartCost,
+    chartPart,
+    droppedChart,
+    readChart,
+} from '../../lib/core/ooxml-chart';
+import type { Relationship } from '../../lib/core/opc';
+import { type XmlElement, XmlError } from '../../lib/core/xml';
 
 const STRICT = 'http://purl.oclc.org/ooxml';
 const ACCENTS = ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '#70ad47'];
@@ -636,7 +647,8 @@ describe('range data for a workbook', () => {
             const [first] = byRange(space(series(f) + AXES)).data.series;
             return first?.values;
         };
-        expect(values("'My ''Q'' sheet'!C10:$B$2")).toEqual({ sheetId: 's2', row: [1, 9], column: [1, 2] });
+        expect(values("'My ''Q'' sheet'!C10:$C$2")).toEqual({ sheetId: 's2', row: [1, 9], column: [2, 2] });
+        expect(values('Sheet1!$D$2:B2')).toEqual({ sheetId: 's1', row: [1, 1], column: [1, 3] });
         expect(values("'A!B'!$A$1:$A$3")).toEqual({ sheetId: 's3', row: [0, 2], column: [0, 0] });
         // Excel leaves a name of non-Latin letters unquoted.
         expect(values('Лист1!$B$2:$B$4')).toEqual({ sheetId: 's4', row: [1, 3], column: [1, 1] });
@@ -658,6 +670,18 @@ describe('range data for a workbook', () => {
         }
         const literal = `<c:barChart><c:barDir val="col"/><c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numLit><c:ptCount val="1"/><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val></c:ser></c:barChart>`;
         expect('unsupported' in read(space(literal + AXES), ranges)).toBe(true);
+    });
+
+    // The sheet draws a row or a column of values or categories, never an area.
+    test('a values or categories ref over more than one row and column is no spec, with its title', () => {
+        const head = title('Sales');
+        const areaValues = space(bar().replace('Sheet1!$B$2:$B$4', 'Sheet1!$B$2:$C$4') + AXES, { head });
+        const cat = strRef('Sheet1!$A$2:$B$4', CATEGORIES);
+        const areaCategories = space(bar([{ idx: 0, name: 'A', values: [1, 2, 3], cat }]) + AXES, { head });
+        for (const xml of [areaValues, areaCategories]) {
+            expect(read(xml, ranges)).toEqual({ unsupported: { title: 'Sales', name: 'Clustered Column' } });
+            expect('spec' in read(xml)).toBe(true);
+        }
     });
 
     test('a horizontal bar chart over ranges reads, its axis reversed', () => {
@@ -683,5 +707,68 @@ describe('range data for a workbook', () => {
     test("a pie's slice colours cover its value range", () => {
         const pie = `<c:pieChart><c:varyColors val="1"/>${ser({ idx: 0, name: 'P', values: [1, 2, 3] })}</c:pieChart>`;
         expect(byRange(space(pie)).sliceColors).toEqual(ACCENTS.slice(0, 3));
+    });
+});
+
+describe('the chart part an r:id names', () => {
+    const CHART = 'http://purl.oclc.org/ooxml/officeDocument/relationships/chart';
+    const root = parseOoxml(space(bar() + AXES)) ?? undefined;
+    const rels = new Map<string, Relationship>([
+        ['rId1', { type: CHART, target: 'word/charts/chart1.xml' }],
+        ['rId2', { type: CHART, target: 'word/charts/chart2.xml' }],
+        ['rId3', { type: CHART, target: 'word/media/chart1.xml' }],
+        ['rId4', { type: `${CHART}UserShapes`, target: 'word/charts/chart1.xml' }],
+        ['rId5', { type: CHART, target: 'word/charts/chart1.xml', external: true }],
+        ['rId6', { type: CHART, target: 'word/charts/damaged.xml' }],
+        ['rId7', { type: CHART, target: 'word/charts/huge.xml' }],
+    ]);
+    const pkg = {
+        part: (path: string): XmlElement | undefined => {
+            if (path.endsWith('damaged.xml')) throw new XmlError('malformed');
+            if (path.endsWith('huge.xml')) throw new ApiError(413, 'Too large');
+            return path === 'word/charts/chart1.xml' ? root : undefined;
+        },
+        contentTypeOf: (path: string) => (path.endsWith('chart2.xml') ? 'application/xml' : CHART_CONTENT_TYPE),
+    };
+    const part = (id: string | undefined) => chartPart(pkg, rels, id, 'word/charts/');
+
+    test("is the chart relationship's part under the format's charts folder, of the chart content type", () => {
+        expect(part('rId1')).toBe(root);
+        for (const id of ['rId2', 'rId3', 'rId4', 'rId5', 'rId8', undefined])
+            expect([id, part(id)]).toEqual([id, undefined]);
+    });
+
+    test('a damaged part is none; a part past the parse budget refuses the file', () => {
+        expect(part('rId6')).toBeUndefined();
+        expect(() => part('rId7')).toThrow('Too large');
+    });
+});
+
+describe('the cost of reading a chart', () => {
+    const cost = (xml: string) => {
+        const root = parseOoxml(xml);
+        if (!root) throw new Error('no root');
+        return chartCost(root);
+    };
+    const chartSpace = (inner: string) => `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}">${inner}</c:chartSpace>`;
+
+    test("is the part's elements and, per series and two more, the longest cache's declared or last point", () => {
+        expect(cost(chartSpace('<c:ser/><c:ser/><c:ptCount val="10"/>'))).toBe(4 + (2 + 2) * 10);
+        expect(cost(chartSpace('<c:ser/><c:pt idx="99"/><a:ptCount val="500"/>'))).toBe(4 + (1 + 2) * 100);
+        expect(cost(chartSpace('<a:p/>'))).toBe(2);
+    });
+
+    test('counts no more series or points than the spec can hold', () => {
+        const series = '<c:ser/>'.repeat(MAX_CHART_SERIES + 5);
+        expect(cost(chartSpace(`${series}<c:ptCount val="1000000000"/>`))).toBe(
+            MAX_CHART_SERIES + 7 + (MAX_CHART_SERIES + 2) * MAX_CHART_POINTS,
+        );
+    });
+});
+
+describe('a chart with no spec, in words', () => {
+    test('names its kind and keeps its title; one with no name is a chart', () => {
+        expect(droppedChart({ title: 'Spread', name: 'Scatter' })).toEqual(['Scatter chart not imported', 'Spread']);
+        expect(droppedChart({ title: '', name: '' })).toEqual([CHART_NOT_IMPORTED]);
     });
 });
