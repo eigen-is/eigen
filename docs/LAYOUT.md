@@ -76,7 +76,7 @@ Every right-click menu and every ⋮ menu composes `MenuSections` (`packages/ui/
 | `clipboard` | Cut, Copy, Paste, in that order, from `ClipboardMenuItems` with their shortcuts |
 | `create` | New slide, Insert, Duplicate, Edit, Rename |
 | `organize` | Move to, Copy to, Archive, labels, color, assign, resolve, hide, sort, filter, Clear contents |
-| `arrange` | A canvas object's `OrderMenuSub` (Google Slides' Order ▸), a sheet tab's Move left and right |
+| `arrange` | A canvas object's or a sheet image's or chart's `OrderMenuSub` (Google Slides' Order ▸), a sheet tab's Move left and right |
 | `convert` | Convert to shapes, Convert to Sheet, Document or Slides |
 | `output` | Download, Export, Print, Save to Drive, Import to… |
 | `collaborate` | Add comment, Share ▸, Watch |
