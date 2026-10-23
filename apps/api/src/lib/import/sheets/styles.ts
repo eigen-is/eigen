@@ -12,6 +12,7 @@ import { readColorScheme, SCHEME_SLOTS } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import { maxDigitWidth } from '../../document/spreadsheetml';
 import { IMPORT_MESSAGES } from '../messages';
 
 // The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
@@ -154,12 +155,15 @@ export function readLooks(styleSheet: XmlElement | undefined, palette: ThemePale
     });
 }
 
-// The workbook's default font, the first, which a column width counts in.
-export function defaultFontName(styleSheet: XmlElement | undefined): string | undefined {
+// The workbook's default font, the first, whose digit a column width counts.
+export function defaultFontDigitWidth(styleSheet: XmlElement | undefined): number {
     const fonts = styleSheet && xmlChild(styleSheet, SML_NS, 'fonts');
     const font = fonts && xmlChild(fonts, SML_NS, 'font');
-    const name = font && xmlChild(font, SML_NS, 'name');
-    return name && xmlAttr(name, '', 'val');
+    const value = (name: string) => {
+        const child = font && xmlChild(font, SML_NS, name);
+        return child && xmlAttr(child, '', 'val');
+    };
+    return maxDigitWidth(value('name'), Number.parseFloat(value('sz') ?? ''));
 }
 
 // What a conditional format paints: its font's colour and its fill's.
