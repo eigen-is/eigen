@@ -5,47 +5,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
-Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` and `.pptx` itself: import and export are rewritten from scratch on one core the three formats share. Docs gets equations, charts, page setup, headers and footers, and footnotes. Slides opens and saves PowerPoint files, and charts come to every app. Reload open documents after the update: a tab from 0.3.3 deletes the equations, footnotes and charts it receives.
+Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` and `.pptx` itself, on one core the three formats share. Docs gets equations, page setup, headers and footers, and footnotes, and charts come to every app. Reload open documents after the update: a tab from 0.3.3 deletes the equations, footnotes and charts it receives.
 
 ### Added
 
-- **Word, Excel and PowerPoint files** — Eigen's own readers and writers, on one zip and XML core. **Convert to Document**, **Convert to Sheet** or **Convert to Slides** in Drive makes an Eigen file of one, File → **Import…** brings one into the open document, and File → Download writes one
-- **What comes across** — a chart in a Word, Excel or PowerPoint file comes in as a chart you can edit, and an Excel chart sheet as a sheet of its own. Word files keep equations, headers and footers, page numbers, page setup, footnotes and images both ways. Excel files keep hidden sheets, tab colors, rich text, column widths and pictures placed in a sheet, turned as they were. PowerPoint files keep text, shapes, pictures, backgrounds and slide size. Going out, a chart is a picture in Word and shapes in PowerPoint, and a chart you can edit in Excel, with a sheet's pictures beside it
-- **Import…** — in Sheets and Slides it inserts the file's sheets or slides, or replaces the whole spreadsheet or deck. In Docs it replaces the document. A version is saved before every replace
-- **Equations** — in Docs, Insert → **Equation** opens the Equation panel: type LaTeX with a live preview or pick a symbol, in line or on a line of its own. Math pasted from Word for the web or a web page comes in as an equation you can edit. PDF and web page downloads draw equations, and the Word download writes Word equations
-- **Charts** — Insert → **Chart** in Vector, Slides, Docs and Sheets: column, bar, line or pie. The Chart panel sets stacking, titles, legend, axes, gridlines and colors, and **Edit data** edits the numbers in a small sheet. In Sheets a chart follows the cells it charts. Copy and paste moves a chart between apps as a live chart, not a picture. A new chart in Docs, Slides and Vector starts from a sample, the light of the Sun, a bulb and a hot star by wavelength
-- **Chart look** — in Vector, Slides, Docs and Sheets a chart takes a shape's fill style, stroke and sketch, so it can be hatched and hand-drawn like the rest of a drawing. **Convert to shapes** in Vector and Slides turns a chart into shapes
-- **Download image** — right-click a chart in any app, or a selection in Vector or Slides, to save it as an SVG picture in its look. This works with view access too
-- **Page setup** — File → **Page setup…** in Docs sets paper size, orientation and margins. The editor, print, previews and every download follow it
-- **Headers and footers** — double-click the top or bottom margin, or use Insert → **Page elements**, with a different first page, page numbers and page count. **Options → Header format…** or **Footer format…** on a band's bar sets their distance from the paper's edge. Print, PDF and Word put them on every page, and a page number or count in the body prints its number too
-- **Footnotes** — Insert → Page elements → **Footnote** (⌘⌥F) adds a numbered note at the cursor. The PDF prints notes at the foot of their page
-- **Spacing and indents** — Format → **Line & paragraph spacing** and Format → **Align and indent**, each with its own dialog. **Update 'Normal text' to match** makes the text at the cursor the document's normal text
-- **Font size and cell color** — the Docs toolbar's **− 11 +** sets the size of text (⌘⇧. and ⌘⇧,), and Format → Table → **Cell background color** colors table cells
-- **Slide size** — File → **Page setup…** in Slides switches between 16:9 and 4:3. Font sizes show in pt, so a 44 pt PowerPoint title stays 44 pt
-- **PowerPoint shapes** — every shape in a `.pptx`, a star or a block arrow too, comes in as a shape you can move, resize and recolor. A table or a SmartArt graphic leaves a box saying what was there
-- **SVG download in Vector** — File → Download → **SVG image** keeps text as text, laid out as on the canvas, so Illustrator, Inkscape, Figma and Office draw it. Drive offers a drawing as PDF
+- **Word, Excel and PowerPoint files** — Drive converts one to an Eigen file, Import brings one into the open document, and Download writes one. Charts come in as charts you can edit. Word files keep equations, headers and footers, footnotes and page setup, Excel files their hidden sheets and pictures, and PowerPoint files their shapes, pictures and backgrounds
+- **Import** — adds a file's sheets or slides to the open one, or replaces the open document after saving a version
+- **Equations** — in Docs, typed as LaTeX with a live preview or picked from symbols. Math pasted from Word for the web or a web page becomes an equation, and PDF, web page and Word downloads keep it
+- **Charts** — column, bar, line and pie charts in Docs, Sheets, Slides and Vector, with their numbers in a small sheet. In Sheets a chart follows its cells. A chart pastes between apps as a live chart, takes a shape's fill, stroke and sketch, and turns into shapes in Vector and Slides
+- **SVG downloads** — a chart, or a selection in Vector or Slides, saves as an SVG picture, for viewers too. A Vector drawing downloads as SVG with its text kept as text, and Drive offers it as PDF
+- **Page setup** — paper size, orientation and margins in Docs, which the editor, print and every download follow. Slides switches between 16:9 and 4:3
+- **Headers and footers** — in Docs, with a different first page, page numbers and page count, on every page in print, PDF and Word
+- **Footnotes** — numbered notes in Docs, printed at the foot of their page in the PDF
+- **Docs formatting** — line and paragraph spacing, indents, font size on the toolbar, table cell colors, and Normal text updated to match the text at the cursor
 
 ### Changed
 
-- **Find and replace** — opens on ⇧⌘H (Ctrl+Shift+H, or Ctrl+H on Windows and Linux) in every editor, as in Google Docs. In Docs, ⇧⌘H no longer highlights text
-- **Print in Docs** — File → **Print** and ⌘P open the document as a PDF to print from, so headers, footers and page numbers print. Offline, Docs prints from the browser without them and says so
-- **Nested numbered lists** — a numbered list inside another numbers 1. a. i. by depth. In existing documents, a nested list that showed 1. 2. 3. now shows a. or i.: choose Format → Bullets and numbering → Numbered list → **1. 2. 3.** in it again
-- **Sheets** — text runs over into empty cells beside it, as in Excel, unless set to Clip or Wrap. A column is as wide on screen as in Excel. XLOOKUP, IFS, IFNA and Excel's other newer functions calculate
-- **Excel import** — a workbook with more than 10,000 merged ranges, 500 sheets or 2 million rows imports when its cells fit, where it was refused. A password-protected file says so
-- **Image sizes in Docs** — the Image panel and an image's handle show its width in cm
-- **Menus** — every menu orders its rows the same way, with Delete last and in red. A choice, such as a style or an alignment, is a submenu with a check on the current one. A canvas object's menu gets Cut, Copy, Paste and an **Order** submenu. In Docs, a table cell and an equation get a right-click menu of their own
-- **Pictures and charts in Sheets** — they share one frame: move, resize and rotate them, and stack them together with ⌘[ and ⌘]. A chart has one panel, with its data range inside and Arrange at the end, as in Vector and Slides
-- **Accent colors** — chart series, calendars, labels and collaborator carets take colors in one order that starts with Eigen's pink and keeps neighbors easy to tell apart, for color-blind readers too
-- **Clear formatting** — in Docs it keeps comments and links, as in Google Docs, and has a shortcut: ⌘\ (Ctrl+\)
+- **Find and replace** — ⇧⌘H in every editor, as in Google Docs
+- **Print in Docs** — prints from a PDF, so headers, footers and page numbers print
+- **Nested numbered lists** — number 1. a. i. by depth. An existing nested list that showed 1. 2. 3. shows a. or i.: set it to 1. 2. 3. again
+- **Sheets** — text runs over into empty cells beside it, and columns are as wide as in Excel. IFS, IFNA and some other newer Excel functions calculate. Pictures and charts share one frame to move, resize, rotate and stack. A large workbook imports when its cells fit, and a password-protected one says so
+- **Menus** — every menu orders its rows the same way, with Delete last and in red, and a choice is a submenu with a check on the current one. Canvas objects, and tables and equations in Docs, get fuller right-click menus
+- **Accent colors** — charts, calendars, labels and collaborator carets share one color order that starts with Eigen's pink and stays easy to tell apart, for color-blind readers too
+- **Clear formatting** — in Docs it keeps comments and links, and ⌘\ runs it
 
 ### Fixed
 
-- **Access** — an open Docs editor turns read-only when your write access is removed, and a sharing change refreshes access for every open document in the drive
-- **Slides** — dragging a bar of a chart turned into shapes moves it, where the browser dragged the label text instead
-- **Docs** — a collaborator's edit or an undo no longer turns a file name such as plan.md into a link nobody made. An image switched to wrap text shrinks so text fits beside it, and a list beside it keeps its bullets clear
-- **Sheets** — copied cells paste into other apps as rows and columns, a pasted cell keeps its font, Tab confirms a cell and moves right, and Ctrl+arrow jumps to the edge of the data. A cell with mixed bold, italic, colors or fonts counts in sorting, filters and formulas, where it read as empty
-- **Trash** — on local storage, a crash during a trash or a restore no longer leaves the file out of reach, and a restore into a folder trashed meanwhile lands at the root
-- **Large files** — a file too large for the server's memory to import, export, preview or index is refused instead of taking the server down. A download whose images pass 200 MB is refused with a message
+- **Access** — an open Docs editor turns read-only when your write access is removed, and a sharing change reaches every open document in the drive
+- **Docs** — a collaborator's edit or an undo no longer turns a file name such as plan.md into a link, and a wrapped image leaves room for the text and lists beside it
+- **Sheets** — copied cells paste into other apps as rows and columns, a pasted cell keeps its font, Tab and Ctrl+arrow move as in Excel, and a cell with mixed formatting counts in sorting, filters and formulas
+- **Trash** — on local storage, a crash during a trash or a restore no longer leaves the file out of reach
+- **Large files** — a file too large for the server's memory is refused instead of taking the server down
 
 ## [0.3.3] - 2026-10-13
 
