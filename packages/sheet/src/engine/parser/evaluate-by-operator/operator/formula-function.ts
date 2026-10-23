@@ -109,6 +109,15 @@ function withSignificance(method: FormulajsMethod) {
     return (params: FormulaArg[]) => (params.length === 1 ? method(params[0], 1) : undefined);
 }
 
+// formulajs reads a start_num below 1 as 1, where Excel's is #VALUE!, an empty one too.
+function startAboveZero(params: FormulaArg[]): FormulaOutput | undefined {
+    if (params.length < 3) return undefined;
+    const start = params[2];
+    if (start instanceof Error) return start;
+    if (!((toNumber(start ?? 0) ?? Number.NaN) >= 1)) throw Error(ERROR_VALUE);
+    return undefined;
+}
+
 const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefined> = {
     // formulajs.VALUE rejects numbers with #VALUE!. Excel accepts numbers as a
     // pass-through (and booleans as 1/0). Without this fix, calendar templates
@@ -139,6 +148,16 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
 
     CONCAT: concatenate,
     CONCATENATE: concatenate,
+
+    FIND: startAboveZero,
+    SEARCH: startAboveZero,
+
+    // formulajs answers NaN for text it can't read, which shows as a blank, where Excel's is #VALUE!.
+    NUMBERVALUE(params) {
+        const result = formulajs.NUMBERVALUE(...params);
+        if (Number.isNaN(result)) throw Error(ERROR_VALUE);
+        return result;
+    },
 
     INDEX: index,
 
