@@ -655,7 +655,7 @@ export function recalcSheets(
             const existing = rowArr[info.c];
             if (existing == null) continue;
             // An engine error must never overwrite a good cached value: functions
-            // this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) evaluate to
+            // this build lacks (LET, FILTER, …) evaluate to
             // #NAME?, which would otherwise destroy Excel's correct cached result
             // at import. When the cell already carries a non-error cached value,
             // keep it AND skip the execFunctionGlobalData seed so downstream

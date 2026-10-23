@@ -115,11 +115,11 @@ describe('engine/recalc — recalcSheets', () => {
     });
 
     test('engine error does not clobber a non-error cached value', () => {
-        // Functions this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) return
+        // Functions this build lacks (LET, FILTER, …) return
         // #NAME?. At import, Excel's correct cached value must survive — same
         // freeze-is-safe rationale as volatiles.
         const sheets = [
-            sheet('s1', 'Sheet1', [[formula('=TEXTJOIN(",",1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } })]]),
+            sheet('s1', 'Sheet1', [[formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } })]]),
         ];
         const out = recalcSheets(sheets);
         expect(out[0].data![0][0]?.v).toBe(7);
@@ -132,11 +132,7 @@ describe('engine/recalc — recalcSheets', () => {
         // proving the #NAME? never entered the eval cache (execFunctionGlobalData).
         const sheets = [
             sheet('s1', 'Sheet1', [
-                [
-                    null,
-                    formula('=TEXTJOIN(",",1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } }),
-                    formula('=B1+1'),
-                ],
+                [null, formula('=FILTER(1,2)', { v: 7, m: '7', ct: { fa: 'General', t: 'n' } }), formula('=B1+1')],
             ]),
         ];
         const out = recalcSheets(sheets);
@@ -165,10 +161,24 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![1][1]?.v).toBe('No input yet');
     });
 
+    test('an imported XLOOKUP recalculates after its input changed', () => {
+        // Excel's cached 2 predates the edit of B2 to 5.
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [str('a'), num(1), num(10), formula('=XLOOKUP("b",A1:A2,B1:B2)', num(2))],
+                [str('b'), num(5), num(50), formula('=XLOOKUP("b",A1:A2,B1:C2)', num(2))],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][3]?.v).toBe(5);
+        // A row-wide return is a spill anchor, which holds the row's first value.
+        expect(out[0].data![1][3]?.v).toBe(5);
+    });
+
     test('engine error with no cached value still writes the #NAME? sentinel', () => {
         // Pin the generator-case behavior: an unsupported function that was never
         // computed (no cached v) lands the error sentinel — better than a silent blank.
-        const sheets = [sheet('s1', 'Sheet1', [[formula('=TEXTJOIN(",",1,2)')]])];
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=FILTER(1,2)')]])];
         const out = recalcSheets(sheets);
         expect(out[0].data![0][0]?.v).toBe('#NAME?');
         expect(out[0].data![0][0]?.ct?.t).toBe('e');

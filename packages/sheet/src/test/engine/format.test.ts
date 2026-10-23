@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { is_date, numberDisplay, parseCellInput, update, valueShowEs } from '../../engine/format';
+import { is_date, numberDisplay, numberText, parseCellInput, update, valueShowEs } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
 
 describe('engine/format — date serials', () => {
@@ -195,6 +195,22 @@ describe('engine/format — numberDisplay', () => {
     test('a mask renders exponent-form values through the mask', () => {
         expect(numberDisplay(1.5e-10, '0.00E+00')).toBe(update('0.00E+00', 1.5e-10));
         expect(numberDisplay(2e-7, '0.00%')).toBe('0.00%');
+    });
+});
+
+describe('engine/format — numberText', () => {
+    test('15 significant digits, so float noise stays hidden', () => {
+        expect(numberText(0.1 + 0.2)).toBe('0.3');
+        expect(numberText(1 / 3)).toBe('0.333333333333333');
+        expect(numberText(-12.5)).toBe('-12.5');
+        expect(numberText(123456789012345)).toBe('123456789012345');
+    });
+
+    test('a number past 15 digits is E notation with a two-digit exponent, as is one below 1E-6', () => {
+        expect(numberText(1e21)).toBe('1E+21');
+        expect(numberText(1234567890123456)).toBe('1.23456789012346E+15');
+        expect(numberText(2 ** 60)).toBe('1.15292150460685E+18');
+        expect(numberText(1e-7)).toBe('1E-07');
     });
 });
 

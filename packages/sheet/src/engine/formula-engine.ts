@@ -144,11 +144,17 @@ export class FormulaEngine {
     ): EvaluationResult {
         this.currentResolver = resolver;
         try {
-            const { error, result } = this.parser.evaluate(compiled, { sheetId, rowOffset, colOffset });
+            const { error, result: evaluated } = this.parser.evaluate(compiled, { sheetId, rowOffset, colOffset });
 
             if (error != null) {
                 return { value: error, display: error, type: 'error' };
             }
+
+            // The engine has no spill, so an array result (a bare range, XLOOKUP's matched row,
+            // TRANSPOSE) keeps its top-left value: the value Excel's spill anchor holds, so a recalc
+            // of an imported anchor lands on Excel's cached value.
+            let result = evaluated;
+            while (Array.isArray(result)) result = result[0];
 
             if (result instanceof Date) {
                 // A Date result stores as its Excel serial — the same convention the
@@ -158,9 +164,7 @@ export class FormulaEngine {
                 return { value: serial, display: String(serial), type: 'date' };
             }
 
-            // Cell-scoped formulas produce scalars. Range references can
-            // surface arrays if a formula evaluates to a bare range — coerce
-            // those (and any other non-primitive) to a string for storage.
+            // Any other non-primitive is stored as its string.
             const value: Cell['v'] =
                 typeof result === 'string' || typeof result === 'number' || typeof result === 'boolean'
                     ? result
