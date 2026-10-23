@@ -90,21 +90,6 @@ export function topmostIndex(map: Y.Map<unknown>): string | null {
     return topmost;
 }
 
-// The frames in stored order, as {id, index} pairs, a shared key ordered by id. Skips malformed entries, as
-// topmostIndex does.
-function frameOrder(framesMap: Y.Map<unknown>): { id: string; index: string }[] {
-    const out: { id: string; index: string }[] = [];
-    for (const value of framesMap.values()) {
-        if (!(value instanceof Y.Map)) continue;
-        const id = value.get('id');
-        const index = value.get('index');
-        if (typeof id !== 'string' || typeof index !== 'string') continue;
-        if (!isValidFractionalIndex(index, undefined, undefined)) continue;
-        out.push({ id, index });
-    }
-    return orderByFractionalIndex(out);
-}
-
 // `count` keys that land frames directly after `afterId`, in order: at the front for null, at the end when it is
 // unknown. `excludeId` drops the frame being moved from the order it is placed into. The editor's new slide, duplicate
 // and move place one; Import… places a file's slides after the current one. Frames sharing the anchor's key, two peers'
@@ -115,9 +100,15 @@ export function frameKeysAfter(
     count: number,
     excludeId?: string,
 ): string[] {
-    return keysAfter(
-        frameOrder(framesMap).filter((f) => f.id !== excludeId),
-        afterId,
-        count,
-    );
+    // The frames in stored order, a shared key ordered by id; malformed entries skipped, as topmostIndex does.
+    const frames: { id: string; index: string }[] = [];
+    for (const value of framesMap.values()) {
+        if (!(value instanceof Y.Map)) continue;
+        const id = value.get('id');
+        const index = value.get('index');
+        if (typeof id !== 'string' || typeof index !== 'string' || id === excludeId) continue;
+        if (!isValidFractionalIndex(index, undefined, undefined)) continue;
+        frames.push({ id, index });
+    }
+    return keysAfter(orderByFractionalIndex(frames), afterId, count);
 }
