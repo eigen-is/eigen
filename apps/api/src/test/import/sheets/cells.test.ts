@@ -48,10 +48,10 @@ function thrown(run: () => unknown): unknown {
 }
 
 describe('a value', () => {
-    test('a number displays through its format and aligns right', () => {
+    test('a number displays through its format, with no alignment of its own', () => {
         const { cell } = read('<row r="1"><c r="A1"><v>1.5</v></c><c r="B1" s="6"><v>0.25</v></c></row>');
-        expect(cell('A1')).toEqual({ v: 1.5, m: '1.5', ht: 2, ct: { fa: 'General', t: 'n' } });
-        expect(cell('B1')).toEqual({ v: 0.25, m: '25.00%', ht: 2, bg: '#FFFF00', ct: { fa: '0.00%', t: 'n' } });
+        expect(cell('A1')).toEqual({ v: 1.5, m: '1.5', ct: { fa: 'General', t: 'n' } });
+        expect(cell('B1')).toEqual({ v: 0.25, m: '25.00%', bg: '#FFFF00', ct: { fa: '0.00%', t: 'n' } });
     });
 
     test('strings shared, inline and formula-made, a rich one in its runs alone', () => {
@@ -107,9 +107,9 @@ describe('a value', () => {
         const { cell } = read(
             `<row r="1"><c r="A1" s="${DATE}"><v>45000</v></c><c r="B1" s="${CUSTOM_DATE}"><v>45000.5</v></c><c r="C1" t="d"><v>2023-03-15T12:00:00</v></c><c r="D1" t="d"><v>not a date</v></c></row>`,
         );
-        expect(cell('A1')).toEqual({ v: 45000, m: '03-15-23', ht: 2, ct: { fa: 'MM-dd-yy', t: 'd' } });
-        expect(cell('B1')).toEqual({ v: 45000.5, m: '2023-03-15', ht: 2, ct: { fa: 'yyyy\\-MM\\-dd', t: 'd' } });
-        expect(cell('C1')).toEqual({ v: 45000.5, m: '3/15/2023', ht: 2, ct: { fa: 'General', t: 'd' } });
+        expect(cell('A1')).toEqual({ v: 45000, m: '03-15-23', ct: { fa: 'MM-dd-yy', t: 'd' } });
+        expect(cell('B1')).toEqual({ v: 45000.5, m: '2023-03-15', ct: { fa: 'yyyy\\-MM\\-dd', t: 'd' } });
+        expect(cell('C1')).toEqual({ v: 45000.5, m: '3/15/2023', ct: { fa: 'General', t: 'd' } });
         expect(cell('D1')).toBeUndefined();
     });
 
@@ -134,7 +134,7 @@ describe('a value', () => {
 describe('a formula', () => {
     test('keeps its cached value, zero too, behind the =', () => {
         const { cell } = read('<row r="1"><c r="A1"><f>SUM(B1:B2)</f><v>0</v></c><c r="B1"><f>NOW()</f></c></row>');
-        expect(cell('A1')).toEqual({ v: 0, m: '0', ht: 2, f: '=SUM(B1:B2)', ct: { fa: 'General', t: 'n' } });
+        expect(cell('A1')).toEqual({ v: 0, m: '0', f: '=SUM(B1:B2)', ct: { fa: 'General', t: 'n' } });
         expect(cell('B1')).toEqual({ f: '=NOW()' });
     });
 
@@ -155,7 +155,7 @@ describe('a formula', () => {
         expect(cell('D1')?.f).toBe('=B1*$B$1+C$1');
         expect(cell('C3')?.f).toBe('=A3*$B$1+B$1');
         // A copy of a formula nothing defined keeps its value alone.
-        expect(cell('D3')).toEqual({ v: 4, m: '4', ht: 2, ct: { fa: 'General', t: 'n' } });
+        expect(cell('D3')).toEqual({ v: 4, m: '4', ct: { fa: 'General', t: 'n' } });
     });
 
     test("an array formula sits on its anchor; a data table's cells keep their values", () => {
@@ -163,7 +163,7 @@ describe('a formula', () => {
             '<row r="1"><c r="A1"><f t="array" ref="A1:A2">B1:B2*2</f><v>2</v></c><c r="B1"><f t="dataTable" ref="B1:B2" dt2D="0" dtr="0" r1="C1"/><v>5</v></c></row><row r="2"><c r="A2"><v>4</v></c></row>',
         );
         expect(cell('A1')?.f).toBe('=B1:B2*2');
-        expect(cell('A2')).toEqual({ v: 4, m: '4', ht: 2, ct: { fa: 'General', t: 'n' } });
+        expect(cell('A2')).toEqual({ v: 4, m: '4', ct: { fa: 'General', t: 'n' } });
         expect(cell('B1')?.f).toBeUndefined();
         expect(cell('B1')?.v).toBe(5);
     });
@@ -177,7 +177,7 @@ describe('a look', () => {
         );
         expect(cell('A1')).toEqual({ v: 'x', m: 'x', bl: 1, bg: '#FFFF00', ct: { fa: 'General', t: 's' } });
         expect(cell('B1')).toEqual({ v: 3, m: '3', ht: 1, ct: { fa: 'General', t: 'n' } });
-        expect(cell('C1')).toEqual({ v: 4, m: '4', ht: 2, ct: { fa: 'General', t: 'n' } });
+        expect(cell('C1')).toEqual({ v: 4, m: '4', ct: { fa: 'General', t: 'n' } });
     });
 
     test("a border is the sheet's, on an empty cell too", () => {
@@ -206,15 +206,12 @@ describe('the grid', () => {
         expect([grid.rows, grid.columns]).toEqual([5, 6]);
     });
 
-    test('row heights as written, and hidden rows, with cells or without; a height of 0 only when custom', () => {
+    test('row heights as written, and hidden rows, with cells or without; a height that draws no pixel is hidden', () => {
         const { grid } = read(
-            '<row r="1" ht="30" customHeight="1"><c r="A1"><v>1</v></c></row><row r="3" hidden="1" ht="0"/><row r="4" hidden="true" ht="abc"><c r="A4"><v>1</v></c></row><row r="5" ht="0" customHeight="1"/>',
+            '<row r="1" ht="30" customHeight="1"><c r="A1"><v>1</v></c></row><row r="3" hidden="1" ht="0"/><row r="4" hidden="true" ht="abc"><c r="A4"><v>1</v></c></row><row r="5" ht="0" customHeight="1"/><row r="6" ht="0.05" customHeight="1"/>',
         );
-        expect([...grid.heights]).toEqual([
-            [0, 30],
-            [4, 0],
-        ]);
-        expect(grid.rowhidden).toEqual({ 2: 0, 3: 0 });
+        expect([...grid.heights]).toEqual([[0, 30]]);
+        expect(grid.rowhidden).toEqual({ 2: 0, 3: 0, 4: 0, 5: 0 });
     });
 
     test('a row or column past the grid has too many cells; a reference that is none is no valid file', () => {
@@ -338,7 +335,6 @@ describe('the grid', () => {
         expect(cell('A1')).toEqual({
             v: 1,
             m: '1',
-            ht: 2,
             ct: { fa: 'General', t: 'n' },
             mc: { r: 0, c: 0, rs: 1, cs: 2 },
         });

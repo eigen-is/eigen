@@ -45,8 +45,14 @@ export function pictureMediaPart(
 
 export type ImportedMedia = { name: string; contentType: string; data: Buffer };
 
-// One media file per picture part, read as it is first named and named by a prefix of the import's own and the order
-// of first use, so an import beside an earlier one's pictures overwrites none. A part past MAX_MEDIA_PARTS or the
+// An import's media names: its format, a prefix of its own and the order of first use, so an import beside an earlier
+// one's pictures overwrites none.
+export function mediaNamer(format: 'docx' | 'pptx' | 'xlsx'): (index: number, extension: string) => string {
+    const prefix = `${format}-${crypto.randomUUID()}`;
+    return (index, extension) => `${prefix}-image-${index}.${extension}`;
+}
+
+// One media file per picture part, read as it is first named, by mediaNamer. A part past MAX_MEDIA_PARTS or the
 // pictures' bytes past `maxBytes` is `null`, which the format refuses or leaves out; one whose bytes don't read is
 // undefined.
 export function importMedia(
@@ -54,7 +60,7 @@ export function importMedia(
     read: (path: string) => Uint8Array | undefined,
     maxBytes: number,
 ): { media: ImportedMedia[]; name(part: MediaPart): string | undefined | null } {
-    const prefix = `${format}-${crypto.randomUUID()}`;
+    const named = mediaNamer(format);
     const media: ImportedMedia[] = [];
     const names = new Map<string, string | undefined>();
     let bytes = 0;
@@ -65,7 +71,7 @@ export function importMedia(
             if (names.size >= MAX_MEDIA_PARTS || bytes + part.size > maxBytes) return null;
             bytes += part.size;
             const data = read(part.path);
-            const name = data && `${prefix}-image-${media.length + 1}.${part.extension}`;
+            const name = data && named(media.length + 1, part.extension);
             // A view of the bytes read, not a copy of them.
             if (data && name)
                 media.push({

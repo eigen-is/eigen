@@ -14,7 +14,6 @@ import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/core/zip';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { getSharedDrive } from '../../lib/drive/get-drive';
-import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
@@ -23,7 +22,7 @@ import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import { getUserById } from '../../lib/user';
 import { PIXEL_PNG } from '../fixtures/pptx';
 import { build, deflated } from '../fixtures/raw-zip';
-import { linkRels, rowsXml, SML, sheetXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
+import { exportXlsx, linkRels, rowsXml, SML, sheetXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
 import {
     assertJson,
@@ -332,7 +331,7 @@ describe('Sheets xlsx import/convert', () => {
         const image = { id: 'photo', index: 'a0', x: 100, y: 20, width: 40, height: 30, mediaName: 'photo.png' };
         const media = [{ name: 'photo.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG) }];
         return toTransferableBuffer(
-            await sheetsToXlsx([{ name: 'Pictures', celldata: [], images: { photo: image } }], { media }),
+            exportXlsx([{ name: 'Pictures', celldata: [], images: { photo: image } }], { media }),
         );
     }
 
@@ -929,7 +928,7 @@ describe('Sheets xlsx conversion fidelity', () => {
     test("a width counts the file's default font: Calibri's 7 px digit beside Calibri, Inter's digit beside Inter", async () => {
         // Excel's default column, 8.43 characters and the padding, stored as 9.140625.
         expect(parseXlsx(widthOf(9.140625))[0].config?.columnlen?.['0']).toBe(64);
-        const inter = await sheetsToXlsx([{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 67 } } }]);
+        const inter = exportXlsx([{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 67 } } }]);
         expect(xlsxToSheets(inter)[0].config?.columnlen).toEqual({ 0: 67 });
     });
 
@@ -1026,7 +1025,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(sheets[0].config?.borderInfo).toEqual({ '0_1': { b: { style: 1, color: '#000000' } } });
     });
 
-    test('convert right-aligns numbers without explicit alignment', async () => {
+    test('convert leaves a number without explicit alignment to align by its type', async () => {
         const buffer = buildXlsxBuffer([
             { a1: 'A1', value: 'text' },
             { a1: 'B1', value: 42 },
@@ -1034,7 +1033,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         const sheets = parseXlsx(buffer);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.ht).toBeUndefined();
-        expect(byCoord.get('0:1')?.ht).toBe(2);
+        expect(byCoord.get('0:1')?.ht).toBeUndefined();
     });
 
     test('convert resolves ARGB colors for font and fill and skips pattern none', async () => {

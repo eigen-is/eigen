@@ -136,35 +136,37 @@ export type DocumentTransformRequest =
     | (BytesTransformJob & { data: ArrayBuffer });
 
 // The warnings that count what a read skipped, an import left out or an export cut.
-export type CountedWarningCode =
-    | 'corrupt-blobs-skipped'
-    | 'blocks-flattened'
-    | 'images-unshown'
-    | 'images-dropped'
-    | 'mirrors-dropped'
-    | 'graphics-dropped'
-    | 'tables-dropped'
-    | 'charts-dropped'
-    | 'diagrams-dropped'
-    | 'objects-dropped'
-    | 'shapes-simplified'
-    | 'fills-simplified'
-    | 'text-simplified'
-    | 'section-pages-dropped'
-    | 'even-bands-dropped'
-    | 'band-images-unanchored'
-    | 'band-content-dropped'
-    | 'band-blocks-cut'
-    | 'conditional-formats-dropped'
-    | 'validations-dropped'
-    | 'validation-prompts-cut'
-    | 'sheet-names-changed'
-    | 'cells-dropped'
-    | 'texts-cut'
-    | 'formulas-dropped'
-    | 'number-formats-dropped'
-    | 'cell-formats-dropped'
-    | 'links-dropped';
+export const COUNTED_WARNING_CODES = [
+    'corrupt-blobs-skipped',
+    'blocks-flattened',
+    'images-unshown',
+    'images-dropped',
+    'mirrors-dropped',
+    'graphics-dropped',
+    'tables-dropped',
+    'charts-dropped',
+    'diagrams-dropped',
+    'objects-dropped',
+    'shapes-simplified',
+    'fills-simplified',
+    'text-simplified',
+    'section-pages-dropped',
+    'even-bands-dropped',
+    'band-images-unanchored',
+    'band-content-dropped',
+    'band-blocks-cut',
+    'conditional-formats-dropped',
+    'validations-dropped',
+    'validation-prompts-cut',
+    'sheet-names-changed',
+    'cells-dropped',
+    'texts-cut',
+    'formulas-dropped',
+    'number-formats-dropped',
+    'cell-formats-dropped',
+    'links-dropped',
+] as const;
+export type CountedWarningCode = (typeof COUNTED_WARNING_CODES)[number];
 
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }
@@ -350,6 +352,13 @@ export function toTransferableBuffer(bytes: Uint8Array): ArrayBuffer {
 
 // Every text result (export documents, the import snapshot JSON) crosses as UTF-8
 // bytes the main thread decodes or serves as-is.
+// An import's media files as they cross back.
+export function toTransferableMedia(
+    media: { name: string; contentType: string; data: Uint8Array }[],
+): TransformMedia[] {
+    return media.map(({ name, contentType, data }) => ({ name, contentType, data: toTransferableBuffer(data) }));
+}
+
 export function toTransferableText(text: string): ArrayBuffer {
     return toTransferableBuffer(new TextEncoder().encode(text));
 }

@@ -33,10 +33,7 @@ export function escapeXmlText(value: string): string {
     return xmlEscape(value, /[&<>"']/g);
 }
 
-// Splice a block right after the root `<svg …>` open tag (every svg font injector uses this).
-// Anchoring on the tag — not the document's first `>` — keeps an XML prolog, DOCTYPE, or comment
-// ahead of the root intact (an uploaded .svg may carry one; splicing before the root breaks it).
-// No open tag → the svg is returned untouched.
+// After the root's open tag, not the first `>`, so a prolog, DOCTYPE or comment an uploaded .svg carries stays ahead.
 export function spliceAfterSvgOpenTag(svg: string, block: string): string {
     const start = svg.search(/<svg[\s>]/);
     if (start === -1) return svg;

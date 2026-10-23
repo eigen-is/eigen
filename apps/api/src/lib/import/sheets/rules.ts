@@ -15,12 +15,14 @@ import {
     CF_CELL_IS_CONDITION,
     DAY_MS,
     DAYS_1904,
+    DUPLICATE_RULE,
     DV_DATE_OPERATOR,
     DV_OPERATOR,
     DV_TYPE,
     EXCEL_EPOCH_MS,
     inExcelGrid,
     NUMERIC,
+    TOP10_CONDITION,
     withoutFuturePrefixes,
 } from '../../document/spreadsheetml';
 import { colorOf, type DxfLook, dxfLook, resolveColor, type ThemePalette } from './styles';
@@ -254,14 +256,13 @@ function mapCfRule(
         const bottom = flag('bottom') === true;
         const percent = flag('percent') === true;
         const rank = xmlAttr(rule, '', 'rank');
-        return condition(bottom ? (percent ? 'last10_percent' : 'last10') : percent ? 'top10_percent' : 'top10', [
-            String(rank === undefined ? 10 : Number.parseInt(rank, 10)),
-        ]);
+        const top = [...TOP10_CONDITION].find(([, flags]) => flags.percent === percent && flags.bottom === bottom);
+        if (top) return condition(top[0], [String(rank === undefined ? 10 : Number.parseInt(rank, 10))]);
     }
     // aboveAverage is on unless written off.
     if (type === 'aboveAverage') return condition(flag('aboveAverage') === false ? 'belowAverage' : 'aboveAverage', []);
-    if (type === 'duplicateValues' || type === 'uniqueValues')
-        return condition('duplicateValue', [type === 'duplicateValues' ? '0' : '1']);
+    const duplicate = DUPLICATE_RULE.get(type);
+    if (duplicate) return condition('duplicateValue', [duplicate]);
     // An icon set has no evaluator, a blank or error rule without its formula nothing to evaluate: a dropped rule is
     // honest, a wrong one is not.
     return undefined;

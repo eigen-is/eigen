@@ -12,6 +12,10 @@ export {
 
 import { rowIndexToLabel, rowLabelToIndex, SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
 
+// Excel's limit on a sheet name's length and the characters it refuses in one; it refuses a quote at either end too.
+export const MAX_SHEET_NAME_LENGTH = 31;
+export const SHEET_NAME_FORBIDDEN = /[\\/?*[\]:]/g;
+
 export type CellRef = { col: number; row: number };
 
 export type A1Range = {
@@ -50,4 +54,14 @@ export function parseA1Range(range: string): A1Range | null {
 
 export function toA1(row: number, col: number): string {
     return columnIndexToLabel(col) + rowIndexToLabel(row);
+}
+
+// A cell or a rectangle as A1 text, one cell without the colon; `absolute` is Excel's $A$1 form.
+export function rangeToA1(
+    { row, column }: { row: readonly number[]; column: readonly number[] },
+    absolute = false,
+): string {
+    const cell = (r: number, c: number) => (absolute ? `$${columnIndexToLabel(c)}$${rowIndexToLabel(r)}` : toA1(r, c));
+    const start = cell(row[0], column[0]);
+    return row[0] === row[1] && column[0] === column[1] ? start : `${start}:${cell(row[1], column[1])}`;
 }

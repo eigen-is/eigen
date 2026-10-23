@@ -16,7 +16,7 @@ import { IMPORT_MESSAGES } from '../messages';
 // at a time, since a sheet's grid and the shared strings can each be the whole decompressed cap.
 
 // A chart sheet is a sheet without a grid, holding its drawing's chart.
-export type WorkbookSheet = { name: string; path: string; hidden: boolean; chartSheet?: true };
+export type WorkbookSheet = { name: string; path: string; hidden: boolean; chartSheet: boolean };
 
 export type XlsxPackage = {
     pkg: OoxmlPackage;
@@ -41,10 +41,10 @@ export function readPackage(bytes: Uint8Array): XlsxPackage {
     const entries = (list ? xmlChildren(list, SML_NS, 'sheet') : []).flatMap((sheet): WorkbookSheet[] => {
         const name = xmlAttr(sheet, '', 'name');
         const rel = rels.get(xmlAttr(sheet, R_NS, 'id') ?? '');
-        const chartSheet = rel?.type.endsWith('/chartsheet');
+        const chartSheet = rel?.type.endsWith('/chartsheet') === true;
         if (name === undefined || !rel || rel.external || !(chartSheet || rel.type.endsWith('/worksheet'))) return [];
         const hidden = (xmlAttr(sheet, '', 'state') ?? 'visible') !== 'visible';
-        return [{ name, path: rel.target, hidden, ...(chartSheet && { chartSheet }) }];
+        return [{ name, path: rel.target, hidden, chartSheet }];
     });
     // One sheet per part, named and placed by the last entry naming it; read per entry, a part would be inflated and
     // parsed again for each.

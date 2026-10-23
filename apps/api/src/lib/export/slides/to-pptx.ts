@@ -21,7 +21,6 @@ import {
     getFontMetrics,
     isBordered,
     isClosedPath,
-    isTransparentColor,
     isTransparentFill,
     linearLocalToScene,
     normalizeAngle,
@@ -48,11 +47,10 @@ import {
 } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
-import { THEME_TYPE, themeXml } from '../../core/drawingml';
+import { colorXml, DEGREE, solidFillXml, THEME_TYPE, themeXml } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { A_NS, AHYP_NS, EMU_PER_POINT, P_NS, R_NS } from '../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
-import { cssColorToHex } from '../../document/colors';
 import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../document/presentationml';
 import { canvasTextValue } from '../../document/prose-css';
 import {
@@ -232,7 +230,7 @@ function degrees(radians: number): number {
 
 // Degrees clockwise as DrawingML's 60,000ths, within one turn.
 function angle(value: number): number {
-    return Math.round(normalizeAngle(value) * 60_000) % 21_600_000;
+    return Math.round(normalizeAngle(value) * DEGREE) % (360 * DEGREE);
 }
 
 function elementXml(el: VectorElement, slide: Slide): string {
@@ -404,14 +402,6 @@ function customXml(slide: Slide, box: { width: number; height: number }, path: s
     return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="${w}" h="${h}"${filled ? '' : ' fill="none"'}>${path}</a:path></a:pathLst></a:custGeom>`;
 }
 
-// A stored color token as DrawingML, null for transparent. A #rrggbbaa's alpha rides beside the RGB, times the element's.
-function colorXml(color: string, opacity: number): string | null {
-    const hex = isTransparentColor(color) ? undefined : cssColorToHex(color.slice(0, 7));
-    if (!hex) return null;
-    const alpha = (color.length === 9 ? Number.parseInt(color.slice(7), 16) / 255 : 1) * opacity;
-    return `<a:srgbClr val="${hex}">${alpha < 1 ? `<a:alpha val="${share(alpha)}"/>` : ''}</a:srgbClr>`;
-}
-
 // The paint alone: a hatched or rough fill exports solid. A gradient takes the stops the canvas samples and its CSS
 // angle (0 paints upward) as DrawingML's (0 paints rightward). The canvas paints an element's in the box's own units
 // (gradientVector), so stretched with the box it runs at another angle; a background is CSS's, at its own. LibreOffice
@@ -421,10 +411,7 @@ function fillXml(
     opacity: number,
     box: { width: number; height: number } = { width: 1, height: 1 },
 ): string {
-    if (paint.type === 'solid') {
-        const color = colorXml(paint.color, opacity);
-        return color ? `<a:solidFill>${color}</a:solidFill>` : '<a:noFill/>';
-    }
+    if (paint.type === 'solid') return solidFillXml(paint.color, opacity);
     const stops = gradientStops(paint.from, paint.to).map(
         (stop) => `<a:gs pos="${share(stop.offset)}">${colorXml(stop.color, stop.opacity * opacity)}</a:gs>`,
     );
@@ -889,8 +876,7 @@ function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, 
         box.strike || marks.strike ? ' strike="sngStrike"' : '',
         spacing !== 0 ? ` spc="${spacing}"` : '',
     ].join('');
-    const color = colorXml(box.color, opacity);
-    const fill = color ? `<a:solidFill>${color}</a:solidFill>` : '<a:noFill/>';
+    const fill = solidFillXml(box.color, opacity);
     const face = escapeXml(box.fontFamily);
     const fonts = `<a:latin typeface="${face}"/><a:ea typeface="${face}"/><a:cs typeface="${face}"/>`;
     // A link draws in the run's color, as canvas-text.css draws it: PowerPoint's own extension for that.

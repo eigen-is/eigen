@@ -14,7 +14,7 @@ export type SharedStringTable = {
     xml(): Iterable<string>;
 };
 
-const BATCH_CHARS = 1024 * 1024;
+export const BATCH_CHARS = 1024 * 1024;
 
 export function sharedStringTable(lost: (code: CountedWarningCode) => void): SharedStringTable {
     const plain = new Map<string, number>();

@@ -73,11 +73,8 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
     }
 }
 
-// Inject a <defs><style> of @font-face blocks for the EIGEN fonts the svg's text names, right after the
-// opening <svg> tag (sceneToSvg emits no top-level <defs>). The faces are data: URIs (from
-// getFontFaceCSSForFamilies), so sanitizeExportHtml keeps them and the sandbox CSP allows them; faces are static per build, so a cached result never goes stale. Charges the
-// css against the shared output budget before splicing; a breach degrades to no faces (text falls back
-// to a system font, the svg still serves) rather than discarding the media already inlined.
+// The faces are data: URIs, so sanitizeExportHtml keeps them and the sandbox CSP allows them; they are static per
+// build, so a cached result never goes stale. Past the output budget the svg serves without them, its media kept.
 function injectFontFaces(svg: string, budget: Budget): string {
     const faceCSS = getFontFaceCSSForFamilies(usedEigenFonts(svg));
     if (faceCSS === '') return svg;

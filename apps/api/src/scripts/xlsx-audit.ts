@@ -16,7 +16,8 @@
 //
 // roundtrip is the xlsx writer's gate: each file the reader imports is written by the writer (`--writer`, to-xlsx.ts's
 // signature) and imported again, and the two imports are compared key by key. A difference is listed when LISTED
-// explains it, else unlisted; the run passes with no crash, no cut and no unlisted difference.
+// explains it, else unlisted; the run passes with no crash, no cut and no unlisted difference. A file the first import
+// refuses is skipped, so a reader that newly refuses one passes here: `compare` of two corpus runs catches that.
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
@@ -37,7 +38,9 @@ import { MAX_DECOMPRESSED_BYTES, openZip, writeZip, type ZipWriteEntry } from '.
 import { MAX_FORMULA_STRING_LENGTH } from '../lib/document/spreadsheetml';
 import type { TransformWarning } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
+import type { OfficeMedia } from '../lib/export/office-image';
 import type { sheetsToXlsx } from '../lib/export/sheets/to-xlsx';
+import { sheetNames } from '../lib/export/sheets/xlsx/package';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import {
     type RoundtripDifference as BaseDifference,
@@ -915,8 +918,17 @@ export function compareRuns(
 // One thing the two imports hold differently: a sheet's feature at a place, or a cell's key at its cell, with the cells.
 export type RoundtripDifference = BaseDifference & { sheet: string; cells?: { a?: Cell; b?: Cell } };
 
-// What the writer reported cutting, by warning code, and the sheets both imports made.
-export type RoundtripContext = { warnings: ReadonlyMap<string, number>; a: Sheet[]; b: Sheet[] };
+// A picture's media as a reader draws it, by its media name: its type and its pixels.
+export type MediaFacts = ReadonlyMap<string, { contentType: string; width: number; height: number }>;
+
+// What the writer reported cutting, by warning code, the sheets both imports made, and the media the writer was given
+// beside the media the second import read.
+export type RoundtripContext = {
+    warnings: ReadonlyMap<string, number>;
+    a: Sheet[];
+    b: Sheet[];
+    media: { a: MediaFacts; b: MediaFacts };
+};
 
 // A cell's keys, its type and format flattened out of `ct`, so each is a difference of its own.
 function cellFields(cell: Cell | null | undefined): Map<string, unknown> {
@@ -930,7 +942,7 @@ function cellFields(cell: Cell | null | undefined): Map<string, unknown> {
 }
 
 // A sheet's maps compared key by key, its lists item by item; a key either holds is compared, so nothing is left out.
-export function diffWorkbooks(a: Sheet[], b: Sheet[]): RoundtripDifference[] {
+export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['media']): RoundtripDifference[] {
     const differences: RoundtripDifference[] = [];
     const note = (
         feature: string,
@@ -974,12 +986,14 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[]): RoundtripDifference[] {
                 keyed(field, sheet, x, y);
             else if (field === 'charts') {
                 const spec = (value: unknown) =>
-                    Object.values(value && typeof value === 'object' ? value : {}).map((chart) => ({
-                        ...chart,
-                        spec: typeof chart?.spec === 'string' ? JSON.parse(chart.spec) : chart?.spec,
-                    }));
+                    Object.values(isRecord(value) ? value : {}).map((chart: unknown) =>
+                        isRecord(chart) && typeof chart['spec'] === 'string'
+                            ? { ...chart, spec: JSON.parse(chart['spec']) }
+                            : chart,
+                    );
                 keyed('charts', sheet, spec(x), spec(y));
-            } else if (field === 'images') keyed('images', sheet, picturesOf(sheetA), picturesOf(sheetB));
+            } else if (field === 'images')
+                keyed('images', sheet, picturesOf(sheetA, media.a), picturesOf(sheetB, media.b));
             else note(field, sheet, '', x, y);
         }
         const cellsA = new Map((sheetA.celldata ?? []).map(({ r, c, v }) => [`${r}_${c}`, { r, c, v }]));
@@ -1003,21 +1017,23 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[]): RoundtripDifference[] {
     return differences;
 }
 
-// A sheet's pictures in paint order, by place, their media by order of first use: an import names both afresh.
-function picturesOf(sheet: Sheet): unknown[] {
+// A sheet's pictures in paint order, by place, their media by order of first use, as an import names both afresh, and
+// by what it draws.
+function picturesOf(sheet: Sheet, facts: MediaFacts): unknown[] {
     const media = new Map<string, number>();
     return Object.values(sheet.images ?? {})
         .toSorted((x, y) => (x.index < y.index ? -1 : x.index > y.index ? 1 : 0))
         .map(({ id: _id, index: _index, mediaName, ...image }) => {
             if (!media.has(mediaName)) media.set(mediaName, media.size);
-            return { ...image, media: media.get(mediaName) };
+            return { ...image, media: media.get(mediaName), file: facts.get(mediaName) };
         });
 }
 
 // A run's font without the keys that name the workbook's default, which draws the same as none.
 function withoutDefaultFont(runs: unknown): unknown {
     return Array.isArray(runs)
-        ? runs.map((run) => {
+        ? runs.map((run: unknown) => {
+              if (!isRecord(run)) return run;
               const { fs: size, ff: face, ...rest } = run;
               return {
                   ...rest,
@@ -1033,42 +1049,18 @@ const isDefaultFace = (face: unknown) =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
-// A merge's other cell, which points back at its anchor without the span.
-const isConstituent = (cell: Cell | undefined) => cell?.mc !== undefined && cell.mc.rs === undefined;
-
-// What a cell holds as its value, and what the import derives from one.
-const VALUE_KEYS = new Set(['cell v', 'cell m', 'cell f', 'cell ct.t', 'cell ct.s']);
-
-// The differences the spec explains (.superpowers/xlsx-writer/SPEC.md § 2, § 3), each kind with why it is no loss or
-// a loss the spec accepts. A difference none matches is unlisted, and fails the gate.
+// The differences the writer explains, each kind with why it is no loss or a loss Excel's limits force. A difference
+// none matches is unlisted, and fails the gate.
 export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
     {
         kind: 'default font keys',
-        why: "§ 2: the import gives a cell of any but the default format its font whole, and our writer writes a cell whose font is the default with format 0, so a size or face equal to the workbook's default (Inter 10) comes and goes; both draw alike",
+        why: "The import gives a cell of any but the default format its font whole, and our writer writes a cell whose font is the default with format 0, so a size or face equal to the workbook's default (Inter 10) comes and goes; both draw alike",
         matches: ({ feature, a, b }) =>
             (feature === 'cell fs' &&
                 (a === undefined || a === SHEET_DEFAULT_FONT_SIZE) &&
                 (b === undefined || b === SHEET_DEFAULT_FONT_SIZE)) ||
             (feature === 'cell ff' && (a === undefined || isDefaultFace(a)) && (b === undefined || isDefaultFace(b))) ||
             (feature === 'cell ct.s' && canonical(withoutDefaultFont(a)) === canonical(withoutDefaultFont(b))),
-    },
-    {
-        kind: 'number alignment',
-        why: '§ 2: the import aligns a number right (ht 2) unless its format names a horizontal alignment, and a source\'s `horizontal="general"` names one Eigen has no value for, so the export writes none and the number comes back right-aligned',
-        matches: ({ feature, a, b, cells }) =>
-            feature === 'cell ht' && a === undefined && b === 2 && typeof cells?.b?.v === 'number',
-    },
-    {
-        kind: 'merged-cell values',
-        why: "§ 3.5: a merge's other cells write only their look, as Excel shows the first cell's value over the merge; a value the source held under it is not written",
-        matches: ({ feature, a, b, cells }) =>
-            isConstituent(cells?.a) &&
-            isConstituent(cells?.b) &&
-            cells?.b?.v === undefined &&
-            cells?.b?.f === undefined &&
-            (VALUE_KEYS.has(feature) ||
-                (feature === 'cell ct.fa' && a === 'General' && b === undefined) ||
-                (feature === 'cell ht' && a === 2 && b === undefined)),
     },
     {
         kind: 'single-cell merges',
@@ -1082,7 +1074,7 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
     },
     {
         kind: 'web links resolved',
-        why: "§ 3.8: a web link is written as resolveWebLink makes it, the address the editor opens, and as a relationship's URI, so a bare host gains its https:// and a character a URI can't hold its escape",
+        why: "A web link is written as resolveWebLink makes it, the address the editor opens, and as a relationship's URI, so a bare host gains its https:// and a character a URI can't hold its escape",
         matches: ({ feature, a, b }) =>
             feature === 'hyperlink' &&
             isRecord(a) &&
@@ -1094,7 +1086,7 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
     },
     {
         kind: 'unwritable links dropped',
-        why: "§ 3.8: a web link resolveWebLink refuses (a script's address), which the editor never opens, or a cell link to no range (a defined name's Print_Area), which it can't follow, is left out and counted (links-dropped), its cell's backref with it",
+        why: "A web link resolveWebLink refuses (a script's address), which the editor never opens, or a cell link to no range (a defined name's Print_Area), which it can't follow, is left out and counted (links-dropped), its cell's backref with it",
         matches: ({ feature, sheet, at, a, b }, { warnings, a: sheets }) => {
             if (!warnings.has('links-dropped') || b !== undefined) return false;
             const links = sheets.find((candidate) => candidate.name === sheet)?.hyperlink ?? {};
@@ -1110,7 +1102,7 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
     },
     {
         kind: 'sheet links as cell links',
-        why: "§ 2: a link to a sheet is written as a location, which names a cell, so it comes back a link to the sheet's A1",
+        why: "A link to a sheet is written as a location, which names a cell, so it comes back a link to the sheet's A1",
         matches: ({ feature, a, b }) =>
             feature === 'hyperlink' &&
             isRecord(a) &&
@@ -1124,7 +1116,7 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
     },
     {
         kind: 'list ranges absolute',
-        why: "§ 3.7: a list's range is written absolute, as the engine reads one list for every cell where Excel would shift a relative ref",
+        why: "A list's range is written absolute, as the engine reads one list for every cell where Excel would shift a relative ref",
         matches: ({ feature, a, b }) =>
             feature === 'dataVerification' &&
             isRecord(a) &&
@@ -1137,7 +1129,7 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
     },
     {
         kind: 'list validations too long',
-        why: '§ 3.7, Q4: Excel holds a list literal of at most 255 characters; a longer one is dropped and counted (validations-dropped)',
+        why: 'Excel holds a list literal of at most 255 characters; a longer one is dropped and counted (validations-dropped)',
         matches: ({ feature, a, b }, { warnings }) =>
             feature === 'dataVerification' &&
             warnings.has('validations-dropped') &&
@@ -1149,14 +1141,15 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
     },
     {
         kind: 'sheet names repaired',
-        why: '§ 3.2: a name Excel refuses (History, a forbidden character, past 31 characters, a duplicate in any case) is repaired and counted (sheet-names-changed)',
-        matches: ({ feature }, { warnings }) => feature === 'sheet name' && warnings.has('sheet-names-changed'),
+        why: 'A name Excel refuses (History, a forbidden character, past 31 characters, a duplicate in any case) is repaired and counted (sheet-names-changed)',
+        matches: ({ feature, at, b }, { a: sheets }) =>
+            feature === 'sheet name' && b === sheetNames(sheets, () => {})[Number(at)],
     },
 ];
 
 export function classifyDifferences(context: RoundtripContext): DifferenceGroup[] {
     return classify(
-        diffWorkbooks(context.a, context.b),
+        diffWorkbooks(context.a, context.b, context.media),
         LISTED,
         context,
         (difference) => `${difference.sheet}!${difference.at}`,
@@ -1172,6 +1165,19 @@ const XLSX_GATE: RoundtripGate = {
     listed: LISTED,
 };
 
+// A picture's media by name, its type and pixel size as sharp reads them.
+async function mediaFacts(
+    media: { name: string; contentType: string; data: ArrayBuffer | Buffer }[],
+): Promise<MediaFacts> {
+    const { default: sharp } = await import('sharp');
+    const facts = new Map<string, { contentType: string; width: number; height: number }>();
+    for (const { name, contentType, data } of media) {
+        const { width = 0, height = 0 } = await sharp(data).metadata();
+        facts.set(name, { contentType, width, height });
+    }
+    return facts;
+}
+
 // The round trip's child: the file imported, written by our writer with its pictures prepared as an export prepares
 // them, imported again, and the two imports compared.
 async function xlsxRoundtripChild(file: string, options: { writer: string; reports: string }): Promise<void> {
@@ -1183,14 +1189,19 @@ async function xlsxRoundtripChild(file: string, options: { writer: string; repor
     const limits = { maxMediaBytes: MAX_DECOMPRESSED_BYTES };
     await roundtripChild(options.reports, async (step) => {
         const data = new Uint8Array(await Bun.file(file).arrayBuffer());
-        const a = await step('import', () => readXlsx(data, limits));
+        const a = await step('import', () => readXlsx(data, limits, []));
         const exported: TransformWarning[] = [];
-        const bytes = await step('export', async () =>
-            sheetsToXlsx(a.sheets, { warnings: exported, media: await officeMedia(a.media) }),
-        );
-        const b = await step('reimport', () => readXlsx(bytes, limits));
+        let prepared: OfficeMedia[] = [];
+        const bytes = await step('export', async () => {
+            prepared = await officeMedia(a.media);
+            return sheetsToXlsx(a.sheets, { title: '', warnings: exported, media: prepared });
+        });
+        const b = await step('reimport', () => readXlsx(bytes, limits, []));
         const warnings = new Map(exported.map((warning) => [warning.code, 'count' in warning ? warning.count : 1]));
-        const groups = await step('compare', () => classifyDifferences({ warnings, a: a.sheets, b: b.sheets }));
+        const groups = await step('compare', async () => {
+            const media = { a: await mediaFacts(prepared), b: await mediaFacts(b.media) };
+            return classifyDifferences({ warnings, a: a.sheets, b: b.sheets, media });
+        });
         return { warnings, groups };
     });
 }

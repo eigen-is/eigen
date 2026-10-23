@@ -3,6 +3,7 @@ import {
     chartColor,
     DEFAULT_CHART_SERIES_STYLE,
     defaultChartPresentation,
+    FLAT_CHART_LOOK,
     parseChartSpec,
     sampleChartSpec,
 } from '@workspace/lib/charts';
@@ -22,6 +23,8 @@ const NAMES = new Map([
     ['s2', "Bob's <sheet>"],
 ]);
 const ranges = (sheetId: string) => NAMES.get(sheetId);
+// Inline data names no sheet.
+const INLINE = { ranges: () => undefined, look: FLAT_CHART_LOOK };
 const ids = (name: string) => [...NAMES].find(([, written]) => written === name)?.[0];
 
 const ref = (row: [number, number], column: [number, number], sheetId = 's1'): CellRangeRef => ({
@@ -68,7 +71,7 @@ function read(xml: string, data: Parameters<typeof readChart>[1]['data']): Chart
 }
 
 const throughRanges = (spec: ChartSpec, cache?: ChartData) =>
-    read(writeChart(spec, { ranges, cache }), { ranges: ids });
+    read(writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK }), { ranges: ids });
 
 // A pie has no axes, so the axis fields a Type switch would show read as an Excel pie's: no titles, no gridlines.
 function axesOf(spec: ChartSpec): ChartSpec {
@@ -103,7 +106,7 @@ describe('writeChart with range data', () => {
 
     test('a percent-stacked chart labels its value axis 0%, which reads back as no format', () => {
         const spec = rangeSpec('column', { stacking: 'percent' });
-        const [axis] = find(root(writeChart(spec, { ranges })), 'valAx');
+        const [axis] = find(root(writeChart(spec, { ranges, look: FLAT_CHART_LOOK })), 'valAx');
         const [numFmt] = find(axis, 'numFmt');
         expect([xmlAttr(numFmt, '', 'formatCode'), xmlAttr(numFmt, '', 'sourceLinked')]).toEqual(['0%', '0']);
         expect(throughRanges(spec).valueAxis.format).toBeNull();
@@ -126,8 +129,12 @@ describe('writeChart with range data', () => {
 
     test("a pie keeps its slice colours, an automatic one automatic, and its first series' look", () => {
         const spec = rangeSpec('pie', { sliceColors: [null, '#abcdef'] }, RANGE_SERIES.slice(0, 1));
-        const xml = writeChart(spec, { ranges });
-        expect(throughRanges(spec)).toEqual(axesOf(spec));
+        const cache: ChartData = {
+            categories: ['North', 'South', 'East'],
+            series: [{ ...DEFAULT_CHART_SERIES_STYLE, color: chartColor(0), name: 'Sales', values: [1, 2, 3] }],
+        };
+        const xml = writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK });
+        expect(throughRanges(spec, cache)).toEqual(axesOf(spec));
         // Excel draws the palette's colour for the automatic slices, explicitly.
         const colors = find(root(xml), 'dPt').map((point) => find(point, 'srgbClr', A_NS)[0]);
         expect(colors.map((color) => xmlAttr(color, '', 'val'))).toEqual([
@@ -160,7 +167,7 @@ describe('writeChart with range data', () => {
             { ...RANGE_SERIES[1], color: null },
         ];
         const spec = rangeSpec('column', {}, series);
-        const xml = writeChart(spec, { ranges });
+        const xml = writeChart(spec, { ranges, look: FLAT_CHART_LOOK });
         expect(throughRanges(spec).data.series.map((s) => s.color)).toEqual([null, '#11223380', null]);
         const fills = find(root(xml), 'ser').map((ser) => xmlAttr(find(ser, 'srgbClr', A_NS)[0], '', 'val'));
         expect(fills).toEqual([chartColor(0), '#112233', chartColor(2)].map((color) => color.slice(1).toUpperCase()));
@@ -169,7 +176,7 @@ describe('writeChart with range data', () => {
     // CHARTS.md: c:orientation is maxMin when (type === 'bar') !== reversed, and the value axis crosses at that end.
     test("the category axis runs as Google's unless reversed, the value axis staying at its start", () => {
         const orientation = (spec: ChartSpec) => {
-            const chart = root(writeChart(spec, { ranges }));
+            const chart = root(writeChart(spec, { ranges, look: FLAT_CHART_LOOK }));
             return [val(find(chart, 'catAx')[0], 'orientation'), val(find(chart, 'valAx')[0], 'crosses')];
         };
         expect(orientation(rangeSpec('column'))).toEqual(['minMax', 'autoZero']);
@@ -180,7 +187,7 @@ describe('writeChart with range data', () => {
     });
 
     test("refs name the workbook's sheets quoted, and a sheet it doesn't write is #REF!", () => {
-        const xml = writeChart(rangeSpec('column'), { ranges });
+        const xml = writeChart(rangeSpec('column'), { ranges, look: FLAT_CHART_LOOK });
         expect(find(root(xml), 'f').map(xmlTrimmedText)).toEqual([
             "'Data'!$B$1",
             "'Data'!$A$2:$A$4",
@@ -188,9 +195,15 @@ describe('writeChart with range data', () => {
             "'Data'!$A$2:$A$4",
             "'Bob''s <sheet>'!$C$2:$C$4",
         ]);
-        const lost = read(writeChart(rangeSpec('column'), { ranges: (id) => (id === 's1' ? 'Data' : undefined) }), {
-            ranges: ids,
-        });
+        const lost = read(
+            writeChart(rangeSpec('column'), {
+                ranges: (id) => (id === 's1' ? 'Data' : undefined),
+                look: FLAT_CHART_LOOK,
+            }),
+            {
+                ranges: ids,
+            },
+        );
         expect(lost.data.series[1]).toMatchObject({ name: 'Plan', values: null });
     });
 
@@ -213,7 +226,7 @@ describe('writeChart with range data', () => {
                 { ...DEFAULT_CHART_SERIES_STYLE, color: '#112233', name: 'Actual', values: [4.5, 5, -6e-7] },
             ],
         };
-        const inline = read(writeChart(spec, { ranges, cache }), 'cache');
+        const inline = read(writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK }), 'cache');
         expect(inline.data).toEqual({
             source: 'inline',
             categories: ['North', 'South', 'East'],
@@ -227,14 +240,16 @@ describe('writeChart with range data', () => {
     });
 
     test('without caches the refs go alone, and the chart still reads back', () => {
-        const xml = writeChart(rangeSpec('column'), { ranges });
+        const xml = writeChart(rangeSpec('column'), { ranges, look: FLAT_CHART_LOOK });
         expect(find(root(xml), 'numCache')).toEqual([]);
         expect(throughRanges(rangeSpec('column'))).toEqual(rangeSpec('column'));
     });
 
     test('the same spec writes the same bytes', () => {
         const spec = rangeSpec('pie', {}, RANGE_SERIES.slice(0, 1));
-        expect(writeChart(spec, { ranges })).toBe(writeChart(parsed(spec), { ranges }));
+        expect(writeChart(spec, { ranges, look: FLAT_CHART_LOOK })).toBe(
+            writeChart(parsed(spec), { ranges, look: FLAT_CHART_LOOK }),
+        );
         expect(throughRanges(spec)).toEqual(axesOf(spec));
     });
 });
@@ -242,7 +257,7 @@ describe('writeChart with range data', () => {
 describe('writeChart with inline data', () => {
     test.each(['column', 'bar', 'line', 'pie'] as const)("the %s sample's literals read back as it", (type) => {
         const spec = sampleChartSpec(type);
-        expect(read(writeChart(spec), 'cache')).toEqual(axesOf(spec));
+        expect(read(writeChart(spec, INLINE), 'cache')).toEqual(axesOf(spec));
     });
 
     test('gaps, ragged series and no categories read back', () => {
@@ -258,13 +273,11 @@ describe('writeChart with inline data', () => {
                 ],
             },
         });
-        expect(read(writeChart(spec), 'cache')).toEqual(spec);
+        expect(read(writeChart(spec, INLINE), 'cache')).toEqual(spec);
     });
 
-    // An xlsx reads its refs first and falls back to the caches for a literal.
-    test("a literal can't be read as a range", () => {
-        expect(readChart(root(writeChart(sampleChartSpec('column'))), { theme, data: { ranges: ids } })).toEqual({
-            unsupported: { title: "Where a star's light goes", name: 'Clustered Column' },
-        });
+    test('a literal read through ranges reads as its literals', () => {
+        const spec = sampleChartSpec('column');
+        expect(read(writeChart(spec, INLINE), { ranges: ids })).toEqual(spec);
     });
 });

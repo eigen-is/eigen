@@ -44,8 +44,8 @@ export type PptxOptions = { deck?: SlidePage; maxMediaBytes: number };
 export const MAX_PPTX_WORK = 3_000_000;
 
 // ST_SlideSizeCoordinate's range, 1 to 56 inches; PowerPoint's 4:3, 10 by 7.5 in, where the file states none.
-const MIN_SLIDE_EMU = 914_400;
-const MAX_SLIDE_EMU = 51_206_400;
+const MIN_SLIDE_EMU = 72 * EMU_PER_POINT;
+const MAX_SLIDE_EMU = MAX_SLIDE_WIDTH * EMU_PER_POINT;
 const DEFAULT_SLIDE_EMU = { cx: 9_144_000, cy: 6_858_000 };
 
 export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {

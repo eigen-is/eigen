@@ -7,11 +7,11 @@ import type {
 } from '@workspace/lib/sheets';
 import { parseCellKey } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { iscelldata, toA1 } from '@workspace/sheet/engine';
-import { cssColorToHex } from '../../../document/colors';
+import { iscelldata, rangeToA1, toA1 } from '@workspace/sheet/engine';
 import {
     CF_CELL_IS_CONDITION,
     DAY_MS,
+    DUPLICATE_XLSX_RULE,
     DV_XLSX_DATE_OPERATOR,
     DV_XLSX_OPERATOR,
     DV_XLSX_TYPE,
@@ -19,11 +19,13 @@ import {
     inExcelGrid,
     MAX_FORMULA_LENGTH,
     MAX_FORMULA_STRING_LENGTH,
+    MAX_PROMPT_LENGTH,
     NUMERIC,
+    TOP10_CONDITION,
     withFuturePrefixes,
 } from '../../../document/spreadsheetml';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
-import type { StyleRegistry } from './styles';
+import { argbOf, type StyleRegistry } from './styles';
 
 // The reader's mirror (import/sheets/rules.ts): each rule in the 2007 schema's form, which the reader reads as the
 // rule it was. What Excel can't hold is dropped and counted.
@@ -52,7 +54,7 @@ function conditionalFormattingXml(
     const written: { sqref: string; rule: CfRule }[] = [];
     for (const rule of rules) {
         const cfRule = cfRuleOf(rule);
-        if (cfRule) written.push({ sqref: rule.cellrange.map(refOf).join(' '), rule: cfRule });
+        if (cfRule) written.push({ sqref: rule.cellrange.map((range) => rangeToA1(range)).join(' '), rule: cfRule });
         else lost('conditional-formats-dropped');
     }
     // Excel resolves overlapping rules by the lowest priority number, the engine by the last rule. Excel keeps the
@@ -72,13 +74,6 @@ function conditionalFormattingXml(
         .map(([sqref, xml]) => `<conditionalFormatting sqref="${sqref}">${xml.join('')}</conditionalFormatting>`)
         .join('');
 }
-
-const TOP10: Record<string, { percent: boolean; bottom: boolean }> = {
-    top10: { percent: false, bottom: false },
-    top10_percent: { percent: true, bottom: false },
-    last10: { percent: false, bottom: true },
-    last10_percent: { percent: true, bottom: true },
-};
 
 function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
     if (rule.type === 'dataBar') {
@@ -108,7 +103,9 @@ function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
     const fits = (cfRule: CfRule) => ((cfRule.formulas ?? []).every(fitsExcel) ? cfRule : undefined);
     if (CF_CELL_IS_CONDITION.has(name)) {
         const operands = values.slice(0, name === 'between' || name === 'notBetween' ? 2 : 1).map(String);
-        return fits({ type: 'cellIs', look, attributes: ` operator="${name}"`, formulas: operands.map(operandOf) });
+        // A number as Excel holds it; anything else a quoted string, as the reader's parseCfLiteral reads them.
+        const formulas = operands.map((value) => (NUMERIC.test(value) ? value : quoted(value)));
+        return fits({ type: 'cellIs', look, attributes: ` operator="${name}"`, formulas });
     }
     if (name === 'textContains') {
         const text = String(values[0]);
@@ -128,8 +125,9 @@ function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
             formulas: [withFuturePrefixes(formula.startsWith('=') ? formula.slice(1) : formula)],
         });
     }
-    if (name in TOP10) {
-        const { percent, bottom } = TOP10[name];
+    const top = TOP10_CONDITION.get(name);
+    if (top) {
+        const { percent, bottom } = top;
         const rank = Number(values[0]);
         // Excel's ranks: 1 to 1000 items, or 1 to 100 percent.
         if (!Number.isInteger(rank) || rank < 1 || rank > (percent ? 100 : 1000)) return undefined;
@@ -142,14 +140,12 @@ function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
     if (name === 'aboveAverage' || name === 'belowAverage')
         return { type: 'aboveAverage', look, attributes: name === 'belowAverage' ? ' aboveAverage="0"' : '' };
     if (name === 'duplicateValue') {
-        const type = { '0': 'duplicateValues', '1': 'uniqueValues' }[String(values[0])];
+        const type = DUPLICATE_XLSX_RULE.get(String(values[0]));
         return type ? { type, look } : undefined;
     }
     // occurrenceDate: the editor's own, with no Excel rule.
     return undefined;
 }
-
-const MAX_PROMPT_LENGTH = 255;
 
 function dataValidationsXml(
     verification: NonNullable<Sheet['dataVerification']>,
@@ -190,10 +186,11 @@ function dataValidationsXml(
             lost('validation-prompts-cut');
         }
         const { type, operator, formulas } = validation;
+        const sqref = ranges.map((range) => rangeToA1(range)).join(' ');
         validations.push(
             `<dataValidation type="${type}"${operator ? ` operator="${operator}"` : ''} allowBlank="1"` +
                 `${prompt ? ' showInputMessage="1"' : ''}${rule.prohibitInput ? ' showErrorMessage="1"' : ''}` +
-                `${prompt ? ` prompt="${escapeXml(prompt)}"` : ''} sqref="${ranges.map(refOf).join(' ')}">` +
+                `${prompt ? ` prompt="${escapeXml(prompt)}"` : ''} sqref="${sqref}">` +
                 formulas
                     .map((formula, index) => `<formula${index + 1}>${escapeXml(formula)}</formula${index + 1}>`)
                     .join('') +
@@ -271,11 +268,6 @@ function rectanglesOf(cells: [number, number][]): SingleRange[] {
     return rectangles;
 }
 
-function refOf({ row, column }: SingleRange): string {
-    const start = toA1(row[0], column[0]);
-    return row[0] === row[1] && column[0] === column[1] ? start : `${start}:${toA1(row[1], column[1])}`;
-}
-
 function absoluteRef(ref: string): string {
     const at = ref.lastIndexOf('!') + 1;
     const ends = ref
@@ -290,18 +282,8 @@ function absoluteRef(ref: string): string {
     return ref.slice(0, at) + ends.join(':');
 }
 
-function argbOf(color: string): string | undefined {
-    const hex = cssColorToHex(color);
-    return hex && `FF${hex}`;
-}
-
 function quoted(text: string): string {
     return `"${text.replace(/"/g, '""')}"`;
-}
-
-// A number as Excel holds it; anything else a quoted string, as the reader's parseCfLiteral reads them.
-function operandOf(value: string): string {
-    return NUMERIC.test(value) ? value : quoted(value);
 }
 
 // Excel refuses a formula past its length, or one quoting a string past its own.

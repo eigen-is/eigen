@@ -16,6 +16,7 @@ import { SML_NS } from '../../../core/ooxml';
 import { cssColorToHex } from '../../../document/colors';
 import {
     BUILTIN_NUMBER_FORMATS,
+    DATE_FORMAT,
     FONT_FAMILY_NUMBER,
     MAX_CELL_FORMATS,
     MAX_NUMBER_FORMAT_LENGTH,
@@ -75,20 +76,10 @@ const BUILTIN_FORMAT_IDS = new Map(
     [...BUILTIN_NUMBER_FORMATS].filter(([id]) => id > 0 && (id < 14 || id > 22)).map(([id, code]) => [code, id]),
 );
 const FIRST_CUSTOM_FORMAT = 164;
-// The format a date shows in when its own draws no date.
-const DATE_FORMAT = 'm/d/yyyy';
 
-// Google's `M` for month is Excel's `m`, which Excel tells from a minute by what sits beside it (Q6). Quoted text, an
+// Google's `M` for month is Excel's `m`, which Excel tells from a minute by what sits beside it. Quoted text, an
 // escaped, skipped or repeated character, a bracket and AM/PM keep their case.
 const FORMAT_TOKENS = /"[^"]*"?|\\.|[_*].|\[[^\]]*\]?|am\/pm|a\/p|M/gi;
-
-function excelFormat(format: string): string {
-    return format.replace(FORMAT_TOKENS, (token) => (token === 'M' ? 'm' : token));
-}
-
-function isDateFormat(format: string | undefined): boolean {
-    return format !== undefined && isValidNumberFormat(format) && is_date(format);
-}
 
 type Look = { numFmt: number; font: number; fill: number; alignment: string };
 
@@ -122,8 +113,9 @@ export function styleRegistry(lost: (code: CountedWarningCode) => void): StyleRe
 
     const numFmtOf = (cell: Cell): number => {
         const stored = cell.ct?.fa === 'General' ? undefined : cell.ct?.fa;
-        const canonical = stored === undefined ? undefined : excelFormat(stored);
-        const code = cell.ct?.t === 'd' && !isDateFormat(canonical) ? DATE_FORMAT : canonical;
+        const canonical = stored?.replace(FORMAT_TOKENS, (token) => (token === 'M' ? 'm' : token));
+        const drawsDate = canonical !== undefined && isValidNumberFormat(canonical) && is_date(canonical);
+        const code = cell.ct?.t === 'd' && !drawsDate ? DATE_FORMAT : canonical;
         if (code === undefined) return 0;
         if (code.length > MAX_NUMBER_FORMAT_LENGTH) {
             lost('number-formats-dropped');

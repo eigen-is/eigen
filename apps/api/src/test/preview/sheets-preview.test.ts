@@ -554,6 +554,6 @@ describe('eigensheets export and preview (hidden sheets)', () => {
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
-// an intentional renderer or preview-budget change. Last move: the table draws an
-// unsized cell at the grid's SHEET_DEFAULT_FONT_SIZE pt, not 11px (2026-10-23).
-const GOLDEN_BODY_SHA256 = 'ace62284a51caa4baf42fbdbf11bb0d96871efbf62adb433cbe1aacb8c750705';
+// an intentional renderer or preview-budget change. Last move: a number without an
+// alignment of its own aligns right, as the grid draws one (2026-10-23).
+const GOLDEN_BODY_SHA256 = '7d0ff12d8071b362a2cbf1984ad330502aecdf7181a2139ef045c9200f86a943';

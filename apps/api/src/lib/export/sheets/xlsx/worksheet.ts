@@ -1,6 +1,5 @@
 import { pxToPt } from '@workspace/lib/docs/eigendoc';
 import {
-    columnIndexToLabel,
     parseCellKey,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
@@ -11,11 +10,11 @@ import {
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { escapeXml } from '@workspace/lib/xml';
-import { parseA1Range, quoteSheetName, toA1, unquoteSheetName } from '@workspace/sheet/engine';
+import { parseA1Range, quoteSheetName, rangeToA1, toA1, unquoteSheetName } from '@workspace/sheet/engine';
 import { R_NS, SML_NS } from '../../../core/ooxml';
 import { type Relationship, uriReference } from '../../../core/opc';
 import { MAX_SHEET_LINKS, pxToColumnWidth } from '../../../document/spreadsheetml';
-import { type GridContext, sheetGrid } from './cells';
+import { type GridContext, inGrid, keyOf, sheetGrid } from './cells';
 import { rulesXml } from './rules';
 import { argbOf } from './styles';
 
@@ -34,22 +33,15 @@ export type WorksheetContext = GridContext & {
 };
 
 // The area a sheet's filter spans, within Excel's grid.
-export type Area = { top: number; left: number; bottom: number; right: number };
-
-export function filterArea(sheet: Sheet): Area | undefined {
+export function filterArea(sheet: Sheet): { row: [number, number]; column: [number, number] } | undefined {
     const { row, column } = sheet.filterRange ?? {};
     const bound = (values: number[] | undefined, count: number) =>
         values?.length === 2 && values.every((value) => Number.isInteger(value) && value >= 0)
-            ? [Math.min(...values), Math.min(Math.max(...values), count - 1)]
+            ? ([Math.min(...values), Math.min(Math.max(...values), count - 1)] satisfies [number, number])
             : undefined;
     const rows = bound(row, REFERENCE_ROW_COUNT);
     const columns = bound(column, REFERENCE_COLUMN_COUNT);
-    return rows && columns ? { top: rows[0], bottom: rows[1], left: columns[0], right: columns[1] } : undefined;
-}
-
-export function areaRef({ top, left, bottom, right }: Area, absolute = false): string {
-    const cell = (r: number, c: number) => (absolute ? `$${columnIndexToLabel(c)}$${r + 1}` : toA1(r, c));
-    return top === bottom && left === right ? cell(top, left) : `${cell(top, left)}:${cell(bottom, right)}`;
+    return rows && columns ? { row: rows, column: columns } : undefined;
 }
 
 const PAGE_MARGINS = '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>';
@@ -77,7 +69,7 @@ export function worksheetPart(
         const filter = filterArea(sheet);
         yield [
             '</sheetData>',
-            filter ? `<autoFilter ref="${areaRef(filter)}"/>` : '',
+            filter ? `<autoFilter ref="${rangeToA1(filter)}"/>` : '',
             mergesXml(sheet),
             rulesXml(sheet, context.styles, context.lost),
             links,
@@ -114,9 +106,9 @@ function colsXml(sheet: Sheet): string {
         .filter((column) => Number.isInteger(column) && column >= 0 && column < REFERENCE_COLUMN_COUNT)
         .sort((a, b) => a - b);
     const attributesOf = (column: number) => {
-        const px = Number(columnlen[column] ?? Number.NaN);
+        const px = Number(columnlen[column]);
         const width =
-            px >= 0 && Number.isFinite(px)
+            px > 0 && Number.isFinite(px)
                 ? ` width="${pxToColumnWidth(px, SHEET_DEFAULT_DIGIT_WIDTH)}" customWidth="1"`
                 : '';
         return `${width}${colhidden[column] != null ? ' hidden="1"' : ''}`;
@@ -139,7 +131,7 @@ function mergesXml(sheet: Sheet): string {
         if (!valid || (rs === 1 && cs === 1) || r >= REFERENCE_ROW_COUNT || c >= REFERENCE_COLUMN_COUNT) return [];
         const bottom = Math.min(r + rs, REFERENCE_ROW_COUNT) - 1;
         const right = Math.min(c + cs, REFERENCE_COLUMN_COUNT) - 1;
-        return [`<mergeCell ref="${areaRef({ top: r, left: c, bottom, right })}"/>`];
+        return [`<mergeCell ref="${rangeToA1({ row: [r, bottom], column: [c, right] })}"/>`];
     });
     return refs.length > 0 ? `<mergeCells count="${refs.length}">${refs.join('')}</mergeCells>` : '';
 }
@@ -153,12 +145,12 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
     const linked = new Set(
         entries.map(([key]) => {
             const [r, c] = parseCellKey(key);
-            return r * REFERENCE_COLUMN_COUNT + c;
+            return keyOf(r, c);
         }),
     );
     const shown = new Map<number, string>();
     for (const { r, c, v } of sheet.celldata ?? []) {
-        const key = r * REFERENCE_COLUMN_COUNT + c;
+        const key = keyOf(r, c);
         if (!v || !linked.has(key)) continue;
         const text = v.ct?.s ? v.ct.s.map((run) => run.v ?? '').join('') : String(v.m ?? v.v ?? '');
         shown.set(key, text);
@@ -167,7 +159,7 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
     const items: string[] = [];
     for (const [key, { linkType, linkAddress }] of entries) {
         const [r, c] = parseCellKey(key);
-        if (!(r >= 0 && c >= 0 && r < REFERENCE_ROW_COUNT && c < REFERENCE_COLUMN_COUNT)) continue;
+        if (!inGrid(r, c)) continue;
         const ref = toA1(r, c);
         const location =
             linkType === 'sheet'
@@ -187,7 +179,7 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
             relationships.push({ type: `${R_NS}/hyperlink`, target: uriReference(target), external: true });
             items.push(`<hyperlink ref="${ref}" r:id="rId${relationships.length}"/>`);
         } else {
-            const display = shown.get(r * REFERENCE_COLUMN_COUNT + c) || linkAddress;
+            const display = shown.get(keyOf(r, c)) || linkAddress;
             items.push(
                 `<hyperlink ref="${ref}" location="${escapeXml(location ?? '')}" display="${escapeXml(display)}"/>`,
             );

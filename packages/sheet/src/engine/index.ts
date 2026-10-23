@@ -6,9 +6,12 @@
 // package-root export instead.
 
 export {
+    MAX_SHEET_NAME_LENGTH,
     parseA1Range,
     quoteSheetName,
+    rangeToA1,
     rowIndexToLabel,
+    SHEET_NAME_FORBIDDEN,
     toA1,
     unquoteSheetName,
 } from './a1-notation';

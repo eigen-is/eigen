@@ -39,12 +39,12 @@ describe('columns', () => {
         expect(read(cols, '', { digitWidth: 9 }).config.columnlen).toEqual({ 0: 82, 2: 186, 3: 186 });
     });
 
-    test('hidden columns, and a column taking the first <col> by min that reaches it; a width of 0 only when custom', () => {
+    test('hidden columns, and a column taking the first <col> by min that reaches it; a width that draws no pixel is hidden', () => {
         const { config } = read(
-            '<cols><col min="4" max="6" width="5"/><col min="2" max="4" width="10" hidden="1"/><col min="7" max="7" width="0" hidden="true"/><col min="8" max="8" width="0" customWidth="1"/></cols>',
+            '<cols><col min="4" max="6" width="5"/><col min="2" max="4" width="10" hidden="1"/><col min="7" max="7" width="0" hidden="true"/><col min="8" max="8" width="0" customWidth="1"/><col min="9" max="9" width="0.0234375" customWidth="1"/></cols>',
         );
-        expect(config.columnlen).toEqual({ 1: 80, 2: 80, 3: 80, 4: 40, 5: 40, 7: 0 });
-        expect(config.colhidden).toEqual({ 1: 0, 2: 0, 3: 0, 6: 0 });
+        expect(config.columnlen).toEqual({ 1: 80, 2: 80, 3: 80, 4: 40, 5: 40 });
+        expect(config.colhidden).toEqual({ 1: 0, 2: 0, 3: 0, 6: 0, 7: 0, 8: 0 });
     });
 
     test("a sheet without sheetFormatPr takes Excel's default: 8.43 characters, 64 px at Calibri 11's 7 px digit, and 15 pt rows", () => {
@@ -268,7 +268,7 @@ describe('in the sheet', () => {
             '0_0': { v: 'title', m: 'title', ct: { fa: 'General', t: 's' }, mc: { r: 0, c: 0, rs: 3, cs: 1 } },
             '1_0': { mc: { r: 0, c: 0 } },
             '2_0': { mc: { r: 0, c: 0 } },
-            '0_1': { v: 2, m: '2', ht: 2, ct: { fa: 'General', t: 'n' }, mc: { r: 0, c: 1, rs: 1, cs: 2 } },
+            '0_1': { v: 2, m: '2', ct: { fa: 'General', t: 'n' }, mc: { r: 0, c: 1, rs: 1, cs: 2 } },
             '0_2': { mc: { r: 0, c: 1 } },
             '4_4': { hl: { r: 4, c: 4, id: 'sheet-0' } },
             // A one-column merge whose row holds no value keeps its anchor.
@@ -290,8 +290,8 @@ describe('in the sheet', () => {
             '<hyperlinks><hyperlink ref="A1" r:id="rId1"/><hyperlink ref="B1" r:id="rId1"/></hyperlinks>',
         );
         expect(sheet.celldata?.map(({ v }) => v)).toEqual([
-            { v: 42, m: '42', ht: 2, ct: { fa: 'General', t: 'n' }, hl: { r: 0, c: 0, id: 'sheet-0' } },
-            { v: 84, m: '84', ht: 2, f: '=A1*2', ct: { fa: 'General', t: 'n' }, hl: { r: 0, c: 1, id: 'sheet-0' } },
+            { v: 42, m: '42', ct: { fa: 'General', t: 'n' }, hl: { r: 0, c: 0, id: 'sheet-0' } },
+            { v: 84, m: '84', f: '=A1*2', ct: { fa: 'General', t: 'n' }, hl: { r: 0, c: 1, id: 'sheet-0' } },
         ]);
     });
 

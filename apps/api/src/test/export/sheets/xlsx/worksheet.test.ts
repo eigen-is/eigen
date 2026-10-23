@@ -82,7 +82,7 @@ describe('a worksheet part', () => {
         const { xml } = partOf({
             name: 'Sheet1',
             celldata: [],
-            config: { columnlen: { 0: 90, 1: 90, 2: 131, 4: 90, 5: 0 }, colhidden: { 2: 0, 3: 0, 4: 0 } },
+            config: { columnlen: { 0: 90, 1: 90, 2: 131, 4: 90 }, colhidden: { 2: 0, 3: 0, 4: 0 } },
         });
         expect(xml).toContain(
             [
@@ -91,7 +91,6 @@ describe('a worksheet part', () => {
                 '<col min="3" max="3" width="14.5546875" customWidth="1" hidden="1"/>',
                 '<col min="4" max="4" hidden="1"/>',
                 '<col min="5" max="5" width="10" customWidth="1" hidden="1"/>',
-                '<col min="6" max="6" width="0" customWidth="1"/>',
                 '</cols>',
             ].join(''),
         );

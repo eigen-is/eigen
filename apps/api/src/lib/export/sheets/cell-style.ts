@@ -1,9 +1,23 @@
-import type { Cell } from '@workspace/lib/sheets';
+import type { Cell, Sheet } from '@workspace/lib/sheets';
+import { type CellResolver, createArrayResolver } from '@workspace/sheet/engine';
 
-// Cell-style facts both Sheet[] emitters read: the HTML/PDF renderer (render.ts) and the
-// XLSX writer (to-xlsx.ts). They live here rather than in either emitter because to-xlsx
+// What both Sheet[] emitters read: the HTML/PDF renderer (render.ts) and the
+// XLSX writer (to-xlsx.ts). It lives here rather than in either emitter because to-xlsx
 // must not import render.ts — that would pull DOMPurify/jsdom (via sanitize) into the
 // xlsx path, which transform.ts deliberately loads separately.
+
+// The sheets' cells as the export reads them: the dense data every sheet carries once materialized.
+export function sheetsResolver(sheets: Sheet[]): CellResolver {
+    return createArrayResolver(
+        sheets.map((sheet) => ({
+            id: sheet.id ?? sheet.name,
+            name: sheet.name,
+            data: sheet.data ?? null,
+            calculationChain: [],
+            dynamicArrayCompute: [],
+        })),
+    );
+}
 
 export const HORIZONTAL_ALIGN: Record<number, 'left' | 'center' | 'right'> = {
     0: 'center',

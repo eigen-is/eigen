@@ -1,4 +1,4 @@
-import { normalizeAngle } from '@workspace/lib/vector';
+import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { A_NS } from './ooxml';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from './xml';
@@ -38,9 +38,29 @@ export const IDENTITY_COLOR_MAP: ColorMap = new Map([
     ...SCHEME_SLOTS.map((slot): [string, string] => [slot, slot]),
 ]);
 
-const NO_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
+// A part without a theme: no scheme colours, the identity map.
+export const NO_DRAWING_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
 
 export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
+
+// DrawingML counts an angle in 60,000ths of a degree.
+export const DEGREE = 60_000;
+
+// A stored colour token (#rgb, #rrggbb, #rrggbbaa) as an a:srgbClr, its alpha times `opacity` beside it; null for
+// transparent or anything else.
+export function colorXml(color: string, opacity = 1): string | null {
+    const digits = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
+    if (!digits || isTransparentColor(color)) return null;
+    const rgb = digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits.slice(0, 6);
+    const alpha = (digits.length === 8 ? Number.parseInt(digits.slice(6), 16) / 255 : 1) * opacity;
+    const share = alpha < 1 ? `<a:alpha val="${Math.round(alpha * 100_000)}"/>` : '';
+    return `<a:srgbClr val="${rgb.toUpperCase()}">${share}</a:srgbClr>`;
+}
+
+export function solidFillXml(color: string, opacity = 1): string {
+    const rgb = colorXml(color, opacity);
+    return rgb ? `<a:solidFill>${rgb}</a:solidFill>` : '<a:noFill/>';
+}
 
 // Every shape and cell the writers write holds its own colours and fonts, so their theme only has to be valid: plain
 // colours, and the document's font.
@@ -80,7 +100,7 @@ export function readColorScheme(theme: XmlElement | undefined): ColorScheme {
     const scheme = elements && xmlChild(elements, A_NS, 'clrScheme');
     const colors = new Map<string, string>();
     for (const slot of SCHEME_SLOTS) {
-        const color = scheme && drawingColor(xmlChild(scheme, A_NS, slot), NO_THEME);
+        const color = scheme && drawingColor(xmlChild(scheme, A_NS, slot), NO_DRAWING_THEME);
         if (color) colors.set(slot, color);
     }
     return colors;
@@ -145,7 +165,7 @@ function baseColor(element: XmlElement, theme: DrawingTheme): Rgba | null | unde
                 : [fromLinear(r), fromLinear(g), fromLinear(b), 1];
         }
         case 'hslClr': {
-            const hue = Number(attr('hue')) / 60000;
+            const hue = Number(attr('hue')) / DEGREE;
             const sat = percent(attr('sat'));
             const lum = percent(attr('lum'));
             return Number.isFinite(hue) && sat !== undefined && lum !== undefined
@@ -291,7 +311,7 @@ export function isSideways(degrees: number): boolean {
     return (turn >= 45 && turn < 135) || (turn >= 225 && turn < 315);
 }
 
-type Box = { x: number; y: number; width: number; height: number };
+export type Box = { x: number; y: number; width: number; height: number };
 
 // The cells Excel and LibreOffice place a picture turned `degrees` over: its box, or, sideways, its box turned a quarter
 // about its centre, its sides swapped. Its own inverse, so the reader takes the picture's box back from its anchor.

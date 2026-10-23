@@ -8,11 +8,11 @@ import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml'
 import { columnWidthToPx, DEFAULT_BASE_COL_WIDTH, DEFAULT_ROW_HEIGHT_PT } from '../../document/spreadsheetml';
 import { colorOf, resolveColor, type ThemePalette } from './styles';
 
-// A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden columns, the merges, the frozen panes and
-// gridlines, the filter's span and the hyperlinks. A merge's cells and a link's cell are placed before the grid is
-// read, so the grid's cell there takes them, and a place the grid holds no cell for still gets one. Only what the file
-// holds is walked: a merge's cells after its area is charged, a column range's columns after they are, and each column
-// once.
+// A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden
+// columns, the merges, the frozen panes and gridlines, the filter's span and the hyperlinks. A merge's cells and a
+// link's cell are placed before the grid is read, so the grid's cell there takes them, and a place the grid holds no
+// cell for still gets one. Only what the file holds is walked: a merge's cells after its area is charged, a column
+// range's columns after they are, and each column once.
 
 export type PlacedCell = { r: number; c: number; v: FortuneCell };
 
@@ -121,12 +121,11 @@ function readColumns(rest: XmlElement, context: WorksheetContext, config: Worksh
         const to = Math.min(bound(col, 'max'), REFERENCE_COLUMN_COUNT);
         next = Math.max(next, to + 1);
         const width = Number.parseFloat(xmlAttr(col, '', 'width') ?? '');
-        // A custom width of 0 is a column Excel draws as none.
-        const pixels =
-            width > 0 || (width === 0 && isOn(xmlAttr(col, '', 'customWidth')))
-                ? columnWidthToPx(width, context.digitWidth)
-                : undefined;
-        const hidden = isOn(xmlAttr(col, '', 'hidden')) === true;
+        const drawn = width > 0 ? columnWidthToPx(width, context.digitWidth) : 0;
+        const pixels = drawn > 0 ? drawn : undefined;
+        // A custom width that draws no pixel is a column Excel draws as none, as the editor draws a hidden one.
+        const none = drawn === 0 && (width > 0 || isOn(xmlAttr(col, '', 'customWidth')) === true);
+        const hidden = isOn(xmlAttr(col, '', 'hidden')) === true || none;
         if (from > to || (pixels === undefined && !hidden)) continue;
         context.charge(to - from + 1, 0);
         for (let column = from - 1; column < to; column++) {
@@ -185,7 +184,7 @@ function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: 
         const location = xmlAttr(element, '', 'location');
         const rel = context.rels.get(xmlAttr(element, R_NS, 'id') ?? '');
         const target = rel?.external ? rel.target : undefined;
-        // A relationship to `#` and the location, which files written by ExcelJS (the old export) carry beside an internal link, is the location.
+        // A relationship to `#` beside the location, as ExcelJS writes an internal link, is the location.
         const link = mapHyperlink(
             target !== undefined && !target.startsWith('#')
                 ? `${target}${location ? `#${location}` : ''}`

@@ -494,10 +494,10 @@ describe('document transform (eigensheets preview)', () => {
 });
 
 // The golden workbook's HTML download and the document fed to WeasyPrint, its @page fit to the widest and tallest
-// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved by the table's
-// default font size, 10 pt as the grid draws an unsized cell, where it was 11 px).
-const GOLDEN_EXPORT_HTML_SHA256 = '30544662f5fbcefa770bf02f6c8dd16a81e9813030177da76d5ae6abea7d4976';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'c951df462003b50cd88d85a407ce2648f75d1a7a1ea93416f8c41cdaa7c4d878';
+// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved by a number without
+// an alignment of its own aligning right, as the grid draws one).
+const GOLDEN_EXPORT_HTML_SHA256 = '0afdc724b9c1a24f6c01df831acb860aa743d839573bd07e5f02a2d8a3efd56e';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = 'd0ff97af65d65e2acee9cd9a46b0eaed169ca2e0fcabcdd62f8f8bc8a4816015';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
@@ -559,9 +559,9 @@ describe('document transform (eigensheets export)', () => {
 // Recorded from the import pipeline (xlsxToSheets + recalcImportedSheets +
 // encodeSheetsSnapshot) over buildImportFixture(), so the Worker and the main
 // thread are proven to emit the same bytes. Regenerate only for an intentional
-// converter or wire-format change (last moved by Excel's column width rule: Calibri 11's
-// 7 px digit makes the default column 64 px and the fixture's width 18 126 px).
-const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '76fbe3b4fd94331790f9d314eed3a79d1133686b63215d0b247beee13f555e47';
+// converter or wire-format change (last moved when a number without an alignment of its
+// own stopped storing a right one: the editor aligns by type).
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '02d90a244fc30b98a94a4ba9b075efa96617815380d1bd8ee60a61c7dea0f8f2';
 
 // Small but representative workbook: values, a stale cached formula result the
 // import recalc must correct, styles, a date format, a merge, a column width, a

@@ -1,3 +1,4 @@
+import { DEGREE } from '../../core/drawingml';
 import { A_NS, emu } from '../../core/ooxml';
 import { type XmlElement, xmlAttr } from '../../core/xml';
 import { cachedBy, charge, childrenOf } from './lookup';
@@ -16,7 +17,6 @@ export const MAX_GUIDES = 4096;
 // An operator and three arguments, each a number emu() reads or a name: past this a formula is junk, read as 0 unread.
 const MAX_FORMULA_CHARS = 256;
 
-export const DEGREE = 60_000;
 export const RADIANS_PER_UNIT = Math.PI / (180 * DEGREE);
 
 // x, y, z as the spec names them. Whatever comes out not finite (a quotient by zero, an overflow, a negative root) is 0.

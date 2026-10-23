@@ -10,10 +10,10 @@ import {
     type Sheet,
 } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { toA1, valueIsError } from '@workspace/sheet/engine';
+import { rangeToA1, valueIsError } from '@workspace/sheet/engine';
 import { MAX_FORMULA_LENGTH, withFuturePrefixes } from '../../../document/spreadsheetml';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
-import { cutText, type SharedStringTable } from './strings';
+import { BATCH_CHARS, cutText, type SharedStringTable } from './strings';
 import type { StyleRegistry } from './styles';
 
 // A worksheet's grid as <sheetData>'s rows, handed over a batch at a time so a sheet of millions of cells is never one
@@ -32,9 +32,7 @@ export type Grid = {
     rows(): Generator<string>;
 };
 
-const BATCH_CHARS = 1024 * 1024;
-
-function inGrid(r: number, c: number): boolean {
+export function inGrid(r: number, c: number): boolean {
     return (
         Number.isInteger(r) &&
         Number.isInteger(c) &&
@@ -45,7 +43,7 @@ function inGrid(r: number, c: number): boolean {
     );
 }
 
-function keyOf(r: number, c: number): number {
+export function keyOf(r: number, c: number): number {
     return r * REFERENCE_COLUMN_COUNT + c;
 }
 
@@ -87,19 +85,13 @@ export function sheetGrid(sheet: Sheet, context: GridContext): Grid {
     };
     for (const { r, c } of cells) span(r, c);
     for (const key of borders) span(Math.floor(key / REFERENCE_COLUMN_COUNT), key % REFERENCE_COLUMN_COUNT);
-    const dimension =
-        bottom < 0
-            ? 'A1'
-            : top === bottom && left === right
-              ? toA1(top, left)
-              : `${toA1(top, left)}:${toA1(bottom, right)}`;
+    const dimension = bottom < 0 ? 'A1' : rangeToA1({ row: [top, bottom], column: [left, right] });
 
     const labels: string[] = [];
     const cellXml = (r: number, c: number, cell: Cell | undefined, border: CellBorderSides | undefined): string => {
-        // A merge's other cells show the first's value, so they hold only their own look.
-        const constituent = cell?.mc !== undefined && (cell.mc.r !== r || cell.mc.c !== c);
+        // A merge's other cells keep their values, as Excel keeps them for the formulas that read them.
         const s = context.styles.xf(cell, border);
-        const value = cell && !constituent ? valueXml(cell, context) : undefined;
+        const value = cell && valueXml(cell, context);
         if (!value && s === 0) return '';
         labels[c] ??= columnIndexToLabel(c);
         const attributes = `${s ? ` s="${s}"` : ''}${value?.t ? ` t="${value.t}"` : ''}`;
@@ -108,8 +100,8 @@ export function sheetGrid(sheet: Sheet, context: GridContext): Grid {
             : `<c r="${labels[c]}${r + 1}"${attributes}/>`;
     };
     const rowAttributes = (r: number): string => {
-        const px = Number(rowlen[r] ?? Number.NaN);
-        const height = px >= 0 && Number.isFinite(px) ? ` ht="${pxToPt(px)}" customHeight="1"` : '';
+        const px = Number(rowlen[r]);
+        const height = px > 0 && Number.isFinite(px) ? ` ht="${pxToPt(px)}" customHeight="1"` : '';
         return `${height}${rowhidden[r] != null ? ' hidden="1"' : ''}`;
     };
 

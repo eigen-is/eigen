@@ -80,14 +80,13 @@ describe("a sheet's grid", () => {
     test('a row keeps its height and hidden flag, with cells or without', () => {
         const { xml } = gridOf({
             celldata: [{ r: 1, c: 0, v: { v: 1 } }],
-            config: { rowlen: { 1: 40, 3: 30, 6: 0 }, rowhidden: { 3: 0, 5: 0 } },
+            config: { rowlen: { 1: 40, 3: 30 }, rowhidden: { 3: 0, 5: 0 } },
         });
         expect(xml).toBe(
             [
                 '<row r="2" ht="30" customHeight="1"><c r="A2"><v>1</v></c></row>',
                 '<row r="4" ht="22.5" customHeight="1" hidden="1"></row>',
                 '<row r="6" hidden="1"></row>',
-                '<row r="7" ht="0" customHeight="1"></row>',
             ].join(''),
         );
     });
@@ -103,7 +102,7 @@ describe("a sheet's grid", () => {
         );
     });
 
-    test('a merge constituent is written only for a look or a border of its own, and never its value', () => {
+    test('a merge constituent keeps its value, as Excel keeps it under the merge, and its own look or border', () => {
         const thin = { style: 1, color: '#000000' };
         const { xml } = gridOf({
             celldata: [
@@ -113,7 +112,9 @@ describe("a sheet's grid", () => {
             ],
             config: { borderInfo: { '0_1': { t: thin } } },
         });
-        expect(xml).toBe('<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" s="1"/><c r="C1" s="2"/></row>');
+        expect(xml).toBe(
+            '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" s="1" t="s"><v>1</v></c><c r="C1" s="2"/></row>',
+        );
     });
 
     test("a cell past Excel's grid is left out, counted", () => {

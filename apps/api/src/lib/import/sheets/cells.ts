@@ -1,3 +1,4 @@
+import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { CellBorderSides, CellStyle, Cell as FortuneCell, InlineStringSegment } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
@@ -5,6 +6,7 @@ import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import {
+    DATE_FORMAT,
     DAY_MS,
     DAYS_1904,
     EXCEL_EPOCH_MS,
@@ -74,13 +76,15 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
     for (const row of rows) {
         const reference = xmlAttr(row, '', 'r');
         r = indexOf(reference === undefined ? undefined : Number(reference), r, REFERENCE_ROW_COUNT);
-        if (isOn(xmlAttr(row, '', 'hidden')) && !(r in grid.rowhidden)) {
+        const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
+        // A custom height that draws no pixel is a row Excel draws as none, as the editor draws a hidden one.
+        const pixels = Math.round(ptToPx(height));
+        const none = pixels === 0 && (height > 0 || isOn(xmlAttr(row, '', 'customHeight')) === true);
+        if ((none || isOn(xmlAttr(row, '', 'hidden'))) && !(r in grid.rowhidden)) {
             context.charge(1, 0);
             grid.rowhidden[r] = 0;
         }
-        const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
-        // A custom height of 0 is a row Excel draws as none.
-        if (height > 0 || (height === 0 && isOn(xmlAttr(row, '', 'customHeight')))) {
+        if (pixels > 0) {
             if (!grid.heights.has(r)) context.charge(1, 0);
             grid.heights.set(r, height);
         }
@@ -167,8 +171,7 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         if (typeof value === 'number') {
             // numfmt renders a bare serial under General as a number, so a date without a format it can draw shows as
             // m/d/yyyy.
-            cell.m = date ? update(look.numFmt ?? 'm/d/yyyy', value) : numberDisplay(value, look.numFmt);
-            if (!look.aligned) cell.ht = 2;
+            cell.m = date ? update(look.numFmt ?? DATE_FORMAT, value) : numberDisplay(value, look.numFmt);
         } else cell.m = typeof value === 'boolean' ? booleanDisplay(value) : value;
     }
     if (formula) cell.f = `=${formula}`;

@@ -34,9 +34,9 @@ describe('the workbook', () => {
             }),
         );
         expect(book.sheets).toEqual([
-            { name: 'One', path: 'xl/worksheets/sheet1.xml', hidden: false },
-            { name: 'Two', path: 'xl/worksheets/sheet2.xml', hidden: true },
-            { name: 'Three', path: 'xl/worksheets/sheet3.xml', hidden: true },
+            { name: 'One', path: 'xl/worksheets/sheet1.xml', hidden: false, chartSheet: false },
+            { name: 'Two', path: 'xl/worksheets/sheet2.xml', hidden: true, chartSheet: false },
+            { name: 'Three', path: 'xl/worksheets/sheet3.xml', hidden: true, chartSheet: false },
         ]);
         expect(book.date1904).toBe(false);
     });
@@ -63,7 +63,7 @@ describe('the workbook', () => {
             ]),
         );
         expect(book.sheets).toEqual([
-            { name: 'Grid', path: 'grid/one.xml', hidden: false },
+            { name: 'Grid', path: 'grid/one.xml', hidden: false, chartSheet: false },
             { name: 'Chart', path: 'book/charts/one.xml', hidden: false, chartSheet: true },
         ]);
         expect(book.date1904).toBe(true);
@@ -93,8 +93,8 @@ describe('the workbook', () => {
             ]),
         );
         expect(book.sheets).toEqual([
-            { name: 'B', path: 'xl/worksheets/sheet2.xml', hidden: false },
-            { name: 'C', path: 'xl/worksheets/sheet1.xml', hidden: true },
+            { name: 'B', path: 'xl/worksheets/sheet2.xml', hidden: false, chartSheet: false },
+            { name: 'C', path: 'xl/worksheets/sheet1.xml', hidden: true, chartSheet: false },
         ]);
     });
 
@@ -145,7 +145,9 @@ describe('the workbook', () => {
                 },
             ]),
         );
-        expect(book.sheets).toEqual([{ name: 'S', path: 'xl/worksheets/sheet1.xml', hidden: false }]);
+        expect(book.sheets).toEqual([
+            { name: 'S', path: 'xl/worksheets/sheet1.xml', hidden: false, chartSheet: false },
+        ]);
     });
 
     test('a package without a workbook is not a valid xlsx file; an encrypted one says so', () => {

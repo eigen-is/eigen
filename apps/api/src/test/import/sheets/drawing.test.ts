@@ -10,11 +10,11 @@ import {
     type Sheet,
 } from '@workspace/lib/sheets';
 import { CHART_CONTENT_TYPE } from '../../../lib/core/ooxml-chart';
-import { openZip, writeZip } from '../../../lib/core/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/core/zip';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { CHART_SHEET_SIZE } from '../../../lib/import/sheets/drawing';
-import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
+import { readXlsx } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
 import { PIXEL_PNG } from '../../fixtures/pptx';
 import { type FixtureSheet, OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
@@ -120,7 +120,7 @@ function workbook({
 
 function read(bytes: Uint8Array): { sheets: Sheet[]; warnings: TransformWarning[] } {
     const warnings: TransformWarning[] = [];
-    return { sheets: xlsxToSheets(bytes, warnings), warnings };
+    return { sheets: readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, warnings).sheets, warnings };
 }
 
 const chartsOf = (sheet: Sheet) => Object.values(sheet.charts ?? {});
@@ -275,6 +275,27 @@ describe('a worksheet chart', () => {
         );
         expect(chartsOf(sheets[0]).map((chart) => [chart.id, chart.y])).toEqual([['chart-0', 240]]);
         expect(warnings).toEqual([{ code: 'charts-dropped', count: 3 }]);
+    });
+
+    test('a pie over more cells than a pie holds slices for is left out and counted, with its caches or without', () => {
+        const pie = (cache: string) =>
+            chartSpace(
+                `<c:pieChart><c:varyColors val="1"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>p</c:v></c:tx><c:val><c:numRef><c:f>Data!$B$1:$B$1048576</c:f>${cache}</c:numRef></c:val></c:ser></c:pieChart>`,
+            );
+        const { sheets, warnings } = read(
+            workbook({
+                sheets: [{ name: 'Data', data: DATA }],
+                anchors:
+                    twoCell([0, 0, 0, 0], [3, 0, 10, 0], graphicFrame('rId1')) +
+                    twoCell([0, 0, 12, 0], [3, 0, 20, 0], graphicFrame('rId2')),
+                charts: [
+                    pie(''),
+                    pie(`<c:numCache><c:formatCode>General</c:formatCode>${pts([1, 2, 3])}</c:numCache>`),
+                ],
+            }),
+        );
+        expect(chartsOf(sheets[0])).toEqual([]);
+        expect(warnings).toEqual([{ code: 'charts-dropped', count: 2 }]);
     });
 
     // A cache declares its points in one tag, and readChart builds them all: each chart placed is charged its part's

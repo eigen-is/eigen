@@ -25,7 +25,6 @@ import {
     type CellResolver,
     type ComputeMap,
     cellWrapsText,
-    createArrayResolver,
     createCfFormulaEvaluator,
     type DataBar,
     evaluateConditionalFormat,
@@ -39,7 +38,7 @@ import { FONT_STACK_SANS } from '../../document/font-stacks';
 import type { HtmlExportMode } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
+import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } from './cell-style';
 
 // Sheet[] -> HTML: the full-workbook export document, the budgeted preview body and
 // the fixed-size PDF document. Runs inside the transform Worker (worker.ts owns
@@ -157,16 +156,7 @@ export const PREVIEW_SHEET_BUDGET: SheetPreviewBudget = { maxRows: 200, maxCols:
 // CF rule's own formula is evaluated against existing cell values.
 function createRenderContext(sheets: Sheet[]): { engine: FormulaEngine; resolver: CellResolver } {
     const engine = new FormulaEngine();
-    const resolver = createArrayResolver(
-        sheets.map((s) => ({
-            id: s.id ?? s.name,
-            name: s.name,
-            data: s.data ?? null,
-            calculationChain: [],
-            dynamicArrayCompute: [],
-        })),
-    );
-    return { engine, resolver };
+    return { engine, resolver: sheetsResolver(sheets) };
 }
 
 // The sheets the tabs show, as Excel prints them; the resolver still spans every sheet, hidden ones too.
@@ -466,8 +456,8 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 }
 
 // Floating images are stored in unzoomed grid pixels from A1's top-left (the editor's
-// ImgBoxs reads the same fields into left/top/width/height), while the table starts at
-// the used range — so the overlay subtracts the rows and columns the window skipped.
+// FloatingObjectFrame reads the same fields), while the table starts at the used range —
+// so the overlay subtracts the rows and columns the window skipped.
 function gridOffset(sheet: Sheet, minRow: number, minCol: number): { left: number; top: number } {
     return { left: sheetColumnsWidth(sheet, 0, minCol - 1), top: sheetRowsHeight(sheet, 0, minRow - 1) };
 }
@@ -562,10 +552,12 @@ function buildCellStyle(
         if (cellColor) parts.push(`background:${cellColor}`);
         // Rotated cells skip ht/vt — the rotated span is absolutely-positioned in the
         // cell (see wrapForRotation) so neither alignment property has anything to act
-        // on. Non-rotated cells emit text-align if the user picked one, plus a single
-        // vertical-align (default `middle`, matching the canvas painter).
+        // on. Non-rotated cells emit the user's text-align, else right for a number or date as
+        // the canvas painter and Excel draw one, plus a single vertical-align (default `middle`).
         if (!rotated) {
-            if (v.ht != null && v.ht in HORIZONTAL_ALIGN) parts.push(`text-align:${HORIZONTAL_ALIGN[v.ht]}`);
+            const picked = v.ht != null && v.ht in HORIZONTAL_ALIGN ? HORIZONTAL_ALIGN[v.ht] : undefined;
+            const align = picked ?? (typeof v.v === 'number' ? 'right' : undefined);
+            if (align) parts.push(`text-align:${align}`);
             const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
             parts.push(`vertical-align:${valign}`);
         }

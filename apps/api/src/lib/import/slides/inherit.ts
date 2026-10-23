@@ -1,9 +1,10 @@
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
 import { normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import {
+    DEGREE,
     type DrawingTheme,
     drawingColor,
-    drawingTheme,
+    NO_DRAWING_THEME,
     percent,
     readColorMap,
     readColorScheme,
@@ -148,7 +149,7 @@ export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInher
 }
 
 const NO_THEME: SlideTheme = {
-    colors: drawingTheme(undefined),
+    colors: NO_DRAWING_THEME,
     fonts: { major: '', minor: '' },
     formats: { fills: [], backgrounds: [], lines: [] },
 };
@@ -218,7 +219,7 @@ export function readXfrm(xfrm: XmlElement | undefined): Xfrm | undefined {
     if (!xfrm || !off || !ext) return undefined;
     const chOff = point(childOf(xfrm, A_NS, 'chOff'), 'x', 'y');
     const chExt = point(childOf(xfrm, A_NS, 'chExt'), 'cx', 'cy');
-    const rot = Number(xmlAttr(xfrm, '', 'rot') ?? 0) / 60_000;
+    const rot = Number(xmlAttr(xfrm, '', 'rot') ?? 0) / DEGREE;
     return {
         ...off,
         // A negative extent is no extent.
@@ -423,7 +424,7 @@ function gradientOf(fill: XmlElement, colors: DrawingTheme, options: PaintOption
     if (single) return { type: 'solid', color: from };
     const lin = childOf(fill, A_NS, 'lin');
     if (!lin && childOf(fill, A_NS, 'path')) options.lost('fills-simplified');
-    const ang = Number((lin && xmlAttr(lin, '', 'ang')) ?? 0) / 60_000;
+    const ang = Number((lin && xmlAttr(lin, '', 'ang')) ?? 0) / DEGREE;
     const scaled = (lin && isOn(xmlAttr(lin, '', 'scaled'))) ?? false;
     const angle = (options.angle ?? quarterTurn)(Number.isFinite(ang) ? ang : 0, scaled);
     return { type: 'gradient', from, to, angle: normalizeAngle(Math.round(angle * 1000) / 1000) };

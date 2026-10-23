@@ -1,5 +1,4 @@
-import { chartColor, FLAT_CHART_LOOK, GRIDLINE_OPACITY } from '@workspace/lib/charts';
-import { columnIndexToLabel } from '@workspace/lib/sheets';
+import { chartColor, GRIDLINE_OPACITY } from '@workspace/lib/charts';
 import type {
     CellRangeRef,
     ChartData,
@@ -11,25 +10,25 @@ import type {
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
-import { isTransparentColor, parseFill } from '@workspace/lib/vector';
+import { parseFill } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
-// The one engine module a chart's refs need, not the engine: a docx or pptx export never evaluates the formula engine.
-import { quoteSheetName } from '@workspace/sheet/engine/a1-notation';
+import { quoteSheetName, rangeToA1 } from '@workspace/sheet/engine/a1-notation';
+import { solidFillXml } from './drawingml';
 import { A_NS, C_NS, EMU_PER_PX, R_NS } from './ooxml';
 import { LEGEND_BY_POSITION, PERCENT_AXIS_FORMAT, STACKING_BY_GROUPING } from './ooxml-chart';
 
-// A ChartSpec as a DrawingML chart part, c:chartSpace, the same in a docx, an xlsx and a pptx: the mirror of
-// ooxml-chart.ts, which reads it back as the same spec. Excel draws what Eigen draws: an automatic colour is written
-// as the palette's at its place, which the reader reads back as automatic, and the look as Excel's shape properties.
+// A ChartSpec as a DrawingML chart part, c:chartSpace, which a docx, an xlsx and a pptx share and only the xlsx export
+// writes today: the mirror of ooxml-chart.ts, which reads it back as the same spec. Excel draws what Eigen draws: an
+// automatic colour is written as the palette's at its place, which the reader reads back as automatic, and the look as
+// Excel's shape properties.
 
 export type ChartWriteOptions = {
     // Range data's sheets by the names the workbook writes them under; a ref to a sheet it doesn't name is #REF!.
-    ranges?: (sheetId: string) => string | undefined;
+    ranges: (sheetId: string) => string | undefined;
     // What range data's cells show (resolveRangeChartData), its series those with values: the refs' caches, which
     // Excel shows until it recalculates. Without it the refs go alone.
     cache?: ChartData;
-    // The flat look by default.
-    look?: ChartLook;
+    look: ChartLook;
 };
 
 const CATEGORY_AXIS = 1;
@@ -39,13 +38,13 @@ const VALUE_AXIS = 2;
 const GROUPING = turned(STACKING_BY_GROUPING);
 const LEGEND = turned(LEGEND_BY_POSITION);
 
-export function writeChart(spec: ChartSpec, { ranges, cache, look = FLAT_CHART_LOOK }: ChartWriteOptions = {}): string {
+export function writeChart(spec: ChartSpec, { ranges, cache, look }: ChartWriteOptions): string {
     const text = textProperties(look.color, spec.fontFamily);
     const group = groupXml(spec, look, ranges, cache);
     const plot = spec.type === 'pie' ? group : `${group}${axesXml(spec, look)}`;
     const legend = spec.legend === 'none' ? '' : legendXml(spec.legend);
     const background = parseFill(look.fill);
-    const fill = background.type === 'solid' ? solidFill(background.color) : '<a:noFill/>';
+    const fill = background.type === 'solid' ? solidFillXml(background.color) : '<a:noFill/>';
     return [
         `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}">`,
         '<c:date1904 val="0"/><c:lang val="en-US"/><c:roundedCorners val="0"/><c:chart>',
@@ -93,16 +92,16 @@ function seriesXml(spec: ChartSpec, look: ChartLook, ranges: Ranges, cache: Char
             const head = `<c:idx val="${i}"/><c:order val="${i}"/>${source.name}`;
             if (spec.type === 'line') {
                 const marker = markers
-                    ? `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solidFill(color)}<a:ln>${solidFill(color)}</a:ln></c:spPr></c:marker>`
+                    ? `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solidFillXml(color)}<a:ln>${solidFillXml(color)}</a:ln></c:spPr></c:marker>`
                     : '<c:marker><c:symbol val="none"/></c:marker>';
-                const line = `<c:spPr><a:ln w="${width}" cap="rnd">${solidFill(color)}<a:round/></a:ln></c:spPr>`;
+                const line = `<c:spPr><a:ln w="${width}" cap="rnd">${solidFillXml(color)}<a:round/></a:ln></c:spPr>`;
                 return `<c:ser>${head}${line}${marker}${source.data}<c:smooth val="${smooth ? 1 : 0}"/></c:ser>`;
             }
             if (spec.type === 'pie') {
                 const points = i === 0 ? slicesXml(spec, source.points) : '';
-                return `<c:ser>${head}<c:spPr>${solidFill(color)}</c:spPr>${points}${PIE_LABELS}${source.data}</c:ser>`;
+                return `<c:ser>${head}<c:spPr>${solidFillXml(color)}</c:spPr>${points}${PIE_LABELS}${source.data}</c:ser>`;
             }
-            return `<c:ser>${head}<c:spPr>${solidFill(color)}</c:spPr><c:invertIfNegative val="0"/>${source.data}</c:ser>`;
+            return `<c:ser>${head}<c:spPr>${solidFillXml(color)}</c:spPr><c:invertIfNegative val="0"/>${source.data}</c:ser>`;
         })
         .join('');
 }
@@ -114,11 +113,11 @@ const PIE_LABELS =
 function slicesXml(spec: ChartSpec, points: number): string {
     return Array.from({ length: points }, (_, i) => {
         const color = spec.sliceColors[i] ?? chartColor(i);
-        return `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr>${solidFill(color)}</c:spPr></c:dPt>`;
+        return `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr>${solidFillXml(color)}</c:spPr></c:dPt>`;
     }).join('');
 }
 
-// A series' name, categories and values, and how many points it plots.
+// A series' name, categories and values, and how many points it plots: a range series its cache's, none without one.
 type Source = { name: string; data: string; points: number };
 
 function inlineSource(categories: string[], name: string, values: (number | null)[]): Source {
@@ -161,7 +160,7 @@ function rangeSource(
             categories ? `<c:cat><c:strRef>${formula(categories)}${strCache(cache.categories)}</c:strRef></c:cat>` : '',
             values ? `<c:val><c:numRef>${formula(values)}${numCache}</c:numRef></c:val>` : '',
         ].join(''),
-        points: values ? (values.row[1] - values.row[0] + 1) * (values.column[1] - values.column[0] + 1) : 0,
+        points: cache.series?.values.length ?? 0,
     };
 }
 
@@ -175,12 +174,8 @@ function pointsXml(points: readonly (string | number | null)[]): string {
 
 // 'Sheet'!$A$2:$A$9 by the name the workbook writes.
 function cellRange(ref: CellRangeRef, ranges: Ranges): string {
-    const name = ranges?.(ref.sheetId);
-    if (name === undefined) return '#REF!';
-    const cell = (row: number, column: number) => `$${columnIndexToLabel(column)}$${row + 1}`;
-    const start = cell(ref.row[0], ref.column[0]);
-    const end = cell(ref.row[1], ref.column[1]);
-    return `${quoteSheetName(name)}!${start === end ? start : `${start}:${end}`}`;
+    const name = ranges(ref.sheetId);
+    return name === undefined ? '#REF!' : `${quoteSheetName(name)}!${rangeToA1(ref, true)}`;
 }
 
 // The category axis, then the value axis. A bar chart lies on its side. CHARTS.md: the category axis is maxMin when
@@ -190,7 +185,7 @@ function axesXml(spec: ChartSpec, look: ChartLook): string {
     const sideways = spec.type === 'bar';
     const maxMin = sideways !== categoryAxis.reversed;
     const stroke = (opacity = 1) =>
-        `<a:ln w="${Math.round(look.strokeWidth * EMU_PER_PX)}">${solidFill(look.strokeColor, opacity)}</a:ln>`;
+        `<a:ln w="${Math.round(look.strokeWidth * EMU_PER_PX)}">${solidFillXml(look.strokeColor, opacity)}</a:ln>`;
     const deleted = (visible: boolean) => `<c:delete val="${visible ? 0 : 1}"/>`;
     const noTicks = '<c:majorTickMark val="none"/><c:minorTickMark val="none"/>';
     const scaling = (orientation: string, bounds = '') =>
@@ -239,17 +234,7 @@ function legendXml(position: Exclude<LegendPosition, 'none'>): string {
 
 // Every label's colour and the spec's font.
 function textProperties(color: string, font: string): string {
-    return `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr>${solidFill(color)}<a:latin typeface="${escapeXml(font)}"/></a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`;
-}
-
-// A colour token (#rgb, #rrggbb, #rrggbbaa) as DrawingML, its alpha times `opacity` beside it; transparent is no fill.
-function solidFill(color: string, opacity = 1): string {
-    if (isTransparentColor(color)) return '<a:noFill/>';
-    const digits = color.slice(1);
-    const rgb = digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits.slice(0, 6);
-    const alpha = (digits.length === 8 ? Number.parseInt(digits.slice(6), 16) / 255 : 1) * opacity;
-    const share = alpha < 1 ? `<a:alpha val="${Math.round(alpha * 100_000)}"/>` : '';
-    return `<a:solidFill><a:srgbClr val="${rgb.toUpperCase()}">${share}</a:srgbClr></a:solidFill>`;
+    return `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr>${solidFillXml(color)}<a:latin typeface="${escapeXml(font)}"/></a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`;
 }
 
 function turned<K, V>(read: ReadonlyMap<K, V>): Map<V, K> {

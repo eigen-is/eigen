@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { MAX_CHART_POINTS, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import {
     type Cell,
     floatingItems,
+    REFERENCE_ROW_COUNT,
     type Sheet,
     type SheetChart,
     type SheetFloatingObject,
@@ -12,7 +13,7 @@ import { A_NS, EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/core/ooxml
 import { CHART_CONTENT_TYPE } from '../../../../lib/core/ooxml-chart';
 import type { PackagePart } from '../../../../lib/core/opc';
 import { hasXmlName, type XmlElement, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
-import { openZip } from '../../../../lib/core/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip } from '../../../../lib/core/zip';
 import { pxToColumnWidth } from '../../../../lib/document/spreadsheetml';
 import {
     type CountedWarningCode,
@@ -21,11 +22,10 @@ import {
     toTransferableText,
 } from '../../../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../../../lib/export/office-image';
-import { sheetsToXlsx } from '../../../../lib/export/sheets/to-xlsx';
 import { DRAWING_CONTENT_TYPE, drawingOf, type WorkbookPictures } from '../../../../lib/export/sheets/xlsx/drawing';
 import { readXlsx, xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { PIXEL_PNG } from '../../../fixtures/pptx';
-import { xlsxFixture } from '../../../fixtures/xlsx';
+import { exportXlsx, xlsxFixture } from '../../../fixtures/xlsx';
 
 // A sheet's charts as its drawing part, read back by Eigen's own xlsx reader: each chart over the same pixels of the
 // same cells, and its spec the same.
@@ -113,7 +113,8 @@ function roundTrip(sheets: Sheet[]): { sheets: Sheet[]; warnings: TransformWarni
         ],
     });
     const warnings: TransformWarning[] = [];
-    return { sheets: xlsxToSheets(bytes, warnings), warnings, lost };
+    const read = readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, warnings);
+    return { sheets: read.sheets, warnings, lost };
 }
 
 const boxOf = ({ x, y, width, height }: SheetFloatingObject) => ({ x, y, width, height });
@@ -202,6 +203,28 @@ describe('drawingOf', () => {
         const mixed: Sheet = { ...SUMMARY, charts: { ...SUMMARY.charts, ...broken.charts } };
         expect(drawingOf(mixed, 1, [mixed, MY_DATA], noPictures(), (code) => lost.push(code))?.parts).toHaveLength(4);
         expect(lost).toEqual(['charts-dropped', 'charts-dropped']);
+    });
+
+    // B2:B4 resolves to three slices; a whole column, an area and one point too many resolve to none.
+    test.each([
+        ['B2:B4', range([1, 3], [1, 1]), 3],
+        ['a whole column', range([0, REFERENCE_ROW_COUNT - 1], [1, 1]), 0],
+        ['an area', range([1, 3], [0, 1]), 0],
+        ['one point too many', range([0, MAX_CHART_POINTS], [1, 1]), 0],
+    ])('a pie over %s writes a slice per point its cells resolve to', (_, values, slices) => {
+        const spec = JSON.stringify({
+            ...sampleChartSpec('pie'),
+            data: {
+                source: 'range',
+                categories: null,
+                series: [{ name: 'Sales', values, color: null, markers: false, smooth: false }],
+            },
+        });
+        const pie: Sheet = { ...SUMMARY, charts: byId({ ...RANGED, spec }) };
+        const drawing = drawingOf(pie, 1, [pie, MY_DATA], noPictures(), () => {});
+        const part = drawing ? xml(drawing.parts[2]) : '';
+        expect(part.match(/<c:dPt>/g)?.length ?? 0).toBe(slices);
+        expect(part.length).toBeLessThan(10_000);
     });
 
     test("a chart naming a sheet the workbook doesn't hold keeps its other refs", () => {
@@ -302,7 +325,7 @@ describe('the workbook', () => {
         const turned: SheetChart = { ...RANGED, angle: 30, color: '#AA0000', strokeColor: '#00AA00' };
         const summary: Sheet = { ...SUMMARY, charts: byId(INLINE, turned) };
         const warnings: TransformWarning[] = [];
-        const bytes = await sheetsToXlsx([summary, stored], { warnings });
+        const bytes = exportXlsx([summary, stored], { warnings });
         expect(warnings).toEqual([]);
         const zip = openZip(bytes);
         const part = (path: string) => new TextDecoder().decode(zip.read(path) ?? new Uint8Array());
@@ -330,7 +353,7 @@ describe('the workbook', () => {
         const image = { id: 'picture', index: 'a0V', x: 0, y: 0, width: 10, height: 10, mediaName: 'a.png' };
         const summary: Sheet = { ...SUMMARY, images: { picture: image } };
         const history: Sheet = { ...stored, name: 'History' };
-        const [read] = xlsxToSheets(await sheetsToXlsx([summary, history]));
+        const [read] = xlsxToSheets(exportXlsx([summary, history]));
         const charts = Object.values(read.charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
         expect(charts.map(boxOf)).toEqual([INLINE, RANGED].map(boxOf));
         expect(parseChartSpec(charts[1].spec)?.data).toMatchObject({
@@ -355,9 +378,9 @@ describe('pictures read back by the import', () => {
         const drawn: SheetImage = { ...BELOW, id: 'drawn', index: 'a4', mediaName: 'drawing.svg', angle: 200 };
         const summary: Sheet = { ...SUMMARY, images: { below: BELOW, above: ABOVE, sideways, drawn } };
         const warnings: TransformWarning[] = [];
-        const bytes = await sheetsToXlsx([summary, MY_DATA], { media: [PNG, SVG], warnings });
+        const bytes = exportXlsx([summary, MY_DATA], { media: [PNG, SVG], warnings });
         expect(warnings).toEqual([]);
-        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 });
+        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 }, []);
         const items = floatingItems(sheets[0]);
         expect(items.map(({ kind, object }) => [kind, boxOf(object), object.angle ?? 0])).toEqual([
             ['chart', boxOf(INLINE), 0],

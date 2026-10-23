@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
+import { recalcSheets } from '@workspace/sheet/engine';
 import { openZip } from '../../../lib/core/zip';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
-import { sheetsToXlsx } from '../../../lib/export/sheets/to-xlsx';
 import { xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
+import { exportXlsx } from '../../fixtures/xlsx';
 
 function entry(bytes: Uint8Array, path: string): string {
     const data = openZip(bytes).read(path);
@@ -17,6 +18,24 @@ function cellAt(sheet: Sheet, r: number, c: number) {
 }
 
 describe('an xlsx export read back by the import', () => {
+    test('keeps the values under a merge, so a formula reading one computes the same', async () => {
+        const sheets: Sheet[] = [
+            {
+                id: 'data',
+                name: 'Data',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 1, m: '1', mc: { r: 0, c: 0, rs: 1, cs: 2 } } },
+                    { r: 0, c: 1, v: { v: 5, m: '5', mc: { r: 0, c: 0 } } },
+                    { r: 0, c: 2, v: { v: 10, m: '10', f: '=B1*2' } },
+                ],
+                config: { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } },
+            },
+        ];
+        const [data] = recalcSheets(xlsxToSheets(exportXlsx(sheets)));
+        expect(cellAt(data, 0, 1)).toMatchObject({ v: 5, mc: { r: 0, c: 0 } });
+        expect(cellAt(data, 0, 2)?.v).toBe(10);
+    });
+
     test('keeps the values, types, looks, sizes, merges, panes and hidden tracks', async () => {
         const thin = { style: 1, color: '#000000' };
         const sheets: Sheet[] = [
@@ -50,7 +69,7 @@ describe('an xlsx export read back by the import', () => {
             },
             { name: 'Hidden', hide: 1, celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
         ];
-        const [data, hidden] = xlsxToSheets(await sheetsToXlsx(sheets));
+        const [data, hidden] = xlsxToSheets(exportXlsx(sheets));
         expect(data).toMatchObject({
             name: 'Data',
             color: '#FF0000',
@@ -80,7 +99,7 @@ describe('an xlsx export read back by the import', () => {
     test('a cell with a border alone stays no cell, and a look without a colour gains none', async () => {
         const thin = { style: 1, color: '#000000' };
         const [sheet] = xlsxToSheets(
-            await sheetsToXlsx([
+            exportXlsx([
                 {
                     name: 'Sheet1',
                     celldata: [{ r: 0, c: 0, v: { v: 'bold', bl: 1 } }],
@@ -95,7 +114,7 @@ describe('an xlsx export read back by the import', () => {
 
     test('a link to a name no sheet holds, a defined name, keeps it as its location', async () => {
         const [sheet] = xlsxToSheets(
-            await sheetsToXlsx([
+            exportXlsx([
                 {
                     name: 'Index',
                     celldata: [{ r: 0, c: 0, v: { v: 'table 1' } }],
@@ -112,7 +131,7 @@ describe('an xlsx export read back by the import', () => {
             { v: 'world', it: 1, fs: 14 },
         ];
         const [sheet] = xlsxToSheets(
-            await sheetsToXlsx([
+            exportXlsx([
                 { name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { ct: { fa: 'General', t: 'inlineStr', s: runs } } }] },
             ]),
         );
@@ -124,7 +143,7 @@ describe('an xlsx export read back by the import', () => {
 describe('the export keeps what a plain writer loses', () => {
     test('a linked number or date keeps its value and type', async () => {
         const [sheet] = xlsxToSheets(
-            await sheetsToXlsx([
+            exportXlsx([
                 {
                     name: 'Sheet1',
                     celldata: [
@@ -145,7 +164,7 @@ describe('the export keeps what a plain writer loses', () => {
 
     test('a formula cell keeps its link', async () => {
         const [sheet] = xlsxToSheets(
-            await sheetsToXlsx([
+            exportXlsx([
                 {
                     name: 'Sheet1',
                     celldata: [{ r: 0, c: 0, v: { f: '=SUM(B1:B3)', v: 6 } }],
@@ -159,7 +178,7 @@ describe('the export keeps what a plain writer loses', () => {
 
     test('a range link keeps its range, and a web address with a cell-shaped tail stays one', async () => {
         const [sheet] = xlsxToSheets(
-            await sheetsToXlsx([
+            exportXlsx([
                 {
                     name: 'Sheet1',
                     celldata: [
@@ -181,7 +200,7 @@ describe('the export keeps what a plain writer loses', () => {
     });
 
     test('an error result is an error cell', async () => {
-        const bytes = await sheetsToXlsx([
+        const bytes = exportXlsx([
             { name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { f: '=1/0', v: '#DIV/0!', m: '#DIV/0!' } }] },
         ]);
         expect(entry(bytes, 'xl/worksheets/sheet1.xml')).toContain('<c r="A1" t="e"><f>1/0</f><v>#DIV/0!</v></c>');
@@ -191,7 +210,7 @@ describe('the export keeps what a plain writer loses', () => {
     test('a sheet name Excel refuses is made safe, counted, rather than failing the export', async () => {
         const long = 'Quarterly revenue by region and product';
         const warnings: TransformWarning[] = [];
-        const bytes = await sheetsToXlsx(
+        const bytes = exportXlsx(
             [
                 { name: 'History', celldata: [] },
                 { name: `${long} A`, celldata: [] },
@@ -250,8 +269,8 @@ describe('the export keeps what a plain writer loses', () => {
                 },
             },
         ];
-        const first = await sheetsToXlsx(sheets, { title: 'Book' });
-        const second = await sheetsToXlsx(sheets, { title: 'Book' });
+        const first = exportXlsx(sheets, { title: 'Book' });
+        const second = exportXlsx(sheets, { title: 'Book' });
         expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);
         expect(new Bun.CryptoHasher('sha256').update(first).digest('hex')).toBe(GOLDEN_XLSX_SHA256);
         expect(entry(first, 'docProps/core.xml')).not.toMatch(/created|modified|Microsoft/);
@@ -265,7 +284,7 @@ const GOLDEN_XLSX_SHA256 = '7896dcf9ac4abb356254193f22b0eb343e99e6804dc9bcca15c4
 
 describe('the package', () => {
     test("declares Excel's parts and their types", async () => {
-        const bytes = await sheetsToXlsx([{ name: 'Sheet1', celldata: [] }], { title: 'Budget' });
+        const bytes = exportXlsx([{ name: 'Sheet1', celldata: [] }], { title: 'Budget' });
         expect(openZip(bytes).names()).toEqual([
             '[Content_Types].xml',
             '_rels/.rels',
@@ -295,7 +314,7 @@ describe('a large sheet', () => {
             for (let c = 0; c < 10; c++) celldata.push({ r, c, v: { v: c === 0 ? `row ${r % 1000}` : r * c } });
         Bun.gc(true);
         const before = process.memoryUsage().rss;
-        const bytes = await sheetsToXlsx([{ name: 'Big', celldata }]);
+        const bytes = exportXlsx([{ name: 'Big', celldata }]);
         // The writer is synchronous and RSS seldom falls back within it, so after it is near its peak: about 300 MB for
         // a million cells, against about 450 MB with the sheet's XML whole.
         expect(process.memoryUsage().rss - before).toBeLessThan(400 * 1024 * 1024);
