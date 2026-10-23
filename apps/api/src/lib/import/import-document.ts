@@ -34,6 +34,7 @@ import {
     runImportToDocumentUpdate,
     runImportToSlidesUpdate,
     runImportToSnapshotJson,
+    type SheetsImportSnapshot,
 } from '../document/transform/run-transform';
 import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
@@ -48,10 +49,7 @@ import { IMPORT_MESSAGES, importSummary, PRESENTATION_EMPTY } from './messages';
 // Refuse before the copy: a view over a larger pool is copied out, and IPC copies the
 // upload again, so a job the runner will not admit must not pay for it. run() rechecks
 // authoritatively. The upload cap bounds the pictures' inflated bytes too, as an upload of each would be bounded.
-function importXlsxSnapshot(
-    buffer: Buffer,
-    signal?: AbortSignal,
-): Promise<{ snapshotJson: string; images: TransformMedia[]; warnings: TransformWarning[] }> {
+function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<SheetsImportSnapshot> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'xlsx');
     const job: SheetsImportJob = {
@@ -185,7 +183,8 @@ export async function convertToDocument(
     }
 
     if (targetType === 'eigenslides') {
-        // No deck: the new one takes the slide size nearest the file's and the file's width, so a 4:3 file makes a 4:3 deck.
+        // No deck: the new one takes the slide size nearest the file's and the file's width, so a 4:3 file makes a 4:3
+        // deck.
         const { update, images } = await importPptxUpdate(buffer, undefined);
         // Refused before the create, so a file whose pictures can't fit makes no document; saveDocImages charges again.
         await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
