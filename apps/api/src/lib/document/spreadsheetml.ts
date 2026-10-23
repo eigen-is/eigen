@@ -89,15 +89,13 @@ export function pxToColumnWidth(px: number, digit: number): number {
 export const MAX_FORMULA_LENGTH = 8192;
 export const MAX_NUMBER_FORMAT_LENGTH = 255;
 export const MAX_FORMULA_STRING_LENGTH = 255;
-// Excel's limits on a cell's text, a sheet's name, a workbook's cell formats and a sheet's links.
+// Excel's limits on a cell's text, a workbook's cell formats and a sheet's links; a sheet name's are the engine's
+// (a1-notation.ts).
 export const MAX_TEXT_LENGTH = 32_767;
-export const MAX_SHEET_NAME_LENGTH = 31;
 export const MAX_CELL_FORMATS = 64_000;
 export const MAX_SHEET_LINKS = 65_530;
 // Excel's limit on a validation's input message.
 export const MAX_PROMPT_LENGTH = 255;
-// The characters Excel refuses in a sheet's name; it refuses a quote at either end too.
-export const SHEET_NAME_FORBIDDEN = /[\\/?*[\]:]/g;
 
 // A ref's cells, past its sheet's name, all in Excel's grid: a defined name shaped like a cell (UkRegion2) names a
 // column past XFD.

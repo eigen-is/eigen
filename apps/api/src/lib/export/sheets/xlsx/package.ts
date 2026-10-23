@@ -1,11 +1,10 @@
 import { SHEET_DEFAULT_FONT, type Sheet } from '@workspace/lib/sheets';
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
-import { quoteSheetName, rangeToA1 } from '@workspace/sheet/engine';
+import { MAX_SHEET_NAME_LENGTH, quoteSheetName, rangeToA1, SHEET_NAME_FORBIDDEN } from '@workspace/sheet/engine';
 import { THEME_TYPE, themeXml } from '../../../core/drawingml';
 import { R_NS, SML_NS } from '../../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, relsPathOf, writePackage } from '../../../core/opc';
 import type { ZipWriteEntry } from '../../../core/zip';
-import { MAX_SHEET_NAME_LENGTH, SHEET_NAME_FORBIDDEN } from '../../../document/spreadsheetml';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
 import { OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia } from '../../office-image';
 import { drawingOf, type WorkbookPictures } from './drawing';
