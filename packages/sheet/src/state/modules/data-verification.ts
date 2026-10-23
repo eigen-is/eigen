@@ -1,6 +1,7 @@
 import { isNil } from 'es-toolkit/compat';
 import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
+import type { Cell } from '../../engine/types';
 import {
     type CellMatrix,
     type Context,
@@ -20,6 +21,7 @@ import {
     jfrefreshgrid,
     mergeBorder,
     normalizedAttr,
+    normalizedCellAttr,
     rowLocationByIndex,
     type SingleRange,
     setCellValue,
@@ -344,7 +346,13 @@ export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellVal
     return String(cellValue).toUpperCase() === item.value1.toUpperCase();
 }
 
-// `horizonAlign`/`verticalAlign` are the normalized ht/vt attrs
+// A tick box sits where the cell's own alignment puts it, else left: General alignment centres a boolean, which would
+// move a ticked box off the column an empty cell's box draws in.
+export function checkboxAlign(cell: Cell | null | undefined): number {
+    return cell?.ht == null ? 1 : Number(normalizedCellAttr(cell, 'ht'));
+}
+
+// `horizonAlign` is checkboxAlign's and `verticalAlign` the normalized vt attr
 // (ht 0 center / 1 left / 2 right, vt 0 middle / 1 top / 2 bottom); an empty
 // cell yields NaN, which lands on the same left/middle default the painter uses.
 export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: number): CellGlyphRect {
@@ -381,7 +389,7 @@ export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x
     if (getCellDataVerification(ctx, r, c)?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
     if (!d) return false;
-    const rect = checkboxRect(box, Number(normalizedAttr(d, r, c, 'ht')), Number(normalizedAttr(d, r, c, 'vt')));
+    const rect = checkboxRect(box, checkboxAlign(d[r]?.[c]), Number(normalizedAttr(d, r, c, 'vt')));
     return x >= rect.x && x <= rect.x + rect.size && y >= rect.y && y <= rect.y + rect.size;
 }
 

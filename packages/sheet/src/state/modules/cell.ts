@@ -46,7 +46,7 @@ export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize
     } else if (attr.substring(0, 2) === 'bs') {
         value ||= 'none';
     } else if (attr === 'ht' || attr === 'vt') {
-        const defaultValue = attr === 'ht' ? '1' : '0';
+        const defaultValue = attr === 'ht' ? generalAlign(cell) : '0';
         value = !isNil(value) ? value.toString() : defaultValue;
         if (['0', '1', '2'].indexOf(value.toString()) === -1) {
             value = defaultValue;
@@ -59,6 +59,15 @@ export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize
     }
 
     return value;
+}
+
+// Excel's General alignment, for a cell without its own: numbers and dates right, booleans and errors centred, text
+// left. An imported error keeps a text type, so its value decides too.
+function generalAlign(cell: Cell): '0' | '1' | '2' {
+    const value = cell?.v;
+    if (typeof value === 'number') return '2';
+    if (typeof value === 'boolean' || cell?.ct?.t === 'e') return '0';
+    return typeof value === 'string' && valueIsError(value) ? '0' : '1';
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: passes through normalizedCellAttr's per-attr union
