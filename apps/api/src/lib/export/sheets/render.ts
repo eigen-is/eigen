@@ -11,6 +11,7 @@ import {
     mergedBorderSides,
     type Sheet,
     type SheetConfig,
+    sheetChartBox,
     sheetColumnsWidth,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
@@ -480,15 +481,15 @@ function gridOffset(sheet: Sheet, minRow: number, minCol: number): { left: numbe
 
 type FloatingBox = { x: number; y: number; width: number; height: number };
 
-// Every image and chart box, which the page size and the window's origin count.
+// Every image and chart box, which the page size and the window's origin count; a chart's clamped as it draws.
 function floatingObjects(sheet: Sheet): FloatingBox[] {
-    return [...(sheet.images ?? []), ...Object.values(sheet.charts ?? {})];
+    return [...(sheet.images ?? []), ...Object.values(sheet.charts ?? {}).map(sheetChartBox)];
 }
 
 // Images, then charts in their paint order, at their stored boxes: the editor's ImgBoxs and ChartBoxs stack
 // the same way. An image whose name resolves to nothing renders nothing: a `pending:` name from an upload
 // that never settled, or a media file deleted under the reference. A chart draws as the painter's inline
-// SVG, its ranges read from the materialized sheets.
+// SVG, its box clamped (sheetChartBox) and its ranges read from the materialized sheets.
 function renderFloatingObjects(
     sheet: Sheet,
     mediaUrls: MediaUrls,
@@ -517,7 +518,7 @@ function renderFloatingObjects(
     }
     // White like the editor's chart box, so the gridlines stop at a chart.
     for (const chart of orderByFractionalIndex(Object.values(sheet.charts ?? {}))) {
-        const placed = place(chart, ';background:#fff');
+        const placed = place(sheetChartBox(chart), ';background:#fff');
         if (placed)
             parts.push(
                 `<div ${placed.attr}>${renderSheetChartSvg({ ...chart, width: placed.width, height: placed.height }, resolver)}</div>`,

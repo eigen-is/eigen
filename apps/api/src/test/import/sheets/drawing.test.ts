@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { parseChartSpec } from '@workspace/lib/charts';
-import type { Sheet } from '@workspace/lib/sheets';
+import { CHART_MAX_SIDE, parseChartSpec } from '@workspace/lib/charts';
+import {
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    SHEET_DEFAULT_COL_WIDTH,
+    type Sheet,
+} from '@workspace/lib/sheets';
 import { CHART_CONTENT_TYPE } from '../../../lib/core/ooxml-chart';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { CHART_SHEET_SIZE } from '../../../lib/import/sheets/drawing';
@@ -178,6 +183,62 @@ describe('a worksheet chart', () => {
         expect(first.spec).toBe(second.spec);
     });
 
+    // Excel draws a two-cell anchor between its corners whichever comes first.
+    test('a two-cell anchor whose to is before its from spans the same cells', () => {
+        const { sheets } = read(
+            workbook({
+                sheets: [{ name: 'Data', data: DATA }],
+                anchors: twoCell([4, 0, 10, 0], [1, 10 * PX, 2, 0], graphicFrame('rId1')),
+                charts: [column('Data')],
+            }),
+        );
+        expect(chartsOf(sheets[0])[0]).toMatchObject({ x: 82, y: 40, width: 206, height: 160 });
+    });
+
+    // emu() reads up to 2^53 EMU, about 9.4e11 px, which the painter overflows its stack at.
+    test("a side past the max is the max, and a place past Excel's grid its edge", () => {
+        const FAR = 9e15;
+        const { sheets, warnings } = read(
+            workbook({
+                sheets: [{ name: 'Data', data: DATA }],
+                anchors:
+                    oneCell([0, 0, 0, 0], FAR, 200 * PX, graphicFrame('rId1')) +
+                    absolute(FAR, 0, 300 * PX, FAR, graphicFrame('rId1')) +
+                    twoCell([0, FAR, 0, 0], [2, 0, 3, FAR], graphicFrame('rId1')),
+                charts: [column('Data')],
+            }),
+        );
+        const edge = REFERENCE_COLUMN_COUNT * SHEET_DEFAULT_COL_WIDTH;
+        expect(
+            chartsOf(sheets[0])
+                .sort((a, b) => a.id.localeCompare(b.id))
+                .map(({ x, y, width, height }) => [x, y, width, height]),
+        ).toEqual([
+            [0, 0, CHART_MAX_SIDE, 200],
+            [edge, 0, 300, CHART_MAX_SIDE],
+            [144, 0, CHART_MAX_SIDE, CHART_MAX_SIDE],
+        ]);
+        expect(warnings).toEqual([]);
+    });
+
+    test('a sheet named twice in different case: its refs mean the first', () => {
+        const { sheets } = read(
+            workbook({
+                sheets: [
+                    { name: 'Data', data: DATA },
+                    { name: 'DATA', data: DATA },
+                ],
+                anchors: twoCell([0, 0, 0, 0], [2, 0, 10, 0], graphicFrame('rId1')),
+                charts: [column('data')],
+            }),
+        );
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Data', 'DATA (2)']);
+        expect(parseChartSpec(chartsOf(sheets[0])[0].spec)?.data).toMatchObject({
+            source: 'range',
+            categories: { sheetId: 'sheet-0' },
+        });
+    });
+
     test("a ref ranges can't hold, a defined name, comes in with the caches' numbers inline", () => {
         const { sheets, warnings } = read(
             workbook({
@@ -227,6 +288,26 @@ describe('a worksheet chart', () => {
         );
         const placed = chartsOf(sheets[0]).length;
         expect(placed).toBeGreaterThan(count - 20);
+        expect(warnings).toEqual([{ code: 'charts-dropped', count: count - placed }]);
+    });
+
+    // Placing an anchor walks the tracks before its corners, so a far one costs its columns and rows.
+    test('anchors far down the grid are charged their tracks, and those past the budget left out', () => {
+        const far = (REFERENCE_COLUMN_COUNT - 2 + REFERENCE_ROW_COUNT - 2) * 2;
+        const count = Math.floor(MAX_XLSX_ELEMENTS / far) + 3;
+        const { sheets, warnings } = read(
+            workbook({
+                sheets: [{ name: 'Data', data: DATA }],
+                anchors: twoCell(
+                    [REFERENCE_COLUMN_COUNT - 2, 0, REFERENCE_ROW_COUNT - 2, 0],
+                    [REFERENCE_COLUMN_COUNT - 1, 0, REFERENCE_ROW_COUNT - 1, 0],
+                    graphicFrame('rId1'),
+                ).repeat(count),
+                charts: [column('Data')],
+            }),
+        );
+        const placed = chartsOf(sheets[0]).length;
+        expect(placed).toBeLessThan(count - 2);
         expect(warnings).toEqual([{ code: 'charts-dropped', count: count - placed }]);
     });
 

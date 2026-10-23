@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    CHART_MAX_SIDE,
     chartColor,
     MAX_CHART_LABEL_LENGTH,
     MAX_CHART_POINTS,
@@ -212,6 +213,12 @@ describe('renderSheetChartSvg', () => {
 
     test('a stored axis format wins over the cells’', () => {
         expect(renderSheetChartSvg(chart('0.00'), shares)).toContain('>0.50<');
+    });
+
+    // A peer or a file can store any number; at a trillion px the painter overflows its stack.
+    test('a stored side past the max draws at the max', () => {
+        const svg = renderSheetChartSvg({ ...chart(null), width: 9.4e11, height: 9.4e11 }, shares);
+        expect(svg).toContain(`width="${CHART_MAX_SIDE}" height="${CHART_MAX_SIDE}"`);
     });
 });
 

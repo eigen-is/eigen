@@ -3,7 +3,7 @@ import { normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@works
 import {
     type DrawingTheme,
     drawingColor,
-    IDENTITY_COLOR_MAP,
+    drawingTheme,
     percent,
     readColorMap,
     readColorScheme,
@@ -148,7 +148,7 @@ export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInher
 }
 
 const NO_THEME: SlideTheme = {
-    colors: { scheme: new Map(), map: IDENTITY_COLOR_MAP },
+    colors: drawingTheme(undefined),
     fonts: { major: '', minor: '' },
     formats: { fills: [], backgrounds: [], lines: [] },
 };

@@ -1,5 +1,5 @@
 import { chartColor, chartLabel, exceedsChartSpecBytes, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
-import type { SheetChart } from '@workspace/lib/sheets';
+import { type SheetChart, sheetChartBox } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
     ChartData,
@@ -63,19 +63,20 @@ export function seriesName(name: RangeChartSeries['name'], resolver: CellResolve
     return typeof name === 'string' ? name : cellLabel(resolver.getCell(name.sheetId, name.row[0], name.column[0]));
 }
 
-// A chart as the editor's overlay and the export draw it: its box, its range data read through the
-// resolver, and value ticks in the axis's own format or else the first value cell's, Google's "From
-// source data".
+// A chart as the editor's overlay and the export draw it: its box clamped as stored, its range data read
+// through the resolver, and value ticks in the axis's own format or else the first value cell's, Google's
+// "From source data".
 export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): string {
     const spec = parseChartSpec(chart.spec);
     const range = spec?.data.source === 'range' ? spec.data : null;
     const format = spec ? valueFormat(spec, resolver) : undefined;
+    const { width, height } = sheetChartBox(chart);
     return renderChartSpecSvg({
         id: chart.id,
         spec,
         data: range ? resolveRangeChartData(range, resolver) : undefined,
-        width: chart.width,
-        height: chart.height,
+        width,
+        height,
         formatTick: (value) => numberDisplay(value, format),
     });
 }

@@ -3,8 +3,14 @@
 // joiner through replaySheetsOps. Every client and the joiner must end on the same charts.
 
 import { describe, expect, test } from 'bun:test';
-import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot, type SheetChart } from '@workspace/lib/sheets';
+import { CHART_MAX_SIDE, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    decodeSheetsSnapshot,
+    encodeSheetsSnapshot,
+    REFERENCE_ROW_COUNT,
+    SHEET_DEFAULT_ROW_HEIGHT,
+    type SheetChart,
+} from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { orderByFractionalIndex } from '@workspace/lib/vector';
 import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } from 'immer';
@@ -18,6 +24,7 @@ import {
     deleteChart,
     editsDeletedChart,
     insertChart,
+    pasteChart,
     reorderChart,
     setChartSpec,
     updateChartBox,
@@ -32,6 +39,7 @@ enablePatches();
 const S = 'id_1';
 const T = 'id_2';
 const BOX = { x: 10, y: 20, width: 400, height: 300 };
+const SPEC = JSON.stringify(sampleChartSpec('column'));
 
 const ref = (sheetId: string, row: [number, number], column: [number, number] = [1, 1]): CellRangeRef => ({
     sheetId,
@@ -127,6 +135,25 @@ describe('chart writers', () => {
         expect(ops.map((op) => [op.op, op.path])).toEqual([
             ['replace', ['charts', 'c1', 'x']],
             ['replace', ['charts', 'c1', 'width']],
+        ]);
+    });
+
+    // A pasted size or a resize past the largest side would stall every peer's painter, and at a trillion px overflow it.
+    test('insert, paste, move and resize store a side past the max as the max, and the corner on the grid', () => {
+        const huge = { x: -5, y: 9.4e11, width: 9.4e11, height: 1e9 };
+        const inserted = author(workbook(), (ctx) => insertChart(ctx, 'c3', huge, sampleChartSpec('line')));
+        expect(inserted.next.sheets[0].charts!.c3).toMatchObject({
+            x: 0,
+            y: REFERENCE_ROW_COUNT * SHEET_DEFAULT_ROW_HEIGHT,
+            width: CHART_MAX_SIDE,
+            height: CHART_MAX_SIDE,
+        });
+        const pasted = author(workbook(), (ctx) => pasteChart(ctx, 'c3', SPEC, { width: 9.4e11, height: 300 }));
+        expect(pasted.next.sheets[0].charts!.c3).toMatchObject({ x: 0, y: 0, width: CHART_MAX_SIDE, height: 300 });
+        const resized = author(workbook(), (ctx) => updateChartBox(ctx, 'c1', { x: -40, width: 9.4e11 }));
+        expect(resized.ops.map((op) => [op.path, op.value])).toEqual([
+            [['charts', 'c1', 'x'], 0],
+            [['charts', 'c1', 'width'], CHART_MAX_SIDE],
         ]);
     });
 

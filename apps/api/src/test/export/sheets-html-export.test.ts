@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, sampleChartSpec } from '@workspace/lib/charts';
 import type { Cell, ConditionalFormatRule, Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
-import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { REFERENCE_COLUMN_COUNT, SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
@@ -1157,6 +1157,19 @@ describe('Sheets HTML export — charts', () => {
             charts: { c1: chartOn('data', { x: 600, y: 300, width: 100, height: 50 }) },
         };
         expect(getSheetContentSize(sheet)).toEqual({ width: 700, height: 350 });
+    });
+
+    // A peer or a file can store any number; at a trillion px the painter overflows its stack.
+    test('a stored box past the max side or off the grid draws at the max, its corner on the grid', () => {
+        const sheet: Sheet = {
+            ...sheetWithChart(),
+            charts: { c1: chartOn('data', { x: 9.4e11, y: 40, width: 9.4e11, height: 9.4e11 }) },
+        };
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        expect(out.html).toContain(`width="${CHART_MAX_SIDE}" height="${CHART_MAX_SIDE}"`);
+        expect(getSheetContentSize(sheet).width).toBe(
+            REFERENCE_COLUMN_COUNT * SHEET_DEFAULT_COL_WIDTH + CHART_MAX_SIDE,
+        );
     });
 
     test('the chart survives the document sanitizer', () => {

@@ -7,7 +7,7 @@ import {
     DEFAULT_SHEET_COLUMN_COUNT,
     DEFAULT_SHEET_ROW_COUNT,
 } from '@workspace/sheet/engine';
-import { IDENTITY_COLOR_MAP, readColorScheme } from '../../core/drawingml';
+import { drawingTheme } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { optional } from '../../core/opc';
 import type { TransformWarning } from '../../document/transform/protocol';
@@ -151,7 +151,7 @@ export function xlsxToSheets(bytes: Uint8Array, warnings: TransformWarning[] = [
         if (sheets.length === 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
         const dropped = placeCharts(drawings, {
             pkg: book.pkg,
-            theme: { scheme: readColorScheme(book.theme), map: IDENTITY_COLOR_MAP },
+            theme: drawingTheme(book.theme),
             sheetIds,
             spend: budget.spendElements,
             charge,

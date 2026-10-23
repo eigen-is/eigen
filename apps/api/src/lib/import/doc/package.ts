@@ -42,7 +42,7 @@ export type DocxPackage = {
     damagedBands: number;
     contentTypeOf: OoxmlPackage['contentTypeOf'];
     // A part a drawing names, read when met; a damaged one is no part.
-    readPart(path: string): XmlElement | undefined;
+    part(path: string): XmlElement | undefined;
     // An image's bytes; a damaged entry is none, and costs only its picture.
     readMedia(path: string): Uint8Array | undefined;
     // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own, as has
@@ -51,7 +51,8 @@ export type DocxPackage = {
     // An equation's MathML is charged as it is written: a space in m:t writes 26 characters, so a few KB zipped would
     // build hundreds of MB before the output is weighed.
     chargeMathml(length: number): void;
-    // A chart's cost, charged only when the allowance left covers it: one it can't is left out, not the document.
+    // A chart's read cost (chartCost), charged only when the allowance left covers it: one it can't is left out. Its spec
+    // string still weighs in the output budget, so enough charts can refuse the document.
     spendChart(cost: number): boolean;
 };
 
@@ -114,7 +115,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         evenBands: evenAndOdd ? even : 0,
         damagedBands,
         contentTypeOf: pkg.contentTypeOf,
-        readPart: (path) => optional(() => pkg.part(path)),
+        part: (path) => optional(() => pkg.part(path)),
         readMedia: (path) => optional(() => pkg.zip.read(path)),
         chargePiece: (count = 1) => {
             pieces -= count;

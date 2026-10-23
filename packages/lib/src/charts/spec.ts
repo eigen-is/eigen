@@ -6,6 +6,7 @@ import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../constants/colors';
 import { DOCUMENT_FONT } from '../constants/fonts';
 import { isRecord } from '../core/guards';
 import { stripNonXmlChars } from '../core/xml';
+import { MAX_PAPER_MM, mmToPx } from '../docs/eigendoc/page';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../sheets/defaults';
 import {
     type CellRangeRef,
@@ -30,6 +31,9 @@ export const MAX_CHART_SPEC_BYTES = 64 * 1024;
 export const MAX_CHART_SERIES = 32;
 export const MAX_CHART_POINTS = 2000;
 export const MAX_CHART_LABEL_LENGTH = 200;
+// No chart is drawn wider or taller than the largest page, Word's 22 inches (2112 px): a side past it runs the layout
+// for seconds in every viewer and the export, and at a trillion px overflows the painter's stack.
+export const CHART_MAX_SIDE = Math.round(mmToPx(MAX_PAPER_MM));
 
 // What the Edit data grid edits; an imported chart over these opens its data read-only. A full grid,
 // 12 × 200, is past MAX_CHART_POINTS, so the grid's cells count too.

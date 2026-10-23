@@ -1,9 +1,9 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CHART_MAX_SIDE } from '@workspace/lib/docs/eigendoc';
+import { CHART_MAX_SIDE } from '@workspace/lib/charts';
 import { C_NS } from '../../../lib/core/ooxml';
 import * as ooxmlChart from '../../../lib/core/ooxml-chart';
-import { CHART_NOT_IMPORTED } from '../../../lib/core/ooxml-chart';
+import { CHART_CONTENT_TYPE, CHART_NOT_IMPORTED } from '../../../lib/core/ooxml-chart';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import {
@@ -472,10 +472,14 @@ describe('charts', () => {
     });
 
     // A header's schema holds no chart, and the Chart panel follows the body only.
-    test("a header's chart keeps its title's text or its cell's, a chart with none leaves nothing", async () => {
+    test("a header's chart keeps its title as the chart reads it, a chart with none leaves nothing", async () => {
         const part = (title: string) =>
             `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A}"><c:chart>${title}<c:plotArea><c:valAx><c:title><c:tx><c:rich><a:p><a:r><a:t>Axis</a:t></a:r></a:p></c:rich></c:tx></c:title></c:valAx></c:plotArea></c:chart></c:chartSpace>`;
-        const { rels = '', media } = chartParts([
+        const {
+            rels = '',
+            media,
+            contentTypes,
+        } = chartParts([
             part(
                 '<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Sales </a:t></a:r><a:r><a:t>2024</a:t></a:r></a:p></c:rich></c:tx></c:title>',
             ),
@@ -483,16 +487,56 @@ describe('charts', () => {
             part(
                 '<c:title><c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:pt idx="0"><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx></c:title>',
             ),
+            part('<c:autoTitleDeleted val="1"/>'),
+            chartSpace(COLUMNS, 'Drawn'),
         ]);
-        const header = paragraph(`${chartRun('rId20')}${chartRun('rId21')}${chartRun('rId22')}`);
+        const header = paragraph(['rId20', 'rId21', 'rId22', 'rId23', 'rId24'].map((id) => chartRun(id)).join(''));
         const { json, bands, warnings } = docxToPmJson(
-            Buffer.from(await buildDocxWithBands([{ id: 'h1', kind: 'header', xml: header, rels }], { media })),
+            Buffer.from(
+                await buildDocxWithBands([{ id: 'h1', kind: 'header', xml: header, rels }], { media, contentTypes }),
+            ),
         );
         expect([lines(json), bands.header && lines(bands.header), charts(bands.header ?? {})]).toEqual([
             ['Body'],
-            ['Sales 2024', 'Revenue'],
+            ['Sales 2024', 'Chart Title', 'Revenue', 'Drawn'],
             [],
         ]);
+        expect(warnings).toEqual([{ code: 'charts-dropped', count: 5 }]);
+    });
+
+    // A band's chart is found as the body's is: by a chart relationship, under word/charts/, of the chart content type.
+    test("a header's reference to anything but a chart part keeps no title", async () => {
+        const titled = new TextEncoder().encode(chartSpace(COLUMNS, 'Hidden'));
+        const rel = (id: string, type: string, target: string) =>
+            `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`;
+        const header = paragraph(['rId30', 'rId31', 'rId32'].map((id) => chartRun(id)).join(''));
+        const { bands, warnings } = docxToPmJson(
+            Buffer.from(
+                await buildDocxWithBands(
+                    [
+                        {
+                            id: 'h1',
+                            kind: 'header',
+                            xml: header,
+                            rels:
+                                rel('rId30', 'chart', 'media/chart.xml') +
+                                rel('rId31', 'chart', 'charts/untyped.xml') +
+                                rel('rId32', 'image', 'charts/chart1.xml'),
+                        },
+                    ],
+                    {
+                        media: {
+                            'word/media/chart.xml': titled,
+                            'word/charts/untyped.xml': titled,
+                            'word/charts/chart1.xml': titled,
+                        },
+                        contentTypes: `<Override PartName="/word/media/chart.xml" ContentType="${CHART_CONTENT_TYPE}"/><Override PartName="/word/charts/chart1.xml" ContentType="${CHART_CONTENT_TYPE}"/>`,
+                    },
+                ),
+            ),
+        );
+        // A header of nothing but these is no header.
+        expect(bands.header).toBeUndefined();
         expect(warnings).toEqual([{ code: 'charts-dropped', count: 3 }]);
     });
 });
