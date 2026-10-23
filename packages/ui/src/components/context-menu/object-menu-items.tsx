@@ -1,5 +1,5 @@
-// The object menus' shared rows, one set of labels and order for every host (the writes stay host-side), plus every
-// embedded image's download row.
+// The object menus' shared rows, one set of labels and order for every host (the writes stay host-side), plus the two
+// download rows: an embedded image's original file and the image the browser draws of a chart or a selection.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { downloadDriveFile } from '@workspace/lib/download';
@@ -13,6 +13,7 @@ import {
     ClipboardPaste,
     Copy,
     Download,
+    ImageDown,
     Layers,
     Scissors,
 } from 'lucide-react';
@@ -91,11 +92,22 @@ export function ClipboardMenuItems({
 
 // Every embedded image's download row (canvas, docs, sheets). The host resolves the image's media name
 // to its path; none yet (a pending upload, a deleted file) hides the row.
-export function DownloadImageMenuItem({ path }: { path?: DrivePath | null }) {
+export function DownloadOriginalImageMenuItem({ path }: { path?: DrivePath | null }) {
     if (!path) return null;
     return (
         <DropdownMenuItem onClick={() => downloadDriveFile(path)}>
             <Download className="h-4 w-4" /> Download original image
+        </DropdownMenuItem>
+    );
+}
+
+// Download image, the SVG the browser draws (downloadCanvasImage) of a chart in any app or a canvas selection. A host
+// with nothing to draw, a single image among them, passes no callback and the row hides.
+export function DownloadImageMenuItem({ onDownload }: { onDownload?: () => void }) {
+    if (!onDownload) return null;
+    return (
+        <DropdownMenuItem onClick={onDownload}>
+            <ImageDown className="h-4 w-4" /> Download image
         </DropdownMenuItem>
     );
 }

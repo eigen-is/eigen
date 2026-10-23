@@ -9,7 +9,12 @@ import { CommentMenuItems } from '../comments/comment-menu-items';
 import { DropdownMenuItem } from '../dropdown-menu';
 import { ContextMenuAnchor } from './context-menu-anchor';
 import { MenuSections, type MenuSectionsProps } from './menu-sections';
-import { ClipboardMenuItems, DownloadImageMenuItem, OrderMenuSub } from './object-menu-items';
+import {
+    ClipboardMenuItems,
+    DownloadImageMenuItem,
+    DownloadOriginalImageMenuItem,
+    OrderMenuSub,
+} from './object-menu-items';
 import type { useContextMenu } from './use-context-menu';
 
 type ObjectContextMenuProps<T> = {
@@ -18,6 +23,8 @@ type ObjectContextMenuProps<T> = {
     canEdit: boolean;
     // The right-clicked image's media file; undefined for any other object.
     imagePath: DrivePath | undefined;
+    // Download image, for a chart or a selection; omitted for a single image, which downloads its original.
+    onDownloadImage?: () => void;
     onArrange?: (op: ZOp) => void;
     onCut?: () => void;
     onCopy?: () => void;
@@ -37,6 +44,7 @@ export function ObjectContextMenu<T>({
     contextMenu,
     canEdit,
     imagePath,
+    onDownloadImage,
     onArrange,
     onCut,
     onCopy,
@@ -47,9 +55,10 @@ export function ObjectContextMenu<T>({
     onComment,
     hostSections = {},
 }: ObjectContextMenuProps<T>) {
-    const output = (imagePath || hostSections.output) && (
+    const output = (imagePath || onDownloadImage || hostSections.output) && (
         <>
-            <DownloadImageMenuItem path={imagePath} />
+            <DownloadOriginalImageMenuItem path={imagePath} />
+            <DownloadImageMenuItem onDownload={onDownloadImage} />
             {hostSections.output}
         </>
     );

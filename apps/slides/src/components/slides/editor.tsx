@@ -1,6 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     elementsInFrame,
     parseBackgroundFill,
@@ -443,6 +443,7 @@ function SlideEditorInner({
                             canEdit={canEdit}
                             ownerId={ownerId}
                             mountId={path.mountId}
+                            fileName={stripEigenExtension(path.name)}
                             tool={tool}
                             setTool={setTool}
                             toolLocked={toolLocked}

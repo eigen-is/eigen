@@ -1,16 +1,14 @@
-/// <reference types="vite/client" />
-// The image writer behind Download image and Vector's File › Download › SVG: canvas elements drawn by the browser
-// as one standalone SVG. Its input is the clipboard payload a copy writes, so a copy and a download carry the same
-// elements. Rich text is written as SVG text from the browser's own layout of each box, the faces it and the labels
-// draw in are embedded, and images are inlined from the canvas's own media, so the file draws the same in any SVG
-// reader. DOM work, so the measuring lives here and the writing in lib.
+// The image writer behind Download image and Vector's File › Download › SVG: canvas elements, or a doc's or a sheet's
+// chart, drawn by the browser as one standalone SVG. Rich text is written as SVG text from the browser's own layout
+// of each box, the faces it and the labels draw in are embedded, and images are inlined from the canvas's own media,
+// so the file draws the same in any SVG reader. DOM work, so the measuring lives here and the writing in lib.
 
 import { inlineSvgMedia } from '@workspace/lib/clipboard';
 import { type BundledFontFace, fontFaceCss } from '@workspace/lib/constants/fonts';
 import { downloadBlob } from '@workspace/lib/download';
 import { bytesToBase64 } from '@workspace/lib/format';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
-import type { EigenClipboardItem } from '@workspace/lib/types/clipboard';
+import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import {
     canvasImageFaces,
     canvasImageScene,
@@ -27,40 +25,34 @@ import {
     type VectorRichTextElement,
 } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
+import { bundledFontUrl } from './bundled-font-url';
 
 type CanvasImageOptions = {
     // The file's name, without its extension.
     name: string;
     // The whole drawing's background; a selection has none of its own (canvasImageScene).
     background?: string;
-    // An image element's bytes, from the canvas's own media.
-    fetchMedia: (mediaName: string) => Promise<Blob | null>;
+    // An image element's bytes, from the canvas's own media; a chart holds no images.
+    fetchMedia?: (mediaName: string) => Promise<Blob | null>;
 };
 
-export async function downloadCanvasImage(items: EigenClipboardItem[], opts: CanvasImageOptions): Promise<void> {
-    const scene = canvasImageScene(items, opts.background);
+export async function downloadCanvasImage(
+    content: VectorElement[] | EigenClipboardChartItem,
+    { name, background, fetchMedia = async () => null }: CanvasImageOptions,
+): Promise<void> {
+    const scene = canvasImageScene(content, background);
     const measured = await measureRichText(scene.elements);
     const richText = new Map([...measured].map(([id, box]) => [id, richTextSvg(box)]));
-    const inlined = await inlineSvgMedia(
-        sceneToSvg(scene, { resolveMedia: eigenMediaHref, richText }),
-        opts.fetchMedia,
-    );
+    const inlined = await inlineSvgMedia(sceneToSvg(scene, { resolveMedia: eigenMediaHref, richText }), fetchMedia);
     const faces = await fontFaceCssOf(canvasImageFaces(scene.elements, measured));
     const svg = spliceAfterSvgOpenTag(inlined, `<defs><style>${faces}</style></defs>`);
-    downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${opts.name}.svg`);
+    downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${name}.svg`);
 }
 
-// The faces the fonts.css @font-face rules load, by their path under assets/fonts/: the same hashed files, so the
-// file embeds what the canvas drew with.
 async function fontFaceCssOf(faces: BundledFontFace[]): Promise<string> {
-    const urls = import.meta.glob<string>('../../assets/fonts/*/*.woff2', {
-        query: '?url',
-        import: 'default',
-        eager: true,
-    });
     const rules = await Promise.all(
         faces.map(async (face) => {
-            const response = await fetch(urls[`../../assets/fonts/${face.file}`]);
+            const response = await fetch(bundledFontUrl(face.file));
             if (!response.ok) throw new Error(`The ${face.family} font could not be loaded`);
             const bytes = new Uint8Array(await response.arrayBuffer());
             return fontFaceCss(face, `data:font/woff2;base64,${bytesToBase64(bytes)}`);

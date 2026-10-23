@@ -112,7 +112,7 @@ async function openDownloads(): Promise<(string | undefined)[]> {
 
 // The browser lays the drawing's text out as the canvas does, so its SVG is the canvas's own, never the server's.
 test("the drawing's File › Download › SVG is the canvas's own image of the whole drawing", async () => {
-    const downloads: string[] = [];
+    let downloads = 0;
     await render({
         path: drivePath({ name: 'Sketch.eigenvector', mimeType: DRIVE_MIME_VECTOR }),
         createLabel: 'New vector',
@@ -124,7 +124,9 @@ test("the drawing's File › Download › SVG is the canvas's own image of the w
                 insertDrivePaths: async () => {},
                 insertChart: () => {},
                 centerOn: () => {},
-                downloadDrawing: (name) => downloads.push(name),
+                downloadDrawing: () => {
+                    downloads += 1;
+                },
             },
         },
     });
@@ -132,7 +134,7 @@ test("the drawing's File › Download › SVG is the canvas's own image of the w
     await act(async () => {
         menuItem('SVG image (.svg)')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(downloads).toEqual(['Sketch']);
+    expect(downloads).toBe(1);
 });
 
 test("a deck's File › Download is the export route's formats alone", async () => {

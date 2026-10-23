@@ -42,7 +42,7 @@ import {
 import {
     ClipboardMenuItems,
     ContextMenuAnchor,
-    DownloadImageMenuItem,
+    DownloadOriginalImageMenuItem,
     MenuSections,
     useContextMenu,
 } from '@workspace/ui/components/context-menu';
@@ -839,7 +839,7 @@ const TiptapEditor = ({
                     }
                     output={
                         figureContextMenu.item?.imagePath && (
-                            <DownloadImageMenuItem path={figureContextMenu.item.imagePath} />
+                            <DownloadOriginalImageMenuItem path={figureContextMenu.item.imagePath} />
                         )
                     }
                     collaborate={
