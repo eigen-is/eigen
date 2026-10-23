@@ -12,9 +12,8 @@ import type { Context } from '../context';
 import { getSheetIndex } from '../utils';
 
 // What images and charts share. Each writer touches one object of the current sheet and nothing else, field by field,
-// so a write on an object a peer deleted is dropped on every client and in the replay. What writes a whole object
-// brings one a peer deleted back on every client, last writer wins: redoing its insert, undoing its delete, and
-// undoing or redoing a row or column op that shifted a chart.
+// so a write on an object a peer deleted is dropped on every client and in the replay. What writes a whole object,
+// redoing its insert or undoing its delete, brings one a peer deleted back only where the delete arrived first.
 
 export type FloatingRef = { kind: SheetFloatingKind; id: string };
 

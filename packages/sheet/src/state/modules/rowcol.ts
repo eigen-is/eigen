@@ -424,8 +424,8 @@ function adjustSelectionForInsert(
 
 // Per sheet and per field, never `ctx.sheets = ...` or a whole sheet: a wholesale reassignment makes immer emit one
 // replace carrying the whole workbook, shipped over collab on every edit (rowcol-patches.test.ts), and a whole sheet's
-// undo would put back its images and charts over a peer's later ones. A moved chart is written under its own key; an
-// image never moves.
+// undo would put back its images and charts over a peer's later ones. A moved chart gets only the fields that changed,
+// its spec, so a peer's move or delete of it at once survives; an image never moves.
 function writeBackSheets(ctx: Context, sheets: Sheet[]) {
     sheets.forEach((next, i) => {
         const sheet: Record<string, unknown> = ctx.sheets[i];
@@ -434,7 +434,11 @@ function writeBackSheets(ctx: Context, sheets: Sheet[]) {
         }
         const { charts } = ctx.sheets[i];
         for (const chart of Object.values(next.charts ?? {})) {
-            if (charts && charts[chart.id] !== chart) charts[chart.id] = chart;
+            const stored: Record<string, unknown> | undefined = charts?.[chart.id];
+            if (!stored || stored === chart) continue;
+            for (const [field, value] of Object.entries(chart)) {
+                if (stored[field] !== value) stored[field] = value;
+            }
         }
     });
 }

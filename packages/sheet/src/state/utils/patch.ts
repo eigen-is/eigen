@@ -152,7 +152,7 @@ const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['sel
 // reducer, the BE replay never reads it, and a fresh mount re-seeds it from
 // `cell.f`), and `images` and `charts`, which ship per object: a whole map would
 // overwrite a peer's insert, delete or move. A row op moves no image, and each chart
-// it moves, on any sheet, has immer's own per-chart patch, last writer wins, since a
+// it moves, on any sheet, has immer's own patch of its spec, last writer wins, since a
 // receiver's shift can differ from the author's write-back: an undone delete never
 // grows a ref back. Everything else is small, and shipping an unchanged field as an
 // authoritative replace is a no-op.
