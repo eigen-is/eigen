@@ -162,7 +162,7 @@ export function readXlsx(
             };
             sheets.push(sheet);
             const drawing = readDrawing(book.pkg, rest, rels);
-            if (drawing) drawings.push({ sheet, chartSheet: chartSheet === true, ...drawing });
+            if (drawing) drawings.push({ sheet, chartSheet, ...drawing });
         }
         // An import replaces the document's sheets: none read is a file it can't read, never an empty spreadsheet.
         if (sheets.length === 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
