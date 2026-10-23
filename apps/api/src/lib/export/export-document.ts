@@ -116,9 +116,9 @@ async function serveExport(
 }
 
 // The one main-thread entry every export takes: run the shared transform seam, and prepare
-// the media the child names once it has read the document. The Worker
-// returns the finished bytes — the UTF-8 document for html and pdf-html, the zip for xlsx,
-// docx and pptx.
+// the media the child names once it has read the document. The child returns the finished
+// bytes, the UTF-8 document for html and pdf-html or the zip for xlsx, docx and pptx, and a
+// deck's pdf-html the zoom WeasyPrint prints it at.
 export async function runDocumentExport(
     job: ExportJob,
     mount: Mount,
