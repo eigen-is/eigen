@@ -26,7 +26,13 @@ Listings, name lookups, shared views and mime queries add `trashedAt IS NULL`, a
 - A folder is renamed to `.trash/{pathId}`. Its descendants keep their `file` values and resolve through the renamed folder.
 - Restore renames it back and sets `file` to the restored name.
 
-Any case or compatibility variant of `.trash` is a reserved name on every mount, so no user item can alias the directory. Both renames take the tree lock exclusively ([STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree)).
+Any case or compatibility variant of `.trash` is a reserved name on every mount, so no user item can alias the directory. Both renames take the tree lock exclusively ([STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree)). Trash reads the row again under its locks, so a move while it waited cannot leave a stale `trashedFrom`, and a second trash of a trashed item is a 404.
+
+## On `local` the bytes move first, and a failed row write moves them back
+
+A rename on disk and a row write in `metadata.db` cannot share a transaction. Trash and restore rename the bytes, then write the row, and a row write that throws renames the bytes back (`renameThenWriteRow`). Without that, a live row would point at bytes in `.trash/`: the next save rebuilds the item at its old name, and its next trash fails with `ENOTEMPTY` because the trash key is taken. Restore has the mirror case, a trashed row whose bytes sit at a live name.
+
+A crash between the two steps, or a `metadata.db` put back from before a trash, still leaves that state. So a trash that finds `.trash/{pathId}.{ext}` already there moves it aside to `{key}.stale-{ms}` and logs a warning. Only this row's trash writes that key, and the row is live, so what sits there is no trash anyone can restore. It is kept, not deleted, because it may hold older versions or media the live item lacks. No restore, purge or backup reaches a `.stale-` entry: the operator looks through it and removes it by hand.
 
 ## Trash closes what is open under the item first
 

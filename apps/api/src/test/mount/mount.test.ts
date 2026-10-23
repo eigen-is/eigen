@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq, type SQL, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -1126,7 +1126,79 @@ describe('trashPath (local path-based storage)', () => {
         const restored = await mount.restorePath(fileId);
         expect(await (await mount.readFile(restored.id))!.text()).toBe('must-survive');
     });
+
+    // A row write lost after the rename left a live row whose bytes sat in .trash/, and the next trash hit ENOTEMPTY.
+    test('a trash whose row write fails puts the bytes back', async () => {
+        const data = Buffer.from('stays-live');
+        const fileId = await mount.createFile(rootId, 'row-fails.txt', 'text/plain', data.length, data);
+
+        await withFailingTrashedAtWrite(mount, async () => {
+            await expect(mount.trashPath(fileId)).rejects.toThrow();
+        });
+
+        expect((await mount.getPath(fileId))!.trashedAt).toBeNull();
+        expect(existsSync(join(mount.dataDir, 'row-fails.txt'))).toBe(true);
+        expect(existsSync(join(mount.dataDir, '.trash', buildStorageKey(fileId, 'row-fails.txt')))).toBe(false);
+    });
+
+    test('a trash over a stale folder at its trash key succeeds and keeps that folder aside', async () => {
+        const folderId = await mount.createFolder(rootId, 'Stale.eigensheets');
+        await mount.createFile(folderId, 'data.db', 'application/octet-stream', 5, Buffer.from('newer'));
+        const trashKey = buildStorageKey(folderId, 'Stale.eigensheets');
+        const stale = join(mount.dataDir, '.trash', trashKey);
+        mkdirSync(stale);
+        writeFileSync(join(stale, 'data.db'), 'older');
+
+        await mount.trashPath(folderId);
+
+        expect(readFileSync(join(stale, 'data.db'), 'utf8')).toBe('newer');
+        const aside = readdirSync(join(mount.dataDir, '.trash')).filter((name) => name.startsWith(`${trashKey}.`));
+        expect(aside).toHaveLength(1);
+        expect(readFileSync(join(mount.dataDir, '.trash', aside[0], 'data.db'), 'utf8')).toBe('older');
+
+        const restored = await mount.restorePath(folderId);
+        expect(readFileSync(join(mount.dataDir, restored.name, 'data.db'), 'utf8')).toBe('newer');
+    });
+
+    test('a trash over a stale file at its trash key keeps that file aside', async () => {
+        const fileId = await mount.createFile(rootId, 'stale.txt', 'text/plain', 5, Buffer.from('newer'));
+        const trashKey = buildStorageKey(fileId, 'stale.txt');
+        writeFileSync(join(mount.dataDir, '.trash', trashKey), 'older');
+
+        await mount.trashPath(fileId);
+
+        expect(await (await mount.readFile(fileId))!.text()).toBe('newer');
+        const aside = readdirSync(join(mount.dataDir, '.trash')).filter((name) => name.startsWith(`${trashKey}.`));
+        expect(aside).toHaveLength(1);
+        expect(readFileSync(join(mount.dataDir, '.trash', aside[0]), 'utf8')).toBe('older');
+    });
+
+    test('a second trash of a trashed item is refused and keeps its original folder', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashTwice');
+        const fileId = await mount.createFile(folderId, 'twice.txt', 'text/plain', 5, Buffer.from('twice'));
+
+        await mount.trashPath(fileId);
+        await expect(mount.trashPath(fileId)).rejects.toMatchObject({ status: 404 });
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(folderId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('twice');
+    });
 });
+
+// A trigger stands in for a metadata.db that fails mid-write (corruption, a full disk): any write to trashedAt aborts.
+async function withFailingTrashedAtWrite(mount: Mount, fn: () => Promise<void>): Promise<void> {
+    mount.db.run(
+        sql.raw(
+            `CREATE TRIGGER fail_trashed_at BEFORE UPDATE OF trashedAt ON paths BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`,
+        ),
+    );
+    try {
+        await fn();
+    } finally {
+        mount.db.run(sql.raw('DROP TRIGGER fail_trashed_at'));
+    }
+}
 
 describe('restorePath (local-key storage)', () => {
     let mount: Mount;
@@ -1345,6 +1417,22 @@ describe('restorePath (local path-based storage)', () => {
         expect(existsSync(join(mount.dataDir, restored.name, 'inside.txt'))).toBe(true);
         // The real trash dir is still a directory at data/.trash
         expect(existsSync(join(mount.dataDir, '.trash'))).toBe(true);
+    });
+
+    test('a restore whose row write fails leaves the item in trash, bytes and all', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreRowFails');
+        const fileId = await mount.createFile(folderId, 'back.txt', 'text/plain', 4, Buffer.from('back'));
+        await mount.trashPath(fileId);
+
+        await withFailingTrashedAtWrite(mount, async () => {
+            await expect(mount.restorePath(fileId)).rejects.toThrow();
+        });
+
+        expect((await mount.getPath(fileId))!.trashedAt).not.toBeNull();
+        expect(existsSync(join(mount.dataDir, 'RestoreRowFails', 'back.txt'))).toBe(false);
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(folderId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('back');
     });
 });
 

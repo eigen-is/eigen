@@ -165,7 +165,6 @@ The product's stated core weakness ("I would not yet trust it with data you cann
 | A comment-search hit for an emote shows the sender's email | XS | An emote's search hit names its sender by email where every other hit shows the display name. Resolve the name as the other hits do. |
 | Comment highlights show in the HTML export only | S | The HTML export draws a doc's comment highlights, while the PDF and the docx don't. Drop the comment mark in the export render, which the quick-look preview shares, so no format shows them. |
 | An inline text save logs "uploaded" in the file history | S | `Drive.writeFileContent` records every overwrite as `uploaded`, a save in the inline editor included, though `FileEventType` has `edited`. Pass the event type in, and turn the method's positional tail (`user`, `expectedUpdatedAt`) into an options object then. |
-| `trashPath` reads the item before taking its lock | S | `trashPath` (`apps/api/src/lib/mount/trash.ts`) reads the row, then waits for the path lock, so a rename or move in between leaves a stale `trashedFrom` and parent to invalidate. Read the row again inside the lock. |
 | An overwrite of a deleted file deletes its object without cancelling the upload queue | XS | `commitOverwrite` (`apps/api/src/lib/mount/mount.ts`) deletes the object a delete raced past, but skips `uploadQueue.cancel`, which `removeObject` runs so a queued PUT can't bring the object back. Delete through `removeObject`. |
 
 ## Focused audits (future-proofing reviews)
