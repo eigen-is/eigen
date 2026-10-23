@@ -652,10 +652,12 @@ describe('Sheets HTML export — cell styling', () => {
         expect(out.css).not.toContain('text-align:left');
     });
 
-    test('a number or date without an alignment of its own aligns right, as the editor draws it; text and a picked one keep theirs', () => {
+    test("a cell without an alignment of its own takes Excel's General, as the editor draws it: a number or date right, a boolean or error centred; text and a picked one keep theirs", () => {
         const css = (v: Cell) => renderSheetsHtml([makeSheet([{ r: 0, c: 0, v }])], NO_MEDIA).css;
         expect(css({ v: 42, m: '42', ct: { fa: 'General', t: 'n' } })).toContain('text-align:right');
         expect(css({ v: 45000, m: '3/15/2023', ct: { fa: 'General', t: 'd' } })).toContain('text-align:right');
+        expect(css({ v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } })).toContain('text-align:center');
+        expect(css({ v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } })).toContain('text-align:center');
         expect(css({ v: 42, m: '42', ht: 1 })).toContain('text-align:left');
         expect(css({ v: 'text', m: 'text' })).not.toContain('text-align');
     });

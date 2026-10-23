@@ -11,6 +11,15 @@ export function booleanDisplay(value: boolean): string {
     return value ? 'TRUE' : 'FALSE';
 }
 
+// Excel's General alignment, for a cell without its own, as the editor and the HTML export draw it: numbers and dates right, booleans and errors centred, text
+// left. An imported error keeps a text type, so its value decides too.
+export function generalAlign(cell: Cell | null | undefined): '0' | '1' | '2' {
+    const value = cell?.v;
+    if (typeof value === 'number') return '2';
+    if (typeof value === 'boolean' || cell?.ct?.t === 'e') return '0';
+    return typeof value === 'string' && valueIsError(value) ? '0' : '1';
+}
+
 // A number as text, in a formula and on the clipboard: Excel's 15 significant digits, so 0.1+0.2 is "0.3", and
 // E notation past 15 digits, as for a 16-digit card number (1.23456789012346E+15). A tiny one goes E where
 // JavaScript does, below 1E-6.

@@ -33,6 +33,7 @@ export {
     cellDisplay,
     cellValue,
     cellWrapsText,
+    generalAlign,
     is_date,
     isValidNumberFormat,
     numberDisplay,

@@ -29,6 +29,7 @@ import {
     type DataBar,
     evaluateConditionalFormat,
     FormulaEngine,
+    generalAlign,
     renderSheetChartSvg,
     richText,
     withCfRanges,
@@ -552,12 +553,12 @@ function buildCellStyle(
         if (cellColor) parts.push(`background:${cellColor}`);
         // Rotated cells skip ht/vt — the rotated span is absolutely-positioned in the
         // cell (see wrapForRotation) so neither alignment property has anything to act
-        // on. Non-rotated cells emit the user's text-align, else right for a number or date as
-        // the canvas painter and Excel draw one, plus a single vertical-align (default `middle`).
+        // on. Non-rotated cells emit the user's text-align, else Excel's General one as the canvas
+        // painter draws it (left, the td's own, emits none), plus a single vertical-align (default `middle`).
         if (!rotated) {
-            const picked = v.ht != null && v.ht in HORIZONTAL_ALIGN ? HORIZONTAL_ALIGN[v.ht] : undefined;
-            const align = picked ?? (typeof v.v === 'number' ? 'right' : undefined);
-            if (align) parts.push(`text-align:${align}`);
+            const general = generalAlign(v);
+            const ht = v.ht != null && v.ht in HORIZONTAL_ALIGN ? v.ht : general === '1' ? undefined : Number(general);
+            if (ht !== undefined) parts.push(`text-align:${HORIZONTAL_ALIGN[ht]}`);
             const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
             parts.push(`vertical-align:${valign}`);
         }

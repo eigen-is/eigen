@@ -2,7 +2,15 @@ import { escapeHtml } from '@workspace/lib/html';
 import { type BorderSide, columnIndexToLabel, type MergeCell, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { booleanDisplay, cellWrapsText, dropRuns, numberDisplay, parseCellInput, richText } from '../../engine/format';
+import {
+    booleanDisplay,
+    cellWrapsText,
+    dropRuns,
+    generalAlign,
+    numberDisplay,
+    parseCellInput,
+    richText,
+} from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
@@ -59,15 +67,6 @@ export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize
     }
 
     return value;
-}
-
-// Excel's General alignment, for a cell without its own: numbers and dates right, booleans and errors centred, text
-// left. An imported error keeps a text type, so its value decides too.
-function generalAlign(cell: Cell): '0' | '1' | '2' {
-    const value = cell?.v;
-    if (typeof value === 'number') return '2';
-    if (typeof value === 'boolean' || cell?.ct?.t === 'e') return '0';
-    return typeof value === 'string' && valueIsError(value) ? '0' : '1';
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: passes through normalizedCellAttr's per-attr union
