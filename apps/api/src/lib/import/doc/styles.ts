@@ -1,6 +1,6 @@
-import { isOn, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
+import { isOn, W_NS } from '../../ooxml/ooxml';
 import {
     BORDER_SIDES,
     codeBlockLanguage,
@@ -8,7 +8,7 @@ import {
     LINK_THEME_COLORS,
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
-} from '../../document/wordml';
+} from '../../ooxml/wordml';
 import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
 import { halfPointsOf, int, onOff, twipsOf, w, wChild } from './package';
 

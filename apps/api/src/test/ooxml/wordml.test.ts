@@ -1,11 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    codeBlockLanguage,
-    codeBlockStyle,
-    headingLevel,
-    headingStyleName,
-    STYLE_NAMES,
-} from '../../lib/document/wordml';
+import { codeBlockLanguage, codeBlockStyle, headingLevel, headingStyleName, STYLE_NAMES } from '../../lib/ooxml/wordml';
 
 describe('the heading style name', () => {
     test('reads back as its level, in any case', () => {

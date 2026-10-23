@@ -1,10 +1,10 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import * as engine from '@workspace/sheet/engine';
-import { ZipReader } from '../../../lib/core/zip';
 import { SERVER_RECALC_BUDGET } from '../../../lib/document/sheets';
 import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { importXlsxToSheetsSnapshot } from '../../../lib/import/sheets/transform';
+import { ZipReader } from '../../../lib/ooxml/zip';
 import { PIXEL_PNG } from '../../fixtures/pptx';
 import { build, stored } from '../../fixtures/raw-zip';
 import { exportXlsx, xlsxFixture } from '../../fixtures/xlsx';

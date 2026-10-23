@@ -40,7 +40,7 @@ This proposal lets a user download an Eigen document from Drive as one file and 
 
 **Conversion already makes a document from a file.** `convertToDocument` (`apps/api/src/lib/import/import-document.ts`) turns an xlsx or docx into a new document next to it: the transform Worker parses, then the main thread runs `drive.create`, applies the update to the new collab document and writes the media. Nothing is created before the Worker succeeds.
 
-**Eigen has its own zip.** `apps/api/src/lib/core/zip.ts` reads with `openZip`, bounded per entry and in total (`MAX_DECOMPRESSED_BYTES`, 200 MB; `MAX_ZIP_ENTRIES`, 10,000), and writes with `writeZip`, every entry dated the DOS epoch. The docx writer uses it.
+**Eigen has its own zip.** `apps/api/src/lib/ooxml/zip.ts` reads with `openZip`, bounded per entry and in total (`MAX_DECOMPRESSED_BYTES`, 200 MB; `MAX_ZIP_ENTRIES`, 10,000), and writes with `writeZip`, every entry dated the DOS epoch. The docx writer uses it.
 
 **An upload trusts the client's MIME.** `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) keeps the multipart part's media type, and `finalizeUpload` stores it. `Mount.getPathsByMimeType` lists by MIME alone. So a plain file uploaded as `application/eigendoc` shows up in the Docs app's list as if it were a document.
 

@@ -1,7 +1,7 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { writeZip } from '../../lib/core/zip';
 import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
+import { writeZip } from '../../lib/ooxml/zip';
 
 // An xlsx built from raw SpreadsheetML on writeZip, so a test states exactly the XML a reader meets.
 

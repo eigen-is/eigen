@@ -1,5 +1,5 @@
 import { constants, deflateRawSync, inflateRawSync } from 'node:zlib';
-import { ApiError, isOutOfMemory } from './errors';
+import { ApiError, isOutOfMemory } from '../core/errors';
 
 // What OOXML packages use: stored and deflated entries, ZIP64, one disk. The directory's sizes are capped
 // when the archive opens and every inflate stops at its entry's declared size, so a lying entry can't grow

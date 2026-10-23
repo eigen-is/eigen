@@ -14,12 +14,12 @@ import {
     TRANSPARENT_COLOR,
     type VectorElementPatch,
 } from '@workspace/lib/vector';
-import { DEGREE, drawingLines, isSideways } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../core/ooxml';
-import { CHART_NOT_IMPORTED, droppedChart } from '../../core/ooxml-chart';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
+import { DEGREE, drawingLines, isSideways } from '../../ooxml/drawingml';
+import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../ooxml/ooxml';
+import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
 import { IMPORT_MESSAGES } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
 import { type CustomGeometry, closedPath, customGeometry } from './custom-geometry';

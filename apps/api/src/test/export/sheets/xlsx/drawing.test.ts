@@ -9,12 +9,7 @@ import {
     type SheetFloatingObject,
     type SheetImage,
 } from '@workspace/lib/sheets';
-import { A_NS, EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/core/ooxml';
-import { CHART_CONTENT_TYPE } from '../../../../lib/core/ooxml-chart';
-import type { PackagePart } from '../../../../lib/core/opc';
 import { hasXmlName, type XmlElement, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
-import { MAX_DECOMPRESSED_BYTES, openZip } from '../../../../lib/core/zip';
-import { pxToColumnWidth } from '../../../../lib/document/spreadsheetml';
 import {
     type CountedWarningCode,
     type TransformWarning,
@@ -24,6 +19,11 @@ import {
 import type { OfficeMedia } from '../../../../lib/export/office-image';
 import { DRAWING_CONTENT_TYPE, drawingOf, type WorkbookPictures } from '../../../../lib/export/sheets/xlsx/drawing';
 import { readXlsx, xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
+import { A_NS, EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/ooxml/ooxml';
+import { CHART_CONTENT_TYPE } from '../../../../lib/ooxml/ooxml-chart';
+import type { PackagePart } from '../../../../lib/ooxml/opc';
+import { pxToColumnWidth } from '../../../../lib/ooxml/spreadsheetml';
+import { MAX_DECOMPRESSED_BYTES, openZip } from '../../../../lib/ooxml/zip';
 import { PIXEL_PNG } from '../../../fixtures/pptx';
 import { exportXlsx, xlsxFixture } from '../../../fixtures/xlsx';
 

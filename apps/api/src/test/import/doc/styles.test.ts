@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { parseOoxml, W_NS } from '../../../lib/core/ooxml';
 import { Styles } from '../../../lib/import/doc/styles';
+import { parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // What a paragraph style means: roles come from style names along the basedOn chain, which Word keeps English.

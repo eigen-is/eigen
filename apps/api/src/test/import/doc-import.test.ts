@@ -4,7 +4,6 @@ import type { DocumentImportOptions, DrivePath } from '@workspace/lib/types/driv
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
-import { openZip, writeZip } from '../../lib/core/zip';
 import { readEigendocFromDoc } from '../../lib/document/doc';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { getSharedDrive } from '../../lib/drive/get-drive';
@@ -12,6 +11,7 @@ import { getHome } from '../../lib/home/get-home';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { importDocxToEigendocUpdate } from '../../lib/import/doc/transform';
 import { importIntoDocument } from '../../lib/import/import-document';
+import { openZip, writeZip } from '../../lib/ooxml/zip';
 import { getUserById } from '../../lib/user';
 import { seedEigendoc } from '../fixtures/golden-documents';
 import {

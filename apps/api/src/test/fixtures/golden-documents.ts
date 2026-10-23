@@ -29,12 +29,12 @@ import {
 } from '@workspace/lib/vector';
 import { type MathRow, readOmml, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
-import { parseOoxml } from '../../lib/core/ooxml';
 import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../lib/export/office-image';
 import type { Mount } from '../../lib/mount';
+import { parseOoxml } from '../../lib/ooxml/ooxml';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
 // (preview/export golden tests and the responsiveness benchmark). Everything is

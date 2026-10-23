@@ -3,21 +3,21 @@ import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import * as math from '@workspace/math';
 import { ApiError } from '../../../lib/core/errors';
-import { C_NS, M_NS, parseOoxml } from '../../../lib/core/ooxml';
-import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/core/ooxml-chart';
-import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import * as xml from '../../../lib/core/xml';
-import { openZip, ZipReader } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { QUOTE_LOOK } from '../../../lib/document/looks';
 import { runImportToDocumentUpdate } from '../../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document/transform/runner';
-import { LIST_LEVELS } from '../../../lib/document/wordml';
 import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson, MAX_DOCX_TEXT } from '../../../lib/import/doc/from-docx';
 import { CHARS_PER_UNIT, MAX_DOCX_CHART_WORK, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
+import { C_NS, M_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
+import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/ooxml/ooxml-chart';
+import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
+import { LIST_LEVELS } from '../../../lib/ooxml/wordml';
+import { openZip, ZipReader } from '../../../lib/ooxml/zip';
 import {
     buildDocxWithBody,
     chartParts,

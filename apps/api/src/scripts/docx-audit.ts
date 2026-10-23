@@ -4,7 +4,7 @@
 // Usage:
 //   bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]
 //   bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>
-//   bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--timeout <s>] [--max-rss <MB>]
+//   bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
 //
 // The importer module exports `docxToPmJson` with from-docx.ts's signature. It runs in a Worker, and the source is read
 // in another, so a hang is cut at the time cap and a crash is a result; every importer is measured by the same code.
@@ -27,6 +27,26 @@ import {
     type TitleType,
 } from '@workspace/lib/docs/eigendoc';
 import {
+    trimXmlSpace,
+    XML_NAMESPACE,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+} from '../lib/core/xml';
+import { cssColorToHex } from '../lib/document/colors';
+import { docSchema } from '../lib/document/doc-schema';
+import { readStoredEquation } from '../lib/document/equation';
+import { nodeLook } from '../lib/document/looks';
+import type { eigendocToDocx } from '../lib/export/doc/to-docx';
+import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
+import type { docxToPmJson } from '../lib/import/doc/from-docx';
+import { descendants } from '../lib/import/doc/package';
+import { isBodySizedRun } from '../lib/import/doc/paragraphs';
+import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
+import {
     A_NS,
     C_NS,
     isOn,
@@ -41,23 +61,8 @@ import {
     W10_NS,
     W14_NS,
     WP_NS,
-} from '../lib/core/ooxml';
-import { uriReference } from '../lib/core/opc';
-import {
-    trimXmlSpace,
-    XML_NAMESPACE,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlText,
-} from '../lib/core/xml';
-import { openZip } from '../lib/core/zip';
-import { cssColorToHex } from '../lib/document/colors';
-import { docSchema } from '../lib/document/doc-schema';
-import { readStoredEquation } from '../lib/document/equation';
-import { nodeLook } from '../lib/document/looks';
+} from '../lib/ooxml/ooxml';
+import { uriReference } from '../lib/ooxml/opc';
 import {
     BORDER_SIDES,
     FLOATING_WRAPS,
@@ -66,13 +71,8 @@ import {
     NOTE_SEPARATORS,
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
-} from '../lib/document/wordml';
-import type { eigendocToDocx } from '../lib/export/doc/to-docx';
-import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
-import type { docxToPmJson } from '../lib/import/doc/from-docx';
-import { descendants } from '../lib/import/doc/package';
-import { isBodySizedRun } from '../lib/import/doc/paragraphs';
-import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
+} from '../lib/ooxml/wordml';
+import { openZip } from '../lib/ooxml/zip';
 import {
     canonical,
     classify,
@@ -83,6 +83,7 @@ import {
     type RoundtripDifference,
     type RoundtripGate,
     type RoundtripMeta,
+    type RoundtripOptions,
     roundtripChild,
     roundtripLine,
     runRoundtrip as runGate,
@@ -2275,13 +2276,16 @@ const DOCX_GATE: RoundtripGate = {
 
 // The round trip's child: the file imported, written by our writer with its pictures prepared as an export prepares
 // them, charts and pasted pictures drawn as the export draws them, imported again, and the two imports compared.
-async function docxRoundtripChild(file: string, options: { writer: string; reports: string }): Promise<void> {
+async function docxRoundtripChild(
+    file: string,
+    options: { writer: string; reports: string; dump?: string },
+): Promise<void> {
     const { docxToPmJson: read } = await import('../lib/import/doc/from-docx');
     const { chartFigureMedia, pastedFigureMedia } = await import('../lib/export/doc/to-docx');
     const module: unknown = await import(options.writer);
     const write = typeof module === 'object' && module !== null && 'eigendocToDocx' in module && module.eigendocToDocx;
     if (!isWriter(write)) throw new Error(`${options.writer} exports no eigendocToDocx`);
-    await roundtripChild(options.reports, async (step) => {
+    await roundtripChild(options, async (step) => {
         const data = Buffer.from(await Bun.file(file).arrayBuffer());
         const a = await step('import', () => read(data));
         let media: Awaited<ReturnType<typeof officeMedia>> = [];
@@ -2304,13 +2308,7 @@ async function docxRoundtripChild(file: string, options: { writer: string; repor
     });
 }
 
-export function runRoundtrip(options: {
-    corpora: string[];
-    out: string;
-    writer?: string;
-    timeoutMs?: number;
-    maxRssMb?: number;
-}): Promise<RoundtripMeta> {
+export function runRoundtrip(options: RoundtripOptions): Promise<RoundtripMeta> {
     return runGate(DOCX_GATE, options);
 }
 
@@ -2371,16 +2369,18 @@ if (import.meta.main && Bun.isMainThread) {
             writer: { type: 'string' },
             'max-rss': { type: 'string' },
             reports: { type: 'string' },
+            dump: { type: 'string' },
         },
     });
     const [command, ...rest] = positionals;
     if (command === 'roundtrip-child' && rest.length === 1 && values.writer && values.reports) {
-        await docxRoundtripChild(rest[0], { writer: values.writer, reports: values.reports });
+        await docxRoundtripChild(rest[0], { writer: values.writer, reports: values.reports, dump: values.dump });
     } else if (command === 'roundtrip' && rest.length > 0 && values.out) {
         const meta = await runRoundtrip({
             corpora: rest,
             out: values.out,
             writer: values.writer,
+            dump: values.dump,
             timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
             maxRssMb: values['max-rss'] ? Number(values['max-rss']) : undefined,
         });
@@ -2404,7 +2404,7 @@ if (import.meta.main && Bun.isMainThread) {
             [
                 'Usage: bun apps/api/src/scripts/docx-audit.ts <corpus dir> --out <dir> [--importer <module>] [--name <label>] [--timeout <s>]',
                 '       bun apps/api/src/scripts/docx-audit.ts compare <outA> <outB>',
-                '       bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--timeout <s>] [--max-rss <MB>]',
+                '       bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]',
             ].join('\n'),
         );
         process.exit(1);

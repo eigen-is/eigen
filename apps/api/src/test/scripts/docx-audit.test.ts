@@ -5,9 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
-import { writeZip } from '../../lib/core/zip';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import { writeZip } from '../../lib/ooxml/zip';
 import {
     auditImported,
     auditSource,
@@ -399,10 +399,10 @@ describe('source side', () => {
         expect([tally.words, count(tally, 'heading1')]).toEqual([['Strict', 'title', 'Two', 'words'], 1]);
     });
 
-    test('the source is read with core/zip, not JSZip', () => {
+    test('the source is read with ooxml/zip, not JSZip', () => {
         const script = fs.readFileSync(new URL('../../scripts/docx-audit.ts', import.meta.url), 'utf8');
         expect(script).not.toContain("from 'jszip'");
-        expect(script).toContain("from '../lib/core/zip'");
+        expect(script).toContain("from '../lib/ooxml/zip'");
     });
 
     test('a start override restarts its list once', async () => {

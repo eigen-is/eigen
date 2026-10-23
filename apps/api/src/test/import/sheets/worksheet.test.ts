@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { REFERENCE_COLUMN_COUNT } from '@workspace/lib/sheets';
-import { parseOoxml } from '../../../lib/core/ooxml';
-import type { Relationship } from '../../../lib/core/opc';
 import { xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { readWorksheet } from '../../../lib/import/sheets/worksheet';
+import { parseOoxml } from '../../../lib/ooxml/ooxml';
+import type { Relationship } from '../../../lib/ooxml/opc';
 import { sheetXml, xlsxFixture } from '../../fixtures/xlsx';
 
 // A worksheet past its grid: columns, merges, views, the filter's span and the hyperlinks, and the cells merges and

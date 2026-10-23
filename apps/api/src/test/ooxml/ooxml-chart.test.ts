@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { chartColor, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
-import { type DrawingTheme, IDENTITY_COLOR_MAP } from '../../lib/core/drawingml';
 import { ApiError } from '../../lib/core/errors';
-import { A_NS, C_NS, MC_NS, parseOoxml } from '../../lib/core/ooxml';
+import { type XmlElement, XmlError } from '../../lib/core/xml';
+import { type DrawingTheme, IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
+import { A_NS, C_NS, MC_NS, parseOoxml } from '../../lib/ooxml/ooxml';
 import {
     CHART_CONTENT_TYPE,
     CHART_NOT_IMPORTED,
@@ -13,9 +14,8 @@ import {
     chartPart,
     droppedChart,
     readChart,
-} from '../../lib/core/ooxml-chart';
-import type { Relationship } from '../../lib/core/opc';
-import { type XmlElement, XmlError } from '../../lib/core/xml';
+} from '../../lib/ooxml/ooxml-chart';
+import type { Relationship } from '../../lib/ooxml/opc';
 
 const STRICT = 'http://purl.oclc.org/ooxml';
 const ACCENTS = ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '#70ad47'];

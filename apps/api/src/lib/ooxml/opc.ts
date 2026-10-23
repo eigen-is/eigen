@@ -1,7 +1,7 @@
 import { escapeXml } from '@workspace/lib/xml';
-import { ApiError } from './errors';
+import { ApiError } from '../core/errors';
+import { hasXmlName, type XmlElement, XmlError, xmlElements } from '../core/xml';
 import { CONTENT_TYPES_NS, CORE_PROPERTIES_NS, DC_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS } from './ooxml';
-import { hasXmlName, type XmlElement, XmlError, xmlElements } from './xml';
 import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from './zip';
 
 // The Open Packaging Conventions every OOXML format shares: the package, a part's relationships and the part names they
@@ -114,7 +114,7 @@ export function isEncryptedPackage(bytes: Uint8Array): boolean {
 }
 
 // Each part is charged against the budget before it parses, its declared size before it inflates (a read inflates no
-// further, core/zip), its tags before the parse. A part past the budget refuses the whole package.
+// further, ooxml/zip), its tags before the parse. A part past the budget refuses the whole package.
 export function openPackage(bytes: Uint8Array, messages: PackageMessages): OoxmlPackage {
     if (isEncryptedPackage(bytes)) throw new ApiError(400, messages.passwordProtected);
     const zip = openZip(bytes);
@@ -187,7 +187,7 @@ export function relationshipsXml(relationships: Relationship[]): string {
     return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
 }
 
-// A format's XML part: its path, its XML whole or as chunks (core/zip) and, unless an extension's Default covers it, its
+// A format's XML part: its path, its XML whole or as chunks (ooxml/zip) and, unless an extension's Default covers it, its
 // content type.
 export type PackagePart = [path: string, xml: string | (() => Iterable<string>), contentType?: string];
 

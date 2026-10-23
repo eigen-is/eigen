@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
-import { A_NS, P_NS, parseOoxml, R_NS } from '../../../lib/core/ooxml';
 import { type XmlElement, xmlAttr } from '../../../lib/core/xml';
 import {
     affords,
@@ -12,6 +11,7 @@ import {
     spend,
     withWorkBudget,
 } from '../../../lib/import/slides/lookup';
+import { A_NS, P_NS, parseOoxml, R_NS } from '../../../lib/ooxml/ooxml';
 import { countVisits, NS } from '../../fixtures/pptx';
 
 // The reader's lookups into an element: a layout's, master's or theme's is looked into again by everything inheriting

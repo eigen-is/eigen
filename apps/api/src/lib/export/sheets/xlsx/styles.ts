@@ -12,16 +12,16 @@ import {
 } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
-import { SML_NS } from '../../../core/ooxml';
 import { cssColorToHex } from '../../../document/colors';
+import type { CountedWarningCode } from '../../../document/transform/protocol';
+import { SML_NS } from '../../../ooxml/ooxml';
 import {
     BUILTIN_NUMBER_FORMATS,
     DATE_FORMAT,
     FONT_FAMILY_NUMBER,
     MAX_CELL_FORMATS,
     MAX_NUMBER_FORMAT_LENGTH,
-} from '../../../document/spreadsheetml';
-import type { CountedWarningCode } from '../../../document/transform/protocol';
+} from '../../../ooxml/spreadsheetml';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from '../cell-style';
 
 // The workbook's looks, each interned once by its canonical key as the sheets are written, then written as styles.xml

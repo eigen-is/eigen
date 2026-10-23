@@ -17,13 +17,13 @@ import {
     type VectorScene,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { parseOoxml } from '../../lib/core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../lib/core/xml';
-import { openZip, type ZipReader } from '../../lib/core/zip';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../lib/export/office-image';
 import { sanitizeSceneHtml } from '../../lib/export/sanitize';
 import { eigenslidesToPptx } from '../../lib/export/slides/to-pptx';
+import { parseOoxml } from '../../lib/ooxml/ooxml';
+import { openZip, type ZipReader } from '../../lib/ooxml/zip';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';

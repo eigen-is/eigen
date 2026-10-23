@@ -1,6 +1,6 @@
 import { deflateRawSync } from 'node:zlib';
 
-// A zip built field by field, so every field can lie: the hostile archives core/zip.ts must refuse.
+// A zip built field by field, so every field can lie: the hostile archives ooxml/zip.ts must refuse.
 
 export type RawPart = {
     name: string;

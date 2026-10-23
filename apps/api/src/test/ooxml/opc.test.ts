@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { ApiError } from '../../lib/core/errors';
-import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml } from '../../lib/core/ooxml';
+import * as xml from '../../lib/core/xml';
+import { XmlError } from '../../lib/core/xml';
+import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml } from '../../lib/ooxml/ooxml';
 import {
     isEncryptedPackage,
     MAX_PACKAGE_XML_BYTES,
@@ -13,10 +15,8 @@ import {
     relsPathOf,
     relTarget,
     writePackage,
-} from '../../lib/core/opc';
-import * as xml from '../../lib/core/xml';
-import { XmlError } from '../../lib/core/xml';
-import { openZip, writeZip, ZipError, ZipReader } from '../../lib/core/zip';
+} from '../../lib/ooxml/opc';
+import { openZip, writeZip, ZipError, ZipReader } from '../../lib/ooxml/zip';
 import { build, deflated } from '../fixtures/raw-zip';
 
 const MESSAGES = { passwordProtected: 'Locked', tooLarge: 'Too large' };

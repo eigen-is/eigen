@@ -12,9 +12,7 @@ import {
     ITALIC_HEADING_LEVELS,
     normalStyleProperties,
 } from '@workspace/lib/docs/eigendoc';
-import { W_NS } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
-import { openZip } from '../../lib/core/zip';
 import {
     BODY,
     CAPTION_LOOK,
@@ -32,8 +30,10 @@ import {
     TITLE_LOOKS,
 } from '../../lib/document/looks';
 import { PROSE_CSS, proseValue } from '../../lib/document/prose-css';
-import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../lib/document/wordml';
 import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { W_NS } from '../../lib/ooxml/ooxml';
+import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../lib/ooxml/wordml';
+import { openZip } from '../../lib/ooxml/zip';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
 const zip = openZip(

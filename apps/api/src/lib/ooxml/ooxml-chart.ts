@@ -20,10 +20,10 @@ import {
 // The two engine modules a chart reads, not the engine: a docx or pptx import never evaluates the formula engine.
 import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
 import { numberDisplay } from '@workspace/sheet/engine/format';
+import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, xmlTrimmedText } from '../core/xml';
 import { type DrawingTheme, drawingColor, drawingLines, readColorMap } from './drawingml';
 import { A_NS, alternativeFor, C_NS, isAlternateContent, isOn } from './ooxml';
 import { type OoxmlPackage, optional, type Relationship, relTarget } from './opc';
-import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, xmlTrimmedText } from './xml';
 
 // A DrawingML chart part, c:chartSpace, the same in a docx, an xlsx and a pptx, read into a ChartSpec. A chart the spec
 // can't draw as the file does is no spec, with its title for the caller to show instead: never a different chart.

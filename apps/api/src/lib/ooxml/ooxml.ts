@@ -1,8 +1,8 @@
 import { MARKUP_COMPATIBILITY_NAMESPACE, OMML_NAMESPACE, WORDML_NAMESPACE } from '@workspace/math';
-import { hasXmlName, parseXml, type XmlElement, xmlElements } from './xml';
+import { hasXmlName, parseXml, type XmlElement, xmlElements } from '../core/xml';
 
 // The OOXML every format's reader and writer share: namespaces, Strict read as transitional, markup compatibility and
-// the units. Word's own vocabulary is document/wordml.ts.
+// the units. Word's own vocabulary is ooxml/wordml.ts.
 
 // ── Namespaces ──────────────────────────────────────────────────────────────────────────────────────────────────
 

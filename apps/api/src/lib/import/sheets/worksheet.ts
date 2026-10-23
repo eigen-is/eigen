@@ -2,10 +2,10 @@ import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
-import { isOn, R_NS, SML_NS } from '../../core/ooxml';
-import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
-import { columnWidthToPx, DEFAULT_BASE_COL_WIDTH, DEFAULT_ROW_HEIGHT_PT } from '../../document/spreadsheetml';
+import { isOn, R_NS, SML_NS } from '../../ooxml/ooxml';
+import type { Relationship } from '../../ooxml/opc';
+import { columnWidthToPx, DEFAULT_BASE_COL_WIDTH, DEFAULT_ROW_HEIGHT_PT } from '../../ooxml/spreadsheetml';
 import { colorOf, resolveColor, type ThemePalette } from './styles';
 
 // A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden

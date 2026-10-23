@@ -1,7 +1,7 @@
 import { ApiError, isOutOfMemory } from '../core/errors';
 import { XmlError } from '../core/xml';
-import { ZipError } from '../core/zip';
 import type { CountedWarningCode, ImportTransformJob, TransformWarning } from '../document/transform/protocol';
+import { ZipError } from '../ooxml/zip';
 
 // What an import answers in the format's words: past a cap or the memory of the transform process, for a file it can't
 // read, and for an encrypted one, naming the application that removes the password. Light on purpose: run-transform.ts

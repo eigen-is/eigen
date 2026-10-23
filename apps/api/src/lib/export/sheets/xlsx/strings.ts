@@ -1,8 +1,8 @@
 import type { InlineStringSegment } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { SML_NS } from '../../../core/ooxml';
-import { encodeEscapes, MAX_TEXT_LENGTH } from '../../../document/spreadsheetml';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
+import { SML_NS } from '../../../ooxml/ooxml';
+import { encodeEscapes, MAX_TEXT_LENGTH } from '../../../ooxml/spreadsheetml';
 import { runPropertiesXml } from './styles';
 
 // The shared strings, each interned once as the sheets are written, then written after them. A plain string is keyed

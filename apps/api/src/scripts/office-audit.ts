@@ -193,12 +193,22 @@ export type RoundtripGate = {
     listed: readonly { kind: string; why: string }[];
 };
 
+export type RoundtripOptions = {
+    corpora: string[];
+    out: string;
+    writer?: string;
+    dump?: string;
+    timeoutMs?: number;
+    maxRssMb?: number;
+};
+
 export type Step = <T>(name: Stage, run: () => T | Promise<T>) => Promise<T>;
 
 // The round trip's child: `run` takes each stage through `step`, which reports it, and returns the writer's warnings,
-// by code, and the differences classified; a stage that throws is reported with it.
+// by code, and the differences classified; a stage that throws is reported with it. With `dump`, the bytes the export
+// stage returns are written there.
 export async function roundtripChild(
-    reports: string,
+    { reports, dump }: { reports: string; dump?: string },
     run: (step: Step) => Promise<{ warnings: ReadonlyMap<string, number>; groups: DifferenceGroup[] }>,
 ): Promise<void> {
     const report = (line: RoundtripReport) => fs.appendFileSync(reports, `${JSON.stringify(line)}\n`);
@@ -208,6 +218,11 @@ export async function roundtripChild(
         const started = performance.now();
         const value = await inner();
         report({ kind: 'stage', stage: name, ms: performance.now() - started });
+        if (dump && name === 'export') {
+            if (!(value instanceof Uint8Array)) throw new Error('The writer returned no bytes to dump');
+            fs.mkdirSync(path.dirname(dump), { recursive: true });
+            fs.writeFileSync(dump, value);
+        }
         return value;
     };
     try {
@@ -245,11 +260,12 @@ export async function officeMedia(media: ImportedMedia[], drawn: ExportMedia[] =
 async function roundtripOne(
     gate: RoundtripGate,
     file: CorpusFile,
-    options: { writer: string; timeoutMs: number; maxRssMb: number; reports: string },
+    options: { writer: string; dump?: string; timeoutMs: number; maxRssMb: number; reports: string },
 ): Promise<RoundtripResult> {
+    const dump = options.dump ? ['--dump', path.join(options.dump, `${file.key}.${gate.format}`)] : [];
     const { reports, cut, observedMb, why } = await spawnChild<RoundtripReport>(
         gate.script,
-        ['roundtrip-child', file.absolute, '--writer', options.writer],
+        ['roundtrip-child', file.absolute, '--writer', options.writer, ...dump],
         options,
     );
     const ms: RoundtripResult['ms'] = {};
@@ -280,19 +296,21 @@ const differencesIn = (results: RoundtripResult[], listed: boolean) => {
     return { differences: counted.reduce((sum, n) => sum + n, 0), files: counted.filter((n) => n > 0).length };
 };
 
-// Pass: no crash, cut or unlisted difference.
-export async function runRoundtrip(
-    gate: RoundtripGate,
-    options: { corpora: string[]; out: string; writer?: string; timeoutMs?: number; maxRssMb?: number },
-): Promise<RoundtripMeta> {
+// Pass: no crash, cut or unlisted difference. With `dump`, each file our writer wrote lands there under its key, so two
+// runs compare byte for byte (`diff -rq`).
+export async function runRoundtrip(gate: RoundtripGate, options: RoundtripOptions): Promise<RoundtripMeta> {
     const started = performance.now();
     const files = listCorpus(options.corpora, gate.pattern, gate.noun);
+    // A file left from another run would compare as this one's.
+    if (options.dump && fs.existsSync(options.dump) && fs.readdirSync(options.dump).length > 0)
+        throw new Error(`${options.dump} is not empty`);
     fs.mkdirSync(options.out, { recursive: true });
     fs.rmSync(path.join(options.out, 'files'), { recursive: true, force: true });
     const results: RoundtripResult[] = [];
     for (const [index, file] of files.entries()) {
         const result = await roundtripOne(gate, file, {
             writer: path.resolve(options.writer ?? gate.writer),
+            dump: options.dump && path.resolve(options.dump),
             timeoutMs: options.timeoutMs ?? DEFAULT_ROUNDTRIP_TIMEOUT_MS,
             maxRssMb: options.maxRssMb ?? DEFAULT_MAX_RSS_MB,
             reports: path.join(options.out, 'child.jsonl'),

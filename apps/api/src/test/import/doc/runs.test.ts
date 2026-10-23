@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { MATH_LIMITS, type MathRow, writeMathml } from '@workspace/math';
-import { writeZip } from '../../../lib/core/zip';
 import { CODE_LOOK } from '../../../lib/document/looks';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
+import { writeZip } from '../../../lib/ooxml/zip';
 import { GOLDEN_DOCX_IMAGE_RUN, importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // A run's look: which marks Word's formatting becomes, and which it doesn't.

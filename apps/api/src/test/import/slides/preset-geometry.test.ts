@@ -2,10 +2,10 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { join } from 'node:path';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS } from '@workspace/lib/vector';
-import { parseOoxml } from '../../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlElements } from '../../../lib/core/xml';
 import { affords, withWorkBudget } from '../../../lib/import/slides/lookup';
 import { PRESET_KINDS, presetGeometry } from '../../../lib/import/slides/preset-geometry';
+import { parseOoxml } from '../../../lib/ooxml/ooxml';
 import { NS } from '../../fixtures/pptx';
 
 // A shape's a:prstGeom → the native kind it is, or the paths Ecma's preset definitions draw for its adjust values.

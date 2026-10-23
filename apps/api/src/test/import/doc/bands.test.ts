@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { ApiError } from '../../../lib/core/errors';
-import { MAX_PACKAGE_XML_BYTES } from '../../../lib/core/opc';
 import * as xml from '../../../lib/core/xml';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
+import { MAX_PACKAGE_XML_BYTES } from '../../../lib/ooxml/opc';
 import {
     BAND_NAMESPACES,
     buildDocxWithBands,

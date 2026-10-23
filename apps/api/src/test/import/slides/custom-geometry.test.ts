@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parsePathCommands } from '@workspace/lib/vector';
-import { parseOoxml } from '../../../lib/core/ooxml';
 import type { XmlElement } from '../../../lib/core/xml';
 import {
     type CustomGeometry,
@@ -12,6 +11,7 @@ import {
 import { MAX_GUIDES } from '../../../lib/import/slides/guides';
 import { affords, withWorkBudget } from '../../../lib/import/slides/lookup';
 import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
+import { parseOoxml } from '../../../lib/ooxml/ooxml';
 import { NS } from '../../fixtures/pptx';
 
 // A shape's a:custGeom → the path a canvas path element stores, normalized to the shape's box.

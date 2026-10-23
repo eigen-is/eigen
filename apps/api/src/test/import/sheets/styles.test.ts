@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { ApiError } from '../../../lib/core/errors';
-import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
 import { fontLook, readLooks, themePalette } from '../../../lib/import/sheets/styles';
+import { A_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import { OFFICE_COLORS, SML } from '../../fixtures/xlsx';
 
 // What a cell takes from its xf: one look per xf, resolved once.

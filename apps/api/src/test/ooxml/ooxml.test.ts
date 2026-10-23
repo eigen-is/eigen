@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { A_NS, DSP_NS, emu, P_NS, parseOoxml, R_NS, W_NS, XDR_NS } from '../../lib/core/ooxml';
 import { type XmlElement, xmlElements } from '../../lib/core/xml';
+import { A_NS, DSP_NS, emu, P_NS, parseOoxml, R_NS, W_NS, XDR_NS } from '../../lib/ooxml/ooxml';
 
 describe('Strict OOXML read as transitional', () => {
     const STRICT = 'http://purl.oclc.org/ooxml';

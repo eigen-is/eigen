@@ -1,9 +1,9 @@
 import type { JSONContent } from '@tiptap/core';
-import { C_NS } from '../../lib/core/ooxml';
-import { CHART_CONTENT_TYPE } from '../../lib/core/ooxml-chart';
-import { writeZip } from '../../lib/core/zip';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import { C_NS } from '../../lib/ooxml/ooxml';
+import { CHART_CONTENT_TYPE } from '../../lib/ooxml/ooxml-chart';
+import { writeZip } from '../../lib/ooxml/zip';
 
 // Deterministic .docx fixture for the docx import work. Hand-built OOXML rather
 // than a checked-in binary, so every part the importer reads is visible here:

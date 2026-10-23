@@ -23,7 +23,6 @@ import * as collabSchema from '../../lib/collab/schema';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import { parseXml } from '../../lib/core/xml';
-import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/core/zip';
 import {
     commitEigendocImport,
     readEigendocBands,
@@ -56,6 +55,7 @@ import { IMPORT_MESSAGES } from '../../lib/import/messages';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
+import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/ooxml/zip';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';

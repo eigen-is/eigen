@@ -8,13 +8,13 @@ import {
 } from '@workspace/lib/sheets';
 import { normalizeAngle } from '@workspace/lib/vector';
 import { type CellResolver, resolveRangeChartData } from '@workspace/sheet/engine';
-import { anchoredBox, DEGREE } from '../../../core/drawingml';
-import { A_NS, C_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../core/ooxml';
-import { CHART_CONTENT_TYPE } from '../../../core/ooxml-chart';
-import { writeChart } from '../../../core/ooxml-chart-writer';
-import { type PackagePart, type Relationship, relationshipsXml, relsPathOf } from '../../../core/opc';
-import type { ZipWriteEntry } from '../../../core/zip';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
+import { anchoredBox, DEGREE } from '../../../ooxml/drawingml';
+import { A_NS, C_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../ooxml/ooxml';
+import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
+import { writeChart } from '../../../ooxml/ooxml-chart-writer';
+import { type PackagePart, type Relationship, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
+import type { ZipWriteEntry } from '../../../ooxml/zip';
 import { blipXml, type OfficeImageParts, type OfficeMedia, officeImageParts } from '../../office-image';
 import { sheetsResolver } from '../cell-style';
 

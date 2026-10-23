@@ -2,7 +2,7 @@ import type { EigenFont } from '@workspace/lib/constants/fonts';
 import { type PageNumberKind, ptToTwips, pxToPt } from '@workspace/lib/docs/eigendoc';
 
 // Word's vocabulary, which the docx writer writes and the docx reader recognises, one source both ways: style names,
-// list formats, units and Word's spelling of a number. The OOXML every format shares is core/ooxml.ts.
+// list formats, units and Word's spelling of a number. The OOXML every format shares is ooxml/ooxml.ts.
 
 // Not a namespace: the uri of Word's compatibility settings.
 export const WORD_SETTINGS_URI = 'http://schemas.microsoft.com/office/word';

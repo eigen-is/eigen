@@ -15,10 +15,10 @@ import {
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { parseOoxml } from '../../lib/core/ooxml';
-import { openZip } from '../../lib/core/zip';
 import { exportDocument } from '../../lib/export/export-document';
 import { getHome } from '../../lib/home/get-home';
+import { parseOoxml } from '../../lib/ooxml/ooxml';
+import { openZip } from '../../lib/ooxml/zip';
 import { seedDocumentMedia, seedVectorDoc } from '../fixtures/golden-documents';
 import { driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 

@@ -1,7 +1,7 @@
 import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
+import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../core/xml';
 import { A_NS } from './ooxml';
-import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from './xml';
 
 // DrawingML, the drawing vocabulary docx, xlsx and pptx share: a theme's colours, a colour element with its
 // transforms, a text body's plain text, and the theme the writers write.

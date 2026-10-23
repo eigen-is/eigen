@@ -7,7 +7,7 @@ import {
     pxToColumnWidth,
     withFuturePrefixes,
     withoutFuturePrefixes,
-} from '../../lib/document/spreadsheetml';
+} from '../../lib/ooxml/spreadsheetml';
 
 describe("Excel's future functions", () => {
     test('lose their prefixes on the way in, a worksheet function both, in any case', () => {

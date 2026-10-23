@@ -3,8 +3,8 @@ import type { CellBorderSides, CellStyle, Cell as FortuneCell, InlineStringSegme
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
-import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
+import { isOn, SML_NS } from '../../ooxml/ooxml';
 import {
     DATE_FORMAT,
     DAY_MS,
@@ -12,7 +12,7 @@ import {
     EXCEL_EPOCH_MS,
     MAX_FORMULA_LENGTH,
     withoutFuturePrefixes,
-} from '../../document/spreadsheetml';
+} from '../../ooxml/spreadsheetml';
 import { IMPORT_MESSAGES, TOO_MANY_CELLS } from '../messages';
 import { type SharedString, stringOf, textOf } from './strings';
 import { type Look, NO_LOOK, type ThemePalette } from './styles';

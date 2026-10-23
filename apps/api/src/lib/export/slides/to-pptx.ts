@@ -47,12 +47,12 @@ import {
 } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
-import { colorXml, DEGREE, solidFillXml, THEME_TYPE, themeXml } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { A_NS, AHYP_NS, EMU_PER_POINT, P_NS, R_NS } from '../../core/ooxml';
-import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
-import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../document/presentationml';
 import { canvasTextValue } from '../../document/prose-css';
+import { colorXml, DEGREE, solidFillXml, THEME_TYPE, themeXml } from '../../ooxml/drawingml';
+import { A_NS, AHYP_NS, EMU_PER_POINT, P_NS, R_NS } from '../../ooxml/ooxml';
+import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../ooxml/opc';
+import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../ooxml/presentationml';
 import {
     blipXml,
     OFFICE_IMAGE_CONTENT_TYPES,

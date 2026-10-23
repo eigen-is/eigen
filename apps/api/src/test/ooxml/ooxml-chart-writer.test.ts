@@ -8,11 +8,11 @@ import {
     sampleChartSpec,
 } from '@workspace/lib/charts';
 import type { CellRangeRef, ChartData, ChartSpec, ChartType, RangeChartSeries } from '@workspace/lib/types/chart';
-import { type DrawingTheme, IDENTITY_COLOR_MAP } from '../../lib/core/drawingml';
-import { A_NS, C_NS, parseOoxml } from '../../lib/core/ooxml';
-import { readChart } from '../../lib/core/ooxml-chart';
-import { writeChart } from '../../lib/core/ooxml-chart-writer';
 import { hasXmlName, type XmlElement, xmlAttr, xmlElements, xmlTrimmedText } from '../../lib/core/xml';
+import { type DrawingTheme, IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
+import { A_NS, C_NS, parseOoxml } from '../../lib/ooxml/ooxml';
+import { readChart } from '../../lib/ooxml/ooxml-chart';
+import { writeChart } from '../../lib/ooxml/ooxml-chart-writer';
 
 // A ChartSpec written as a c:chartSpace and read back by Eigen's own reader: the same spec, its ranges by the names the
 // workbook writes and its numbers inline as literals.

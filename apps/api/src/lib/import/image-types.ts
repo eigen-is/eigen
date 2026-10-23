@@ -1,4 +1,4 @@
-import { type OoxmlPackage, type Relationship, relTarget } from '../core/opc';
+import { type OoxmlPackage, type Relationship, relTarget } from '../ooxml/opc';
 
 // The image types an import stores a picture part as, each under its own extension. WMF and EMF are kept though no
 // browser or sharp draws them: the docx reader leaves its figure's alt text in a broken image.

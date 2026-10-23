@@ -9,7 +9,17 @@ import {
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
-import { anchoredBox, type Box, DEGREE, type DrawingTheme } from '../../core/drawingml';
+import {
+    hasXmlName,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlTrimmedText,
+} from '../../core/xml';
+import type { CountedWarningCode } from '../../document/transform/protocol';
+import { anchoredBox, type Box, DEGREE, type DrawingTheme } from '../../ooxml/drawingml';
 import {
     A_NS,
     ASVG_NS,
@@ -21,19 +31,9 @@ import {
     R_NS,
     SML_NS,
     XDR_NS,
-} from '../../core/ooxml';
-import { chartCost, chartPart, readChart } from '../../core/ooxml-chart';
-import { type OoxmlPackage, optional, type Relationship, relTarget } from '../../core/opc';
-import {
-    hasXmlName,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlTrimmedText,
-} from '../../core/xml';
-import type { CountedWarningCode } from '../../document/transform/protocol';
+} from '../../ooxml/ooxml';
+import { chartCost, chartPart, readChart } from '../../ooxml/ooxml-chart';
+import { type OoxmlPackage, optional, type Relationship, relTarget } from '../../ooxml/opc';
 import { type MediaPart, pictureMediaPart } from '../image-types';
 
 // A worksheet's or a chart sheet's drawing: the anchors that place its charts and pictures over the grid, each read into

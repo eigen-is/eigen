@@ -1,8 +1,8 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { ApiError } from '../../lib/core/errors';
 import { XmlError } from '../../lib/core/xml';
-import { ZipError } from '../../lib/core/zip';
 import { IMPORT_MESSAGES, importError, importSummary } from '../../lib/import/messages';
+import { ZipError } from '../../lib/ooxml/zip';
 
 describe("an import's error", () => {
     const { tooLarge, invalid } = IMPORT_MESSAGES.xlsx;

@@ -8,9 +8,9 @@ import {
     type SlidePage,
 } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
-import { EMU_PER_POINT, P_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr } from '../../core/xml';
 import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
+import { EMU_PER_POINT, P_NS } from '../../ooxml/ooxml';
 import { type ImportedMedia, importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';

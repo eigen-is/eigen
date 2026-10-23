@@ -14,12 +14,12 @@ import {
     twipsToMm,
     twipsToPt,
 } from '@workspace/lib/docs/eigendoc';
-import { type DrawingTheme, drawingTheme } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
-import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES } from '../../document/wordml';
+import { type DrawingTheme, drawingTheme } from '../../ooxml/drawingml';
+import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
+import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES } from '../../ooxml/wordml';
 import { mediaNamer } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';

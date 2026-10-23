@@ -8,6 +8,7 @@ import type {
 import { parseCellKey } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { iscelldata, rangeToA1, toA1 } from '@workspace/sheet/engine';
+import type { CountedWarningCode } from '../../../document/transform/protocol';
 import {
     CF_CELL_IS_CONDITION,
     DAY_MS,
@@ -23,8 +24,7 @@ import {
     NUMERIC,
     TOP10_CONDITION,
     withFuturePrefixes,
-} from '../../../document/spreadsheetml';
-import type { CountedWarningCode } from '../../../document/transform/protocol';
+} from '../../../ooxml/spreadsheetml';
 import { argbOf, type StyleRegistry } from './styles';
 
 // The reader's mirror (import/sheets/rules.ts): each rule in the 2007 schema's form, which the reader reads as the

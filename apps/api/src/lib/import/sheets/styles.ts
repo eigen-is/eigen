@@ -8,11 +8,11 @@ import type {
 } from '@workspace/lib/sheets';
 import { BORDER_STYLES } from '@workspace/lib/sheets';
 import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
-import { readColorScheme, SCHEME_SLOTS } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
-import { BUILTIN_NUMBER_FORMATS, MAX_NUMBER_FORMAT_LENGTH, maxDigitWidth } from '../../document/spreadsheetml';
+import { readColorScheme, SCHEME_SLOTS } from '../../ooxml/drawingml';
+import { isOn, SML_NS } from '../../ooxml/ooxml';
+import { BUILTIN_NUMBER_FORMATS, MAX_NUMBER_FORMAT_LENGTH, maxDigitWidth } from '../../ooxml/spreadsheetml';
 import { IMPORT_MESSAGES } from '../messages';
 
 // The styles part read into one look per cell format (xf), resolved once: fonts, fills, alignment, borders, number
