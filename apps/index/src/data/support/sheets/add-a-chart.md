@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, charts, graphs]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 147
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
 You can turn a table of numbers into a chart that floats over the grid. The chart reads its cells, so it changes as soon as you change a value.
@@ -44,6 +44,15 @@ Hover over a chart and click the three dots in its top-right corner for its menu
 - **Edit the chart** opens the **Chart editor**.
 - **Delete chart** removes it.
 - **Download chart** → **SVG (.svg)** saves the chart as a picture. This works with view access too.
+
+## Copy a chart
+
+Select a chart and press **Ctrl+C** (Mac: **⌘C**) to copy it, or **Ctrl+X** (Mac: **⌘X**) to cut it. Cutting copies the chart and removes it. A chart that shows `#REF!` or **Too much data for a chart** can't be copied.
+
+Paste it with **Ctrl+V** (Mac: **⌘V**):
+
+- **In the same spreadsheet**, the copy reads the same cells as the original, so it changes when they do.
+- **In Docs, Slides, Vector, or another spreadsheet**, the chart keeps the numbers it showed when you copied it. It stays a chart you can edit there, and you change its numbers with **Edit data**.
 
 <div class="eigen-callout">
 

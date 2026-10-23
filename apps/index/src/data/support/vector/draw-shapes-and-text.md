@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, drawing, shapes, text, images, charts]
 related: [vector/get-started, vector/connect-with-arrows, vector/style-objects]
 order: 20
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
 You build a drawing in Vector by placing objects on the canvas. Pick a tool, then click or drag to add a shape, a freehand line, a text box, or an image. Charts come from the **Insert** menu. This page covers each tool and what happens after you place something.
@@ -75,7 +75,9 @@ With the chart selected, the properties panel shows its options. The **Chart** s
 
 You can paste cells copied from a spreadsheet into the grid, and copy cells out of it. A paste fills the grid from the selected cell, and the grid grows to fit. A chart holds up to 12 series, 200 categories, and 2,000 values; when a paste has more, the dialog says how much it pasted and leaves the rest out. Numbers may have thousands separators, a currency sign or a percent sign, as a spreadsheet shows them. A chart with more data than that, for example from an imported file, opens its data read-only.
 
-**Convert to shapes**, in the properties panel or the right-click menu, turns the chart into ordinary shapes and text boxes you can edit one by one. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back. See [Arrange and align](/support/vector/arrange-and-align).
+**Convert to shapes**, in the properties panel or the right-click menu, turns the chart into ordinary shapes and text boxes you can edit one by one. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back.
+
+You can paste a chart copied in Sheets, Docs, or Slides onto a drawing, and it stays a chart you can edit. A chart you copy on its own from a drawing pastes into Docs and Sheets the same way; copied together with other objects, it pastes there as one picture. A chart copied from Sheets keeps the numbers it showed when you copied it. See [Arrange and align](/support/vector/arrange-and-align).
 
 ## Erase objects
 

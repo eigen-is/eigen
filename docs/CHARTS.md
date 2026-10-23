@@ -124,6 +124,10 @@ The table is generated from the static TTFs a docx embeds: `bun apps/api/src/scr
 
 A sheet keeps its charts beside its cells as `SheetChart` records, and a chart there usually holds range data, which the sheet resolves from its cells when it draws. The editor's overlay and the export draw it through `renderSheetChartSvg`, `renderChartSpecSvg` with the sheet's resolved data and its number formats. Insert → Chart charts the selected cells, and the sheet's Chart editor puts Google's Setup (the data range, Switch rows/columns, headers and labels) above this editor's rows, or Edit data for an inline chart. How the sheet stores, shifts, draws and exports charts: [SHEETS.md § A chart is a floating record](SHEETS.md#a-chart-is-a-floating-record-whose-refs-name-sheets-by-id) and the sections after it.
 
+## A chart copies between apps with its numbers inline
+
+⌘C on a chart in Sheets, Docs, Slides or Vector puts one chart item on the shared clipboard: the spec as stored, and the chart's box. Every host pastes it as a live chart it can edit, not a picture ([CLIPBOARD.md](CLIPBOARD.md#a-chart-travels-as-its-spec-with-the-numbers-inline)). The data must be inline, since only the sheet a chart came from can read its ranges and anywhere else a range chart draws the placeholder. So a sheet chart is read into inline data as it is copied, and only a paste back into the same workbook keeps its ranges ([SHEETS.md](SHEETS.md#a-selected-chart-copies-itself-not-the-cells-behind-it)). The font travels in the spec, so a Vector chart pasted into Docs keeps Excalifont, while a canvas paints a pasted chart with its own element paint. Value ticks in Docs and on a canvas ignore `valueAxis.format` and draw as plain numbers, so a percent column copied from Sheets ticks as 0.25 rather than 25%; that gap is a [ROADMAP](ROADMAP.md) row.
+
 ## See also
 
 - [CANVAS.md](CANVAS.md): kinds, the reader, layers, and the pie kind a chart's slices are

@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, text, images, charts, objects, canvas]
 related: [slides/get-started, slides/add-slides, slides/style-objects, slides/draw-shapes-and-arrows]
 order: 40
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
 You build slides by placing text boxes, images, and charts on the canvas. They work the same way: add one from the toolbar, then move, resize, and adjust it from the properties panel on the right.
@@ -48,7 +48,9 @@ With the chart selected, the properties panel shows its options. The **Chart** s
 
 You can paste cells copied from a spreadsheet into the grid, and copy cells out of it. A paste fills the grid from the selected cell, and the grid grows to fit. A chart holds up to 12 series, 200 categories, and 2,000 values; when a paste has more, the dialog says how much it pasted and leaves the rest out. Numbers may have thousands separators, a currency sign or a percent sign, as a spreadsheet shows them. A chart with more data than that, for example from an imported file, opens its data read-only.
 
-**Convert to shapes**, in the properties panel or the right-click menu, turns the chart into ordinary shapes and text boxes you can edit one by one. You can't turn them back into a chart, but undo (**Cmd+Z** on a Mac, **Ctrl+Z** on Windows) right after brings the chart back. See [Arrange and align](/support/slides/arrange-and-align).
+**Convert to shapes**, in the properties panel or the right-click menu, turns the chart into ordinary shapes and text boxes you can edit one by one. You can't turn them back into a chart, but undo (**Cmd+Z** on a Mac, **Ctrl+Z** on Windows) right after brings the chart back.
+
+You can paste a chart copied in Sheets, Docs, or Vector onto a slide, and it stays a chart you can edit. A chart you copy on its own from a slide pastes into Docs and Sheets the same way; copied together with other objects, it pastes there as one picture. A chart copied from Sheets keeps the numbers it showed when you copied it. See [Arrange and align](/support/slides/arrange-and-align).
 
 ## Add shapes and arrows
 

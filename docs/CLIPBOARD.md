@@ -1,6 +1,6 @@
 # Clipboard
 
-> **TLDR:** Rich copy and paste between Eigen apps: a shape, an image or styled text copied in one app keeps its size and style when pasted into another. One typed JSON payload (`EigenClipboardData`, `packages/lib/src/types/clipboard.ts`) rides the `application/eigen-clipboard` MIME type and, as a fallback, a marker span: a hidden `<span>` in the copied `text/html` that carries the same JSON; the readers and writers live in `packages/lib/src/core/clipboard/`. Any web page can forge the payload, so the reader validates every item. Width and height are mandatory, because consumers place with no fallback. An image travels as a reference the pasting user must be allowed to read. A canvas cut deletes only what the copy carried.
+> **TLDR:** Rich copy and paste between Eigen apps: a shape, an image, a chart or styled text copied in one app keeps its size and style when pasted into another. One typed JSON payload (`EigenClipboardData`, `packages/lib/src/types/clipboard.ts`) rides the `application/eigen-clipboard` MIME type and, as a fallback, a marker span: a hidden `<span>` in the copied `text/html` that carries the same JSON; the readers and writers live in `packages/lib/src/core/clipboard/`. Any web page can forge the payload, so the reader validates every item. Width and height are mandatory, because consumers place with no fallback. An image travels as a reference the pasting user must be allowed to read. A canvas cut deletes only what the copy carried.
 
 Three hosts read and write the payload: the docs editor, the sheet (`packages/sheet`) and the canvas engine that draws both drawings and slides ([CANVAS.md](CANVAS.md)). Anything else on the clipboard, from another site or a desktop app, arrives as plain HTML, text or files, and each host has its own order for those ([§ Each app keeps its own paste ladder](#each-app-keeps-its-own-paste-ladder)). An image never travels as bytes. It is the name of a file in its document's `media/` folder, the way every Eigen document refers to its media ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), so a paste into another document downloads that file as the pasting user and uploads it into the target's `media/`.
 
@@ -14,9 +14,9 @@ The async writer takes its HTML as a promise. The write must start inside the us
 
 ## Every field on the wire is typed and has a reader
 
-An item is `text`, `image` or `elements`. Geometry (`width`, `height`, `angle`) and text `typography` are typed fields, with no untyped bag beside them. Every field has a producer and a consumer, and anything an app wants to carry earns a typed field with a reader. Producers build items with `buildImageClipboardItem` and `buildTextClipboardItem`, and consumers read the box with `readClipboardBox`.
+An item is `text`, `image`, `elements` or `chart`. Geometry (`width`, `height`, `angle`) and text `typography` are typed fields, with no untyped bag beside them. Every field has a producer and a consumer, and anything an app wants to carry earns a typed field with a reader. Producers build items with `buildImageClipboardItem`, `buildTextClipboardItem` and `buildChartClipboardItem`, and consumers read the box with `readClipboardBox`.
 
-Text and image items carry no position: each app pastes at its own caret, cell or viewport center. The `elements` item is the exception, because a canvas paste lands relative to where it was copied from.
+Text, image and chart items carry no position: each app pastes at its own caret, cell or viewport center. The `elements` item is the exception, because a canvas paste lands relative to where it was copied from.
 
 `EigenClipboardTypography` is exactly the ten fields a canvas rich-text box stores, the widest set any consumer can place. The canvas writes and applies all ten. Docs maps the six it has nodes and marks for (font family, color, alignment, bold, italic, underline or strike), and sheets reads none. `fontFamily` is the `EIGEN_FONTS` name, not a CSS stack. The `text` is plain, so per-run marks do not survive. No item holds an equation: a docs copy that writes the payload puts one in its text item as its linear form ([DOCS.md](DOCS.md#an-equations-text-is-its-linear-form-and-the-find-bar-skips-it)), so a slide or a cell gets `x/2`, never the equation.
 
@@ -30,13 +30,19 @@ Text re-measures. Every consumer measures a text item with its own fonts, becaus
 
 ## The reader validates every item against its own variant
 
-`readEigenClipboard` checks each item before a consumer sees it: finite geometry, a string `text` on a text item, the five source identifiers on an image item, an array on an elements item. A bad item is dropped and the good ones survive (`packages/lib/src/test/core/clipboard/clipboard.test.ts`). Consumers read the typed fields with no fallbacks, inside a paste handler that has already called `preventDefault`. An item that passed and then threw would eat the paste, and the user would see nothing.
+`readEigenClipboard` checks each item before a consumer sees it: finite geometry, a string `text` on a text item, the five source identifiers on an image item, an array on an elements item, and on a chart item a spec that parses with inline data. A bad item is dropped and the good ones survive (`packages/lib/src/test/core/clipboard/clipboard.test.ts`). Consumers read the typed fields with no fallbacks, inside a paste handler that has already called `preventDefault`. An item that passed and then threw would eat the paste, and the user would see nothing.
 
 A text item with no content is valid but useless. The canvas writes one for an empty rich-text box, and a forged payload may too, so every consumer filters with `clipboardTextItemHasContent`.
 
+## A chart travels as its spec with the numbers inline
+
+A chart item is the chart's `ChartSpec` string and its box ([CHARTS.md](CHARTS.md)), so it pastes as a live chart, not a picture. Its data is always inline: only the sheet a chart came from can read a cell range, and a doc or a canvas draws a range chart as its placeholder. So the builder and the reader accept only a spec that parses with inline data within the spec's 64 KiB limit, one check (`isInlineChartSpec` in `clipboard.ts`), and no consumer ever stores a placeholder. The spec rides as the producer stores it, never re-serialized, so its font and every field reach the target unchanged.
+
+A sheet chart reads its ranges into inline data at copy time (`inlineChartSpec`, `packages/sheet/src/engine/chart-data.ts`); a chart that draws `#REF!`, "Too much data for a chart" or whose numbers pass the size limit copies nothing. Docs writes one per chart in a copy, and a canvas one per selected chart beside the `elements` item. A docs chart lands capped at the text column, keeping its shape; a header, footer or footnote places none, as their Insert menus offer none. A canvas places one at the viewport center in the host's paint, and Sheets on the selected cell.
+
 ## A copy never writes two flavors one consumer would both accept
 
-Two flavors a single consumer reads would paste twice. So a pure image copy writes the payload and no `text/plain`. The pair at risk is `text/plain` beside `image/png`. No producer writes a PNG. One that does must not write `text/plain` beside it.
+Two flavors a single consumer reads would paste twice. So a pure image or chart copy writes the payload and no `text/plain`. The pair at risk is `text/plain` beside `image/png`. No producer writes a PNG. One that does must not write `text/plain` beside it.
 
 ## A pasted image re-uploads as the pasting user
 
@@ -50,9 +56,9 @@ The download runs as the pasting user, with credentials. A user who cannot read 
 
 | App | Ladder |
 |---|---|
-| Docs (`apps/docs/src/components/docs/doc-editor.ts`) | SVG as a figure, then image items (a docs copy through its own HTML) and marker-only text, then an image file, then ProseMirror's own paste |
-| Sheets (`packages/sheet/src/components/Workbook/index.tsx`) | SVG as a floating image, then image items as images and text items into cells, then the HTML table |
-| Canvas (`packages/ui/src/components/vector/hooks/use-canvas-clipboard.ts`) | Native elements, then the SVG, then OS files, then plain text as a text box |
+| Docs (`apps/docs/src/components/docs/doc-editor.ts`) | SVG as a figure, then image and chart items (a docs copy through its own HTML) and marker-only text, then an image file, then ProseMirror's own paste |
+| Sheets (`packages/sheet/src/components/Workbook/index.tsx`) | SVG as a floating image, then image and chart items as floating objects and text items into cells, then the HTML table |
+| Canvas (`packages/ui/src/components/vector/hooks/use-canvas-clipboard.ts`) | Native elements, or else the image, chart and text items, then the SVG, then OS files, then plain text as a text box |
 
 Docs claims text items only when `hasRichHtmlBeyondMarker` says the HTML is just the marker. A sheets range rides as marker plus a real `<table>`, which ProseMirror turns into a docs table.
 
@@ -62,6 +68,8 @@ A copied equation rides `text/html` as its `<math>`, with its LaTeX as the annot
 
 A sheets copy writes the payload, but a sheets paste of it skips the payload. The copy tags its HTML with `COPY_ACTION_TABLE_MARKER`, and `classifyPaste`'s `internalMarkerText` drops the payload and the SVG on that tag. The paste is served from `ctx.copyState`, which holds coordinates and re-reads the live cells. That is why formulas, formats and links survive a same-tab paste though none of them exist on the wire. In another tab there is no `copyState`, the tag still suppresses the payload, and the paste falls through to the HTML table parser, lossy. Putting sheets on the wire is scoped in [SHEETS-TODO.md](SHEETS-TODO.md).
 
+A copied chart works the same way. The wire carries its inline copy, and the workbook keeps a note of the chart's own spec beside it (`copiedChart` on its global cache). A paste of that same item into the workbook it came from stores the chart's own spec, so the duplicate stays linked to its cells, as Google's does; a paste anywhere else stores the inline copy. The note is per mounted workbook, so another tab of the same file pastes the inline copy.
+
 A sheets menu copy has no native event either, and the async writer cannot set the custom type. So it stages its HTML with `setPendingCopy` and fires `execCommand('copy')`, and the Workbook's `copy` listener writes every flavor (`packages/sheet/src/state/modules/clipboard.ts`). A docs menu copy fires `execCommand` too, for the editor's own handlers ([DOCS.md](DOCS.md#a-docs-copy-with-an-image-writes-its-items-in-order-and-a-docs-paste-reads-its-html)).
 
 ## A canvas selection rides as its stored records
@@ -70,7 +78,7 @@ A sheets menu copy has no native event either, and the async writer cannot set t
 
 The paste planner (`packages/ui/src/components/vector/tools/paste-elements.ts`) drops each record's id, index and seed, clears `commentCardIds`, and runs rich text's `html` through `sanitizeToLightEditorHtml`. Pasted arrows rebind to the pasted copies of their shapes, and a binding to a shape left behind is cleared. Every add and the arrow remap are one undo step. A cross-mount image lands under a pending name and swaps in its real name untracked, or is deleted when the re-upload fails.
 
-Beside the `elements` item the copy writes an `image` item per image, which is both what other apps place and the canvas' re-upload manifest, and a `text` item per rich-text box.
+Beside the `elements` item the copy writes an `image` item per image, which is both what other apps place and the canvas' re-upload manifest, a `text` item per rich-text box and a `chart` item per chart. A canvas paste reads the `elements` item and ignores the rest, so a chart copied between Vector and Slides is the exact record.
 
 ## A canvas paste lands relative to where it was copied
 
@@ -92,11 +100,11 @@ A copy leaves out any image whose media path does not resolve yet, such as a pen
 
 A payload can be valid and place nothing: every item dropped as forged, or only images with no `media/` folder. `pasteEigenItems` reports whether it placed anything, and the handler calls `preventDefault` only when it did, so the lower rungs still get their turn. The SVG rung likewise falls through without a `media/` folder. If nothing places and a payload was there, the canvas toasts, because a silent ⌘V looks like a broken key.
 
-## The SVG flavor is skipped for text-only and big selections
+## The SVG flavor is skipped for text-only, chart-only and big selections
 
 A canvas copy sets `EigenClipboardData.svg`: a `sceneToSvg` render with the items embedded in a `<metadata>` block. Docs and sheets cannot place elements, so they paste the SVG as one image. `selectionSvg` (`tools/clipboard.ts`) has two gates:
 
-- A text-only selection writes none. Every foreign host tries the SVG before the typed items, so a text box would land as a picture of itself instead of styled, editable text.
+- A text-only or a chart-only selection writes none. Every foreign host tries the SVG before the typed items, so a text box would land as a picture of itself instead of styled, editable text, and a chart as a picture instead of a live chart. A chart beside any other element still writes it, and lands as one picture.
 - A big selection writes none. The records are serialized as items, again in the metadata, and the whole SVG is URI-encoded into an attribute. Past `CLIPBOARD_SVG_MAX_ELEMENTS` or `CLIPBOARD_SVG_MAX_BYTES`, a canvas still pastes from the `elements` item, and docs and sheets get only the image and text items.
 
 A canvas given an SVG, pasted or dropped as a file, restores native elements from the metadata and inserts an image otherwise. `readSvgClipboardWithItems` also takes a whole SVG from `text/plain` when its root tag carries the SVG namespace, so an `<svg>` code snippet stays text.
