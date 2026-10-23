@@ -83,7 +83,7 @@ function isInlineChartSpec(spec: unknown): spec is string {
 
 // A chart item, or null for a spec no consumer could draw (range data, unreadable, over the size limit).
 // The spec rides as given, never re-serialized. The look is read off its holder, a canvas element among them, and a
-// host that stores none copies flat.
+// missing field copies flat.
 export function buildChartClipboardItem(args: {
     spec: string;
     box: Pick<ClipboardBox, 'width' | 'height'>;
