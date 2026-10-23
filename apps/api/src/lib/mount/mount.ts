@@ -780,7 +780,6 @@ export class Mount {
         }
 
         if (!wroteUnderLock) await writeRow();
-        // After, not inside writeRow: a failure there would move the bytes back under a row that already moved.
         if (updates.parentId !== undefined) {
             await this.invalidateSizesFrom(oldParentId ?? null);
             await this.invalidateSizesFrom(updates.parentId);
@@ -1408,19 +1407,24 @@ export class Mount {
     }
 
     // NULL the cached size on `parentId` and every ancestor up to the mount root.
+    // Every caller has committed its write: a failure leaves a stale size, logged, not a 500.
     // internal — used by mount/*.ts
     async invalidateSizesFrom(parentId: string | null): Promise<void> {
         if (!parentId) return;
-        await this.db.run(sql`
-            WITH RECURSIVE ancestors(id) AS (
-                SELECT ${parentId} AS id
-                UNION ALL
-                SELECT p.parentId FROM paths p
-                    JOIN ancestors a ON p.id = a.id
-                    WHERE p.parentId IS NOT NULL
-            )
-            UPDATE paths SET size = NULL WHERE id IN (SELECT id FROM ancestors)
-        `);
+        try {
+            await this.db.run(sql`
+                WITH RECURSIVE ancestors(id) AS (
+                    SELECT ${parentId} AS id
+                    UNION ALL
+                    SELECT p.parentId FROM paths p
+                        JOIN ancestors a ON p.id = a.id
+                        WHERE p.parentId IS NOT NULL
+                )
+                UPDATE paths SET size = NULL WHERE id IN (SELECT id FROM ancestors)
+            `);
+        } catch (e) {
+            console.error(`[Mount] Could not invalidate the folder sizes from ${parentId}:`, e);
+        }
     }
 
     private computeAndCacheFolderSize(folderId: string): number {

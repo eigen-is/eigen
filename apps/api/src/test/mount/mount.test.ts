@@ -522,25 +522,36 @@ describe('Mount (local path-based storage)', () => {
         expect(readFileSync(join(mount.dataDir, '.trash', buildStorageKey(fileId, 'A.txt')), 'utf8')).toBe('alpha');
     });
 
-    test('a move whose size invalidation fails keeps its bytes with the row', async () => {
-        const fromId = await mount.createFolder(rootId, 'SizeFailFrom');
-        const toId = await mount.createFolder(rootId, 'SizeFailTo');
-        const fileId = await mount.createFile(fromId, 'sized.txt', 'text/plain', 5, Buffer.from('sized'));
+    // The cached folder size is NULLed after the write commits: a failure there is logged, not a 500 for a write that happened.
+    test.each(['move', 'trash', 'restore'] as const)(
+        'a %s whose size invalidation fails still answers, its bytes with the row',
+        async (op) => {
+            const fromId = await mount.createFolder(rootId, `SizeFailFrom-${op}`);
+            const toId = await mount.createFolder(rootId, `SizeFailTo-${op}`);
+            const fileId = await mount.createFile(fromId, 'sized.txt', 'text/plain', 5, Buffer.from('sized'));
+            if (op === 'restore') await mount.trashPath(fileId);
 
-        mount.db.run(
-            sql.raw(
-                `CREATE TRIGGER fail_size BEFORE UPDATE OF size ON paths BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`,
-            ),
-        );
-        try {
-            await expect(mount.updatePath(fileId, { parentId: toId })).rejects.toThrow();
-        } finally {
-            mount.db.run(sql.raw('DROP TRIGGER fail_size'));
-        }
+            mount.db.run(
+                sql.raw(
+                    `CREATE TRIGGER fail_size BEFORE UPDATE OF size ON paths WHEN NEW.size IS NULL BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END`,
+                ),
+            );
+            const logged = spyOn(console, 'error').mockImplementation(() => {});
+            try {
+                if (op === 'move') await mount.updatePath(fileId, { parentId: toId });
+                if (op === 'trash') await mount.trashPath(fileId);
+                if (op === 'restore') await mount.restorePath(fileId);
+            } finally {
+                logged.mockRestore();
+                mount.db.run(sql.raw('DROP TRIGGER fail_size'));
+            }
 
-        expect((await mount.getPath(fileId))!.parentId).toBe(toId);
-        expect(await (await mount.readFile(fileId))!.text()).toBe('sized');
-    });
+            const row = (await mount.getPath(fileId))!;
+            expect(row.parentId).toBe(op === 'move' ? toId : op === 'trash' ? rootId : fromId);
+            expect(row.trashedAt !== null).toBe(op === 'trash');
+            expect(await (await mount.readFile(fileId))!.text()).toBe('sized');
+        },
+    );
 
     test('a move into its own subfolder answers 400 and moves nothing', async () => {
         const folderId = await mount.createFolder(rootId, 'MoveIntoSelf');

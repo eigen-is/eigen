@@ -111,7 +111,7 @@ Before posting, the hook lists the folder once and keeps the ids it sees. After 
 
 ## Folder sizes are a lazy cache, so a listing can write
 
-A folder row caches its recursive size in `paths.size`, and `NULL` means stale. A mutation does not recompute. It NULLs the whole ancestor chain (`invalidateSizesFrom`, or `invalidateAncestorsOf` for a content write). The next read that hydrates the folder (`toDrivePath`) recomputes the subtree bottom-up in one transaction and writes the totals back, reusing every descendant total still cached.
+A folder row caches its recursive size in `paths.size`, and `NULL` means stale. A mutation does not recompute. It NULLs the whole ancestor chain (`invalidateSizesFrom`, or `invalidateAncestorsOf` for a content write). That runs once the mutation has committed, so a failure there is logged and leaves a stale total, never a 500 for a write that happened. The next read that hydrates the folder (`toDrivePath`) recomputes the subtree bottom-up in one transaction and writes the totals back, reusing every descendant total still cached.
 
 So a GET can write, which matters for any read-replica idea. The first listing after a large move or delete pays the recompute, and every later read is a column read. A trashed item hangs under the mount root and is left out of the totals ([SOFT-DELETE.md](SOFT-DELETE.md)).
 
