@@ -21,7 +21,7 @@ function applyFormat(value: Cell['v'], fa: string): Cell {
     return data[0][1]!;
 }
 
-const PRESETS = numberMenuPresets('€');
+const PRESETS = numberMenuPresets('€').flat();
 
 function presetValue(text: string): string {
     const preset = PRESETS.find((p) => p.text === text);
@@ -31,7 +31,7 @@ function presetValue(text: string): string {
 
 describe('Format → Number menu presets', () => {
     test('menu lists the Google-structure presets with their format strings', () => {
-        expect(PRESETS.filter((p) => p.value !== 'split').map((p) => [p.text, p.value])).toEqual([
+        expect(PRESETS.map((p) => [p.text, p.value])).toEqual([
             ['Automatic', 'General'],
             ['Plain text', '@'],
             ['Number', '#,##0.00'],
@@ -149,7 +149,7 @@ describe('Format → Number menu presets', () => {
     });
 
     test('the currency symbol parameter flows into the currency presets', () => {
-        const dollar = numberMenuPresets('$');
+        const dollar = numberMenuPresets('$').flat();
         expect(dollar.find((p) => p.text === 'Currency')?.value).toBe('$#,##0.00');
         expect(dollar.find((p) => p.text === 'Accounting')?.value).toBe(
             '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)',

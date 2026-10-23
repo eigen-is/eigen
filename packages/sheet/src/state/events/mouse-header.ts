@@ -27,7 +27,6 @@ export function handleRowHeaderMouseDown(
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
     }
-    // Cancel active image item
     deselectFloatingObject(ctx);
 
     const rect = container.getBoundingClientRect();
@@ -332,7 +331,6 @@ export function handleColumnHeaderMouseDown(
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
     }
-    // Cancel active image item
     deselectFloatingObject(ctx);
 
     const rect = container.getBoundingClientRect();

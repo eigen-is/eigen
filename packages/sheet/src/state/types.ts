@@ -1,7 +1,6 @@
 import type {
     ConditionalFormatRule,
     DataVerificationRule,
-    SheetImage as Image,
     Sheet as LibSheet,
     SheetConfig as LibSheetConfig,
     MergeCell,
@@ -23,10 +22,10 @@ import type { PatchOptions } from './utils';
 // Types surfaced here so state-side consumers don't have to know the canonical
 // home. Sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
 // Range) live in @workspace/lib/sheets and re-export through ../engine/types;
-// Op / ConditionalFormatRule / DataVerificationRule / Image (lib's SheetImage)
-// live in lib directly (the BE document reader replays ops without the engine, the
-// HTML export reads CF rules and paints floating images, and data-validation rules
-// are touched by the editor + canvas painter — none is engine-conceptual).
+// Op / ConditionalFormatRule / DataVerificationRule live in lib directly (the BE
+// document reader replays ops without the engine, the HTML export reads CF rules,
+// and data-validation rules are touched by the editor + canvas painter — none is
+// engine-conceptual).
 // AncestorFormulaCell and CalcChainEntry are engine-only (formula dep graph +
 // calc-chain node).
 export type {
@@ -37,7 +36,6 @@ export type {
     CellWithRowAndCol,
     ConditionalFormatRule,
     DataVerificationRule,
-    Image,
     MergeCell,
     Op,
     Range,

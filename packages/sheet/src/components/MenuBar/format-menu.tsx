@@ -47,15 +47,7 @@ function NumberFormatSubmenu() {
     const { setContext, refs, settings } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
     const { currency } = settings;
-    // The presets in Google's groups, split where the list says so.
-    const groups = numberMenuPresets(currency).reduce<{ text: string; value: string; example: string }[][]>(
-        (acc, preset) => {
-            if (preset.value === 'split') acc.push([]);
-            else acc.at(-1)?.push(preset);
-            return acc;
-        },
-        [[]],
-    );
+    const groups = numberMenuPresets(currency);
 
     const anchor = useAnchorCell();
     const activeFa = anchor?.ct?.fa ?? 'General';
@@ -71,7 +63,7 @@ function NumberFormatSubmenu() {
             <DropdownMenuSubTrigger>Number</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 {groups.map((group) => (
-                    <Fragment key={group[0]?.value}>
+                    <Fragment key={group[0].value}>
                         <DropdownMenuSeparator />
                         <ChoiceMenuItems
                             value={activeFa}
