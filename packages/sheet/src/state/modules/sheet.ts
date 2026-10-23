@@ -1,6 +1,7 @@
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { isNil, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
+import { MAX_SHEET_NAME_LENGTH } from '../../engine/a1-notation';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
@@ -204,7 +205,7 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     }
 
     if (
-        txt.length > 31 ||
+        txt.length > MAX_SHEET_NAME_LENGTH ||
         txt.charAt(0) === "'" ||
         txt.charAt(txt.length - 1) === "'" ||
         /[：:\\/？?*[\]]+/.test(txt)

@@ -1,3 +1,5 @@
+import { MAX_SHEET_NAME_LENGTH } from './a1-notation';
+
 // The name a sheet takes when the workbook already holds its own: "Sheet1(Copy)", then "Sheet1(Copy2)", past the
 // highest copy number taken, within the 31 characters a sheet name may have. The tab menu's Duplicate names its copy so,
 // and Import… a tab whose name is taken.
@@ -17,7 +19,7 @@ export function copySheetName(name: string, taken: readonly string[]): string {
     let copy: string;
     do {
         const postfix = `${copyWord + (index || '')})`;
-        const lengthLimit = 31 - postfix.length;
+        const lengthLimit = MAX_SHEET_NAME_LENGTH - postfix.length;
         copy = base.length > lengthLimit ? `${base.slice(0, lengthLimit - 1)}…` : base;
         copy += postfix;
         index = (index || 1) + 1;
