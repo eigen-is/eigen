@@ -277,7 +277,7 @@ describe('a worksheet chart', () => {
         expect(warnings).toEqual([{ code: 'charts-dropped', count: 3 }]);
     });
 
-    test('a pie over more cells than a pie holds slices for is left out and counted, with its caches or without', () => {
+    test('a pie over more cells than a pie holds slices for reads its caches, and is left out and counted only when they hold too many too', () => {
         const pie = (cache: string) =>
             chartSpace(
                 `<c:pieChart><c:varyColors val="1"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:v>p</c:v></c:tx><c:val><c:numRef><c:f>Data!$B$1:$B$1048576</c:f>${cache}</c:numRef></c:val></c:ser></c:pieChart>`,
@@ -289,13 +289,16 @@ describe('a worksheet chart', () => {
                     twoCell([0, 0, 0, 0], [3, 0, 10, 0], graphicFrame('rId1')) +
                     twoCell([0, 0, 12, 0], [3, 0, 20, 0], graphicFrame('rId2')),
                 charts: [
-                    pie(''),
+                    pie(
+                        `<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="2001"/>${pts([1])}</c:numCache>`,
+                    ),
                     pie(`<c:numCache><c:formatCode>General</c:formatCode>${pts([1, 2, 3])}</c:numCache>`),
                 ],
             }),
         );
-        expect(chartsOf(sheets[0])).toEqual([]);
-        expect(warnings).toEqual([{ code: 'charts-dropped', count: 2 }]);
+        const specs = chartsOf(sheets[0]).map((chart) => JSON.parse(chart.spec));
+        expect(specs).toMatchObject([{ type: 'pie', data: { source: 'inline', series: [{ values: [1, 2, 3] }] } }]);
+        expect(warnings).toEqual([{ code: 'charts-dropped', count: 1 }]);
     });
 
     // A cache declares its points in one tag, and readChart builds them all: each chart placed is charged its part's

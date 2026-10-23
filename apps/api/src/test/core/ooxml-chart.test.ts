@@ -701,13 +701,18 @@ describe('range data for a workbook', () => {
         expect(byRange(space(literal + AXES)).data).toMatchObject({ source: 'inline', series: [{ values: [1] }] });
     });
 
-    test('a pie over more cells than the spec holds slices for is no spec, with its caches or without', () => {
-        const pie = (cache: string) =>
+    test('a pie over more cells than the spec holds slices for reads its caches, as a whole column does, and is no spec when they hold too many too', () => {
+        const pie = (f: string, cache: string) =>
             space(
-                `<c:pieChart><c:varyColors val="1"/><c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numRef><c:f>Sheet1!$B$1:$B$2001</c:f>${cache}</c:numRef></c:val></c:ser></c:pieChart>`,
+                `<c:pieChart><c:varyColors val="1"/><c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numRef><c:f>${f}</c:f>${cache}</c:numRef></c:val></c:ser></c:pieChart>`,
             );
-        expect('unsupported' in read(pie(''), ranges)).toBe(true);
-        expect('unsupported' in read(pie('<c:numCache><c:ptCount val="3"/></c:numCache>'), ranges)).toBe(true);
+        const cache = (count: number) =>
+            `<c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${count}"/>${pts([1, 2, 3])}</c:numCache>`;
+        for (const f of ['Sheet1!$B$1:$B$2001', 'Sheet1!$B$1:$B$1048576']) {
+            expect(byRange(pie(f, cache(3))).data).toMatchObject({ source: 'inline', series: [{ values: [1, 2, 3] }] });
+            expect(read(pie(f, ''), ranges)).toEqual(read(pie('Sheet1!$B:$B', ''), ranges));
+            expect('unsupported' in read(pie(f, cache(2001)), ranges)).toBe(true);
+        }
     });
 
     // The sheet draws a row or a column of values or categories, never an area.
