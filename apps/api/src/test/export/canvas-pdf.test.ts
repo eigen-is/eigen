@@ -246,8 +246,8 @@ suite('canvas PDF — text, opaque and translucent elements print wherever they 
             ],
             meta: { ...DEFAULT_SCENE_META, slideSize: '16:9' },
         });
-        // Within a line and a half of the bottom edge, at 0.375 pt per scene pixel.
-        expect(lowestBlueRow(page)).toBeGreaterThan(page.height - 1.5 * 57.6 * 0.375);
+        // Within a line and a half of the bottom edge, at a new deck's 0.5 pt per scene pixel.
+        expect(lowestBlueRow(page)).toBeGreaterThan(page.height - 1.5 * 57.6 * 0.5);
     }, 120_000);
 
     // A drawing's page starts at its content, wherever that is: far from the scene origin, far above and

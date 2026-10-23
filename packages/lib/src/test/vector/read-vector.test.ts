@@ -10,6 +10,7 @@ import {
     MIN_SLIDE_WIDTH,
     SLIDE_SIZES,
     slideFontSize,
+    UNSTORED_SLIDE_WIDTH,
 } from '../../vector/frames';
 import { ELEMENT_FIELDS } from '../../vector/kinds';
 import { MAX_ARROW_LABEL_BYTES, MAX_ARROW_LABEL_LINES, MAX_HTML_DEPTH } from '../../vector/kinds/read-fields';
@@ -150,10 +151,11 @@ describe('readVectorFromDoc', () => {
         expect(el).toMatchObject({ x: -1_000_000, y: 1_000_000, width: 1_000_000, height: 0, opacity: 100 });
     });
 
-    test('empty doc yields an empty scene with default meta', () => {
+    // Every default but the width, which a new deck writes and a deck from before it had one lacks.
+    test('empty doc yields an empty scene with default meta, at the width of a deck that stores none', () => {
         const scene = readVectorFromDoc(new Y.Doc());
         expect(scene.elements).toEqual([]);
-        expect(scene.meta).toEqual(DEFAULT_SCENE_META);
+        expect(scene.meta).toEqual({ ...DEFAULT_SCENE_META, slideWidth: UNSTORED_SLIDE_WIDTH });
     });
 
     test('materializes a linear element with points and roundness', () => {
@@ -503,10 +505,12 @@ describe('readVectorFromDoc', () => {
         expect(txt).toMatchObject({ fontSize: MIN_FONT_SIZE_PX });
     });
 
-    // The range is fonts.ts' 1 to 400 pt on every deck: 400 pt on the narrowest, 1 pt on the widest.
-    test("the fontSize range reaches every deck's whole pt range", () => {
-        expect(slideFontSize(MAX_FONT_SIZE_PX, MIN_SLIDE_WIDTH)).toBe(400);
+    // fonts.ts' 1 to 400 pt on every deck 10 in or wider, which every deck Eigen makes is; a drawing tops out near it.
+    test('the fontSize range reaches 1 pt on the widest deck and 400 pt on a 10 in one, and no further', () => {
         expect(slideFontSize(MIN_FONT_SIZE_PX, MAX_SLIDE_WIDTH)).toBe(1);
+        expect(slideFontSize(MAX_FONT_SIZE_PX, UNSTORED_SLIDE_WIDTH)).toBe(400);
+        expect(slideFontSize(MAX_FONT_SIZE_PX, DEFAULT_SCENE_META.slideWidth)).toBe(400);
+        expect(MAX_FONT_SIZE_PX).toBeCloseTo(1066.67, 2);
     });
 
     test('a fontSize in range reads to the bit, however many decimals it has', () => {
@@ -1117,7 +1121,7 @@ describe('readVectorFromDoc — the slide size', () => {
         }
     });
 
-    test("a deck without a width is Google's 10 in; a stored one reads as it is, held to PowerPoint's range", () => {
+    test("a deck without a width is the 10 in it printed at; a stored one reads as it is, in PowerPoint's range", () => {
         const widthOf = (width?: unknown) => {
             const doc = deckSized();
             if (width !== undefined) doc.getMap('meta').set('slideWidth', width);

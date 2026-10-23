@@ -25,7 +25,7 @@ import {
     type NewVectorElement,
     parseFill,
     resizeLinear,
-    STROKE_WIDTH_OPTIONS,
+    round,
     type StrokeStyle,
     serializeFill,
     TRANSPARENT_FILL,
@@ -41,6 +41,7 @@ import {
     getMergedValue,
     holdCapture,
     isMixed,
+    MergedNumberInput,
     MergedSelect,
     MergedSlider,
     type MergedValue,
@@ -59,8 +60,7 @@ import type * as Y from 'yjs';
 import { applyZOrder, convertElementToShapes } from './hooks/selection-ops';
 import { ELEMENT_KIND_UI } from './kinds';
 
-// Discrete presets, the Excalidraw constants: strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,
-// shared from lib), roughness 0/1/2.
+// Discrete presets, the Excalidraw constants: roughness 0/1/2.
 const ROUGHNESS_OPTIONS: { value: string; label: string }[] = [
     { value: '0', label: 'Architect' },
     { value: '1', label: 'Artist' },
@@ -253,7 +253,8 @@ export function CanvasPropertiesPanel({
     const tAngle = getMergedValue(selectedElements, (el) => Math.round(el.angle));
 
     const strokeColor = getMergedValue(selectedElements, (el) => el.strokeColor);
-    const strokeWidth = getMergedValue(selectedElements, (el) => el.strokeWidth);
+    // Any px, as a pptx's 1 pt line stores 2.67 on a 10 in deck: shown to the hundredth, stored as typed.
+    const strokeWidth = getMergedValue(selectedElements, (el) => round(el.strokeWidth));
     const strokeStyle = getMergedValue(selectedElements, (el) => el.strokeStyle);
     // The fill merges as the STORED string and is parsed once, so a gradient survives the merge intact.
     const fillRaw: MergedValue<string> = getMergedValue(selectedElements, (el) => ('fill' in el ? el.fill : undefined));
@@ -339,10 +340,12 @@ export function CanvasPropertiesPanel({
                             allowNone={strokeOptional}
                         />
                         <PropertyRow label="Width">
-                            <MergedSelect
-                                value={numToStr(strokeWidth)}
-                                onChange={(v) => applyToAll({ strokeWidth: Number(v) })}
-                                options={STROKE_WIDTH_OPTIONS}
+                            <MergedNumberInput
+                                value={strokeWidth}
+                                onChange={(v) => applyToAll({ strokeWidth: v })}
+                                step={1}
+                                min={0}
+                                max={100}
                             />
                         </PropertyRow>
                         {showStrokeStyle && (

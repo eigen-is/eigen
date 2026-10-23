@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { slideFontSize, slidePtToPx } from '@workspace/lib/vector';
+import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, slideFontSize, slidePtToPx } from '@workspace/lib/vector';
 import { ApiError } from '../../../lib/core/errors';
 import { MAX_MEDIA_PARTS, MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_SLIDES } from '../../../lib/import/slides/package';
@@ -63,6 +63,36 @@ describe('a deck read', () => {
         const imported = readPptx(pptx, { ...OPTIONS, deck: { slideSize: '16:9', slideWidth: 960 } });
         expect(imported.slides[0].elements[0].fontSize).toBe(slidePtToPx(14, 960));
     });
+
+    // 11 pt scales to 14.67 pt in the 13.33 in deck: 14.5 on its grid, where the file's 10 in grid keeps 11 pt's px.
+    test("Import slides… snaps on the open deck's grid, not the file's", () => {
+        const pptx = buildPptx({
+            sldSz: '<p:sldSz cx="9144000" cy="5143500"/>',
+            slides: [{ shapes: sp({ xfrm: box(0, 0, 900, 100), text: para('Title', ' sz="1100"') }) }],
+        });
+        const imported = readPptx(pptx, { ...OPTIONS, deck: { slideSize: '16:9', slideWidth: 960 } });
+        expect(imported.slides[0].elements[0].fontSize).toBe(slidePtToPx(14.5, 960));
+    });
+
+    // A slide over 42 in tall is wider than PowerPoint's 56 in in a 4:3 frame, a 1 in square narrower than a 16:9 one's
+    // inch of height: the deck takes the bound, and the file's shapes take the deck's pt per px, so a pt stays a pt.
+    test.each([
+        ['36576000', '51206400', MAX_SLIDE_WIDTH],
+        ['914400', '914400', MIN_SLIDE_WIDTH],
+    ])(
+        "a %s by %s EMU slide's deck is held to PowerPoint's range, and a 44 pt title still shows 44",
+        (cx, cy, slideWidth) => {
+            const deck = readPptx(
+                buildPptx({
+                    sldSz: `<p:sldSz cx="${cx}" cy="${cy}"/>`,
+                    slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), text: para('Title', ' sz="4400"') }) }],
+                }),
+                OPTIONS,
+            );
+            expect(deck.page).toEqual({ slideSize: '4:3', slideWidth });
+            expect(Number(deck.slides[0].elements[0].fontSize)).toBe(slidePtToPx(44, slideWidth));
+        },
+    );
 
     test('a slide size outside what PowerPoint allows is held to its range, a missing one is 4:3', () => {
         const size = (sldSz: string) => readPptx(buildPptx({ sldSz, slides: [{}] }), OPTIONS).page.slideSize;

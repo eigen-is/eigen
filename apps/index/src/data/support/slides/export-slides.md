@@ -28,7 +28,7 @@ A few things look different in the PowerPoint file:
 
 ## Export to PDF
 
-Each slide becomes one page in the PDF, the size of your slides. In a new presentation, 10 inches wide, that is 254 mm × 142.875 mm for 16:9, or 254 mm × 190.5 mm for 4:3. A presentation converted from PowerPoint prints at the file's own width.
+Each slide becomes one page in the PDF, the size of your slides. In a new presentation, 13.33 inches wide, that is 338.67 mm × 190.5 mm for 16:9, or 338.67 mm × 254 mm for 4:3. A presentation converted from PowerPoint prints at the file's own width.
 
 1. Open the presentation in Slides.
 2. Click **File** in the toolbar.

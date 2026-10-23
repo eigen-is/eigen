@@ -43,7 +43,7 @@ Shown with the **Text** section, for text objects.
 
 | Control | What it does |
 |---|---|
-| **Letter** | Letter spacing |
+| **Letter** | Letter spacing in pixels |
 | **Line** | Line height |
 | **Padding** | The gap between the text and the edge of its box |
 
@@ -71,7 +71,7 @@ The object's outline. Shown for any selection, because every object is drawn wit
 | Control | What it does |
 |---|---|
 | **Color** | Outline color. On shapes, text, and images you can set it to **None**. A line or arrow is its stroke, so it always keeps a color. |
-| **Width** | **Thin**, **Medium**, or **Bold** |
+| **Width** | Line thickness in pixels. Type any number, such as 1.5 |
 | **Style** | **Solid**, **Dashed**, or **Dotted**. Not shown for freehand drawings. |
 
 ## Shape

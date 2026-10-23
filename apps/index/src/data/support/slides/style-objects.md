@@ -43,7 +43,7 @@ Shows for a text box. Controls the type itself; the box behind it uses the **Fil
 
 | Control | What it does |
 |---|---|
-| **Letter** | Space between letters |
+| **Letter** | Space between letters, in points |
 | **Line** | Line height |
 | **Padding** | Inset between the text and the box edge |
 
@@ -92,7 +92,7 @@ The outline of the object.
 | Control | What it does |
 |---|---|
 | **Color** | Outline color |
-| **Width** | Line thickness |
+| **Width** | Line thickness in pixels. Type any number, such as 1.5 |
 | **Style** | **Solid**, **Dashed**, or **Dotted** |
 
 ## Shape

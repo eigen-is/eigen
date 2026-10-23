@@ -1,6 +1,7 @@
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import {
     MAX_SLIDE_WIDTH,
+    MIN_SLIDE_WIDTH,
     type NewVectorElement,
     nearestSlideSize,
     SLIDE_SIZES,
@@ -27,7 +28,8 @@ export type PptxDeck = {
     media: PptxMedia[];
     warnings: TransformWarning[];
     // The page a Convert's new deck takes: the slide size nearest the file's p:sldSz, and the width that keeps the
-    // file's pt per px, its own width where the shapes match.
+    // file's pt per px, its own width where the shapes match and PowerPoint's range allows. An Import's is the open
+    // deck's.
     page: SlidePage;
 };
 
@@ -66,13 +68,18 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     const cy = side('cy', DEFAULT_SLIDE_EMU.cy);
     const slideSize = options.deck?.slideSize ?? nearestSlideSize(cx, cy);
     const frame = SLIDE_SIZES[slideSize];
-    // Letterboxed: the whole slide fits the frame, centred.
-    const scale = Math.min(frame.width / cx, frame.height / cy);
-    // A Convert's frame is as wide as the file's slide, or wider where the file's is taller than the frame's shape.
+    // A Convert's frame is as wide as the file's slide, or wider where the file's is taller than the frame's shape,
+    // held to PowerPoint's range.
+    const fitted = Math.max(cx, (cy * frame.width) / frame.height) / EMU_PER_POINT;
     const page = options.deck ?? {
         slideSize,
-        slideWidth: Math.min(MAX_SLIDE_WIDTH, Math.max(cx, (cy * frame.width) / frame.height) / EMU_PER_POINT),
+        slideWidth: Math.min(MAX_SLIDE_WIDTH, Math.max(MIN_SLIDE_WIDTH, fitted)),
     };
+    // Centred. An Import letterboxes the whole slide into the open deck's frame; a Convert's shapes take its deck's pt
+    // per px, so a pt stays a pt, and a slide the range held overhangs its frame or sits inside it.
+    const scale = options.deck
+        ? Math.min(frame.width / cx, frame.height / cy)
+        : frame.width / (page.slideWidth * EMU_PER_POINT);
 
     // A random prefix per import, so an Import into a deck that holds an earlier one's pictures overwrites none.
     const prefix = `pptx-${crypto.randomUUID()}`;

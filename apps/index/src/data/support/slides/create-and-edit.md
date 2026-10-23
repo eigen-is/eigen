@@ -71,7 +71,7 @@ With no object selected, the properties panel shows the background for the activ
 
 ## Change the slide size
 
-A presentation is **Widescreen 16:9** or **Standard 4:3**, and all its slides share that size. A new presentation starts at 16:9, 10 inches wide. A presentation converted from PowerPoint keeps the file's width, so its text sizes stay as they were.
+A presentation is **Widescreen 16:9** or **Standard 4:3**, and all its slides share that size. A new presentation starts at 16:9, 13.33 inches wide, as in PowerPoint. A presentation converted from PowerPoint keeps the file's width, so its text sizes stay as they were.
 
 1. Click **File** in the toolbar and choose **Page setup…**.
 2. Pick **Widescreen 16:9** or **Standard 4:3**.

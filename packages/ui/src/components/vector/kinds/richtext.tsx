@@ -4,7 +4,14 @@
 // generic Stroke row; this section is the text itself.
 
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
-import { RICH_TEXT_CLASS, richTextCssText, type VectorRichTextElement } from '@workspace/lib/vector';
+import {
+    RICH_TEXT_CLASS,
+    richTextCssText,
+    round,
+    slidePtToPx,
+    slidePxToPt,
+    type VectorRichTextElement,
+} from '@workspace/lib/vector';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import {
     AlignmentPicker,
@@ -98,7 +105,10 @@ export function RichTextPanelSection({ elements, slideWidth, onChange, onChangeE
     const textAlign = getMergedValue(boxes, (el) => el.textAlign);
     const verticalAlign = getMergedValue(boxes, (el) => el.verticalAlign);
     const color = getMergedValue(boxes, (el) => el.color);
-    const letterSpacing = getMergedValue(boxes, (el) => el.letterSpacing);
+    // A deck's tracking shows in pt, as its font size does and pptx writes it; a drawing's in px. Shown to the
+    // hundredth, stored as typed: a deck's range is a drawing's in px.
+    const shownSpacing = (px: number) => round(slideWidth === undefined ? px : slidePxToPt(px, slideWidth));
+    const letterSpacing = getMergedValue(boxes, (el) => shownSpacing(el.letterSpacing));
     const lineHeight = getMergedValue(boxes, (el) => el.lineHeight);
     const padding = getMergedValue(boxes, (el) => el.padding);
 
@@ -196,10 +206,12 @@ export function RichTextPanelSection({ elements, slideWidth, onChange, onChangeE
                 <PropertyRow label="Letter">
                     <MergedNumberInput
                         value={letterSpacing}
-                        onChange={(v) => onChange({ letterSpacing: v })}
+                        onChange={(v) =>
+                            onChange({ letterSpacing: slideWidth === undefined ? v : slidePtToPx(v, slideWidth) })
+                        }
                         step={0.5}
-                        min={-10}
-                        max={50}
+                        min={shownSpacing(-10)}
+                        max={shownSpacing(50)}
                     />
                 </PropertyRow>
                 <PropertyRow label="Line">

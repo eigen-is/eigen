@@ -27,7 +27,8 @@ export function importPptxToSlidesUpdate(
     try {
         const doc = new Y.Doc();
         doc.transact(() => {
-            // A Convert's deck takes it; Import slides… leaves the open deck's meta alone.
+            // A Convert's new deck takes the page; on Import slides… it is the open deck's own, and the append leaves
+            // that deck's meta alone (document/slides.ts).
             const meta = doc.getMap('meta');
             meta.set('slideSize', page.slideSize);
             meta.set('slideWidth', page.slideWidth);

@@ -4,6 +4,7 @@ import {
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
     serializeBinding,
+    UNSTORED_SLIDE_WIDTH,
     type VectorElement,
     writeElementInDoc,
     writeFrameInDoc,
@@ -232,7 +233,8 @@ describe('document/slides', () => {
             strokeWidth: 100,
         });
         expect(JSON.stringify(stored)).not.toContain('javascript');
-        expect(target.getMap('meta').toJSON()).toEqual(DEFAULT_SCENE_META);
+        // An update that states no width gives the deck the width of one that stores none.
+        expect(target.getMap('meta').toJSON()).toEqual({ ...DEFAULT_SCENE_META, slideWidth: UNSTORED_SLIDE_WIDTH });
 
         const imported = existingDeck();
         appendSlidesUpdateToYjs(imported, update);

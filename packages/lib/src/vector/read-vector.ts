@@ -6,7 +6,14 @@
 import type * as Y from 'yjs';
 import { parseBackgroundFill, serializeBackgroundFill } from './fill';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
-import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, SLIDE_SIZE_KEYS, SLIDE_SIZES, type VectorFrame } from './frames';
+import {
+    MAX_SLIDE_WIDTH,
+    MIN_SLIDE_WIDTH,
+    SLIDE_SIZE_KEYS,
+    SLIDE_SIZES,
+    UNSTORED_SLIDE_WIDTH,
+    type VectorFrame,
+} from './frames';
 import { ELEMENT_KINDS, isBindable, isVectorElementType } from './kinds';
 import {
     clampNum,
@@ -68,7 +75,7 @@ export function readSlidePage(doc: Y.Doc): SlidePage {
     const meta = doc.getMap('meta');
     return {
         slideSize: oneOf(meta.get('slideSize'), SLIDE_SIZE_KEYS, DEFAULT_SCENE_META.slideSize),
-        slideWidth: clampNum(meta.get('slideWidth'), MIN_SLIDE_WIDTH, MAX_SLIDE_WIDTH, DEFAULT_SCENE_META.slideWidth),
+        slideWidth: clampNum(meta.get('slideWidth'), MIN_SLIDE_WIDTH, MAX_SLIDE_WIDTH, UNSTORED_SLIDE_WIDTH),
     };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseBackgroundFill, readVectorFromDoc } from '@workspace/lib/vector';
+import { DEFAULT_SCENE_META, parseBackgroundFill, readVectorFromDoc, writeFrameInDoc } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { seedDeck } from '../../../components/slides/seed-deck';
 
@@ -19,12 +19,25 @@ describe('seedDeck', () => {
         expect(welcome.type === 'richtext' && welcome.color).toBe('#ffffff');
     });
 
+    // A deck that stores no width reads as an older deck's 10 in, so a new one writes its own.
+    test("a new deck writes its width, PowerPoint's 13.33 in", () => {
+        const doc = new Y.Doc();
+        seedDeck(doc);
+        expect(doc.getMap('meta').get('slideWidth')).toBe(960);
+        expect(readVectorFromDoc(doc).meta.slideWidth).toBe(DEFAULT_SCENE_META.slideWidth);
+    });
+
     test('a deck that already has a slide is left alone', () => {
         const doc = new Y.Doc();
         seedDeck(doc);
         const firstId = readVectorFromDoc(doc).frames[0].id;
         seedDeck(doc);
         expect(readVectorFromDoc(doc).frames.map((f) => f.id)).toEqual([firstId]);
+        // An older deck keeps reading at the width it was made at.
+        const older = new Y.Doc();
+        writeFrameInDoc(older, { id: 'fr-older', index: 'a0' });
+        seedDeck(older);
+        expect(older.getMap('meta').has('slideWidth')).toBe(false);
     });
 
     test('two peers seeding the same empty deck converge on one title slide', () => {

@@ -830,7 +830,7 @@ const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '5cb21d5397765e68a4c13d2274e99d1606d7d
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'ca6eebcf9d24cbd4f7fe618494848af853bb102b34634fee396aae78136f6bed';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —

@@ -314,8 +314,9 @@ export const DEFAULT_LINE_ROUNDNESS: Roundness = 'round';
 // arrows keep their meaning.
 const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
 
-// Canvas-level defaults (the `meta` root). A new deck is Google's: 16:9 and 10 in wide.
-export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', slideSize: '16:9', slideWidth: 720 };
+// Canvas-level defaults (the `meta` root). A new deck is PowerPoint's widescreen, 16:9 and 13.33 in wide, so a pt is
+// 2 px of the frame; a deck that stores no width reads as UNSTORED_SLIDE_WIDTH instead (frames.ts).
+export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', slideSize: '16:9', slideWidth: 960 };
 
 // Shared element defaults, adopted from Excalidraw's DEFAULT_ELEMENT_PROPS.
 export const DEFAULT_ELEMENT_PROPS = {
@@ -386,17 +387,6 @@ export const DEFAULT_ARROW_PROPS = {
     | 'labelWidth'
     | 'roundness'
 >;
-
-// Shared line-width presets — the ONE source for the thin/medium/bold vocabulary, consumed by both
-// the vector panel (strokeWidth, scene-px) and the slides panel (borderWidth, slide-units ≡ scene-px).
-// The Excalidraw constants (1/2/4). Data-driven: growing to more weights is an array edit, no UI
-// change. Values are Select strings (MergedSelect is string-typed, like sibling ROUGHNESS_OPTIONS);
-// consumers parse them back to the literal numeric width with Number().
-export const STROKE_WIDTH_OPTIONS: { value: string; label: string }[] = [
-    { value: '1', label: 'Thin' },
-    { value: '2', label: 'Medium' },
-    { value: '4', label: 'Bold' },
-];
 
 // The ONE labeling of the Roundness vocabulary, consumed by the panel's Edges row for boxes and
 // lines and by the arrow section (where an elbow's roundness means its corner style).
