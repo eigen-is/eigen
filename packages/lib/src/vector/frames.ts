@@ -2,6 +2,7 @@
 // a drawing is the same canvas with no frames at all. Every frame of a deck has the deck's slide size —
 // elements may overhang and the frame clips them.
 
+import { MAX_FONT_SIZE, MIN_FONT_SIZE, snapFontSize } from '../constants/fonts';
 import { ptToPx, pxToPt } from '../docs/eigendoc/page';
 import { serializeBackgroundFill } from './fill';
 import type { Point } from './geometry';
@@ -30,6 +31,41 @@ export function canvasPxToPt(px: number): number {
 export function canvasPtToPx(pt: number): number {
     return ptToPx(pt);
 }
+
+// A deck's physical width in pt, `meta.slideWidth` (DEFAULT_SCENE_META holds a new deck's, which the seeder writes;
+// a pptx keeps its own). The frame stays 1920 px wide whatever it is, so this sets the deck's pt per px, and every
+// px↔pt a deck converts goes through the two below: the Size and Letter rows, the pptx reader and writer, the PDF's
+// sheet. Bounded by PowerPoint's 1 to 56 in on both sides; a 16:9 slide's height is the short side.
+export const MIN_SLIDE_WIDTH = (72 * FRAME_WIDTH) / SLIDE_SIZES['16:9'].height;
+export const MAX_SLIDE_WIDTH = 4032;
+
+// A deck stored before it had a width printed its 1920 px as 10 in, so a deck without one reads as that.
+export const UNSTORED_SLIDE_WIDTH = 720;
+
+export function slidePxToPt(px: number, slideWidth: number): number {
+    return (px * slideWidth) / FRAME_WIDTH;
+}
+
+export function slidePtToPx(pt: number, slideWidth: number): number {
+    return (pt * FRAME_WIDTH) / slideWidth;
+}
+
+// A stored px size as a deck shows it: pt on fonts.ts' half-point grid. Showing it writes nothing: the stored px changes
+// only when the user sets a size, so a box pasted between a deck and a drawing keeps its size to the bit.
+export function slideFontSize(px: number, slideWidth: number): number {
+    return snapFontSize(slidePxToPt(px, slideWidth));
+}
+
+// A size an importer writes, on the half-point grid at the deck's scale, so a 44 pt title shows 44.
+export function snapSlideFontSize(px: number, slideWidth: number): number {
+    return slidePtToPx(slideFontSize(px, slideWidth), slideWidth);
+}
+
+// The px range a stored size may hold, for a deck and a drawing alike, as a paste between them keeps its px: fonts.ts'
+// pt range on the widest deck and on a 10 in one, so every deck Eigen makes reaches all of it and a drawing tops out
+// near 1,067 px. A pptx's deck under 10 in wide tops out under 400 pt.
+export const MIN_FONT_SIZE_PX = slidePtToPx(MIN_FONT_SIZE, MAX_SLIDE_WIDTH);
+export const MAX_FONT_SIZE_PX = slidePtToPx(MAX_FONT_SIZE, UNSTORED_SLIDE_WIDTH);
 
 // The slide size closest in shape to a page of any size, for an importer: widescreen and 16:10 read as
 // 16:9, 4:3 and A4 as 4:3.

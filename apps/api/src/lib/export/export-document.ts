@@ -12,7 +12,6 @@ import type {
 } from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
-import { DECK_SCALE } from './canvas/render';
 import { collectExportMedia } from './media';
 import { htmlToPdf } from './weasyprint';
 
@@ -105,10 +104,9 @@ async function serveExport(
     path: DrivePath,
     signal?: AbortSignal,
 ): Promise<ExportResult> {
-    const bytes = await runDocumentExport(job, mount, path, signal);
     // A deck's PDF document lays its slides out at 1:1 (renderPrintPage), so WeasyPrint's zoom scales them
     // onto the sheet.
-    const zoom = job.documentType === 'eigenslides' ? DECK_SCALE : 1;
+    const { data: bytes, zoom } = await runDocumentExport(job, mount, path, signal);
     return {
         // WeasyPrint stays a main-thread subprocess (already off-process, so it never
         // blocks the event loop) over the document the Worker rendered.
@@ -127,7 +125,7 @@ export async function runDocumentExport(
     mount: Mount,
     path: DrivePath,
     signal?: AbortSignal,
-): Promise<Buffer> {
+): Promise<{ data: Buffer; zoom?: number }> {
     // The eigendoc <title> keeps the UNstripped container name (frozen output); the
     // docx document property carries the stripped one, applied in the Worker. Root-relative
     // links take the public origin in every format, none on a checkout's dev server.

@@ -26,7 +26,7 @@ An element is a flat Yjs map of scalars and strings (`packages/lib/src/vector/ty
 
 A missing `roughness` reads as 0, so an old element stays crisp. A missing `seed` reads as 1, because roughjs picks a random seed for 0 and would redraw the jitter on every render.
 
-A frame's size is the deck's slide size, `meta.slideSize` read through `SLIDE_SIZES` (1920×1080 or 1920×1440), and is never stored on the frame ([SLIDES.md](SLIDES.md#a-deck-has-one-slide-size-and-a-change-moves-nothing)). An element with a `frameId` stores `x`/`y` relative to the frame origin, so frame mode needs no coordinate translation. Elements may overhang; the frame clips them.
+A frame's size is the deck's slide size, `meta.slideSize` read through `SLIDE_SIZES` (1920×1080 or 1920×1440), and is never stored on the frame ([SLIDES.md](SLIDES.md#a-deck-has-one-slide-size-and-a-change-moves-nothing)). An element with a `frameId` stores `x`/`y` relative to the frame origin, so frame mode needs no coordinate translation. Elements may overhang; the frame clips them. A deck also has a physical width, `meta.slideWidth`, which only converts its px to pt ([SLIDES.md](SLIDES.md#a-deck-has-a-physical-width-so-its-text-sizes-read-in-pt)); a drawing has none, and both store the same px.
 
 A rich-text box's `html` is one scalar, so two people typing in one box resolve last-writer-wins for the whole box ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
 

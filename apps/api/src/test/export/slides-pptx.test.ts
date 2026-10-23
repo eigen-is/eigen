@@ -12,6 +12,7 @@ import {
     type SlideSize,
     serializeBackgroundFill,
     serializeFill,
+    slidePtToPx,
     type VectorElementType,
     type VectorScene,
 } from '@workspace/lib/vector';
@@ -30,7 +31,8 @@ const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const CONTENT_TYPES = 'http://schemas.openxmlformats.org/package/2006/content-types';
 const ASVG = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main';
 
-// 16:9: 12,192,000 EMU over 1920 px.
+// PowerPoint's widescreen, the fixtures' deck: 13.33 in, 12,192,000 EMU over 1920 px, and a point is 2 px.
+const WIDESCREEN = 960;
 const EMU = 6350;
 
 type Fields = Record<string, unknown>;
@@ -54,10 +56,11 @@ function element(type: VectorElementType, over: Fields): Fields {
     };
 }
 
-function deckDoc(frames: FrameSpec[], elements: Fields[], slideSize?: SlideSize): Y.Doc {
+function deckDoc(frames: FrameSpec[], elements: Fields[], slideSize: SlideSize | undefined, slideWidth: number): Y.Doc {
     const doc = new Y.Doc();
     doc.transact(() => {
         if (slideSize) doc.getMap('meta').set('slideSize', slideSize);
+        doc.getMap('meta').set('slideWidth', slideWidth);
         for (const spec of frames) {
             const frame = new Y.Map<unknown>();
             const values: Fields = {
@@ -85,8 +88,9 @@ function sceneOf(
     elements: Fields[],
     frames: FrameSpec[] = [{ id: 'f1', index: 'a0' }],
     slideSize?: SlideSize,
+    slideWidth = WIDESCREEN,
 ): VectorScene {
-    return sanitizeSceneHtml(readVectorFromDoc(deckDoc(frames, elements, slideSize)));
+    return sanitizeSceneHtml(readVectorFromDoc(deckDoc(frames, elements, slideSize, slideWidth)));
 }
 
 function pptx(scene: VectorScene, media: OfficeMedia[] = []): ZipReader {
@@ -262,15 +266,24 @@ describe('pptx package', () => {
         expect(() => eigenslidesToPptx(sceneOf([], []), [], 'Deck')).toThrow('The deck is empty');
     });
 
-    test("the slide size is the deck's: 16:9 and 4:3", () => {
+    test("the slide size is the deck's: its shape and its own width", () => {
         const wideScene = sceneOf([element('rectangle', { corners: 'straight' })]);
         const wide = pptx(wideScene);
         const wideSize = first(part(wide, 'ppt/presentation.xml'), P, 'sldSz');
-        expect([attr(wideSize, 'cx'), attr(wideSize, 'cy')]).toEqual(['12192000', '6858000']);
+        expect([attr(wideSize, 'cx'), attr(wideSize, 'cy'), attr(wideSize, 'type')]).toEqual([
+            '12192000',
+            '6858000',
+            undefined,
+        ]);
         expect(xfrm(only(wide))).toEqual({ x: 100 * EMU, y: 50 * EMU, cx: 200 * EMU, cy: 100 * EMU, rot: 0 });
-        // The size is the deck's meta, not its frames' shape.
-        const relabeled = pptx({ ...wideScene, meta: { ...wideScene.meta, slideSize: '4:3' } });
-        expect(attr(first(part(relabeled, 'ppt/presentation.xml'), P, 'sldSz'), 'cx')).toBe('9144000');
+        // The size is the deck's meta, not its frames' shape: 10 in wide is an on-screen show.
+        const relabeled = pptx({ ...wideScene, meta: { ...wideScene.meta, slideSize: '4:3', slideWidth: 720 } });
+        const relabeledSize = first(part(relabeled, 'ppt/presentation.xml'), P, 'sldSz');
+        expect([attr(relabeledSize, 'cx'), attr(relabeledSize, 'cy'), attr(relabeledSize, 'type')]).toEqual([
+            '9144000',
+            '6858000',
+            'screen4x3',
+        ]);
 
         const square = pptx(
             sceneOf(
@@ -280,6 +293,7 @@ describe('pptx package', () => {
                 ],
                 undefined,
                 '4:3',
+                720,
             ),
         );
         const squareSize = first(part(square, 'ppt/presentation.xml'), P, 'sldSz');
@@ -289,6 +303,23 @@ describe('pptx package', () => {
         expect(xfrm(rectangle)).toEqual({ x: 914400, y: 685800, cx: 952500, cy: 476250, rot: 0 });
         // Text shrinks with the slide: 48 px at 0.375 pt per px.
         expect(attr(runProps(text, 'small'), 'sz')).toBe('1800');
+    });
+
+    // Google's 44 pt title imports at 8/3 px a pt on a 10 in deck and at 2 on PowerPoint's 13.33 in one.
+    test.each([
+        [720, '9144000', '5143500', 'screen16x9'],
+        [960, '12192000', '6858000', undefined],
+    ] as const)('a %s pt wide deck writes its own width, and a 44 pt title as 44 pt', (width, cx, cy, type) => {
+        const title = element('richtext', { html: '<p>Title</p>', fontSize: slidePtToPx(44, width) });
+        const zip = pptx(sceneOf([title], undefined, '16:9', width));
+        const size = first(part(zip, 'ppt/presentation.xml'), P, 'sldSz');
+        expect([attr(size, 'cx'), attr(size, 'cy'), attr(size, 'type')]).toEqual([cx, cy, type]);
+        expect(attr(runProps(only(zip), 'Title'), 'sz')).toBe('4400');
+    });
+
+    test("a size the canvas holds unsnapped writes the deck's whole points, not 58.67", () => {
+        const title = element('richtext', { html: '<p>Title</p>', fontSize: 117.33333333333334 });
+        expect(attr(runProps(only(pptx(sceneOf([title], undefined, '16:9', 720))), 'Title'), 'sz')).toBe('4400');
     });
 
     test('an element wholly outside its frame is not written, one the canvas draws any of is', () => {

@@ -520,7 +520,7 @@ describe('document transform (eigensheets export)', () => {
             format: 'pdf-html',
             title: 'golden-export',
         } as const;
-        const html = await runTransformToBytes(golden.mount, golden.path, job, {});
+        const { data: html } = await runTransformToBytes(golden.mount, golden.path, job, {});
         expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 
@@ -830,7 +830,7 @@ const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '5cb21d5397765e68a4c13d2274e99d1606d7d
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'fe210134977e3fbbc40438a14450559f3fe18fe2b9d57c613426d09d670403b6';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = '4f85e025b9666658f4da8dc1423ff78378158d1afb110da96997fc9c6f417a9e';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'ca6eebcf9d24cbd4f7fe618494848af853bb102b34634fee396aae78136f6bed';
 const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'ca7d6f0360e6790f5a4db5460c521721fc7d73a3237e3c0f635e2ed3064b5043';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
@@ -943,7 +943,7 @@ describe('document transform (eigendoc)', () => {
 
     test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
         // The stage before htmlToPdf: the wrapped document WeasyPrint renders.
-        const html = await runDocumentExport(
+        const { data: html } = await runDocumentExport(
             { documentType: 'eigendoc', format: 'pdf-html' },
             golden.mount,
             golden.path,
@@ -1115,7 +1115,11 @@ describe('document transform (eigendoc)', () => {
         const read = spyOn(previewCache, 'getScreenPreview');
         let names: string[] = [];
         try {
-            const html = await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, doc.mount, doc.path);
+            const { data: html } = await runDocumentExport(
+                { documentType: 'eigendoc', format: 'html' },
+                doc.mount,
+                doc.path,
+            );
             names = read.mock.calls.map(([, file]) => file.name);
             expect(html.toString('utf-8')).toContain('src="data:image/webp;base64,');
         } finally {
@@ -1157,7 +1161,11 @@ describe('document transform (eigendoc)', () => {
             ['b.png', 'image/png', half],
         ];
         await withDeclaredMedia('heavy-photos', photos, async (doc) => {
-            const html = await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, doc.mount, doc.path);
+            const { data: html } = await runDocumentExport(
+                { documentType: 'eigendoc', format: 'html' },
+                doc.mount,
+                doc.path,
+            );
             expect(html.toString('utf-8').match(/src="data:image\/webp;base64,/g)).toHaveLength(2);
         });
     }, 120_000);
@@ -1308,7 +1316,7 @@ describe('document transform (docx round trip)', () => {
         const svg =
             '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><circle cx="75" cy="75" r="70"/></svg>';
         await seedDocumentMedia(mount, path, 'diagram.svg', Buffer.from(svg), 'image/svg+xml');
-        const docx = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, mount, path);
+        const { data: docx } = await runDocumentExport({ documentType: 'eigendoc', format: 'docx' }, mount, path);
         return docxToPmJson(docx, { publicOrigin: getPublicOrigin() });
     }
 
@@ -1493,7 +1501,7 @@ describe('document transform (eigenslides)', () => {
     test('pdf-html export matches the pinned golden bytes', async () => {
         // The PDF arm lays each page out at 1:1 on its own sheet; only the screen arm wraps a page
         // in the container-query fit box.
-        const html = await runDocumentExport(
+        const { data: html } = await runDocumentExport(
             { documentType: 'eigenslides', format: 'pdf-html' },
             golden.mount,
             golden.path,

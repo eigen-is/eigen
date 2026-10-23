@@ -1,6 +1,7 @@
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
+import type { SlidePage } from '@workspace/lib/vector';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 
@@ -111,9 +112,9 @@ export type SlidesImportJob = {
     kind: 'import';
     sourceFormat: 'pptx';
     targetType: 'eigenslides';
-    // The open deck's frame, which Import slides… fits a file of another size into, letterboxed. A Convert passes none:
-    // its new deck takes the slide size nearest the file's.
-    frame?: { width: number; height: number };
+    // The open deck's page, which Import slides… fits a file of another size into, letterboxed. A Convert passes none:
+    // its new deck takes the slide size nearest the file's, and the file's width.
+    deck?: SlidePage;
     // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
     maxMediaBytes: number;
 };
@@ -180,7 +181,8 @@ export type PreviewResult = Omit<TextPreviewResult, 'mode'>;
 // Body text for the content index, already capped by the extractor — small like a
 // preview body.
 export type ExtractTextResult = { text: string };
-export type ExportWorkerResult = { data: ArrayBuffer };
+// `zoom` is the one htmlToPdf hands WeasyPrint for a PDF document laid out at 1:1: a deck's, from its width.
+export type ExportWorkerResult = { data: ArrayBuffer; zoom?: number };
 // UTF-8 bytes of the lean Sheet[] JSON — the main thread commits the string
 // without parsing it.
 export type SheetsImportWorkerResult = { snapshotJson: ArrayBuffer };
@@ -267,6 +269,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
               body?: unknown;
               text?: unknown;
               data?: unknown;
+              zoom?: unknown;
               snapshotJson?: unknown;
               update?: unknown;
               page?: unknown;
@@ -280,7 +283,10 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
         case 'extract-text':
             return typeof r?.text === 'string';
         case 'export':
-            return r?.data instanceof ArrayBuffer;
+            return (
+                r?.data instanceof ArrayBuffer &&
+                (r.zoom === undefined || (typeof r.zoom === 'number' && Number.isFinite(r.zoom) && r.zoom > 0))
+            );
         case 'import':
             switch (request.targetType) {
                 case 'eigendoc':

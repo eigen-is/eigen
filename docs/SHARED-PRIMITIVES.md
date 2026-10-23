@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1884 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1895 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (181)
+## Components (182)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -165,6 +165,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BackgroundFillBlock` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/background-fill-block.tsx |
 | `ColorRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/color-row.tsx |
 | `FontRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/font-row.tsx |
+| `FontSizeRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/font-size-row.tsx |
 | `MergedNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-number-input.tsx |
 | `MergedSelect` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-select.tsx |
 | `MergedSlider` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-slider.tsx |
@@ -532,7 +533,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (422)
+## Types (423)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -867,6 +868,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `RenderOutput` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `SlidePage` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `SlideSize` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `SnapLine` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `SnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
@@ -959,7 +961,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (961)
+## Utilities & constants (970)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1258,6 +1260,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SETUP_LINK_PARAM` | `@workspace/lib/constants` | packages/lib/src/constants/setup.ts |
 | `SIDEBAR_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `SMALL_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `snapFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `SPECIAL_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `specialMailboxFromFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `STALE_TIME` | `@workspace/lib/constants` | packages/lib/src/constants/stale-time.ts |
@@ -1729,10 +1732,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `marqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `materializeFirstPin` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `MAX_ARROW_LABEL_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
+| `MAX_FONT_SIZE_PX` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `MAX_HTML_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
 | `MAX_PATH_BYTES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
 | `MAX_PATH_COMMANDS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
+| `MAX_SLIDE_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `measureLabel` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
+| `MIN_FONT_SIZE_PX` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `MIN_SLIDE_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `moveEndpoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `nearestFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -1781,7 +1788,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readClipboardTypography` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `readElementFromFields` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `readElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
-| `readSlideSize` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
+| `readSlidePage` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `reanchorElements` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `rectOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
@@ -1823,15 +1830,18 @@ rather than inlining `queryClient.invalidateQueries`.
 | `sharpDiamondOffset` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `SLIDE_SIZE_KEYS` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `SLIDE_SIZES` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `slideFontSize` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `slidePtToPx` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
+| `slidePxToPt` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `SLIDES_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `snapBoxToTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
+| `snapSlideFontSize` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `solidFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `storedFields` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `stripEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `STROKE_WIDTH_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `SVG_NS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/render-utils.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1843,6 +1853,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UNBOUND_PIN_CONTEXT` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `unionBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `unpinSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
+| `UNSTORED_SLIDE_WIDTH` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `validateElbowPoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |

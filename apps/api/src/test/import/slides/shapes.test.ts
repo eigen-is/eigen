@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { MAX_PATH_BYTES, type NewVectorElement, SLIDE_SIZES } from '@workspace/lib/vector';
+import { MAX_PATH_BYTES, type NewVectorElement, type SlidePage } from '@workspace/lib/vector';
 import * as customGeometryModule from '../../../lib/import/slides/custom-geometry';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
@@ -29,8 +29,9 @@ import {
 // A slide's shape tree as canvas elements: geometry, groups, kinds, paint, pictures and what is dropped.
 
 const OPTIONS = { maxMediaBytes: 35 * 1024 * 1024 };
-// The frame of a 16:9 deck a file is imported into.
-const WIDE = SLIDE_SIZES['16:9'];
+// The page of a 16:9 and a 4:3 deck a file is imported into.
+const WIDE: SlidePage = { slideSize: '16:9', slideWidth: 720 };
+const STANDARD: SlidePage = { slideSize: '4:3', slideWidth: 720 };
 
 const deckOf = (fixture: PptxFixture) => readPptx(buildPptx(fixture), OPTIONS);
 const elementsOf = (shapes: string, fixture: Partial<PptxFixture> = {}): NewVectorElement[] =>
@@ -51,12 +52,8 @@ function expectBox(found: NewVectorElement | undefined, x: number, y: number, wi
 }
 
 describe('geometry', () => {
-    test("a 16:9 slide fills the frame: 6,350 EMU a px, or the deck's frame an Import gives", () => {
-        const shape = sp({ xfrm: box(100, 50, 400, 200), spPr: FILLED });
-        expectBox(element(shape), 100, 50, 400, 200);
-        const frame = { width: 960, height: 540 };
-        const imported = readPptx(buildPptx({ slides: [{ shapes: shape }] }), { ...OPTIONS, frame });
-        expectBox(imported.slides[0].elements[0], 50, 25, 200, 100);
+    test('a 16:9 slide fills the frame: 6,350 EMU a px', () => {
+        expectBox(element(sp({ xfrm: box(100, 50, 400, 200), spPr: FILLED })), 100, 50, 400, 200);
     });
 
     test("a 4:3 slide is letterboxed into a 16:9 deck's frame, centred, and fills a frame its own size", () => {
@@ -64,13 +61,13 @@ describe('geometry', () => {
             sldSz: '<p:sldSz cx="9144000" cy="6858000"/>',
             slides: [{ shapes: sp({ xfrm: xfrm(0, 0, 9144000, 6858000), spPr: FILLED }) }],
         });
-        expectBox(readPptx(pptx, { ...OPTIONS, frame: WIDE }).slides[0].elements[0], 240, 0, 1440, 1080);
+        expectBox(readPptx(pptx, { ...OPTIONS, deck: WIDE }).slides[0].elements[0], 240, 0, 1440, 1080);
         expectBox(readPptx(pptx, OPTIONS).slides[0].elements[0], 0, 0, 1920, 1440);
     });
 
     test("a 16:9 slide is letterboxed into a 4:3 deck's frame, centred", () => {
         const pptx = buildPptx({ slides: [{ shapes: sp({ xfrm: xfrm(0, 0, 12192000, 6858000), spPr: FILLED }) }] });
-        expectBox(readPptx(pptx, { ...OPTIONS, frame: SLIDE_SIZES['4:3'] }).slides[0].elements[0], 0, 180, 1920, 1080);
+        expectBox(readPptx(pptx, { ...OPTIONS, deck: STANDARD }).slides[0].elements[0], 0, 180, 1920, 1080);
     });
 
     test('a rotation is the angle, and a flip keeps the box: flipH its turn, flipV half a turn more', () => {
@@ -178,7 +175,7 @@ describe('geometry', () => {
                 layouts: [{ shapes: line(-200000) + line(9300000) + line(100000) }],
                 slides: [{ shapes: sp({ xfrm: xfrm(9000000, 0, 400000, 100000), spPr: FILLED }) }],
             }),
-            { ...OPTIONS, frame: WIDE },
+            { ...OPTIONS, deck: WIDE },
         );
         expect(deck.slides[0].elements.map((found) => [found.type, Math.round(found.x ?? Number.NaN)])).toEqual([
             ['line', 256],

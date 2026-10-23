@@ -4,6 +4,7 @@ import {
     DEFAULT_RICHTEXT_PROPS,
     MAX_HTML_BYTES,
     SLIDES_STYLE_DEFAULTS,
+    snapSlideFontSize,
     type TextAlign,
     TRANSPARENT_COLOR,
     type VectorRichTextElement,
@@ -15,7 +16,7 @@ import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlElements, xmlText } from '../../core/xml';
 import { colorOf, fillIn, paintOf, type ShapeProperties, type SlideTheme } from './inherit';
 import { charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
-import { alternative, type Lost } from './package';
+import { alternative, type DeckWalk, type Lost } from './package';
 
 // A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
 // font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and
@@ -99,9 +100,10 @@ type Paragraph = { list: 'ul' | 'ol' | undefined; level: number; runs: Run[]; te
 export function richTextOf(
     source: TextSource,
     theme: SlideTheme,
-    pxPerEmu: number,
+    deck: Pick<DeckWalk, 'scale' | 'slideWidth'>,
     lost: Lost,
 ): RichTextFields | undefined {
+    const pxPerEmu = deck.scale;
     const bodies = bodiesOf(source);
     const shapeLists = bodies.flatMap((body) => body.listStyle ?? []);
     const bodyPrs = bodies.flatMap((body) => body.bodyPr ?? []);
@@ -181,6 +183,8 @@ export function richTextOf(
     const lnSpc = firstOf(first, (pPr) => childOf(pPr, A_NS, 'lnSpc'));
     const spacing = share(lnSpc && attrOf(childOf(lnSpc, A_NS, 'spcPct'), 'val'));
     const points = Number(lnSpc && attrOf(childOf(lnSpc, A_NS, 'spcPts'), 'val'));
+    // Where the box takes it, the run's size is snapped: a 44 pt title shows 44 pt, not 44.000000001.
+    const fontSize = snapSlideFontSize(box.size, deck.slideWidth);
     const inset = (name: string) => {
         const value = emu(bodyAttr(name));
         return value !== undefined && value >= 0 ? value : DEFAULT_SIDE_INSET;
@@ -188,7 +192,7 @@ export function richTextOf(
     return {
         html: htmlOf(paragraphs, marks),
         fontFamily: box.fontFamily,
-        fontSize: box.size,
+        fontSize,
         fontWeight: marks.bold ? 'bold' : 'normal',
         fontStyle: marks.italic ? 'italic' : 'normal',
         textDecoration: marks.underline ? 'underline' : marks.strike ? 'line-through' : 'none',
@@ -199,7 +203,7 @@ export function richTextOf(
         // lnSpcReduction comes off a percentage; a spacing in points is the file's own.
         lineHeight:
             Number.isFinite(points) && points > 0
-                ? ((points / 100) * EMU_PER_POINT * pxPerEmu) / box.size
+                ? ((points / 100) * EMU_PER_POINT * pxPerEmu) / fontSize
                 : SINGLE_LINE * Math.max(0, (spacing ?? 1) - lineReduction),
         padding: ((inset('lIns') + inset('rIns')) / 2) * pxPerEmu,
     };

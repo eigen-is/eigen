@@ -6,7 +6,7 @@ category: Editing
 tags: [slides, styling, fill, stroke, colors, text]
 related: [slides/insert-content, slides/draw-shapes-and-arrows, slides/arrange-and-align]
 order: 50
-updated: 2026-09-11
+updated: 2026-10-23
 ---
 
 Select an object on a slide and the panel on the right fills with its style controls. This page lists every section, top to bottom, and what each control does.
@@ -33,7 +33,7 @@ Shows for a text box. Controls the type itself; the box behind it uses the **Fil
 | Control | What it does |
 |---|---|
 | **Font** | The typeface |
-| **Size** | Font size in points |
+| **Size** | Font size in points. Type a size, or click the minus or plus button to change it by one point; with several text boxes selected, each changes from its own size |
 | **Color** | Text color |
 | **Style** | **Bold**, **Italic**, **Underline**, and **Strikethrough** |
 | **Align** | Left, center, right, or justified |
@@ -43,7 +43,7 @@ Shows for a text box. Controls the type itself; the box behind it uses the **Fil
 
 | Control | What it does |
 |---|---|
-| **Letter** | Space between letters |
+| **Letter** | Space between letters, in points |
 | **Line** | Line height |
 | **Padding** | Inset between the text and the box edge |
 
@@ -92,7 +92,7 @@ The outline of the object.
 | Control | What it does |
 |---|---|
 | **Color** | Outline color |
-| **Width** | Line thickness |
+| **Width** | Line thickness in pixels. Type any number, such as 1.5 |
 | **Style** | **Solid**, **Dashed**, or **Dotted** |
 
 ## Shape

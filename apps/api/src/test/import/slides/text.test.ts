@@ -32,6 +32,9 @@ const THEME: SlideTheme = {
 
 const UNCOUNTED = () => {};
 
+// PowerPoint's widescreen, 13.33 in: 6,350 EMU a px, and a point is 2 px.
+const WIDE_DECK = { scale: 1 / 6350, slideWidth: 960 };
+
 const parse = (xml: string) => {
     const element = parseOoxml(xml);
     if (!element) throw new Error(`not XML: ${xml}`);
@@ -57,7 +60,6 @@ type Source = {
     rels?: Map<string, Relationship>;
 };
 
-// 6,350 EMU a px: a point is 2 px.
 function textOf(paragraphs: string, source: Source = {}) {
     return richTextOf(
         {
@@ -71,7 +73,7 @@ function textOf(paragraphs: string, source: Source = {}) {
             rels: source.rels ?? new Map(),
         },
         THEME,
-        1 / 6350,
+        WIDE_DECK,
         UNCOUNTED,
     );
 }
@@ -416,7 +418,7 @@ describe('the body', () => {
         const found = richTextOf(
             { body: body(autofit), inherited: [], listStyle: undefined, style: undefined, rels: new Map() },
             THEME,
-            1 / 6350,
+            WIDE_DECK,
             UNCOUNTED,
         );
         expect(found?.fontSize).toBe(24);
@@ -431,7 +433,7 @@ describe('the body', () => {
                 rels: new Map(),
             },
             THEME,
-            1 / 6350,
+            WIDE_DECK,
             UNCOUNTED,
         );
         expect(inherited?.fontSize).toBe(24);
@@ -444,7 +446,7 @@ describe('the body', () => {
                 rels: new Map(),
             },
             THEME,
-            1 / 6350,
+            WIDE_DECK,
             UNCOUNTED,
         );
         expect(own?.fontSize).toBe(48);
@@ -485,7 +487,7 @@ describe('a placeholder on a slide', () => {
                     },
                 ],
             }),
-            { frame: { width: 1920, height: 1080 }, maxMediaBytes: 1024 },
+            { maxMediaBytes: 1024 },
         );
         const [title, body] = deck.slides[0].elements;
         expect(title).toMatchObject({
@@ -517,7 +519,7 @@ describe('a text style every paragraph inherits', () => {
         const found = richTextOf(
             { body: txBody(para('x').repeat(1000)), inherited: [], listStyle, style: undefined, rels: new Map() },
             THEME,
-            1 / 6350,
+            WIDE_DECK,
             UNCOUNTED,
         );
         expect(found).toMatchObject({ fontSize: 20, color: '#c0504d', html: expect.stringContaining('<ul><li>') });

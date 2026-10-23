@@ -10,7 +10,7 @@ import {
     isCollabType,
     isConvertSource,
 } from '@workspace/lib/types/drive';
-import { readSlideSize, SLIDE_SIZES } from '@workspace/lib/vector';
+import { readSlidePage } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { enforceMountQuota } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
@@ -69,13 +69,13 @@ function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImpo
 // The upload cap bounds the pictures' inflated bytes too, as an upload of each would be bounded.
 function importPptxUpdate(
     buffer: Buffer,
-    frame: SlidesImportJob['frame'],
+    deck: SlidesImportJob['deck'],
     signal?: AbortSignal,
 ): Promise<SlidesImportWorkerResult & { warnings: TransformWarning[] }> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'pptx');
     return runImportToSlidesUpdate(
-        { kind: 'import', sourceFormat: 'pptx', targetType: 'eigenslides', frame, maxMediaBytes: getMaxUploadSize() },
+        { kind: 'import', sourceFormat: 'pptx', targetType: 'eigenslides', deck, maxMediaBytes: getMaxUploadSize() },
         toTransferableBuffer(buffer),
         { signal },
     );
@@ -184,7 +184,7 @@ export async function convertToDocument(
     }
 
     if (targetType === 'eigenslides') {
-        // No frame: the new deck takes the slide size nearest the file's, so a 4:3 file makes a 4:3 deck.
+        // No deck: the new one takes the slide size nearest the file's and the file's width, so a 4:3 file makes a 4:3 deck.
         const { update, images } = await importPptxUpdate(buffer, undefined);
         // Refused before the create, so a file whose pictures can't fit makes no document; saveDocImages charges again.
         await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
@@ -240,12 +240,12 @@ export async function importIntoDocument(
     }
 
     if (containerMime === DRIVE_MIME_SLIDES) {
-        // Refused before the deck is opened for its frame. A file of another size is fitted into the frame, letterboxed.
+        // Refused before the deck is opened for its page. A file of another size is fitted into its frame, letterboxed.
         // The importer prefixes its picture names per import, so they land beside the deck's media, never over it.
         documentTransformRunner.assertAdmissible('foreground');
         assertWithinByteCap(buffer.byteLength, 'pptx');
-        const frame = SLIDE_SIZES[readSlideSize((await drive.getCollabDocument(path.mountId, path.id)).doc)];
-        const { update, images, warnings } = await importPptxUpdate(buffer, frame, signal);
+        const deck = readSlidePage((await drive.getCollabDocument(path.mountId, path.id)).doc);
+        const { update, images, warnings } = await importPptxUpdate(buffer, deck, signal);
         // Opened again: the last tab leaving during the transform closes the deck, and a write into a closed one is lost.
         // As the docx branch: media before the update that names it, the write check last.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);

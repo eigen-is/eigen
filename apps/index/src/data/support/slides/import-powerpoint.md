@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, import, powerpoint, pptx]
 related: [slides/export-slides, slides/add-slides]
 order: 100
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
 You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in Drive into a new presentation, or import its slides into a presentation you already have open. Its slides come across with their text, shapes, pictures, charts, and backgrounds.
@@ -31,6 +31,7 @@ An **Importing slides** dialog shows while the file imports. Pictures from the f
 ## What comes across
 
 - Every slide, hidden slides included, in the same order. A slide takes its name from its title.
+- The slide size. A converted presentation takes 16:9 or 4:3, whichever is closer to the file's, and keeps the file's width, so a 44 pt title still shows 44 pt. Slides added to an open presentation are fitted to its slides, and their text grows or shrinks with them.
 - Text keeps its bold, italic, underline, color, size, and alignment. Fonts become Eigen's own: a sans-serif font such as Calibri or Arial shows in Inter, a serif font such as Times New Roman in Source Serif 4, and a monospace font such as Courier New in JetBrains Mono.
 - Rectangles, rounded rectangles, ovals, diamonds, pie shapes, lines, and arrows, with their fill and outline.
 - Every other shape, such as a star, a block arrow, a flowchart shape, a map outline, or a freeform drawing, with its fill and outline. You can move, resize, and recolor it like any other shape.

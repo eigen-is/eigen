@@ -5,14 +5,14 @@ type: how-to
 tags: [slides, export, powerpoint, pdf, download]
 related: [slides/get-started, slides/present]
 order: 90
-updated: 2026-10-13
+updated: 2026-10-23
 ---
 
 You can download a presentation as a PowerPoint file, a PDF, or a self-contained web page. All three include every slide and the images you have added. In Drive, right-click the presentation (or click the **⋮** button next to it) and point to **Download** to get the same formats without opening it.
 
 ## Export to PowerPoint
 
-Each slide becomes one slide in the PowerPoint file, with its text, shapes, lines, arrows, images, and background. You can open and edit it in PowerPoint, Google Slides, or LibreOffice Impress.
+Each slide becomes one slide in the PowerPoint file, with its text, shapes, lines, arrows, images, and background. The slides are the size of your presentation's, and text keeps its size in points. You can open and edit it in PowerPoint, Google Slides, or LibreOffice Impress.
 
 1. Open the presentation in Slides.
 2. Click **File** in the toolbar.
@@ -28,7 +28,7 @@ A few things look different in the PowerPoint file:
 
 ## Export to PDF
 
-Each slide becomes one page in the PDF, the shape of your slides: 254 mm × 142.875 mm for 16:9, or 254 mm × 190.5 mm for 4:3.
+Each slide becomes one page in the PDF, the size of your slides. In a new presentation, 13.33 inches wide, that is 338.67 mm × 190.5 mm for 16:9, or 338.67 mm × 254 mm for 4:3. A presentation converted from PowerPoint prints at the file's own width.
 
 1. Open the presentation in Slides.
 2. Click **File** in the toolbar.

@@ -38,10 +38,11 @@ export type InPlaceEditorProps = {
 // and `onChangeEach` a patch computed per element (a label's measured width, an arrow's re-docked
 // route), each in one sealed transact (the panel owns the sealing). `scene` resolves an element the
 // selection does not hold — an arrow's bound shape. `onReplace` swaps a sole selected element for new ones
-// and selects them, one undo step (a chart's Convert to shapes).
+// and selects them, one undo step (a chart's Convert to shapes). `slideWidth` is the deck's, for its pt; a drawing has none.
 export type KindPanelSectionProps = {
     elements: VectorElement[];
     scene: Map<string, VectorElement>;
+    slideWidth?: number;
     onChange: (fields: VectorElementPatch) => void;
     onChangeEach: (patch: (el: VectorElement) => VectorElementPatch) => void;
     onReplace: (elements: NewVectorElement[]) => void;

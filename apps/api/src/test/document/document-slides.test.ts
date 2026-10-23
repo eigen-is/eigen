@@ -4,6 +4,7 @@ import {
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
     serializeBinding,
+    UNSTORED_SLIDE_WIDTH,
     type VectorElement,
     writeElementInDoc,
     writeFrameInDoc,
@@ -61,6 +62,7 @@ const DECK_UPDATE = updateOf((doc) => {
     writeElementInDoc(doc, { type: 'ellipse', frameId: 'u2', ...BOX }, 'a2', SLIDES_STYLE_DEFAULTS, 'e');
     doc.getMap('meta').set('background', '#123456');
     doc.getMap('meta').set('slideSize', '4:3');
+    doc.getMap('meta').set('slideWidth', 960);
 });
 
 // A deck someone already works in: two slides with one element each, and its own background.
@@ -170,7 +172,7 @@ describe('document/slides', () => {
     test('Convert carries the update meta; Import leaves the target meta alone', () => {
         const converted = new Y.Doc();
         writeSlidesUpdateToYjs(converted, DECK_UPDATE);
-        expect(converted.getMap('meta').toJSON()).toEqual({ background: '#123456', slideSize: '4:3' });
+        expect(converted.getMap('meta').toJSON()).toEqual({ background: '#123456', slideSize: '4:3', slideWidth: 960 });
 
         const imported = existingDeck();
         appendSlidesUpdateToYjs(imported, DECK_UPDATE);
@@ -231,7 +233,8 @@ describe('document/slides', () => {
             strokeWidth: 100,
         });
         expect(JSON.stringify(stored)).not.toContain('javascript');
-        expect(target.getMap('meta').toJSON()).toEqual(DEFAULT_SCENE_META);
+        // An update that states no width gives the deck the width of one that stores none.
+        expect(target.getMap('meta').toJSON()).toEqual({ ...DEFAULT_SCENE_META, slideWidth: UNSTORED_SLIDE_WIDTH });
 
         const imported = existingDeck();
         appendSlidesUpdateToYjs(imported, update);

@@ -5,10 +5,16 @@ import {
     elementsInFrame,
     FRAME_FIELDS,
     framesFrom,
+    MAX_SLIDE_WIDTH,
+    MIN_SLIDE_WIDTH,
     nearestFrameId,
     nearestSlideSize,
     pointInFrame,
     SLIDE_SIZES,
+    slideFontSize,
+    slidePtToPx,
+    slidePxToPt,
+    snapSlideFontSize,
     type VectorFrame,
 } from '../../vector/frames';
 import { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
@@ -38,6 +44,40 @@ describe('canvasPxToPt', () => {
         expect(canvasPxToPt(20)).toBe(15);
         expect(canvasPtToPx(15)).toBe(20);
         expect(canvasPtToPx(canvasPxToPt(48))).toBe(48);
+    });
+});
+
+describe("a deck's pt", () => {
+    // Google's 10 in deck is 8/3 px a pt; PowerPoint's 13.33 in widescreen 2.
+    test('converts at the deck width, both ways', () => {
+        expect(slidePtToPx(44, 960)).toBe(88);
+        expect(slidePxToPt(88, 960)).toBe(44);
+        expect(slidePxToPt(slidePtToPx(44, 720), 720)).toBe(44);
+        expect(slidePxToPt(48, 720)).toBe(18);
+    });
+
+    // What the pptx reader computes for Google's 44 pt title: 44 × 12,700 EMU at 1920 / 9,144,000 px an EMU.
+    test('shows a stored px on the half-point grid, in fonts.ts range', () => {
+        expect(slideFontSize(117.33333333333334, 720)).toBe(44);
+        expect(slideFontSize(117.4, 720)).toBe(44);
+        expect(slideFontSize(29, 720)).toBe(11);
+        expect(slideFontSize(28.1, 720)).toBe(10.5);
+        expect(slideFontSize(0.01, 720)).toBe(1);
+        expect(slideFontSize(1e6, 720)).toBe(400);
+    });
+
+    // ST_SlideSizeCoordinate's 1 to 56 in holds both sides of every slide size; a 16:9 height is the short side.
+    test("every deck's p:sldSz is within PowerPoint's 1 to 56 in", () => {
+        for (const { width, height } of Object.values(SLIDE_SIZES)) {
+            expect(slidePxToPt(height, MIN_SLIDE_WIDTH)).toBeGreaterThanOrEqual(72);
+            expect(slidePxToPt(width, MAX_SLIDE_WIDTH)).toBeLessThanOrEqual(4032);
+        }
+        expect(slidePxToPt(SLIDE_SIZES['16:9'].height, MIN_SLIDE_WIDTH)).toBe(72);
+    });
+
+    test("snaps an imported size to the deck's half points", () => {
+        expect(snapSlideFontSize(117.33333333333334, 720)).toBe(slidePtToPx(44, 720));
+        expect(snapSlideFontSize(88.4, 960)).toBe(88);
     });
 });
 

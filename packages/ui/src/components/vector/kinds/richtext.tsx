@@ -4,12 +4,20 @@
 // generic Stroke row; this section is the text itself.
 
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
-import { RICH_TEXT_CLASS, richTextCssText, type VectorRichTextElement } from '@workspace/lib/vector';
+import {
+    RICH_TEXT_CLASS,
+    richTextCssText,
+    round,
+    slidePtToPx,
+    slidePxToPt,
+    type VectorRichTextElement,
+} from '@workspace/lib/vector';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import {
     AlignmentPicker,
     ColorRow,
     FontRow,
+    FontSizeRow,
     getMergedValue,
     isMixed,
     MergedNumberInput,
@@ -87,18 +95,20 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
     );
 }
 
-export function RichTextPanelSection({ elements, onChange }: KindPanelSectionProps) {
+export function RichTextPanelSection({ elements, slideWidth, onChange, onChangeEach }: KindPanelSectionProps) {
     // The panel mounts a kind's section only for a SOLE-kind selection, so this narrows rather than filters.
     const boxes = elements.filter((el): el is VectorRichTextElement => el.type === 'richtext');
     const fontFamily = getMergedValue(boxes, (el) => el.fontFamily);
-    const fontSize = getMergedValue(boxes, (el) => el.fontSize);
     const fontWeight = getMergedValue(boxes, (el) => el.fontWeight);
     const fontStyle = getMergedValue(boxes, (el) => el.fontStyle);
     const textDecoration = getMergedValue(boxes, (el) => el.textDecoration);
     const textAlign = getMergedValue(boxes, (el) => el.textAlign);
     const verticalAlign = getMergedValue(boxes, (el) => el.verticalAlign);
     const color = getMergedValue(boxes, (el) => el.color);
-    const letterSpacing = getMergedValue(boxes, (el) => el.letterSpacing);
+    // A deck's tracking shows in pt, as its font size does and pptx writes it; a drawing's in px. Shown to the
+    // hundredth, stored as typed: a deck's range is a drawing's in px.
+    const shownSpacing = (px: number) => round(slideWidth === undefined ? px : slidePxToPt(px, slideWidth));
+    const letterSpacing = getMergedValue(boxes, (el) => shownSpacing(el.letterSpacing));
     const lineHeight = getMergedValue(boxes, (el) => el.lineHeight);
     const padding = getMergedValue(boxes, (el) => el.padding);
 
@@ -106,15 +116,13 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
         <>
             <PropertySection title="Text">
                 <FontRow value={fontFamily} onChange={(f) => onChange({ fontFamily: f })} />
-                <PropertyRow label="Size">
-                    <MergedNumberInput
-                        value={fontSize}
-                        onChange={(v) => onChange({ fontSize: v })}
-                        min={8}
-                        max={200}
-                        step={1}
-                    />
-                </PropertyRow>
+                <FontSizeRow
+                    sizes={boxes.map((el) => el.fontSize)}
+                    slideWidth={slideWidth}
+                    onChange={(size) =>
+                        onChangeEach((el) => (el.type === 'richtext' ? { fontSize: size(el.fontSize) } : {}))
+                    }
+                />
                 <ColorRow label="Color" value={color} onChange={(c) => onChange({ color: c })} />
                 <PropertyRow label="Style">
                     <div className="flex items-center gap-1">
@@ -198,10 +206,12 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
                 <PropertyRow label="Letter">
                     <MergedNumberInput
                         value={letterSpacing}
-                        onChange={(v) => onChange({ letterSpacing: v })}
+                        onChange={(v) =>
+                            onChange({ letterSpacing: slideWidth === undefined ? v : slidePtToPx(v, slideWidth) })
+                        }
                         step={0.5}
-                        min={-10}
-                        max={50}
+                        min={shownSpacing(-10)}
+                        max={shownSpacing(50)}
                     />
                 </PropertyRow>
                 <PropertyRow label="Line">

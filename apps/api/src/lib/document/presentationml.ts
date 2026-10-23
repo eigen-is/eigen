@@ -1,4 +1,4 @@
-import type { SlideSize } from '@workspace/lib/vector';
+import { type SlideSize, UNSTORED_SLIDE_WIDTH } from '@workspace/lib/vector';
 
 // PowerPoint's vocabulary, which the pptx writer writes and the pptx reader recognises, one source both ways. The OOXML
 // every format shares is core/ooxml.ts.
@@ -8,8 +8,7 @@ export const PML = 'application/vnd.openxmlformats-officedocument.presentationml
 export const PRESENTATION_TYPE = `${PML}.presentation.main+xml`;
 export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
 
-// The EMU size PowerPoint gives each of a deck's slide sizes; a frame's width sets EMU per px.
-export const PPTX_SLIDE_SIZES: Record<SlideSize, { cx: number; cy: number; type?: string }> = {
-    '16:9': { cx: 12_192_000, cy: 6_858_000 },
-    '4:3': { cx: 9_144_000, cy: 6_858_000, type: 'screen4x3' },
-};
+// The on-screen show sizes ST_SlideSizeType names, both 10 in wide, as a deck that stores no width is; a deck of
+// another width, a new one's 13.33 in among them, is custom, the attribute's default, which the writer leaves out.
+export const SCREEN_SLIDE_WIDTH = UNSTORED_SLIDE_WIDTH;
+export const SCREEN_SLIDE_TYPES: Record<SlideSize, string> = { '16:9': 'screen16x9', '4:3': 'screen4x3' };

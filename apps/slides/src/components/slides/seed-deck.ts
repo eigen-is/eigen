@@ -6,6 +6,7 @@
 // both seed it, and the same keys make those two writes converge on one title slide instead of two.
 
 import {
+    DEFAULT_SCENE_META,
     generateKeyBetween,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
@@ -50,6 +51,8 @@ export function seedDeck(doc: Y.Doc): void {
         const index = generateKeyBetween(null, null);
         const background = serializeBackgroundFill({ type: 'solid', color: SEED_BACKGROUND_COLOR });
         writeFrameInDoc(doc, { id: SEED_FRAME_ID, index, background });
+        // A deck that stores no width is an older one (UNSTORED_SLIDE_WIDTH), so a new deck states its own.
+        doc.getMap('meta').set('slideWidth', DEFAULT_SCENE_META.slideWidth);
         writeElementInDoc(
             doc,
             { type: 'richtext', frameId: SEED_FRAME_ID, ...WELCOME },

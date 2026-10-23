@@ -58,6 +58,8 @@ export type DeckWalk = {
     pkg: PptxPackage;
     // The frame's px per EMU, where the slide's origin lands in the frame, and the slide's extent there.
     scale: number;
+    // The deck's width in pt, whose half points a text size snaps to.
+    slideWidth: number;
     offset: { x: number; y: number };
     slide: Frame;
     // Children walked and elements written, each capped: a master's shapes count again for every slide.

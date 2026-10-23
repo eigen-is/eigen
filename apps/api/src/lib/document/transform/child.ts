@@ -17,6 +17,7 @@ import {
     type ExportMedia,
     type ExportMediaLoader,
     type ExportTransformJob,
+    type ExportWorkerResult,
     type ImportTransformJob,
     type ParentMediaReply,
     type PreviewResult,
@@ -59,7 +60,7 @@ async function renderExport(
     request: ExportTransformJob,
     doc: Y.Doc,
     loadMedia: ExportMediaLoader,
-): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
+): Promise<ExportWorkerResult & { warnings: TransformWarning[] }> {
     switch (request.documentType) {
         case 'eigensheets': {
             const { renderEigensheetsExport } = await import('../../export/sheets/transform');
@@ -163,8 +164,8 @@ async function renderCollabRequest(
             return { result, warnings };
         }
         case 'export': {
-            const { data, warnings } = await renderExport(request, doc, loadMedia);
-            return { result: { data }, warnings };
+            const { warnings, ...result } = await renderExport(request, doc, loadMedia);
+            return { result, warnings };
         }
         case 'extract-text': {
             const { extractCollabText } = await import('../../search/extract-render');
