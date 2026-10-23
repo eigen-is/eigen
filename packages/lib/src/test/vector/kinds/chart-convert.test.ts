@@ -62,17 +62,17 @@ describe('chartToElements', () => {
     test('a column chart: bars, swatches and the background are rectangles, rules lines, labels rich text', () => {
         const elements = chartToElements(chart({ id: 'c1', fill: SOLID }));
         expect(typesById(elements, 'background')).toEqual(['rectangle']);
-        expect(typesById(elements, 'bar:')).toEqual(Array(8).fill('rectangle'));
-        expect(typesById(elements, 'legend:')).toEqual(['rectangle', 'rectangle']);
+        expect(typesById(elements, 'bar:')).toEqual(Array(18).fill('rectangle'));
+        expect(typesById(elements, 'legend:')).toEqual(['rectangle', 'rectangle', 'rectangle']);
         expect(typesById(elements, 'baseline')).toEqual(['line']);
         expect(typesById(elements, 'gridline:').length).toBeGreaterThan(2);
         expect(new Set(typesById(elements, 'gridline:'))).toEqual(new Set(['line']));
-        expect(labelsOf(elements).map((el) => el.html)).toContain('<p>Points scored</p>');
+        expect(labelsOf(elements).map((el) => el.html)).toContain('<p>Where a star&#39;s light goes</p>');
     });
 
     test('a bar chart draws its bars as rectangles too', () => {
         const elements = chartToElements(chart({ id: 'c1', chart: specJson('bar') }));
-        expect(typesById(elements, 'bar:')).toEqual(Array(8).fill('rectangle'));
+        expect(typesById(elements, 'bar:')).toEqual(Array(18).fill('rectangle'));
     });
 
     test('a line chart: one line per series, an ellipse per marker', () => {
@@ -82,13 +82,13 @@ describe('chartToElements', () => {
         const elements = chartToElements(
             chart({ id: 'c1', chart: specJson('line', { data: { ...spec.data, series } }) }),
         );
-        expect(typesById(elements, 'line:')).toEqual(['line', 'line']);
-        expect(typesById(elements, 'marker:')).toEqual(Array(8).fill('ellipse'));
+        expect(typesById(elements, 'line:')).toEqual(['line', 'line', 'line']);
+        expect(typesById(elements, 'marker:')).toEqual(Array(18).fill('ellipse'));
     });
 
     test('a pie chart: one pie element per slice', () => {
         const elements = chartToElements(chart({ id: 'c1', chart: specJson('pie') }));
-        expect(typesById(elements, 'slice:')).toEqual(Array(4).fill('pie'));
+        expect(typesById(elements, 'slice:')).toEqual(Array(6).fill('pie'));
         expect(labelsOf(elements).length).toBeGreaterThan(4);
     });
 

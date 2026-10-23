@@ -48,8 +48,8 @@ describe('renderChartSpecSvg', () => {
             svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="371" viewBox="0 0 600 371">'),
         ).toBe(true);
         expect(svg.endsWith('</svg>')).toBe(true);
-        expect(svg).toContain('Points scored');
-        expect(svg).toContain('Team 4');
+        expect(svg).toContain('Where a star&apos;s light goes');
+        expect(svg).toContain('IR-B/C');
     });
 
     test('each shape draws as its own element would', () => {

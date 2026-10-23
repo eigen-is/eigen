@@ -129,7 +129,7 @@ test('a title typed into the panel is one undo step, and the chart stays selecte
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
 
     undoManager.undo();
-    expect(spec()?.title).toBe('Points scored');
+    expect(spec()?.title).toBe("Where a star's light goes");
 });
 
 // The field still holds the caret after typing, so ⌘Z reaches the field, not the editor's keymap. The browser's own
@@ -200,17 +200,17 @@ test("a Style toggle wraps the chart in one undo step and lights it, the spec's 
 
 test("the sample's colors are Automatic, and a picked color and a Stacking pick are one undo step each", async () => {
     const { undoManager, spec } = await mount();
-    expect(row('Period 1').textContent).toBe('Automatic');
-    expect(row('Period 2').textContent).toBe('Automatic');
+    expect(row('Sun').textContent).toBe('Automatic');
+    expect(row('Bulb').textContent).toBe('Automatic');
 
-    await click(row('Period 2').querySelector('button') ?? document.body);
+    await click(row('Bulb').querySelector('button') ?? document.body);
     const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
     if (!swatch) throw new Error('the color popover has no swatch');
     await click(swatch);
     const picked = spec();
-    expect(picked?.data.series.map((series) => series.color)).toEqual([null, swatch.title]);
+    expect(picked?.data.series.map((series) => series.color)).toEqual([null, swatch.title, null]);
     undoManager.undo();
-    expect(spec()?.data.series.map((series) => series.color)).toEqual([null, null]);
+    expect(spec()?.data.series.map((series) => series.color)).toEqual([null, null, null]);
 
     await choose('Stacking', '100%');
     expect(spec()?.stacking).toBe('percent');
@@ -229,7 +229,7 @@ test('Edit data saves the grid as one undo step', async () => {
 
     undoManager.undo();
     const undone = spec();
-    expect(undone?.data.source === 'inline' && undone.data.series[0].values[0]).toBe(42);
+    expect(undone?.data.source === 'inline' && undone.data.series[0].values[0]).toBe(12.2);
 });
 
 // A section's row control, beside its label span: the panel has several Style rows.

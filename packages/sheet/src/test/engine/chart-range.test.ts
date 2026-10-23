@@ -200,6 +200,19 @@ describe('suggestChartSpec', () => {
         expect(spec.fontFamily).toBe('Inter');
     });
 
+    test("starts from the default look, not Insert → Chart's sample, so no sample axis title carries over", () => {
+        const spec = suggestChartSpec(ref([0, 3], [0, 3]), resolver);
+        if (typeof spec === 'string') throw new Error(spec);
+        expect(spec.valueAxis).toEqual({
+            title: '',
+            min: null,
+            max: null,
+            gridlines: true,
+            format: null,
+            visible: true,
+        });
+    });
+
     test('one or two series titles read naturally, unnamed series leave it empty', () => {
         expect(suggestChartSpec(ref([0, 3], [0, 1]), resolver)).toMatchObject({ title: 'North' });
         expect(suggestChartSpec(ref([0, 3], [0, 2]), resolver)).toMatchObject({ title: 'North and South' });

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     chartColor,
     chartPointCount,
+    defaultChartPresentation,
     formatTickValue,
     layoutChart,
     layoutChartMessage,
@@ -42,6 +43,12 @@ const style = { markers: false, smooth: false };
 function series(name: string, values: (number | null)[], color: string | null = '#2a78d6') {
     return { ...style, color, name, values };
 }
+
+// The sample without its axis titles, for tests that measure the room left to the plot and its labels.
+const UNTITLED: Partial<ChartSpec> = {
+    categoryAxis: defaultChartPresentation('column').categoryAxis,
+    valueAxis: defaultChartPresentation('column').valueAxis,
+};
 
 type Options = { data?: ChartData; width?: number; height?: number; paint?: Partial<ChartPaint> };
 
@@ -148,8 +155,8 @@ describe('layoutChart invariants', () => {
             const spec: Partial<ChartSpec> = {
                 legend,
                 stacking,
-                categoryAxis: { ...sampleChartSpec('column').categoryAxis, title: 'Teams' },
-                valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
+                categoryAxis: { ...defaultChartPresentation('column').categoryAxis, title: 'Teams' },
+                valueAxis: { ...defaultChartPresentation('column').valueAxis, title: 'Points' },
             };
             const out = layout(type, spec, { width, height });
 
@@ -223,7 +230,7 @@ describe('layoutChart invariants', () => {
         }
         expect(
             ofPart(
-                layout('column', { valueAxis: { ...sampleChartSpec('column').valueAxis, gridlines: false } }),
+                layout('column', { valueAxis: { ...defaultChartPresentation('column').valueAxis, gridlines: false } }),
                 'gridline',
             ),
         ).toEqual([]);
@@ -241,7 +248,7 @@ describe('layoutChart invariants', () => {
     test('text sizes scale with the box, the title bold and larger', () => {
         const small = layout('column', {}, { width: 320, height: 200 });
         const large = layout('column', {}, { width: 1200, height: 675 });
-        const title = (out: ChartLayout) => out.labels.find((label) => label.text === 'Points scored');
+        const title = (out: ChartLayout) => out.labels.find((label) => label.text === "Where a star's light goes");
         const tick = (out: ChartLayout) => out.labels.find((label) => label.text === '0');
         expect(title(large)?.fontSize).toBeGreaterThan(title(small)?.fontSize ?? Infinity);
         expect(title(large)?.bold).toBe(true);
@@ -254,7 +261,7 @@ describe('layoutChart invariants', () => {
         // Narrow in Inter, a full cell each in a monospace face.
         const data = { categories: ['illicit', 'iii'], series: [series('S', [3, 5])] };
         const bar = (fontFamily: string) => {
-            const out = layout('bar', { fontFamily }, { data });
+            const out = layout('bar', { ...UNTITLED, fontFamily }, { data });
             expect(out.labels.every((label) => label.fontFamily === fontFamily)).toBe(true);
             const names = out.labels.filter((label) => data.categories.includes(label.text));
             const widest = Math.max(...names.map((l) => measureLabel(l.text, fontFamily, l.fontSize, l.bold)));
@@ -362,7 +369,7 @@ describe('column and bar', () => {
         const data: ChartData = { categories: ['A'], series: [series('S1', [1]), series('S2', [3], '#eb6834')] };
         const out = layout(
             'column',
-            { stacking: 'percent', valueAxis: { ...sampleChartSpec('column').valueAxis, max: 0.5 } },
+            { stacking: 'percent', valueAxis: { ...defaultChartPresentation('column').valueAxis, max: 0.5 } },
             { data },
         );
         const ticks = out.labels.filter((label) => label.anchor === 'end').map((label) => label.text);
@@ -408,7 +415,7 @@ describe('column and bar', () => {
         const out = layout(
             'column',
             {
-                valueAxis: { ...sampleChartSpec('column').valueAxis, min: 10, max: 30 },
+                valueAxis: { ...defaultChartPresentation('column').valueAxis, min: 10, max: 30 },
             },
             { data },
         );
@@ -426,7 +433,7 @@ describe('column and bar', () => {
 
     test('tick count follows the axis length', () => {
         const count = (height: number) => lines(layout('column', {}, { height, width: 640 }), 'gridline').length;
-        expect(count(800)).toBeGreaterThan(count(250));
+        expect(count(1200)).toBeGreaterThan(count(250));
     });
 
     // A peer stores the box, so a huge one must not mean huge work. formatTick runs once per tick of
@@ -494,8 +501,8 @@ describe('category labels', () => {
 
     test('fit under their band upright', () => {
         const out = layout('column');
-        for (const team of ['Team 1', 'Team 2', 'Team 3', 'Team 4']) {
-            expect(out.labels.find((label) => label.text === team)?.rotate).toBe(0);
+        for (const band of ['UV', 'Blue', 'Green', 'Red', 'IR-A', 'IR-B/C']) {
+            expect(out.labels.find((label) => label.text === band)?.rotate).toBe(0);
         }
     });
 
@@ -547,15 +554,15 @@ describe('category labels', () => {
 
     test('axis titles: the category title below, the value title turned -90', () => {
         const out = layout('column', {
-            categoryAxis: { ...sampleChartSpec('column').categoryAxis, title: 'Teams' },
-            valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
+            categoryAxis: { ...defaultChartPresentation('column').categoryAxis, title: 'Teams' },
+            valueAxis: { ...defaultChartPresentation('column').valueAxis, title: 'Points' },
         });
         const teams = out.labels.find((label) => label.text === 'Teams');
         const points = out.labels.find((label) => label.text === 'Points');
         expect(teams?.rotate).toBe(0);
         expect(points?.rotate).toBe(-90);
-        const team1 = out.labels.find((label) => label.text === 'Team 1');
-        expect(teams && team1 && teams.y > team1.y).toBe(true);
+        const uv = out.labels.find((label) => label.text === 'UV');
+        expect(teams && uv && teams.y > uv.y).toBe(true);
     });
     // Thin bands put a centered name's half line past the plot's ends.
     test("a bar chart's crowded names stay below the title or legend and above the value labels", () => {
@@ -570,7 +577,7 @@ describe('category labels', () => {
             ],
         };
         for (const legend of ['none', 'top'] as const) {
-            const out = layout('bar', { legend }, { data });
+            const out = layout('bar', { ...UNTITLED, legend }, { data });
             const above = out.labels.filter((label) => label.bold || label.anchor === 'start').map(labelBounds);
             const ticks = out.labels.filter((label) => label.anchor === 'middle' && !label.bold).map(labelBounds);
             const names = out.labels.filter((label) => label.anchor === 'end').map(labelBounds);
@@ -592,7 +599,7 @@ describe('axes', () => {
     };
     type AxesPatch = { category?: Partial<ChartSpec['categoryAxis']>; value?: Partial<ChartSpec['valueAxis']> };
     function axes(type: ChartType, { category = {}, value = {} }: AxesPatch): Partial<ChartSpec> {
-        const spec = sampleChartSpec(type);
+        const spec = defaultChartPresentation(type);
         return {
             categoryAxis: { ...spec.categoryAxis, ...category },
             valueAxis: { ...spec.valueAxis, ...value },
@@ -728,13 +735,13 @@ describe('legend', () => {
     test('top and bottom are a centered row of swatches, left and right a column', () => {
         const top = layout('column', { legend: 'top' });
         const swatches = rects(top, 'legend');
-        expect(swatches.map((swatch) => swatch.fill)).toEqual([solidFill(chartColor(0)), solidFill(chartColor(1))]);
+        expect(swatches.map((swatch) => swatch.fill)).toEqual([0, 1, 2].map((i) => solidFill(chartColor(i))));
         expect(swatches[0].y).toBeCloseTo(swatches[1].y);
         const titleBottom = Math.max(...top.labels.filter((l) => l.bold).map((l) => labelBounds(l).bottom));
         expect(swatches[0].y).toBeGreaterThan(titleBottom);
         const left = swatches[0].x;
-        const period2 = top.labels.find((label) => label.text === 'Period 2');
-        const right = (period2?.x ?? 0) + measureLabel('Period 2', 'Inter', period2?.fontSize ?? 0, false);
+        const last = top.labels.find((label) => label.text === 'Hot star');
+        const right = (last?.x ?? 0) + measureLabel('Hot star', 'Inter', last?.fontSize ?? 0, false);
         expect((left + right) / 2).toBeCloseTo(320, -1);
 
         const bottom = rects(layout('column', { legend: 'bottom' }), 'legend');
@@ -824,10 +831,10 @@ describe('pie', () => {
     test("slices sweep their share clockwise from 12 o'clock and sum to 360", () => {
         const out = layout('pie');
         const pie = slices(out);
-        expect(pie).toHaveLength(4);
+        expect(pie).toHaveLength(6);
         expect(pie[0].startAngle).toBe(270);
         expect(pie.reduce((sum, slice) => sum + slice.sweepAngle, 0)).toBeCloseTo(360);
-        expect(pie[0].sweepAngle).toBeCloseTo((42 / 225) * 360);
+        expect(pie[0].sweepAngle).toBeCloseTo((12.2 / 100) * 360);
         for (let i = 1; i < pie.length; i++) {
             expect(pie[i].startAngle).toBeCloseTo((pie[i - 1].startAngle + pie[i - 1].sweepAngle) % 360);
         }
@@ -843,7 +850,9 @@ describe('pie', () => {
         expect(pie[1].fill).toBe(solidFill(chartColor(1)));
         const automatic = slices(layout('pie', { sliceColors: [null, '#000000'] }));
         expect(automatic.map((slice) => slice.fill)).toEqual(
-            [chartColor(0), '#000000', chartColor(2), chartColor(3)].map((color) => solidFill(color)),
+            [chartColor(0), '#000000', chartColor(2), chartColor(3), chartColor(4), chartColor(5)].map((color) =>
+                solidFill(color),
+            ),
         );
     });
 
@@ -979,7 +988,7 @@ describe('edge cases', () => {
         const column = layout('column', { title: '', legend: 'none' }, { data: one([61]), width: 400, height: 2000 });
         expect(valueTicks(column).length).toBeGreaterThan(10);
         expect(valueTicks(column).length).toBeLessThanOrEqual(20);
-        const pinned = { ...sampleChartSpec('column').valueAxis, min: 10, max: 30 };
+        const pinned = { ...defaultChartPresentation('column').valueAxis, min: 10, max: 30 };
         const fixed = layout('column', { valueAxis: pinned }, { data: one([20]), width: 400, height: 2000 });
         expect(valueTicks(fixed).length).toBeLessThanOrEqual(20);
     });
@@ -1048,8 +1057,8 @@ describe('edge cases', () => {
     });
 
     test('pinned bounds: exact decimal labels, and a min past the data draws a finite empty plot', () => {
-        const axis = { ...sampleChartSpec('column').valueAxis, min: 0.1, max: 0.7 };
-        expect(valueTicks(layout('column', { valueAxis: axis }, { data: one([0.3, 0.5]) }))).toEqual([
+        const axis = { ...defaultChartPresentation('column').valueAxis, min: 0.1, max: 0.7 };
+        expect(valueTicks(layout('column', { ...UNTITLED, valueAxis: axis }, { data: one([0.3, 0.5]) }))).toEqual([
             '0.1',
             '0.2',
             '0.3',
@@ -1162,7 +1171,7 @@ describe('outlines follow the fill style', () => {
     });
 
     test.each(['hachure', 'cross-hatch', 'zigzag'] as const)('%s outlines each in its own color', (fillStyle) => {
-        const colors = [chartColor(0), chartColor(1)];
+        const colors = [chartColor(0), chartColor(1), chartColor(2)];
         const column = layout('column', legend, { paint: { fillStyle, strokeWidth: 4 } });
         const bars = rects(column, 'bar');
         expect(new Set(bars.map((bar) => bar.strokeColor))).toEqual(new Set(colors));

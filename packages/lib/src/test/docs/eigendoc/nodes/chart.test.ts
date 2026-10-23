@@ -64,8 +64,8 @@ describe('chart HTML', () => {
         expect(span?.getAttribute('data-width')).toBe('480');
         expect(span?.getAttribute('data-height')).toBe('300');
         const img = span?.querySelector('img');
-        expect(img?.getAttribute('alt')).toBe('Points scored');
-        expect(decodeURIComponent(img?.getAttribute('src') ?? '')).toContain('>Team 1</text>');
+        expect(img?.getAttribute('alt')).toBe("Where a star's light goes");
+        expect(decodeURIComponent(img?.getAttribute('src') ?? '')).toContain('>UV</text>');
         expect(chartsIn(html)).toHaveLength(1);
         let figures = 0;
         createDocument(html, getSchema(extensions)).descendants((node) => {
@@ -188,7 +188,7 @@ describe('insertChart', () => {
             content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] },
         });
 
-    test("inserts Google's sample at the caret at the default size, and selects it", () => {
+    test('inserts the sample at the caret at the default size, and selects it', () => {
         const editor = editorWith('ab');
         editor.commands.setTextSelection(2);
         expect(editor.commands.insertChart('bar')).toBe(true);

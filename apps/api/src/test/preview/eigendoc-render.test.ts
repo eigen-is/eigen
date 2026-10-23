@@ -69,7 +69,7 @@ describe('renderEigendocPreviewBody', () => {
             content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { spec, width: 480, height: 300 } }] }],
         });
         expect(body).toContain('<span class="figure" data-layout="block" data-alignment="center"><svg');
-        expect(body).toMatch(/<text[^>]*>Team 1<\/text>/);
+        expect(body).toMatch(/<text[^>]*>UV<\/text>/);
     });
 
     test('the golden document keeps its media and its hyperlink', () => {

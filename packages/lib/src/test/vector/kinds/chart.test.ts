@@ -227,26 +227,24 @@ describe('chart painter', () => {
 
 describe('chart text', () => {
     test('searchText is the title, axis titles, series names and categories', () => {
-        const el = chart({
-            id: 'c1',
-            chart: specJson({
-                categoryAxis: { ...sampleChartSpec('column').categoryAxis, title: 'Teams' },
-                valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
-            }),
-        });
-        expect(ELEMENT_KINDS.chart.searchText(el).split('\n')).toEqual([
-            'Points scored',
-            'Teams',
-            'Points',
-            'Period 1',
-            'Period 2',
-            'Team 1',
-            'Team 2',
-            'Team 3',
-            'Team 4',
+        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: specJson() })).split('\n')).toEqual([
+            "Where a star's light goes",
+            'Wavelength',
+            'Share of light (%)',
+            'Sun',
+            'Bulb',
+            'Hot star',
+            'UV',
+            'Blue',
+            'Green',
+            'Red',
+            'IR-A',
+            'IR-B/C',
         ]);
         expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: 'nope' }))).toBe('');
-        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: RANGE_SPEC }))).toBe('Points scored\nSales');
+        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: RANGE_SPEC }))).toBe(
+            "Where a star's light goes\nWavelength\nShare of light (%)\nSales",
+        );
     });
 
     test('a chart draws its labels in the font of its spec, and none for a placeholder', () => {

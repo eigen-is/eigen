@@ -109,7 +109,7 @@ test('writes inside a panel gesture undo and redo as one step, and the next writ
     await step((w) => w.undo());
     expect(title()).toBe('Sco');
     await step((w) => w.undo());
-    expect(title()).toBe('Points scored');
+    expect(title()).toBe("Where a star's light goes");
     await step((w) => w.redo());
     expect(title()).toBe('Sco');
 });
@@ -132,7 +132,7 @@ test('a field typed key by key in a gesture keeps one forward and one inverse wr
     const title = () => JSON.parse(charts()?.[id]?.spec ?? '{}').title;
 
     await step((w) => w.undo());
-    expect(title()).toBe('Points scored');
+    expect(title()).toBe("Where a star's light goes");
     expect(sent.at(-1)).toHaveLength(1);
     await step((w) => w.redo());
     expect(title()).toBe(typed.slice(0, 40));

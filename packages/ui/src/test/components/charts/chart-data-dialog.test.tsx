@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
     chartColor,
+    DEFAULT_CHART_SERIES_STYLE,
+    defaultChartPresentation,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     MAX_CHART_LABEL_LENGTH,
-    sampleChartSpec,
 } from '@workspace/lib/charts';
 import type { ChartSpec, InlineChartData } from '@workspace/lib/types/chart';
 import { installHappyDom } from '../../happy-dom';
@@ -20,16 +21,28 @@ const style = { markers: false, smooth: false };
 
 type InlineSpec = ChartSpec & { data: InlineChartData };
 
-// The sample: series Period 1 and Period 2 across row 1, Team 1 to Team 4 down column A.
-function sample(type: 'column' | 'pie' = 'column'): InlineSpec {
-    const spec = sampleChartSpec(type);
-    if (spec.data.source !== 'inline') throw new Error('the sample is inline');
-    return { ...spec, data: spec.data };
+// The grid's own data, not Insert → Chart's sample: series Period 1 and Period 2 across row 1, Team 1 to Team 4
+// down column A, A1 empty. A pie keeps the first series, as a new pie does.
+function scores(type: 'column' | 'pie' = 'column'): InlineSpec {
+    const periods = [
+        { ...DEFAULT_CHART_SERIES_STYLE, name: 'Period 1', values: [42, 65, 38, 80] },
+        { ...DEFAULT_CHART_SERIES_STYLE, name: 'Period 2', values: [58, 47, 71, 63] },
+    ];
+    return {
+        ...defaultChartPresentation(type),
+        type,
+        title: 'Points scored',
+        data: {
+            source: 'inline',
+            categories: ['Team 1', 'Team 2', 'Team 3', 'Team 4'],
+            series: type === 'pie' ? periods.slice(0, 1) : periods,
+        },
+    };
 }
 
 function grid(seriesCount: number, rows: number): InlineSpec {
     return {
-        ...sample(),
+        ...scores(),
         data: {
             source: 'inline',
             categories: Array.from({ length: rows }, (_, i) => `C${i}`),
@@ -210,7 +223,7 @@ async function open(spec: InlineSpec) {
 
 describe('ChartDataDialog: the grid', () => {
     test("opens as a sheet of the chart's data: series across row 1, categories down column A", async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         expect([dialog.cell(0, 1).textContent, dialog.cell(0, 2).textContent]).toEqual(['Period 1', 'Period 2']);
         expect(dialog.cell(1, 0).textContent).toBe('Team 1');
         expect(dialog.cell(1, 1).textContent).toBe('42');
@@ -225,7 +238,7 @@ describe('ChartDataDialog: the grid', () => {
     });
 
     test('empty rows fill the view and more come as it scrolls, up to the category limit', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.scroll(0, 400);
         // Two views' worth of 20px rows, so there is always more to scroll into.
         expect(dialog.shown()).toEqual({ rows: 40, columns: INLINE_GRID_MAX_SERIES + 1 });
@@ -236,7 +249,7 @@ describe('ChartDataDialog: the grid', () => {
     });
 
     test('the cell editor names the cell and what it holds; the corner is a column header', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(1, 1);
         expect(dialog.editor().getAttribute('aria-label')).toBe('B2: 42');
         await dialog.select(5, 1);
@@ -246,7 +259,7 @@ describe('ChartDataDialog: the grid', () => {
     });
 
     test('the selected cell highlights its row and column headers; Shift extends a range', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(2, 1);
         expect(dialog.editor().getAttribute('aria-label')).toBe('B3: 65');
         expect(dialog.highlighted('columnheader')).toEqual(['B']);
@@ -262,7 +275,7 @@ describe('ChartDataDialog: the grid', () => {
 
     // The header of the categories column, as in Google.
     test('A1 shows the category axis title and types it', async () => {
-        const dialog = await open({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Teams' } });
+        const dialog = await open({ ...scores(), categoryAxis: { ...scores().categoryAxis, title: 'Teams' } });
         expect(dialog.cell(0, 0).textContent).toBe('Teams');
         expect(dialog.editor().getAttribute('aria-label')).toBe('A1: Teams');
         await dialog.type('Squads');
@@ -272,23 +285,23 @@ describe('ChartDataDialog: the grid', () => {
     });
 
     test("Save leaves a peer's category axis title alone when A1 did not change", async () => {
-        const dialog = await open({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Teams' } });
-        await dialog.rerender({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Squads' } });
+        const dialog = await open({ ...scores(), categoryAxis: { ...scores().categoryAxis, title: 'Teams' } });
+        await dialog.rerender({ ...scores(), categoryAxis: { ...scores().categoryAxis, title: 'Squads' } });
         await dialog.select(1, 1);
         await dialog.type('7');
         expect((await dialog.save()).categoryAxis.title).toBe('Squads');
     });
 
     test('Save writes the grid once, Cancel nothing', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.click(dialog.button('Cancel'));
         expect(dialog.saved).toEqual([]);
         expect(dialog.openChanges).toEqual([false]);
 
-        const again = await open(sample());
+        const again = await open(scores());
         const spec = await again.save();
         expect(again.saved).toHaveLength(1);
-        expect(spec.data).toEqual(sample().data);
+        expect(spec.data).toEqual(scores().data);
         expect(spec.title).toBe('Points scored');
     });
 
@@ -305,7 +318,7 @@ describe('ChartDataDialog: the grid', () => {
 
 describe('ChartDataDialog: the keyboard is Sheets', () => {
     test('typing replaces the cell; Enter commits and moves down', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(1, 1);
         await dialog.type('7');
         await dialog.type('75');
@@ -318,7 +331,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
     });
 
     test('Tab commits and moves right, Shift+Tab left; arrows move', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(0, 1);
         await dialog.type('First half');
         await dialog.key('Tab');
@@ -334,7 +347,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
     });
 
     test('an arrow commits a typed cell and moves', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(1, 0);
         await dialog.type('Blues');
         await dialog.key('ArrowDown');
@@ -343,7 +356,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
     });
 
     test('F2 and a double-click edit in place, keeping the value', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(1, 1);
         await dialog.key('F2');
         expect(dialog.editor().value).toBe('42');
@@ -359,7 +372,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
     });
 
     test('Escape cancels the edit and leaves the dialog open; a second Escape closes it', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(1, 1);
         await dialog.type('99');
         await dialog.key('Escape');
@@ -371,7 +384,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
     });
 
     test('Delete and Backspace clear the selected cells to gaps', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(1, 1);
         await dialog.key('ArrowDown', { shiftKey: true });
         await dialog.key('ArrowRight', { shiftKey: true });
@@ -385,7 +398,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
     });
 
     test('a row header selects the row, and Delete removes it with its slice color', async () => {
-        const pie = { ...sample('pie'), sliceColors: ['#000001', '#000002', '#000003', '#000004'] };
+        const pie = { ...scores('pie'), sliceColors: ['#000001', '#000002', '#000003', '#000004'] };
         const dialog = await open(pie);
         await dialog.mouseDown(dialog.rowHeader('3'));
         expect(dialog.highlighted('columnheader')).toEqual(
@@ -398,7 +411,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
     });
 
     test('a column header selects the column, and Delete removes its series', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.mouseDown(dialog.columnHeader('B'));
         expect(dialog.highlighted('rowheader')).toEqual(['1', '2', '3', '4', '5', '6']);
         await dialog.key('Delete');
@@ -406,7 +419,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
     });
 
     test('⌘C copies the selection as TSV and an HTML table', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(0, 0);
         await dialog.key('ArrowRight', { shiftKey: true });
         await dialog.key('ArrowDown', { shiftKey: true });
@@ -420,7 +433,7 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
 
 describe('ChartDataDialog: growing the grid', () => {
     test('typing in the trailing row adds a category with gaps and an automatic slice color', async () => {
-        const dialog = await open(sample('pie'));
+        const dialog = await open(scores('pie'));
         await dialog.select(5, 0);
         await dialog.type('Team 5');
         await dialog.key('Enter');
@@ -433,7 +446,7 @@ describe('ChartDataDialog: growing the grid', () => {
     });
 
     test('typing in the trailing column adds a series in an automatic color', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(2, 3);
         await dialog.type('5');
         await dialog.key('Enter');
@@ -447,7 +460,7 @@ describe('ChartDataDialog: growing the grid', () => {
     });
 
     test('a trailing cell left empty adds nothing', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(5, 0);
         await dialog.key('F2');
         await dialog.key('Enter');
@@ -456,7 +469,7 @@ describe('ChartDataDialog: growing the grid', () => {
     });
 
     test('typing further down adds the rows between as gaps', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.scroll(0, 400);
         await dialog.select(9, 0);
         await dialog.type('Team 9');
@@ -481,7 +494,7 @@ describe('ChartDataDialog: growing the grid', () => {
     });
 
     test('a value that is not a number is flagged and keeps Save off', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.select(1, 1);
         await dialog.type('lots');
         await dialog.key('Enter');
@@ -504,14 +517,14 @@ describe('ChartDataDialog: growing the grid', () => {
 
 describe('ChartDataDialog: numbers as Sheets shows them', () => {
     test('grouping, a leading currency symbol and a trailing percent read as numbers', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.paste(1, 1, { 'text/plain': '$1,234.00\n1,234\n12%\n-€5.5' });
         expect(dialog.button('Save').disabled).toBe(false);
         expect((await dialog.save()).data.series[0].values).toEqual([1234, 1234, 0.12, -5.5]);
     });
 
     test('a percent is its share without float noise, and an exponent reads', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         // 33.3 / 100 is 0.33299999999999996 in floating point.
         await dialog.paste(1, 1, { 'text/plain': '33.3%\n1.5E3\n-2e-2' });
         expect((await dialog.save()).data.series[0].values.slice(0, 3)).toEqual([0.333, 1500, -0.02]);
@@ -519,7 +532,7 @@ describe('ChartDataDialog: numbers as Sheets shows them', () => {
 
     test('anything else is still flagged', async () => {
         for (const text of ['1,23', '12%%', '$', '1.2.3', '12 apples', '%5', '0x10', '0b11', '$0x10', '0x10%']) {
-            const dialog = await open(sample());
+            const dialog = await open(scores());
             await dialog.paste(1, 1, { 'text/plain': text });
             expect(dialog.button('Save').disabled).toBe(true);
         }
@@ -528,7 +541,7 @@ describe('ChartDataDialog: numbers as Sheets shows them', () => {
 
 describe('ChartDataDialog: paste fits the grid', () => {
     test('pasted TSV fills from the active cell and grows the grid', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.paste(1, 1, { 'text/plain': '1\t2\t3\n4\t5\t6\n7\t8\t9\n10\t11\t12\n13\t14\t15\n' });
         expect(dialog.shown().rows).toBe(7);
         await dialog.paste(0, 1, { 'text/plain': 'A\tB\tC' });
@@ -540,7 +553,7 @@ describe('ChartDataDialog: paste fits the grid', () => {
     });
 
     test("a spreadsheet's HTML table pastes when its plain text has no tabs", async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.paste(0, 0, {
             'text/plain': 'MonthNorthJan10',
             'text/html': '<table><tr><td></td><td>North</td></tr><tr><td>Jan</td><td>10</td></tr></table>',
@@ -551,7 +564,7 @@ describe('ChartDataDialog: paste fits the grid', () => {
     });
 
     test("a Docs table pastes as its HTML table, not as its plain text's lines", async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.paste(0, 1, {
             'text/plain': 'North\n\nSouth\n\n1\n\n2',
             'text/html':
@@ -563,13 +576,13 @@ describe('ChartDataDialog: paste fits the grid', () => {
     });
 
     test('lines of plain text with no table paste down a column', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.paste(1, 0, { 'text/plain': 'North\nSouth' });
         expect((await dialog.save()).data.categories.slice(0, 2)).toEqual(['North', 'South']);
     });
 
     test('a pasted corner header titles the category axis, and shows in A1', async () => {
-        const dialog = await open({ ...sample(), categoryAxis: { ...sample().categoryAxis, title: 'Teams' } });
+        const dialog = await open({ ...scores(), categoryAxis: { ...scores().categoryAxis, title: 'Teams' } });
         await dialog.paste(0, 0, { 'text/plain': 'Month\tNorth\nJan\t10' });
         expect(dialog.cell(0, 0).textContent).toBe('Month');
         const spec = await dialog.save();
@@ -578,13 +591,13 @@ describe('ChartDataDialog: paste fits the grid', () => {
     });
 
     test('a single value pastes into the selected cell', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.paste(1, 1, { 'text/plain': '12' });
         expect(dialog.cell(1, 1).textContent).toBe('12');
     });
 
     test('a paste stops at the limits and says how much it held', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         const names = Array.from({ length: INLINE_GRID_MAX_SERIES + 3 }, (_, i) => `S${i}`).join('\t');
         await dialog.paste(0, 1, { 'text/plain': names });
         expect(dialog.shown().columns).toBe(INLINE_GRID_MAX_SERIES + 1);
@@ -599,7 +612,7 @@ describe('ChartDataDialog: paste fits the grid', () => {
 
     // Past what a spread call holds (Chrome stops near 125,000 arguments, Bun near a million).
     test('a paste of a million rows fills what fits and says how much it held', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         const values = Array.from({ length: 1_000_000 }, (_, i) => `${i}\t${i}`).join('\n');
         await dialog.paste(1, 1, { 'text/plain': values });
         expect(dialog.dialog().textContent).toContain('Pasted 1,000,000 rows × 2 columns;');
@@ -609,7 +622,7 @@ describe('ChartDataDialog: paste fits the grid', () => {
     });
 
     test('a pasted label is cut to the label limit', async () => {
-        const dialog = await open(sample());
+        const dialog = await open(scores());
         await dialog.paste(0, 1, { 'text/plain': `${'x'.repeat(MAX_CHART_LABEL_LENGTH + 50)}\tB` });
         expect((await dialog.save()).data.series[0].name).toHaveLength(MAX_CHART_LABEL_LENGTH);
     });
