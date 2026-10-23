@@ -24,8 +24,9 @@ describe('changeSheet', () => {
         expect(ctx.defaultrowlen).toBe(30);
         expect(ctx.defaultcollen).toBe(100);
         expect(ctx.showGridLines).toBe(false);
-        expect(ctx.visibledatarow).toEqual([31, 82, 113, 144]);
-        expect(ctx.visibledatacolumn).toEqual([101, 202, 243, 344]);
+        // A track is its stored size, gridline included, as Excel and the export draw it.
+        expect(ctx.visibledatarow).toEqual([30, 80, 110, 140]);
+        expect(ctx.visibledatacolumn).toEqual([100, 200, 240, 340]);
     });
 
     test('switching back restores the workbook defaults for a sheet without its own', () => {
@@ -35,8 +36,8 @@ describe('changeSheet', () => {
         expect(ctx.defaultrowlen).toBe(SHEET_DEFAULT_ROW_HEIGHT);
         expect(ctx.defaultcollen).toBe(SHEET_DEFAULT_COL_WIDTH);
         expect(ctx.showGridLines).toBe(true);
-        const row = SHEET_DEFAULT_ROW_HEIGHT + 1;
-        const col = SHEET_DEFAULT_COL_WIDTH + 1;
+        const row = SHEET_DEFAULT_ROW_HEIGHT;
+        const col = SHEET_DEFAULT_COL_WIDTH;
         expect(ctx.visibledatarow).toEqual([row, 2 * row, 3 * row, 4 * row]);
         expect(ctx.visibledatacolumn).toEqual([col, 2 * col, 3 * col, 4 * col]);
     });
@@ -131,7 +132,7 @@ describe('leaving a sheet that goes away', () => {
         expect(ctx.sheets[0].hide).toBe(1);
         expect(ctx.currentSheetId).toBe('b');
         expect(ctx.scrollRequest).toEqual({ left: 0, top: 500 });
-        expect(ctx.visibledatarow).toEqual([SHEET_DEFAULT_ROW_HEIGHT + 1, 2 * (SHEET_DEFAULT_ROW_HEIGHT + 1)]);
+        expect(ctx.visibledatarow).toEqual([SHEET_DEFAULT_ROW_HEIGHT, 2 * SHEET_DEFAULT_ROW_HEIGHT]);
     });
 
     test('hiding another sheet leaves the current sheet alone', () => {

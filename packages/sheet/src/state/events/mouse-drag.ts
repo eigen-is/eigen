@@ -469,7 +469,6 @@ export function handleOverlayMouseUp(
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (delta !== 0 && idx != null) {
             const row = ctx.rowsResizeStart[1];
-            // Read the stored height directly; visibledatarow carries the +1px row separator.
             const rowlen = ctx.sheets[idx].config?.rowlen;
             const size = Math.max((rowlen?.[row] || ctx.defaultrowlen) + delta, 10);
 

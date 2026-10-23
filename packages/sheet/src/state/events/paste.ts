@@ -114,7 +114,7 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
                 ctx.visibledatarow.push(ctx.rh_height);
                 continue;
             } else {
-                ctx.rh_height += rowlen + 1;
+                ctx.rh_height += rowlen;
             }
 
             ctx.visibledatarow.push(ctx.rh_height); // temporary row height distribution
