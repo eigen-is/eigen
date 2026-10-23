@@ -113,8 +113,9 @@ describe('floating writers', () => {
     }
 
     // setContextWithProduce merges every write of a panel gesture into one entry: its own earlier write can bring back
-    // the object a later one edits, so only an object missing for the whole entry drops its edits.
-    test('a merged entry that deletes or inserts an object it edits undoes and redoes whole', () => {
+    // the object a later one edits, so only an object missing where the write lands drops it, on the author, a peer
+    // and a joiner alike.
+    test('a merged entry that deletes or inserts an object it edits undoes and redoes whole, everywhere', () => {
         const merged = (base: Context, ...recipes: ((ctx: Context) => void)[]) => {
             let next = base;
             const entry = { patches: [] as Patch[], inverse: [] as Patch[] };
@@ -124,7 +125,13 @@ describe('floating writers', () => {
                 entry.patches.push(...step.patches);
                 entry.inverse.unshift(...step.inverse);
             }
-            return { next, ...entry };
+            return { next, ops: patchToOp(next, entry.patches), ...entry };
+        };
+        // Workbook's handleUndo and handleRedo: the entry's writes that still apply, and the batch they ship.
+        const replay = (ctx: Context, patches: Patch[]) => {
+            const kept = withoutDeletedFloatingEdits(ctx, patches);
+            const next = applyPatches(ctx, kept);
+            return { next, ops: patchToOp(next, kept) };
         };
         const base = workbook();
         const deleted = merged(
@@ -132,17 +139,22 @@ describe('floating writers', () => {
             (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 }),
             (ctx) => deleteFloatingObject(ctx, { kind: 'chart', id: 'c1' }),
         );
-        const undone = applyPatches(deleted.next, withoutDeletedFloatingEdits(deleted.next, deleted.inverse));
-        expect(objects(undone.sheets)).toEqual(objects(base.sheets));
+        const undone = replay(deleted.next, deleted.inverse);
+        expect(objects(undone.next.sheets)).toEqual(objects(base.sheets));
+        expect(objects(receive(deleted.next, undone.ops).sheets)).toEqual(objects(base.sheets));
+        expect(objects(join(base, [deleted.ops, undone.ops]))).toEqual(objects(base.sheets));
 
         const inserted = merged(
             base,
             (ctx) => insertChart(ctx, 'c2', BOX, sampleChartSpec('line')),
             (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c2' }, { x: 300 }),
         );
-        const back = applyPatches(inserted.next, inserted.inverse);
-        const redone = applyPatches(back, withoutDeletedFloatingEdits(back, inserted.patches));
-        expect(objects(redone.sheets)).toEqual(objects(inserted.next.sheets));
+        const back = replay(inserted.next, inserted.inverse);
+        const redone = replay(back.next, inserted.patches);
+        const expected = objects(inserted.next.sheets);
+        expect(objects(redone.next.sheets)).toEqual(expected);
+        expect(objects(receive(back.next, redone.ops).sheets)).toEqual(expected);
+        expect(objects(join(base, [inserted.ops, back.ops, redone.ops]))).toEqual(expected);
     });
 
     test('three clients editing different images end identical, and so does a joiner', () => {

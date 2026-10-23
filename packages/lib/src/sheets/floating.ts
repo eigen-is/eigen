@@ -1,4 +1,5 @@
 import { CHART_MAX_SIDE } from '../charts/spec';
+import { isRecord } from '../core/guards';
 import { generateKeyBetween, orderByFractionalIndex, syncInvalidIndices } from '../vector/fractional-index';
 import type { Box } from '../vector/geometry';
 import {
@@ -23,13 +24,44 @@ export function floatingItems(sheet: Sheet): SheetFloatingItem[] {
     );
 }
 
-// A write into a field of an image or chart that no longer exists, deleted by a peer, resolves on nothing. Every
-// client and the replay drop just that write, so the rest of its batch applies: an insert whose index repair names a
-// tied object a peer deleted keeps its insert. `path` is Sheet[]-rooted, the sheet's index first.
-export function editsMissingFloatingObject(sheets: Sheet[], [sheet, field, id, ...rest]: (string | number)[]): boolean {
-    if (typeof sheet !== 'number' || rest.length === 0) return false;
-    if (field !== 'images' && field !== 'charts') return false;
-    return sheets[sheet]?.[field]?.[id] == null;
+type SheetWrite = { op: string; path: (string | number)[]; value?: unknown };
+type FloatingMaps = Partial<Record<'images' | 'charts', Record<string, unknown>>>;
+
+// Which writes of one batch apply, asked in order. A write into a field of an image or chart applies when the object
+// is there as the batch's earlier writes leave it, else as it stood before the batch: one a peer deleted resolves on
+// nothing, so every client, the replay and an undo or redo drop just that write and the rest of the batch applies. An
+// insert whose index repair names a tied object a peer deleted keeps its insert; a merged gesture's undo that puts an
+// object back and then its field keeps the field. Paths are Sheet[]-rooted, the sheet's index first.
+export function floatingWriteFilter(sheets: Sheet[]): (write: SheetWrite) => boolean {
+    const written = new Map<number, FloatingMaps>();
+    const mapsOf = (sheet: number) => {
+        let maps = written.get(sheet);
+        if (!maps) written.set(sheet, (maps = copyFloatingMaps(sheets[sheet])));
+        return maps;
+    };
+    return ({ op, path: [sheet, field, id, ...rest], value }) => {
+        if (typeof sheet !== 'number') return true;
+        if (field === undefined) {
+            written.set(sheet, op === 'remove' ? {} : copyFloatingMaps(value));
+            return true;
+        }
+        if (field !== 'images' && field !== 'charts') return true;
+        const maps = mapsOf(sheet);
+        if (id === undefined) maps[field] = op === 'remove' || !isRecord(value) ? undefined : { ...value };
+        else if (rest.length > 0) return maps[field]?.[id] != null;
+        else if (op === 'remove') delete maps[field]?.[id];
+        else (maps[field] ??= {})[id] = value;
+        return true;
+    };
+}
+
+function copyFloatingMaps(sheet: unknown): FloatingMaps {
+    if (!isRecord(sheet)) return {};
+    const { images, charts } = sheet;
+    return {
+        images: isRecord(images) ? { ...images } : undefined,
+        charts: isRecord(charts) ? { ...charts } : undefined,
+    };
 }
 
 // The index of an object inserted above every image and chart. Tied and malformed keys, which concurrent inserts and

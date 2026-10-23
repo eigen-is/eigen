@@ -1,6 +1,6 @@
 import {
-    editsMissingFloatingObject,
     floatingItems,
+    floatingWriteFilter,
     nextFloatingIndex,
     type SheetFloatingKind,
     sheetFloatingBox,
@@ -85,15 +85,8 @@ export function deleteActiveObject(ctx: Context) {
     ctx.activeObject = undefined;
 }
 
-// What of an undo or redo entry still applies: a write into an image or chart a peer deleted is dropped, as every
-// client and the replay drop it from a batch. One the entry itself writes back first stays, as a merged gesture's
-// undo of an edit and a delete puts the object back and then its field.
+// What of an undo or redo entry still applies, by the rule every client and the replay apply to its batch.
 export function withoutDeletedFloatingEdits(ctx: Context, patches: Patch[]): Patch[] {
-    const written = new Map<string, boolean>();
-    return patches.filter(({ op, path: [root, ...path] }) => {
-        if (root !== 'sheets') return true;
-        const key = path.slice(0, 3).join('/');
-        if (path.length === 3) written.set(key, op !== 'remove');
-        return written.get(key) === true || !editsMissingFloatingObject(ctx.sheets, path);
-    });
+    const applies = floatingWriteFilter(ctx.sheets);
+    return patches.filter(({ op, path: [root, ...path], value }) => root !== 'sheets' || applies({ op, path, value }));
 }
