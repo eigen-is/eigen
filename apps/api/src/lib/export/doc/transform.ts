@@ -114,7 +114,7 @@ export async function renderEigendocExport(
     const html = exportHtmlDocument({
         title,
         fonts: usedFamilies(body, style),
-        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
+        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf ? PAGE_NUMBER_CSS : ''}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings };
@@ -225,10 +225,15 @@ ${BAND_ROOTS.map((root) => `.band-${root} { position: running(${root}); }`).join
     @bottom-center { content: element(footer); vertical-align: bottom; padding-bottom: ${bottom}mm; width: 100%; }
 }
 ${page.differentFirstPage ? '@page :first { @top-center { content: element(headerFirst); } @bottom-center { content: element(footerFirst); } }' : ''}
+`;
+}
+
+// WeasyPrint counts the pages in the body's flow as in a margin box, so a field prints its number wherever it stands, a
+// docx's NUMPAGES in the body of a doc with no bands too.
+const PAGE_NUMBER_CSS = `
 [data-type="page-number"][data-kind="page"]::after { content: counter(page); }
 [data-type="page-number"][data-kind="pages"]::after { content: counter(pages); }
 `;
-}
 
 // A note floats whole to its reference's page, so one taller than the page's text loses what doesn't fit, and
 // WeasyPrint lays the notes out again for every page they fill: 4,000 one-line notes took 35 s and 10,000 ran past the
