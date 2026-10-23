@@ -99,6 +99,9 @@ export const STACKING_BY_GROUPING: ReadonlyMap<string, ChartStacking> = new Map<
     ['percentStacked', 'percent'],
 ]);
 
+// The format the writer gives a percent-stacked value axis that has none of its own; it reads back as none.
+export const PERCENT_AXIS_FORMAT = '0%';
+
 export const LEGEND_BY_POSITION: ReadonlyMap<string, LegendPosition> = new Map<string, LegendPosition>([
     ['t', 'top'],
     ['b', 'bottom'],
@@ -218,7 +221,10 @@ function chartSpec(
             min: numberOf(val(child(scaling, 'min'))),
             max: numberOf(val(child(scaling, 'max'))),
             gridlines: child(valueAxis, 'majorGridlines') !== undefined,
-            format: format && format !== 'General' ? chartLabel(format) : null,
+            format:
+                format && format !== 'General' && !(stacking === 'percent' && format === PERCENT_AXIS_FORMAT)
+                    ? chartLabel(format)
+                    : null,
             visible: visible(valueAxis),
         },
     };

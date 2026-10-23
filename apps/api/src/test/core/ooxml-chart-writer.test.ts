@@ -101,6 +101,20 @@ describe('writeChart with range data', () => {
         expect(throughRanges(spec)).toEqual(spec);
     });
 
+    test('a percent-stacked chart labels its value axis 0%, which reads back as no format', () => {
+        const spec = rangeSpec('column', { stacking: 'percent' });
+        const [axis] = find(root(writeChart(spec, { ranges })), 'valAx');
+        const [numFmt] = find(axis, 'numFmt');
+        expect([xmlAttr(numFmt, '', 'formatCode'), xmlAttr(numFmt, '', 'sourceLinked')]).toEqual(['0%', '0']);
+        expect(throughRanges(spec).valueAxis.format).toBeNull();
+    });
+
+    test('a percent-stacked chart keeps a format of its own', () => {
+        const spec = rangeSpec('column', { stacking: 'percent' });
+        const own = { ...spec, valueAxis: { ...spec.valueAxis, format: '0.0%' } };
+        expect(throughRanges(own).valueAxis.format).toBe('0.0%');
+    });
+
     test('a line chart keeps its markers and smooth lines', () => {
         const series = [
             { ...RANGE_SERIES[0], markers: true, smooth: true },

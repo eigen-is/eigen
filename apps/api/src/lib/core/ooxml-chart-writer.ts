@@ -16,7 +16,7 @@ import { escapeXml } from '@workspace/lib/xml';
 // The one engine module a chart's refs need, not the engine: a docx or pptx export never evaluates the formula engine.
 import { quoteSheetName } from '@workspace/sheet/engine/a1-notation';
 import { A_NS, C_NS, EMU_PER_PX, R_NS } from './ooxml';
-import { LEGEND_BY_POSITION, STACKING_BY_GROUPING } from './ooxml-chart';
+import { LEGEND_BY_POSITION, PERCENT_AXIS_FORMAT, STACKING_BY_GROUPING } from './ooxml-chart';
 
 // A ChartSpec as a DrawingML chart part, c:chartSpace, the same in a docx, an xlsx and a pptx: the mirror of
 // ooxml-chart.ts, which reads it back as the same spec. Excel draws what Eigen draws: an automatic colour is written
@@ -199,7 +199,9 @@ function axesXml(spec: ChartSpec, look: ChartLook): string {
         valueAxis.max === null ? '' : `<c:max val="${valueAxis.max}"/>`,
         valueAxis.min === null ? '' : `<c:min val="${valueAxis.min}"/>`,
     ].join('');
-    const format = valueAxis.format ?? 'General';
+    // A 100% stack's axis runs 0 to 1; without a format of its own Excel would label it so.
+    const format = valueAxis.format ?? (spec.stacking === 'percent' ? PERCENT_AXIS_FORMAT : 'General');
+    const linked = valueAxis.format === null && format === 'General';
     return [
         `<c:catAx><c:axId val="${CATEGORY_AXIS}"/>${scaling(maxMin ? 'maxMin' : 'minMax')}${deleted(categoryAxis.visible)}`,
         `<c:axPos val="${sideways ? 'l' : 'b'}"/>${axisTitleXml(categoryAxis.title, sideways)}`,
@@ -211,7 +213,7 @@ function axesXml(spec: ChartSpec, look: ChartLook): string {
             ? `<c:majorGridlines><c:spPr>${stroke(GRIDLINE_OPACITY / 100)}</c:spPr></c:majorGridlines>`
             : '',
         axisTitleXml(valueAxis.title, !sideways),
-        `<c:numFmt formatCode="${escapeXml(format)}" sourceLinked="${valueAxis.format === null ? 1 : 0}"/>${noTicks}`,
+        `<c:numFmt formatCode="${escapeXml(format)}" sourceLinked="${linked ? 1 : 0}"/>${noTicks}`,
         `<c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr><c:crossAx val="${CATEGORY_AXIS}"/>`,
         `<c:crosses val="${maxMin ? 'max' : 'autoZero'}"/><c:crossBetween val="between"/></c:valAx>`,
     ].join('');
