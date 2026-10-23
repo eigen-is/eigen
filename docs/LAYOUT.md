@@ -86,7 +86,7 @@ Shared rows know their group. A `FileAction` in `packages/lib/src/core/file-acti
 
 `DropdownMenuSeparator` hides itself when it opens the menu, follows another separator or has no row after it. A row component may render nothing (`DownloadOriginalImageMenuItem` with no path, `DownloadImageMenuItem` with nothing to draw, the comment rows for a viewer), and the separator before it then goes too, so no host writes separator logic of its own. Tests read a menu as a user sees it through `menuRows` and `collapseSeparators` in `packages/ui/src/test/menu-rows.ts`, since happy-dom draws no CSS.
 
-Menubar menus (File, Edit, Format) keep Google's order, which a user knows from Docs, but their destructive rows are red too.
+Menubar menus (File, Edit, Format) keep Google's order, which a user knows from Docs, except that their delete rows go last and red, as Format › Table's Delete row, column and table do.
 
 ## A row that deletes is red and last
 
