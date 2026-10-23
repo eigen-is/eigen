@@ -18,7 +18,7 @@ import { polylineOutline } from '../outline';
 import { DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS, type VectorLinearElement } from '../types';
 import { defineKind } from './kind';
 import { bool, clampCoord, fillField, oneOf, str } from './read-fields';
-import { drawableToSvg, fillDefs, getSvgPathFromStroke, linearRoughOptions } from './render-utils';
+import { drawableToSvg, fillDefs, getSvgPathFromStroke, linearRoughOptions, loopPath } from './render-utils';
 
 export const freedrawKind = defineKind<VectorLinearElement>({
     type: 'freedraw',
@@ -80,7 +80,8 @@ export const freedrawKind = defineKind<VectorLinearElement>({
         if (isClosedPath(points) && !isTransparentFill(parseFill(el.fill))) {
             const options = linearRoughOptions(el, points);
             options.stroke = 'none';
-            fill = `${fillDefs(el)}${drawableToSvg(new RoughGenerator().polygon(coords, options))}`;
+            const clip = { id: el.id, d: loopPath(points, false) };
+            fill = `${fillDefs(el)}${drawableToSvg(new RoughGenerator().polygon(coords, options), clip)}`;
         }
 
         const d = getSvgPathFromStroke(freedrawOutline(el, points));

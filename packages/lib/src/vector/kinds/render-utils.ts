@@ -8,10 +8,11 @@ import { getFontFamily } from '../../constants/fonts';
 import { escapeXml } from '../../core/xml';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
-import { type Box, DEG_TO_RAD, isClosedPath, type Point, round } from '../geometry';
+import { arrowCurveBeziers, type Box, DEG_TO_RAD, isClosedPath, type Point, round } from '../geometry';
 import {
     cornerRadius,
     diamondOutline,
+    ellipseOutline,
     outlinePath,
     rectOutline,
     scaleNormalizedPath,
@@ -53,10 +54,11 @@ type RoughBoxElement =
 // A closed box's rough drawing. The generator is per-call: seeded roughjs output depends only on
 // el.seed. The linecap rides the paths (the caller owns the placing <g>).
 export function renderRoughShape(el: RoughBoxElement): string {
-    const drawable = shapeDrawable(new RoughGenerator(), el);
+    const outline = boxOutlinePath(el);
+    const drawable = shapeDrawable(new RoughGenerator(), el, outline);
     // A gradient's defs ride along only when the fill paints.
     const defs = 'fill' in el && drawable.options.fill !== undefined ? fillDefs(el) : '';
-    return `${defs}<g stroke-linecap="round">${drawableToSvg(drawable)}</g>`;
+    return `${defs}<g stroke-linecap="round">${drawableToSvg(drawable, { id: el.id, d: outline })}</g>`;
 }
 
 // The dashed box an element draws where its content can't be shown: a picture with no file, a chart that
@@ -106,11 +108,11 @@ function med(a: number[], b: number[]): number[] {
     return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
-function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
-    // A whole slice is the ellipse: a slice's path would draw its two radii as a seam.
-    if (el.type === 'ellipse' || (el.type === 'pie' && el.sweepAngle >= 360)) {
-        return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, roughOptions(el, false));
-    }
+// The box's own outline in its local frame: what a slice, a path and a rounded corner draw through gen.path, and what
+// every hatch is clipped to.
+function boxOutlinePath(el: RoughBoxElement): string {
+    const box = { x: 0, y: 0, width: el.width, height: el.height };
+    if (el.type === 'ellipse' || isWholeSlice(el)) return outlinePath(ellipseOutline(box, 0));
     // A slice is SVG arcs, as a rounded corner is: roughjs's own arc samples 20° steps at any size and leads in
     // from inside the rim, which facets a large slice. roughjs draws an arc as one cubic per up to 120°, which
     // bulges 0.15% of the radius; one per ARC_PIECE bulges as little as its ellipse.
@@ -124,27 +126,36 @@ function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement): Drawable {
         for (let i = 1; i <= pieces; i++) {
             d += ` A ${round(rx)} ${round(ry)} 0 0 1 ${rim(el.startAngle + (el.sweepAngle * i) / pieces)}`;
         }
-        return gen.path(`${d} Z`, roughOptions(el, true));
+        return `${d} Z`;
     }
     // A path is its own SVG path, scaled from the unit box.
-    if (el.type === 'path') {
-        return gen.path(scaleNormalizedPath(el.path, el.width, el.height), roughOptions(el, el.closed));
+    if (el.type === 'path') return scaleNormalizedPath(el.path, el.width, el.height);
+    if (el.type === 'diamond') return outlinePath(diamondOutline(box, cornerRadius(el, 'diamond'), 0));
+    return outlinePath(rectOutline(box, cornerRadius(el, 'rectangle'), 0));
+}
+
+// A whole slice is the ellipse: a slice's path would draw its two radii as a seam.
+function isWholeSlice(el: RoughBoxElement): boolean {
+    return el.type === 'pie' && el.sweepAngle >= 360;
+}
+
+function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement, outline: string): Drawable {
+    if (el.type === 'ellipse' || isWholeSlice(el)) {
+        return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, roughOptions(el, false));
     }
-    const box = { x: 0, y: 0, width: el.width, height: el.height };
-    const radius = cornerRadius(el, el.type === 'diamond' ? 'diamond' : 'rectangle');
-    const rounded = radius > 0;
+    if (el.type === 'pie') return gen.path(outline, roughOptions(el, true));
+    if (el.type === 'path') return gen.path(outline, roughOptions(el, el.closed));
+    const rounded = cornerRadius(el, el.type === 'diamond' ? 'diamond' : 'rectangle') > 0;
     const options = roughOptions(el, rounded);
     // Straight corners keep roughjs's own rectangle/polygon generators; a rounded one is the shared
     // outline path, the same curve docking intersects.
-    if (!rounded) {
-        if (el.type !== 'diamond') return gen.rectangle(0, 0, el.width, el.height, options);
-        return gen.polygon(
-            sharpDiamondOffset(box, 0).map((p): [number, number] => [p.x, p.y]),
-            options,
-        );
-    }
-    const outline = el.type === 'diamond' ? diamondOutline(box, radius, 0) : rectOutline(box, radius, 0);
-    return gen.path(outlinePath(outline), options);
+    if (rounded) return gen.path(outline, options);
+    if (el.type !== 'diamond') return gen.rectangle(0, 0, el.width, el.height, options);
+    const box = { x: 0, y: 0, width: el.width, height: el.height };
+    return gen.polygon(
+        sharpDiamondOffset(box, 0).map((p): [number, number] => [p.x, p.y]),
+        options,
+    );
 }
 
 // Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
@@ -267,9 +278,15 @@ function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: 
     return undefined;
 }
 
+// A hatch's clip: the outline it fills and the element its clipPath id is scoped to. roughjs strokes hachure,
+// cross-hatch and zigzag past the shape (a zigzag by about 3px at any size), which shows on a small one, so the
+// strokes draw inside the outline and the outline itself stays unclipped. A solid fill is the outline already.
+export type HatchClip = { id: string; d: string };
+
 // Fill sets come before the outline in `sets`, so drawing in order layers fill under stroke.
-export function drawableToSvg(drawable: Drawable): string {
+export function drawableToSvg(drawable: Drawable, clip?: HatchClip): string {
     const o = drawable.options;
+    let hatch = '';
     let out = '';
     for (const set of drawable.sets) {
         const d = opsToPath(set);
@@ -280,10 +297,20 @@ export function drawableToSvg(drawable: Drawable): string {
         } else if (set.type === 'fillPath') {
             out += `<path d="${d}" fill="${escapeXml(o.fill ?? 'none')}" stroke="none"/>`;
         } else if (set.type === 'fillSketch') {
-            out += `<path d="${d}" stroke="${escapeXml(o.fill ?? 'none')}" stroke-width="${round(o.fillWeight)}" fill="none"/>`;
+            hatch += `<path d="${d}" stroke="${escapeXml(o.fill ?? 'none')}" stroke-width="${round(o.fillWeight)}" fill="none"/>`;
         }
     }
-    return out;
+    if (hatch === '' || !clip?.d) return hatch + out;
+    const id = svgId('hatch', clip.id);
+    return `<defs><clipPath id="${id}"><path d="${clip.d}"/></clipPath></defs><g clip-path="url(#${id})">${hatch}</g>${out}`;
+}
+
+// A closed line's outline, which its hatch is clipped to: the polygon, or a round line's curve as roughjs draws it.
+export function loopPath(points: Point[], curved: boolean): string {
+    if (!curved || points.length < 2) return outlinePath({ kind: 'polygon', corners: points });
+    const at = (p: Point) => `${round(p.x)} ${round(p.y)}`;
+    const curves = arrowCurveBeziers(points).map(([, c1, c2, end]) => `C ${at(c1)} ${at(c2)} ${at(end)}`);
+    return `M ${at(points[0])} ${curves.join(' ')} Z`;
 }
 
 // The whole roughjs serializer: move→M, lineTo→L, bcurveTo→C, coordinates to 2 decimals.

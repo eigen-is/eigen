@@ -4,6 +4,7 @@ import {
     chartColor,
     chartPaintOf,
     FLAT_CHART_LOOK,
+    formatTickValue,
     layoutChart,
     sampleChartSpec,
 } from '../../../charts';
@@ -12,6 +13,8 @@ import { escapeXml } from '../../../core/xml';
 import type { ChartData, ChartLook, ChartSpec } from '../../../types/chart';
 import { serializeFill } from '../../../vector/fill';
 import { renderChartSpecSvg, renderChartSvg } from '../../../vector/kinds/chart-render';
+import { svgId } from '../../../vector/kinds/render-utils';
+import { outlinePath, rectOutline } from '../../../vector/outline';
 import { elementToSvg } from '../../../vector/scene-to-svg';
 
 const RANGE_SPEC: ChartSpec = {
@@ -132,6 +135,42 @@ describe('renderChartSpecSvg', () => {
         // a hatched mark is drawn as stroked sketch lines; a solid one is a filled path
         expect(svg).not.toContain(`stroke="${chartColor(0)}" stroke-width="1" fill="none"`);
         expect(svg).toContain(`fill="${chartColor(0)}"`);
+    });
+
+    test('a hatched bar, slice or legend swatch draws its hatch inside a clip of its own outline', () => {
+        const look: ChartLook = {
+            ...FLAT_CHART_LOOK,
+            fill: serializeFill({ type: 'solid', color: 'transparent', style: 'zigzag' }),
+            roughness: 0,
+        };
+        for (const type of ['column', 'pie'] as const) {
+            const spec = { ...sampleChartSpec(type), legend: 'top' as const };
+            if (spec.data.source !== 'inline') throw new Error('expected inline data');
+            const svg = renderChartSpecSvg({ id: 'c1', spec, width: 600, height: 371, look });
+            const { shapes } = layoutChart({
+                id: 'c1',
+                spec,
+                data: spec.data,
+                width: 600,
+                height: 371,
+                paint: chartPaintOf(look),
+                formatTick: formatTickValue,
+            });
+            const marks = shapes.filter((shape) => /:(bar|slice|legend):/.test(shape.id));
+            expect(marks.some((shape) => shape.id.includes(':legend:'))).toBe(true);
+            for (const shape of marks) {
+                const id = svgId('hatch', shape.id);
+                const clip = new RegExp(`<clipPath id="${id}"><path d="([^"]*)"/></clipPath>`).exec(svg);
+                expect([shape.id, clip !== null]).toEqual([shape.id, true]);
+                if (shape.type === 'rectangle') {
+                    const box = { x: 0, y: 0, width: shape.width, height: shape.height };
+                    expect([shape.id, clip?.[1]]).toEqual([shape.id, outlinePath(rectOutline(box, 0, 0))]);
+                }
+                expect(svg).toContain(`<g clip-path="url(#${id})"><path d="`);
+            }
+            const ids = Array.from(svg.matchAll(/<clipPath id="([^"]*)"/g), (m) => m[1]);
+            expect(new Set(ids).size).toBe(ids.length);
+        }
     });
 
     test('a look draws as a canvas chart storing the same fields', () => {
