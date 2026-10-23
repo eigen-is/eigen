@@ -4,6 +4,7 @@
 // and a symbol menu inserts its command at the field's caret. A draft that starts with <math is MathML, read as a stored
 // one is.
 import { afterEach, expect, test } from 'bun:test';
+import { readEquation } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -87,9 +88,9 @@ const remote = (editor: InstanceType<typeof Editor>, edit: (tr: InstanceType<typ
         edit(tr);
         editor.view.dispatch(tr);
     });
-const key = (name: string) =>
+const key = (name: string, init: KeyboardEventInit = {}) =>
     act(async () => {
-        field().dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }));
+        field().dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true, ...init }));
     });
 
 test('the field shows the LaTeX, and the preview draws its MathML', async () => {
@@ -128,7 +129,7 @@ test('Enter writes the draft with its LaTeX and puts the caret after the equatio
     const editor = await mount();
     const draft = 'x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}';
     await type(draft);
-    await key('Enter');
+    await key('Enter', { metaKey: true });
 
     expect(stored(editor)?.['mathml']).toBe(typed(draft));
     expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 3, head: 3 });
@@ -174,7 +175,7 @@ test('Escape drops the draft', async () => {
 test('a draft that does not parse is never written, and shows its error where the reader stopped', async () => {
     const editor = await mount();
     await type('\\frac{a');
-    await key('Enter');
+    await key('Enter', { metaKey: true });
     await act(async () => field().blur());
 
     expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
@@ -220,7 +221,7 @@ test.each([
 ])('MathML %s is never written and shows an error', async (_, draft) => {
     const editor = await mount();
     await type(draft);
-    await key('Enter');
+    await key('Enter', { metaKey: true });
     await act(async () => field().blur());
 
     expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
@@ -311,7 +312,7 @@ test('a symbol menu inserts its command at the caret and gives the field back it
     expect(field().selectionStart).toBe('a\\alpha '.length);
     // The draft is no peer's until committed.
     expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
-    await key('Enter');
+    await key('Enter', { metaKey: true });
     expect(stored(editor)?.['mathml']).toBe(typed('a\\alpha b'));
 });
 
@@ -335,7 +336,7 @@ test('an equation selected as text takes the draft and the Style options', async
     const editor = await mount();
     await act(async () => editor.commands.setTextSelection({ from: 2, to: 3 }));
     await type('y');
-    await key('Enter');
+    await key('Enter', { metaKey: true });
     expect(stored(editor)?.['mathml']).toBe(typed('y'));
     expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 3, head: 3 });
 
@@ -364,7 +365,7 @@ test('a draft whose write finds no equation stays', async () => {
     const editor = await mount();
     await type('y');
     await act(async () => editor.commands.setTextSelection(1));
-    await key('Enter');
+    await key('Enter', { metaKey: true });
     expect(field().value).toBe('y');
     expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
 });
@@ -395,7 +396,7 @@ test("a peer's write to the equation leaves the draft, and Enter writes it", asy
     await type('y');
     await remote(editor, (tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
     expect(field().value).toBe('y');
-    await key('Enter');
+    await key('Enter', { metaKey: true });
     expect(stored(editor)?.['mathml']).toBe(typed('y'));
 });
 
@@ -405,7 +406,7 @@ test('a peer deleting the equation ends its draft, which never lands on the next
     await type('y');
     await remote(editor, (tr) => tr.delete(2, 3).setSelection(NodeSelection.create(tr.doc, 2)));
     expect(field().value).toBe('z');
-    await key('Enter');
+    await key('Enter', { metaKey: true });
     expect(stored(editor)?.['mathml']).toBe(typed('z'));
 });
 
@@ -434,4 +435,19 @@ test('a draft that does not parse is dropped once another equation is selected',
             .run();
     });
     expect(field().value).toBe('z');
+});
+
+test('Enter in the field starts a line, and a multi-line draft commits with its newlines and the same equation', async () => {
+    const editor = await mount();
+    const multi = '\\frac{1}{2}\n  + x^2';
+    await type(multi);
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    await act(async () => field().dispatchEvent(enter));
+    expect(enter.defaultPrevented).toBe(false);
+    expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
+
+    await key('Enter', { metaKey: true });
+    expect(stored(editor)?.['mathml']).toBe(typed(multi));
+    expect(readLatex(multi)).toEqual(readLatex('\\frac{1}{2} + x^2'));
+    expect(readEquation(stored(editor) ?? {}).latex).toBe(multi);
 });
