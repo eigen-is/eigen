@@ -501,10 +501,10 @@ export function useDocEditor(
     // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
     // A viewer's deletion would be dropped by the server.
     useZombieMediaSweep({
-        ready: !!editor && sweeps,
+        ready: sweeps,
         scan: () => {
             const names: string[] = [];
-            editor?.state.doc.descendants((node) => {
+            editor.state.doc.descendants((node) => {
                 if (
                     node.type.name === 'figure' &&
                     typeof node.attrs.mediaName === 'string' &&
@@ -517,7 +517,6 @@ export function useDocEditor(
             return names;
         },
         remove: (names) => {
-            if (!editor) return;
             for (const name of names) swapFigureMediaName(editor, name, null);
         },
     });
@@ -526,7 +525,7 @@ export function useDocEditor(
     // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
     // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
     useEffect(() => {
-        if (!editor || !sweeps) return;
+        if (!sweeps) return;
         normalizeFontFamilyMarks(editor);
     }, [editor, sweeps]);
 
