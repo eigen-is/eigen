@@ -112,6 +112,39 @@ describe('floating writers', () => {
         });
     }
 
+    // setContextWithProduce merges every write of a panel gesture into one entry: its own earlier write can bring back
+    // the object a later one edits, so only an object missing for the whole entry drops its edits.
+    test('a merged entry that deletes or inserts an object it edits undoes and redoes whole', () => {
+        const merged = (base: Context, ...recipes: ((ctx: Context) => void)[]) => {
+            let next = base;
+            const entry = { patches: [] as Patch[], inverse: [] as Patch[] };
+            for (const recipe of recipes) {
+                const step = author(next, recipe);
+                next = step.next;
+                entry.patches.push(...step.patches);
+                entry.inverse.unshift(...step.inverse);
+            }
+            return { next, ...entry };
+        };
+        const base = workbook();
+        const deleted = merged(
+            base,
+            (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 }),
+            (ctx) => deleteFloatingObject(ctx, { kind: 'chart', id: 'c1' }),
+        );
+        const undone = applyPatches(deleted.next, withoutDeletedFloatingEdits(deleted.next, deleted.inverse));
+        expect(objects(undone.sheets)).toEqual(objects(base.sheets));
+
+        const inserted = merged(
+            base,
+            (ctx) => insertChart(ctx, 'c2', BOX, sampleChartSpec('line')),
+            (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c2' }, { x: 300 }),
+        );
+        const back = applyPatches(inserted.next, inserted.inverse);
+        const redone = applyPatches(back, withoutDeletedFloatingEdits(back, inserted.patches));
+        expect(objects(redone.sheets)).toEqual(objects(inserted.next.sheets));
+    });
+
     test('three clients editing different images end identical, and so does a joiner', () => {
         const base = produce(workbook(), (ctx: Context) => {
             ctx.sheets[0].images!.i2 = image('i2', 'a3');
