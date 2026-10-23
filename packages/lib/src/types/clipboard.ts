@@ -95,7 +95,21 @@ export type EigenClipboardElementsItem = {
     height: number;
 };
 
-export type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageItem | EigenClipboardElementsItem;
+// A live chart: a ChartSpec string that always holds its numbers inline, since no host but the sheet it came
+// from can read a range. A sheet copy resolves its ranges into it at copy time; the reader drops a spec that
+// doesn't parse as inline data within the spec's limits, so no consumer stores a placeholder.
+export type EigenClipboardChartItem = {
+    type: 'chart';
+    spec: string;
+    width: number;
+    height: number;
+};
+
+export type EigenClipboardItem =
+    | EigenClipboardTextItem
+    | EigenClipboardImageItem
+    | EigenClipboardElementsItem
+    | EigenClipboardChartItem;
 
 export type EigenClipboardData = {
     version: 1;

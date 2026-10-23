@@ -1,5 +1,6 @@
 import { parseChartSpec } from '@workspace/lib/charts';
 import {
+    buildChartClipboardItem,
     buildImageClipboardItem,
     buildTextClipboardItem,
     classifyPaste,
@@ -9,16 +10,19 @@ import {
 } from '@workspace/lib/clipboard';
 import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import type {
+    EigenClipboardChartItem,
     EigenClipboardData,
     EigenClipboardImageItem,
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
+import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
 import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
-import { resolveRangeChartData, seriesName } from '../../engine/chart-data';
+import { inlineChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import {
@@ -31,6 +35,7 @@ import {
     createContextResolver,
     defaultContext,
     defaultSettings,
+    deleteActiveChart,
     editsDeletedChart,
     ensureSheetIndex,
     filterPatch,
@@ -44,6 +49,7 @@ import {
     insertRowCol,
     inverseRowColOptions,
     type Op,
+    pasteChart,
     patchToOp,
     type Settings,
     type Sheet as SheetType,
@@ -570,11 +576,30 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onCopy = useCallback(
             (e: ClipboardEvent) => {
+                // A text field beside a selected chart or image (the chart editor's title, the image panel's
+                // width) copies its own text.
+                const floating = !isTypingTarget();
+                // A selected chart copies itself with its ranges read into inline data, the one thing every
+                // other app can draw; this workbook keeps its ranges for a paste here. A chart that draws
+                // #REF! or too much data copies nothing. A cut deletes it, as Google's does. Read from
+                // ctx.sheets, not the editable current sheet, so a viewer copies too.
+                if (context.activeChart && floating) {
+                    const sheet = context.sheets[getSheetIndex(context, context.currentSheetId) ?? -1];
+                    const chart = sheet?.charts?.[context.activeChart.id];
+                    const inline = chart ? inlineChartSpec(chart, createContextResolver(context)) : null;
+                    const item = chart && inline ? buildChartClipboardItem({ spec: inline, box: chart }) : null;
+                    if (!chart || !inline || !item) return;
+                    e.preventDefault();
+                    writeEigenClipboard(e, { version: 1, items: [item] });
+                    globalCache.current.copiedChart = { inline, spec: chart.spec };
+                    if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveChart);
+                    return;
+                }
                 // A selected floating image takes precedence over the pending cell copy: its
                 // copy is a pure image — eigen JSON only, no text/plain and no png, as vector's is (a
                 // native copy event can't await a media/ blob fetch, so png is dropped).
                 const activeImg = context.insertedImgs?.find((img) => img.id === context.activeImg);
-                if (activeImg) {
+                if (activeImg && floating) {
                     const source = mergedSettings.hooks?.resolveImagePath?.(activeImg.mediaName);
                     if (source) {
                         e.preventDefault();
@@ -605,15 +630,18 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 };
                 writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },
-            [context, mergedSettings.hooks],
+            [context, mergedSettings.hooks, setContextWithProduce],
         );
 
         const onPaste = useCallback(
             (e: ClipboardEvent) => {
-                // deal with multi instance case, only the focused sheet handles the paste
+                // deal with multi instance case, only the focused sheet handles the paste; a selected chart
+                // holds the focus
+                const { activeElement } = document;
                 if (
-                    cellInput.current === document.activeElement ||
-                    document.activeElement?.className === 'sheet-overlay'
+                    cellInput.current === activeElement ||
+                    activeElement?.className === 'sheet-overlay' ||
+                    (activeElement?.matches('[data-chart-id]') && workbookContainer.current?.contains(activeElement))
                 ) {
                     const { clipboardData } = e;
                     if (!clipboardData) return;
@@ -651,8 +679,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
 
                     if (paste.eigen) {
-                        // Mixed eigen payloads split by kind: image items become floating images,
-                        // text items land in cells. Both apply when both are present. The image
+                        // Mixed eigen payloads split by kind: image and chart items become floating objects,
+                        // text items land in cells. All apply when all are present. The image
                         // insert is app-owned (typed size + cross-mount re-upload), gated on its hook.
                         const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
                         const imageItems = onPasteEigenImage
@@ -665,9 +693,22 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     item.type === 'text' && clipboardTextItemHasContent(item),
                             )
                             .map((item) => item.text);
-                        if (imageItems.length > 0 || textParts.length > 0) {
+                        const chartItems = paste.eigen.items.filter(
+                            (item): item is EigenClipboardChartItem => item.type === 'chart',
+                        );
+                        if (imageItems.length > 0 || chartItems.length > 0 || textParts.length > 0) {
                             e.preventDefault();
                             for (const item of imageItems) onPasteEigenImage?.(item);
+                            // This workbook's own copy keeps the ranges it was copied with.
+                            const copied = globalCache.current.copiedChart;
+                            if (chartItems.length > 0) {
+                                setContextWithProduce((draftCtx) => {
+                                    for (const { spec, width, height } of chartItems) {
+                                        const own = copied?.inline === spec ? copied.spec : spec;
+                                        pasteChart(draftCtx, uuidv4(), own, { width, height });
+                                    }
+                                });
+                            }
                             if (textParts.length > 0) {
                                 // Create a synthetic paste with the text — let handlePaste process it
                                 const syntheticTransfer = new DataTransfer();

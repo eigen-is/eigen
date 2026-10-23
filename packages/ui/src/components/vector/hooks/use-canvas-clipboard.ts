@@ -168,7 +168,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         [fetchMediaBlob],
     );
 
-    // A payload with no native elements item: another app's images and text. Each lands centered on the
+    // A payload with no native elements item: another app's images, charts and text. Each lands centered on the
     // viewport, cascading so a multi-item paste stays visible. An image sizes from the TYPED wire box
     // (authoritative), text re-measures LOCALLY (a wire size is never written onto text).
     const planForeignPaste = useCallback(
@@ -201,6 +201,19 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                         mediaName: crossMount ? `${PENDING_PREFIX}${crypto.randomUUID()}` : item.mediaName,
                     });
                     if (crossMount) plan.crossMount.push({ index, item });
+                    continue;
+                }
+                // A chart keeps its spec as it came, its font included, and takes the host's paint.
+                if (item.type === 'chart') {
+                    const { width, height } = box;
+                    plan.partials.push({
+                        type: 'chart',
+                        ...placeAt(width, height),
+                        width,
+                        height,
+                        angle,
+                        chart: item.spec,
+                    });
                     continue;
                 }
                 // An empty text item is a foreign contentless carrier — skip it.

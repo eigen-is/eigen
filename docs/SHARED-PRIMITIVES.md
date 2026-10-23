@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1872 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1874 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -531,7 +531,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (420)
+## Types (421)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -669,6 +669,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveVisibility` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EditorSaveResult` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EffectiveMember` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `EigenClipboardChartItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardData` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardElementsItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
 | `EigenClipboardImageItem` | `@workspace/lib/types` | packages/lib/src/types/clipboard.ts |
@@ -956,7 +957,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (952)
+## Utilities & constants (953)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1122,6 +1123,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SLASH_COMMANDS` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `BUILT_IN_EMOTES` | `@workspace/lib/chat/built-in-emotes` | packages/lib/src/core/chat/built-in-emotes.ts |
 | `EMOTE_COMMANDS` | `@workspace/lib/chat/emotes` | packages/lib/src/core/chat/emotes.ts |
+| `buildChartClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `buildImageClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `buildTextClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `cellsToHtmlTable` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/table.ts |

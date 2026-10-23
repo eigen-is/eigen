@@ -2,6 +2,7 @@ import type { Editor, JSONContent } from '@tiptap/core';
 import type { EditorView } from '@tiptap/pm/view';
 import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
+    buildChartClipboardItem,
     buildImageClipboardItem,
     buildTextClipboardItem,
     clipboardTextItemHasContent,
@@ -10,9 +11,11 @@ import {
 } from '@workspace/lib/clipboard';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import {
+    CHART_DEFAULT_SIZE,
     ITALIC_HEADING_LEVELS,
     ITALIC_HEADING_SELECTOR,
     PAGE_NUMBER_TEXT,
+    readChartAttrs,
     readEquation,
     type TitleType,
 } from '@workspace/lib/docs/eigendoc';
@@ -62,8 +65,9 @@ function textRunBox(view: EditorView, from: number, to: number): ClipboardBox {
 }
 
 // The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file
-// resolves, and the text between them as a text item, a line per paragraph, an equation as its text, a page
-// number as its # and a footnote as nothing. None resolves → no items, and the copy is ProseMirror's own.
+// resolves, a chart item per chart with inline data, and the text between them as a text item, a line per
+// paragraph, an equation as its text, a page number as its # and a footnote as nothing. None → no items, and the
+// copy is ProseMirror's own.
 function copiedClipboardItems(
     view: EditorView,
     from: number,
@@ -80,14 +84,26 @@ function copiedClipboardItems(
         if (text) items.push(buildTextClipboardItem({ text, box: textRunBox(view, runFrom, runTo) }));
     };
     // A note's text and images are no part of the sentence around its reference: a paste elsewhere places them as one.
+    const push = (pos: number, size: number, item: EigenClipboardItem) => {
+        pushText(pos);
+        runFrom = pos + size;
+        items.push(item);
+    };
     view.state.doc.nodesBetween(from, to, (node, pos) => {
         if (node.type.name === 'footnote') return false;
+        if (node.type.name === 'chart') {
+            const { spec, width, height } = readChartAttrs(node.attrs);
+            const box = { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
+            const item = spec ? buildChartClipboardItem({ spec, box }) : null;
+            if (item) push(pos, node.nodeSize, item);
+            return;
+        }
         if (node.type.name !== 'figure' || !node.attrs.mediaName) return;
         const mediaPath = resolveMediaPath(node.attrs.mediaName);
         if (!mediaPath) return;
-        pushText(pos);
-        runFrom = pos + node.nodeSize;
-        items.push(
+        push(
+            pos,
+            node.nodeSize,
             buildImageClipboardItem({
                 mediaName: node.attrs.mediaName,
                 source: mediaPath,
@@ -182,12 +198,14 @@ function eigenTextItemContent({ text, typography: typo }: EigenClipboardTextItem
 // marked with data-pm-slice, pastes through that HTML, which keeps the headings, lists and marks its text items
 // flatten; a figure with no item (unresolved at copy) or a failed re-upload is dropped, so none pastes broken. Any
 // other payload is placed in wire order, text as whole paragraphs, so beside text an image takes a paragraph of its
-// own; an image-only paste stays inline at the caret.
+// own; an image-only paste stays inline at the caret. A chart is as wide as it came, or `columnWidth` keeping its
+// shape when wider, as a pasted span.chart is.
 export async function insertEigenItems(
     editor: Editor,
     items: EigenClipboardItem[],
     html: string,
     pastedMediaName: (item: EigenClipboardImageItem) => Promise<string | null>,
+    columnWidth: number,
 ): Promise<void> {
     const sources = new Map<string, EigenClipboardImageItem>();
     for (const item of items) if (item.type === 'image') sources.set(item.mediaName, item);
@@ -212,16 +230,31 @@ export async function insertEigenItems(
         if (item.type === 'text') {
             const paragraphs = eigenTextItemContent(item);
             if (paragraphs.length > 0) editor.chain().focus().insertContent(paragraphs).run();
-        } else if (item.type === 'image') {
-            const mediaName = storedNames.get(item.mediaName);
-            if (!mediaName) continue;
-            const { width } = readClipboardBox(item);
-            const figure = { type: 'figure', attrs: { mediaName, width, caption: item.caption } };
-            editor
-                .chain()
-                .focus()
-                .insertContent(withText ? { type: 'paragraph', content: [figure] } : figure)
-                .run();
+            continue;
         }
+        const node = atomContent(item, storedNames, columnWidth);
+        if (!node) continue;
+        editor
+            .chain()
+            .focus()
+            .insertContent(withText ? { type: 'paragraph', content: [node] } : node)
+            .run();
     }
+}
+
+// An image item as a figure under its stored name, a chart item as a chart.
+function atomContent(
+    item: EigenClipboardItem,
+    storedNames: Map<string, string | null>,
+    columnWidth: number,
+): JSONContent | null {
+    if (item.type === 'image') {
+        const mediaName = storedNames.get(item.mediaName);
+        if (!mediaName) return null;
+        const { width } = readClipboardBox(item);
+        return { type: 'figure', attrs: { mediaName, width, caption: item.caption } };
+    }
+    if (item.type !== 'chart') return null;
+    const scale = Math.min(1, columnWidth / item.width);
+    return { type: 'chart', attrs: { spec: item.spec, width: item.width * scale, height: item.height * scale } };
 }

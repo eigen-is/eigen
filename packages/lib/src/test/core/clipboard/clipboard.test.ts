@@ -1,6 +1,8 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { toast } from 'sonner';
+import { sampleChartSpec } from '../../../charts/spec';
 import {
+    buildChartClipboardItem,
     clipboardTextItemHasContent,
     copyToClipboard,
     EIGEN_CLIPBOARD_RENDER_ATTR,
@@ -10,6 +12,7 @@ import {
     inlineClipboardSvgMedia,
     materializeClipboardSvg,
     needsReUpload,
+    readClipboardBox,
     readEigenClipboard,
     readSvgClipboardWithItems,
     svgToImageDataUri,
@@ -470,5 +473,36 @@ describe('readEigenClipboard — the forged-wire seam', () => {
     test('a valid payload still round-trips whole', () => {
         const data = sampleData();
         expect(readEigenClipboard(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data) }))).toEqual(data);
+    });
+});
+
+describe('chart items', () => {
+    const inline = JSON.stringify(sampleChartSpec('column'));
+    const range = JSON.stringify({
+        ...sampleChartSpec('column'),
+        data: { source: 'range', categories: null, series: [] },
+    });
+    const raw = (item: unknown): DataTransfer =>
+        stubClipboard({ [EIGEN_MIME]: JSON.stringify({ version: 1, items: [item] }) });
+
+    test('a chart with inline data builds an item at its box, with no angle, its spec as given', () => {
+        const item = buildChartClipboardItem({ spec: inline, box: { width: 600.5, height: 371.25 } });
+        expect(item).toEqual({ type: 'chart', spec: inline, width: 600.5, height: 371.25 });
+        if (item) expect(readClipboardBox(item)).toEqual({ width: 600.5, height: 371.25, angle: undefined });
+    });
+
+    test('a range, unreadable or oversized spec builds no item', () => {
+        const box = { width: 10, height: 10 };
+        const oversized = JSON.stringify({ ...sampleChartSpec('column'), title: 'x'.repeat(70 * 1024) });
+        for (const spec of [range, '{', oversized]) expect(buildChartClipboardItem({ spec, box })).toBeNull();
+    });
+
+    test('the reader keeps a chart with inline data and drops any other', () => {
+        const good: EigenClipboardItem = { type: 'chart', spec: inline, width: 600, height: 371 };
+        expect(readEigenClipboard(raw(good))?.items).toEqual([good]);
+        for (const spec of [range, 'null', 42, undefined]) {
+            expect(readEigenClipboard(raw({ ...good, spec }))?.items).toEqual([]);
+        }
+        expect(readEigenClipboard(raw({ ...good, height: Number.NaN }))?.items).toEqual([]);
     });
 });

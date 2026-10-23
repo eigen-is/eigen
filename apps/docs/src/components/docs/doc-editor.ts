@@ -407,15 +407,18 @@ export function docEditorOptions({
                 }
 
                 if (paste.eigen) {
-                    // Images take this path for the cross-mount re-upload, a docs copy's through its own
-                    // HTML; text only when text/html is marker-only (a canvas text copy), so a sheets table
-                    // still parses in PM. Claimed only with an item this editor can place, or ⌘V on a bare
-                    // `elements` item is dead.
-                    const hasImage = paste.eigen.items.some((i) => i.type === 'image');
-                    const hasText = paste.eigen.items.some((i) => i.type === 'text' && clipboardTextItemHasContent(i));
-                    if (hasImage || (hasText && !hasRichHtmlBeyondMarker(event.clipboardData))) {
+                    // Images and charts take this path, images for the cross-mount re-upload, a docs copy's
+                    // through its own HTML; text only when text/html is marker-only (a canvas text copy), so a
+                    // sheets table still parses in PM. Claimed only with an item this editor can place, or ⌘V
+                    // on a bare `elements` item is dead. A band and a note place no chart, as their Insert
+                    // menus offer none.
+                    const items =
+                        band || note ? paste.eigen.items.filter((i) => i.type !== 'chart') : paste.eigen.items;
+                    const hasAtom = items.some((i) => i.type === 'image' || i.type === 'chart');
+                    const hasText = items.some((i) => i.type === 'text' && clipboardTextItemHasContent(i));
+                    if (hasAtom || (hasText && !hasRichHtmlBeyondMarker(event.clipboardData))) {
                         event.preventDefault();
-                        insertEigenItems(target, paste.eigen.items, paste.html, pastedMediaName).catch(() => {});
+                        insertEigenItems(target, items, paste.html, pastedMediaName, textColumnWidth()).catch(() => {});
                         return true;
                     }
                 }

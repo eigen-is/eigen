@@ -9,6 +9,7 @@ import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { clipToUsedExtent, getSheetIndex } from '../utils';
 import { createContextResolver } from './formula-cache';
+import { selectedCellOrigin } from './image';
 
 // Each writer touches one chart of the current sheet and nothing else, field by field, so a batch
 // on a chart a peer deleted fails whole on every client and in the replay. What writes a whole chart
@@ -24,11 +25,22 @@ function currentSheet(ctx: Context) {
 }
 
 export function insertChart(ctx: Context, id: string, box: ChartBox, spec: ChartSpec) {
+    addChart(ctx, id, box, JSON.stringify(spec));
+}
+
+function addChart(ctx: Context, id: string, box: ChartBox, spec: string) {
     const sheet = currentSheet(ctx);
     if (!sheet) return;
     const charts = (sheet.charts ??= {});
     const top = orderByFractionalIndex(Object.values(charts)).at(-1);
-    charts[id] = { id, index: generateKeyBetween(top?.index, null), ...box, spec: JSON.stringify(spec) };
+    charts[id] = { id, index: generateKeyBetween(top?.index, null), ...box, spec };
+}
+
+// A pasted chart lands on the selected cell at its copied size, its spec stored as it came, and selected.
+export function pasteChart(ctx: Context, id: string, spec: string, size: Pick<ChartBox, 'width' | 'height'>) {
+    if (!currentSheet(ctx)) return;
+    addChart(ctx, id, { ...selectedCellOrigin(ctx), ...size }, spec);
+    selectChart(ctx, id);
 }
 
 export function updateChartBox(ctx: Context, id: string, box: Partial<ChartBox>) {
