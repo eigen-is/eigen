@@ -15,7 +15,7 @@ import {
     xlsxPackage,
 } from '../../scripts/xlsx-audit';
 
-// The gate the new xlsx reader passes before it replaces ExcelJS's: what the audit counts on either side, and that a
+// What the audit counts on either side, and that a
 // run survives what an importer does to it and compare reports what changed.
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'xlsx-audit-'));

@@ -77,7 +77,7 @@ describe('columns', () => {
         expect(sheet).toMatchObject({ defaultColWidth: 64, defaultRowHeight: 20 });
     });
 
-    // ExcelJS gave a <col> without a width 9 characters.
+    // A <col> without a width is 9 characters.
     test('a <col> without a width keeps the default width', () => {
         const { config } = read('<cols><col min="1" max="2" hidden="1"/><col min="3" max="3" style="1"/></cols>');
         expect(config.columnlen).toBeUndefined();
@@ -122,7 +122,7 @@ describe('merges', () => {
         expect(config.merge).toEqual({ '1_1': { r: 1, c: 1, rs: 2, cs: 2 } });
     });
 
-    // ExcelJS refused a workbook whose merges overlap; Excel repairs it by dropping the later merge.
+    // A workbook whose merges overlap is read; Excel repairs it by dropping the later merge.
     test('a merge over a cell an earlier one holds is dropped', () => {
         const { config, placed } = read(
             '',
@@ -170,7 +170,7 @@ describe('views and the filter', () => {
         });
     });
 
-    // ExcelJS read only "0" as off.
+    // "0" and "false" are both off.
     test("gridlines are off by the first view's showGridLines", () => {
         expect(pane('', ' showGridLines="0"').showGridLines).toBe(false);
         expect(pane('', ' showGridLines="false"').showGridLines).toBe(false);
@@ -210,7 +210,7 @@ describe('hyperlinks', () => {
         expect(charged[0]).toEqual([1, 'https://example.com/page'.length]);
     });
 
-    test("an external link's location is its fragment; ExcelJS's own internal links stay internal", () => {
+    test("an external link's location is its fragment; an internal link written with a `#` relationship stays internal", () => {
         expect(links('<hyperlink ref="A1" r:id="rId1" location="section"/>').links).toEqual({
             '0_0': { linkType: 'webpage', linkAddress: 'https://example.com/page#section' },
         });
@@ -236,7 +236,7 @@ describe('hyperlinks', () => {
             '<mergeCells><mergeCell ref="B2:C2"/></mergeCells>',
         );
         expect(Object.keys(found ?? {})).toEqual(['1_1', '3_3', '4_4']);
-        // ExcelJS took the link written for the cell alone.
+        // The link written for the cell alone is not the merge's.
         expect(found?.['3_3']).toEqual({ linkType: 'sheet', linkAddress: 'Other' });
         expect(placed).toEqual([
             { r: 1, c: 1, v: { mc: { r: 1, c: 1, rs: 1, cs: 2 }, hl: { r: 1, c: 1, id: 'sheet-0' } } },
@@ -283,7 +283,7 @@ describe('in the sheet', () => {
         expect(sheet.hyperlink).toEqual({ '4_4': { linkType: 'cellrange', linkAddress: 'Sheet1!A1' } });
     });
 
-    // ExcelJS made a cell with an external link its text: a number became '', a formula its result.
+    // A cell with an external link keeps its value: a number stays a number, a formula its formula.
     test('an externally linked cell keeps its value, type and formula', () => {
         const sheet = own(
             '<row r="1"><c r="A1"><v>42</v></c><c r="B1"><f>A1*2</f><v>84</v></c></row>',

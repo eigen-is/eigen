@@ -16,7 +16,6 @@ import {
 } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
-import ExcelJS from 'exceljs';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
@@ -54,6 +53,7 @@ import { getHome } from '../../lib/home/get-home';
 import { type DocxImage, docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
 import { IMPORT_MESSAGES } from '../../lib/import/messages';
+import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import type { Mount } from '../../lib/mount';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
@@ -547,13 +547,12 @@ describe('document transform (eigensheets export)', () => {
 
     test('xlsx export through the Worker returns a parseable workbook', async () => {
         const result = await exportDocument(golden.mount, golden.path, 'xlsx');
-        const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(result.data);
-        expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
-        const dashboard = workbook.getWorksheet('Dashboard');
-        expect(dashboard?.getCell('B2').value).toBe(48);
-        // Recalc ran in the Worker before ExcelJS built the workbook.
-        expect(dashboard?.getCell('F2').value).toMatchObject({ formula: 'SUM(B2:E2)', result: GOLDEN_ROW1_TOTAL });
+        const sheets = xlsxToSheets(result.data);
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
+        const cell = (r: number, c: number) => sheets[0].celldata?.find((d) => d.r === r && d.c === c)?.v;
+        expect(cell(1, 1)).toMatchObject({ v: 48 });
+        // Recalc ran in the Worker before the workbook was written.
+        expect(cell(1, 5)).toMatchObject({ f: '=SUM(B2:E2)', v: GOLDEN_ROW1_TOTAL });
     }, 120_000);
 });
 

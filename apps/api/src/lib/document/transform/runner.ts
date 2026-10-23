@@ -24,7 +24,7 @@ import {
 // owns periodic jobs; the closest sibling shape is ContentReindexQueue.
 //
 // Policy (docs/DOCUMENT-TRANSFORMS.md § A child serves one job, then dies): one active child so a
-// single ExcelJS/Yjs heap exists at a time, a bounded queue with two priorities, one-shot
+// single Yjs heap exists at a time, a bounded queue with two priorities, one-shot
 // children killed after every outcome, and NEVER a main-thread fallback — an
 // overloaded or failing runner must not reintroduce the event-loop freeze it
 // exists to remove.

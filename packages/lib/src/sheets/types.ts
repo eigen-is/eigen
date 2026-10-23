@@ -103,7 +103,7 @@ export type BorderType =
     | 'border-vertical'
     | 'border-none';
 
-// The xlsx/OOXML border-style vocabulary (exceljs `Border['style']`), the `name`
+// The xlsx/OOXML border-style vocabulary (the `ST_BorderStyle` names), the `name`
 // side of each `BORDER_STYLES` ordinal.
 export type BorderStyleName =
     | 'thin'

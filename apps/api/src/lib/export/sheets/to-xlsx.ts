@@ -5,13 +5,11 @@ import { writeWorkbook } from './xlsx/package';
 
 // Sheet[] -> XLSX workbook bytes, the SpreadsheetML written by hand as the import reads it. Runs in the transform
 // process (child.ts owns execution, export-document.ts the orchestration), so it never reaches the Mount. What Excel's
-// limits cut is counted in `warnings`. `writer: 'exceljs'` writes the workbook as ExcelJS did, for the round-trip gate
-// that compares the two before ExcelJS leaves.
+// limits cut is counted in `warnings`.
 export async function sheetsToXlsx(
     sheets: Sheet[],
-    { title = '', warnings = [], writer }: { title?: string; warnings?: TransformWarning[]; writer?: 'exceljs' } = {},
+    { title = '', warnings = [] }: { title?: string; warnings?: TransformWarning[] } = {},
 ): Promise<Uint8Array> {
-    if (writer === 'exceljs') return (await import('./to-xlsx-exceljs')).sheetsToXlsxWithExcelJS(sheets);
     const losses = new Map<CountedWarningCode, number>();
     const bytes = writeWorkbook(sheets, stripEigenExtension(title), (code) =>
         losses.set(code, (losses.get(code) ?? 0) + 1),
