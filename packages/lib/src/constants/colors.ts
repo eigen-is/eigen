@@ -256,24 +256,25 @@ export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) =>
     col.map((hex, s) => ({ label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex })),
 ) as EigenColor[][];
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
-// The order calendars, labels, chart series and presence hand the accents out in. The ones at 3:1 or more on
-// white lead, every neighbor stays apart for a deuteranope, the faintest (yellow, lime) sit past the first
-// eight, and pink, the color a new deck's title slide opens on, comes last. colors.test.ts pins all four.
+// The order calendars, labels, chart series and presence hand the accents out in: each next one is the furthest
+// (CIEDE2000) from those before it for normal vision and simulated deuteranopia, then protanopia and tritanopia, so the
+// first four read as blue, orange, green and red to anyone. Yellow and lime (under 2:1 on white) sit past the eighth,
+// pink (a new deck's title slide) comes last. colors.test.ts pins it.
 const EIGEN_ACCENT_ORDER = [
     'indigo',
-    'red',
-    'fuchsia',
-    'orange',
-    'sky',
-    'emerald',
-    'blue',
     'amber',
     'teal',
-    'yellow',
+    'rose',
+    'sky',
+    'orange',
     'cyan',
     'green',
+    'blue',
+    'red',
     'violet',
-    'rose',
+    'emerald',
+    'fuchsia',
+    'yellow',
     'purple',
     'lime',
     'pink',

@@ -43,7 +43,8 @@ export const INLINE_GRID_MAX_CATEGORIES = 200;
 // Google's chart font, and the one a spec that names none or a font Eigen doesn't bundle reads as.
 export const DEFAULT_CHART_FONT = DOCUMENT_FONT;
 
-// The accent colors in the order calendars hand them out, so a series and its neighbor stay apart, for a deuteranope too.
+// The accent colors in the order calendars hand them out, so the first few series and every neighbor stay apart, for a
+// color-blind reader too.
 // A series or slice whose color is null draws in the one at its index.
 export function chartColor(index: number): string {
     return EIGEN_ACCENT_COLORS_SHUFFLED[index % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
