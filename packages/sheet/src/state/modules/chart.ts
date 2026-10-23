@@ -1,4 +1,4 @@
-import { parseChartSpec, readChartLook } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import { buildChartClipboardItem } from '@workspace/lib/clipboard';
 import { nextFloatingIndex, type SheetChart, sheetFloatingBox } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
@@ -55,9 +55,6 @@ export function setChartLook(ctx: Context, id: string, look: Partial<ChartLook>)
     if (chart) Object.assign(chart, look);
 }
 
-// Google's default chart size.
-const NEW_CHART_SIZE = { width: 600, height: 371 };
-
 // Insert → Chart: a column chart of the selection, or of the table around a single selected cell, below
 // it at Google's default size, selected, so its panel shows. Inserts nothing and says why for a selection
 // that holds no chart.
@@ -73,7 +70,7 @@ export function insertChartFromSelection(ctx: Context, id: string): ChartRangeRe
     const spec = suggestChartSpec(ref, resolver);
     if (typeof spec === 'string') return spec;
     const x = ref.column[0] === 0 ? 0 : ctx.visibledatacolumn[ref.column[0] - 1];
-    insertChart(ctx, id, { x, y: ctx.visibledatarow[ref.row[1]], ...NEW_CHART_SIZE }, spec);
+    insertChart(ctx, id, { x, y: ctx.visibledatarow[ref.row[1]], ...CHART_DEFAULT_SIZE }, spec);
     selectFloatingObject(ctx, { kind: 'chart', id });
 }
 

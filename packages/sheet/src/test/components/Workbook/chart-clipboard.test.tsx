@@ -221,7 +221,7 @@ test('⌘V in another workbook pastes the inline chart', async () => {
 
 test('a chart item another app wrote pastes as an inline chart at its size', async () => {
     const spec = JSON.stringify(sampleChartSpec('pie'));
-    const item = buildChartClipboardItem({ spec, box: { width: 320.5, height: 200 } });
+    const item = buildChartClipboardItem({ spec, box: { width: 320.5, height: 200 }, look: {} });
     if (!item) throw new Error('no item');
     const clipboardData = new DataTransfer();
     writeEigenClipboard(new ClipboardEvent('copy', { clipboardData }), { version: 1, items: [item] });

@@ -1,6 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
-import { CHART_MAX_SIDE } from '@workspace/lib/charts';
-import { CHART_DEFAULT_SIZE, isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
+import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE } from '@workspace/lib/charts';
+import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
 import {
     A_NS,
     ASVG_NS,
