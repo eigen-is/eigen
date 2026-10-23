@@ -1,5 +1,6 @@
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
 import { normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
+import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import {
     DEGREE,
     type DrawingTheme,
@@ -8,9 +9,8 @@ import {
     percent,
     readColorMap,
     readColorScheme,
-} from '../../core/drawingml';
-import { A_NS, emu, isOn, P_NS } from '../../core/ooxml';
-import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
+} from '../../ooxml/drawingml';
+import { A_NS, emu, isOn, P_NS } from '../../ooxml/ooxml';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf } from './lookup';
 import { blipMedia, type DeckWalk, type Lost, type Part, type PptxPackage } from './package';
 

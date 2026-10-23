@@ -4,16 +4,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as zlib from 'node:zlib';
 import JSZip from 'jszip';
+import { ApiError } from '../../lib/core';
+import { peakRss } from '../../lib/core/peak-rss';
 import {
-    ApiError,
     MAX_DECOMPRESSED_BYTES,
     MAX_ZIP_ENTRIES,
     openZip,
     writeZip,
     ZipError,
     type ZipErrorCode,
-} from '../../lib/core';
-import { peakRss } from '../../lib/core/peak-rss';
+} from '../../lib/ooxml/zip';
 import { build, deflated, deflatedZeros, type RawPart, stored } from '../fixtures/raw-zip';
 
 const GiB = 2 ** 30;
@@ -780,7 +780,7 @@ describe('a bomb stays within its peak RSS', () => {
         const run = Bun.spawnSync([process.execPath, '-e', script], {
             env: {
                 ...process.env,
-                ZIP_MODULE: Bun.resolveSync('../../lib/core/zip', import.meta.dir),
+                ZIP_MODULE: Bun.resolveSync('../../lib/ooxml/zip', import.meta.dir),
                 PEAK_RSS: Bun.resolveSync('../../lib/core/peak-rss', import.meta.dir),
                 ZIP_PATH: path,
             },

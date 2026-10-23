@@ -11,9 +11,7 @@ import {
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
 import JSZip from 'jszip';
 import sharp from 'sharp';
-import { parseOoxml } from '../../lib/core/ooxml';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
-import { openZip, type ZipReader } from '../../lib/core/zip';
 import type { EigendocBands } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { cssPt, QUOTE_LOOK, twips } from '../../lib/document/looks';
@@ -22,6 +20,8 @@ import { type ExportMedia, toTransferableText } from '../../lib/document/transfo
 import { chartFigureMedia, eigendocToDocx } from '../../lib/export/doc/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
 import { withSvgFallbacks } from '../../lib/export/office-image';
+import { parseOoxml } from '../../lib/ooxml/ooxml';
+import { openZip, type ZipReader } from '../../lib/ooxml/zip';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,

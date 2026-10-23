@@ -1,9 +1,9 @@
 import { BAND_ROOTS, type BandRoot, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
-import { alternativeFor, isOn, POINTS_PER_UNIT, R_NS, W_NS } from '../../core/ooxml';
-import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../core/opc';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
-import type { ZipReader } from '../../core/zip';
+import { alternativeFor, isOn, POINTS_PER_UNIT, R_NS, W_NS } from '../../ooxml/ooxml';
+import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../ooxml/opc';
+import type { ZipReader } from '../../ooxml/zip';
 import { IMPORT_MESSAGES } from '../messages';
 
 // A piece past a run's first is a node no tag counts, about 600 bytes held before the output is weighed; the corpus's

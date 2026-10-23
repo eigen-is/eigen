@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { bundledFont } from '@workspace/lib/constants/fonts';
-import { parseOoxml } from '../../../lib/core/ooxml';
 import { BATCH_BYTES, MAX_XLSX_ELEMENTS, readBudget } from '../../../lib/import/sheets/package';
 import { readSharedStrings, stringOf, textOf } from '../../../lib/import/sheets/strings';
+import { parseOoxml } from '../../../lib/ooxml/ooxml';
 import { SML } from '../../fixtures/xlsx';
 
 // Shared and inline strings: the text a cell shows, with a rich string's runs kept beside it.

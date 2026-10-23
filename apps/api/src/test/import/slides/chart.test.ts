@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { parseChartSpec } from '@workspace/lib/charts';
 import { TRANSPARENT_COLOR } from '@workspace/lib/vector';
-import { CHART_CONTENT_TYPE } from '../../../lib/core/ooxml-chart';
 import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
+import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
 import {
     box,
     buildPptx,

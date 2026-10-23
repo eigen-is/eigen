@@ -2,7 +2,7 @@ import type { JSONContent } from '@tiptap/core';
 import { isFigureFrameNode, ptToTwips, readParagraphFormat, twipsToPt } from '@workspace/lib/docs/eigendoc';
 import { readStoredEquation } from '../../document/equation';
 import { BLOCK_MARGINS, CODE_BLOCK_LOOK, QUOTE_LOOK, TABLE_MARGIN, untypedListFormat } from '../../document/looks';
-import { LIST_FORMATS, LIST_LEVELS, LIST_TYPES } from '../../document/wordml';
+import { LIST_FORMATS, LIST_LEVELS, LIST_TYPES } from '../../ooxml/wordml';
 import type { ListRef } from './numbering';
 import type { Role } from './styles';
 

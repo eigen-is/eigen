@@ -9,13 +9,13 @@ import {
     SHEET_DEFAULT_COL_WIDTH,
     type Sheet,
 } from '@workspace/lib/sheets';
-import { CHART_CONTENT_TYPE } from '../../../lib/core/ooxml-chart';
-import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/core/zip';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { CHART_SHEET_SIZE } from '../../../lib/import/sheets/drawing';
 import { readXlsx } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
+import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
+import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
 import { PIXEL_PNG } from '../../fixtures/pptx';
 import { type FixtureSheet, OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 

@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
-import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import { XmlError, xmlAttr, xmlChild, xmlElements } from '../../../lib/core/xml';
-import { writeZip, ZipError } from '../../../lib/core/zip';
 import {
     BATCH_BYTES,
     MAX_XLSX_ELEMENTS,
@@ -10,6 +8,8 @@ import {
     readInBatches,
     readPackage,
 } from '../../../lib/import/sheets/package';
+import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
+import { writeZip, ZipError } from '../../../lib/ooxml/zip';
 import { OFFICE_COLORS, SML, sheetXml, xlsxFixture } from '../../fixtures/xlsx';
 
 // The workbook part through the package's relationships, and a part's children read a batch at a time.

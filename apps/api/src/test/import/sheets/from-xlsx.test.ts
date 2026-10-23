@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { ApiError } from '../../../lib/core/errors';
-import { openZip, writeZip } from '../../../lib/core/zip';
 import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
+import { openZip, writeZip } from '../../../lib/ooxml/zip';
 import { OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 

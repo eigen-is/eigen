@@ -3,7 +3,6 @@ import { isAllowedUri } from '@tiptap/extension-link';
 import { readFontSize } from '@workspace/lib/constants/fonts';
 import { type Caps, PAGE_NUMBER_KINDS, type PageNumberKind } from '@workspace/lib/docs/eigendoc';
 import { MathError, readOmml, readOmmlText, writeMathml } from '@workspace/math';
-import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../core/ooxml';
 import {
     trimXmlSpace,
     XML_NAMESPACE,
@@ -15,7 +14,8 @@ import {
     xmlText,
 } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
-import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../document/wordml';
+import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../ooxml/ooxml';
+import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../ooxml/wordml';
 import type { Item } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';

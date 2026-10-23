@@ -16,7 +16,6 @@ import { enforceMountQuota } from '../config/enforcement';
 import { getPublicOrigin } from '../config/server-config';
 import { getMaxUploadSize } from '../config/server-settings';
 import { ApiError } from '../core/errors';
-import { MAX_DECOMPRESSED_BYTES } from '../core/zip';
 import { commitEigendocImport } from '../document/doc';
 import { appendSheetsToYjs, writeSheetsSnapshotToYjs } from '../document/sheets';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
@@ -39,6 +38,7 @@ import {
 import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
 import type { Mount } from '../mount';
+import { MAX_DECOMPRESSED_BYTES } from '../ooxml/zip';
 import type { User } from '../user';
 import { IMPORT_MESSAGES, importSummary, PRESENTATION_EMPTY } from './messages';
 

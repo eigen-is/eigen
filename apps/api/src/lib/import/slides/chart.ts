@@ -1,9 +1,9 @@
 import { FLAT_CHART_LOOK } from '@workspace/lib/charts';
 import type { VectorElementPatch } from '@workspace/lib/vector';
-import type { DrawingTheme } from '../../core/drawingml';
-import { A_NS, C_NS, R_NS } from '../../core/ooxml';
-import { type ChartRead, chartColors, chartCost, readChart } from '../../core/ooxml-chart';
 import type { XmlElement } from '../../core/xml';
+import type { DrawingTheme } from '../../ooxml/drawingml';
+import { A_NS, C_NS, R_NS } from '../../ooxml/ooxml';
+import { type ChartRead, chartColors, chartCost, readChart } from '../../ooxml/ooxml-chart';
 import { colorOf, mutedColor, textColorOf } from './inherit';
 import { affords, cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
 import type { DeckWalk, Part } from './package';

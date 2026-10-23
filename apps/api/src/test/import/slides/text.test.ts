@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_HTML_BYTES } from '@workspace/lib/vector';
-import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
-import type { Relationship } from '../../../lib/core/opc';
 import { type XmlElement, xmlChild } from '../../../lib/core/xml';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import type { SlideTheme } from '../../../lib/import/slides/inherit';
 import { richTextOf } from '../../../lib/import/slides/text';
+import { A_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
+import type { Relationship } from '../../../lib/ooxml/opc';
 import { box, buildPptx, countVisits, NS, para, REL, rel, run, sp } from '../../fixtures/pptx';
 
 // A text body as one rich-text box: its paragraphs as HTML, the box styled by the run most of its text is in, every

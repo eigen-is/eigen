@@ -1,8 +1,8 @@
 import { EIGEN_FONT_NAMES, FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
 import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips, type TitleType } from '@workspace/lib/docs/eigendoc';
+import { LIST_FORMATS, LIST_LEVELS } from '../ooxml/wordml';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
-import { LIST_FORMATS, LIST_LEVELS } from './wordml';
 
 // The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a
 // re-save drops the writer's styles and keeps it as direct formatting.

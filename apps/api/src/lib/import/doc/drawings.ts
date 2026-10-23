@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE } from '@workspace/lib/charts';
 import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
+import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import {
     A_NS,
     ASVG_NS,
@@ -16,10 +17,9 @@ import {
     V_NS,
     W_NS,
     WP_NS,
-} from '../../core/ooxml';
-import { CHART_NOT_IMPORTED, chartCost, chartPart, droppedChart, readChart } from '../../core/ooxml-chart';
-import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
-import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../document/wordml';
+} from '../../ooxml/ooxml';
+import { CHART_NOT_IMPORTED, chartCost, chartPart, droppedChart, readChart } from '../../ooxml/ooxml-chart';
+import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
 import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
 import { descendants, int } from './package';

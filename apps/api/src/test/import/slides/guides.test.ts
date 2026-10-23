@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
-import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
 import { xmlChild } from '../../../lib/core/xml';
 import { evaluateGuides, type GuideList, guideListOf, guideValue, MAX_GUIDES } from '../../../lib/import/slides/guides';
 import { affords, withWorkBudget } from '../../../lib/import/slides/lookup';
+import { A_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import { NS } from '../../fixtures/pptx';
 
 // DrawingML's shape guide formulas: lengths in EMU, angles in 60,000ths of a degree, every result finite.

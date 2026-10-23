@@ -9,7 +9,7 @@ import {
 } from '@workspace/lib/sheets';
 
 // Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
-// format shares is core/ooxml.ts.
+// format shares is ooxml/ooxml.ts.
 
 // The format a date shows in when its own draws no date: Excel's for a bare serial in the US locale.
 export const DATE_FORMAT = 'm/d/yyyy';

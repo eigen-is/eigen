@@ -1,11 +1,11 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { CHART_MAX_SIDE } from '@workspace/lib/charts';
-import { C_NS } from '../../../lib/core/ooxml';
-import * as ooxmlChart from '../../../lib/core/ooxml-chart';
-import { CHART_CONTENT_TYPE, CHART_NOT_IMPORTED } from '../../../lib/core/ooxml-chart';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
+import { C_NS } from '../../../lib/ooxml/ooxml';
+import * as ooxmlChart from '../../../lib/ooxml/ooxml-chart';
+import { CHART_CONTENT_TYPE, CHART_NOT_IMPORTED } from '../../../lib/ooxml/ooxml-chart';
 import {
     buildDocxWithBands,
     chartParts,

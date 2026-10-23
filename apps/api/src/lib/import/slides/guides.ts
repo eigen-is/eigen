@@ -1,6 +1,6 @@
-import { DEGREE } from '../../core/drawingml';
-import { A_NS, emu } from '../../core/ooxml';
 import { type XmlElement, xmlAttr } from '../../core/xml';
+import { DEGREE } from '../../ooxml/drawingml';
+import { A_NS, emu } from '../../ooxml/ooxml';
 import { cachedBy, charge, childrenOf } from './lookup';
 
 // DrawingML's shape guides (ECMA-376 §20.1.9.11), as a custGeom and the presets compute their points: lengths in EMU,

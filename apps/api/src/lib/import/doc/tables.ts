@@ -5,10 +5,10 @@ import {
     PROSE_TEXTBLOCKS,
     readCellBackground,
 } from '@workspace/lib/docs/eigendoc';
-import { isOn, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
-import { MAX_TABLE_COLUMNS, STYLE_NAMES, TWIPS_PER_PX } from '../../document/wordml';
+import { isOn, W_NS } from '../../ooxml/ooxml';
+import { MAX_TABLE_COLUMNS, STYLE_NAMES, TWIPS_PER_PX } from '../../ooxml/wordml';
 import { build, type Item, inlineText, isWhitespace, type Para } from './assemble';
 import { int, onOff, twipsOf, w, wChild } from './package';
 import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';

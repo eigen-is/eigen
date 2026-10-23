@@ -5,15 +5,15 @@ import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { readOmml, writeMathml } from '@workspace/math';
-import { M_NS, parseOoxml, W_NS } from '../../../lib/core/ooxml';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
-import { openZip } from '../../../lib/core/zip';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
 import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
 import { chartFigureMedia, eigendocToDocx } from '../../../lib/export/doc/to-docx';
 import { withSvgFallbacks } from '../../../lib/export/office-image';
 import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
+import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
+import { openZip } from '../../../lib/ooxml/zip';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 import { importDocxBody } from '../../fixtures/golden-docx';
 

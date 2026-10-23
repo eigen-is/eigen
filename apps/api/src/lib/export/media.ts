@@ -1,9 +1,9 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
-import { MAX_DECOMPRESSED_BYTES } from '../core/zip';
 import { listDocumentMedia } from '../document/media';
 import { type ExportMedia, type ExportTransformJob, toTransferableBuffer } from '../document/transform/protocol';
 import type { Mount } from '../mount';
+import { MAX_DECOMPRESSED_BYTES } from '../ooxml/zip';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { getScreenPreview, isScreenPreviewRedirect } from '../preview/preview-cache';
 import { generateImagePreview } from '../shared/thumbnails';

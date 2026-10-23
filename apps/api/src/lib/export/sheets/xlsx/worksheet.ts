@@ -11,9 +11,9 @@ import {
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { escapeXml } from '@workspace/lib/xml';
 import { parseA1Range, quoteSheetName, rangeToA1, toA1, unquoteSheetName } from '@workspace/sheet/engine';
-import { R_NS, SML_NS } from '../../../core/ooxml';
-import { type Relationship, uriReference } from '../../../core/opc';
-import { MAX_SHEET_LINKS, pxToColumnWidth } from '../../../document/spreadsheetml';
+import { R_NS, SML_NS } from '../../../ooxml/ooxml';
+import { type Relationship, uriReference } from '../../../ooxml/opc';
+import { MAX_SHEET_LINKS, pxToColumnWidth } from '../../../ooxml/spreadsheetml';
 import { type GridContext, inGrid, keyOf, sheetGrid } from './cells';
 import { rulesXml } from './rules';
 import { argbOf } from './styles';

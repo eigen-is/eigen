@@ -6,12 +6,12 @@ import type {
     Sheet,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { parseOoxml } from '../../../../lib/core/ooxml';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
 import { rulesXml } from '../../../../lib/export/sheets/xlsx/rules';
 import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
 import { readRules } from '../../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../../lib/import/sheets/styles';
+import { parseOoxml } from '../../../../lib/ooxml/ooxml';
 import { sheetXml } from '../../../fixtures/xlsx';
 
 // A sheet's conditional formats and data validations, written and read back through the reader, with the dxfs the

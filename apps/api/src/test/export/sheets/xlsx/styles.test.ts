@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { type Cell, SHEET_DEFAULT_DIGIT_WIDTH } from '@workspace/lib/sheets';
-import { parseOoxml } from '../../../../lib/core/ooxml';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
 import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
 import { defaultFontDigitWidth, readDxfs, readLooks } from '../../../../lib/import/sheets/styles';
+import { parseOoxml } from '../../../../lib/ooxml/ooxml';
 
 function registryOf() {
     const lost: CountedWarningCode[] = [];

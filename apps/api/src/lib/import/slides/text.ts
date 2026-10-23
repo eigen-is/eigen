@@ -10,10 +10,10 @@ import {
     type VectorRichTextElement,
     type VerticalAlign,
 } from '@workspace/lib/vector';
-import { percent } from '../../core/drawingml';
-import { A_NS, EMU_PER_POINT, emu, isAlternateContent, isOn, R_NS } from '../../core/ooxml';
-import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlElements, xmlText } from '../../core/xml';
+import { percent } from '../../ooxml/drawingml';
+import { A_NS, EMU_PER_POINT, emu, isAlternateContent, isOn, R_NS } from '../../ooxml/ooxml';
+import type { Relationship } from '../../ooxml/opc';
 import { colorOf, fillIn, paintOf, type ShapeProperties, type SlideTheme } from './inherit';
 import { charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 import { alternative, type DeckWalk, type Lost } from './package';

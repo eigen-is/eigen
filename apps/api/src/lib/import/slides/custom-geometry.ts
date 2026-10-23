@@ -6,9 +6,9 @@ import {
     PATH_COORD_MIN,
     round4,
 } from '@workspace/lib/vector';
-import { DEGREE } from '../../core/drawingml';
-import { A_NS, emu, isOn } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
+import { DEGREE } from '../../ooxml/drawingml';
+import { A_NS, emu, isOn } from '../../ooxml/ooxml';
 import { evaluateGuides, type GuideList, type Guides, guideListOf, guideValue, RADIANS_PER_UNIT } from './guides';
 import { affords, charge, childOf, spend } from './lookup';
 

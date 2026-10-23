@@ -1,7 +1,7 @@
 import type { InlineStringSegment } from '@workspace/lib/sheets';
-import { SML_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlChild, xmlElements, xmlText } from '../../core/xml';
-import { decodeEscapes } from '../../document/spreadsheetml';
+import { SML_NS } from '../../ooxml/ooxml';
+import { decodeEscapes } from '../../ooxml/spreadsheetml';
 import { type ReadBudget, readInBatches } from './package';
 import { fontLook, type ThemePalette } from './styles';
 

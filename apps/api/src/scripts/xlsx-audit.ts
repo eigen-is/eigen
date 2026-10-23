@@ -31,17 +31,17 @@ import {
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { parseA1Range, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
-import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS } from '../lib/core/ooxml';
-import { uriReference } from '../lib/core/opc';
 import { peakRss } from '../lib/core/peak-rss';
-import { MAX_DECOMPRESSED_BYTES, openZip, writeZip, type ZipWriteEntry } from '../lib/core/zip';
-import { MAX_FORMULA_STRING_LENGTH } from '../lib/document/spreadsheetml';
 import type { TransformWarning } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/office-image';
 import type { sheetsToXlsx } from '../lib/export/sheets/to-xlsx';
 import { sheetNames } from '../lib/export/sheets/xlsx/package';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
+import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS } from '../lib/ooxml/ooxml';
+import { uriReference } from '../lib/ooxml/opc';
+import { MAX_FORMULA_STRING_LENGTH } from '../lib/ooxml/spreadsheetml';
+import { MAX_DECOMPRESSED_BYTES, openZip, writeZip, type ZipWriteEntry } from '../lib/ooxml/zip';
 import {
     type RoundtripDifference as BaseDifference,
     type CorpusFile,

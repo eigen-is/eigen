@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { readPackage } from '../../../lib/import/slides/package';
+import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
 import {
     box,
     buildPptx,

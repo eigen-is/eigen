@@ -19,9 +19,9 @@ import {
     type VectorFrame,
     type VectorScene,
 } from '@workspace/lib/vector';
-import { EMU_PER_POINT } from '../lib/core/ooxml';
 import type { eigenslidesToPptx } from '../lib/export/slides/to-pptx';
 import type { ImportedMedia } from '../lib/import/image-types';
+import { EMU_PER_POINT } from '../lib/ooxml/ooxml';
 import {
     canonical,
     classify,
@@ -379,7 +379,7 @@ async function pptxRoundtripChild(
     const { readVectorFromDoc } = await import('@workspace/lib/vector');
     const { importPptxToSlidesUpdate } = await import('../lib/import/slides/transform');
     const { sanitizeSceneHtml } = await import('../lib/export/sanitize');
-    const { MAX_DECOMPRESSED_BYTES } = await import('../lib/core/zip');
+    const { MAX_DECOMPRESSED_BYTES } = await import('../lib/ooxml/zip');
     const module: unknown = await import(options.writer);
     const write =
         typeof module === 'object' && module !== null && 'eigenslidesToPptx' in module && module.eigenslidesToPptx;

@@ -27,6 +27,26 @@ import {
     type TitleType,
 } from '@workspace/lib/docs/eigendoc';
 import {
+    trimXmlSpace,
+    XML_NAMESPACE,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+} from '../lib/core/xml';
+import { cssColorToHex } from '../lib/document/colors';
+import { docSchema } from '../lib/document/doc-schema';
+import { readStoredEquation } from '../lib/document/equation';
+import { nodeLook } from '../lib/document/looks';
+import type { eigendocToDocx } from '../lib/export/doc/to-docx';
+import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
+import type { docxToPmJson } from '../lib/import/doc/from-docx';
+import { descendants } from '../lib/import/doc/package';
+import { isBodySizedRun } from '../lib/import/doc/paragraphs';
+import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
+import {
     A_NS,
     C_NS,
     isOn,
@@ -41,23 +61,8 @@ import {
     W10_NS,
     W14_NS,
     WP_NS,
-} from '../lib/core/ooxml';
-import { uriReference } from '../lib/core/opc';
-import {
-    trimXmlSpace,
-    XML_NAMESPACE,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlText,
-} from '../lib/core/xml';
-import { openZip } from '../lib/core/zip';
-import { cssColorToHex } from '../lib/document/colors';
-import { docSchema } from '../lib/document/doc-schema';
-import { readStoredEquation } from '../lib/document/equation';
-import { nodeLook } from '../lib/document/looks';
+} from '../lib/ooxml/ooxml';
+import { uriReference } from '../lib/ooxml/opc';
 import {
     BORDER_SIDES,
     FLOATING_WRAPS,
@@ -66,13 +71,8 @@ import {
     NOTE_SEPARATORS,
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
-} from '../lib/document/wordml';
-import type { eigendocToDocx } from '../lib/export/doc/to-docx';
-import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
-import type { docxToPmJson } from '../lib/import/doc/from-docx';
-import { descendants } from '../lib/import/doc/package';
-import { isBodySizedRun } from '../lib/import/doc/paragraphs';
-import { CODE_CHARACTER_STYLES, CODE_PARAGRAPH_STYLES } from '../lib/import/doc/styles';
+} from '../lib/ooxml/wordml';
+import { openZip } from '../lib/ooxml/zip';
 import {
     canonical,
     classify,

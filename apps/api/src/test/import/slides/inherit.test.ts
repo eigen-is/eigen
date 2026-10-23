@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { NewVectorElement } from '@workspace/lib/vector';
-import { A_NS, parseOoxml } from '../../../lib/core/ooxml';
 import { xmlChild, xmlElements } from '../../../lib/core/xml';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { paintOf, type SlideTheme } from '../../../lib/import/slides/inherit';
 import { withWorkBudget } from '../../../lib/import/slides/lookup';
+import { A_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import {
     box,
     buildPptx,

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { xmlAttr, xmlChild, xmlElements } from '../../lib/core/xml';
 import {
     type DrawingTheme,
     drawingColor,
@@ -8,9 +9,8 @@ import {
     readColorScheme,
     SCHEME_SLOTS,
     themeXml,
-} from '../../lib/core/drawingml';
-import { A_NS, parseOoxml } from '../../lib/core/ooxml';
-import { xmlAttr, xmlChild, xmlElements } from '../../lib/core/xml';
+} from '../../lib/ooxml/drawingml';
+import { A_NS, parseOoxml } from '../../lib/ooxml/ooxml';
 
 const STRICT_A = 'http://purl.oclc.org/ooxml/drawingml/main';
 

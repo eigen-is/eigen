@@ -11,8 +11,8 @@ import {
 } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { rangeToA1, valueIsError } from '@workspace/sheet/engine';
-import { MAX_FORMULA_LENGTH, withFuturePrefixes } from '../../../document/spreadsheetml';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
+import { MAX_FORMULA_LENGTH, withFuturePrefixes } from '../../../ooxml/spreadsheetml';
 import { BATCH_CHARS, cutText, type SharedStringTable } from './strings';
 import type { StyleRegistry } from './styles';
 

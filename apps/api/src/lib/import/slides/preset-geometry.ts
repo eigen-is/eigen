@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import type { Corners } from '@workspace/lib/vector';
-import { A_NS } from '../../core/ooxml';
 import { parseXml, type XmlElement, xmlElements } from '../../core/xml';
+import { A_NS } from '../../ooxml/ooxml';
 import { type CustomGeometry, customGeometry } from './custom-geometry';
 import { type GuideList, guideListOf } from './guides';
 import { cachedBy, childOf } from './lookup';

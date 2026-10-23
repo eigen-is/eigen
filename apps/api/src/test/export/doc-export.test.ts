@@ -15,7 +15,6 @@ import { MATHML_NAMESPACE, type MathNode, type MathRow, writeMathml, writeText }
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
-import { openZip } from '../../lib/core/zip';
 import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
@@ -26,6 +25,7 @@ import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import renderScript from '../../lib/export/weasyprint-render.py' with { type: 'file' };
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import { openZip } from '../../lib/ooxml/zip';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
 import { corpusEquations, equation, seedBand, seedEigendoc } from '../fixtures/golden-documents';
 

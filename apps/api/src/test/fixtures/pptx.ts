@@ -1,5 +1,5 @@
 import type { XmlElement } from '../../lib/core/xml';
-import { writeZip } from '../../lib/core/zip';
+import { writeZip } from '../../lib/ooxml/zip';
 
 // Hand-built .pptx packages for the pptx import: every part the reader reads is visible in the test that uses it.
 // 16:9 at 12,192,000 × 6,858,000 EMU by default, which is 6,350 EMU a frame px, so 635,000 EMU is 100 px.

@@ -29,15 +29,6 @@ import {
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import { writeOmml } from '@workspace/math';
-import { A_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../core/ooxml';
-import {
-    type PackagePart,
-    type Relationship,
-    relationshipsXml,
-    relsPathOf,
-    uriReference,
-    writePackage,
-} from '../../core/opc';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
 import type { EigendocBands } from '../../document/doc';
 import { readStoredEquation } from '../../document/equation';
@@ -72,6 +63,15 @@ import { lowlight } from '../../document/lowlight';
 import { sanitizeMedia } from '../../document/media';
 import { proseValue, proseValueIfSet } from '../../document/prose-css';
 import { type ExportMedia, toTransferableBuffer, toTransferableText } from '../../document/transform/protocol';
+import { A_NS, EMU_PER_PX, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../ooxml/ooxml';
+import {
+    type PackagePart,
+    type Relationship,
+    relationshipsXml,
+    relsPathOf,
+    uriReference,
+    writePackage,
+} from '../../ooxml/opc';
 import {
     BORDER_SIDES,
     CHECKBOX_GLYPHS,
@@ -89,7 +89,7 @@ import {
     type StyleId,
     TWIPS_PER_PX,
     WORD_SETTINGS_URI,
-} from '../../document/wordml';
+} from '../../ooxml/wordml';
 import { splitDataUri } from '../../shared/data-uri';
 import { DOCX_FONT_FILES, type DocxFontFiles, sfntTables } from '../fonts';
 import {

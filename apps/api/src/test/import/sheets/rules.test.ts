@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { parseOoxml } from '../../../lib/core/ooxml';
 import { readRules } from '../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../lib/import/sheets/styles';
 import { cellKey } from '../../../lib/import/sheets/worksheet';
+import { parseOoxml } from '../../../lib/ooxml/ooxml';
 import { SML, sheetXml } from '../../fixtures/xlsx';
 
 // A worksheet's conditional formats and data validations, Excel 2010's extensions besides, and each rule's output

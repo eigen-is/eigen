@@ -7,11 +7,11 @@ import {
     DEFAULT_SHEET_COLUMN_COUNT,
     DEFAULT_SHEET_ROW_COUNT,
 } from '@workspace/sheet/engine';
-import { drawingTheme } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { optional } from '../../core/opc';
-import { MAX_DECOMPRESSED_BYTES } from '../../core/zip';
 import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
+import { drawingTheme } from '../../ooxml/drawingml';
+import { optional } from '../../ooxml/opc';
+import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
 import { type ImportedMedia, importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
