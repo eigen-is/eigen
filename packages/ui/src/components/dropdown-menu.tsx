@@ -487,8 +487,6 @@ export {
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuPortal,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuSub,

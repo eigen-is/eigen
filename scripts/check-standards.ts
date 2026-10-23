@@ -285,6 +285,23 @@ function plainDestructiveRows({ text, code }: SourceFile): number {
     return hits;
 }
 
+// docs/LAYOUT.md § A choice is a submenu with a check: a menu row shows a current option or an on state with the check
+// ChoiceMenuItems and DropdownMenuCheckboxItem draw, never a Check it draws itself when a condition holds. The color
+// picker's swatch grid marks its color inside the swatch, as Google's palette does.
+const DRAWN_CHECK = /(?:&&|\?)\s*\(?\s*<Check(?:Icon)?\b/;
+const SWATCH_GRID = 'packages/ui/src/components/media/color-picker-menu-item.tsx';
+
+function handDrawnMenuChecks({ path, code }: SourceFile): number {
+    if (path === SWATCH_GRID) return 0;
+    let hits = 0;
+    for (const match of code.matchAll(/<DropdownMenuItem\b/g)) {
+        const tagEnd = openingTagEnd(code, match.index);
+        const close = code.indexOf('</DropdownMenuItem>', tagEnd);
+        if (DRAWN_CHECK.test(code.slice(tagEnd + 1, close === -1 ? code.length : close))) hits++;
+    }
+    return hits;
+}
+
 type SourceFile = {
     path: string;
     // Raw file text — use it for anything that lives in a comment, a string, or a class name.
@@ -409,6 +426,12 @@ const METRICS: Metric[] = [
         label: 'Delete or remove menu rows without the destructive variant',
         hardZero: true,
         count: (file) => (file.path.endsWith('.tsx') ? plainDestructiveRows(file) : 0),
+    },
+    {
+        id: 'hand-drawn-menu-checks',
+        label: 'Menu rows drawing their own check',
+        hardZero: true,
+        count: (file) => (file.path.endsWith('.tsx') ? handDrawnMenuChecks(file) : 0),
     },
     {
         id: 'hover-without-touch',
