@@ -4,6 +4,7 @@ import type { EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { nextFontSize, readCssFontSize, readFontSize, SMALL_FONT_SIZE } from '../../../constants/fonts';
 import { DEFAULT_NORMAL_STYLE, type NormalStyle } from '../normal-style';
+import { pxToPt } from '../page';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -31,7 +32,7 @@ function sizeReader(view: EditorView | undefined, normal: NormalStyle) {
         if (size === undefined) {
             const dom = view.nodeDOM(pos);
             const px = dom instanceof HTMLElement ? Number.parseFloat(getComputedStyle(dom).fontSize) : Number.NaN;
-            size = readFontSize(px * 0.75) ?? normal.size;
+            size = readFontSize(pxToPt(px)) ?? normal.size;
             blocks.set(key, size);
         }
         return size;

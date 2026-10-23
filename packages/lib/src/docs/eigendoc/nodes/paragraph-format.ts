@@ -1,5 +1,6 @@
 import { Extension } from '@tiptap/core';
 import type { ResolvedPos } from '@tiptap/pm/model';
+import { pxToPt } from '../page';
 import {
     FORMAT,
     ownsSpacing,
@@ -76,7 +77,7 @@ export const EigenParagraphFormat = Extension.create<{ types: string[]; textColu
             setParagraphFormat:
                 (format) =>
                 ({ state, tr, dispatch }) => {
-                    const read = readParagraphFormat(format, this.options.textColumnWidth() * 0.75);
+                    const read = readParagraphFormat(format, pxToPt(this.options.textColumnWidth()));
                     const keys = PARAGRAPH_FORMAT_KEYS.filter((key) => format[key] !== undefined);
                     let found = false;
                     for (const { $from, $to } of state.selection.ranges)
@@ -110,7 +111,7 @@ export const EigenParagraphFormat = Extension.create<{ types: string[]; textColu
                         return true;
                     }
                     if (!dispatch) return true;
-                    const column = this.options.textColumnWidth() * 0.75;
+                    const column = pxToPt(this.options.textColumnWidth());
                     for (const { $from, $to } of state.selection.ranges)
                         state.doc.nodesBetween($from.pos, $to.pos, (node, pos) => {
                             if (!this.options.types.includes(node.type.name)) return;
