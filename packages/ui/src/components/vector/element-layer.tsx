@@ -34,6 +34,8 @@ type ElementLayerProps = {
     // Rich text's height follows its text: pass a writer and the layer measures its own body and fits
     // the box (text-fit.ts). Omitted by every read-only surface — a thumbnail must not write.
     onFitHeight?: FitHeight;
+    // Set by a read-only copy of the canvas, so its defs' ids stay apart from the canvas's (layerContent).
+    idScope?: string;
 };
 
 // A kind draws in its local frame, so a move, a turn or a fade re-places the body without redrawing it.
@@ -85,7 +87,7 @@ export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps)
     // The canvas swaps this to undefined for the length of a gesture, which is how a live resize keeps
     // the auto-fit off the box it is dragging.
     if (prev.onFitHeight !== next.onFitHeight) return false;
-    if (prev.resolveMedia !== next.resolveMedia) return false;
+    if (prev.resolveMedia !== next.resolveMedia || prev.idScope !== next.idScope) return false;
     if (!sameFields(prev.el, next.el, ELEMENT_FIELDS)) return false;
     // Same element fields AND the same scene map → identical output (the pan/zoom common case). A drag
     // rebuilds the map every frame, so identity alone cannot settle those: only an elbow arrow whose
@@ -100,6 +102,7 @@ type BodyCache = {
     el: VectorElement;
     resolveMedia?: MediaResolver;
     byId?: Map<string, VectorElement>;
+    idScope?: string;
     content: RenderOutput | null;
 };
 
@@ -110,23 +113,25 @@ function useLayerBody(
     el: VectorElement,
     resolveMedia?: MediaResolver,
     byId?: Map<string, VectorElement>,
+    idScope?: string,
 ): RenderOutput | null {
     const cache = useRef<BodyCache | null>(null);
     const prev = cache.current;
     if (
         prev &&
         prev.resolveMedia === resolveMedia &&
+        prev.idScope === idScope &&
         sameFields(prev.el, el, derivesRoute(el) ? ELEMENT_FIELDS : BODY_FIELDS) &&
         (prev.byId === byId || sameRouteContext(el, prev.byId, byId))
     ) {
         return prev.content;
     }
-    const content = layerContent(el, { resolveMedia, route: arrowRoute(el, byId) });
+    const content = layerContent(el, { resolveMedia, route: arrowRoute(el, byId), idScope });
     // THE mount seam for stored rich text, so this is where it is sanitized: `html` reaches us
     // verbatim from a hostile peer's Y.Doc write or a forged clipboard record. Same allowlist the
     // in-place editor's paste runs, so legitimate LightEditor markup passes through unchanged.
     const safe = content && 'html' in content ? { ...content, html: sanitizeToLightEditorHtml(content.html) } : content;
-    cache.current = { el, resolveMedia, byId, content: safe };
+    cache.current = { el, resolveMedia, byId, idScope, content: safe };
     return safe;
 }
 
@@ -143,13 +148,14 @@ export const ElementLayer = memo(function ElementLayer({
     byId,
     children,
     onFitHeight,
+    idScope,
 }: ElementLayerProps) {
     // The layer node, so rich text can measure the body inside it — its own, or the in-place editor's.
     const hostRef = useRef<HTMLDivElement>(null);
     // Hosting the in-place editor IS the user typing in this box, which is what makes its growth
     // part of their edit rather than bookkeeping.
     useRichTextAutoFit(hostRef, el, onFitHeight, !!children);
-    const content = useLayerBody(el, resolveMedia, byId);
+    const content = useLayerBody(el, resolveMedia, byId, idScope);
     if (!content) return null;
     const style = layerStyle(placeLayer(el, content));
     if (children) {

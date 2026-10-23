@@ -36,6 +36,8 @@ type ElementLayerOptions = {
     resolveMedia?: MediaResolver;
     // An elbow arrow's derived route; without it the arrow falls back to its stored endpoints.
     route?: Point[];
+    // Prefixes the ids of the element's defs, for a surface that draws a copy of what another on the page draws.
+    idScope?: string;
 };
 
 // One element as a placed layer, or null when the kind draws nothing at all. The live canvas renders per
@@ -52,7 +54,10 @@ export const PLACEMENT_FIELDS: readonly string[] = ['x', 'y', 'angle', 'opacity'
 // What the element draws, in its own frame. Null when the kind draws nothing at all (an image with no
 // media name and no border is the only such element today).
 export function layerContent(el: VectorElement, opts: ElementLayerOptions = {}): RenderOutput | null {
-    const content = ELEMENT_KINDS[el.type].render(el, { resolveMedia: opts.resolveMedia, route: opts.route });
+    // A kind names its defs after its element's id, and a url(#…) lands on the page's first def of that id: the Slides
+    // rail's copy of a shape mid-resize on the canvas would clip the canvas's hatch to the old outline.
+    const named = opts.idScope ? { ...el, id: `${opts.idScope}${el.id}` } : el;
+    const content = ELEMENT_KINDS[el.type].render(named, { resolveMedia: opts.resolveMedia, route: opts.route });
     return !('html' in content) && content.svg === '' ? null : content;
 }
 
