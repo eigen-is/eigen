@@ -12,13 +12,11 @@ import {
     readFontSize,
 } from '@workspace/lib/constants/fonts';
 import {
-    BAND_DISTANCE_MM,
     chartSvg,
     FIRST_PAGE_BAND,
     flattenNestedFootnotes,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
-    mmToTwips,
     type NormalStyle,
     type PageSetup,
     pageTwips,
@@ -350,14 +348,13 @@ type Context = {
     upright?: boolean;
 };
 
-// The bands' distance from the page edge, inside a smaller margin.
-const BAND_DISTANCE = Math.round(mmToTwips(BAND_DISTANCE_MM));
-
-function sectionXml({ width, height, margin, differentFirstPage }: PageSetup, references: string): string {
+function sectionXml(
+    { width, height, margin, headerDistance, footerDistance, differentFirstPage }: PageSetup,
+    references: string,
+): string {
     const orient = width > height ? ' w:orient="landscape"' : '';
-    const bands = `w:header="${Math.min(BAND_DISTANCE, margin.top)}" w:footer="${Math.min(BAND_DISTANCE, margin.bottom)}"`;
     const titlePg = differentFirstPage ? '<w:titlePg/>' : '';
-    return `<w:sectPr>${references}<w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" ${bands} w:gutter="0"/>${titlePg}</w:sectPr>`;
+    return `<w:sectPr>${references}<w:pgSz w:w="${width}" w:h="${height}"${orient}/><w:pgMar w:top="${margin.top}" w:right="${margin.right}" w:bottom="${margin.bottom}" w:left="${margin.left}" w:header="${headerDistance}" w:footer="${footerDistance}" w:gutter="0"/>${titlePg}</w:sectPr>`;
 }
 
 // Without the compatibility mode Word opens the file in Compatibility Mode. The fonts are embedded whole, so no subset flag.

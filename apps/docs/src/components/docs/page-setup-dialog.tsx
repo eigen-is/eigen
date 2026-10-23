@@ -9,6 +9,7 @@ import {
     readPageSetup,
 } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
@@ -192,6 +193,115 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone }: PageSetupFormProps
             ) : (
                 <DialogFooter showCloseButton />
             )}
+        </form>
+    );
+}
+
+type HeadersAndFootersDialogProps = {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    setup: PageSetup;
+    onSetupChange: (from: PageSetup, to: PageSetup) => void;
+};
+
+const DISTANCE_FIELDS = [
+    { key: 'headerDistance', label: 'Header (centimetres from top)' },
+    { key: 'footerDistance', label: 'Footer (centimetres from bottom)' },
+] as const;
+
+type DistanceKey = (typeof DISTANCE_FIELDS)[number]['key'];
+
+// Google Docs' Headers and footers, from a band's Options: the bands' distances from the paper's edge and Different
+// first page, without odd and even pages, which a doc has no bands for. Only a writer enters a band.
+export function HeadersAndFootersDialog({ open, onOpenChange, setup, onSetupChange }: HeadersAndFootersDialogProps) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent size="xs" showCloseButton={false} aria-describedby={undefined}>
+                <DialogHeader>
+                    <DialogTitle>Headers and footers</DialogTitle>
+                </DialogHeader>
+                <HeadersAndFootersForm setup={setup} onSubmit={onSetupChange} onDone={() => onOpenChange(false)} />
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// Mounted with the dialog, as the page setup form is.
+function HeadersAndFootersForm({ setup, onSubmit, onDone }: Omit<PageSetupFormProps, 'canWrite'>) {
+    const [initial] = useState(setup);
+    const [text, setText] = useState({
+        headerDistance: marginText(initial.headerDistance),
+        footerDistance: marginText(initial.footerDistance),
+    });
+    const [differentFirstPage, setDifferentFirstPage] = useState(initial.differentFirstPage);
+
+    // An untouched field keeps the stored distance, not its rounding.
+    const distance = (key: DistanceKey) => (text[key] === marginText(initial[key]) ? initial[key] : readCm(text[key]));
+    const candidate: PageSetup = {
+        ...initial,
+        headerDistance: distance('headerDistance'),
+        footerDistance: distance('footerDistance'),
+        differentFirstPage,
+    };
+    // Valid is what the stored page would read back unchanged: each band between the paper's edge and its margin.
+    const read = readPageSetup(pageRecord(candidate));
+    const valid = DISTANCE_FIELDS.every(({ key }) => read[key] === candidate[key]);
+
+    return (
+        <form
+            className="flex flex-col gap-6"
+            onSubmit={(e) => {
+                e.preventDefault();
+                if (!valid) return;
+                onSubmit(initial, candidate);
+                onDone();
+            }}
+        >
+            <FieldSet className="gap-3">
+                <FieldLegend variant="label">Margins</FieldLegend>
+                {DISTANCE_FIELDS.map(({ key, label }) => (
+                    <Field key={key} orientation="horizontal">
+                        <FieldLabel htmlFor={`headers-and-footers-${key}`}>{label}</FieldLabel>
+                        <Input
+                            id={`headers-and-footers-${key}`}
+                            type="number"
+                            step="any"
+                            className="w-24"
+                            value={text[key]}
+                            onChange={(e) => setText({ ...text, [key]: e.target.value })}
+                        />
+                    </Field>
+                ))}
+                {!valid && (
+                    <FieldError>
+                        The header must be 0 to {marginText(initial.margin.top)} cm from the top and the footer 0 to{' '}
+                        {marginText(initial.margin.bottom)} cm from the bottom, within their margins.
+                    </FieldError>
+                )}
+            </FieldSet>
+
+            <FieldSet className="gap-3">
+                <FieldLegend variant="label">Layout</FieldLegend>
+                <div className="flex items-center gap-2">
+                    <Checkbox
+                        id="headers-and-footers-first-page"
+                        checked={differentFirstPage}
+                        onCheckedChange={(checked) => setDifferentFirstPage(checked === true)}
+                    />
+                    <Label htmlFor="headers-and-footers-first-page" className="font-normal">
+                        Different first page
+                    </Label>
+                </div>
+            </FieldSet>
+
+            <DialogFooter>
+                <Button type="button" variant="outline" onClick={onDone}>
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={!valid}>
+                    Apply
+                </Button>
+            </DialogFooter>
         </form>
     );
 }

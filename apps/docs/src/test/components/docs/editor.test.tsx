@@ -370,6 +370,29 @@ test('Options › Page setup… keeps focus in the dialog it opens', async () =>
     expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
 });
 
+// Google's Header format… and Footer format… open one dialog, which writes the page as Page setup does.
+test('Options › Footer format… sets the footer’s distance from the bottom, which the page draws and ⌘Z takes back', async () => {
+    await render(WRITER);
+    await doubleClick('footer');
+    await openMenu('Options');
+    expect(menuItems()).not.toContain('Header format…');
+    await pick('Footer format…');
+    const field = [...document.querySelectorAll('label')].find(
+        (l) => l.textContent === 'Footer (centimetres from bottom)',
+    );
+    const input = field && document.getElementById(field.htmlFor);
+    if (!(input instanceof HTMLInputElement)) throw new Error('no footer distance field');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, '0.8');
+    await act(async () => input.dispatchEvent(new Event('input', { bubbles: true })));
+    await inBrowserFrames(() => button('Apply')?.click());
+
+    expect(doc.getMap(PAGE_ROOT).get('footerDistance')).toBe(8);
+    expect(margin('footer')?.style.paddingBottom).toBe('8mm');
+    await pressEscape(bandView('footer'));
+    await act(async () => void bodyView()?.editor?.commands.undo());
+    expect(doc.getMap(PAGE_ROOT).get('footerDistance')).toBeUndefined();
+});
+
 // Y's undo manager moves the undone step onto the redo stack after the transaction that undid it, so with a step still
 // left to undo that transaction changes nothing the menu draws; only a focus or a selection after it redrew the menu.
 test('Redo is offered once one of a band’s two edits is undone, focus elsewhere', async () => {

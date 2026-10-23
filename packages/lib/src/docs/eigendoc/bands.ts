@@ -33,10 +33,6 @@ export const PAGE_BAND_CLASS = 'page-band';
 // a mail or chat editor's prose doesn't take.
 export const DOC_PROSE_CLASS = 'eigen-doc';
 
-// A band's distance from the paper's edge, Word's and Google's default: the page draws it there, and so do the PDF and
-// the docx.
-export const BAND_DISTANCE_MM = 12.7;
-
 // A band prints, and the page draws it, only with something to show: focusing an empty band leaves an empty paragraph,
 // and a line break or an empty equation alone shows nothing either. The server has no DOMParser, so it passes its own
 // equation reader.

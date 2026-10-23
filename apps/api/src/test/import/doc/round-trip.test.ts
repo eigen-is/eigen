@@ -195,6 +195,8 @@ describe('the page', () => {
             width: 279.4,
             height: 215.9,
             margin: { top: 10, right: 10, bottom: 10, left: 10 },
+            headerDistance: 8,
+            footerDistance: 5,
             differentFirstPage: false,
         };
         const source = buildAllFeaturesDocJson();
@@ -204,6 +206,8 @@ describe('the page', () => {
         expect(read.width).toBe(279.4);
         expect(read.height).toBe(215.9);
         for (const side of ['top', 'right', 'bottom', 'left'] as const) expect(read.margin[side]).toBeCloseTo(10, 2);
+        expect(read.headerDistance).toBeCloseTo(8, 1);
+        expect(read.footerDistance).toBeCloseTo(5, 1);
         expect(read.differentFirstPage).toBe(false);
     });
 

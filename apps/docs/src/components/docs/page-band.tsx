@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditorState } from '@tiptap/react';
 import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { BAND_DISTANCE_MM, bandEdge, bandHasContent, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
+import { bandEdge, bandHasContent, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
@@ -16,11 +16,11 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
-import { ChevronDown, FileSliders, Hash, Trash2 } from 'lucide-react';
+import { ChevronDown, FileSliders, Hash, PanelBottom, PanelTop, Trash2 } from 'lucide-react';
 import { type ReactNode, useId, useState } from 'react';
 import { keepEditorFocus } from './editor-toolbar';
 import { PageNumberItems, type PageNumberPreset } from './page-numbers';
-import { PageSetupDialog } from './page-setup-dialog';
+import { HeadersAndFootersDialog, PageSetupDialog } from './page-setup-dialog';
 
 const BAND_LABEL: Record<BandRoot, string> = {
     header: 'Header',
@@ -44,7 +44,7 @@ type PageBandsProps = {
 // One margin of the page and the bands in it, each drawn by its own live editor: the header above the first block, the
 // footer after the last. The margin's negative margins pull it over the page's padding to the paper's edges, so a
 // double-click anywhere in it reaches it, and its min-height gives the room back, so a band, with its bar while edited,
-// taller than the room left by its 1.27 cm pushes the body, as in Word. Not edited, a margin shows the band the long page's end prints, with
+// taller than the room left by its distance pushes the body, as in Word. Not edited, a margin shows the band the long page's end prints, with
 // content: page 1's header, the other pages' footer. Edited, with Different first page, both stack, page 1's at the
 // paper's edge and the other pages' next to the body.
 export function PageBands({ edge, editors, setup, editing, onEnter, controls }: PageBandsProps) {
@@ -65,8 +65,7 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
             ? root === edge || setup.differentFirstPage
             : root === printed && (root === edge ? otherHasContent : firstHasContent);
     const room = edge === 'header' ? setup.margin.top : setup.margin.bottom;
-    // At a margin narrower than its distance a band sits on the margin's edge, as the PDF and the docx put it.
-    const distance = Math.min(BAND_DISTANCE_MM, room);
+    const distance = edge === 'header' ? setup.headerDistance : setup.footerDistance;
     const { left, right } = setup.margin;
     return (
         <div
@@ -151,7 +150,8 @@ type BandControlsProps = {
     onRemove: () => void;
 };
 
-// The controls on Google's bar between a band and the body: Different first page and Options.
+// The controls on Google's bar between a band and the body: Different first page and Options, whose Header format… or
+// Footer format… opens Google's Headers & footers dialog.
 export function BandControls({
     band,
     editor,
@@ -162,7 +162,9 @@ export function BandControls({
     onRemove,
 }: BandControlsProps) {
     const [pageSetupOpen, setPageSetupOpen] = useState(false);
+    const [formatOpen, setFormatOpen] = useState(false);
     const differentFirstPageId = useId();
+    const edge = bandEdge(band);
     return (
         <div className="ml-auto flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -183,6 +185,17 @@ export function BandControls({
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" onCloseAutoFocus={keepEditorFocus(editor)}>
+                    <DropdownMenuItem onClick={() => setFormatOpen(true)}>
+                        {edge === 'header' ? (
+                            <>
+                                <PanelTop className="h-4 w-4" /> Header format…
+                            </>
+                        ) : (
+                            <>
+                                <PanelBottom className="h-4 w-4" /> Footer format…
+                            </>
+                        )}
+                    </DropdownMenuItem>
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
                             <Hash className="h-4 w-4" /> Page numbers
@@ -196,10 +209,16 @@ export function BandControls({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onRemove}>
-                        <Trash2 className="h-4 w-4" /> Remove {bandEdge(band)}
+                        <Trash2 className="h-4 w-4" /> Remove {edge}
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
+            <HeadersAndFootersDialog
+                open={formatOpen}
+                onOpenChange={setFormatOpen}
+                setup={setup}
+                onSetupChange={onSetupChange}
+            />
             <PageSetupDialog
                 open={pageSetupOpen}
                 onOpenChange={setPageSetupOpen}

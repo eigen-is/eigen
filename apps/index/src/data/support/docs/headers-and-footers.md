@@ -32,15 +32,19 @@ The number goes in and your cursor moves to that header or footer. A header or f
 
 While you edit a header or footer, tick **Different first page** on the bar. What you typed stays as the header or footer for the other pages, and your cursor moves to a new, empty **First page header** above it, or **First page footer** below it. While you edit a header, both headers show, each on its own bar, and you click either one to edit it. The same goes for the footers. Otherwise the top of the page shows the first page's header and the bottom the other pages' footer. A letterhead on page 1 and a short title on the rest is the usual use.
 
+## Set how far it sits from the edge of the page
+
+While you edit a header, choose **Options → Header format…** on the bar, or **Options → Footer format…** while you edit a footer. Under **Margins**, type how far the header sits from the top of the page and the footer from the bottom, in centimeters, and click **Apply**. Both start at 1.27 cm. A header or footer stays inside its margin, so the distance can be no more than the margin. **Different first page** is in the same window too.
+
 ## Remove a header or footer
 
 Double-click the header or footer, then choose **Options → Remove header** or **Options → Remove footer** on the bar. **Options → Page setup…** opens the paper and margin settings.
 
 ## Good to know
 
-- **File → Print** and the PDF and Word downloads put the header and footer on every page, with the page numbers filled in, and the first page's own when it differs. The web page download shows the header at the top and the footer at the end.
+- **File → Print** and the PDF and Word downloads put the header and footer on every page, with the page numbers filled in, and the first page's own when it differs, at the distance from the edge you set. The web page download shows the header at the top and the footer at the end.
 - A header or footer taller than its margin moves your text away from it, on the page and in the PDF. In the PDF, the header and footer never take more than half the page: the rest of a taller one runs over your text. The PDF cuts a header or footer after about 200 paragraphs or 20,000 characters.
-- Importing a Word file brings its header and footer along. See [Import a Word document](/support/docs/import-word).
+- Importing a Word file brings its header and footer along, at their distance from the edge. See [Import a Word document](/support/docs/import-word).
 - Comments and **Find** work on your text, not on the header or footer.
 - On a phone you see the header and footer on the page, but you can't change them.
 - Only people who can edit the document can change its header and footer.

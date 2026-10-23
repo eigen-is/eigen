@@ -1,5 +1,6 @@
-// A margin of the page holds its bands, drawn by their live editors: the header 1.27 cm below the paper's top edge and
-// the footer ending 1.27 cm above its bottom one, a band taller than the room pushing the body. A margin reaches the
+// A margin of the page holds its bands, drawn by their live editors: the header its distance below the paper's top edge
+// and the footer ending its distance above the bottom one, 1.27 cm unless set, a band taller than the room pushing the
+// body. A margin reaches the
 // paper's edges, so a double-click anywhere in it enters, the band under the pointer or the margin's own.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
@@ -11,7 +12,7 @@ installHappyDom();
 const Y = await import('yjs');
 const { act, createElement } = await import('react');
 const { AuthProvider } = await import('@workspace/lib/auth');
-const { BAND_ROOTS, DEFAULT_PAGE_SETUP, PAGE_BAND_CLASS } = await import('@workspace/lib/docs/eigendoc');
+const { BAND_ROOTS, DEFAULT_PAGE_SETUP, PAGE_BAND_CLASS, readPageSetup } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { useBandEditors, useDocMedia } = await import('../../../components/docs/doc-editor');
@@ -86,9 +87,18 @@ test('the footer margin spans the paper to its bottom edge and ends the band 1.2
     ]);
 });
 
+test('a band sits the distance the page sets from its edge', async () => {
+    const setup = readPageSetup({ marginLeft: 10, marginRight: 15, headerDistance: 8, footerDistance: 15 });
+    const header = await render(new Y.Doc(), { edge: 'header', setup });
+    expect(header.style.padding).toBe('8mm 15mm 0px 10mm');
+    await unmount();
+    const footer = await render(new Y.Doc(), { edge: 'footer', setup });
+    expect(footer.style.padding).toBe('0px 15mm 15mm 10mm');
+});
+
 // As in the PDF and the docx: a band never sits inside the body's column.
 test('at a margin narrower than 1.27 cm a band sits on the margin', async () => {
-    const setup = { ...DEFAULT_PAGE_SETUP, margin: { top: 10, right: 15, bottom: 8, left: 10 } };
+    const setup = readPageSetup({ marginTop: 10, marginRight: 15, marginBottom: 8, marginLeft: 10 });
     const header = await render(new Y.Doc(), { edge: 'header', setup });
     expect(header.style.padding).toBe('10mm 15mm 0px 10mm');
     await unmount();
@@ -99,7 +109,7 @@ test('at a margin narrower than 1.27 cm a band sits on the margin', async () => 
 // The hint shows on hover, so it can't take room the way a band does: it fills the margin, and the space before it, the
 // band's distance, gives way where a line doesn't fit after it. That's spot.docx's 1 cm margin.
 test('the hint to add a band stays in its margin, at the band distance where it fits', async () => {
-    const setup = { ...DEFAULT_PAGE_SETUP, margin: { top: 10, right: 15, bottom: 30, left: 12 } };
+    const setup = readPageSetup({ marginTop: 10, marginRight: 15, marginBottom: 30, marginLeft: 12 });
     const hint = (margin: HTMLElement) => {
         const box = margin.querySelector<HTMLElement>('[data-band-hint]');
         const space = box?.firstElementChild;

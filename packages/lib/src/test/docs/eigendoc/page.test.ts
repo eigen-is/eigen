@@ -26,15 +26,19 @@ const LANDSCAPE: PageSetup = {
     width: 297,
     height: 210,
     margin: { top: 10, right: 15, bottom: 25, left: 30 },
+    headerDistance: 8,
+    footerDistance: 12.7,
     differentFirstPage: true,
 };
 
 describe('page setup', () => {
-    test('the default page is A4 with 2 cm margins and one header and footer for every page', () => {
+    test('the default page is A4 with 2 cm margins and one header and footer for every page, 1.27 cm from its edge', () => {
         expect(DEFAULT_PAGE_SETUP).toEqual({
             width: 210,
             height: 297,
             margin: { top: 20, right: 20, bottom: 20, left: 20 },
+            headerDistance: 12.7,
+            footerDistance: 12.7,
             differentFirstPage: false,
         });
     });
@@ -81,12 +85,16 @@ describe('page setup', () => {
             width: 11906,
             height: 16838,
             margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 },
+            headerDistance: 720,
+            footerDistance: 720,
             differentFirstPage: false,
         });
         expect(pageTwips(LANDSCAPE)).toEqual({
             width: 16838,
             height: 11906,
             margin: { top: 567, right: 850, bottom: 1417, left: 1701 },
+            headerDistance: 454,
+            footerDistance: 720,
             differentFirstPage: true,
         });
     });
@@ -129,6 +137,8 @@ describe('the stored page', () => {
             marginRight: 15,
             marginBottom: 25,
             marginLeft: 30,
+            headerDistance: 8,
+            footerDistance: 12.7,
             differentFirstPage: true,
         });
         expect(readPageSetup(pageRecord(LANDSCAPE))).toEqual(LANDSCAPE);
@@ -136,6 +146,8 @@ describe('the stored page', () => {
             width: 215.9,
             height: 279.4,
             margin: { top: 25.4, right: 25.4, bottom: 25.4, left: 25.4 },
+            headerDistance: 15,
+            footerDistance: 25.4,
             differentFirstPage: false,
         };
         expect(readPageSetup(pageRecord(letter))).toEqual(letter);
@@ -174,6 +186,26 @@ describe('the stored page', () => {
             height: 50,
         });
         expect(readPageSetup({ width: -1e9, height: 1e9 })).toMatchObject({ width: 50, height: 558.8 });
+    });
+
+    // Word's Header from top and Footer from bottom. A band never sits in the body's column, nor past the paper's edge.
+    test('a header and a footer sit their distance from the edge, held between the edge and their margin', () => {
+        expect(readPageSetup({ headerDistance: 5, footerDistance: 15 })).toMatchObject({
+            headerDistance: 5,
+            footerDistance: 15,
+        });
+        expect(readPageSetup({ marginTop: 10, headerDistance: 15, footerDistance: -3 })).toMatchObject({
+            headerDistance: 10,
+            footerDistance: 0,
+        });
+        // A missing one is Word's and Google's 1.27 cm, within a narrower margin too.
+        expect(readPageSetup({ marginBottom: 8, headerDistance: '9' })).toMatchObject({
+            headerDistance: 12.7,
+            footerDistance: 8,
+        });
+        // Within the margin as it reads, shrunk to leave the text its room.
+        const shrunk = readPageSetup({ height: 50, marginTop: 30, marginBottom: 30, headerDistance: 20 });
+        expect(shrunk.headerDistance).toBe(shrunk.margin.top);
     });
 
     test('a negative margin reads as its size', () => {
