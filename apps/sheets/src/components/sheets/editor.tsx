@@ -362,7 +362,7 @@ function SheetEditorInner({
             )}
             <div className="flex h-full w-full flex-col overflow-hidden">
                 {/* Persistent read-only signal — a decode failure leaves a blank sheet otherwise
-                    indistinguishable from data loss (a dismissible toast was not enough). */}
+                    indistinguishable from data loss. */}
                 {loadFailed && (
                     <div className="flex shrink-0 items-center justify-center gap-2 border-b bg-destructive/10 app-gutter-x py-1.5 text-xs text-destructive">
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -465,7 +465,7 @@ function SheetEditorInner({
                             </div>
                         </DocSearchProvider>
                     </div>
-                    {panel && (
+                    {panel && auth.user && (
                         <PanelColumn
                             activePanel={panel}
                             onClose={closePanels}
@@ -473,15 +473,16 @@ function SheetEditorInner({
                             cards={cards}
                             entries={allComments}
                             members={members}
-                            currentUserEmail={auth.user!.email}
+                            currentUserEmail={auth.user.email}
                             filter={commentFilter}
                             activeComments={activeComments}
                             commentContextMenu={commentContextMenu}
                             onOpenCard={setOpenCardId}
                         />
                     )}
-                    {/* The comment/activity pane wins over the properties panel (the slides arrangement). */}
-                    {activeObject && !panel && (
+                    {/* The comment/activity pane wins over the properties panel (the slides arrangement), and a phone
+                        has no room for it (MOBILE.md). */}
+                    {activeObject && !panel && !isMobile && (
                         <FloatingObjectPanel
                             item={activeObject}
                             canWrite={canWrite}
