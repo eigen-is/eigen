@@ -184,14 +184,12 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                         : undefined,
                     handleDOMEvents: {
                         contextmenu: (view, event) => {
-                            // Right-click on a comment highlight → comment context menu
                             const cardId = commentCardIdAt(event.target);
                             if (cardId && onCommentContextMenu) {
                                 event.preventDefault();
                                 onCommentContextMenu(cardId, event);
                                 return true;
                             }
-                            // Right-click on a selection a comment can anchor on → selection context menu
                             if (canAnchorComment(view.state) && onSelectionContextMenu?.(event)) {
                                 event.preventDefault();
                                 return true;
