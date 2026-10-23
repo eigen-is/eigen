@@ -40,4 +40,17 @@ describe('FUNCTION_LIST names', () => {
         const registered = new Set(formulaFunction.SYMBOL.map((name) => name.toUpperCase()));
         expect(FUNCTION_LIST.filter((fn) => !registered.has(fn.n)).map((fn) => fn.n)).toEqual([]);
     });
+
+    // formulajs registers some names only as a stub that throws "<NAME> is not implemented", whatever the arguments.
+    test('no function offered is a formulajs stub', () => {
+        const stubs = FUNCTION_LIST.filter((fn) => {
+            try {
+                formulaFunction(fn.n)(1, 1, 1);
+                return false;
+            } catch (error) {
+                return error instanceof Error && error.message.endsWith('is not implemented');
+            }
+        });
+        expect(stubs.map((fn) => fn.n)).toEqual([]);
+    });
 });
