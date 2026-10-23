@@ -379,6 +379,27 @@ test('a menu closed with Esc hands focus back to the band being edited, and Opti
     }
 });
 
+// Radix hands focus back a tick after a menu unmounts, and by then Tiptap has destroyed the editors of a document that
+// closed with it.
+test('a document closed with the body’s or a band’s menu open throws nothing', async () => {
+    const errors: unknown[] = [];
+    const onError = (event: InstanceType<typeof window.Event>) => errors.push('error' in event ? event.error : event);
+    window.addEventListener('error', onError);
+    try {
+        await render(WRITER);
+        await openMenu('Insert');
+        await unmount();
+        await render(WRITER);
+        await doubleClick('header');
+        await openMenu('Options');
+        await unmount();
+        await frames();
+    } finally {
+        window.removeEventListener('error', onError);
+    }
+    expect(errors).toEqual([]);
+});
+
 test('Options › Page setup… keeps focus in the dialog it opens', async () => {
     await render(WRITER);
     await doubleClick('header');
