@@ -53,6 +53,11 @@ function useCount(out: RenderOut, cls: string): number {
     return (out.html.match(new RegExp(`class="(?:sheet )?${cls}"`, 'g')) ?? []).length;
 }
 
+// A sheet's images as the editor stores them: a map by id, stacked in the order given.
+function imagesOf(...images: Omit<SheetImage, 'index'>[]): Record<string, SheetImage> {
+    return Object.fromEntries(images.map((image, i) => [image.id, { ...image, index: `a${i}` }]));
+}
+
 describe('Sheets HTML export — rich text', () => {
     test("a rich-text cell shows its runs' text", () => {
         const rich: Cell = { ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Rich', bl: 1 }, { v: ' text' }] } };
@@ -929,7 +934,7 @@ describe('Sheets export — content size (@page)', () => {
             ...makeSheet([{ r: 2, c: 1, v: { v: 'grid' } }]),
             defaultColWidth: 64,
             defaultRowHeight: 17,
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 100, y: 60, width: 10, height: 10 }],
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 100, y: 60, width: 10, height: 10 }),
         };
         const out = renderSheetsHtml([sheet], new Map([['chart.png', 'data:image/png;base64,']]));
         expect(out.css).toContain('{width:64px}');
@@ -949,17 +954,35 @@ describe('Sheets export — content size (@page)', () => {
     test('an image parked past the used range is measured too', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]),
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 400, y: 200, width: 100, height: 50 }],
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 400, y: 200, width: 100, height: 50 }),
         };
         // The overlay draws at the absolute grid coordinate, so the page has to reach the
         // image's far edge — the one default-sized cell is not what bounds this sheet.
         expect(getSheetContentSize(sheet)).toEqual({ width: 500, height: 250 });
     });
 
+    // The page covers the box an object turns into: a 400 × 100 chart at 90° stands 100 wide and 400 tall about
+    // the same center, (300, 250).
+    test('a rotated object is measured by its turned box', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]),
+            images: imagesOf({
+                id: 'img_1',
+                mediaName: 'chart.png',
+                x: 100,
+                y: 200,
+                width: 400,
+                height: 100,
+                angle: 90,
+            }),
+        };
+        expect(getSheetContentSize(sheet)).toEqual({ width: 350, height: 450 });
+    });
+
     test('image extents are measured in the same offset space as the grid', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 2, c: 1, v: { v: 'grid' } }]),
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 300, y: 100, width: 10, height: 10 }],
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 300, y: 100, width: 10, height: 10 }),
         };
         // Two default rows and one default column sit above/left of the table.
         expect(getSheetContentSize(sheet)).toEqual({
@@ -976,8 +999,8 @@ describe('Sheets HTML export — floating images', () => {
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
     const MEDIA = new Map([['chart.png', PIXEL]]);
 
-    function withImages(images: SheetImage[]): Sheet {
-        return { ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]), images };
+    function withImages(images: Omit<SheetImage, 'index'>[]): Sheet {
+        return { ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]), images: imagesOf(...images) };
     }
 
     test('renders each image absolutely positioned over the grid at its stored geometry', () => {
@@ -1001,6 +1024,15 @@ describe('Sheets HTML export — floating images', () => {
         expect(classesFor(out, 'transform:rotate(30deg);transform-origin:center center')).toHaveLength(1);
     });
 
+    // Geometry is schemaless at the Yjs boundary: a peer can store a string, which reaches the CSS as its number only.
+    test('a stored string draws as its number and an angle that is no number draws unrotated', () => {
+        const stored = JSON.parse('{"x":"12","y":"8","width":"40","height":"30","angle":"red;position:fixed"}');
+        const out = renderSheetsHtml([withImages([{ id: 'img_1', mediaName: 'chart.png', ...stored }])], MEDIA);
+        expect(classesFor(out, 'left:12px;top:8px;width:40px;height:30px')).toHaveLength(1);
+        expect(out.css).not.toContain('rotate(');
+        expect(out.css).not.toContain('position:fixed');
+    });
+
     test('an image whose name resolves to nothing renders nothing', () => {
         const out = renderSheetsHtml(
             [withImages([{ id: 'img_1', mediaName: 'pending:abc', x: 0, y: 0, width: 10, height: 10 }])],
@@ -1013,7 +1045,7 @@ describe('Sheets HTML export — floating images', () => {
     test('an image on an otherwise blank sheet still renders', () => {
         const sheet: Sheet = {
             name: 'Blank',
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 5, y: 5, width: 10, height: 10 }],
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 5, y: 5, width: 10, height: 10 }),
         };
         expect(renderSheetsHtml([sheet], MEDIA).html).toContain('<img');
     });
@@ -1021,7 +1053,7 @@ describe('Sheets HTML export — floating images', () => {
     test('the overlay is offset by the rows and columns before the used range', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 2, c: 1, v: { v: 'grid' } }]),
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 100, y: 60, width: 10, height: 10 }],
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 100, y: 60, width: 10, height: 10 }),
         };
         // Two default rows and one default column sit above/left of the table.
         const out = renderSheetsHtml([sheet], MEDIA);
@@ -1033,7 +1065,7 @@ describe('Sheets HTML export — floating images', () => {
     test('an image anchored above the used range pulls the window up instead of going negative', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 4, c: 2, v: { v: 'C5' } }]),
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 }],
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 }),
         };
         const out = renderSheetsHtml([sheet], MEDIA);
         // The window starts at A1 now, so the overlay draws at the stored geometry...
@@ -1064,7 +1096,7 @@ describe('Sheets HTML export — floating images', () => {
     test('the preview drops an image parked outside the window it renders', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]),
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 5000, y: 0, width: 100, height: 100 }],
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 5000, y: 0, width: 100, height: 100 }),
         };
         // The preview box is the clipped grid; an image far right of it would stretch the
         // fragment's scroll width and collapse the thumbnail that scales by it.
@@ -1076,7 +1108,7 @@ describe('Sheets HTML export — floating images', () => {
     test('the preview keeps an image that only overhangs its window', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]),
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 50, y: 0, width: 400, height: 10 }],
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 50, y: 0, width: 400, height: 10 }),
         };
         expect(renderSheetsPreviewHtml([sheet], MEDIA).html).toContain('<img');
     });
@@ -1181,6 +1213,27 @@ describe('Sheets HTML export — charts', () => {
         expect(out.html).toContain(`width="${CHART_MAX_SIDE}" height="${CHART_MAX_SIDE}"`);
         expect(getSheetContentSize(sheet).width).toBe(
             REFERENCE_COLUMN_COUNT * SHEET_DEFAULT_COL_WIDTH + CHART_MAX_SIDE,
+        );
+    });
+
+    // One paint order for both kinds, as the editor stacks them.
+    test('an image and a chart stack by their shared index', () => {
+        const image = { id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 10, height: 10 };
+        const media = new Map([['chart.png', 'data:image/png;base64,']]);
+        const drawn = (index: string) => {
+            const sheet: Sheet = { ...sheetWithChart(), images: { img_1: { ...image, index } } };
+            const { html } = renderSheetsHtml([sheet], media);
+            return html.indexOf('<img') > html.indexOf('<svg') ? 'image on top' : 'chart on top';
+        };
+        expect(drawn('a1')).toBe('image on top');
+        expect(drawn('Zz')).toBe('chart on top');
+    });
+
+    test('a rotated chart turns about its center as an image does', () => {
+        const sheet: Sheet = { ...sheetWithChart(), charts: { c1: { ...chartOn('data'), angle: 90 } } };
+        const out = renderSheetsHtml([sheet], NO_MEDIA);
+        expect(classesFor(out, 'background:#fff;transform:rotate(90deg);transform-origin:center center')).toHaveLength(
+            1,
         );
     });
 

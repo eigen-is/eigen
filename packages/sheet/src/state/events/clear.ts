@@ -1,6 +1,5 @@
 import type { Context } from '../context';
-import { deleteActiveChart } from '../modules/chart';
-import { removeActiveImage } from '../modules/image';
+import { deleteActiveObject } from '../modules/floating';
 import { jfrefreshgrid } from '../modules/refresh';
 import { deleteSelectedCellText } from '../modules/selection';
 import { isAllowEdit } from '../utils';
@@ -17,10 +16,8 @@ const CLEAR_ERRORS: Record<string, string> = {
 export function clearSelectedContents(ctx: Context): string | null {
     if (!isAllowEdit(ctx)) return null;
     let error: string | null = null;
-    if (ctx.activeImg != null) {
-        removeActiveImage(ctx);
-    } else if (ctx.activeChart) {
-        deleteActiveChart(ctx);
+    if (ctx.activeObject) {
+        deleteActiveObject(ctx);
     } else {
         error = CLEAR_ERRORS[deleteSelectedCellText(ctx)] ?? null;
     }

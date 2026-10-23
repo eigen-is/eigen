@@ -35,8 +35,8 @@ import {
     createContextResolver,
     defaultContext,
     defaultSettings,
-    deleteActiveChart,
-    editsDeletedChart,
+    deleteActiveObject,
+    editsDeletedFloatingObject,
     ensureSheetIndex,
     filterPatch,
     type GlobalCache,
@@ -292,8 +292,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.undoList.pop();
             if (history) {
                 setContext((ctx_) => {
-                    // A peer deleted the chart this entry edits: drop the entry, applying it would throw.
-                    if (editsDeletedChart(ctx_, history.inversePatches)) return ctx_;
+                    // A peer deleted the image or chart this entry edits: drop the entry, applying it would throw.
+                    if (editsDeletedFloatingObject(ctx_, history.inversePatches)) return ctx_;
                     if (history.options?.deleteSheetOp) {
                         history.inversePatches[0].path[1] = ctx_.sheets.length;
                         const order = history.options.deletedSheet?.value?.order as number;
@@ -310,11 +310,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             } as Patch);
                         }
                     }
-                    const newContext = produce(applyPatches(ctx_, history.inversePatches), (draft: Context) => {
-                        settleCurrentSheet(draft);
-                        const si = getSheetIndex(draft, draft.currentSheetId);
-                        if (si != null) draft.insertedImgs = draft.sheets[si].images;
-                    });
+                    const newContext = produce(applyPatches(ctx_, history.inversePatches), settleCurrentSheet);
                     globalCache.current.redoList.push(history);
                     const inversedOptions = inverseRowColOptions(history.options);
                     if (inversedOptions?.insertRowColOp) {
@@ -350,12 +346,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.redoList.pop();
             if (history) {
                 setContext((ctx_) => {
-                    if (editsDeletedChart(ctx_, history.patches)) return ctx_;
-                    const newContext = produce(applyPatches(ctx_, history.patches), (draft: Context) => {
-                        settleCurrentSheet(draft);
-                        const si = getSheetIndex(draft, draft.currentSheetId);
-                        if (si != null) draft.insertedImgs = draft.sheets[si].images;
-                    });
+                    if (editsDeletedFloatingObject(ctx_, history.patches)) return ctx_;
+                    const newContext = produce(applyPatches(ctx_, history.patches), settleCurrentSheet);
                     globalCache.current.undoList.push(history);
                     emitOp(newContext, history.patches, history.options);
 
@@ -378,17 +370,17 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         }, [context.currentSheetId, context.selections, mergedSettings.hooks]);
 
         // Surface the active floating image to the app so it can mount its properties panel. Fires on
-        // select/deselect and after a geometry commit (insertedImgs changes); `find` returns a stable
-        // reference while unchanged, so the app's setState bails when nothing moved.
-        useEffect(() => {
-            const active = context.insertedImgs?.find((img) => img.id === context.activeImg) ?? null;
-            mergedSettings.hooks?.onActiveImageChange?.(active);
-        }, [context.activeImg, context.insertedImgs, mergedSettings.hooks]);
-
+        // select/deselect and after a geometry commit; immer keeps the record's reference while it is
+        // unchanged, so the app's setState bails when nothing moved.
         const currentSheetIndex = getSheetIndex(context, context.currentSheetId);
-        const editingChart = context.activeChart?.editor
-            ? context.sheets[currentSheetIndex ?? -1]?.charts?.[context.activeChart.id]
-            : undefined;
+        const currentSheet = context.sheets[currentSheetIndex ?? -1];
+        const { activeObject } = context;
+        const activeImage = activeObject?.kind === 'image' ? currentSheet?.images?.[activeObject.id] : undefined;
+        useEffect(() => {
+            mergedSettings.hooks?.onActiveImageChange?.(activeImage ?? null);
+        }, [activeImage, mergedSettings.hooks]);
+
+        const editingChart = activeObject?.editor ? currentSheet?.charts?.[activeObject.id] : undefined;
         // Rebuilt on every sheet change while the editor is open: a renamed sheet renames its data range,
         // and an edited cell its slices. Memoized, so the app's setState bails out when nothing changed.
         // biome-ignore lint/correctness/useExhaustiveDependencies: the resolver reads context.sheets alone; depending on `context` would rebuild on every selection and scroll
@@ -583,22 +575,23 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // other app can draw; this workbook keeps its ranges for a paste here. A chart that draws
                 // #REF! or too much data copies nothing. A cut deletes it, as Google's does. Read from
                 // ctx.sheets, not the editable current sheet, so a viewer copies too.
-                if (context.activeChart && floating) {
-                    const sheet = context.sheets[getSheetIndex(context, context.currentSheetId) ?? -1];
-                    const chart = sheet?.charts?.[context.activeChart.id];
+                const { activeObject } = context;
+                const sheet = context.sheets[getSheetIndex(context, context.currentSheetId) ?? -1];
+                if (activeObject?.kind === 'chart' && floating) {
+                    const chart = sheet?.charts?.[activeObject.id];
                     const inline = chart ? inlineChartSpec(chart, createContextResolver(context)) : null;
                     const item = chart && inline ? buildChartClipboardItem({ spec: inline, box: chart }) : null;
                     if (!chart || !inline || !item) return;
                     e.preventDefault();
                     writeEigenClipboard(e, { version: 1, items: [item] });
                     globalCache.current.copiedChart = { inline, spec: chart.spec };
-                    if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveChart);
+                    if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                     return;
                 }
                 // A selected floating image takes precedence over the pending cell copy: its
                 // copy is a pure image — eigen JSON only, no text/plain and no png, as vector's is (a
                 // native copy event can't await a media/ blob fetch, so png is dropped).
-                const activeImg = context.insertedImgs?.find((img) => img.id === context.activeImg);
+                const activeImg = activeObject?.kind === 'image' ? sheet?.images?.[activeObject.id] : undefined;
                 if (activeImg && floating) {
                     const source = mergedSettings.hooks?.resolveImagePath?.(activeImg.mediaName);
                     if (source) {
@@ -784,7 +777,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // expose APIs
         useImperativeHandle(
             ref,
-            () => generateAPIs(context, setContextWithProduce, handleUndo, handleRedo, mergedSettings),
+            () =>
+                generateAPIs(
+                    context,
+                    setContextWithProduce,
+                    handleUndo,
+                    handleRedo,
+                    mergedSettings,
+                    globalCache.current,
+                ),
             [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings],
         );
 

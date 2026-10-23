@@ -1,0 +1,87 @@
+import { describe, expect, test } from 'bun:test';
+import { CHART_MAX_SIDE } from '../../charts';
+import {
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    SHEET_DEFAULT_COL_WIDTH,
+    SHEET_DEFAULT_ROW_HEIGHT,
+} from '../../sheets/defaults';
+import { floatingItems, nextFloatingIndex, sheetFloatingBox } from '../../sheets/floating';
+import type { Sheet, SheetChart, SheetImage } from '../../sheets/types';
+
+const BOX = { x: 10, y: 20, width: 40, height: 30 };
+const image = (id: string, index: string): SheetImage => ({ id, index, ...BOX, mediaName: `${id}.png` });
+const chart = (id: string, index: string): SheetChart => ({ id, index, ...BOX, spec: '{}' });
+
+describe('sheetFloatingBox', () => {
+    test('keeps a box on the grid as it is, with no angle as 0', () => {
+        expect(sheetFloatingBox({ x: 120.5, y: 40, width: 400, height: 300 })).toEqual({
+            x: 120.5,
+            y: 40,
+            width: 400,
+            height: 300,
+            angle: 0,
+        });
+        expect(sheetFloatingBox({ ...BOX, angle: 90 }).angle).toBe(90);
+    });
+
+    test('a side past the max is the max, and one under a pixel a pixel', () => {
+        expect(sheetFloatingBox({ x: 0, y: 0, width: 9.4e11, height: Number.POSITIVE_INFINITY })).toMatchObject({
+            width: CHART_MAX_SIDE,
+            height: CHART_MAX_SIDE,
+        });
+        expect(sheetFloatingBox({ x: 0, y: 0, width: 0, height: Number.NaN })).toMatchObject({ width: 1, height: 1 });
+    });
+
+    test("its corner lies on Excel's grid at the default track sizes", () => {
+        expect(sheetFloatingBox({ x: 9.4e11, y: 9.4e11, width: 400, height: 300 })).toMatchObject({
+            x: REFERENCE_COLUMN_COUNT * SHEET_DEFAULT_COL_WIDTH,
+            y: REFERENCE_ROW_COUNT * SHEET_DEFAULT_ROW_HEIGHT,
+        });
+        expect(sheetFloatingBox({ x: -5, y: Number.NaN, width: 400, height: 300 })).toMatchObject({ x: 0, y: 0 });
+    });
+
+    // Geometry is schemaless at the Yjs boundary: a peer can store a string or a non-finite angle.
+    test('reads a stored string as its number and a non-finite angle as 0', () => {
+        const stored = JSON.parse('{"x":"12","y":"8","width":"40","height":"30","angle":"45"}');
+        expect(sheetFloatingBox(stored)).toEqual({ x: 12, y: 8, width: 40, height: 30, angle: 45 });
+        expect(sheetFloatingBox({ ...BOX, angle: Number.POSITIVE_INFINITY }).angle).toBe(0);
+        expect(sheetFloatingBox({ ...BOX, angle: JSON.parse('"red"') }).angle).toBe(0);
+    });
+});
+
+describe('floatingItems', () => {
+    test('orders images and charts by one index, ties broken by id', () => {
+        const sheet: Sheet = {
+            name: 'S',
+            images: { i1: image('i1', 'a2'), i2: image('i2', 'a0') },
+            charts: { c1: chart('c1', 'a1'), c0: chart('c0', 'a2') },
+        };
+        expect(floatingItems(sheet).map(({ kind, object }) => `${kind}:${object.id}`)).toEqual([
+            'image:i2',
+            'chart:c1',
+            'chart:c0',
+            'image:i1',
+        ]);
+    });
+
+    test('a sheet without maps has none', () => {
+        expect(floatingItems({ name: 'S' })).toEqual([]);
+    });
+});
+
+describe('nextFloatingIndex', () => {
+    test('sits above every image and chart', () => {
+        const sheet: Sheet = { name: 'S', images: { i1: image('i1', 'a3') }, charts: { c1: chart('c1', 'a5') } };
+        expect(nextFloatingIndex(sheet) > 'a5').toBe(true);
+        expect(nextFloatingIndex({ name: 'S' })).toBe('a0');
+    });
+
+    // Two peers inserting at once store one key twice, and a file or a peer can store any string.
+    test('never throws on a tied or malformed top key', () => {
+        const tied: Sheet = { name: 'S', images: { i1: image('i1', 'a1') }, charts: { c1: chart('c1', 'a1') } };
+        expect(nextFloatingIndex(tied) > 'a1').toBe(true);
+        const malformed: Sheet = { name: 'S', images: { i1: image('i1', 'a0') }, charts: { c1: chart('c1', '') } };
+        expect(() => nextFloatingIndex(malformed)).not.toThrow();
+    });
+});

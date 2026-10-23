@@ -1,45 +1,45 @@
-import { find, set } from 'es-toolkit/compat';
+import { CHART_MAX_SIDE } from '@workspace/lib/charts';
+import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
+import { set } from 'es-toolkit/compat';
+import type { Patch } from 'immer';
+import { v4 as uuidv4 } from 'uuid';
 import { type Context, getFlowdata } from '../context';
-import type { GlobalCache, Image } from '../types';
-import { getSheetIndex } from '../utils';
+import type { GlobalCache } from '../types';
 import { mergeBorder } from '.';
+import { editableCurrentSheet, updateFloatingBox } from './floating';
 
-let counter = 0;
-function generateImageId() {
-    return `img_${Date.now()}_${++counter}`;
-}
-
-export function saveImage(ctx: Context) {
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null) return;
-    const file = ctx.sheets[index];
-
-    file.images = ctx.insertedImgs;
-}
-
-export function removeActiveImage(ctx: Context) {
-    if (ctx.allowEdit === false) return;
-    ctx.insertedImgs = ctx.insertedImgs?.filter((image) => image.id !== ctx.activeImg);
-    ctx.activeImg = undefined;
-    saveImage(ctx);
-}
-
+// A pending upload's name is swapped for the real one on every sheet: the user may have switched tabs since the insert.
 export function replaceImageMediaName(ctx: Context, oldName: string, newName: string) {
-    if (!ctx.insertedImgs) return;
-    let changed = false;
-    ctx.insertedImgs = ctx.insertedImgs.map((img) => {
-        if (img.mediaName !== oldName) return img;
-        changed = true;
-        return { ...img, mediaName: newName };
-    });
-    if (changed) saveImage(ctx);
+    if (ctx.allowEdit === false) return;
+    for (const sheet of ctx.sheets) {
+        for (const image of Object.values(sheet.images ?? {}))
+            if (image.mediaName === oldName) image.mediaName = newName;
+    }
 }
 
 export function removeImageByMediaName(ctx: Context, name: string) {
-    if (!ctx.insertedImgs) return;
-    const before = ctx.insertedImgs.length;
-    ctx.insertedImgs = ctx.insertedImgs.filter((img) => img.mediaName !== name);
-    if (ctx.insertedImgs.length !== before) saveImage(ctx);
+    if (ctx.allowEdit === false) return;
+    for (const sheet of ctx.sheets) {
+        for (const image of Object.values(sheet.images ?? {}))
+            if (image.mediaName === name) delete sheet.images?.[image.id];
+    }
+}
+
+// The swap of a pending name records no undo step, so an entry that brings its image back, a redone insert or an undone
+// delete, would still bring the pending name, which resolves to nothing; it takes the real name too.
+export function replaceMediaNameInHistory(
+    history: Pick<GlobalCache, 'undoList' | 'redoList'>,
+    oldName: string,
+    newName: string,
+) {
+    const rename = (patch: Patch): Patch =>
+        patch.path[2] === 'images' && patch.path.length === 4 && patch.value?.mediaName === oldName
+            ? { ...patch, value: { ...patch.value, mediaName: newName } }
+            : patch;
+    for (const entry of [...history.undoList, ...history.redoList]) {
+        entry.patches = entry.patches.map(rename);
+        entry.inversePatches = entry.inversePatches.map(rename);
+    }
 }
 
 // Where an inserted or pasted floating object lands: the top-left of the selected cell, or of its merge.
@@ -71,35 +71,17 @@ export function selectedCellOrigin(ctx: Context): { x: number; y: number } {
     return { x: left, y: top };
 }
 
-export function insertImage(ctx: Context, mediaName: string, width: number, height: number, angle: number = 0) {
-    // Stored as given — the caller has already sized the image (OS-file/upload inserts run the
-    // shared fitImageSize; typed clipboard sizes are authoritative). No sizing quirk lives here.
-    // `angle` is 0 for fresh inserts; an eigen image paste carries the source rotation through (U5c).
-    const img = {
-        id: generateImageId(),
-        mediaName,
-        ...selectedCellOrigin(ctx),
-        width,
-        height,
-        angle,
-    };
-    ctx.insertedImgs = (ctx.insertedImgs || []).concat(img);
-    saveImage(ctx);
-}
-
-// The single write path for an ObjectTransform resize/rotate commit (ImgBoxs) and the properties
-// panel's numeric edits. Only the fields the gesture/edit changed are passed; saveImage keeps the
-// emitted op the usual whole-images-array replace (the mirror in patch.ts depends on that shape).
-export function updateImage(
-    ctx: Context,
-    id: string,
-    fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>>,
-) {
-    if (ctx.allowEdit === false) return;
-    const img = find(ctx.insertedImgs, (v) => v.id === id);
-    if (!img) return;
-    Object.assign(img, fields);
-    saveImage(ctx);
+// Stored at the size the caller gives (a fit to the pane, or a pasted item's own box), scaled down whole to the largest
+// side every floating object is clamped to, so a large image keeps its aspect. The id is a uuid: two peers inserting
+// at once must never write one key.
+export function insertImage(ctx: Context, mediaName: string, width: number, height: number, angle = 0) {
+    const sheet = editableCurrentSheet(ctx);
+    if (!sheet) return;
+    const id = uuidv4();
+    const scale = Math.min(1, CHART_MAX_SIDE / width, CHART_MAX_SIDE / height);
+    const images = (sheet.images ??= {});
+    const box = sheetFloatingBox({ ...selectedCellOrigin(ctx), width: width * scale, height: height * scale, angle });
+    images[id] = { id, index: nextFloatingIndex(sheet), mediaName, ...box };
 }
 
 function getImagePosition() {
@@ -109,12 +91,6 @@ function getImagePosition() {
     const left = box.offsetLeft;
     const top = box.offsetTop;
     return { left, top, width, height };
-}
-
-export function deselectFloatingObject(ctx: Context, globalCache: GlobalCache) {
-    ctx.activeImg = undefined;
-    ctx.activeChart = undefined;
-    globalCache.image = undefined;
 }
 
 export function onImageMoveStart(_ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
@@ -149,12 +125,7 @@ export function onImageMoveEnd(ctx: Context, globalCache: GlobalCache) {
     if (!globalCache.image) return;
     const position = getImagePosition();
     globalCache.image = undefined;
-    if (position) {
-        const img = find(ctx.insertedImgs, (v) => v.id === ctx.activeImg);
-        if (img) {
-            img.x = position.left;
-            img.y = position.top;
-            saveImage(ctx);
-        }
+    if (position && ctx.activeObject?.kind === 'image') {
+        updateFloatingBox(ctx, ctx.activeObject, { x: position.left, y: position.top });
     }
 }

@@ -108,4 +108,17 @@ describe('sheet/core/api/sheet', () => {
         expect(data?.source === 'range' && data.categories?.sheetId).toBe('id_2');
         expect(next.sheets[0].charts).toEqual({ c1: chart });
     });
+
+    test("a copied sheet's images take fresh ids too, each under its own key", () => {
+        const image = { id: 'i1', index: 'a0', x: 0, y: 0, width: 40, height: 30, mediaName: 'a.png' };
+        const ctx = contextFactory({
+            sheets: [{ name: 'S', id: 'id_1', order: 0, images: { i1: image } }],
+        }) as Context;
+        const next = produce(ctx, (draft: Context) => copySheet(draft, 'id_1'));
+        const [copied] = Object.values(next.sheets[1].images!);
+        expect(copied).toEqual({ ...image, id: copied.id });
+        expect(copied.id).not.toBe('i1');
+        expect(Object.keys(next.sheets[1].images!)).toEqual([copied.id]);
+        expect(next.sheets[0].images).toEqual({ i1: image });
+    });
 });

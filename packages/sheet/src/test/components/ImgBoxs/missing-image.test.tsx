@@ -29,7 +29,7 @@ test('a missing image selects on click and Delete removes it', async () => {
             column: 5,
             celldata: [],
             config: {},
-            images: [{ id: 'gone', mediaName: 'gone.png', x: 10, y: 10, width: 50, height: 50 }],
+            images: { gone: { id: 'gone', index: 'a0', mediaName: 'gone.png', x: 10, y: 10, width: 50, height: 50 } },
         },
     ];
     await act(async () => {

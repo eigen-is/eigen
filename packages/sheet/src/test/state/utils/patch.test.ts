@@ -47,18 +47,6 @@ describe('opToPatch parity with opToPatchOnSheets', () => {
         expect(pure).toEqual([]);
         expect(wrapped).toEqual([]);
     });
-
-    test('images op on currentSheetId: wrapper adds insertedImgs side patch', () => {
-        const ctx = getContext();
-        const ops: Op[] = [{ op: 'add', id: 'sheet-1', path: ['images', 0], value: { id: 'img-1' } }];
-        const [pure] = opToPatchOnSheets(ctx.sheets, ops);
-        const [wrapped] = opToPatch(ctx, ops);
-        const expected = [
-            ...pure.map((p) => ({ ...p, path: ['sheets', ...p.path] })),
-            { op: 'add' as const, value: { id: 'img-1' }, path: ['insertedImgs'] },
-        ];
-        expect(wrapped).toEqual(expected);
-    });
 });
 
 // Some `Sheet` fields are per-client UI state, stored on the sheet only so a tab switch can

@@ -42,8 +42,8 @@ function asSheet(v: unknown): Sheet | null {
 }
 
 // The one shape every sheet leaves the replay in, whichever door it came through — the decoded
-// snapshot or an addSheet op's value. Config collections, `charts`, `images` and `calcChain` are
-// materialized because the editor writes them as whole collections, and a patch against one that
+// snapshot or an addSheet op's value. Config collections, `images`, `charts` and `calcChain` are
+// materialized because the editor writes into them key by key, and a patch against one that
 // doesn't exist yet fails to resolve (see normalizeSheetConfig, and the decode in lib's
 // snapshot-codec). `calcChain` earns its place here: the editor seeds it on every sheet at mount
 // (seedCalcChain), so the first formula a user types emits `add ['calcChain', 0]` in the SAME
@@ -52,7 +52,7 @@ function asSheet(v: unknown): Sheet | null {
 // empty chain is also what the recalc gate reads as "not computed", so materializing it leaves
 // sheetsNeedRecalc unchanged.
 function withNormalizedSheet(s: SheetWithCalcChain): SheetWithCalcChain {
-    const next = { ...s, config: { ...s.config }, images: s.images ?? [], calcChain: s.calcChain ?? [] };
+    const next = { ...s, config: { ...s.config }, calcChain: s.calcChain ?? [] };
     normalizeSheetConfig(next);
     return next;
 }

@@ -9,7 +9,6 @@ export {
     mergeEdgeSides,
     parseCellKey,
 } from './borders';
-export { sheetChartBox } from './chart-box';
 export {
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
@@ -23,6 +22,13 @@ export {
     sheetDefaultRowHeight,
     sheetRowsHeight,
 } from './defaults';
+export {
+    floatingItems,
+    nextFloatingIndex,
+    type SheetFloatingItem,
+    type SheetFloatingKind,
+    sheetFloatingBox,
+} from './floating';
 export { cellFontName, SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from './fonts';
 export { columnIndexToLabel, columnLabelToIndex } from './labels';
 export { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from './snapshot-codec';

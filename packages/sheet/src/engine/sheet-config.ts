@@ -41,6 +41,7 @@ export function normalizeSheetConfig(sheet: Sheet) {
     // `Sheet.config` is lib's wire shape; the editor extras ride along on the same object.
     const cfg: ExtendedSheetConfig = (sheet.config ??= {});
     for (const key of SHEET_CONFIG_COLLECTIONS) cfg[key] ??= {};
-    // Charts live outside config but are written per key the same way.
+    // Images and charts live outside config but are written per key the same way.
+    sheet.images ??= {};
     sheet.charts ??= {};
 }

@@ -19,8 +19,10 @@ import { setColumnWidth, setRowHeight, showRowOrColumn } from '../../state/api/r
 import { initSheetData } from '../../state/api/sheet';
 import type { Context } from '../../state/context';
 import { handlePasteByClick } from '../../state/events/paste';
-import { deleteChart, reorderChart, setChartSpec, updateChartBox } from '../../state/modules/chart';
+import { setChartSpec } from '../../state/modules/chart';
 import { clearFilter } from '../../state/modules/filter';
+import { deleteFloatingObject, reorderFloatingObject, updateFloatingBox } from '../../state/modules/floating';
+import { removeImageByMediaName, replaceImageMediaName } from '../../state/modules/image';
 import { showSelected } from '../../state/modules/rowcol';
 import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
 import { handleBorder, handleClearFormat, handleMerge, updateFormatCell } from '../../state/modules/toolbar';
@@ -85,10 +87,17 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
             handleBorder(ctx, 'border-all');
         },
     ],
-    ['moving a chart that is not there', (ctx) => updateChartBox(ctx, 'gone', { x: 10 })],
+    ...(['image', 'chart'] as const).flatMap((kind): [string, (ctx: Context) => void][] => [
+        [`moving a ${kind} that is not there`, (ctx) => updateFloatingBox(ctx, { kind, id: 'gone' }, { x: 10 })],
+        [
+            `reordering a ${kind} that is not there`,
+            (ctx) => reorderFloatingObject(ctx, { kind, id: 'gone' }, 'toFront'),
+        ],
+        [`deleting a ${kind} that is not there`, (ctx) => deleteFloatingObject(ctx, { kind, id: 'gone' })],
+    ]),
     ['setting the spec of a chart that is not there', (ctx) => setChartSpec(ctx, 'gone', sampleChartSpec('line'))],
-    ['reordering a chart that is not there', (ctx) => reorderChart(ctx, 'gone', 'forward')],
-    ['deleting a chart that is not there', (ctx) => deleteChart(ctx, 'gone')],
+    ['renaming the media of no image', (ctx) => replaceImageMediaName(ctx, 'pending:gone', 'photo.png')],
+    ['removing the media of no image', (ctx) => removeImageByMediaName(ctx, 'pending:gone')],
     ['unhiding a row via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'row')],
     ['unhiding a column via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'column')],
     ['unhiding a selected row when nothing is hidden', (ctx) => showSelected(ctx, 'row')],

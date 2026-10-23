@@ -1,5 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { Box } from '@workspace/lib/vector';
+import { type Box, orderByFractionalIndex } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui';
 import {
     ContextMenuAnchor,
@@ -10,7 +10,7 @@ import {
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { onImageMoveStart, updateImage } from '../../state';
+import { getSheetIndex, onImageMoveStart, selectFloatingObject, updateFloatingBox } from '../../state';
 import type { Image } from '../../state/types';
 
 // Floating-image resize floor (scene px === screen px; the grid is unzoomed).
@@ -118,14 +118,14 @@ function ActiveImage({ img, onContextMenu }: { img: Image; onContextMenu: ImageC
                     onTransform={setPreview}
                     onCommit={(next, start) => {
                         setPreview(null);
-                        const fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>> = {};
+                        const fields: Partial<Box> = {};
                         if (next.x !== start.x) fields.x = next.x;
                         if (next.y !== start.y) fields.y = next.y;
                         if (next.width !== start.width) fields.width = next.width;
                         if (next.height !== start.height) fields.height = next.height;
                         if (next.angle !== start.angle) fields.angle = next.angle;
                         if (Object.keys(fields).length > 0) {
-                            setContext((ctx) => updateImage(ctx, img.id, fields));
+                            setContext((ctx) => updateFloatingBox(ctx, { kind: 'image', id: img.id }, fields));
                         }
                     }}
                 />
@@ -143,10 +143,7 @@ function InactiveImage({ img, onContextMenu }: { img: Image; onContextMenu: Imag
 
     const handleClick = useCallback(
         (e: React.MouseEvent) => {
-            setContext((ctx) => {
-                ctx.activeImg = img.id;
-                ctx.activeChart = undefined;
-            });
+            setContext((ctx) => selectFloatingObject(ctx, { kind: 'image', id: img.id }));
             e.stopPropagation();
         },
         [setContext, img.id],
@@ -188,16 +185,17 @@ export function ImgBoxs() {
         const path = settings.hooks?.resolveImagePath?.(img.mediaName);
         if (path) contextMenu.handleContextMenu(e, path);
     };
-    const activeImg = useMemo(() => {
-        return context.insertedImgs?.find((img) => img.id === context.activeImg);
-    }, [context.activeImg, context.insertedImgs]);
+    const index = getSheetIndex(context, context.currentSheetId);
+    const images = index == null ? [] : orderByFractionalIndex(Object.values(context.sheets[index].images ?? {}));
+    const activeId = context.activeObject?.kind === 'image' ? context.activeObject.id : undefined;
+    const activeImg = images.find((img) => img.id === activeId);
 
     return (
         <div id="sheet-image-showBoxs">
             {/* key: reset the resize/rotate preview when the active image changes. */}
             {activeImg && <ActiveImage key={activeImg.id} img={activeImg} onContextMenu={onContextMenu} />}
-            {context.insertedImgs?.map((img) => {
-                if (img.id === context.activeImg) return null;
+            {images.map((img) => {
+                if (img.id === activeId) return null;
                 return <InactiveImage key={img.id} img={img} onContextMenu={onContextMenu} />;
             })}
             <ContextMenuAnchor contextMenu={contextMenu}>

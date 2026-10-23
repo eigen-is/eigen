@@ -7,17 +7,18 @@ import {
     type CellWithRowAndCol,
     type ConditionalFormatRule,
     cellFontName,
+    floatingItems,
     type MergeCell,
     mergedBorderSides,
     SHEET_DEFAULT_FONT_SIZE,
     type Sheet,
     type SheetConfig,
-    sheetChartBox,
     sheetColumnsWidth,
+    sheetFloatingBox,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
-import { orderByFractionalIndex } from '@workspace/lib/vector';
+import { getElementBounds } from '@workspace/lib/vector';
 import {
     booleanDisplay,
     type CellFormatStyle,
@@ -107,15 +108,6 @@ function serializeStyleRules(styles: StyleRegistry): string {
 // later declaration. Both emitters ask here so the two never disagree.
 function fontQuote(forStylesheet: boolean): string {
     return forStylesheet ? '"' : '&quot;';
-}
-
-// Dimensions are schemaless at the Yjs boundary — a collaborator can store a string.
-// Coerced at the source rather than left to the structural strip above, because these
-// reach the width/height declarations and, through getSheetContentSize, the @page rule
-// pdfPageCss derives from them and never sanitizes.
-function cssLength(value: number | undefined, fallback: number): number {
-    const n = Number(value ?? fallback);
-    return Number.isFinite(n) ? n : fallback;
 }
 
 // The workbook as one document: the screen's prints landscape, the PDF's on a page that fits its widest and tallest
@@ -243,13 +235,13 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     };
 }
 
-// The far corner of a sheet's images and charts, in the table's space, like the overlay positions them.
+// The far corner of a sheet's images and charts as they turn, in the table's space, like the overlay positions them.
 function floatingExtent(sheet: Sheet, offset: { left: number; top: number }): { width: number; height: number } {
     let width = 0;
     let height = 0;
-    for (const item of floatingObjects(sheet)) {
-        width = Math.max(width, cssLength(item.x, 0) + cssLength(item.width, 0) - offset.left);
-        height = Math.max(height, cssLength(item.y, 0) + cssLength(item.height, 0) - offset.top);
+    for (const { bounds } of floatingObjects(sheet)) {
+        width = Math.max(width, bounds.maxX - offset.left);
+        height = Math.max(height, bounds.maxY - offset.top);
     }
     return { width, height };
 }
@@ -480,50 +472,46 @@ function gridOffset(sheet: Sheet, minRow: number, minCol: number): { left: numbe
     return { left: sheetColumnsWidth(sheet, 0, minCol - 1), top: sheetRowsHeight(sheet, 0, minRow - 1) };
 }
 
-type FloatingBox = { x: number; y: number; width: number; height: number };
-
-// Every image and chart box, which the page size and the window's origin count; a chart's clamped as it draws.
-function floatingObjects(sheet: Sheet): FloatingBox[] {
-    return [...(sheet.images ?? []), ...Object.values(sheet.charts ?? {}).map(sheetChartBox)];
+// Every image and chart in their one paint order, each with its box clamped as the editor's writers store it
+// (sheetFloatingBox), which also turns a string a peer stored into its number, and the box it covers as it turns,
+// which the page size, the window's origin and the preview's clip count.
+function floatingObjects(sheet: Sheet) {
+    return floatingItems(sheet).map((item) => {
+        const box = sheetFloatingBox(item.object);
+        return { item, box, bounds: getElementBounds(box) };
+    });
 }
 
-// Images, then charts in their paint order, at their stored boxes: the editor's ImgBoxs and ChartBoxs stack
-// the same way. An image whose name resolves to nothing renders nothing: a `pending:` name from an upload
-// that never settled, or a media file deleted under the reference. A chart draws as the painter's inline
-// SVG, its box clamped (sheetChartBox) and its ranges read from the materialized sheets.
+// Images and charts at their stored boxes, rotated about their centers, in the order the editor stacks them. An image
+// whose name resolves to nothing renders nothing: a `pending:` name from an upload that never settled, or a media
+// file deleted under the reference. A chart draws as the painter's inline SVG on white like the editor's chart box,
+// so the gridlines stop at it, its ranges read from the materialized sheets.
 function renderFloatingObjects(
     sheet: Sheet,
     mediaUrls: MediaUrls,
     resolver: CellResolver,
     offset: { left: number; top: number },
     styles?: StyleRegistry,
-    box?: { width: number; height: number },
+    clip?: { width: number; height: number },
 ): string {
-    // Geometry is schemaless at the Yjs boundary, like every other stored dimension here.
-    const place = (item: FloatingBox, extra = '') => {
-        const left = cssLength(item.x, 0) - offset.left;
-        const top = cssLength(item.y, 0) - offset.top;
-        const width = cssLength(item.width, 0);
-        const height = cssLength(item.height, 0);
-        if (box && (left >= box.width || top >= box.height || left + width <= 0 || top + height <= 0)) return null;
-        const decl = `position:absolute;left:${left}px;top:${top}px;width:${width}px;height:${height}px${extra}`;
-        return { attr: styleAttr(styles, decl), width, height };
-    };
     const parts: string[] = [];
-    for (const img of sheet.images ?? []) {
-        const src = mediaUrls.get(img.mediaName);
-        if (src === undefined) continue;
-        const angle = cssLength(img.angle, 0);
-        const placed = place(img, angle ? `;transform:rotate(${angle}deg);transform-origin:center center` : '');
-        if (placed) parts.push(`<img ${placed.attr} src="${escapeHtml(src)}" alt="">`);
-    }
-    // White like the editor's chart box, so the gridlines stop at a chart.
-    for (const chart of orderByFractionalIndex(Object.values(sheet.charts ?? {}))) {
-        const placed = place(sheetChartBox(chart), ';background:#fff');
-        if (placed)
-            parts.push(
-                `<div ${placed.attr}>${renderSheetChartSvg({ ...chart, width: placed.width, height: placed.height }, resolver)}</div>`,
+    for (const { item, box, bounds } of floatingObjects(sheet)) {
+        const [minX, minY] = [bounds.minX - offset.left, bounds.minY - offset.top];
+        const [maxX, maxY] = [bounds.maxX - offset.left, bounds.maxY - offset.top];
+        if (clip && (minX >= clip.width || minY >= clip.height || maxX <= 0 || maxY <= 0)) continue;
+        const rotate = box.angle ? `;transform:rotate(${box.angle}deg);transform-origin:center center` : '';
+        const place = (extra = '') =>
+            styleAttr(
+                styles,
+                `position:absolute;left:${box.x - offset.left}px;top:${box.y - offset.top}px;width:${box.width}px;height:${box.height}px${extra}${rotate}`,
             );
+        if (item.kind === 'image') {
+            const src = mediaUrls.get(item.object.mediaName);
+            if (src !== undefined) parts.push(`<img ${place()} src="${escapeHtml(src)}" alt="">`);
+        } else {
+            const svg = renderSheetChartSvg({ ...item.object, width: box.width, height: box.height }, resolver);
+            parts.push(`<div ${place(';background:#fff')}>${svg}</div>`);
+        }
     }
     return parts.join('');
 }
@@ -708,7 +696,7 @@ function getGridBounds(
 
 // Images and charts are stored in grid pixels from A1 while the overlay positions them against the
 // window's first cell, so one anchored above or left of the used range would take a negative offset
-// and fall off the page: the window drops to the track the earliest one starts in.
+// and fall off the page: the window drops to the track the earliest one, as it turns, starts in.
 function getRenderBounds(
     sheet: Sheet,
     config: SheetConfig,
@@ -719,9 +707,9 @@ function getRenderBounds(
 
     let x = Number.MAX_SAFE_INTEGER;
     let y = Number.MAX_SAFE_INTEGER;
-    for (const item of floating) {
-        x = Math.min(x, cssLength(item.x, 0));
-        y = Math.min(y, cssLength(item.y, 0));
+    for (const { bounds: turned } of floating) {
+        x = Math.min(x, turned.minX);
+        y = Math.min(y, turned.minY);
     }
 
     let minCol = 0;

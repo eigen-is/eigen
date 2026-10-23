@@ -237,7 +237,7 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
         bump(counts, 'conditionalFormats', sheet.conditionalFormatRules?.length ?? 0);
         bump(counts, 'validations', size(sheet.dataVerification));
         bump(counts, 'hyperlinks', size(sheet.hyperlink));
-        bump(counts, 'images', sheet.images?.length ?? 0);
+        bump(counts, 'images', size(sheet.images));
         bump(counts, 'charts', size(sheet.charts));
         const hashes = Object.fromEntries([
             ...CONFIG_FEATURES.map((key) => [key, Bun.hash.crc32(canonical(config[key] ?? null))]),

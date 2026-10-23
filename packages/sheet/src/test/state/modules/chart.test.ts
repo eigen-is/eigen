@@ -12,26 +12,19 @@ import {
     type SheetChart,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
-import { orderByFractionalIndex } from '@workspace/lib/vector';
-import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } from 'immer';
+import { applyPatches, enablePatches, produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { replaySheetsOps } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import { initSheetData } from '../../../state/api/sheet';
 import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
-import {
-    deleteChart,
-    editsDeletedChart,
-    insertChart,
-    pasteChart,
-    reorderChart,
-    setChartSpec,
-    updateChartBox,
-} from '../../../state/modules/chart';
+import { insertChart, pasteChart, setChartSpec } from '../../../state/modules/chart';
+import { updateFloatingBox } from '../../../state/modules/floating';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op, Sheet } from '../../../state/types';
-import { filterPatch, inverseRowColOptions, type PatchOptions, patchToOp } from '../../../state/utils/patch';
+import { inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
+import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
 enablePatches();
@@ -85,38 +78,7 @@ function workbook(): Context {
     return ctx;
 }
 
-// One edit as setContextWithProduce records it: the new state, its ops and its undo entry.
-function author(base: Context, recipe: (ctx: Context) => void, options?: PatchOptions) {
-    const [next, patches, inverse] = produceWithPatches(base, recipe);
-    return {
-        next,
-        ops: patchToOp(next, filterPatch(patches), options),
-        patches: filterPatch(patches),
-        inverse: filterPatch(inverse),
-    };
-}
-
-// A peer applies a batch through the Workbook's own applyOp.
-function receive(ctx: Context, ops: Op[]): Context {
-    let next = ctx;
-    // biome-ignore lint/suspicious/noExplicitAny: applyOp reads settings only on the addSheet branch
-    const settings = {} as any;
-    const setContext = (recipe: (draft: Context) => void) => {
-        next = produce(next, recipe);
-    };
-    generateAPIs(
-        ctx,
-        setContext,
-        () => {},
-        () => {},
-        settings,
-    ).applyOp(ops);
-    return next;
-}
-
-const join = (base: Context, batches: Op[][]) => replaySheetsOps(structuredClone(base.sheets), batches);
 const charts = (sheets: Sheet[]) => sheets.map((sheet) => sheet.charts);
-const paintOrder = (ctx: Context) => orderByFractionalIndex(Object.values(ctx.sheets[0].charts!)).map((c) => c.id);
 const rangeData = (sheets: Sheet[], sheet: number, id: string) => {
     const spec = parseChartSpec(sheets[sheet].charts![id].spec);
     return spec?.data.source === 'range' ? spec.data : null;
@@ -130,16 +92,8 @@ describe('chart writers', () => {
         expect(parseChartSpec(next.sheets[0].charts!.c3.spec)).toEqual(sampleChartSpec('line'));
     });
 
-    test('a move or resize writes only the fields that changed', () => {
-        const { ops } = author(workbook(), (ctx) => updateChartBox(ctx, 'c1', { x: 300, y: 20, width: 500 }));
-        expect(ops.map((op) => [op.op, op.path])).toEqual([
-            ['replace', ['charts', 'c1', 'x']],
-            ['replace', ['charts', 'c1', 'width']],
-        ]);
-    });
-
-    // A pasted size or a resize past the largest side would stall every peer's painter, and at a trillion px overflow it.
-    test('insert, paste, move and resize store a side past the max as the max, and the corner on the grid', () => {
+    // A pasted size past the largest side would stall every peer's painter, and at a trillion px overflow it.
+    test('insert and paste store a side past the max as the max, and the corner on the grid', () => {
         const huge = { x: -5, y: 9.4e11, width: 9.4e11, height: 1e9 };
         const inserted = author(workbook(), (ctx) => insertChart(ctx, 'c3', huge, sampleChartSpec('line')));
         expect(inserted.next.sheets[0].charts!.c3).toMatchObject({
@@ -150,11 +104,6 @@ describe('chart writers', () => {
         });
         const pasted = author(workbook(), (ctx) => pasteChart(ctx, 'c3', SPEC, { width: 9.4e11, height: 300 }));
         expect(pasted.next.sheets[0].charts!.c3).toMatchObject({ x: 0, y: 0, width: CHART_MAX_SIDE, height: 300 });
-        const resized = author(workbook(), (ctx) => updateChartBox(ctx, 'c1', { x: -40, width: 9.4e11 }));
-        expect(resized.ops.map((op) => [op.path, op.value])).toEqual([
-            [['charts', 'c1', 'x'], 0],
-            [['charts', 'c1', 'width'], CHART_MAX_SIDE],
-        ]);
     });
 
     test('a spec edit is one replace of the spec string', () => {
@@ -163,39 +112,13 @@ describe('chart writers', () => {
         expect(ops).toEqual([{ op: 'replace', id: S, path: ['charts', 'c1', 'spec'], value: JSON.stringify(spec) }]);
     });
 
-    test('bring forward and send backward write one index each', () => {
-        const forward = author(workbook(), (ctx) => reorderChart(ctx, 'c1', 'forward'));
-        expect(paintOrder(forward.next)).toEqual(['c2', 'c1']);
-        expect(forward.ops.map((op) => op.path)).toEqual([['charts', 'c1', 'index']]);
-        const backward = author(workbook(), (ctx) => reorderChart(ctx, 'c2', 'backward'));
-        expect(paintOrder(backward.next)).toEqual(['c2', 'c1']);
-        expect(author(workbook(), (ctx) => reorderChart(ctx, 'c2', 'forward')).ops).toEqual([]);
-        expect(author(workbook(), (ctx) => reorderChart(ctx, 'c1', 'backward')).ops).toEqual([]);
-    });
-
-    test('equal indexes, as two peers inserting at once leave them, order by id and move as a pair', () => {
-        const base = workbook();
-        base.sheets[0].charts!.c3 = chart('c3', rangeSpec(ref(S, [0, 1])), 'a1');
-        expect(paintOrder(base)).toEqual(['c1', 'c2', 'c3']);
-        expect(paintOrder(author(base, (ctx) => reorderChart(ctx, 'c1', 'forward')).next)).toEqual(['c2', 'c3', 'c1']);
-        expect(paintOrder(author(base, (ctx) => reorderChart(ctx, 'c3', 'backward')).next)).toEqual(['c1', 'c3', 'c2']);
-    });
-
-    test('delete removes the one key', () => {
-        const { ops } = author(workbook(), (ctx) => deleteChart(ctx, 'c1'));
-        expect(ops).toEqual([{ op: 'remove', id: S, path: ['charts', 'c1'] }]);
-    });
-
     test('a viewer writes nothing', () => {
         const base = produce(workbook(), (ctx: Context) => {
             ctx.allowEdit = false;
         });
         for (const recipe of [
             (ctx: Context) => insertChart(ctx, 'c3', BOX, sampleChartSpec('line')),
-            (ctx: Context) => updateChartBox(ctx, 'c1', { x: 1 }),
             (ctx: Context) => setChartSpec(ctx, 'c1', sampleChartSpec('pie')),
-            (ctx: Context) => reorderChart(ctx, 'c1', 'forward'),
-            (ctx: Context) => deleteChart(ctx, 'c1'),
         ]) {
             expect(author(base, recipe).ops).toEqual([]);
         }
@@ -216,6 +139,7 @@ describe("the Workbook's insertChart", () => {
             () => {},
             () => {},
             settings,
+            { undoList: [], redoList: [] },
         );
         const id = api.insertChart(BOX, sampleChartSpec('bar'));
         return { id, next };
@@ -266,7 +190,7 @@ describe('charts converge over real ops', () => {
     test('three clients editing different charts end identical, and so does a joiner', () => {
         const base = workbook();
         const a = author(base, (ctx) => insertChart(ctx, 'c3', BOX, sampleChartSpec('pie')));
-        const b = author(base, (ctx) => updateChartBox(ctx, 'c1', { x: 300, y: 40 }));
+        const b = author(base, (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300, y: 40 }));
         const c = author(base, (ctx) => setChartSpec(ctx, 'c2', sampleChartSpec('line')));
         const onA = receive(receive(a.next, b.ops), c.ops);
         const onB = receive(receive(b.next, c.ops), a.ops);
@@ -401,24 +325,5 @@ describe('charts converge over real ops', () => {
         expect(charts(undone.sheets)).toEqual(charts(base.sheets));
         expect(charts(peer.sheets)).toEqual(charts(base.sheets));
         expect(charts(joiner)).toEqual(charts(base.sheets));
-    });
-});
-
-describe('an undo entry on a chart a peer deleted', () => {
-    test('is recognized before it is applied, so it can be dropped', () => {
-        const base = workbook();
-        const move = author(base, (ctx) => updateChartBox(ctx, 'c1', { x: 300 }));
-        const gone = receive(move.next, author(base, (ctx) => deleteChart(ctx, 'c1')).ops);
-        expect(editsDeletedChart(gone, move.inverse)).toBe(true);
-        expect(() => applyPatches(gone, move.inverse)).toThrow();
-        expect(editsDeletedChart(move.next, move.inverse)).toBe(false);
-    });
-
-    test("the chart's own insert and delete stay undoable", () => {
-        const base = workbook();
-        const removed = author(base, (ctx) => deleteChart(ctx, 'c1'));
-        const inserted = author(base, (ctx) => insertChart(ctx, 'c3', BOX, sampleChartSpec('bar')));
-        const patches: Patch[] = [...removed.inverse, ...inserted.inverse];
-        expect(editsDeletedChart(removed.next, patches)).toBe(false);
     });
 });

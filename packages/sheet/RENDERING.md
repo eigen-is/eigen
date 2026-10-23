@@ -142,7 +142,7 @@ The autofilter range border and the per-column buttons are painted on the canvas
 - An inactive image sits at `z-index: 19`: an `<img>` in an `overflow-hidden` div.
 - ID: `sheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`).
 
-Charts (`ChartBoxs/index.tsx`) follow images in the same pane region, so a chart paints above an image at the same z-index. Each draws the painter's SVG in a white box at 19, the selected one at 20 with an `ObjectTransform` ring that resizes but doesn't rotate, since a chart's box has no angle. Why a chart redraws only when its cells change: [SHEETS.md § A chart on the grid redraws only when a cell matrix it reads changes](../../docs/SHEETS.md#a-chart-on-the-grid-redraws-only-when-a-cell-matrix-it-reads-changes).
+Charts (`ChartBoxs/index.tsx`) follow images in the same pane region, so a chart paints above an image at the same z-index. Each draws the painter's SVG in a white box at 19, the selected one at 20 with an `ObjectTransform` ring that resizes but doesn't rotate, and the chart draws unrotated whatever angle it stores ([ROADMAP](../../docs/ROADMAP.md)). Why a chart redraws only when its cells change: [SHEETS.md § A chart on the grid redraws only when a cell matrix it reads changes](../../docs/SHEETS.md#a-chart-on-the-grid-redraws-only-when-a-cell-matrix-it-reads-changes).
 
 ### 8. Comments
 

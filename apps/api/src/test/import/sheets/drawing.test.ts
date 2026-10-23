@@ -353,7 +353,16 @@ describe('a chart sheet', () => {
             ['Notes', 'sheet-2', []],
         ]);
         expect(chartsOf(sheets[1])).toEqual([
-            { id: 'chart-0', index: expect.any(String), x: 0, y: 0, width: 977, height: 638, spec: expect.any(String) },
+            {
+                id: 'chart-0',
+                index: expect.any(String),
+                x: 0,
+                y: 0,
+                width: 977,
+                height: 638,
+                angle: 0,
+                spec: expect.any(String),
+            },
         ]);
         expect(parseChartSpec(chartsOf(sheets[1])[0].spec)?.data).toMatchObject({
             source: 'range',

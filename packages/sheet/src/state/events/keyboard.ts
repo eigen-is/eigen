@@ -157,7 +157,7 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     }
 }
 
-const floatingObjectSelected = (ctx: Context) => ctx.activeChart != null || ctx.activeImg != null;
+const floatingObjectSelected = (ctx: Context) => ctx.activeObject != null;
 
 export function handleWithCtrlOrMetaKey(
     ctx: Context,
