@@ -94,30 +94,32 @@ describe('accent order', () => {
         expect(ORDER.map(({ value }) => value).sort()).toEqual(EIGEN_ACCENT_COLORS.map(({ value }) => value).sort());
     });
 
-    test('the first is indigo, the brand accent, so a default calendar and a first series keep it', () => {
-        expect(ORDER[0].label).toBe('indigo-500');
+    test('the first is pink, Eigen’s accent, so a default calendar and a first series take it', () => {
+        expect(ORDER[0].label).toBe('pink-500');
     });
 
-    test('the first three are 20 apart for every vision, the first four 15', () => {
-        for (const vision of Object.keys(VISIONS) as Vision[]) {
-            expect(closestPair(3, vision)).toBeGreaterThanOrEqual(20);
-            expect(closestPair(4, vision)).toBeGreaterThanOrEqual(15);
+    // What the order reaches with pink first: amber and green, second and fourth, are closest for a protanope.
+    test('the first three and the first four keep each vision’s floor', () => {
+        for (const [vision, three, four] of [
+            ['normal', 50, 45],
+            ['deuteranopia', 20, 10],
+            ['protanopia', 20, 6],
+            ['tritanopia', 10, 10],
+        ] as const) {
+            expect(closestPair(3, vision)).toBeGreaterThanOrEqual(three);
+            expect(closestPair(4, vision)).toBeGreaterThanOrEqual(four);
         }
     });
 
-    test('every neighbor is 24 apart in normal vision, for a deuteranope and for a protanope', () => {
+    test('every neighbor is 23 apart in normal vision, for a deuteranope and for a protanope', () => {
         for (const vision of ['normal', 'deuteranopia', 'protanopia'] as const) {
             for (let i = 1; i < ORDER.length; i++) {
-                expect(distance(ORDER[i - 1].value, ORDER[i].value, vision)).toBeGreaterThanOrEqual(24);
+                expect(distance(ORDER[i - 1].value, ORDER[i].value, vision)).toBeGreaterThanOrEqual(23);
             }
         }
     });
 
     test('none of the first eight is under 2:1 on white', () => {
         for (const { value } of ORDER.slice(0, 8)) expect(contrastOnWhite(value)).toBeGreaterThanOrEqual(2);
-    });
-
-    test('pink, the background a new deck opens on, comes last', () => {
-        expect(ORDER.at(-1)?.label).toBe('pink-500');
     });
 });

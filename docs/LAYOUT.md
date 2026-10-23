@@ -96,6 +96,10 @@ A share dialog's role Remove is a `SelectItem` with the same `variant`, behind a
 
 `scripts/check-standards.ts` gates it as a hard zero: a `DropdownMenuItem` or `SelectItem` that draws a `Trash2` icon, or whose label says Delete, Remove or to trash, fails without the variant, and so does one tinted by `text-destructive`, which leaves the icon grey. A toggle's label (`'Remove' : 'Add'` space before) is an undo and passes.
 
+## Pink is Eigen's accent color
+
+Pink `#f6339a`, the accent row of the pink column in `packages/lib/src/constants/colors.ts`, is Eigen's accent color. It comes first in `EIGEN_ACCENT_COLORS_SHUFFLED`, the order calendars, labels, chart series and presence hand the accents out in, so what Eigen picks for a user starts in its own color: a new account's first calendar and a chart's first series. A new deck's title slide opens on it too. Rose and fuchsia sit close to it, so they come late in that order ([CHARTS.md](CHARTS.md) has the reasoning).
+
 ## The document apps reach Drive through one config
 
 Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, which filter by the app's MIME type. Their configs come from `buildConfig` in `eigendoc-config.ts`, which reads the EigenDocType registry, so an app gets its sidebar, list and shared views without its own Drive code.
