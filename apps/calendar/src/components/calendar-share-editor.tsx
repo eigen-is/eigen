@@ -10,7 +10,14 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectSeparator,
+    SelectTrigger,
+    SelectValue,
+} from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
 import { Users } from 'lucide-react';
@@ -97,7 +104,10 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
                                     <SelectItem value="write">Can edit</SelectItem>
                                     <SelectItem value="read">Can view</SelectItem>
                                     <SelectItem value="free-busy">Free/Busy</SelectItem>
-                                    <SelectItem value="remove">Remove</SelectItem>
+                                    <SelectSeparator />
+                                    <SelectItem value="remove" variant="destructive">
+                                        Remove
+                                    </SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

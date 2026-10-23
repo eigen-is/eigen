@@ -11,8 +11,8 @@ import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { useAttachmentChipMenu } from '../attachment/use-attachment-chip-menu';
 import { EigenLoader } from '../braket/eigen-loader';
-import { ContextMenuAnchor } from '../context-menu';
-import { DropdownMenuItem, DropdownMenuSeparator } from '../dropdown-menu';
+import { ContextMenuAnchor, MenuSections } from '../context-menu';
+import { DropdownMenuItem } from '../dropdown-menu';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { LoadingState } from '../layout/app/loading-state';
@@ -424,45 +424,52 @@ export function ChatMessageList({
             <div className="h-3" />
             <ContextMenuAnchor contextMenu={contextMenu} className="min-w-[180px]">
                 {menuMessage && (
-                    <>
-                        {runner.subject && (
+                    <MenuSections
+                        open={runner.subject && <FileActionMenuItems runner={runner} group="open" />}
+                        create={
+                            menuActions?.canEdit &&
+                            onEditMessage && (
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        onEditMessage(menuMessage);
+                                        contextMenu.close();
+                                    }}
+                                >
+                                    <Pencil className="h-4 w-4" /> Edit
+                                </DropdownMenuItem>
+                            )
+                        }
+                        convert={runner.subject && <FileActionMenuItems runner={runner} group="convert" />}
+                        output={
                             <>
-                                <FileActionMenuItems runner={runner} />
-                                <DropdownMenuSeparator />
+                                {runner.subject && <FileActionMenuItems runner={runner} group="output" />}
+                                {menuActions?.canSaveAttachments && (
+                                    <DropdownMenuItem
+                                        onClick={() => {
+                                            runner.openPicker(menuSubjects);
+                                            contextMenu.close();
+                                        }}
+                                    >
+                                        <Download className="h-4 w-4" /> Save attachments
+                                    </DropdownMenuItem>
+                                )}
                             </>
-                        )}
-                        {menuActions?.canSaveAttachments && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    runner.openPicker(menuSubjects);
-                                    contextMenu.close();
-                                }}
-                            >
-                                <Download className="h-4 w-4" /> Save attachments
-                            </DropdownMenuItem>
-                        )}
-                        {menuActions?.canEdit && onEditMessage && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onEditMessage(menuMessage);
-                                    contextMenu.close();
-                                }}
-                            >
-                                <Pencil className="h-4 w-4" /> Edit
-                            </DropdownMenuItem>
-                        )}
-                        {menuActions?.canDelete && onDeleteMessage && (
-                            <DropdownMenuItem
-                                variant="destructive"
-                                onClick={() => {
-                                    onDeleteMessage(menuMessage);
-                                    contextMenu.close();
-                                }}
-                            >
-                                <Trash2 className="h-4 w-4" /> Delete
-                            </DropdownMenuItem>
-                        )}
-                    </>
+                        }
+                        destructive={
+                            menuActions?.canDelete &&
+                            onDeleteMessage && (
+                                <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => {
+                                        onDeleteMessage(menuMessage);
+                                        contextMenu.close();
+                                    }}
+                                >
+                                    <Trash2 className="h-4 w-4" /> Delete
+                                </DropdownMenuItem>
+                            )
+                        }
+                    />
                 )}
             </ContextMenuAnchor>
             {runner.dialogs}

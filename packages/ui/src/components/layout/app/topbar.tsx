@@ -238,15 +238,25 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                             Theme
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
-                            <DropdownMenuRadioGroup
-                                value={settings?.theme ?? 'light'}
-                                onValueChange={(v) =>
-                                    updateSettings.mutate({ theme: v as 'light' | 'dark' | 'system' })
-                                }
-                            >
-                                <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+                            <DropdownMenuRadioGroup value={settings?.theme ?? 'light'}>
+                                <DropdownMenuRadioItem
+                                    value="light"
+                                    onSelect={() => updateSettings.mutate({ theme: 'light' })}
+                                >
+                                    Light
+                                </DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem
+                                    value="dark"
+                                    onSelect={() => updateSettings.mutate({ theme: 'dark' })}
+                                >
+                                    Dark
+                                </DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem
+                                    value="system"
+                                    onSelect={() => updateSettings.mutate({ theme: 'system' })}
+                                >
+                                    System
+                                </DropdownMenuRadioItem>
                             </DropdownMenuRadioGroup>
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
