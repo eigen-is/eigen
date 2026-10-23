@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     CHART_MAX_SIDE,
     chartColor,
+    FLAT_CHART_LOOK,
     MAX_CHART_LABEL_LENGTH,
     MAX_CHART_POINTS,
     parseChartSpec,
@@ -9,6 +10,7 @@ import {
 } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
+import { serializeFill } from '@workspace/lib/vector';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { inlineChartSpec, renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
 import type { Cell } from '../../engine/types';
@@ -213,6 +215,17 @@ describe('renderSheetChartSvg', () => {
 
     test('a stored axis format wins over the cells’', () => {
         expect(renderSheetChartSvg(chart('0.00'), shares)).toContain('>0.50<');
+    });
+
+    test('draws the look the chart stores, a hatch inside a clip of its outline, and flat without one', () => {
+        const fill = serializeFill({ type: 'solid', color: 'transparent', style: 'cross-hatch' });
+        const svg = renderSheetChartSvg({ ...chart(null), fill, color: '#334455', roughness: 1 }, shares);
+        expect(svg).toContain('<clipPath id="');
+        expect(svg).toContain('<g clip-path="url(#');
+        expect(svg).toContain('fill="#334455"');
+        const flat = renderSheetChartSvg(chart(null), shares);
+        expect(flat).not.toContain('<clipPath');
+        expect(flat).toContain(`fill="${FLAT_CHART_LOOK.color}"`);
     });
 
     // A peer or a file can store any number; at a trillion px the painter overflows its stack.

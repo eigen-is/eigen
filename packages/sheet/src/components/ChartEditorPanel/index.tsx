@@ -1,9 +1,11 @@
-import { parseChartSpec } from '@workspace/lib/charts';
+import { parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
-import type { ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
+import type { ChartLook, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
+import { parseFill, serializeFill } from '@workspace/lib/vector';
 import { ChartEditor } from '@workspace/ui/components/charts';
 import { Input } from '@workspace/ui/components/input';
 import {
+    PaintSections,
     PropertiesPanel,
     PropertyCheckbox,
     PropertyGestureContext,
@@ -30,13 +32,16 @@ type ChartEditorPanelProps = {
     children?: ReactNode;
 };
 
-// Google's Chart editor: Setup (the data range and how it reads) over the shared Customise rows. Every
-// change is one write of the chart's spec, a typed field one undo step for the whole edit.
+// Google's Chart editor: Setup (the data range and how it reads) over the shared Customise rows, then the
+// look's paint rows. A Customise change is one write of the chart's spec, a paint row one write of its look
+// fields, and a typed field one undo step for the whole edit.
 export function ChartEditorPanel({ editor, workbook, children }: ChartEditorPanelProps) {
     const spec = parseChartSpec(editor.chart.spec);
     if (!spec) return null;
     const { data } = spec;
+    const look = readChartLook(editor.chart);
     const write = (next: ChartSpec) => workbook.current?.setChartSpec(editor.chart.id, next);
+    const writeLook = (patch: Partial<ChartLook>) => workbook.current?.setChartLook(editor.chart.id, patch);
     const beginGesture = () => workbook.current?.beginGesture() ?? (() => {});
     return (
         <PropertiesPanel title="Chart editor">
@@ -49,6 +54,20 @@ export function ChartEditorPanel({ editor, workbook, children }: ChartEditorPane
                     onChange={write}
                     categories={editor.categories}
                     seriesNames={editor.seriesNames}
+                />
+                <PaintSections
+                    fill={look.fill}
+                    fillStyle={parseFill(look.fill).style}
+                    marksHatch
+                    strokeColor={look.strokeColor}
+                    strokeWidth={look.strokeWidth}
+                    strokeStyle={look.strokeStyle}
+                    strokeOptional
+                    roughness={look.roughness}
+                    color={look.color}
+                    sketchCapped={editor.sketchCapped}
+                    onFill={(next) => writeLook({ fill: serializeFill(next(parseFill(look.fill))) })}
+                    onChange={writeLook}
                 />
                 {children}
             </PropertyGestureContext.Provider>

@@ -19,7 +19,7 @@ import { setColumnWidth, setRowHeight, showRowOrColumn } from '../../state/api/r
 import { initSheetData } from '../../state/api/sheet';
 import type { Context } from '../../state/context';
 import { handlePasteByClick } from '../../state/events/paste';
-import { setChartSpec } from '../../state/modules/chart';
+import { setChartLook, setChartSpec } from '../../state/modules/chart';
 import { clearFilter } from '../../state/modules/filter';
 import { deleteFloatingObject, reorderFloatingObject, updateFloatingBox } from '../../state/modules/floating';
 import { removeImageByMediaName, replaceImageMediaName } from '../../state/modules/image';
@@ -96,6 +96,7 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
         [`deleting a ${kind} that is not there`, (ctx) => deleteFloatingObject(ctx, { kind, id: 'gone' })],
     ]),
     ['setting the spec of a chart that is not there', (ctx) => setChartSpec(ctx, 'gone', sampleChartSpec('line'))],
+    ['setting the look of a chart that is not there', (ctx) => setChartLook(ctx, 'gone', { roughness: 1 })],
     ['renaming the media of no image', (ctx) => replaceImageMediaName(ctx, 'pending:gone', 'photo.png')],
     ['removing the media of no image', (ctx) => removeImageByMediaName(ctx, 'pending:gone')],
     ['unhiding a row via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'row')],

@@ -2,9 +2,10 @@
 // chart's block back from its refs and rewrites them, the Customise rows write the spec, each change one
 // undo step.
 import { afterEach, expect, test } from 'bun:test';
-import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { MAX_SKETCH_POINTS, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
+import { parseFill } from '@workspace/lib/vector';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -137,7 +138,31 @@ async function mount(chart: SheetChart) {
         return found.querySelector<HTMLButtonElement>('button[role="checkbox"]');
     };
     const undo = () => act(async () => workbook.current?.undo());
-    return { container, spec, field, type, toggle, undo };
+    const stored = () => workbook.current?.getAllSheets()[0].charts?.c1;
+    const drawn = () => container.querySelector('[data-floating-id="c1"] svg')?.innerHTML;
+    // A section's select, beside its label.
+    const choose = async (section: string, label: string, option: string) => {
+        const heading = [...container.querySelectorAll('h4')].find((h) => h.textContent === section);
+        const span = [...(heading?.parentElement?.querySelectorAll('span.w-14') ?? [])].find(
+            (el) => el.textContent?.trim() === label,
+        );
+        const trigger = span?.nextElementSibling?.querySelector('[data-slot="select-trigger"]');
+        if (!trigger) throw new Error(`no ${section} › ${label} row`);
+        await act(async () => {
+            trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+            trigger.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+        const list = [...document.querySelectorAll('[data-slot="select-content"]')].at(-1);
+        const item = [...(list?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])].find(
+            (el) => el.textContent?.trim() === option,
+        );
+        if (!item) throw new Error(`no "${option}" under ${section} › ${label}`);
+        await act(async () => {
+            item.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+            item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+    };
+    return { container, spec, field, type, toggle, undo, stored, drawn, choose };
 }
 
 test('Setup shows the chart’s block and how it reads', async () => {
@@ -151,7 +176,8 @@ test('Setup shows the chart’s block and how it reads', async () => {
 test('a series row is named by its name cell, as the chart’s legend is', async () => {
     const { container } = await mount(rangeChart());
     const labels = [...container.querySelectorAll('span.w-14')].map((span) => span.textContent?.trim());
-    expect(labels.at(-1)).toBe('Points');
+    expect(labels).toContain('Points');
+    expect(labels).not.toContain('Series 1');
 });
 
 test('a range typed on another sheet points the refs at that sheet by id, the series keeping its color', async () => {
@@ -224,4 +250,52 @@ test('an inline chart edits its data in the grid dialog instead of a data range'
     expect([...container.querySelectorAll('button')].some((button) => button.textContent?.includes('Edit data'))).toBe(
         true,
     );
+});
+
+test("the paint rows write the chart's own look fields, each one undo step, and the chart draws them", async () => {
+    const { container, spec, stored, drawn, choose, undo } = await mount(rangeChart());
+    const sections = [...container.querySelectorAll('h4')].map((h) => h.textContent);
+    expect(sections).toEqual(expect.arrayContaining(['Labels', 'Fill', 'Stroke', 'Sketch']));
+    const before = spec();
+    const flat = drawn();
+
+    await choose('Sketch', 'Style', 'Cartoonist');
+    expect(stored()?.roughness).toBe(2);
+    expect(drawn()).not.toBe(flat);
+    await choose('Fill', 'Style', 'Cross-hatch');
+    expect(parseFill(stored()?.fill ?? '').style).toBe('cross-hatch');
+    expect(spec()).toEqual(before);
+
+    await undo();
+    expect(stored()?.fill).toBeUndefined();
+    expect(stored()?.roughness).toBe(2);
+    await undo();
+    expect(stored()?.roughness).toBeUndefined();
+    expect(drawn()).toBe(flat);
+});
+
+test('a range chart past the sketch cap says so under Sketch', async () => {
+    const chart = rangeChart();
+    const many = JSON.stringify({
+        ...JSON.parse(chart.spec),
+        data: {
+            source: 'range',
+            categories: null,
+            series: [
+                {
+                    name: 'Points',
+                    values: ref([1, MAX_SKETCH_POINTS + 1], [1, 1]),
+                    color: null,
+                    markers: false,
+                    smooth: false,
+                },
+            ],
+        },
+    });
+    const capped = await mount({ ...chart, spec: many });
+    expect(capped.container.textContent).toContain(`Past ${MAX_SKETCH_POINTS} points`);
+    await cleanup?.();
+    cleanup = undefined;
+    const small = await mount(rangeChart());
+    expect(small.container.textContent).not.toContain(`Past ${MAX_SKETCH_POINTS} points`);
 });

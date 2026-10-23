@@ -1,4 +1,4 @@
-import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';
 import { applyPatches, produce } from 'immer';
@@ -44,6 +44,7 @@ import {
     type Settings,
     selectFloatingObject,
     setChartDataRange,
+    setChartLook,
     setChartSpec,
     setSearchHighlights,
     updateFloatingBox,
@@ -194,6 +195,9 @@ export function generateAPIs(
         },
 
         setChartSpec: (id: string, spec: ChartSpec) => setContext((draftCtx) => setChartSpec(draftCtx, id, spec)),
+
+        setChartLook: (id: string, look: Partial<ChartLook>) =>
+            setContext((draftCtx) => setChartLook(draftCtx, id, look)),
 
         // Sets the range up, or says why it holds no chart and writes nothing.
         setChartDataRange: (id: string, ref: CellRangeRef): ChartRangeRefusal | undefined => {

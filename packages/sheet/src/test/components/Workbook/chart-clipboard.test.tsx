@@ -2,10 +2,11 @@
 // cells copied, ⌘X deletes it too, and ⌘V with a chart focused pastes one, linked to its cells in the workbook it
 // was copied from and inline anywhere else.
 import { afterEach, expect, spyOn, test } from 'bun:test';
-import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { FLAT_CHART_LOOK, parseChartSpec, readChartLook, sampleChartSpec } from '@workspace/lib/charts';
 import { buildChartClipboardItem, readEigenClipboard, writeEigenClipboard } from '@workspace/lib/clipboard';
 import type { SheetChart } from '@workspace/lib/sheets';
-import type { CellRangeRef } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartLook } from '@workspace/lib/types/chart';
+import { serializeFill } from '@workspace/lib/vector';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -49,7 +50,18 @@ afterEach(async () => {
     cleanups = [];
 });
 
-async function mount({ allowEdit = true, spec = chart.spec } = {}) {
+// A rough, hatched look as Vector stores it on a chart element.
+const ROUGH: ChartLook = {
+    fill: serializeFill({ type: 'solid', color: '#ffeeaa', style: 'cross-hatch' }),
+    color: '#334455',
+    strokeColor: '#556677',
+    strokeWidth: 3,
+    strokeStyle: 'dashed',
+    roughness: 2,
+    seed: 4242,
+};
+
+async function mount({ allowEdit = true, spec = chart.spec, look = {} as Partial<ChartLook> } = {}) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -71,7 +83,7 @@ async function mount({ allowEdit = true, spec = chart.spec } = {}) {
                 cell(2, 1, 65),
             ],
             config: {},
-            charts: { c1: { ...chart, spec } },
+            charts: { c1: { ...chart, spec, ...look } },
         },
     ];
     await act(async () => {
@@ -217,4 +229,33 @@ test('a chart item another app wrote pastes as an inline chart at its size', asy
     await select();
     await shortcut('KeyV', clipboardData);
     expect(charts().find((c) => c.id !== 'c1')).toMatchObject({ spec, width: 320.5, height: 200 });
+});
+
+test('⌘C carries the look the chart stores, and a chart storing none copies flat', async () => {
+    const rough = await mount({ look: ROUGH });
+    await rough.select();
+    const { clipboardData } = await shortcut('KeyC');
+    expect(readEigenClipboard(clipboardData)?.items[0]).toMatchObject({ type: 'chart', look: ROUGH });
+    await cleanups.shift()?.();
+
+    const flat = await mount();
+    await flat.select();
+    const copied = await shortcut('KeyC');
+    expect(readEigenClipboard(copied.clipboardData)?.items[0]).toMatchObject({ look: FLAT_CHART_LOOK });
+});
+
+test('a chart from Docs or Vector pastes with its look and copies back out with it', async () => {
+    const spec = JSON.stringify(sampleChartSpec('column'));
+    const item = buildChartClipboardItem({ spec, box: { width: 320, height: 200 }, look: ROUGH });
+    if (!item) throw new Error('no item');
+    const clipboardData = new DataTransfer();
+    writeEigenClipboard(new ClipboardEvent('copy', { clipboardData }), { version: 1, items: [item] });
+    const { select, charts } = await mount();
+    await select();
+    await shortcut('KeyV', clipboardData);
+    const pasted = charts().find((c) => c.id !== 'c1');
+    expect(pasted && readChartLook(pasted)).toEqual(ROUGH);
+
+    const back = await shortcut('KeyC');
+    expect(readEigenClipboard(back.clipboardData)?.items[0]).toMatchObject({ type: 'chart', spec, look: ROUGH });
 });
