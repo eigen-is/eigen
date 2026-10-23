@@ -5,10 +5,10 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit]
 order: 100
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
-You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, and equations.
+You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, charts, and equations.
 
 <div class="eigen-callout">
 
@@ -46,6 +46,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Checkboxes become a checklist, ticked or not.
 - Tables keep their merged cells, column widths, and cell colors. A table wider than the page shrinks to fit.
 - Images keep their size and caption. An image that floats left or right of the text floats there in Eigen too.
+- Column, bar, line, and pie charts become charts you can edit, with their data, colors, title, size, and caption. A chart floats as an image does, and a 3-D chart comes in flat. See [Insert images, charts, and tables](/support/docs/images-and-tables).
 - Footnotes stay footnotes, with their formatting and links, and endnotes become footnotes. A footnote with a custom mark, such as *, gets a number instead.
 - The header and footer come across, with page numbers and page counts, and the first page's own header and footer when the Word file has them. An image that floats in a header or footer comes in on a line of its own.
 - A page break, "Page break before" in Word's paragraph settings, and a section break that starts a new page all start a new page in Eigen.
@@ -61,7 +62,9 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - A watermark, or a picture that sits behind the text from the header, such as a full-page letterhead, is left out. So is a footnote mark in a header or footer.
 - Tracked changes come in as if you had accepted them all.
 - Line spacing set to **Exactly** or **At least** in Word follows the normal text's, and normal text set that way is single-spaced.
-- A SmartArt graphic comes in as its text, one paragraph per shape, and a chart as its title only.
+- A SmartArt graphic comes in as its text, one paragraph per shape.
+- A chart Eigen can't draw the way Word does, such as an area, scatter, doughnut, or combo chart, becomes a line that names the kind of chart and its title, for example **Scatter chart not imported**.
+- A chart in a header, footer, or footnote comes in as its title only.
 - An equation takes the size of the text around it, so a size set inside a Word equation doesn't come across.
 - A WMF or EMF picture, a format older Office files often use, shows as a broken image with its description. You can delete it. When you download the document, it's left out.
 

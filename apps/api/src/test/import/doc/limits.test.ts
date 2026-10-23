@@ -3,7 +3,8 @@ import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX } from '@workspace/lib/docs/eigendoc';
 import * as math from '@workspace/math';
 import { ApiError } from '../../../lib/core/errors';
-import { M_NS } from '../../../lib/core/ooxml';
+import { C_NS, M_NS, parseOoxml } from '../../../lib/core/ooxml';
+import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/core/ooxml-chart';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/core/opc';
 import * as xml from '../../../lib/core/xml';
 import { openZip, ZipReader } from '../../../lib/core/zip';
@@ -14,11 +15,13 @@ import { documentTransformRunner, TRANSFORM_LIMITS } from '../../../lib/document
 import { LIST_LEVELS } from '../../../lib/document/wordml';
 import { MAX_QUOTE_DEPTH } from '../../../lib/import/doc/assemble';
 import { docxToPmJson, MAX_DOCX_TEXT } from '../../../lib/import/doc/from-docx';
-import { CHARS_PER_UNIT, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
+import { CHARS_PER_UNIT, MAX_DOCX_CHART_WORK, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
 import {
     buildDocxWithBody,
+    chartParts,
+    chartRun,
     GOLDEN_DOCX_IMAGE_RUN,
     importDocxBody,
     marksOfType,
@@ -305,20 +308,39 @@ describe('XML budget', () => {
     });
 
     test('a chart past the tag budget is 413', async () => {
-        const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
         const points = '<c:pt idx="0"><c:v>v</c:v></c:pt>'.repeat(MAX_PACKAGE_XML_TAGS / 4);
-        const chart = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Chart 1"/><a:graphic><a:graphicData><c:chart xmlns:c="${C}" r:id="rId21"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
         const error = await rejection(() =>
-            importDocxBody(`${paragraph(run('Body'))}${paragraph(chart)}`, {
-                rels: '<Relationship Id="rId21" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="charts/chart1.xml"/>',
-                media: {
-                    'word/charts/chart1.xml': new TextEncoder().encode(
-                        `<c:chartSpace xmlns:c="${C}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
-                    ),
-                },
-            }),
+            importDocxBody(
+                `${paragraph(run('Body'))}${paragraph(chartRun('rId20'))}`,
+                chartParts([
+                    `<c:chartSpace xmlns:c="${C_NS}"><c:chart><c:title><c:tx><c:strRef><c:strCache>${points}</c:strCache></c:strRef></c:tx></c:title></c:chart></c:chartSpace>`,
+                ]),
+            ),
         );
         expect([error.status, error.message]).toEqual([413, 'This document is too large to import']);
+    });
+
+    // A cache declares its points in one tag, which readChart builds before the spec refuses them: each chart past the
+    // allowance is the note a chart it can't draw leaves, and a part named again costs nothing more.
+    test('a chart past the chart allowance says a chart was not imported', async () => {
+        const series =
+            '<c:ser><c:val><c:numRef><c:numCache><c:ptCount val="2000"/></c:numCache></c:numRef></c:val></c:ser>';
+        const heavy = `<c:chartSpace xmlns:c="${C_NS}"><c:chart><c:plotArea><c:barChart>${series.repeat(32)}</c:barChart></c:plotArea></c:chart></c:chartSpace>`;
+        const root = parseOoxml(heavy);
+        const affordable = root ? Math.floor(MAX_DOCX_CHART_WORK / chartCost(root)) : 0;
+        const parts = Array.from({ length: affordable + 1 }, () => heavy);
+        const runs = parts.map((_, i) => paragraph(chartRun(`rId${20 + i}`)));
+        const { json, warnings } = await importDocxBody(
+            `${runs.join('')}${paragraph(chartRun('rId20'))}`,
+            chartParts(parts),
+        );
+        const notes = nodesOfType(json, 'paragraph')
+            .map((node) => texts(node).join(''))
+            .filter(Boolean);
+        const read = 'Clustered Column chart not imported';
+        expect(affordable).toBeGreaterThan(1);
+        expect(notes).toEqual([...Array(affordable).fill(read), CHART_NOT_IMPORTED, read]);
+        expect(warnings).toEqual([{ code: 'charts-dropped', count: affordable + 2 }]);
     });
 
     // As a corrupt file is, rather than as a server error.

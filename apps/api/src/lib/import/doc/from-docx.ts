@@ -126,6 +126,7 @@ export function readDocx(
         const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
         if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
         if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
+        if (reader.chartsDropped > 0) warnings.push({ code: 'charts-dropped', count: reader.chartsDropped });
         if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
         if (pkg.evenBands > 0) warnings.push({ code: 'even-bands-dropped', count: pkg.evenBands });
         if (reader.bandAnchors > 0) warnings.push({ code: 'band-images-unanchored', count: reader.bandAnchors });
