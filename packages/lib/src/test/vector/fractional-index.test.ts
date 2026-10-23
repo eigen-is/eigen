@@ -3,6 +3,7 @@ import {
     generateKeyBetween,
     generateNKeysBetween,
     isValidFractionalIndex,
+    keysAfter,
     orderByFractionalIndex,
     syncInvalidIndices,
     validateOrderKey,
@@ -113,6 +114,34 @@ describe('syncInvalidIndices', () => {
         ];
         syncInvalidIndices(els);
         expect(els.map((e) => e.index)).toEqual(['a0', 'a1', 'a2']);
+    });
+});
+
+describe('keysAfter', () => {
+    // B and C share a key, as two peers' inserts after A leave them: ordered by key then id.
+    const order = orderByFractionalIndex([
+        { id: 'D', index: 'a2' },
+        { id: 'C', index: 'a1' },
+        { id: 'B', index: 'a1' },
+        { id: 'A', index: 'a0' },
+    ]);
+
+    test('places after the anchor, before the next key', () => {
+        const [key] = keysAfter(order, 'A', 1);
+        expect('a0' < key && key < 'a1').toBe(true);
+    });
+
+    test('after a tied anchor goes above the whole tie, never throwing', () => {
+        for (const id of ['B', 'C']) {
+            const keys = keysAfter(order, id, 2);
+            expect(isSorted(['a1', ...keys, 'a2'])).toBe(true);
+        }
+    });
+
+    test('null is the front, an unknown id the end', () => {
+        expect(keysAfter(order, null, 1)[0] < 'a0').toBe(true);
+        expect(keysAfter(order, 'gone', 1)[0] > 'a2').toBe(true);
+        expect(keysAfter([], 'gone', 2)).toEqual(['a0', 'a1']);
     });
 });
 
