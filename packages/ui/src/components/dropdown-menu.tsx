@@ -1,7 +1,7 @@
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { useIsMobile } from '@workspace/lib/media';
 import { cn } from '@workspace/ui/lib/utils';
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CircleIcon } from 'lucide-react';
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, MinusIcon } from 'lucide-react';
 import type * as React from 'react';
 import {
     Children,
@@ -196,7 +196,7 @@ function DropdownMenuCheckboxItem({
         >
             <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
                 <DropdownMenuPrimitive.ItemIndicator>
-                    <CheckIcon className="size-4" />
+                    {checked === 'indeterminate' ? <MinusIcon className="size-4" /> : <CheckIcon className="size-4" />}
                 </DropdownMenuPrimitive.ItemIndicator>
             </span>
             {children}
@@ -236,7 +236,7 @@ function DropdownMenuRadioItem({
         >
             <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
                 <DropdownMenuPrimitive.ItemIndicator>
-                    <CircleIcon className="size-2 fill-current" />
+                    <CheckIcon className="size-4" />
                 </DropdownMenuPrimitive.ItemIndicator>
             </span>
             {children}
@@ -422,7 +422,64 @@ function DropdownMenuSubContent({
     );
 }
 
+// One option of a choice: the value it sets and its row, which an icon, swatch or avatar may lead.
+type ChoiceOption<T> = { value: T; label: React.ReactNode };
+
+type ChoiceMenuItemsProps<T extends string | number | boolean | null> = {
+    // The current value; undefined, as for a mixed selection, checks no row.
+    value: T | undefined;
+    options: readonly ChoiceOption<T>[];
+    onChange: (value: T) => void;
+};
+
+// docs/LAYOUT.md § A choice is a submenu with a check: one row per option, the current one checked.
+function ChoiceMenuItems<T extends string | number | boolean | null>({
+    value,
+    options,
+    onChange,
+}: ChoiceMenuItemsProps<T>) {
+    return (
+        <DropdownMenuRadioGroup value={value === undefined ? '' : String(value)}>
+            {options.map((option) => (
+                <DropdownMenuRadioItem
+                    key={String(option.value)}
+                    value={String(option.value)}
+                    onSelect={() => onChange(option.value)}
+                >
+                    {option.label}
+                </DropdownMenuRadioItem>
+            ))}
+        </DropdownMenuRadioGroup>
+    );
+}
+
+type ChoiceMenuSubProps<T extends string | number | boolean | null> = ChoiceMenuItemsProps<T> & {
+    // The submenu's row: the property's icon and name.
+    trigger: React.ReactNode;
+    disabled?: boolean;
+    contentClassName?: string;
+};
+
+// A choice in a menu of actions: a submenu named for the property, its options in ChoiceMenuItems.
+function ChoiceMenuSub<T extends string | number | boolean | null>({
+    trigger,
+    disabled,
+    contentClassName,
+    ...choice
+}: ChoiceMenuSubProps<T>) {
+    return (
+        <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={disabled}>{trigger}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className={contentClassName}>
+                <ChoiceMenuItems {...choice} />
+            </DropdownMenuSubContent>
+        </DropdownMenuSub>
+    );
+}
+
 export {
+    ChoiceMenuItems,
+    ChoiceMenuSub,
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
