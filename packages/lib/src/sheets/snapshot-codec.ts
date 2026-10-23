@@ -6,8 +6,8 @@
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
+import { isRecord } from '../core/guards';
 import { cloneSides, parseCellKey } from './borders';
-import { isFloatingMap } from './floating';
 import type {
     CalcChainEntry,
     Cell,
@@ -128,9 +128,8 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
         const { cells, borderCells, config, images, charts, ...rest } = encoded;
         // Both maps are materialized on every sheet, the way normalizeSheetConfig materializes a
         // config collection: the editor writes each object under its own key, and a patch resolves
-        // against a base that already carries the map. An images array, stored before images became
-        // a map, is dropped: sheets keep no backward compatibility.
-        const sheet: RuntimeSheet = { ...rest, images: isFloatingMap(images) ? images : {}, charts: charts ?? {} };
+        // against a base that already carries the map. An images array is dropped.
+        const sheet: RuntimeSheet = { ...rest, images: isRecord(images) ? images : {}, charts: charts ?? {} };
 
         if (cells) {
             const celldata: CellWithRowAndCol[] = [];

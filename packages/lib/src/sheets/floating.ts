@@ -9,8 +9,8 @@ import {
 } from './defaults';
 import type { Sheet, SheetChart, SheetFloatingObject, SheetImage } from './types';
 
-export type SheetFloatingKind = 'image' | 'chart';
 export type SheetFloatingItem = { kind: 'image'; object: SheetImage } | { kind: 'chart'; object: SheetChart };
+export type SheetFloatingKind = SheetFloatingItem['kind'];
 
 // A sheet's images and charts in one paint order, bottom first: the editor's overlay, the export and a z-order move read it.
 export function floatingItems(sheet: Sheet): SheetFloatingItem[] {
@@ -23,10 +23,13 @@ export function floatingItems(sheet: Sheet): SheetFloatingItem[] {
     );
 }
 
-// A sheet's `images` or `charts` as the editor writes it. Before images became a map they were stored, and an older
-// tab still writes them, as one array, which no per-object write resolves on: readers drop it.
-export function isFloatingMap(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
+// A write into a field of an image or chart that no longer exists, deleted by a peer, resolves on nothing. Every
+// client and the replay drop just that write, so the rest of its batch applies: an insert whose index repair names a
+// tied object a peer deleted keeps its insert. `path` is Sheet[]-rooted, the sheet's index first.
+export function editsMissingFloatingObject(sheets: Sheet[], [sheet, field, id, ...rest]: (string | number)[]): boolean {
+    if (typeof sheet !== 'number' || rest.length === 0) return false;
+    if (field !== 'images' && field !== 'charts') return false;
+    return sheets[sheet]?.[field]?.[id] == null;
 }
 
 // The index of an object inserted above every image and chart. Tied and malformed keys, which concurrent inserts and

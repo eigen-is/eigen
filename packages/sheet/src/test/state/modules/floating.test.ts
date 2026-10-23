@@ -12,10 +12,10 @@ import { insertChart } from '../../../state/modules/chart';
 import {
     deleteActiveObject,
     deleteFloatingObject,
-    editsDeletedFloatingObject,
     reorderFloatingObject,
     selectFloatingObject,
     updateFloatingBox,
+    withoutDeletedFloatingEdits,
 } from '../../../state/modules/floating';
 import { insertImage, removeImageByMediaName, replaceImageMediaName } from '../../../state/modules/image';
 import type { Sheet } from '../../../state/types';
@@ -88,7 +88,7 @@ describe('floating writers', () => {
             ]);
         });
 
-        test(`a batch on a ${kind} a peer deleted fails whole everywhere, and its undo entry is recognized`, () => {
+        test(`an edit to a ${kind} a peer deleted is dropped everywhere, and from its undo entry`, () => {
             const base = workbook();
             const move = author(base, (ctx) => updateFloatingBox(ctx, { kind, id }, { x: 300 }));
             const removal = author(base, (ctx) => deleteFloatingObject(ctx, { kind, id }));
@@ -97,10 +97,10 @@ describe('floating writers', () => {
             expect(gone.sheets[0][field]).toEqual({});
             expect(join(base, [removal.ops, move.ops])[0][field]).toEqual({});
             const peerGone = receive(move.next, removal.ops);
-            expect(editsDeletedFloatingObject(peerGone, move.inverse)).toBe(true);
             expect(() => applyPatches(peerGone, move.inverse)).toThrow();
-            expect(editsDeletedFloatingObject(move.next, move.inverse)).toBe(false);
-            expect(editsDeletedFloatingObject(removal.next, removal.inverse)).toBe(false);
+            expect(withoutDeletedFloatingEdits(peerGone, move.inverse)).toEqual([]);
+            expect(withoutDeletedFloatingEdits(move.next, move.inverse)).toEqual(move.inverse);
+            expect(withoutDeletedFloatingEdits(removal.next, removal.inverse)).toEqual(removal.inverse);
         });
     }
 
@@ -143,6 +143,24 @@ describe('floating writers', () => {
         });
         const moved = author(base, (ctx) => reorderFloatingObject(ctx, { kind: 'chart', id: 'c1' }, 'forward'));
         expect(paintOrder(moved.next)).toEqual(['i1', 'c1']);
+    });
+
+    // The insert repairs the tie on i2 in its own batch; a peer deleting i2 at once must not cost the insert.
+    test('an insert over tied indices survives a peer deleting a tied object, on every client and a joiner', () => {
+        const base = produce(workbook(), (ctx: Context) => {
+            ctx.sheets[0].images!.i2 = image('i2', 'a2');
+        });
+        const insert = author(base, (ctx) => insertImage(ctx, 'new.png', 40, 30));
+        const removal = author(base, (ctx) => deleteFloatingObject(ctx, { kind: 'image', id: 'i2' }));
+        expect(insert.ops.map((op) => op.path)).toContainEqual(['images', 'i2', 'index']);
+        const onA = receive(insert.next, removal.ops);
+        const onB = receive(removal.next, insert.ops);
+        const joiner = join(base, [removal.ops, insert.ops]);
+        expect(Object.keys(onA.sheets[0].images!)).toHaveLength(2);
+        expect(objects(onB.sheets)).toEqual(objects(onA.sheets));
+        expect(objects(joiner)).toEqual(objects(onA.sheets));
+        const undone = applyPatches(onA, withoutDeletedFloatingEdits(onA, insert.inverse));
+        expect(objects(undone.sheets)).toEqual(objects(removal.next.sheets));
     });
 
     test('a media rename and a pending removal reach an image on another sheet', () => {

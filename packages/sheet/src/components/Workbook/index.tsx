@@ -35,7 +35,6 @@ import {
     defaultContext,
     defaultSettings,
     deleteActiveObject,
-    editsDeletedFloatingObject,
     ensureSheetIndex,
     filterPatch,
     type GlobalCache,
@@ -55,6 +54,7 @@ import {
     settleCurrentSheet,
     sheetChartClipboardItem,
     warmFormulaCellInfoMap,
+    withoutDeletedFloatingEdits,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
@@ -292,8 +292,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.undoList.pop();
             if (history) {
                 setContext((ctx_) => {
-                    // A peer deleted the image or chart this entry edits: drop the entry, applying it would throw.
-                    if (editsDeletedFloatingObject(ctx_, history.inversePatches)) return ctx_;
+                    // A peer deleted an image or chart this entry edits: immer throws on those writes, the rest apply.
+                    history.inversePatches = withoutDeletedFloatingEdits(ctx_, history.inversePatches);
+                    if (history.inversePatches.length === 0) return ctx_;
                     if (history.options?.deleteSheetOp) {
                         history.inversePatches[0].path[1] = ctx_.sheets.length;
                         const order = history.options.deletedSheet?.value?.order as number;
@@ -346,7 +347,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.redoList.pop();
             if (history) {
                 setContext((ctx_) => {
-                    if (editsDeletedFloatingObject(ctx_, history.patches)) return ctx_;
+                    history.patches = withoutDeletedFloatingEdits(ctx_, history.patches);
+                    if (history.patches.length === 0) return ctx_;
                     const newContext = produce(applyPatches(ctx_, history.patches), settleCurrentSheet);
                     globalCache.current.undoList.push(history);
                     emitOp(newContext, history.patches, history.options);

@@ -1,7 +1,7 @@
 import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';
-import { applyPatches, produce } from 'immer';
+import { applyPatches, current, type Patch, produce } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import type { SetContextOptions } from '../../context';
 import { type ChartRangeRefusal, setUpChartRange } from '../../engine/chart-range';
@@ -60,50 +60,71 @@ export function generateAPIs(
         applyOp: (ops: Op[]) => {
             setContext(
                 (ctx_) => {
-                    const [patches, specialOps] = opToPatch(ctx_, ops);
-                    for (const specialOp of specialOps) {
-                        if (specialOp.op === 'insertRowCol') {
-                            try {
-                                // force: this is an authoritative remote op — mirror the data shift
-                                // even for read-only viewers, or the grid diverges from the metadata
-                                // patches applied below (api.ts).
-                                insertRowCol(ctx_, specialOp.value, false, true);
-                            } catch (e) {
-                                if (!(e instanceof RowColError)) throw e;
-                                console.warn('[sheet] insertRowCol op skipped:', e.code);
-                            }
-                        } else if (specialOp.op === 'deleteRowCol') {
-                            try {
-                                deleteRowCol(ctx_, specialOp.value, true);
-                            } catch (e) {
-                                if (!(e instanceof RowColError)) throw e;
-                                console.warn('[sheet] deleteRowCol op skipped:', e.code);
-                            }
-                        } else if (specialOp.op === 'addSheet') {
-                            // The name comes from sheetData: opToPatch prefixes every patch path with 'sheets'.
-                            if (specialOp.value.id) {
-                                addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value, true);
-                            }
-                            const { id } = specialOp.value;
-                            const fileIndex = getSheetIndex(ctx_, id);
-                            if (fileIndex == null) continue;
-                            registerSheetFormulas(ctx_, id, api.initSheetData(ctx_, fileIndex, specialOp.value));
-                        } else if (specialOp.op === 'deleteSheet') {
-                            deleteSheet(ctx_, specialOp.value.id, true);
-                            patches.length = 0;
-                        }
-                    }
-                    if (ops[0]?.path?.[0] === 'filterRange') ctx_.filterRange = ops[0].value;
-                    else if (ops[0]?.path?.[0] === 'hide' && ops[0].id === ctx_.currentSheetId) {
-                        leaveCurrentSheet(ctx_, ops[0].id);
-                    }
-                    createFilterOptions(ctx_, ctx_.filterRange, ops[0]?.id);
-                    if (patches.length === 0) return;
+                    // A batch applies whole or not at all, as replaySheetsOps applies it: a patch that fails takes the
+                    // row, column and sheet ops before it back too, or this client disagrees with a joiner.
+                    let patches: Patch[] = [];
+                    let applied: Context;
                     try {
-                        applyPatches(ctx_, patches);
+                        applied = produce(current(ctx_), (draft: Context) => {
+                            let specialOps: Op[];
+                            [patches, specialOps] = opToPatch(draft, ops);
+                            for (const specialOp of specialOps) {
+                                if (specialOp.op === 'insertRowCol') {
+                                    try {
+                                        // force: this is an authoritative remote op — mirror the data shift
+                                        // even for read-only viewers, or the grid diverges from the metadata
+                                        // patches applied below (api.ts).
+                                        insertRowCol(draft, specialOp.value, false, true);
+                                    } catch (e) {
+                                        if (!(e instanceof RowColError)) throw e;
+                                        console.warn('[sheet] insertRowCol op skipped:', e.code);
+                                    }
+                                } else if (specialOp.op === 'deleteRowCol') {
+                                    try {
+                                        deleteRowCol(draft, specialOp.value, true);
+                                    } catch (e) {
+                                        if (!(e instanceof RowColError)) throw e;
+                                        console.warn('[sheet] deleteRowCol op skipped:', e.code);
+                                    }
+                                } else if (specialOp.op === 'addSheet') {
+                                    // The name comes from sheetData: opToPatch prefixes every patch path with 'sheets'.
+                                    if (specialOp.value.id) {
+                                        addSheet(
+                                            draft,
+                                            settings,
+                                            specialOp.value.id,
+                                            false,
+                                            undefined,
+                                            specialOp.value,
+                                            true,
+                                        );
+                                    }
+                                    const { id } = specialOp.value;
+                                    const fileIndex = getSheetIndex(draft, id);
+                                    if (fileIndex == null) continue;
+                                    registerSheetFormulas(
+                                        draft,
+                                        id,
+                                        api.initSheetData(draft, fileIndex, specialOp.value),
+                                    );
+                                } else if (specialOp.op === 'deleteSheet') {
+                                    deleteSheet(draft, specialOp.value.id, true);
+                                    patches.length = 0;
+                                }
+                            }
+                            if (ops[0]?.path?.[0] === 'filterRange') draft.filterRange = ops[0].value;
+                            else if (ops[0]?.path?.[0] === 'hide' && ops[0].id === draft.currentSheetId) {
+                                leaveCurrentSheet(draft, ops[0].id);
+                            }
+                            createFilterOptions(draft, draft.filterRange, ops[0]?.id);
+                            if (patches.length > 0) applyPatches(draft, patches);
+                        });
                     } catch (e) {
-                        console.error(e);
+                        console.warn('[sheet] op batch failed to apply, skipping batch:', e);
+                        return;
                     }
+                    Object.assign(ctx_, applied);
+                    if (patches.length === 0) return;
                     ctx_.formulaCache.updateFormulaCache(ctx_, { patches, inversePatches: [] }, 'redo');
                 },
                 { noHistory: true },

@@ -24,6 +24,7 @@ export {
     sheetTrackAt,
 } from './defaults';
 export {
+    editsMissingFloatingObject,
     floatingItems,
     nextFloatingIndex,
     type SheetFloatingItem,

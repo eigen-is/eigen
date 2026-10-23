@@ -1,4 +1,10 @@
-import { floatingItems, nextFloatingIndex, type SheetFloatingKind, sheetFloatingBox } from '@workspace/lib/sheets';
+import {
+    editsMissingFloatingObject,
+    floatingItems,
+    nextFloatingIndex,
+    type SheetFloatingKind,
+    sheetFloatingBox,
+} from '@workspace/lib/sheets';
 import { type Box, DUPLICATE_OFFSET, type ZOp, zOrderKeys } from '@workspace/lib/vector';
 import type { Patch } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
@@ -6,7 +12,7 @@ import type { Context } from '../context';
 import { getSheetIndex } from '../utils';
 
 // What images and charts share. Each writer touches one object of the current sheet and nothing else, field by field,
-// so a batch on an object a peer deleted fails whole on every client and in the replay. What writes a whole object
+// so a write on an object a peer deleted is dropped on every client and in the replay. What writes a whole object
 // brings one a peer deleted back on every client, last writer wins: redoing its insert, undoing its delete, and
 // undoing or redoing a row or column op that shifted a chart.
 
@@ -77,12 +83,10 @@ export function deleteActiveObject(ctx: Context) {
     ctx.activeObject = undefined;
 }
 
-// A field patch on an object a peer deleted cannot resolve, and immer throws on it; the object's own add and remove
-// (a path ending at its id) still apply.
-export function editsDeletedFloatingObject(ctx: Context, patches: Patch[]): boolean {
-    return patches.some(({ path: [root, sheet, field, id, ...rest] }) => {
-        if (root !== 'sheets' || typeof sheet !== 'number' || rest.length === 0) return false;
-        if (field !== 'images' && field !== 'charts') return false;
-        return ctx.sheets[sheet]?.[field]?.[id] == null;
-    });
+// What of an undo or redo entry still applies: a write into an image or chart a peer deleted is dropped, as every
+// client and the replay drop it from a batch.
+export function withoutDeletedFloatingEdits(ctx: Context, patches: Patch[]): Patch[] {
+    return patches.filter(
+        ({ path: [root, ...path] }) => root !== 'sheets' || !editsMissingFloatingObject(ctx.sheets, path),
+    );
 }
