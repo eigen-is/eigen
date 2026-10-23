@@ -1256,7 +1256,7 @@ describe('an xlsx export carries the sheets’ images', () => {
             ctx.alice.user.id,
             'default',
             `folder/${root.id}/create/sheets`,
-            { fileName: 'Pictures' },
+            { fileName: 'Exported pictures' },
         );
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument('default', created.id);
