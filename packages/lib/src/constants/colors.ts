@@ -1,4 +1,4 @@
-// Based on Tailwind Colors
+// Based on Tailwind Colors. Pink #f6339a (the pink column's accent row) is Eigen's accent color.
 
 export type EigenColor = {
     label: string;
@@ -256,28 +256,28 @@ export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) =>
     col.map((hex, s) => ({ label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex })),
 ) as EigenColor[][];
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
-// The order calendars, labels, chart series and presence hand the accents out in: each next one is the furthest
-// (CIEDE2000) from those before it for normal vision and simulated deuteranopia, then protanopia and tritanopia, so the
-// first four read as blue, orange, green and red to anyone. Yellow and lime (under 2:1 on white) sit past the eighth,
-// pink (a new deck's title slide) comes last. colors.test.ts pins it.
+// The order calendars, labels, chart series and presence hand the accents out in. Pink, Eigen's accent, comes first;
+// each next one is the furthest (CIEDE2000) from those before it for normal vision and simulated deuteranopia, then
+// protanopia and tritanopia, so pink is followed by green, sky and amber. Yellow and lime (under 2:1 on white) sit past
+// the eighth, and rose and fuchsia, which sit close to pink, come late. colors.test.ts pins it.
 const EIGEN_ACCENT_ORDER = [
-    'indigo',
-    'amber',
-    'teal',
-    'rose',
-    'sky',
-    'orange',
-    'cyan',
-    'green',
-    'blue',
-    'red',
-    'violet',
-    'emerald',
-    'fuchsia',
-    'yellow',
-    'purple',
-    'lime',
     'pink',
+    'green',
+    'sky',
+    'amber',
+    'indigo',
+    'red',
+    'teal',
+    'orange',
+    'violet',
+    'yellow',
+    'fuchsia',
+    'lime',
+    'cyan',
+    'rose',
+    'blue',
+    'emerald',
+    'purple',
 ] as const satisfies readonly (typeof EIGEN_COLOR_NAMES)[number][];
 export const EIGEN_ACCENT_COLORS_SHUFFLED = EIGEN_ACCENT_ORDER.map(
     (name) => EIGEN_ACCENT_COLORS[EIGEN_COLOR_NAMES.indexOf(name)],
