@@ -10,7 +10,7 @@ import {
     PropertyRow,
     PropertySection,
 } from '@workspace/ui/components/properties-panel';
-import { type RefObject, useState } from 'react';
+import { type ReactNode, type RefObject, useState } from 'react';
 import { rowIndexToLabel } from '../../engine/a1-notation';
 import {
     CHART_RANGE_REFUSALS,
@@ -26,11 +26,13 @@ import type { WorkbookInstance } from '../Workbook';
 type ChartEditorPanelProps = {
     editor: ChartEditorState;
     workbook: RefObject<WorkbookInstance | null>;
+    // The app's rows after the chart's own: the Transform section a selected chart shows without its editor.
+    children?: ReactNode;
 };
 
 // Google's Chart editor: Setup (the data range and how it reads) over the shared Customise rows. Every
 // change is one write of the chart's spec, a typed field one undo step for the whole edit.
-export function ChartEditorPanel({ editor, workbook }: ChartEditorPanelProps) {
+export function ChartEditorPanel({ editor, workbook, children }: ChartEditorPanelProps) {
     const spec = parseChartSpec(editor.chart.spec);
     if (!spec) return null;
     const { data } = spec;
@@ -48,6 +50,7 @@ export function ChartEditorPanel({ editor, workbook }: ChartEditorPanelProps) {
                     categories={editor.categories}
                     seriesNames={editor.seriesNames}
                 />
+                {children}
             </PropertyGestureContext.Provider>
         </PropertiesPanel>
     );

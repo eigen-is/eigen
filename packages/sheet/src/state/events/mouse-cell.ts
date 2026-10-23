@@ -69,7 +69,7 @@ export function handleCellAreaMouseDown(
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    deselectFloatingObject(ctx, globalCache);
+    deselectFloatingObject(ctx);
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;
     const mouseY = e.pageY - rect.top - window.scrollY;

@@ -135,7 +135,7 @@ export const SheetTab: React.FC = () => {
                                 onClick={() => {
                                     setContext((draftCtx) => {
                                         changeSheet(draftCtx, singleSheet.id!);
-                                        deselectFloatingObject(draftCtx, refs.globalCache);
+                                        deselectFloatingObject(draftCtx);
                                         cancelNormalSelected(draftCtx);
                                     });
                                 }}

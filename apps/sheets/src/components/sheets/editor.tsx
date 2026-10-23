@@ -10,19 +10,13 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
-import { columnIndexToLabel } from '@workspace/lib/sheets';
+import { columnIndexToLabel, type SheetFloatingItem } from '@workspace/lib/sheets';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
-import {
-    ChartEditorPanel,
-    type ChartEditorState,
-    type Image as SheetImage,
-    Workbook,
-    type WorkbookInstance,
-} from '@workspace/sheet';
+import { ChartEditorPanel, type ChartEditorState, Workbook, type WorkbookInstance } from '@workspace/sheet';
 import {
     CollabDocumentGate,
     DocumentShareCluster,
@@ -42,11 +36,11 @@ import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { FloatingObjectPanel, FloatingTransformSection } from './floating-object-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
 import { useSheet } from './hooks/use-sheet';
-import { ImagePropertiesPanel } from './image-properties-panel';
 import { ToolbarLeftItems } from './toolbar';
 
 type SheetEditorProps = {
@@ -88,11 +82,14 @@ function SheetEditorInner({
     // has no zoom, so container px map 1:1 to the sheet-pixel units insertImage stores.
     const paneRef = useRef<HTMLDivElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
-    // The active floating image (surfaced from the workbook via onActiveImageChange) drives the
-    // right-side properties panel. Its aspect-lock — images default CHECKED — feeds BOTH the
-    // panel checkbox and the canvas ObjectTransform, so it lives here, one level above both.
-    const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
-    const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage ? [activeImage.id] : [], true);
+    // The selected image or chart (surfaced from the workbook via onActiveObjectChange) drives the
+    // right-side properties panel. Its Keep aspect ratio, checked by default for an image and not for a
+    // chart, feeds BOTH the panel checkbox and the grips, so it lives here, one level above both.
+    const [activeObject, setActiveObject] = useState<SheetFloatingItem | null>(null);
+    const [aspectLocked, setAspectLocked] = useAspectLock(
+        activeObject ? [activeObject.object.id] : [],
+        activeObject?.kind === 'image',
+    );
     const [chartEditor, setChartEditor] = useState<ChartEditorState | null>(null);
 
     const {
@@ -302,12 +299,14 @@ function SheetEditorInner({
         [addTargetCell, addInitialTitle, createCard, assignComment],
     );
 
-    // One op per edit; the workbook re-surfaces the committed image via onActiveImageChange.
-    const handleImageTransform = useCallback(
+    // One op per edit; the workbook re-surfaces the written record via onActiveObjectChange.
+    const handleObjectTransform = useCallback(
         (fields: TransformFields) => {
-            if (activeImage) workbookRef.current?.updateFloatingBox({ kind: 'image', id: activeImage.id }, fields);
+            if (activeObject) {
+                workbookRef.current?.updateFloatingBox({ kind: activeObject.kind, id: activeObject.object.id }, fields);
+            }
         },
-        [activeImage],
+        [activeObject],
     );
 
     const leftItems = useMemo(
@@ -401,14 +400,14 @@ function SheetEditorInner({
                                         allowEdit={canWrite && !loadFailed}
                                         toolbarLeftItems={leftItems}
                                         toolbarRightItems={rightItems}
-                                        imageAspectLocked={imageAspectLocked}
+                                        aspectLocked={aspectLocked}
                                         hooks={{
                                             afterSelectionChange: (sheetId, selection) => {
                                                 const r = selection.row_focus ?? selection.row?.[0];
                                                 const c = selection.column_focus ?? selection.column?.[0];
                                                 if (r != null && c != null) publishSelection(sheetId, r, c);
                                             },
-                                            onActiveImageChange: setActiveImage,
+                                            onActiveObjectChange: setActiveObject,
                                             onChartEditorChange: setChartEditor,
                                             ...(canWrite && mediaFolderId
                                                 ? {
@@ -481,18 +480,34 @@ function SheetEditorInner({
                         />
                     )}
                     {/* The comment/activity pane wins over the properties panel (the slides arrangement). */}
-                    {activeImage && !panel && (
-                        <ImagePropertiesPanel
-                            image={activeImage}
+                    {/* An open Chart editor takes the slot and ends with the chart's Transform section. */}
+                    {activeObject && !panel && chartEditor && (
+                        <ChartEditorPanel key={chartEditor.chart.id} editor={chartEditor} workbook={workbookRef}>
+                            <FloatingTransformSection
+                                item={activeObject}
+                                canWrite={canWrite}
+                                aspectLocked={aspectLocked}
+                                onAspectLockChange={setAspectLocked}
+                                onChange={handleObjectTransform}
+                            />
+                        </ChartEditorPanel>
+                    )}
+                    {activeObject && !panel && !chartEditor && (
+                        <FloatingObjectPanel
+                            item={activeObject}
                             canWrite={canWrite}
-                            aspectLocked={imageAspectLocked}
-                            onAspectLockChange={setImageAspectLocked}
-                            onChange={handleImageTransform}
+                            aspectLocked={aspectLocked}
+                            onAspectLockChange={setAspectLocked}
+                            onChange={handleObjectTransform}
+                            onArrange={(op) =>
+                                workbookRef.current?.reorderFloatingObject(
+                                    { kind: activeObject.kind, id: activeObject.object.id },
+                                    op,
+                                )
+                            }
+                            onEditChart={() => workbookRef.current?.openChartEditor(activeObject.object.id)}
                             onDelete={() => workbookRef.current?.deleteActiveObject()}
                         />
-                    )}
-                    {chartEditor && !panel && (
-                        <ChartEditorPanel key={chartEditor.chart.id} editor={chartEditor} workbook={workbookRef} />
                     )}
                 </div>
             </div>

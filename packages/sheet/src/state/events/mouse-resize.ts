@@ -43,7 +43,7 @@ export function handleColSizeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    deselectFloatingObject(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     ctx.editingCellPosition = [];
 
@@ -82,7 +82,7 @@ export function handleRowSizeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    deselectFloatingObject(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     if (
         ctx.formulaCache.rangestart ||
@@ -122,13 +122,12 @@ export function handleRowSizeHandleMouseDown(
 
 export function handleColFreezeHandleMouseDown(
     ctx: Context,
-    globalCache: GlobalCache,
     e: MouseEvent,
     headerContainer: HTMLDivElement,
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    deselectFloatingObject(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     ctx.editingCellPosition = [];
 
@@ -166,13 +165,12 @@ export function handleColFreezeHandleMouseDown(
 
 export function handleRowFreezeHandleMouseDown(
     ctx: Context,
-    globalCache: GlobalCache,
     e: MouseEvent,
     headerContainer: HTMLDivElement,
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement,
 ) {
-    deselectFloatingObject(ctx, globalCache);
+    deselectFloatingObject(ctx);
 
     ctx.editingCellPosition = [];
 

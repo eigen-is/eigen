@@ -38,6 +38,12 @@ export function flushPendingCopy() {
     document.execCommand('copy');
 }
 
+// A selected image or chart writes itself in the Workbook's copy and cut listener, which a menu row reaches through
+// the event execCommand fires, so a menu copies and cuts the way ⌘C and ⌘X do.
+export function copyActiveObject(cut: boolean) {
+    document.execCommand(cut ? 'cut' : 'copy');
+}
+
 export async function readClipboardText(): Promise<string> {
     try {
         const text = await navigator.clipboard.readText();

@@ -42,6 +42,7 @@ import {
     type SearchHighlight,
     type SearchResult,
     type Settings,
+    selectFloatingObject,
     setChartDataRange,
     setChartSpec,
     setSearchHighlights,
@@ -177,6 +178,9 @@ export function generateAPIs(
         deleteFloatingObject: (ref: FloatingRef) => setContext((draftCtx) => deleteFloatingObject(draftCtx, ref)),
 
         deleteActiveObject: () => setContext(deleteActiveObject),
+
+        openChartEditor: (id: string) =>
+            setContext((draftCtx) => selectFloatingObject(draftCtx, { kind: 'chart', id }, true)),
 
         // One op + undo step each, on the current sheet. The id is made here so the caller can
         // select the new chart; the recipe runs later, so a dry run on this state tells a viewer or

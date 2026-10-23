@@ -147,7 +147,6 @@ export const ColumnHeader: React.FC = () => {
             setContext((draftCtx) => {
                 handleColFreezeHandleMouseDown(
                     draftCtx,
-                    refs.globalCache,
                     nativeEvent,
                     containerRef.current!,
                     refs.workbookContainer.current!,
@@ -156,7 +155,7 @@ export const ColumnHeader: React.FC = () => {
             });
             e.stopPropagation();
         },
-        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
+        [refs.cellArea, refs.workbookContainer, setContext],
     );
 
     useEffect(() => {

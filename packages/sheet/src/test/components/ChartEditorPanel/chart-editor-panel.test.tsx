@@ -105,7 +105,7 @@ async function mount(chart: SheetChart) {
         container.remove();
     };
 
-    const box = container.querySelector('[data-chart-id="c1"]');
+    const box = container.querySelector('[data-floating-id="c1"] > *');
     if (!box) throw new Error('no chart');
     await act(async () => box.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
 

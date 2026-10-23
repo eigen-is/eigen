@@ -85,7 +85,7 @@ async function mount({ allowEdit = true, spec = chart.spec } = {}) {
     });
     const charts = () => Object.values(workbook.current?.getAllSheets()[0].charts ?? {});
     const select = async () => {
-        const box = container.querySelector<HTMLElement>('[data-chart-id="c1"]');
+        const box = container.querySelector<HTMLElement>('[data-floating-id="c1"] > *');
         if (!box) throw new Error('no chart');
         await act(async () => {
             box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
