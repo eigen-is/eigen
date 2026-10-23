@@ -65,7 +65,9 @@ The same menu has **Add comment**, to comment on the image itself. See [Comment 
 
 Drag a handle to resize the chart. Its width and height change on their own, so you can make it wider without making it taller. While you drag, the size shows in centimeters.
 
-On a wide screen, selecting a chart opens the **Chart** panel on the right side of the editor. It sets the **Type**, the **Stacking** of a bar or column chart (**None**, **Standard** or **100%**), the **Title**, where the **Legend** goes, the **Font** of all the chart's text, each axis's **Title**, the **Min**, **Max**, and **Gridlines** of the axis with the numbers, and the color of each series, or of each slice of a pie chart. **Min** and **Max** pick their own values while they're empty and are percents on a **100%** stack; switching **Stacking** to or from **100%** empties them. A color reads **Automatic** until you pick one; **Automatic** in a picked color's list puts it back. Below them, **Style** and **Align** place the chart as they place an image, and **Caption** adds a caption beneath it.
+On a wide screen, selecting a chart opens the **Chart** panel on the right side of the editor. It sets the **Type**, the **Stacking** of a bar or column chart (**None**, **Standard** or **100%**), the **Title**, where the **Legend** goes, the **Font** of all the chart's text, each axis's **Title**, the **Min**, **Max**, and **Gridlines** of the axis with the numbers, and the color of each series, or of each slice of a pie chart. **Min** and **Max** pick their own values while they're empty and are percents on a **100%** stack; switching **Stacking** to or from **100%** empties them. A color reads **Automatic** until you pick one; **Automatic** in a picked color's list puts it back. Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets the chart's background, and its **Style** how the bars and slices are drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag**. Solid bars and slices have no outline; hatched ones get an outline in their own color. **Stroke** sets the color, width, and style of the axes and gridlines, and **Sketch** how rough the chart looks, from **Architect** (clean) to **Cartoonist**. A new chart starts clean and solid, like a Google Docs chart. A chart with more than 200 values (for a pie, more than 200 slices) draws its bars, lines, and slices smooth and solid whatever the sketch, so it stays quick to show; the **Sketch** section says so.
+
+Below those, **Style** and **Align** place the chart as they place an image, and **Caption** adds a caption beneath it.
 
 ### Edit the numbers
 
@@ -76,9 +78,9 @@ On a wide screen, selecting a chart opens the **Chart** panel on the right side 
 
 You can paste cells copied from a spreadsheet or a table in a document into the grid, and copy cells out of it. A paste fills the grid from the selected cell, and the grid grows to fit. A chart holds up to 12 series, 200 categories, and 2,000 values; when a paste has more, the dialog says how much it pasted and leaves the rest out. Numbers may have thousands separators, a currency sign or a percent sign, as a spreadsheet shows them.
 
-You can copy a chart from Sheets, Slides, or Vector and paste it into a document, where it stays a chart you can edit. A chart wider than the page shrinks to fit. Headers, footers, and footnotes don't take a chart pasted from another app. Copying a chart in a document and pasting it into Sheets, Slides, or Vector works the same way.
+You can copy a chart from Sheets, Slides, or Vector and paste it into a document, where it stays a chart you can edit. A chart wider than the page shrinks to fit. Headers, footers, and footnotes don't take a chart pasted from another app. Copying a chart in a document and pasting it into Sheets, Slides, or Vector works the same way. A chart keeps its look when you paste it into a document, Slides, or Vector; Sheets shows it in its plain look.
 
-A chart prints and downloads as a PDF, a web page, or a Word file. In the Word file it is a picture, so you can't change its data in Word. See [Export to Word, PDF, or HTML](/support/docs/export).
+A chart prints and downloads as a PDF, a web page, or a Word file, in its look. In the Word file it is a picture, so you can't change its data in Word. See [Export to Word, PDF, or HTML](/support/docs/export).
 
 ## Insert a table
 

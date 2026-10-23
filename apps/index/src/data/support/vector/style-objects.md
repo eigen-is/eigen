@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, styling, fill, stroke, colors, text]
 related: [vector/draw-shapes-and-text, vector/connect-with-arrows, vector/arrange-and-align]
 order: 50
-updated: 2026-09-11
+updated: 2026-10-23
 ---
 
 Select an object in a drawing and the panel on the right fills with its style controls. The sections change to match what you picked: a shape has a fill, an arrow does not, text has its own typography rows. This page lists every section, in the order it appears, and what each control does.
@@ -108,7 +108,8 @@ Sections show only where they mean something for the object you picked.
 | Section | Shown for |
 |---|---|
 | **Transform**, **Stroke**, **Sketch**, **Appearance** | Every object |
-| **Fill** | Shapes and text, plus a closed line or drawing |
+| **Fill** | Shapes, text, and charts, plus a closed line or drawing |
+| **Labels** | Charts |
 | **Text**, **Spacing** | Text |
 | **Image** | Images |
 | **Shape** (**Corners**) | Rectangles, diamonds, text, and images |

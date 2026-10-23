@@ -52,7 +52,7 @@ Adding a kind: add it to `VectorElementType`, write its file, add one line to `E
 
 The `pie` kind is a sector of the ellipse its box inscribes, like OOXML's `pie`. It stores `startAngle` and `sweepAngle` in degrees, clockwise from 3 o'clock, measured in the box-normalized circle, so a resize scales a slice like any other shape. It stores a sweep, not an end angle, because a 360° slice has no distinct end. Its outline is a polygon and its anchors sit on the slice, so an arrow docks on the slice rather than on its box. No tool draws one: slices arrive from charts and Convert to shapes.
 
-The `chart` kind holds one chart's stored spec, kept as stored, and draws it as the canvas's own shapes plus SVG text, each shape through its own kind ([CHARTS.md](CHARTS.md)). Its fill is its background and its stroke its axes. No tool draws one either: Insert → Chart places Google's sample at the viewport center (`CanvasHandle.insertChart`), 640 × 400 on a drawing and 1200 × 675 on a slide.
+The `chart` kind holds one chart's stored spec, kept as stored, and draws it as the canvas's own shapes plus SVG text, each shape through its own kind ([CHARTS.md](CHARTS.md)). Its fill is its background and its stroke its axes; these fields are the chart's look, which a doc's chart stores under the same names ([CHARTS.md](CHARTS.md#one-look-a-canvas-charts-own-fields-paints-a-chart-in-every-app)). No tool draws one either: Insert → Chart places Google's sample at the viewport center (`CanvasHandle.insertChart`), 640 × 400 on a drawing and 1200 × 675 on a slide.
 
 ## A path is stored in its unit box
 
