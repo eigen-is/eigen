@@ -140,16 +140,16 @@ function MobileClusterKebab({
                                 {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
                                 <FindInDocumentMenuItem focusFindBarRef={focusFindBarRef} />
                                 {mobileMenuItems}
+                            </>
+                        }
+                        collaborate={
+                            <>
                                 {onToggleActivityPanel && (
                                     <DropdownMenuItem onClick={onToggleActivityPanel}>
                                         <Activity />
                                         Activity
                                     </DropdownMenuItem>
                                 )}
-                            </>
-                        }
-                        collaborate={
-                            <>
                                 {onToggleCommentPanel && (
                                     <DropdownMenuItem onClick={onToggleCommentPanel}>
                                         <MessageSquare />
