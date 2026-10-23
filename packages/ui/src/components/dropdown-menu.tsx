@@ -264,10 +264,16 @@ function DropdownMenuLabel({
 
 function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
     const hidden = useRowHidden();
+    // Hides itself when it opens the menu, follows another separator or has no row after it, so a group whose rows
+    // all render nothing leaves no line behind.
     return (
         <DropdownMenuPrimitive.Separator
             data-slot="dropdown-menu-separator"
-            className={cn('bg-border -mx-1 my-1 h-px', className, hidden && 'hidden')}
+            className={cn(
+                'bg-border -mx-1 my-1 h-px first:hidden [[data-slot=dropdown-menu-separator]+&]:hidden [&:not(:has(~:not([data-slot=dropdown-menu-separator])))]:hidden',
+                className,
+                hidden && 'hidden',
+            )}
             {...props}
         />
     );

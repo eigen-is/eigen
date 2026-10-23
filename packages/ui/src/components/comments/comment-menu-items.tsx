@@ -3,6 +3,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, MessageSquare, MessageSquarePlus, Palette, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { MenuSections } from '../context-menu/menu-sections';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../dropdown-menu';
 import { AssigneeMenuItems } from './assignee-menu-items';
 
@@ -23,6 +24,9 @@ type CommentMenuItemsProps = {
     members?: EffectiveMember[];
     currentUserEmail?: string;
     onAssign?: (chatName: string, email: string | null, title?: string) => void;
+    // Alone, as a card's own menu, the rows take MenuSections' groups. In a host's menu about something else (a
+    // cell, an image) the host draws 'rows' in its collaborate group and 'delete' in its destructive group.
+    part?: 'rows' | 'delete';
 };
 
 export function CommentMenuItems({
@@ -38,10 +42,11 @@ export function CommentMenuItems({
     members,
     currentUserEmail,
     onAssign,
+    part,
 }: CommentMenuItemsProps) {
     const Noun = noun.charAt(0).toUpperCase() + noun.slice(1);
     if (!item) {
-        if (!onAddComment) return null;
+        if (!onAddComment || part === 'delete') return null;
         return (
             <DropdownMenuItem onClick={onAddComment}>
                 <MessageSquarePlus className="h-4 w-4" /> Add {noun}
@@ -53,13 +58,13 @@ export function CommentMenuItems({
     // its first message or assignment seeds it server-side.
     const chatName = card.chatName;
     const status = entry?.status ?? 'open';
-    return (
+    const view = onOpen && (
+        <DropdownMenuItem onClick={() => onOpen(card.id)}>
+            <MessageSquare className="h-4 w-4" /> View {noun}
+        </DropdownMenuItem>
+    );
+    const organize = (
         <>
-            {onOpen && (
-                <DropdownMenuItem onClick={() => onOpen(card.id)}>
-                    <MessageSquare className="h-4 w-4" /> View {noun}
-                </DropdownMenuItem>
-            )}
             {onEdit && (
                 <DropdownMenuItem onClick={() => onEdit(card.id)}>
                     <Pencil className="h-4 w-4" /> Edit {noun}
@@ -102,11 +107,21 @@ export function CommentMenuItems({
                     <RotateCcw className="h-4 w-4" /> Reopen {noun}
                 </DropdownMenuItem>
             )}
-            {onDelete && (
-                <DropdownMenuItem variant="destructive" onClick={() => onDelete(card.id)}>
-                    <Trash2 className="h-4 w-4" /> Delete {noun}
-                </DropdownMenuItem>
-            )}
         </>
     );
+    const remove = onDelete && (
+        <DropdownMenuItem variant="destructive" onClick={() => onDelete(card.id)}>
+            <Trash2 className="h-4 w-4" /> Delete {noun}
+        </DropdownMenuItem>
+    );
+    if (part === 'rows') {
+        return (
+            <>
+                {view}
+                {organize}
+            </>
+        );
+    }
+    if (part === 'delete') return remove ?? null;
+    return <MenuSections open={view} organize={organize} destructive={remove} />;
 }

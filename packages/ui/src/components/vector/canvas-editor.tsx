@@ -59,7 +59,14 @@ import { useDialogOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
-import { ObjectContextMenu, useContextMenu } from '../context-menu';
+import {
+    ClipboardMenuItems,
+    ContextMenuAnchor,
+    MenuSections,
+    type MenuSectionsProps,
+    ObjectContextMenu,
+    useContextMenu,
+} from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
 import { HintPill } from '../hint-pill';
 import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
@@ -186,8 +193,8 @@ type CanvasEditorProps = {
     onSwipeFrame?: (delta: number) => void;
     // Opens the host's image picker on the image key; the toolbar gets the same callback.
     onInsertImage?: () => void;
-    // A right-click on empty canvas; the deck opens its slide menu. Omitted, the browser's menu shows.
-    onEmptyContextMenu?: (e: React.MouseEvent) => void;
+    // The host's rows on a right-click on empty canvas, below the canvas' own Paste: the deck's slide rows.
+    backgroundMenu?: Omit<MenuSectionsProps, 'clipboard'>;
 };
 
 // The live, interactive canvas surface — one absolutely positioned layer per element, with the
@@ -220,7 +227,7 @@ export function CanvasEditor({
     searchActiveId,
     onSwipeFrame,
     onInsertImage,
-    onEmptyContextMenu,
+    backgroundMenu,
 }: CanvasEditorProps) {
     const {
         elements,
@@ -311,6 +318,7 @@ export function CanvasEditor({
     // The object context menu (right-click) — the singleton surface; item is the right-clicked
     // element id, its ops act on the selection below.
     const objectContextMenu = useContextMenu<string>();
+    const backgroundContextMenu = useContextMenu<true>();
 
     const gestureRef = useRef<Gesture | null>(null);
     // First onTransform of a resize/rotate is the de-facto gesture start (ObjectTransform fires it
@@ -994,7 +1002,7 @@ export function CanvasEditor({
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
-    // Right-click on an element opens the object menu (empty canvas goes to onEmptyContextMenu). Like
+    // Right-click on an element opens the object menu, on empty canvas the background menu. Like
     // slides, a right-click on an element outside the current selection selects it first, so the menu
     // ops act on the target; a right-click inside the selection keeps the whole selection. The canvas
     // uses hit-testing (elements have no per-node DOM), so this lives on the container, not per object.
@@ -1017,7 +1025,7 @@ export function CanvasEditor({
             return;
         }
         if (!hitId) {
-            onEmptyContextMenu?.(e);
+            backgroundContextMenu.handleContextMenu(e, true);
             return;
         }
         if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
@@ -1695,14 +1703,17 @@ export function CanvasEditor({
                 canEdit={canEdit}
                 imagePath={menuElement?.type === 'image' ? resolveMediaPath(menuElement.mediaName) : undefined}
                 onArrange={onMenuArrange}
-                onCopy={onMenuCopy}
                 onCut={onMenuCut}
+                onCopy={onMenuCopy}
                 onPaste={onMenuPaste}
                 onDuplicate={onMenuDuplicate}
                 onDelete={onMenuDelete}
                 onConvertToShapes={menuShapes.length > 0 ? onMenuConvertToShapes : undefined}
                 onComment={onAddComment && menuItemId ? () => onAddComment(menuItemId) : undefined}
             />
+            <ContextMenuAnchor contextMenu={backgroundContextMenu} className="min-w-48">
+                <MenuSections {...backgroundMenu} clipboard={<ClipboardMenuItems onPaste={onMenuPaste} />} />
+            </ContextMenuAnchor>
             {editDialogElement && EditDialog && (
                 // Portaled to the body, but React bubbles its events up this tree, and the canvas' own
                 // pointer, double-click and paste handlers must not act on a click or paste in the dialog.
