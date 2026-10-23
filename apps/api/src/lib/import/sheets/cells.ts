@@ -1,3 +1,4 @@
+import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { CellBorderSides, CellStyle, Cell as FortuneCell, InlineStringSegment } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
@@ -76,13 +77,14 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
         const reference = xmlAttr(row, '', 'r');
         r = indexOf(reference === undefined ? undefined : Number(reference), r, REFERENCE_ROW_COUNT);
         const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
-        // A custom height of 0 is a row Excel draws as none, as the editor draws a hidden one.
-        const none = height === 0 && isOn(xmlAttr(row, '', 'customHeight'));
+        // A custom height that draws no pixel is a row Excel draws as none, as the editor draws a hidden one.
+        const pixels = Math.round(ptToPx(height));
+        const none = pixels === 0 && (height > 0 || isOn(xmlAttr(row, '', 'customHeight')) === true);
         if ((none || isOn(xmlAttr(row, '', 'hidden'))) && !(r in grid.rowhidden)) {
             context.charge(1, 0);
             grid.rowhidden[r] = 0;
         }
-        if (height > 0) {
+        if (pixels > 0) {
             if (!grid.heights.has(r)) context.charge(1, 0);
             grid.heights.set(r, height);
         }

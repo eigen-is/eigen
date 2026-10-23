@@ -377,7 +377,7 @@ These are deliberate. Where a test pins one, it is in `apps/api/src/test/export/
 Column widths and row heights:
 
 - A width counts the file's default font's widest digit ([TYPOGRAPHY.md](TYPOGRAPHY.md#the-xlsx-export-makes-inter-the-workbooks-default-font)), so a column imports at the pixels Excel for Windows draws it at: a Calibri 11 column stored as 9.140625 is 64 px. `maxDigitWidth` (`apps/api/src/lib/document/spreadsheetml.ts`) holds Excel's digit for the Office defaults by face and size, because Excel draws GDI's hinted digit, not the outline's: Calibri 11 and Arial 10 are 7 px, Arial 11 and Cambria 11 are 8. A face it doesn't list counts 7. `columnWidthToPx` and `pxToColumnWidth` are ECMA-376's conversion both ways. The writer truncates to a 256th of a digit and the reader rounds half a 256th up, so every pixel width survives the round trip.
-- A custom height or width of 0 comes in as a hidden row or column, which every renderer draws as none and the writer writes back as `hidden="1"`. A stored length of 0 would draw at the default in the editor and as nothing elsewhere.
+- A height or width that draws no pixel, a custom 0 or a 0.05 pt row, comes in as a hidden row or column, which every renderer draws as none and the writer writes back as `hidden="1"`. A stored length of 0 would draw at the default in the editor and as nothing elsewhere.
 - An unsized column takes the sheet's default width, read by the same digit. `sheetFormatPr`'s `defaultColWidth` counts its padding already. Without it Excel pads `baseColWidth` (8 when absent) by 5 px and rounds up to a multiple of 8 px, so Excel's default is 64 px. The default row height is points to pixels, and Excel's 15 pt when the file names none.
 
 Rules and comments:
