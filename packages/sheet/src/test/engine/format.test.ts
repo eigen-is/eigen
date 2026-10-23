@@ -206,7 +206,7 @@ describe('engine/format — numberText', () => {
         expect(numberText(123456789012345)).toBe('123456789012345');
     });
 
-    test('a number past 15 digits, or tiny, is E notation with a two-digit exponent', () => {
+    test('a number past 15 digits is E notation with a two-digit exponent, as is one below 1E-6', () => {
         expect(numberText(1e21)).toBe('1E+21');
         expect(numberText(1234567890123456)).toBe('1.23456789012346E+15');
         expect(numberText(2 ** 60)).toBe('1.15292150460685E+18');
