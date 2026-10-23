@@ -27,7 +27,7 @@ import {
     PropertyToggle,
 } from '@workspace/ui/components/properties-panel';
 import { Textarea } from '@workspace/ui/components/textarea';
-import { Rows3 } from 'lucide-react';
+import { Rows3, TextCursorInput } from 'lucide-react';
 import { type RefObject, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EQUATION_MENUS } from './equation-menus';
 import { drawnMath, MathMount } from './extensions/equation';
@@ -111,7 +111,7 @@ type EquationPropertiesPanelProps = {
     fieldRef: RefObject<HTMLTextAreaElement | null>;
 };
 
-// The LaTeX field edits a draft that no peer sees. A keystroke or a menu item starts it; Enter or a blur out of the
+// The LaTeX field edits a draft that no peer sees. A keystroke or a menu item starts it; Cmd or Ctrl and Enter, or a blur out of the
 // field and its menus writes it if it parses and differs from the LaTeX it started from, and Escape drops it. Until
 // then the field shows the equation as stored, a peer's write too. A draft stays through a transaction that moves the
 // equation, a collaborator typing above it, and through a peer's write to it, the last writer winning.
@@ -220,15 +220,25 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
             </div>
 
             <PropertySection title="Layout">
-                <PropertyRow label="Display">
-                    <PropertyToggle
-                        aria-label="Display on its own line"
-                        title="Display on its own line"
-                        pressed={display}
-                        onPressedChange={(pressed) => editor.commands.updateEquation({ display: pressed })}
-                    >
-                        <Rows3 className="h-4 w-4" />
-                    </PropertyToggle>
+                <PropertyRow label="Style">
+                    <div className="flex items-center gap-1">
+                        <PropertyToggle
+                            aria-label="In line with text"
+                            title="In line with text"
+                            pressed={!display}
+                            onPressedChange={() => editor.commands.updateEquation({ display: false })}
+                        >
+                            <TextCursorInput className="h-4 w-4" />
+                        </PropertyToggle>
+                        <PropertyToggle
+                            aria-label="On its own line"
+                            title="On its own line"
+                            pressed={display}
+                            onPressedChange={() => editor.commands.updateEquation({ display: true })}
+                        >
+                            <Rows3 className="h-4 w-4" />
+                        </PropertyToggle>
+                    </div>
                 </PropertyRow>
             </PropertySection>
 
@@ -303,7 +313,8 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
                         onKeyDown={(e) => {
                             if (e.nativeEvent.isComposing) return;
                             if (e.key === 'Escape') setDraft(null);
-                            if (e.key !== 'Enter') return;
+                            // Enter starts a new line, the LaTeX reader taking it as a space; Cmd or Ctrl and Enter commits.
+                            if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
                             e.preventDefault();
                             const after = editor.state.selection.to;
                             if (commit()) editor.chain().focus().setTextSelection(after).run();

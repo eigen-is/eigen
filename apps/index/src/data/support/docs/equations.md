@@ -19,7 +19,7 @@ You need edit access to insert or change an equation. On a phone, equations show
 2. Open the **Insert** menu and choose **Equation**.
 3. An empty equation appears at the cursor as a dashed box, and the **Equation** panel opens on the right with the cursor in its **LaTeX** field.
 4. Type the equation, for example `x^2 + y^2 = r^2`. The preview at the top of the panel draws it as you type.
-5. Press **Enter**. The equation is saved, and your cursor goes back to the document, right after the equation.
+5. Press **Cmd+Enter** (**Ctrl+Enter** on Windows and Linux), or click outside the field. The equation is saved, and your cursor goes back to the document, right after the equation. **Enter** starts a new line in the field, which keeps long LaTeX readable and draws the same equation.
 
 Leaving the field, for example by clicking back in the document, saves the equation too. Press **Escape** to throw away what you typed since the last save.
 
@@ -47,7 +47,7 @@ Click a symbol to add it at the cursor in the field. A fraction, a root, or anot
 
 ## Show an equation on its own line
 
-An equation sits in the line of text by default. To give it a line of its own, centered, turn on **Display** under **Layout** in the **Equation** panel. Turn it off to put the equation back in the text.
+An equation sits in the line of text by default. To give it a line of its own, centered, choose **On its own line** next to **Style** under **Layout** in the **Equation** panel. Choose **In line with text** to put the equation back in the text.
 
 ## Change or remove an equation
 
