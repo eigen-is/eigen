@@ -4,6 +4,7 @@ import {
     bundledFontOfCategory,
     bundledFontOfStack,
     EIGEN_FONT_NAMES,
+    fontFacesFor,
     MAX_FONT_SIZE,
     MIN_FONT_SIZE,
     nextFontSize,
@@ -107,5 +108,39 @@ describe('bundledFontOfStack', () => {
     test('a stack of unknown and generic families maps to none', () => {
         expect(bundledFontOfStack('Wingdings, sans-serif')).toBeUndefined();
         expect(bundledFontOfStack('')).toBeUndefined();
+    });
+});
+
+describe('fontFacesFor', () => {
+    const files = (uses: { family: string; style: string }[]) => fontFacesFor(uses).map((face) => face.file);
+
+    test("an upright run needs only its family's upright face, an italic one only its italic face", () => {
+        expect(files([{ family: 'Inter', style: 'normal' }])).toEqual(['inter/Inter-Variable.woff2']);
+        expect(files([{ family: 'Source Serif 4', style: 'italic' }])).toEqual([
+            'source-serif/SourceSerif4-Variable-Italic.woff2',
+        ]);
+    });
+
+    test('a family without an italic face draws its italic from the upright one, which is embedded', () => {
+        expect(files([{ family: 'Excalifont', style: 'italic' }])).toEqual(['excalifont/Excalifont-Regular.woff2']);
+        expect(files([{ family: 'JetBrains Mono', style: 'oblique' }])).toEqual([
+            'jetbrains-mono/JetBrainsMono-Variable.woff2',
+        ]);
+    });
+
+    test('each face once, in registry order; an unknown family has none', () => {
+        expect(
+            files([
+                { family: 'Inter', style: 'italic' },
+                { family: 'Excalifont', style: 'normal' },
+                { family: 'Inter', style: 'normal' },
+                { family: 'Inter', style: 'italic' },
+                { family: 'Wingdings', style: 'normal' },
+            ]),
+        ).toEqual([
+            'inter/Inter-Variable.woff2',
+            'inter/Inter-Variable-Italic.woff2',
+            'excalifont/Excalifont-Regular.woff2',
+        ]);
     });
 });

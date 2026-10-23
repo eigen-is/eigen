@@ -431,6 +431,16 @@ describe('sceneToSvg', () => {
         expect(svg).toContain('<style>.eigen-canvas-text p{margin:0}</style>');
     });
 
+    test('a box measured as SVG text draws that text in its <g>, over its backdrop, and no foreignObject', () => {
+        const el = richtext({ id: 't', html: '<p>hi</p>', fill: solidFill('#ffcc00'), angle: 90 });
+        const svg = sceneToSvg(scene([el]), { richText: new Map([['t', '<text>hi</text>']]) });
+
+        expect(svg).not.toContain('<foreignObject');
+        const group = svg.slice(svg.indexOf('<g transform='));
+        expect(group).toStartWith('<g transform="translate(0 0) rotate(90 50 30)">');
+        expect(group.indexOf('#ffcc00')).toBeLessThan(group.indexOf('<text>hi</text>'));
+    });
+
     test('XML-escapes hostile shape attribute values (stroke color)', () => {
         const svg = sceneToSvg(scene([goldenShape({ id: 's', type: 'rectangle', strokeColor: '"><script>' })]));
         expect(svg).toContain('stroke="&quot;&gt;&lt;script&gt;"');

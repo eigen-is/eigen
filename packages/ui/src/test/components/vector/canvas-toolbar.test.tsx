@@ -97,3 +97,45 @@ test("the drawing's File menu has no import", async () => {
     expect(fileMenuItems()).toContain('Move to trash');
     expect(fileMenuItems().some((item) => item?.startsWith('Import'))).toBe(false);
 });
+
+const menuItem = (label: string) =>
+    [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent?.trim() === label);
+
+async function openDownloads(): Promise<(string | undefined)[]> {
+    await openFileMenu();
+    await act(async () => {
+        menuItem('Download')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const submenu = [...document.querySelectorAll('[role="menu"]')].at(-1);
+    return [...(submenu?.querySelectorAll('[role="menuitem"]') ?? [])].map((item) => item.textContent?.trim());
+}
+
+// The browser lays the drawing's text out as the canvas does, so its SVG is the canvas's own, never the server's.
+test("the drawing's File › Download › SVG is the canvas's own image of the whole drawing", async () => {
+    const downloads: string[] = [];
+    await render({
+        path: drivePath({ name: 'Sketch.eigenvector', mimeType: DRIVE_MIME_VECTOR }),
+        createLabel: 'New vector',
+        createIcon: PenTool,
+        createType: 'vector',
+        canvasRef: {
+            current: {
+                insertFiles: () => {},
+                insertDrivePaths: async () => {},
+                insertChart: () => {},
+                centerOn: () => {},
+                downloadDrawing: (name) => downloads.push(name),
+            },
+        },
+    });
+    expect(await openDownloads()).toEqual(['SVG image (.svg)', 'PDF (.pdf)']);
+    await act(async () => {
+        menuItem('SVG image (.svg)')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(downloads).toEqual(['Sketch']);
+});
+
+test("a deck's File › Download is the export route's formats alone", async () => {
+    await render();
+    expect(await openDownloads()).toEqual(['Microsoft PowerPoint (.pptx)', 'PDF (.pdf)', 'Web Page (.html)']);
+});

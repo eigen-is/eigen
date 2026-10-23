@@ -46,6 +46,8 @@ type FileMenuProps = {
     onImport?: () => void;
     importLabel?: string;
     onExport?: (format: ExportFormat) => void;
+    // A drawing's SVG, which the open editor writes rather than the export route.
+    onDownloadSvg?: () => void;
     createLabel: string;
     createIcon?: LucideIcon;
     createType: EigenDocType;
@@ -61,6 +63,7 @@ export function FileMenu({
     onImport,
     importLabel,
     onExport,
+    onDownloadSvg,
     createLabel,
     createIcon: CreateIcon = FileText,
     createType,
@@ -76,7 +79,8 @@ export function FileMenu({
     const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
     const openConfig = OPEN_LABELS[createType];
     const downloadFormats = exportFormatsFor(createType);
-    const canDownload = !!onExport && downloadFormats.length > 0;
+    const canExport = !!onExport && downloadFormats.length > 0;
+    const canDownload = canExport || !!onDownloadSvg;
     const navigate = useNavigate();
 
     // Mounted by every eigendoc toolbar, so one publish gives ⌘K the open doc's actions
@@ -84,7 +88,7 @@ export function FileMenu({
     // (useEigenDocEditorRoute); usePaletteSelectionActions stabilises these handlers.
     usePaletteSelectionActions({
         onShare: onAccessDialogOpen,
-        onExport: canDownload && onExport ? (_, format) => onExport(format) : undefined,
+        onExport: canExport && onExport ? (_, format) => onExport(format) : undefined,
         onRename: canWrite ? () => setRenameOpen(true) : undefined,
         onEmailCollaborators: canWrite ? () => setEmailOpen(true) : undefined,
         onDelete: canWrite ? () => setDeleteOpen(true) : undefined,
@@ -108,17 +112,21 @@ export function FileMenu({
 
                 {/* Section 2: Export & Rename */}
                 {(canDownload || canWrite) && <DropdownMenuSeparator />}
-                {canDownload && onExport && (
+                {canDownload && (
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
                             <Download className="h-4 w-4 mr-2" /> Download
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
-                            {downloadFormats.map((format) => (
-                                <DropdownMenuItem key={format} onClick={() => onExport(format)}>
-                                    {EXPORT_FORMAT_LABELS[format]}
-                                </DropdownMenuItem>
-                            ))}
+                            {onDownloadSvg && (
+                                <DropdownMenuItem onClick={onDownloadSvg}>SVG image (.svg)</DropdownMenuItem>
+                            )}
+                            {onExport &&
+                                downloadFormats.map((format) => (
+                                    <DropdownMenuItem key={format} onClick={() => onExport(format)}>
+                                        {EXPORT_FORMAT_LABELS[format]}
+                                    </DropdownMenuItem>
+                                ))}
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                 )}

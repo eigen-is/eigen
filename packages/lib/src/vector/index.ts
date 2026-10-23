@@ -1,4 +1,5 @@
 export * from './arrange';
+export * from './canvas-image';
 export * from './clipboard';
 export * from './comments';
 export { elbowBindPoint, redockBindingsForElbow } from './elbow-heading';
@@ -32,6 +33,7 @@ export { isBordered, SVG_NS } from './kinds/render-utils';
 export * from './media-refs';
 export * from './outline';
 export * from './read-vector';
+export * from './rich-text-svg';
 export * from './scene-layers';
 export type { MediaResolver } from './scene-to-svg';
 export { DEFAULT_PADDING, elementToSvg, sceneToSvg } from './scene-to-svg';

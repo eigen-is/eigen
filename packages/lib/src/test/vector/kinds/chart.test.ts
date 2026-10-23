@@ -11,11 +11,11 @@ import { getFontFamily } from '../../../constants/fonts';
 import { escapeXml } from '../../../core/xml';
 import type { ChartLayout, ChartSpec } from '../../../types/chart';
 import { parseFill, serializeFill, TRANSPARENT_FILL } from '../../../vector/fill';
-import { ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, sceneFontFamilies, VECTOR_STYLE_DEFAULTS } from '../../../vector/kinds';
+import { ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../../vector/kinds';
 import { svgTextLine } from '../../../vector/kinds/render-utils';
 import { readElementFromFields } from '../../../vector/read-vector';
 import { elementToSvg } from '../../../vector/scene-to-svg';
-import { DEFAULT_ELEMENT_PROPS, type VectorChartElement } from '../../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, type VectorChartElement, type VectorElement } from '../../../vector/types';
 import { chart, richtext } from '../element-factories';
 
 const specJson = (over: Partial<ChartSpec> = {}, type: ChartSpec['type'] = 'column'): string =>
@@ -249,13 +249,14 @@ describe('chart text', () => {
         expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: RANGE_SPEC }))).toBe('Points scored\nSales');
     });
 
-    test('the SVG download embeds the font in the chart’s spec, and none for a placeholder', () => {
+    test('a chart draws its labels in the font of its spec, and none for a placeholder', () => {
         const serif = chart({ id: 'c1', chart: specJson({ fontFamily: 'Source Serif 4' }) });
-        expect(sceneFontFamilies([serif])).toEqual(new Set(['Source Serif 4']));
-        expect(sceneFontFamilies([chart({ id: 'c2', chart: 'nope' }), chart({ id: 'c3', chart: RANGE_SPEC })])).toEqual(
-            new Set(),
+        const families = (el: VectorElement) => new Set(ELEMENT_KINDS[el.type].fontFamilies(el));
+        expect(families(serif)).toEqual(new Set(['Source Serif 4']));
+        expect(families(chart({ id: 'c2', chart: 'nope' }))).toEqual(new Set());
+        expect(families(chart({ id: 'c3', chart: RANGE_SPEC }))).toEqual(new Set());
+        expect(families(richtext({ id: 't1', html: '<p>Hi</p>', fontFamily: 'JetBrains Mono' }))).toEqual(
+            new Set(['JetBrains Mono']),
         );
-        const text = richtext({ id: 't1', html: '<p>Hi</p>', fontFamily: 'JetBrains Mono' });
-        expect(sceneFontFamilies([serif, text])).toEqual(new Set(['Source Serif 4', 'JetBrains Mono']));
     });
 });

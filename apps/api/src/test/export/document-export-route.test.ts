@@ -174,7 +174,7 @@ describe('Export route — a plain file wearing an eigen mime', () => {
         );
         expect(spoofed.type).toBe('file');
 
-        const res = await exportRequest(spoofed.id, 'svg');
+        const res = await exportRequest(spoofed.id, 'pdf');
         expect(res.status).toBe(400);
         expect(await res.text()).toContain('not supported');
     }, 60_000);

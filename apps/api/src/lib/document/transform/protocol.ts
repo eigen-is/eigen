@@ -18,8 +18,8 @@ export type DocumentExportFormat = 'html' | 'pdf-html';
 // Only eigendoc exports to docx and only eigenslides to pptx; the other routes reject them.
 export type EigendocExportFormat = DocumentExportFormat | 'docx';
 export type SlidesExportFormat = DocumentExportFormat | 'pptx';
-// Vector exports the drawing's own SVG, or that SVG on a page WeasyPrint renders to PDF.
-export type VectorExportFormat = 'svg' | 'pdf-html';
+// A drawing exports as one page WeasyPrint renders to PDF; its SVG is the editor's own (packages/ui's canvas image).
+export type VectorExportFormat = 'pdf-html';
 
 // What an HTML export is for: the download a browser opens, or the document WeasyPrint prints.
 export type HtmlExportMode = 'screen' | 'pdf';

@@ -136,6 +136,8 @@ export type CanvasHandle = {
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
     insertChart: (type: ChartType) => void;
     centerOn: (el: VectorElement) => void;
+    // Every element the canvas shows, on its background, as the SVG the browser draws (Vector's File › Download).
+    downloadDrawing: (name: string) => void;
 };
 
 type CanvasEditorProps = {
@@ -871,23 +873,6 @@ export function CanvasEditor({
         [undoManager, addElement, viewportCenterScene, viewport, styleDefaults, setSelectedIds],
     );
 
-    // Publish the handle for the host (cleared on unmount so a stale canvas never places or pans).
-    useEffect(() => {
-        if (!canvasRef) return;
-        canvasRef.current = {
-            insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
-            insertDrivePaths,
-            insertChart,
-            centerOn: (el) => {
-                const box = elementBox(el);
-                centerOn(box.x + box.width / 2, box.y + box.height / 2);
-            },
-        };
-        return () => {
-            canvasRef.current = null;
-        };
-    }, [canvasRef, insertImageFiles, viewportCenterScene, insertDrivePaths, insertChart, centerOn]);
-
     // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
     // this is normally present) and is closed while a text overlay owns paste + the pointer.
     const imagesEnabled = canEdit && !!mediaFolderId && !textEditing;
@@ -897,7 +882,7 @@ export function CanvasEditor({
     // the drag-over affordance shows only when insertion is actually possible.
     // ⌘C/⌘X/⌘V, the menu clipboard rows and the whole paste ladder live in the sibling hook (the
     // canvas only hands it the scene, the selection and the frame-stamped writers).
-    const { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText } = useCanvasClipboard({
+    const { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText, downloadImage } = useCanvasClipboard({
         canEdit,
         textEditingRef,
         containerRef,
@@ -922,6 +907,39 @@ export function CanvasEditor({
         resolveMediaUrl,
         uploadFile: uploadFile.mutateAsync,
     });
+
+    // Publish the handle for the host (cleared on unmount so a stale canvas never places or pans).
+    useEffect(() => {
+        if (!canvasRef) return;
+        canvasRef.current = {
+            insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
+            insertDrivePaths,
+            insertChart,
+            centerOn: (el) => {
+                const box = elementBox(el);
+                centerOn(box.x + box.width / 2, box.y + box.height / 2);
+            },
+            downloadDrawing: (name) =>
+                downloadImage(
+                    name,
+                    ordered.map((el) => el.id),
+                    meta.background,
+                ),
+        };
+        return () => {
+            canvasRef.current = null;
+        };
+    }, [
+        canvasRef,
+        insertImageFiles,
+        viewportCenterScene,
+        insertDrivePaths,
+        insertChart,
+        centerOn,
+        downloadImage,
+        ordered,
+        meta.background,
+    ]);
 
     // In frame mode the letterbox backdrop is not the canvas: the frame clips its overhang, so an
     // element created out there — and the in-place editor over it — would be invisible. The infinite

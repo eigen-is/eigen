@@ -1,4 +1,11 @@
 import * as fs from 'node:fs';
+import {
+    type BundledFontFace,
+    FONT_FACES,
+    type FontFaceFile,
+    fontFaceCss,
+    fontFacesOf,
+} from '@workspace/lib/constants/fonts';
 import docxExcalifontRegular from '@workspace/ui/assets/fonts/excalifont/Excalifont-Regular.ttf' with { type: 'file' };
 import fontExcalifont from '@workspace/ui/assets/fonts/excalifont/Excalifont-Regular.woff2' with { type: 'file' };
 import docxInterBold from '@workspace/ui/assets/fonts/inter/Inter-Bold-renamed.ttf' with { type: 'file' };
@@ -29,20 +36,19 @@ import fontSerifItalic from '@workspace/ui/assets/fonts/source-serif/SourceSerif
     type: 'file',
 };
 
-// smallCaps: the face has the OpenType smcp glyphs, the only small caps WeasyPrint draws.
-type FontFile = { family: string; path: string; weight: string; style: 'normal' | 'italic'; smallCaps?: true };
+// The bundler's path of each registry face (its asset in the build), keyed by the file FONT_FACES names: the record
+// type makes it list every face and nothing else, so the faces themselves are only ever the registry's.
+const FACE_PATHS: Record<FontFaceFile, string> = {
+    'inter/Inter-Variable.woff2': fontInterRegular,
+    'inter/Inter-Variable-Italic.woff2': fontInterItalic,
+    'source-serif/SourceSerif4-Variable.woff2': fontSerifRegular,
+    'source-serif/SourceSerif4-Variable-Italic.woff2': fontSerifItalic,
+    'jetbrains-mono/JetBrainsMono-Variable.woff2': fontMonoRegular,
+    'excalifont/Excalifont-Regular.woff2': fontExcalifont,
+};
 
-const FONT_FILES: readonly FontFile[] = [
-    { family: 'Inter', path: fontInterRegular, weight: '100 900', style: 'normal' },
-    { family: 'Inter', path: fontInterItalic, weight: '100 900', style: 'italic' },
-    { family: 'Source Serif 4', path: fontSerifRegular, weight: '200 900', style: 'normal', smallCaps: true },
-    { family: 'Source Serif 4', path: fontSerifItalic, weight: '200 900', style: 'italic' },
-    { family: 'JetBrains Mono', path: fontMonoRegular, weight: '100 800', style: 'normal' },
-    { family: 'Excalifont', path: fontExcalifont, weight: '400', style: 'normal' },
-];
-
-export function hasSmallCaps(family: string, style: FontFile['style']): boolean {
-    return FONT_FILES.some((font) => font.family === family && font.style === style && font.smallCaps);
+export function hasSmallCaps(family: string, style: BundledFontFace['style']): boolean {
+    return FONT_FACES.some((face) => face.family === family && face.style === style && 'smallCaps' in face);
 }
 
 export type DocxFontFiles = { Regular: string; Italic?: string; Bold?: string; BoldItalic?: string };
@@ -81,36 +87,27 @@ export function sfntTables(bytes: Buffer): Map<string, Buffer> {
 let _fontCSS: string | undefined;
 
 export function getFontCSS(): string {
-    return (_fontCSS ??= FONT_FILES.map(fontFaceCSS).join('\n'));
+    return (_fontCSS ??= FONT_FACES.map(fontFaceCSS).join('\n'));
 }
 
 // The @font-face blocks for just the given families (each an EIGEN_FONTS name, the same
-// value a vector text/label element stores in `fontFamily`). The SVG export inlines only
-// the whole faces its text actually uses; an unrecognized family contributes nothing.
+// value a vector text/label element stores in `fontFamily`). An export or an SVG preview inlines
+// only the whole faces its text actually uses; an unrecognized family contributes nothing.
 export function getFontFaceCSSForFamilies(families: Iterable<string>): string {
-    const wanted = new Set(families);
-    return FONT_FILES.filter((font) => wanted.has(font.family))
-        .map(fontFaceCSS)
-        .join('\n');
+    return fontFacesOf(families).map(fontFaceCSS).join('\n');
 }
 
 // Read + base64 once per bundled font (~2 MB resident): the main-thread SVG preview path
 // asks for faces on every request, while a one-shot export Worker pays it once anyway.
 // A bundled asset that cannot be read is a build defect, so the read is unguarded.
-const faceCSSByFont = new Map<FontFile, string>();
+const faceCSSByFile = new Map<FontFaceFile, string>();
 
-function fontFaceCSS(font: FontFile): string {
-    let css = faceCSSByFont.get(font);
+function fontFaceCSS(face: BundledFontFace): string {
+    let css = faceCSSByFile.get(face.file);
     if (css === undefined) {
-        const dataUri = `data:font/woff2;base64,${fs.readFileSync(font.path).toString('base64')}`;
-        css = `@font-face {
-    font-family: "${font.family}";
-    src: url("${dataUri}") format("woff2");
-    font-weight: ${font.weight};
-    font-style: ${font.style};
-    font-display: swap;
-}`;
-        faceCSSByFont.set(font, css);
+        const bytes = fs.readFileSync(FACE_PATHS[face.file]);
+        css = fontFaceCss(face, `data:font/woff2;base64,${bytes.toString('base64')}`);
+        faceCSSByFile.set(face.file, css);
     }
     return css;
 }

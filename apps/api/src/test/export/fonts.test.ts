@@ -2,8 +2,8 @@ import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS } from '@workspace/lib/constants/fonts';
-import { DOCX_FONT_FILES, getFontCSS, sfntTables } from '../../lib/export/fonts';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS, FONT_FACES } from '@workspace/lib/constants/fonts';
+import { DOCX_FONT_FILES, getFontCSS, getFontFaceCSSForFamilies, sfntTables } from '../../lib/export/fonts';
 
 const UI_STYLES_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/styles');
 
@@ -30,6 +30,13 @@ test('the export fonts are the faces the apps load', () => {
     const exportFaces = faces(getFontCSS(), (src) => Buffer.from(src.slice(src.indexOf(',') + 1), 'base64'));
     expect(appFaces).toHaveLength(6);
     expect(exportFaces).toEqual(appFaces);
+});
+
+// The faces are the registry's, which the browser's image writer embeds too, in its order.
+test('the export embeds the registry faces, and only those of the families asked for', () => {
+    const families = (css: string) => [...css.matchAll(/font-family: "([^"]+)"/g)].map((m) => m[1]);
+    expect(families(getFontCSS())).toEqual(FONT_FACES.map((face) => face.family));
+    expect(families(getFontFaceCSSForFamilies(['Inter', 'Unknown']))).toEqual(['Inter', 'Inter']);
 });
 
 function nameRecords(name: Buffer): string[] {

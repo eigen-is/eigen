@@ -1,6 +1,6 @@
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
-import { spliceAfterSvgOpenTag } from '../document/media';
+import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
 import { getFontFaceCSSForFamilies } from '../export/fonts';
 import type { Mount } from '../mount';
 
@@ -74,9 +74,8 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
 }
 
 // Inject a <defs><style> of @font-face blocks for the EIGEN fonts the svg's text names, right after the
-// opening <svg> tag (sceneToSvg emits no top-level <defs>) — mirrors export/vector/transform.ts. The
-// faces are data: URIs (from getFontFaceCSSForFamilies), so sanitizeExportHtml keeps them and the
-// sandbox CSP allows them; faces are static per build, so a cached result never goes stale. Charges the
+// opening <svg> tag (sceneToSvg emits no top-level <defs>). The faces are data: URIs (from
+// getFontFaceCSSForFamilies), so sanitizeExportHtml keeps them and the sandbox CSP allows them; faces are static per build, so a cached result never goes stale. Charges the
 // css against the shared output budget before splicing; a breach degrades to no faces (text falls back
 // to a system font, the svg still serves) rather than discarding the media already inlined.
 function injectFontFaces(svg: string, budget: Budget): string {
