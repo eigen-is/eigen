@@ -128,8 +128,8 @@ seed() {
         sheetsToXlsx([{ name: "Sheet1", celldata: [{ r: 0, c: 0, v: { v: process.env.CELL } }] }])
             .then((bytes) => process.stdout.write(bytes));
     ' >"$SCRATCH/seed.xlsx"
-    curl -sk -b "$JAR" -o /dev/null -X POST -H 'Content-Type: application/octet-stream' -H 'Origin: https://localhost' \
-        --data-binary "@$SCRATCH/seed.xlsx" "$BASE$drive/file/$SHEET_ID/import" || true
+    curl -fsSk -b "$JAR" -o /dev/null -X POST -H 'Content-Type: application/octet-stream' -H 'Origin: https://localhost' \
+        --data-binary "@$SCRATCH/seed.xlsx" "$BASE$drive/file/$SHEET_ID/import?mode=replace"
     CAL_ID=$(api GET "/calendar/$ADMIN_ID/calendars" |
         grep -o '"id":"[^"]*","name":"[^"]*","color":"[^"]*","isDefault":true' | cut -d'"' -f4 || true)
     EVENT_ID=$(api POST "/calendar/$ADMIN_ID/calendars/$CAL_ID/events" \
