@@ -490,7 +490,8 @@ const TiptapEditor = ({
     const equationContextMenu = useContextMenu<EquationMenuItem>();
     equationContextMenuRef.current = (target, node, pos, event) => {
         if (!target.isEditable) return;
-        target.commands.setNodeSelection(pos);
+        // Selected as a click selects it, which opens its panel.
+        target.chain().setNodeSelection(pos).setMeta('pointer', true).run();
         const comment = commentMenuItem(nodeCommentCardId(node));
         equationContextMenu.handleContextMenu(event, { editor: target, display: node.attrs.display === true, comment });
     };

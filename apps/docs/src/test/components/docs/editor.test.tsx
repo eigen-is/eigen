@@ -1059,6 +1059,20 @@ test('the equation menu sets its display, opens its panel and deletes it', async
     expect(doc.getXmlFragment('default').toString()).toBe('<paragraph>x</paragraph>');
 });
 
+// A right-click selects as a click does, so a table's cell around the equation leaves its panel shut.
+test('a right-click on an equation in a table cell opens the Equation panel', async () => {
+    await render(WRITER);
+    await bodyTable();
+    const body = bodyEditor();
+    await act(async () => void body.commands.insertEquation());
+    await act(async () => void body.commands.setTextSelection(body.state.selection.from));
+    expect(document.body.textContent).toContain('Columns');
+    await rightClick(bodyView()?.querySelector('.equation'));
+    expect(menuRows()).toEqual([...EQUATION_ROWS, '—', 'Delete equation']);
+    expect(document.querySelector('textarea[aria-label="LaTeX"]')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Columns');
+});
+
 test('the equation menu’s Cut cuts the equation it was opened on', async () => {
     let cut: string | undefined;
     document.execCommand = mock((_command: string) => {
