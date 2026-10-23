@@ -3213,6 +3213,8 @@ describe('docx writer — fonts', () => {
         }
         expect(keys).toHaveLength(8);
         expect(new Set(keys).size).toBe(keys.length);
+        // The key is SHA-256 of "Inter/Regular", pinned so the digest never drifts.
+        expect(keys).toContain('{B390F7A1-9B9C-EF91-C9F2-B6EDED1D075F}');
     });
 
     test("each family's font table entry carries its Regular file's panose and signature", async () => {

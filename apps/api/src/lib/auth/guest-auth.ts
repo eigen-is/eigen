@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { generateId } from '@better-auth/core/utils/id';
 import { hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
@@ -25,8 +25,8 @@ function generateOtp(): string {
 
 // Deterministic password nobody sees — exists so we can call auth.api.signInEmail to get a
 // response with signed session cookies. Scoped per flow so the two surfaces never collide.
-function scopedPassword(scope: 'guest' | 'demo', email: string): string {
-    return createHmac('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
+export function scopedPassword(scope: 'guest' | 'demo', email: string): string {
+    return new Bun.CryptoHasher('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
 }
 
 // Upsert the account's credential with the freshly derived password, then sign in and return the

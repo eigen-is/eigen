@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
@@ -428,7 +427,7 @@ function embeddedFonts(faces: Map<string, Set<FontSlot>>): {
         for (const slot of FONT_SLOTS) {
             const file = slots[slot];
             if (!file || !faces.get(family)?.has(slot)) continue;
-            const hash = createHash('sha256').update(`${family}/${slot}`).digest('hex').toUpperCase();
+            const hash = Bun.CryptoHasher.hash('sha256', `${family}/${slot}`, 'hex').toUpperCase();
             const key = `{${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}}`;
             const digits = key.replace(/[{}-]/g, '');
             const data = new Uint8Array(fs.readFileSync(file));
