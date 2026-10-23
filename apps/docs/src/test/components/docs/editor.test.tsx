@@ -1188,7 +1188,7 @@ test("a viewer's Download image saves the chart in its look on white, its font e
         writeChart();
         await render({ canWrite: false, isMobile: false });
         await rightClickChart();
-        expect(menuRows()).toEqual(['Download image']);
+        expect(menuRows()).toEqual(['Copy', '—', 'Download image']);
         fonts.takeFetched();
         await pick('Download image');
         await frames();

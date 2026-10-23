@@ -960,12 +960,10 @@ const TiptapEditor = ({
             <ContextMenuAnchor contextMenu={figureContextMenu}>
                 <MenuSections
                     clipboard={
-                        canWrite && (
-                            <ClipboardMenuItems
-                                onCut={() => runClipboardCommand(editor, 'cut')}
-                                onCopy={() => runClipboardCommand(editor, 'copy')}
-                            />
-                        )
+                        <ClipboardMenuItems
+                            onCut={canWrite ? () => runClipboardCommand(editor, 'cut') : undefined}
+                            onCopy={() => runClipboardCommand(editor, 'copy')}
+                        />
                     }
                     output={
                         (figureContextMenu.item?.imagePath || menuChart) && (
