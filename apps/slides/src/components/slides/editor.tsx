@@ -332,7 +332,6 @@ function SlideEditorInner({
                     createIcon={Presentation}
                     createType="slides"
                     onImport={() => setImportPickerOpen(true)}
-                    importLabel="Import slides…"
                     fileItems={
                         <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
                             <FileSliders className="h-4 w-4 mr-2" /> Page setup…
@@ -477,9 +476,8 @@ function SlideEditorInner({
                 path={path}
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}
-                title="Import slides"
-                progressTitle="Importing slides"
                 target="eigenslides"
+                afterFrameId={frameId}
             />
             {/* doc.meta re-reads on a peer's write, so the open dialog follows it. */}
             <PageSetupDialog

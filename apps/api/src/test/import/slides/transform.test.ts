@@ -10,7 +10,7 @@ import {
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { appendSlidesUpdateToYjs, writeSlidesUpdateToYjs } from '../../../lib/document/slides';
+import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../../../lib/document/slides';
 import { type SlidesImportJob, toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { runImportToSlidesUpdate } from '../../../lib/document/transform/run-transform';
 import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
@@ -56,7 +56,7 @@ describe('a pptx converted to a deck', () => {
     test('holds its slides as frames and its shapes as validated elements, the master beneath', () => {
         const { update, images, warnings } = importPptxToSlidesUpdate(toTransferableBuffer(PPTX), JOB);
         const doc = new Y.Doc();
-        writeSlidesUpdateToYjs(doc, new Uint8Array(update));
+        replaceSlidesInYjs(doc, readSlidesUpdate(new Uint8Array(update)));
         const scene = readVectorFromDoc(doc);
 
         expect(scene.frames.map((frame) => frame.name)).toEqual(['Welcome', '']);
@@ -125,7 +125,7 @@ describe('a pptx converted to a deck', () => {
                 maxMediaBytes: JOB.maxMediaBytes,
             });
             const doc = new Y.Doc();
-            writeSlidesUpdateToYjs(doc, new Uint8Array(update));
+            replaceSlidesInYjs(doc, readSlidesUpdate(new Uint8Array(update)));
             expect(doc.getMap('meta').get('background')).toBe(DEFAULT_SCENE_META.background);
             const { meta, frames, elements } = readVectorFromDoc(doc);
             return { slideSize: meta.slideSize, frame: [frames[0].width, frames[0].height], slide: elements[0] };
@@ -153,7 +153,7 @@ describe('a pptx converted to a deck', () => {
             slides: [{ shapes: sp({ xfrm: xfrm(0, 0, 12192000, 6858000), spPr: solid('FF0000') }) }],
         });
         const { update } = importPptxToSlidesUpdate(toTransferableBuffer(wide), { ...JOB, frame: SLIDE_SIZES['4:3'] });
-        appendSlidesUpdateToYjs(doc, new Uint8Array(update));
+        insertSlidesIntoYjs(doc, readSlidesUpdate(new Uint8Array(update)), undefined);
         const scene = readVectorFromDoc(doc);
         expect(scene.meta.slideSize).toBe('4:3');
         expect(scene.elements[0]).toMatchObject({ x: 0, y: 180, width: 1920, height: 1080 });
@@ -170,7 +170,7 @@ describe('a pptx converted to a deck', () => {
             'own',
         );
         const { update } = importPptxToSlidesUpdate(toTransferableBuffer(PPTX), JOB);
-        appendSlidesUpdateToYjs(doc, new Uint8Array(update));
+        insertSlidesIntoYjs(doc, readSlidesUpdate(new Uint8Array(update)), undefined);
         const scene = readVectorFromDoc(doc);
         expect(scene.frames.map((frame) => frame.name)).toEqual(['Mine', 'Welcome', '']);
         expect(scene.elements[0]).toMatchObject({ id: 'own', frameId: 'mine' });
@@ -189,7 +189,10 @@ describe('a pptx converted to a deck', () => {
             ],
         });
         const doc = new Y.Doc();
-        writeSlidesUpdateToYjs(doc, new Uint8Array(importPptxToSlidesUpdate(toTransferableBuffer(far), JOB).update));
+        replaceSlidesInYjs(
+            doc,
+            readSlidesUpdate(new Uint8Array(importPptxToSlidesUpdate(toTransferableBuffer(far), JOB).update)),
+        );
         expect(readVectorFromDoc(doc).elements[0].width).toBe(1_000_000);
     });
 
@@ -198,7 +201,7 @@ describe('a pptx converted to a deck', () => {
         const job: SlidesImportJob = { kind: 'import', sourceFormat: 'pptx', targetType: 'eigenslides', ...JOB };
         const { update, images } = await runImportToSlidesUpdate(job, toTransferableBuffer(PPTX), {});
         const doc = new Y.Doc();
-        writeSlidesUpdateToYjs(doc, new Uint8Array(update));
+        replaceSlidesInYjs(doc, readSlidesUpdate(new Uint8Array(update)));
         expect(readVectorFromDoc(doc).frames).toHaveLength(2);
         expect(images).toHaveLength(1);
         const pptm = buildPptx({

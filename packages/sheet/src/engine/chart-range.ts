@@ -7,9 +7,8 @@ import type {
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
-import { parseA1Range, quoteSheetName, toA1 } from './a1-notation';
+import { parseA1Range, sheetRefName, toA1 } from './a1-notation';
 import { cellLabel, resolveRangeChartData } from './chart-data';
-import { SIMPLE_SHEET_NAME } from './parser/helper/cell';
 import type { Cell, CellResolver } from './types';
 
 // Google's Setup of a range chart: one block of cells, its series down the columns or along the rows, and
@@ -146,15 +145,13 @@ export function chartRangeOf(data: RangeChartData): ChartRange | null {
     );
 }
 
-const SIMPLE_NAME = new RegExp(`^${SIMPLE_SHEET_NAME}$`);
-
 // Google's Data range text: A1:D5 on the chart's own sheet, 'Other sheet'!A1:D5 elsewhere.
 export function chartRangeText({ sheetId, row, column }: CellRangeRef, sheets: SheetName[], ownSheetId: string) {
     const start = toA1(row[0], column[0]);
     const cells = row[0] === row[1] && column[0] === column[1] ? start : `${start}:${toA1(row[1], column[1])}`;
     if (sheetId === ownSheetId) return cells;
     const name = sheets.find((sheet) => sheet.id === sheetId)?.name ?? '';
-    return `${SIMPLE_NAME.test(name) ? name : quoteSheetName(name)}!${cells}`;
+    return `${sheetRefName(name)}!${cells}`;
 }
 
 export function parseChartRangeText(text: string, sheets: SheetName[], ownSheetId: string): CellRangeRef | null {

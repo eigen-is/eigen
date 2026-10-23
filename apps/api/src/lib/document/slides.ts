@@ -1,4 +1,5 @@
 import {
+    frameKeysAfter,
     generateNKeysBetween,
     newElementId,
     newFrameId,
@@ -13,12 +14,12 @@ import {
 import * as Y from 'yjs';
 
 // The deck writers for the pptx import (import/import-document.ts). The caller bounds the update's size and record
-// count, and its media names must already be free in the deck's media folder: the writer copies `mediaName` and
+// count, and its media names must already be free in the deck's media folder: the writers copy `mediaName` and
 // background image names as given.
 
 // The update is built from an untrusted pptx, so it goes through the reader: a record a hostile peer
 // write would be healed or dropped to is healed or dropped here too, and only the clean scene is written.
-function readSlidesUpdate(update: Uint8Array): VectorScene {
+export function readSlidesUpdate(update: Uint8Array): VectorScene {
     const scratch = new Y.Doc();
     try {
         Y.applyUpdate(scratch, update);
@@ -28,12 +29,11 @@ function readSlidesUpdate(update: Uint8Array): VectorScene {
     }
 }
 
-// Every record is new, under a fresh id, after the deck's topmost frame and element, in the update's
-// own order. Nothing already in the deck is written, so an open tab's undo stack and comments stay valid.
-// An element on no slide (an update without frames) has nowhere to land and is skipped.
-function appendScene(doc: Y.Doc, scene: VectorScene): void {
+// Every record is new, under a fresh id: the frames under `frameKeys`, one each, the elements after the deck's topmost,
+// in the update's own order. Nothing already in the deck is written, so an open tab's undo stack and comments stay
+// valid. An element on no slide (an update without frames) has nowhere to land and is skipped.
+function appendScene(doc: Y.Doc, scene: VectorScene, frameKeys: string[]): void {
     const frameIds = new Map<string, string>();
-    const frameKeys = generateNKeysBetween(topmostIndex(doc.getMap('frames')), null, scene.frames.length);
     for (const [i, frame] of scene.frames.entries()) {
         const id = newFrameId();
         frameIds.set(frame.id, id);
@@ -61,20 +61,28 @@ function appendScene(doc: Y.Doc, scene: VectorScene): void {
     }
 }
 
-// For Convert to Slides, which fills a brand-new deck, so the deck takes the update's meta too.
-export function writeSlidesUpdateToYjs(doc: Y.Doc, update: Uint8Array): void {
-    const scene = readSlidesUpdate(update);
+// The deck becomes the file's: its slides and elements go, the file's come in, and the deck takes the file's meta, its
+// slide size the one nearest the file's. Convert to Slides fills a brand-new deck so; Import… replaces an open one so,
+// a version saved first, as the cleared records orphan their comment cards.
+export function replaceSlidesInYjs(doc: Y.Doc, scene: VectorScene): void {
     doc.transact(() => {
-        appendScene(doc, scene);
+        doc.getMap('frames').clear();
+        doc.getMap('elements').clear();
+        appendScene(doc, scene, generateNKeysBetween(null, null, scene.frames.length));
         const meta = doc.getMap('meta');
         for (const [key, value] of Object.entries(scene.meta)) meta.set(key, value);
     });
 }
 
-// For importing slides into a deck someone works in: appended after its last slide, its meta left alone. Answers how
-// many slides it appended.
-export function appendSlidesUpdateToYjs(doc: Y.Doc, update: Uint8Array): number {
-    const scene = readSlidesUpdate(update);
-    doc.transact(() => appendScene(doc, scene));
-    return scene.frames.length;
+// Import… into a deck someone works in: the file's slides go in after the slide `afterFrameId` names, or after the last
+// one when it names none or one since deleted. The deck's meta is left alone.
+export function insertSlidesIntoYjs(doc: Y.Doc, scene: VectorScene, afterFrameId: string | undefined): void {
+    doc.transact(() => {
+        const frames = doc.getMap('frames');
+        const keys =
+            afterFrameId === undefined
+                ? generateNKeysBetween(topmostIndex(frames), null, scene.frames.length)
+                : frameKeysAfter(frames, afterFrameId, scene.frames.length);
+        appendScene(doc, scene, keys);
+    });
 }

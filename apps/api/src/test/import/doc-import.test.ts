@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
@@ -32,9 +32,13 @@ import {
     drivePut,
     driveUpload,
     getTestContext,
+    listVersions,
+    restoreVersion,
     setMaxUploadSizeMB,
     TEST_PNG_BYTES,
 } from '../setup';
+
+const REPLACE: DocumentImportOptions = { mode: 'replace' };
 
 // Route contract of docx import and conversion: what lands in the document, what
 // the media folder gets, and the exact error statuses and bodies. Pinned here so
@@ -81,11 +85,12 @@ function convertRequest(pathId: string, targetType = 'eigendoc'): Promise<Respon
     );
 }
 
-function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
-    return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
-        method: 'POST',
-        body,
-    });
+function importRequest(pathId: string, body: ArrayBuffer, mode = 'replace'): Promise<Response> {
+    return authedRequest(
+        ctx.alice.user.sessionToken,
+        `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import?mode=${mode}`,
+        { method: 'POST', body },
+    );
 }
 
 async function readDocJson(pathId: string): Promise<JSONContent> {
@@ -154,6 +159,34 @@ describe('Eigendoc docx import/convert', () => {
         expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(TEST_PNG_BYTES));
     }, 120_000);
 
+    test('import saves a version first, which restores the document as it was', async () => {
+        const docPath = await createDoc('import-version-target');
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, docPath.id);
+        seedEigendoc(collab.doc, {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'PRIOR CONTENT' }] }],
+        });
+
+        await assertJson(await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES)));
+        const versions = await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docPath.id);
+        expect(versions).toHaveLength(1);
+        await restoreVersion(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docPath.id, versions[0].name);
+        const json = await readDocJson(docPath.id);
+        expect(JSON.stringify(json)).toContain('PRIOR CONTENT');
+        expect(JSON.stringify(json)).not.toContain(GOLDEN_DOCX_HEADING);
+    }, 120_000);
+
+    test('an insert into a document is refused, before anything is written', async () => {
+        const docPath = await createDoc('import-insert-target');
+        const before = await readDocJson(docPath.id);
+        const res = await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES), 'insert');
+        expect(res.status).toBe(400);
+        expect(await res.text()).toBe('A document import replaces the document');
+        expect(await readDocJson(docPath.id)).toEqual(before);
+        expect(await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docPath.id)).toEqual([]);
+    }, 120_000);
+
     test('a repeat .docx import overwrites the previous import media', async () => {
         const docPath = await createDoc('repeat-import-target');
         const first = await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES));
@@ -207,7 +240,7 @@ describe('Eigendoc docx import/convert', () => {
         const altBytes = new Uint8Array([...TEST_PNG_BYTES, 0]);
         const res = await authedRequest(
             ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${docPath.id}/import`,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${docPath.id}/import?mode=replace`,
             { method: 'POST', body: await buildGoldenDocx(altBytes) },
         );
         expect((await assertJson<{ success: boolean }>(res)).success).toBe(true);
@@ -311,7 +344,7 @@ describe('Eigendoc docx import/convert', () => {
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, buffer, bob!);
+            await importIntoDocument(bobDrive, path, buffer, REPLACE, bob!);
         } catch (e) {
             error = e;
         }
@@ -335,7 +368,7 @@ describe('Eigendoc docx import/convert', () => {
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         try {
             await expect(
-                importIntoDocument(home.drive, path, buffer, home.user, controller.signal),
+                importIntoDocument(home.drive, path, buffer, REPLACE, home.user, controller.signal),
             ).rejects.toMatchObject({ name: 'AbortError' });
         } finally {
             getSpy.mockRestore();
@@ -375,7 +408,7 @@ describe('Eigendoc docx import/convert', () => {
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         let error: unknown;
         try {
-            await importIntoDocument(bobDrive, path, buffer, bob!);
+            await importIntoDocument(bobDrive, path, buffer, REPLACE, bob!);
         } catch (e) {
             error = e;
         } finally {

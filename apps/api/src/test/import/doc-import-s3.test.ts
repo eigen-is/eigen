@@ -37,7 +37,7 @@ describe('Eigendoc docx import into an S3 mount', () => {
         try {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${MOUNT_ID}/file/${docPath.id}/import`,
+                `/drive/${ctx.alice.user.id}/${MOUNT_ID}/file/${docPath.id}/import?mode=replace`,
                 { method: 'POST', body: await buildGoldenDocx(TEST_PNG_BYTES) },
             );
             expect((await assertJson<{ success: boolean }>(res)).success).toBe(true);

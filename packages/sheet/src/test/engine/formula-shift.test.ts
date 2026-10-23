@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { detectAbsolute, functionCopy, functionStrChange } from '../../engine/formula-shift';
+import { detectAbsolute, functionCopy, functionStrChange, renameSheetRefs } from '../../engine/formula-shift';
 
 describe('engine/formula-shift — functionCopy single-cell refs', () => {
     test('shifts a relative ref down', () => {
@@ -449,5 +449,26 @@ describe('engine/formula-shift — functionCopy functions in a range and structu
         expect(functionCopy('Table1[[#This Row],[A1]]+A1', 1, 0)).toBe('Table1[[#This Row],[A1]]+A2');
         expect(functionCopy("Table1[a'[b]*B1", 1, 0)).toBe("Table1[a'[b]*B2");
         expect(functionCopy("Table1[[#This Row],[a']b]]*B1", 1, 0)).toBe("Table1[[#This Row],[a']b]]*B2");
+    });
+});
+
+describe('engine/formula-shift — renameSheetRefs', () => {
+    const renames = new Map([
+        ['Data', 'Data(Copy)'],
+        ['My data', 'Totals'],
+    ]);
+
+    test('a ref naming a renamed sheet names its new name, quoted when it must be', () => {
+        expect(renameSheetRefs('=Data!A1*2', renames)).toBe("='Data(Copy)'!A1*2");
+        expect(renameSheetRefs("=SUM('My data'!A1:B2)+1", renames)).toBe('=SUM(Totals!A1:B2)+1');
+    });
+
+    test('a ref to any other sheet, an own-sheet ref and a string stay as written', () => {
+        expect(renameSheetRefs('=Other!A1+A1&"Data!A1"', renames)).toBe('=Other!A1+A1&"Data!A1"');
+        expect(renameSheetRefs('=A1+B2', renames)).toBe('=A1+B2');
+    });
+
+    test('a ref without its `=` comes back without one', () => {
+        expect(renameSheetRefs('Data!$A$1:$A$5', renames)).toBe("'Data(Copy)'!$A$1:$A$5");
     });
 });

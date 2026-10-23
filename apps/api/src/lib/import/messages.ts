@@ -63,7 +63,7 @@ export const SAVE_AS_PPTX =
 
 type Noun = readonly [one: string, many: string];
 
-// What a pptx import left out, per kind, for the toast after Import slides…: each warning counts source shapes,
+// What a pptx import left out, per kind, for the toast after Import…: each warning counts source shapes,
 // so a master's background is one fill however many slides show it.
 const NOT_IMPORTED: [readonly CountedWarningCode[], Noun][] = [
     [['tables-dropped'], ['table', 'tables']],

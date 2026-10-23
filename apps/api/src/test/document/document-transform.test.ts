@@ -592,10 +592,14 @@ async function buildImportFixture(): Promise<ArrayBuffer> {
 }
 
 async function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
-    return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
-        method: 'POST',
-        body,
-    });
+    return authedRequest(
+        ctx.alice.user.sessionToken,
+        `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import?mode=replace`,
+        {
+            method: 'POST',
+            body,
+        },
+    );
 }
 
 // The xlsx and docx import/convert failure contracts are identical — same routes, same
@@ -1686,7 +1690,7 @@ describe('document transform (docx import)', () => {
 // to the transform process, in its format's words.
 // A convert checks write on the destination folder before anything else it pays for.
 const WRITABLE_DRIVE = { canWrite: async () => true } as unknown as Drive;
-// Import slides… opens the deck for its frame, which a refused import must not pay for either.
+// An insert into a deck opens it for its frame, which a refused import must not pay for either.
 const UNOPENED_DRIVE = {
     getCollabDocument: () => {
         throw new Error('a refused import opened the document');
@@ -1703,9 +1707,13 @@ describe('document transform (input bound)', () => {
         try {
             const upload = Buffer.allocUnsafe(MAX_DECOMPRESSED_BYTES + 1);
             const path = { id: 'too-large', type, mimeType } as DrivePath;
-            const error = await importIntoDocument(UNOPENED_DRIVE, path, upload, {} as unknown as User).catch(
-                (reason: unknown) => reason,
-            );
+            const error = await importIntoDocument(
+                UNOPENED_DRIVE,
+                path,
+                upload,
+                { mode: 'replace' },
+                {} as unknown as User,
+            ).catch((reason: unknown) => reason);
             expect(error).toMatchObject({ status: 413, message });
             expect(runSpy.mock.calls.filter(([request]) => request.kind === 'import')).toHaveLength(0);
         } finally {
@@ -1819,7 +1827,13 @@ describe('document transform (admission)', () => {
             const refuse = refuseAdmissionOnce();
             let error: unknown;
             try {
-                await importIntoDocument(UNOPENED_DRIVE, { id: 'refused', ...target } as DrivePath, upload, user);
+                await importIntoDocument(
+                    UNOPENED_DRIVE,
+                    { id: 'refused', ...target } as DrivePath,
+                    upload,
+                    { mode: 'replace' },
+                    user,
+                );
             } catch (err) {
                 error = err;
             } finally {

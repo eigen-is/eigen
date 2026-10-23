@@ -1,5 +1,5 @@
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
-import type { DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { CARD_TITLE_MAX_LENGTH, type ClientFileEventInput } from '@workspace/lib/types/file-history';
 import type { S3Config } from '@workspace/lib/types/mount';
@@ -73,6 +73,14 @@ type _ImportFromDriveSchemaCoversSource =
     Exclude<keyof DriveImportSource, keyof Static<typeof importFromDriveSchema>> extends never ? true : never;
 const _importFromDriveSchemaCheck: _ImportFromDriveSchemaCoversSource = true;
 void _importFromDriveSchemaCheck;
+
+// How File › Import… writes into the open document: the upload's query, the Drive pick's body beside its source.
+export const documentImportSchema = t.Object({
+    mode: t.Union([t.Literal('insert'), t.Literal('replace')]),
+    afterFrameId: t.Optional(t.String()),
+});
+const _documentImportSchemaMatchesType: TypesEqual<Static<typeof documentImportSchema>, DocumentImportOptions> = true;
+void _documentImportSchemaMatchesType;
 
 // Refused as input hygiene, and because a lifecycle rule's <Prefix> can't carry most of them: stripped, the rule
 // would cover another prefix.

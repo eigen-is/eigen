@@ -198,13 +198,14 @@ export async function runBytesTransformToText(
 // Imports carry uploaded bytes instead of a captured document, and hand back what
 // the caller commits: the snapshot JSON (decoded, never parsed, on the main thread)
 // for sheets, a ready Yjs update plus extracted media for documents and decks.
+// The warnings come back too, for the summary an import answers with.
 export async function runImportToSnapshotJson(
     job: SheetsImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
-): Promise<string> {
-    const { result } = await runTransformRequest({ ...job, data }, opts);
-    return new TextDecoder().decode(result.snapshotJson);
+): Promise<{ snapshotJson: string; warnings: TransformWarning[] }> {
+    const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
+    return { snapshotJson: new TextDecoder().decode(result.snapshotJson), warnings };
 }
 
 export async function runImportToDocumentUpdate(

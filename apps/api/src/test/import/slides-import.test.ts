@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
-import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import {
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
@@ -25,10 +25,14 @@ import {
     drivePut,
     driveUpload,
     getTestContext,
+    listVersions,
+    restoreVersion,
 } from '../setup';
 
-// Route contract of Convert to Slides and Import slides…: what a deck holds after each, what its media folder gets,
-// the summary Import slides… answers with, and what is refused before anything is written.
+const INSERT: DocumentImportOptions = { mode: 'insert' };
+
+// Route contract of Convert to Slides and Import… into a deck: what a deck holds after each, what its media folder
+// gets, the summary Import… answers with, and what is refused before anything is written.
 
 const TABLE_URI = 'http://schemas.openxmlformats.org/drawingml/2006/table';
 
@@ -115,11 +119,18 @@ function convertRequest(pathId: string): Promise<Response> {
     );
 }
 
-function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
-    return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
-        method: 'POST',
-        body,
-    });
+function importRequest(pathId: string, body: ArrayBuffer, query = 'mode=insert'): Promise<Response> {
+    return authedRequest(
+        ctx.alice.user.sessionToken,
+        `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import?${query}`,
+        { method: 'POST', body },
+    );
+}
+
+function versionNames(pathId: string): Promise<string[]> {
+    return listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, pathId).then((versions) =>
+        versions.map((version) => version.name),
+    );
 }
 
 async function readDeck(pathId: string): Promise<VectorScene> {
@@ -256,7 +267,7 @@ describe('Convert to Slides', () => {
     }, 60_000);
 });
 
-describe('Import slides…', () => {
+describe('Import… into a deck', () => {
     test("appends the file's slides after the deck's own and leaves its slides and meta alone", async () => {
         const deck = await seededDeck('import-target');
         const result = await assertJson<ImportResult>(await importRequest(deck.id, PPTX));
@@ -310,6 +321,53 @@ describe('Import slides…', () => {
         expect(new Set(await mediaNames(deck.id)).size).toBe(2);
     }, 60_000);
 
+    test('inserts after the slide the request names, before the slides that follow it', async () => {
+        const deck = await seededDeck('import-after-current');
+        const home = await getHome(ctx.alice.user.id);
+        const { doc } = await home.drive.getCollabDocument(mountId, deck.id);
+        writeFrameInDoc(doc, { id: 'fr-last', index: 'a5', name: 'Last slide' });
+        await assertJson<ImportResult>(await importRequest(deck.id, PPTX, 'mode=insert&afterFrameId=fr-own'));
+        const scene = await readDeck(deck.id);
+        expect(scene.frames.map((frame) => frame.name)).toEqual(['Own slide', 'Welcome', '', 'Last slide']);
+        expect(await versionNames(deck.id)).toEqual([]);
+    }, 60_000);
+
+    test("a replace swaps the deck's slides and size for the file's, after saving a version that restores them", async () => {
+        const deck = await seededDeck('import-replace', { slideSize: '16:9' });
+        const result = await assertJson<ImportResult>(await importRequest(deck.id, STANDARD_PPTX, 'mode=replace'));
+        expect(result).toEqual({ success: true, summary: null });
+
+        const scene = await readDeck(deck.id);
+        expect(scene.meta.slideSize).toBe('4:3');
+        expect(scene.frames).toHaveLength(1);
+        expect(scene.frames[0]?.id).not.toBe('fr-own');
+        expect(scene.elements).toHaveLength(1);
+        expect(scene.elements[0]).toMatchObject({ x: 0, y: 0, width: 1920, height: 1440 });
+
+        const [version] = await versionNames(deck.id);
+        expect(version).toBeDefined();
+        await restoreVersion(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, deck.id, version);
+        const restored = await readDeck(deck.id);
+        expect(restored.frames.map((frame) => frame.id)).toEqual(['fr-own']);
+        expect(restored.elements.map((el) => el.id)).toEqual(['el-own']);
+        expect(restored.meta.slideSize).toBe('16:9');
+    }, 60_000);
+
+    test('a replace with a .pptx with no slides says so, leaves the deck untouched and saves no version', async () => {
+        const deck = await seededDeck('import-replace-empty');
+        const before = await readDeck(deck.id);
+        const result = await assertJson<ImportResult>(await importRequest(deck.id, EMPTY_PPTX, 'mode=replace'));
+        expect(result).toEqual({ success: true, summary: 'This presentation has no slides' });
+        expect(await readDeck(deck.id)).toEqual(before);
+        expect(await versionNames(deck.id)).toEqual([]);
+    }, 60_000);
+
+    test('a mode the route does not know is refused', async () => {
+        const deck = await seededDeck('import-unknown-mode');
+        expect((await importRequest(deck.id, PPTX, 'mode=merge')).status).toBe(422);
+        expect((await importRequest(deck.id, PPTX, '')).status).toBe(422);
+    }, 60_000);
+
     test('a .pptx with no slides says so and leaves the deck untouched', async () => {
         const deck = await seededDeck('import-empty');
         const before = await readDeck(deck.id);
@@ -343,7 +401,9 @@ describe('Import slides…', () => {
             return response;
         });
         try {
-            expect(await importIntoDocument(drive, path, Buffer.from(PPTX), alice)).toBe('1 table was not imported.');
+            expect(await importIntoDocument(drive, path, Buffer.from(PPTX), INSERT, alice)).toBe(
+                '1 table was not imported.',
+            );
         } finally {
             runSpy.mockRestore();
         }
@@ -372,7 +432,7 @@ describe('Import slides…', () => {
 
         const before = await readDeck(deck.id);
         try {
-            await expect(importIntoDocument(bobDrive, path, Buffer.from(PPTX), bob)).rejects.toEqual(
+            await expect(importIntoDocument(bobDrive, path, Buffer.from(PPTX), INSERT, bob)).rejects.toEqual(
                 new ApiError(403, 'No write permission'),
             );
         } finally {
@@ -401,7 +461,7 @@ describe('Import slides…', () => {
 
         const before = await readDeck(deck.id);
         try {
-            await expect(importIntoDocument(bobDrive, path, Buffer.from(TEXT_PPTX), bob)).rejects.toEqual(
+            await expect(importIntoDocument(bobDrive, path, Buffer.from(TEXT_PPTX), INSERT, bob)).rejects.toEqual(
                 new ApiError(403, 'No write permission'),
             );
         } finally {

@@ -1,7 +1,11 @@
-import { decodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, type Op, type Sheet, type SheetWithCalcChain } from '@workspace/lib/sheets';
 import {
+    copySheetName,
     createDefaultSheets,
+    iscelldata,
+    mapChartRefs,
     recalcSheets,
+    renameSheetRefs,
     replaySheetsOps,
     sheetsNeedRecalc,
     withMaterializedData,
@@ -76,4 +80,62 @@ export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string): void
         const ops = doc.getArray('ops');
         if (ops.length > 0) ops.delete(0, ops.length);
     });
+}
+
+// Import… as new tabs: the file's sheets go in after the workbook's own as addSheet ops, the way a peer's new tab
+// arrives, so an open tab adds them live and keeps its unflushed edits. Each takes a fresh id, and one whose name the
+// workbook holds is renamed as Duplicate names a copy. What the file says about its own sheets follows: formulas,
+// conditional formats, list sources and links name a sheet by name; charts, link cells and the calc chain by id.
+export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string): void {
+    const snapshot = readSheetsSnapshotJson(doc);
+    const ops = doc.getArray<Op[]>('ops');
+    // A doc never flushed opens on the default sheets, as the editor and readSheetsFromDoc both read it.
+    const current = replaySheetsOps(snapshot ? decodeSheetsSnapshot(snapshot) : createDefaultSheets(), ops.toArray());
+    const imported: SheetWithCalcChain[] = decodeSheetsSnapshot(snapshotJson);
+
+    const taken = current.map((sheet) => sheet.name);
+    const renames = new Map<string, string>();
+    const fresh = imported.map((sheet) => {
+        const name = taken.includes(sheet.name) ? copySheetName(sheet.name, taken) : sheet.name;
+        if (name !== sheet.name) renames.set(sheet.name, name);
+        taken.push(name);
+        return { id: crypto.randomUUID(), name };
+    });
+    const ids = new Map(imported.map((sheet, i) => [sheet.id, fresh[i].id]));
+    const rename = (txt: string) => renameSheetRefs(txt, renames);
+
+    const added = imported.map((sheet, i): Op => {
+        const { id, name } = fresh[i];
+        for (const { v } of sheet.celldata ?? []) {
+            if (typeof v?.f === 'string') v.f = rename(v.f);
+            if (v?.hl) v.hl.id = id;
+        }
+        for (const entry of sheet.calcChain ?? []) entry.id = id;
+        for (const rule of sheet.conditionalFormatRules ?? []) {
+            if (rule.type === 'default' && rule.conditionName === 'formula') {
+                rule.conditionValue = rule.conditionValue.map((value) =>
+                    typeof value === 'string' ? rename(value) : value,
+                );
+            }
+        }
+        for (const rule of Object.values(sheet.dataVerification ?? {})) {
+            if (rule.type === 'dropdown' && iscelldata(rule.value1)) rule.value1 = rename(rule.value1);
+        }
+        for (const link of Object.values(sheet.hyperlink ?? {})) {
+            if (link.linkType === 'sheet') link.linkAddress = renames.get(link.linkAddress) ?? link.linkAddress;
+            else if (link.linkType === 'cellrange') link.linkAddress = rename(link.linkAddress);
+        }
+        const charts = Object.fromEntries(
+            Object.entries(sheet.charts ?? {}).map(([key, chart]) => [
+                key,
+                mapChartRefs(chart, (ref) => {
+                    const sheetId = ids.get(ref.sheetId);
+                    return sheetId ? { ...ref, sheetId } : ref;
+                }),
+            ]),
+        );
+        const value: Sheet = { ...sheet, id, name, order: current.length + i, charts };
+        return { op: 'addSheet', id, path: [], value };
+    });
+    ops.push([added]);
 }

@@ -39,6 +39,13 @@ export function quoteSheetName(name: string): string {
     return `'${name.replace(/'/g, "''")}'`;
 }
 
+const SIMPLE_NAME = new RegExp(`^${SIMPLE_SHEET_NAME}$`);
+
+// The name as a ref's sheet prefix spells it: bare when it can be, quoted otherwise.
+export function sheetRefName(name: string): string {
+    return SIMPLE_NAME.test(name) ? name : quoteSheetName(name);
+}
+
 // Split a cell label like `Sheet1!$A$1` into [row, column, sheetName], null when
 // unparseable. Used by the parser to build cell refs.
 export function extractLabel(label: string): [CellCoordinate, CellCoordinate, string | null] | null {

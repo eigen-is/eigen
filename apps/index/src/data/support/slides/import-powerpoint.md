@@ -1,14 +1,14 @@
 ---
 title: "Import a PowerPoint presentation"
-description: "Turn a .pptx file into a presentation, or add its slides to one you already have."
+description: "Turn a .pptx file into a presentation, add its slides to one you already have, or replace that one's slides with them."
 type: how-to
 tags: [slides, import, powerpoint, pptx]
 related: [slides/export-slides, slides/add-slides]
 order: 100
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
-You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in Drive into a new presentation, or import its slides into a presentation you already have open. Its slides come across with their text, shapes, pictures, charts, and backgrounds.
+You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in Drive into a new presentation, or import its slides into a presentation you already have open, next to your own slides or in their place. Its slides come across with their text, shapes, pictures, charts, and backgrounds.
 
 ## Convert a PowerPoint file in Drive
 
@@ -17,16 +17,17 @@ You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in
 
 A **Converting to slides** dialog shows while the file converts. Eigen then creates a new presentation in the same folder, with the same name as the PowerPoint file, and opens it in Slides. The original `.pptx` file stays in place.
 
-## Add slides to an open presentation
+## Import into an open presentation
 
-Importing adds the file's slides after your last slide. Nothing in the presentation is replaced, so your own slides, comments, and undo history stay as they were.
-
-1. Open the presentation in Slides.
+1. Open the presentation in Slides, on the slide you want the new slides to follow.
 2. Click **File** in the toolbar.
-3. Click **Import slides…**.
-4. In the **Import slides** dialog, browse your Drive and select the `.pptx` file, then click **Select**. To use a file from your computer instead, click **Upload from device** and pick the file.
+3. Click **Import…**.
+4. In the **Import pptx file** dialog, browse your Drive and select the `.pptx` file, then click **Select**. To use a file from your computer instead, click **Upload from device** and pick the file.
+5. Choose how the slides come in, then click **Import**:
+   - **Insert slides** adds the file's slides after the current slide. This is the default. Nothing in the presentation is replaced, so your own slides, comments, and undo history stay as they were.
+   - **Replace all slides** replaces every slide with the file's, and the presentation takes the file's slide size. Eigen saves a version first, so you can get your slides back from **File → Version history**. See [See and restore previous versions of a file](/support/drive/file-versions).
 
-An **Importing slides** dialog shows while the file imports. Pictures from the file are stored with the presentation and count toward your drive's storage: if they don't fit in the space left, the import stops and the presentation stays as it was.
+An **Importing pptx file** dialog shows while the file imports. Pictures from the file are stored with the presentation and count toward your drive's storage: if they don't fit in the space left, the import stops and the presentation stays as it was.
 
 ## What comes across
 
@@ -39,11 +40,11 @@ An **Importing slides** dialog shows while the file imports. Pictures from the f
 - Slide backgrounds: a color, a gradient, or a picture.
 - The shapes and pictures of the slide master and layout, such as a logo or a border, on every slide that shows them.
 
-A converted presentation takes the slide size closest to the file's: a widescreen file becomes a **Widescreen 16:9** presentation and a standard file a **Standard 4:3** one, so its slides fill the page. A size in between, such as 16:10 or A4, takes the closer of the two and is fitted inside it. When you import slides into a presentation of another size, they are fitted inside its slides, centered, with a margin at the sides or at the top and bottom. The presentation keeps its own size.
+A converted presentation takes the slide size closest to the file's: a widescreen file becomes a **Widescreen 16:9** presentation and a standard file a **Standard 4:3** one, so its slides fill the page. A size in between, such as 16:10 or A4, takes the closer of the two and is fitted inside it. When you insert slides into a presentation of another size, they are fitted inside its slides, centered, with a margin at the sides or at the top and bottom. The presentation keeps its own size. When you replace all slides, the presentation takes the size closest to the file's, as a converted one does.
 
 ## What doesn't come across
 
-When you use **Import slides…**, a message afterwards counts what didn't come across, for example "2 tables and 1 SmartArt graphic were not imported; 5 shapes were simplified."
+After an import into an open presentation, a message counts what didn't come across, for example "2 tables and 1 SmartArt graphic were not imported; 5 shapes were simplified."
 
 - A table, SmartArt graphic, or embedded object becomes a box that says what was there, so you can see the gap and rebuild it. The box is see-through, so a title behind it stays readable.
 - A chart Slides can't draw the way PowerPoint does, such as an area, scatter, doughnut, or combo chart, becomes a box that names the kind of chart and its title, for example **Scatter chart not imported**.
@@ -53,6 +54,6 @@ When you use **Import slides…**, a message afterwards counts what didn't come 
 - Within one text box, every line takes the font, size, and color used most in that box.
 - Speaker notes, animations, and transitions aren't imported.
 
-A file with no slides converts to a presentation that opens like a new one, with its welcome slide. Imported into an open presentation, it adds nothing, and a message says "This presentation has no slides".
+A file with no slides converts to a presentation that opens like a new one, with its welcome slide. Imported into an open presentation, it changes nothing, and a message says "This presentation has no slides".
 
 A password-protected file can't be imported, and neither can a macro-enabled presentation (`.pptm`), a template, or a slideshow file. Open it in PowerPoint, save it as a `.pptx` without a password, and import it again.

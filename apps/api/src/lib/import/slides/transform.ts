@@ -27,7 +27,7 @@ export function importPptxToSlidesUpdate(
     try {
         const doc = new Y.Doc();
         doc.transact(() => {
-            // A Convert's deck takes it; Import slides… leaves the open deck's meta alone.
+            // A Convert's or a replace's deck takes it; an insert leaves the open deck's meta alone.
             doc.getMap('meta').set('slideSize', slideSize);
             const frameKeys = generateNKeysBetween(null, null, slides.length);
             const elementKeys = generateNKeysBetween(

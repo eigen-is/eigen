@@ -1,10 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
+import { parseChartSpec } from '@workspace/lib/charts';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
-import { readSheetsFromDoc, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
+import { appendSheetsToYjs, readSheetsFromDoc, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
@@ -693,7 +694,7 @@ describe('document/sheets — patch op replay', () => {
 
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        await importIntoDocument(home.drive, path, buffer, home.user);
+        await importIntoDocument(home.drive, path, buffer, { mode: 'replace' }, home.user);
 
         const { sheets: result } = await readSheets(mount, path);
 
@@ -742,5 +743,127 @@ describe('document/sheets — patch op replay', () => {
         const { sheets: result } = await readSheets(mount, path);
 
         expect(withoutData(result)).toEqual(normalized(sheets));
+    });
+});
+
+describe('document/sheets — appendSheetsToYjs', () => {
+    const range = (sheetId: string) => ({
+        sheetId,
+        row: [0, 2] as [number, number],
+        column: [0, 0] as [number, number],
+    });
+    const spec = JSON.stringify({
+        type: 'bar',
+        title: 'Totals',
+        data: { source: 'range', categories: range('sheet-0'), series: [{ name: 'Sum', values: range('sheet-1') }] },
+    });
+
+    // What a file brings: "Data", whose name the workbook holds, and "Summary", which names it in a formula, a
+    // conditional format, a list source, two links and a chart.
+    const file: Sheet[] = [
+        { id: 'sheet-0', name: 'Data', order: 0, celldata: [{ r: 0, c: 0, v: { v: 5, m: '5' } }], config: {} },
+        {
+            id: 'sheet-1',
+            name: 'Summary',
+            order: 1,
+            celldata: [
+                { r: 0, c: 0, v: { f: '=Data!A1*2', v: 10, m: '10' } },
+                { r: 1, c: 0, v: { v: 'Go', m: 'Go', hl: { r: 1, c: 0, id: 'sheet-1' } } },
+            ],
+            config: {},
+            conditionalFormatRules: [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { textColor: '#ff0000', cellColor: null },
+                    conditionName: 'formula',
+                    conditionRange: [],
+                    conditionValue: ['=A1>Data!A1'],
+                },
+            ],
+            dataVerification: { '2_0': { type: 'dropdown', type2: '', value1: 'Data!A1:A3', value2: '' } },
+            hyperlink: {
+                '1_0': { linkType: 'sheet', linkAddress: 'Data' },
+                '1_1': { linkType: 'cellrange', linkAddress: 'Data!B2' },
+            },
+            charts: { c1: { id: 'c1', index: 'a0', x: 0, y: 0, width: 300, height: 200, spec } },
+        },
+    ];
+
+    function workbook(): Y.Doc {
+        const doc = new Y.Doc();
+        const own: Sheet[] = [
+            { id: 'own', name: 'Data', order: 0, celldata: [{ r: 0, c: 0, v: { v: 1 } }], config: {} },
+        ];
+        doc.getMap('state').set('snapshot', encodeSheetsSnapshot(own, { computed: true }));
+        return doc;
+    }
+
+    test("the sheets arrive as one batch of addSheet ops under fresh ids, after the workbook's own", () => {
+        const doc = workbook();
+        const pending: Op[] = [{ op: 'replace', id: 'own', path: ['name'], value: 'Data' }];
+        doc.getArray('ops').push([pending]);
+        const snapshot = doc.getMap('state').get('snapshot');
+
+        appendSheetsToYjs(doc, encodeSheetsSnapshot(file, { computed: true }));
+
+        expect(doc.getMap('state').get('snapshot')).toBe(snapshot);
+        const batches = doc.getArray<Op[]>('ops').toArray();
+        expect(batches).toHaveLength(2);
+        expect(batches[0]).toEqual(pending);
+        expect(batches[1].map((op) => op.op)).toEqual(['addSheet', 'addSheet']);
+        const ids = batches[1].map((op) => op.id);
+        expect(new Set([...ids, 'own', 'sheet-0', 'sheet-1']).size).toBe(5);
+        expect(batches[1].map((op) => op.value.id)).toEqual(ids);
+        expect(batches[1].map((op) => op.value.order)).toEqual([1, 2]);
+
+        const { sheets } = readSheetsFromDoc(doc, { recalc: false });
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Data', 'Data(Copy)', 'Summary']);
+        expect(sheets[0].celldata).toEqual([{ r: 0, c: 0, v: { v: 1 } }]);
+    });
+
+    test('every ref the file makes to a renamed sheet follows its new name, and every id ref its new id', () => {
+        const doc = workbook();
+        appendSheetsToYjs(doc, encodeSheetsSnapshot(file, { computed: true }));
+        const { sheets } = readSheetsFromDoc(doc, { recalc: false });
+        const [, data, summary] = sheets;
+        const cell = (r: number, c: number) => summary.celldata?.find((e) => e.r === r && e.c === c)?.v;
+
+        expect(cell(0, 0)?.f).toBe("='Data(Copy)'!A1*2");
+        expect(cell(1, 0)?.hl?.id).toBe(summary.id);
+        const rule = summary.conditionalFormatRules?.[0];
+        expect(rule?.type === 'default' && rule.conditionValue).toEqual(["=A1>'Data(Copy)'!A1"]);
+        expect(summary.dataVerification?.['2_0']?.value1).toBe("'Data(Copy)'!A1:A3");
+        expect(summary.hyperlink).toEqual({
+            '1_0': { linkType: 'sheet', linkAddress: 'Data(Copy)' },
+            '1_1': { linkType: 'cellrange', linkAddress: "'Data(Copy)'!B2" },
+        });
+        const chart = parseChartSpec(summary.charts?.['c1']?.spec ?? '');
+        expect(chart?.data.source === 'range' && chart.data.categories?.sheetId).toBe(data.id);
+        expect(chart?.data.source === 'range' && chart.data.series[0]?.values?.sheetId).toBe(summary.id);
+    });
+
+    test('a computed file keeps its calc chain, under the new id', () => {
+        const doc = workbook();
+        appendSheetsToYjs(doc, encodeSheetsSnapshot(file, { computed: true }));
+        const added = doc.getArray<Op[]>('ops').toArray()[0][1].value;
+        expect(added.calcChain).toEqual([{ r: 0, c: 0, id: added.id }]);
+    });
+
+    test('a workbook never flushed takes the file beside the default sheet the editor opens on', () => {
+        const doc = new Y.Doc();
+        appendSheetsToYjs(doc, encodeSheetsSnapshot([{ ...file[0], name: 'Sheet1' }], { computed: true }));
+        const { sheets } = readSheetsFromDoc(doc, { recalc: false });
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Sheet1', 'Sheet1(Copy)']);
+    });
+
+    test("a name nobody holds is kept, and a ref to a sheet the file doesn't bring stays as written", () => {
+        const doc = workbook();
+        const json = encodeSheetsSnapshot([{ ...file[1], name: 'Summary' }], { computed: true });
+        appendSheetsToYjs(doc, json);
+        const [summary] = decodeSheetsSnapshot(json);
+        const added = doc.getArray<Op[]>('ops').toArray()[0][0].value;
+        expect(added.name).toBe('Summary');
+        expect(added.celldata[0].v.f).toBe(summary.celldata?.[0]?.v?.f);
     });
 });

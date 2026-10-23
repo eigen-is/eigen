@@ -9,7 +9,7 @@ import {
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { appendSlidesUpdateToYjs, writeSlidesUpdateToYjs } from '../../lib/document/slides';
+import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../../lib/document/slides';
 
 // What the transform process hands over: a scratch deck encoded as one update.
 function updateOf(build: (doc: Y.Doc) => void): Uint8Array {
@@ -85,7 +85,7 @@ function content(el: VectorElement): Omit<VectorElement, 'id' | 'index' | 'frame
 describe('document/slides', () => {
     test('an append into an empty deck writes every slide and element in the update order', () => {
         const target = new Y.Doc();
-        appendSlidesUpdateToYjs(target, DECK_UPDATE);
+        insertSlidesIntoYjs(target, readSlidesUpdate(DECK_UPDATE), undefined);
         const source = readVectorFromDoc(scratchOf(DECK_UPDATE));
         const scene = readVectorFromDoc(target);
         expect(scene.frames.map((f) => f.name)).toEqual(['One', 'Two']);
@@ -100,7 +100,7 @@ describe('document/slides', () => {
     test('an append into a working deck sorts after it, with fresh ids and remapped frames and bindings', () => {
         const target = existingDeck();
         const before = readVectorFromDoc(target);
-        appendSlidesUpdateToYjs(target, DECK_UPDATE);
+        insertSlidesIntoYjs(target, readSlidesUpdate(DECK_UPDATE), undefined);
         const scene = readVectorFromDoc(target);
 
         expect(scene.frames.slice(0, 2)).toEqual(before.frames);
@@ -122,14 +122,14 @@ describe('document/slides', () => {
 
     test('an imported element starts with no comment cards', () => {
         const target = existingDeck();
-        appendSlidesUpdateToYjs(target, DECK_UPDATE);
+        insertSlidesIntoYjs(target, readSlidesUpdate(DECK_UPDATE), undefined);
         expect(readVectorFromDoc(target).elements.every((el) => el.commentCardIds === '')).toBe(true);
     });
 
     test('two appends of one update write two copies, never one id twice', () => {
         const target = new Y.Doc();
-        appendSlidesUpdateToYjs(target, DECK_UPDATE);
-        appendSlidesUpdateToYjs(target, DECK_UPDATE);
+        insertSlidesIntoYjs(target, readSlidesUpdate(DECK_UPDATE), undefined);
+        insertSlidesIntoYjs(target, readSlidesUpdate(DECK_UPDATE), undefined);
         const scene = readVectorFromDoc(target);
         expect(new Set(scene.frames.map((f) => f.id)).size).toBe(4);
         expect(new Set(scene.elements.map((el) => el.id)).size).toBe(6);
@@ -142,7 +142,7 @@ describe('document/slides', () => {
         const frames = target.getMap('frames');
         const kept = [elements.get('old1'), elements.get('old2'), frames.get('t1'), frames.get('t2')];
         const json = kept.map((map) => (map instanceof Y.Map ? map.toJSON() : null));
-        appendSlidesUpdateToYjs(target, DECK_UPDATE);
+        insertSlidesIntoYjs(target, readSlidesUpdate(DECK_UPDATE), undefined);
         const after = [elements.get('old1'), elements.get('old2'), frames.get('t1'), frames.get('t2')];
         for (const [i, map] of after.entries()) {
             expect(map).toBe(kept[i]);
@@ -156,24 +156,24 @@ describe('document/slides', () => {
         target.on('afterTransaction', () => {
             transactions++;
         });
-        appendSlidesUpdateToYjs(target, DECK_UPDATE);
+        insertSlidesIntoYjs(target, readSlidesUpdate(DECK_UPDATE), undefined);
         expect(transactions).toBe(1);
         const fresh = new Y.Doc();
         let freshTransactions = 0;
         fresh.on('afterTransaction', () => {
             freshTransactions++;
         });
-        writeSlidesUpdateToYjs(fresh, DECK_UPDATE);
+        replaceSlidesInYjs(fresh, readSlidesUpdate(DECK_UPDATE));
         expect(freshTransactions).toBe(1);
     });
 
     test('Convert carries the update meta; Import leaves the target meta alone', () => {
         const converted = new Y.Doc();
-        writeSlidesUpdateToYjs(converted, DECK_UPDATE);
+        replaceSlidesInYjs(converted, readSlidesUpdate(DECK_UPDATE));
         expect(converted.getMap('meta').toJSON()).toEqual({ background: '#123456', slideSize: '4:3' });
 
         const imported = existingDeck();
-        appendSlidesUpdateToYjs(imported, DECK_UPDATE);
+        insertSlidesIntoYjs(imported, readSlidesUpdate(DECK_UPDATE), undefined);
         expect(imported.getMap('meta').toJSON()).toEqual({ background: '#ffffff' });
     });
 
@@ -205,7 +205,7 @@ describe('document/slides', () => {
         });
         const source = readVectorFromDoc(scratchOf(update));
         const target = new Y.Doc();
-        writeSlidesUpdateToYjs(target, update);
+        replaceSlidesInYjs(target, readSlidesUpdate(update));
         const scene = readVectorFromDoc(target);
 
         expect(scene.frames.map(({ id: _id, index: _index, ...rest }) => rest)).toEqual(
@@ -234,8 +234,36 @@ describe('document/slides', () => {
         expect(target.getMap('meta').toJSON()).toEqual(DEFAULT_SCENE_META);
 
         const imported = existingDeck();
-        appendSlidesUpdateToYjs(imported, update);
+        insertSlidesIntoYjs(imported, readSlidesUpdate(update), undefined);
         expect(imported.getMap('meta').toJSON()).toEqual({ background: '#ffffff' });
+    });
+
+    test("an insert after a slide lands between it and the next, the deck's own slides kept in order", () => {
+        const target = existingDeck();
+        insertSlidesIntoYjs(target, readSlidesUpdate(DECK_UPDATE), 't1');
+        const scene = readVectorFromDoc(target);
+        expect(scene.frames.map((f) => f.name || f.id)).toEqual(['t1', 'One', 'Two', 't2']);
+        expect(scene.elements.find((el) => el.id === 'old2')?.frameId).toBe('t2');
+    });
+
+    test('an insert after a slide since deleted lands after the last', () => {
+        const target = existingDeck();
+        insertSlidesIntoYjs(target, readSlidesUpdate(DECK_UPDATE), 'gone');
+        expect(readVectorFromDoc(target).frames.map((f) => f.name || f.id)).toEqual(['t1', 't2', 'One', 'Two']);
+    });
+
+    test("a replace leaves only the update's slides and elements, and the update's meta, in one transaction", () => {
+        const target = existingDeck();
+        let transactions = 0;
+        target.on('afterTransaction', () => {
+            transactions++;
+        });
+        replaceSlidesInYjs(target, readSlidesUpdate(DECK_UPDATE));
+        expect(transactions).toBe(1);
+        const scene = readVectorFromDoc(target);
+        expect(scene.frames.map((f) => f.name)).toEqual(['One', 'Two']);
+        expect(scene.elements.map((el) => el.type)).toEqual(['rectangle', 'arrow', 'ellipse']);
+        expect(target.getMap('meta').toJSON()).toEqual({ background: '#123456', slideSize: '4:3' });
     });
 
     test('an update with elements but no slides adds nothing', () => {
@@ -244,7 +272,7 @@ describe('document/slides', () => {
         });
         const target = existingDeck();
         const before = readVectorFromDoc(target);
-        appendSlidesUpdateToYjs(target, update);
+        insertSlidesIntoYjs(target, readSlidesUpdate(update), undefined);
         expect(readVectorFromDoc(target)).toEqual(before);
     });
 });

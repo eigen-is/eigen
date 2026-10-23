@@ -44,7 +44,6 @@ type FileMenuProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
     onImport?: () => void;
-    importLabel?: string;
     onExport?: (format: ExportFormat) => void;
     createLabel: string;
     createIcon?: LucideIcon;
@@ -59,7 +58,6 @@ export function FileMenu({
     canWrite,
     onAccessDialogOpen,
     onImport,
-    importLabel,
     onExport,
     createLabel,
     createIcon: CreateIcon = FileText,
@@ -102,7 +100,7 @@ export function FileMenu({
                 </DropdownMenuItem>
                 {canWrite && onImport && (
                     <DropdownMenuItem onClick={onImport}>
-                        <Upload className="h-4 w-4 mr-2" /> {importLabel ?? 'Import…'}
+                        <Upload className="h-4 w-4 mr-2" /> Import…
                     </DropdownMenuItem>
                 )}
 

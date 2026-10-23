@@ -25,7 +25,8 @@ export type PptxDeck = {
     slideSize: SlideSize;
 };
 
-// The frame is the deck's on an Import slides…, and none on a Convert, whose deck takes the file's nearest size.
+// The frame is the deck's on an inserting Import…, and none on a Convert or a replace, whose deck takes the file's
+// nearest size.
 export type PptxOptions = { frame?: Frame; maxMediaBytes: number };
 
 export const MAX_MEDIA_PARTS = 1000;

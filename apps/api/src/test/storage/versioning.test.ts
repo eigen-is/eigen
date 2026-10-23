@@ -13,7 +13,16 @@ import {
     selectSnapshotsToPrune,
 } from '../../lib/versioning/retention';
 import { formatSnapshotTimestamp, parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
-import { authedRequest, chatGet, chatPost, driveGet, drivePost, getTestContext } from '../setup';
+import {
+    authedRequest,
+    chatGet,
+    chatPost,
+    driveGet,
+    drivePost,
+    getTestContext,
+    listVersions,
+    restoreVersion,
+} from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -113,34 +122,12 @@ describe('retention pruning (absolute time buckets)', () => {
     });
 });
 
-// Local helpers — the /versions surface is small enough that they live here rather
-// than getting promoted into setup.ts until a second test file needs them.
-
-async function listVersions(token: string, ownerId: string, mountId: string, pathId: string): Promise<Snapshot[]> {
-    return driveGet<Snapshot[]>(token, ownerId, mountId, `file/${pathId}/versions`);
-}
-
 async function saveVersion(token: string, ownerId: string, mountId: string, pathId: string): Promise<Snapshot> {
     const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/versions/save`, {
         method: 'POST',
     });
     if (res.status !== 200) throw new Error(`saveVersion failed: ${res.status} ${await res.text()}`);
     return (await res.json()) as Snapshot;
-}
-
-async function restoreVersion(
-    token: string,
-    ownerId: string,
-    mountId: string,
-    pathId: string,
-    snapshotName: string,
-): Promise<void> {
-    const res = await authedRequest(
-        token,
-        `/drive/${ownerId}/${mountId}/file/${pathId}/versions/${encodeURIComponent(snapshotName)}/restore`,
-        { method: 'POST' },
-    );
-    if (res.status !== 200) throw new Error(`restoreVersion failed: ${res.status} ${await res.text()}`);
 }
 
 describe('versions HTTP routes', () => {
