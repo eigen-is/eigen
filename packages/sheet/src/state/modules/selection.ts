@@ -10,7 +10,7 @@ import {
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
-import { cellDisplay, numberDisplay } from '../../engine/format';
+import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
@@ -1198,7 +1198,7 @@ export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
 // General cuts a number to 11 characters; the clipboard carries Excel's 15 significant digits instead.
 export function copiedNumberText(cell: Cell): string | undefined {
     if (typeof cell.v !== 'number' || (cell.ct?.fa ?? 'General') !== 'General') return undefined;
-    return String(Number(cell.v.toPrecision(15)));
+    return numberText(cell.v);
 }
 
 // The range as the clipboard carries it: an HTML table with the cells' styles, the display text as TSV, and

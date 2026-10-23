@@ -1,7 +1,7 @@
 import numeral from 'numeral';
 import { format, isDateFormat } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
-import type { Cell, CellMatrix, CellType } from './types';
+import type { Cell, CellMatrix, CellType, FormulaArg } from './types';
 import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
 
 // Canonical display for a boolean cell — Excel's uppercase TRUE/FALSE. The xlsx
@@ -9,6 +9,24 @@ import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } fr
 // ones recalc pushes back through `update()`.
 export function booleanDisplay(value: boolean): string {
     return value ? 'TRUE' : 'FALSE';
+}
+
+// Excel's text for a number, in a formula and on the clipboard: 15 significant digits, so 0.1+0.2 is "0.3", and
+// E notation past 15 digits, as for a 16-digit card number (1.23456789012346E+15).
+export function numberText(value: number): string {
+    const rounded = Number(value.toPrecision(15));
+    const text = Math.abs(rounded) >= 1e15 ? rounded.toExponential() : String(rounded);
+    const [mantissa, exponent] = text.split('e');
+    return exponent === undefined ? mantissa : `${mantissa}E${exponent[0]}${exponent.slice(1).padStart(2, '0')}`;
+}
+
+// A value as text joins it (`&`, TEXTJOIN, CONCAT): a boolean upper-case, a formulajs Date as the serial the grid
+// stores, not as Date.toString().
+export function valueText(value: FormulaArg | Date): string {
+    if (typeof value === 'boolean') return booleanDisplay(value);
+    if (value instanceof Date) return numberText(dateToSerial(value));
+    if (typeof value === 'number') return numberText(value);
+    return value?.toString() ?? '';
 }
 
 // Wrap breaks text only; the value decides too, since a formula typed into a text cell keeps its ct.t.

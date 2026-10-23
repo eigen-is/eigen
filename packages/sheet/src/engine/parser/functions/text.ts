@@ -1,20 +1,17 @@
-import { booleanDisplay } from '../../format';
-import type { FormulaOutput } from '../../types';
+import { valueText } from '../../format';
+import type { FormulaArg, FormulaOutput } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
 import { toGrid } from '../helper/array';
-import { dateToSerial, toNumber } from '../helper/number';
+import { toNumber } from '../helper/number';
 import { type FunctionArg, OMITTED } from '../omitted';
 
 // A cell holds at most this many characters; a longer result is #VALUE!.
 const MAX_TEXT_LENGTH = 32_767;
 
-// A range reads row by row; a formulajs Date is the serial the grid stores.
+// A range reads row by row.
 function texts(arg: FunctionArg): string[] {
     if (arg === OMITTED) return [''];
-    if (arg instanceof Date) return [String(dateToSerial(arg))];
-    return toGrid(arg)
-        .flat()
-        .map((value) => (typeof value === 'boolean' ? booleanDisplay(value) : (value?.toString() ?? '')));
+    return toGrid(arg).flat().map(valueText);
 }
 
 function ignoreEmpty(arg: FunctionArg): boolean {
@@ -25,6 +22,11 @@ function ignoreEmpty(arg: FunctionArg): boolean {
 }
 
 // A delimiter range is used in turn, one delimiter per gap, starting over at its end.
+// formulajs joins numbers with JS's toString and Dates with Date.toString().
+export function concatenate(params: FormulaArg[]): FormulaOutput {
+    return params.flatMap(texts).join('');
+}
+
 export function textjoin(params: FunctionArg[]): FormulaOutput {
     const [delimiter, skip, ...args] = params;
     if (args.length === 0) throw Error(ERROR_NOT_AVAILABLE);

@@ -22,4 +22,9 @@ describe('sheet/formula-parser/operator/ampersand', () => {
     test('renders a Date as its serial, not as Date.toString()', () => {
         expect(func(new Date(2026, 0, 5), 'x')).toBe('46027x');
     });
+
+    test('renders a number as Excel does, at 15 significant digits', () => {
+        expect(func(0.1 + 0.2, 'x')).toBe('0.3x');
+        expect(func(1e21, '')).toBe('1E+21');
+    });
 });

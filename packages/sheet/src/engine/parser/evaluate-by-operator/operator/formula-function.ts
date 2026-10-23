@@ -5,7 +5,7 @@ import type { FormulaArg, FormulaOutput } from '../../../types';
 import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
 import { xlookup, xmatch } from '../../functions/lookup';
 import { maxifs, minifs } from '../../functions/statistical';
-import { textjoin } from '../../functions/text';
+import { concatenate, textjoin } from '../../functions/text';
 import { toNumber } from '../../helper/number';
 import { type FunctionArg, OMITTED } from '../../omitted';
 import SUPPORTED_FORMULAS from '../../supported-formulas';
@@ -136,6 +136,9 @@ const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefi
         // Non-numeric text keeps its text, formatted by the mask's text section: TEXT("abc","0") = "abc".
         return update(String(mask), num !== undefined && Number.isFinite(num) ? num : String(value));
     },
+
+    CONCAT: concatenate,
+    CONCATENATE: concatenate,
 
     'CEILING.MATH': withSignificance(formulajs.CEILING.MATH),
     'CEILING.PRECISE': withSignificance(formulajs.CEILING.PRECISE),

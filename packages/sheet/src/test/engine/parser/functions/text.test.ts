@@ -96,6 +96,10 @@ describe('TEXTJOIN', () => {
         expect(value('=TEXTJOIN(",",FALSE,"a",,"b")')).toBe('a,,b');
     });
 
+    test('a number reads as Excel writes it, at 15 significant digits', () => {
+        expect(value('=TEXTJOIN(",",TRUE,0.1+0.2,1E+21)')).toBe('0.3,1E+21');
+    });
+
     test('nothing to join is an empty text', () => {
         expect(value('=TEXTJOIN(",",TRUE,Pairs!A3:B3)')).toBe('');
     });
@@ -111,5 +115,17 @@ describe('TEXTJOIN', () => {
         expect(value('=TEXTJOIN(",","yes","a")')).toBe('#VALUE!');
         expect(value('=TEXTJOIN(",",TRUE)')).toBe('#N/A');
         expect(value('=IFERROR(TEXTJOIN(",",TRUE,1/0),"none")')).toBe('none');
+    });
+});
+
+describe('CONCATENATE and CONCAT', () => {
+    test('a number reads as Excel writes it, a boolean upper-case, a date as its serial', () => {
+        expect(value('=CONCATENATE(0.1+0.2,"|",1E+21)')).toBe('0.3|1E+21');
+        expect(value('=CONCAT("a",TRUE,DATE(2026,1,5))')).toBe('aTRUE46027');
+        expect(value('=CONCAT(Cities!A8:C8)')).toBe('1.5TRUEx');
+    });
+
+    test('an error argument propagates', () => {
+        expect(value('=CONCATENATE("a",1/0)')).toBe('#DIV/0!');
     });
 });
