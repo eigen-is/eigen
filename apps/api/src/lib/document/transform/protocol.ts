@@ -350,6 +350,13 @@ export function toTransferableBuffer(bytes: Uint8Array): ArrayBuffer {
 
 // Every text result (export documents, the import snapshot JSON) crosses as UTF-8
 // bytes the main thread decodes or serves as-is.
+// An import's media files as they cross back.
+export function toTransferableMedia(
+    media: { name: string; contentType: string; data: Uint8Array }[],
+): TransformMedia[] {
+    return media.map(({ name, contentType, data }) => ({ name, contentType, data: toTransferableBuffer(data) }));
+}
+
 export function toTransferableText(text: string): ArrayBuffer {
     return toTransferableBuffer(new TextEncoder().encode(text));
 }

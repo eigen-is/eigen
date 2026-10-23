@@ -9,6 +9,7 @@ import {
     type DocImportWorkerResult,
     type TransformWarning,
     toTransferableBuffer,
+    toTransferableMedia,
 } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { readDocx } from './from-docx';
@@ -36,11 +37,7 @@ export function importDocxToEigendocUpdate(
         update: toTransferableBuffer(update),
         page,
         style,
-        images: images.map((image) => ({
-            name: image.name,
-            contentType: image.contentType,
-            data: toTransferableBuffer(image.data),
-        })),
+        images: toTransferableMedia(images),
         warnings,
     };
 }

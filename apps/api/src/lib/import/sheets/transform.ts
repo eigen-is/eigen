@@ -5,7 +5,7 @@ import {
     type SheetsImportJob,
     type SheetsImportWorkerResult,
     type TransformWarning,
-    toTransferableBuffer,
+    toTransferableMedia,
     toTransferableText,
 } from '../../document/transform/protocol';
 import { readXlsx } from './from-xlsx';
@@ -23,11 +23,7 @@ export function importXlsxToSheetsSnapshot(
     const { sheets, computed } = recalcImportedSheets(read.sheets, warnings);
     return {
         snapshotJson: toTransferableText(encodeSheetsSnapshot(sheets, { computed })),
-        images: read.media.map((image) => ({
-            name: image.name,
-            contentType: image.contentType,
-            data: toTransferableBuffer(image.data),
-        })),
+        images: toTransferableMedia(read.media),
         warnings,
     };
 }

@@ -11,6 +11,7 @@ import {
     type SlidesImportWorkerResult,
     type TransformWarning,
     toTransferableBuffer,
+    toTransferableMedia,
 } from '../../document/transform/protocol';
 import { importError } from '../messages';
 import { readPptx } from './from-pptx';
@@ -58,11 +59,7 @@ export function importPptxToSlidesUpdate(
     }
     return {
         update: toTransferableBuffer(update),
-        images: media.map((image) => ({
-            name: image.name,
-            contentType: image.contentType,
-            data: toTransferableBuffer(image.data),
-        })),
+        images: toTransferableMedia(media),
         warnings,
     };
 }
