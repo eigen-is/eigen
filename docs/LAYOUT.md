@@ -100,6 +100,17 @@ A share dialog's role Remove is a `SelectItem` with the same `variant`, behind a
 
 Pink `#f6339a`, the accent row of the pink column in `packages/lib/src/constants/colors.ts`, is Eigen's accent color. It comes first in `EIGEN_ACCENT_COLORS_SHUFFLED`, the order calendars, labels, chart series and presence hand the accents out in, so what Eigen picks for a user starts in its own color: a new account's first calendar and a chart's first series. A new deck's title slide opens on it too. Rose and fuchsia sit close to it, so they come late in that order ([CHARTS.md](CHARTS.md) has the reasoning).
 
+## A choice is a submenu with a check
+
+**A row that shows a current option or an on state draws a check on its left, and nothing else does.** Google's menus work this way (View › Mode, Format › Line & paragraph spacing, View › Show ruler), so a user reads every Eigen menu the same way, and a screen reader hears each row as checked or not.
+
+- A choice, one of several, goes through `ChoiceMenuItems` in `dropdown-menu.tsx`: one row per option, the current one checked, each a `menuitemradio`. A mixed selection passes no value and checks no row.
+- In a menu of actions the choice is `ChoiceMenuSub`, a submenu named for the property: an equation's Style ▸, the avatar's Theme ▸, a comment's Assign to ▸. A menu whose trigger already names the choice (the Align dropdown, All sheets, Drive's sort, a phone's View options) lists the options directly.
+- An on/off setting is one `DropdownMenuCheckboxItem`, a `menuitemcheckbox` checked when on. A set of them with several on (the comment filter's Color, Assign label) keeps the menu open with `onSelect` preventing the default, and a label only some of the selection has is `checked="indeterminate"`, drawn as a dash.
+- An action that flips its item's state keeps Google's label swap instead of a check: Add or Remove space before paragraph, Create or Remove filter, Watch or Stop watching. Commands that set a value without showing it, such as Format › Align and indent or Format › Text › Bold, stay plain rows, as in Google.
+
+`DropdownMenuRadioGroup` and `DropdownMenuRadioItem` are not exported, so a choice cannot draw Radix's dot. `scripts/check-standards.ts` gates the rest as a hard zero: a `DropdownMenuItem` that draws a `Check` when a condition holds fails. The color picker's swatch grid is exempt, since it marks its color inside the swatch, as Google's palette does. A searchable member list (`MemberCommandList`) is a combobox, not menu rows, and keeps its trailing check.
+
 ## The document apps reach Drive through one config
 
 Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Sheets go through `EigenDocListView` and `EigenDocSharedView`, which filter by the app's MIME type. Their configs come from `buildConfig` in `eigendoc-config.ts`, which reads the EigenDocType registry, so an app gets its sidebar, list and shared views without its own Drive code.

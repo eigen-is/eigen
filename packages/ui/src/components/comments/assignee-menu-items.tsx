@@ -1,7 +1,7 @@
 import { usePublicUsers } from '@workspace/lib/public';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { Check, CircleSlash, UserPlus } from 'lucide-react';
-import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../dropdown-menu';
+import { CircleSlash, UserPlus } from 'lucide-react';
+import { ChoiceMenuSub } from '../dropdown-menu';
 import { MemberAvatar } from './member-avatar';
 
 type AssigneeMenuItemsProps = {
@@ -19,32 +19,44 @@ export function AssigneeMenuItems({ members, currentUserEmail, assignee, onAssig
     const listed = members.filter((m) => m.email !== me);
     const users = usePublicUsers(listed.map((m) => m.email));
     return (
-        <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-                <UserPlus className="h-4 w-4" /> Assign to
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="max-w-64">
-                <DropdownMenuItem onClick={() => onAssign(currentUserEmail)}>
-                    <MemberAvatar email={currentUserEmail} />
-                    <span className="flex-1 truncate">Me</span>
-                    {assignee === currentUserEmail && <Check className="h-4 w-4 shrink-0" />}
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onAssign(null)}>
-                    <CircleSlash className="h-4 w-4 text-muted-foreground" />
-                    <span className="flex-1 truncate">Unassigned</span>
-                    {assignee === null && <Check className="h-4 w-4 shrink-0" />}
-                </DropdownMenuItem>
-                {listed.map((m) => {
-                    const displayName = users[m.email]?.name || m.email.split('@')[0];
-                    return (
-                        <DropdownMenuItem key={m.email} onClick={() => onAssign(m.email)}>
+        <ChoiceMenuSub<string | null>
+            trigger={
+                <>
+                    <UserPlus className="h-4 w-4" /> Assign to
+                </>
+            }
+            contentClassName="max-w-64"
+            value={assignee}
+            options={[
+                {
+                    value: currentUserEmail,
+                    label: (
+                        <>
+                            <MemberAvatar email={currentUserEmail} />
+                            <span className="truncate">Me</span>
+                        </>
+                    ),
+                },
+                {
+                    value: null,
+                    label: (
+                        <>
+                            <CircleSlash className="h-4 w-4 text-muted-foreground" />
+                            <span className="truncate">Unassigned</span>
+                        </>
+                    ),
+                },
+                ...listed.map((m) => ({
+                    value: m.email,
+                    label: (
+                        <>
                             <MemberAvatar email={m.email} />
-                            <span className="flex-1 truncate">{displayName}</span>
-                            {assignee === m.email && <Check className="h-4 w-4 shrink-0" />}
-                        </DropdownMenuItem>
-                    );
-                })}
-            </DropdownMenuSubContent>
-        </DropdownMenuSub>
+                            <span className="truncate">{users[m.email]?.name || m.email.split('@')[0]}</span>
+                        </>
+                    ),
+                })),
+            ]}
+            onChange={onAssign}
+        />
     );
 }

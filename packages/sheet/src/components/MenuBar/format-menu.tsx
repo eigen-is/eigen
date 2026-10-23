@@ -1,5 +1,6 @@
 import type { BorderType } from '@workspace/lib/sheets';
 import {
+    ChoiceMenuItems,
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuSub,
@@ -7,8 +8,7 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ColorPickerMenuItem } from '@workspace/ui/components/media';
-import { Check } from 'lucide-react';
-import { useContext, useState } from 'react';
+import { Fragment, useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -47,7 +47,15 @@ function NumberFormatSubmenu() {
     const { setContext, refs, settings } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
     const { currency } = settings;
-    const defaultFormat = numberMenuPresets(currency);
+    // The presets in Google's groups, split where the list says so.
+    const groups = numberMenuPresets(currency).reduce<{ text: string; value: string; example: string }[][]>(
+        (acc, preset) => {
+            if (preset.value === 'split') acc.push([]);
+            else acc.at(-1)?.push(preset);
+            return acc;
+        },
+        [[]],
+    );
 
     const anchor = useAnchorCell();
     const activeFa = anchor?.ct?.fa ?? 'General';
@@ -62,33 +70,32 @@ function NumberFormatSubmenu() {
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Number</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                {defaultFormat.map(({ text, value, example }, ii) => {
-                    if (value === 'split') {
-                        // biome-ignore lint/suspicious/noArrayIndexKey: separator in static defaultFormat list
-                        return <DropdownMenuSeparator key={`split-${ii}`} />;
-                    }
-                    return (
-                        <DropdownMenuItem
-                            key={value}
-                            onClick={() => {
+                {groups.map((group) => (
+                    <Fragment key={group[0]?.value}>
+                        <DropdownMenuSeparator />
+                        <ChoiceMenuItems
+                            value={activeFa}
+                            options={group.map(({ text, value, example }) => ({
+                                value,
+                                label: (
+                                    <>
+                                        <span>{text}</span>
+                                        <span className="ml-auto pl-6 text-xs opacity-50">{example}</span>
+                                    </>
+                                ),
+                            }))}
+                            onChange={(value) =>
                                 setContext((ctx) => {
                                     handleNumberFormat(ctx, refs.cellInput.current!, value);
-                                });
-                            }}
-                        >
-                            <span className="flex w-4 shrink-0 items-center justify-center">
-                                {value === activeFa && <Check className="size-4" />}
-                            </span>
-                            <span>{text}</span>
-                            <span className="ml-auto pl-6 text-xs opacity-50">{example}</span>
-                        </DropdownMenuItem>
-                    );
-                })}
+                                })
+                            }
+                        />
+                    </Fragment>
+                ))}
                 <DropdownMenuSeparator />
                 {customItems.map(({ text, dialog }) => (
-                    <DropdownMenuItem key={text} onClick={() => showDialog(dialog)}>
-                        <span className="w-4 shrink-0" />
-                        <span>{text}</span>
+                    <DropdownMenuItem key={text} inset onClick={() => showDialog(dialog)}>
+                        {text}
                     </DropdownMenuItem>
                 ))}
             </DropdownMenuSubContent>

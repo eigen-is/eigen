@@ -6,9 +6,9 @@ import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { ToolbarMenu } from '@workspace/ui';
 import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
+    ChoiceMenuItems,
+    ChoiceMenuSub,
     DropdownMenuItem,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuSub,
@@ -282,17 +282,11 @@ export const FormatMenu = ({
                 <UnfoldVertical className="h-4 w-4" /> Line & paragraph spacing
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup value={active.lineSpacing === undefined ? '' : String(active.lineSpacing)}>
-                    {LINE_SPACINGS.map(({ value, label }) => (
-                        <DropdownMenuRadioItem
-                            key={label}
-                            value={String(value)}
-                            onSelect={() => editor.chain().focus().setParagraphFormat({ lineSpacing: value }).run()}
-                        >
-                            {label}
-                        </DropdownMenuRadioItem>
-                    ))}
-                </DropdownMenuRadioGroup>
+                <ChoiceMenuItems<number>
+                    value={active.lineSpacing}
+                    options={LINE_SPACINGS}
+                    onChange={(lineSpacing) => editor.chain().focus().setParagraphFormat({ lineSpacing }).run()}
+                />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                     disabled={!active.paragraphSpacing}
@@ -342,24 +336,16 @@ export const FormatMenu = ({
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                        <ListOrdered className="h-4 w-4" /> Numbered list
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                        <DropdownMenuRadioGroup value={active.orderedListType}>
-                            {NUMBERED_LIST_STYLES.map(({ type, preview }) => (
-                                <DropdownMenuRadioItem
-                                    key={type}
-                                    value={type}
-                                    onSelect={() => setNumberedListType(editor, type)}
-                                >
-                                    {preview}
-                                </DropdownMenuRadioItem>
-                            ))}
-                        </DropdownMenuRadioGroup>
-                    </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                <ChoiceMenuSub<string>
+                    trigger={
+                        <>
+                            <ListOrdered className="h-4 w-4" /> Numbered list
+                        </>
+                    }
+                    value={active.orderedListType}
+                    options={NUMBERED_LIST_STYLES.map(({ type, preview }) => ({ value: type, label: preview }))}
+                    onChange={(type) => setNumberedListType(editor, type)}
+                />
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>
                     <List className="h-4 w-4" /> Bulleted list
                 </DropdownMenuItem>

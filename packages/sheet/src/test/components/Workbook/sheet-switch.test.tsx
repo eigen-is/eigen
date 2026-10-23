@@ -1,6 +1,6 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { menuRows } from '@workspace/ui/test/menu-rows';
+import { checkRows, clickRow, menuRows } from '@workspace/ui/test/menu-rows';
 
 installHappyDom();
 
@@ -125,6 +125,29 @@ test('undoing an added sheet lands on the first visible sheet in tab order', asy
     });
     expect(workbook().getAllSheets()).toHaveLength(3);
     expect(current()).toBe('Two');
+});
+
+// All sheets is the choice of sheet: the visible ones in tab order, the current one checked.
+test('All sheets lists the visible sheets in tab order, checks the current one and switches to a pick', async () => {
+    const { container, current } = await mountWorkbook();
+    const open = () =>
+        act(async () => {
+            container
+                .querySelector('button[aria-label="All sheets"]')
+                ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        });
+    await open();
+    expect(checkRows()).toEqual([
+        ['Two', 'false'],
+        ['One', 'true'],
+    ]);
+    await clickRow('Two');
+    expect(current()).toBe('Two');
+    await open();
+    expect(checkRows()).toEqual([
+        ['Two', 'true'],
+        ['One', 'false'],
+    ]);
 });
 
 // A tab's menu in the one menu order: Delete, which Google puts first, goes last and red.

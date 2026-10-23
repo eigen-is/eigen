@@ -19,11 +19,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { DocumentImportPicker, DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
+    ChoiceMenuItems,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuShortcut,
     DropdownMenuTrigger,
@@ -475,22 +474,23 @@ export const EditorToolbar = ({
                                             <TooltipContent>Align</TooltipContent>
                                         </Tooltip>
                                         <DropdownMenuContent onCloseAutoFocus={keepActiveEditorFocus}>
-                                            <DropdownMenuRadioGroup value={active.alignment}>
-                                                {TEXT_ALIGNS.map((alignment) => {
+                                            <ChoiceMenuItems
+                                                value={active.alignment}
+                                                options={TEXT_ALIGNS.map((alignment) => {
                                                     const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
-                                                    return (
-                                                        <DropdownMenuRadioItem
-                                                            key={alignment}
-                                                            value={alignment}
-                                                            onSelect={() =>
-                                                                editor.chain().focus().setTextAlign(alignment).run()
-                                                            }
-                                                        >
-                                                            <Icon className="h-4 w-4" /> {label}
-                                                        </DropdownMenuRadioItem>
-                                                    );
+                                                    return {
+                                                        value: alignment,
+                                                        label: (
+                                                            <>
+                                                                <Icon className="h-4 w-4" /> {label}
+                                                            </>
+                                                        ),
+                                                    };
                                                 })}
-                                            </DropdownMenuRadioGroup>
+                                                onChange={(alignment) =>
+                                                    editor.chain().focus().setTextAlign(alignment).run()
+                                                }
+                                            />
                                         </DropdownMenuContent>
                                     </DropdownMenu>
 

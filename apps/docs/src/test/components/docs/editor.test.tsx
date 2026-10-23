@@ -973,7 +973,7 @@ test('a right-click in a table in the band being edited opens its menu, which wr
     expect(doc.getXmlFragment('default').toString()).toBe('<paragraph>Hello</paragraph>');
 });
 
-const EQUATION_ROWS = ['Cut', 'Copy', '—', 'Edit equation', '—', 'In line with text', 'On its own line'];
+const EQUATION_ROWS = ['Cut', 'Copy', '—', 'Edit equation', '—', 'Style'];
 
 // An empty equation in the body, after the text.
 async function bodyEquation(as = WRITER) {
@@ -990,15 +990,23 @@ test('a right-click on an equation offers a writer its menu, Delete equation red
     expect(document.querySelector('[role="menuitem"][data-variant="destructive"]')?.textContent?.trim()).toBe(
         'Delete equation',
     );
-    // The display it has is the one checked.
-    expect(document.querySelector('[role="menuitemradio"][aria-checked="true"]')?.textContent?.trim()).toBe(
-        'In line with text',
-    );
+    // Style is the panel's row: its two options in a submenu, the display it has checked.
+    await openSubmenu('Style');
+    expect(
+        [...document.querySelectorAll('[role="menuitemradio"]')].map((row) => [
+            row.textContent?.trim(),
+            row.getAttribute('aria-checked'),
+        ]),
+    ).toEqual([
+        ['In line with text', 'true'],
+        ['On its own line', 'false'],
+    ]);
 });
 
 test('the equation menu sets its display, opens its panel and deletes it', async () => {
     await bodyEquation();
     await rightClick(bodyView()?.querySelector('.equation'));
+    await openSubmenu('Style');
     await pick('On its own line');
     expect(doc.getXmlFragment('default').toString()).toContain('display="true"');
 
@@ -1049,6 +1057,7 @@ test('a right-click on an equation in the band being edited opens its menu, whic
     await rightClick(bandView('header')?.querySelector('.equation'));
     // Comments anchor in the body only.
     expect(menuRows()).toEqual([...EQUATION_ROWS, '—', 'Delete equation']);
+    await openSubmenu('Style');
     await pick('On its own line');
     expect(doc.getXmlFragment('header').toString()).toContain('display="true"');
     expect(doc.getXmlFragment('default').toString()).not.toContain('equation');
