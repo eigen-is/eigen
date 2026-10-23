@@ -41,22 +41,26 @@ import type { Mount } from '../mount';
 import type { User } from '../user';
 import { IMPORT_MESSAGES, importSummary, PRESENTATION_EMPTY } from './messages';
 
-const XLSX_TO_SHEETS: SheetsImportJob = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets' };
-
 // Parsing, guards, recalc and serialization run in the transform process; the main
 // thread only commits what it returns — the snapshot for sheets, a ready Yjs update
 // plus extracted media for documents. Nothing is created or mutated before the transform
 // succeeds, so a failed import leaves source and target untouched.
 // Refuse before the copy: a view over a larger pool is copied out, and IPC copies the
 // upload again, so a job the runner will not admit must not pay for it. run() rechecks
-// authoritatively.
+// authoritatively. The upload cap bounds the pictures' inflated bytes too, as an upload of each would be bounded.
 function importXlsxSnapshot(
     buffer: Buffer,
     signal?: AbortSignal,
-): Promise<{ snapshotJson: string; warnings: TransformWarning[] }> {
+): Promise<{ snapshotJson: string; images: TransformMedia[]; warnings: TransformWarning[] }> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'xlsx');
-    return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), { signal });
+    const job: SheetsImportJob = {
+        kind: 'import',
+        sourceFormat: 'xlsx',
+        targetType: 'eigensheets',
+        maxMediaBytes: getMaxUploadSize(),
+    };
+    return runImportToSnapshotJson(job, toTransferableBuffer(buffer), { signal });
 }
 
 function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
@@ -170,9 +174,14 @@ export async function convertToDocument(
     const name = sourcePath.name.slice(0, -`.${format}`.length);
 
     if (targetType === 'eigensheets') {
-        const { snapshotJson } = await importXlsxSnapshot(buffer);
+        const { snapshotJson, images } = await importXlsxSnapshot(buffer);
+        // Refused before the create, as a deck's: a file whose pictures can't fit makes no document.
+        await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
         const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
-        return fillNewDocument(drive, newPath, user, (doc) => writeSheetsSnapshotToYjs(doc, snapshotJson));
+        return fillNewDocument(drive, newPath, user, async (doc) => {
+            await saveDocImages(drive, newPath, images, user);
+            writeSheetsSnapshotToYjs(doc, snapshotJson);
+        });
     }
 
     if (targetType === 'eigenslides') {
@@ -212,10 +221,14 @@ export async function importIntoDocument(
     // the caller's bytes — the same gate exportDocument applies.
     const containerMime = isCollabType(path.type) ? path.mimeType : '';
     if (containerMime === DRIVE_MIME_SHEETS) {
-        const { snapshotJson, warnings } = await importXlsxSnapshot(buffer, signal);
+        const { snapshotJson, images, warnings } = await importXlsxSnapshot(buffer, signal);
+        // As a deck's: media before the snapshot that names it, the write check last. The importer prefixes its
+        // picture names per import, so they land beside the workbook's media, never over it.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
         signal?.throwIfAborted();
         if (mode === 'replace') await drive.saveVersion(path.mountId, path.id);
+        await requireWritePermission(drive, path, user);
+        await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
         if (mode === 'replace') writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
         else appendSheetsToYjs(collabDoc.doc, snapshotJson);

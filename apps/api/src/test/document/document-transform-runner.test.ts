@@ -57,7 +57,7 @@ function pngMedia(buffers: ArrayBuffer[]): ExportMedia[] {
 }
 
 function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = new ArrayBuffer(0)): TestRequest {
-    return { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data, test: directive };
+    return { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', maxMediaBytes: 0, data, test: directive };
 }
 
 // The only result arm with a nested payload of its own: the extracted docx images.

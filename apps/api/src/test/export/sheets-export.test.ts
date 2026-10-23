@@ -1,11 +1,18 @@
 import { describe, expect, test } from 'bun:test';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import type { ConditionalFormatRule, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { parseOoxml, SML_NS } from '../../lib/core/ooxml';
 import { type XmlElement, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import { openZip } from '../../lib/core/zip';
 import type { TransformWarning } from '../../lib/document/transform/protocol';
+import { exportDocument } from '../../lib/export/export-document';
 import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
+import { getHome } from '../../lib/home/get-home';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
+import { seedDocumentMedia } from '../fixtures/golden-documents';
+import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
+import { driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // The raw XML, for what the import doesn't read back: the form a part is written in.
 function readZipEntry(bytes: Uint8Array, path: string): string {
@@ -1236,4 +1243,63 @@ describe('Sheets xlsx export — colors', () => {
         expect(argbs).toEqual(expect.arrayContaining(['FFAA0000', 'FF00FF00']));
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain('rgb="FF6633CC"');
     });
+});
+
+// The whole export: the transform names the sheets' images, the main thread prepares them as a docx's, and the drawing
+// part shows them among the charts.
+describe('an xlsx export carries the sheets’ images', () => {
+    test('each image once under xl/media, the PNG from its source and an SVG beside its PNG', async () => {
+        const ctx = await getTestContext();
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, 'default', 'root');
+        const created = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            'default',
+            `folder/${root.id}/create/sheets`,
+            { fileName: 'Pictures' },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument('default', created.id);
+        const box = { x: 10, y: 10, width: 40, height: 20 };
+        const sheets: Sheet[] = [
+            {
+                name: 'One',
+                celldata: [],
+                images: {
+                    photo: { id: 'photo', index: 'a0', ...box, mediaName: 'photo.png' },
+                    drawing: { id: 'drawing', index: 'a2', ...box, angle: 90, mediaName: 'drawing.svg' },
+                    gone: { id: 'gone', index: 'a3', ...box, mediaName: 'gone.png' },
+                },
+                charts: { chart: { id: 'chart', index: 'a1', ...box, spec: JSON.stringify(sampleChartSpec('pie')) } },
+            },
+            {
+                name: 'Two',
+                celldata: [],
+                images: { again: { id: 'again', index: 'a0', ...box, mediaName: 'photo.png' } },
+            },
+        ];
+        writeSheetsToYjs(collab.doc, sheets, { computed: false });
+        const { mount, path } = await home.drive.resolveFile('default', created.id);
+        await seedDocumentMedia(mount, path, 'photo.png', TEST_PNG_BYTES);
+        const svg =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20"/></svg>';
+        await seedDocumentMedia(mount, path, 'drawing.svg', new TextEncoder().encode(svg), 'image/svg+xml');
+
+        const result = await exportDocument(mount, path, 'xlsx');
+        const zip = openZip(result.data);
+        expect(zip.names().filter((name) => name.startsWith('xl/media/'))).toEqual([
+            'xl/media/image1.png',
+            'xl/media/image2.png',
+            'xl/media/image2.svg',
+        ]);
+        const signature = (name: string) =>
+            Buffer.from(zip.read(name) ?? [])
+                .subarray(1, 4)
+                .toString();
+        expect([signature('xl/media/image1.png'), signature('xl/media/image2.png')]).toEqual(['PNG', 'PNG']);
+        expect(readZipEntry(result.data, '[Content_Types].xml')).toContain(
+            '<Default Extension="png" ContentType="image/png"/>',
+        );
+        expect(readZipEntry(result.data, 'xl/drawings/_rels/drawing2.xml.rels')).toContain('../media/image1.png');
+    }, 120_000);
 });

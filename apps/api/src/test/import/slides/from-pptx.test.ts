@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, slideFontSize, slidePtToPx } from '@workspace/lib/vector';
 import { ApiError } from '../../../lib/core/errors';
-import { MAX_MEDIA_PARTS, MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
+import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
+import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_SLIDES } from '../../../lib/import/slides/package';
 import { MAX_ELEMENTS, MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import { box, buildPptx, NS, PIXEL_PNG, para, pic, pptxParts, rel, solid, sp, zipParts } from '../../fixtures/pptx';

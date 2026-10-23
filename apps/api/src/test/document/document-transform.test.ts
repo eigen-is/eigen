@@ -747,10 +747,18 @@ async function expectFailedConvertCreatesNoDestination(fixture: ImportFormatFixt
     }
 }
 
+const XLSX_JOB = { maxMediaBytes: 35 * 1024 * 1024 };
+
 describe('document transform (xlsx import)', () => {
     test('Worker import equals the pre-move parse + recalc pipeline', async () => {
         const response = await documentTransformRunner.run(
-            { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data: await buildImportFixture() },
+            {
+                kind: 'import',
+                sourceFormat: 'xlsx',
+                targetType: 'eigensheets',
+                maxMediaBytes: XLSX_JOB.maxMediaBytes,
+                data: await buildImportFixture(),
+            },
             EXPORT_OPTIONS,
         );
         const snapshotJson = importSnapshot(response);
@@ -758,7 +766,7 @@ describe('document transform (xlsx import)', () => {
         expect(response.ok && response.warnings).toEqual([]);
 
         // The same pure pipeline the Worker dispatches to, run on this thread.
-        const direct = importXlsxToSheetsSnapshot(await buildImportFixture());
+        const direct = importXlsxToSheetsSnapshot(await buildImportFixture(), XLSX_JOB);
         expect(snapshotJson).toBe(new TextDecoder().decode(direct.snapshotJson));
         // The stale cached SUM(B2:B3)=999 was recomputed at import.
         const sheets = decodeSheetsSnapshot(snapshotJson);
@@ -790,7 +798,7 @@ describe('document transform (xlsx import)', () => {
             },
         }));
         try {
-            const { snapshotJson, warnings } = importXlsxToSheetsSnapshot(await buildImportFixture());
+            const { snapshotJson, warnings } = importXlsxToSheetsSnapshot(await buildImportFixture(), XLSX_JOB);
             expect(warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
             const sheets = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
             // Parsed values survive: the xlsx's own stale cached result, not a failure.
@@ -811,7 +819,10 @@ describe('document transform (xlsx import)', () => {
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Warned', order: 0, celldata: [], config: {} }];
         const runSpy = interceptRunOnce('import', async () => ({
             ok: true as const,
-            result: { snapshotJson: new TextEncoder().encode(JSON.stringify(sheets)).buffer as ArrayBuffer },
+            result: {
+                snapshotJson: new TextEncoder().encode(JSON.stringify(sheets)).buffer as ArrayBuffer,
+                images: [],
+            },
             warnings: [{ code: 'recalc-failed' as const, message: 'forced' }],
         }));
         const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});

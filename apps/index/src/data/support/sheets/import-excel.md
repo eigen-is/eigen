@@ -56,6 +56,7 @@ The import reads every sheet in the workbook and preserves:
 - Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)
 - Column, bar, line, and pie charts, with their colors and title, over the same cells as in Excel. A 3-D chart comes in flat. See [Add a chart to a spreadsheet](/support/sheets/add-a-chart).
 - Chart sheets, each as a sheet of its own with its chart in the top-left corner
+- Images floating over the cells, at the same size and angle, in front of or behind the charts as in Excel. An image in a format Sheets can't show, such as EMF, WMF, or TIFF, is left out.
 
 A chart reads its cells, so it changes when you edit them. A chart whose data comes from a named range, from several separate ranges, or from another workbook shows the numbers saved in the file instead, and doesn't change with the cells.
 
@@ -66,7 +67,7 @@ Fonts from Excel are mapped to the four fonts Sheets supports. Common sans-serif
 The following are not imported:
 
 - Charts Sheets can't draw the way Excel does, such as area, scatter, doughnut, combo, and waterfall charts. A chart sheet holding one comes in as an empty sheet.
-- Images, whether in cells or floating over them, and shapes such as text boxes
+- Images placed inside cells, and shapes such as text boxes
 - Comments and notes
 
 If these are important, keep the original `.xlsx` file in Drive so you have a reference copy.

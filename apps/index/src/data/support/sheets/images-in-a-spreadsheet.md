@@ -58,6 +58,6 @@ If the comments panel is open, it takes the same space. Close it to get the imag
 
 <div class="eigen-callout">
 
-Images live in the spreadsheet itself. They appear in the PDF and web page downloads and in the preview of the file in Drive, but they are not included when you download the spreadsheet as Excel.
+Images live in the spreadsheet itself. They appear in the PDF and web page downloads, in the preview of the file in Drive, and in the Excel download, over the same cells and at the same angle.
 
 </div>

@@ -1,16 +1,22 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { CHART_MAX_SIDE, parseChartSpec } from '@workspace/lib/charts';
 import {
+    floatingItems,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_COL_WIDTH,
     type Sheet,
 } from '@workspace/lib/sheets';
 import { CHART_CONTENT_TYPE } from '../../../lib/core/ooxml-chart';
+import { openZip, writeZip } from '../../../lib/core/zip';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
+import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { CHART_SHEET_SIZE } from '../../../lib/import/sheets/drawing';
-import { xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
+import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
+import { PIXEL_PNG } from '../../fixtures/pptx';
 import { type FixtureSheet, OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 
 // A sheet's drawing: each chart anchored on a worksheet a SheetChart over the cells Excel draws it over, its refs by
@@ -311,7 +317,7 @@ describe('a worksheet chart', () => {
         expect(warnings).toEqual([{ code: 'charts-dropped', count: count - placed }]);
     });
 
-    test("mc:AlternateContent reads the branch in the drawing's vocabulary; pictures and shapes are not read", () => {
+    test("mc:AlternateContent reads the branch in the drawing's vocabulary; shapes are not read", () => {
         const picture = `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="3" name="Picture"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId7"/></xdr:blipFill><xdr:spPr/></xdr:pic>`;
         const shape =
             '<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="4" name="Box"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr/></xdr:sp>';
@@ -331,7 +337,194 @@ describe('a worksheet chart', () => {
             }),
         );
         expect(chartsOf(sheets[0]).map((chart) => chart.y)).toEqual([20, 200]);
+        // The picture names no part.
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
+    });
+});
+
+// A drawing of pictures, each `[id, target]` relationship an image part with these bytes, beside a column chart as rId1.
+function pictures(anchors: string, images: [id: string, target: string, data: Uint8Array][]): Uint8Array {
+    const base = workbook({
+        sheets: [{ name: 'Data', data: DATA }],
+        anchors,
+        charts: [column('Data')],
+        more: images.map(([id, target]): [string, string, string] => [id, 'image', target]),
+    });
+    const zip = openZip(base);
+    const entries = zip.names().map((name) => ({ name, data: zip.read(name) ?? new Uint8Array() }));
+    const types = entries.find((entry) => entry.name === '[Content_Types].xml');
+    if (types)
+        types.data = new TextEncoder().encode(
+            new TextDecoder()
+                .decode(types.data)
+                .replace(
+                    '<Default Extension="xml"',
+                    `${[...IMAGE_EXTENSION_BY_MIME, ['image/jpeg', 'jpg']]
+                        .map(([mime, extension]) => `<Default Extension="${extension}" ContentType="${mime}"/>`)
+                        .join('')}<Default Extension="xml"`,
+                ),
+        );
+    const media = images.map(([, target, data]) => ({ name: `xl/${target.replace('../', '')}`, data }));
+    return writeZip([...entries, ...media]);
+}
+
+const pic = (id: string, xfrm = '') =>
+    `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="3" name="Picture"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${id}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr>${xfrm}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>`;
+const turned = (degrees: number) =>
+    `<a:xfrm rot="${degrees * 60_000}"><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>`;
+
+const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
+const SVG_BYTES = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+
+function readPictures(bytes: Uint8Array, maxMediaBytes = 1024 * 1024) {
+    const warnings: TransformWarning[] = [];
+    const { sheets, media } = readXlsx(bytes, { maxMediaBytes }, warnings);
+    const images = Object.values(sheets[0].images ?? {});
+    return { sheet: sheets[0], images, media, warnings };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+describe('a worksheet picture', () => {
+    test('a two-cell, a one-cell and an absolute anchor each place it, painted in file order among the charts', () => {
+        const { sheet, images, media, warnings } = readPictures(
+            pictures(
+                twoCell([0, 10 * PX, 1, 0], [2, 0, 5, 0], pic('rIdP')) +
+                    twoCell([0, 0, 10, 0], [3, 0, 20, 0], graphicFrame('rId1')) +
+                    oneCell([1, 4 * PX, 2, 0], 30 * PX, 20 * PX, pic('rIdP')) +
+                    absolute(50 * PX, 60 * PX, 40 * PX, 25 * PX, pic('rIdJ')),
+                [
+                    ['rIdP', '../media/image1.png', PIXEL_PNG],
+                    ['rIdJ', '../media/image2.jpg', JPEG],
+                ],
+            ),
+        );
         expect(warnings).toEqual([]);
+        // Excel's default column is 64 px.
+        expect(images.map(({ x, y, width, height }) => [x, y, width, height])).toEqual([
+            [10, 20, 118, 80],
+            [68, 40, 30, 20],
+            [50, 60, 40, 25],
+        ]);
+        expect(images.every((image) => UUID.test(image.id) && image.angle === undefined)).toBe(true);
+        const [chart] = chartsOf(sheet);
+        expect([
+            images[0].index < chart.index,
+            chart.index < images[1].index,
+            images[1].index < images[2].index,
+        ]).toEqual([true, true, true]);
+        // One media file a part, however many pictures show it, named by the import's prefix.
+        const [png, jpeg] = media;
+        expect(png.name).toMatch(/^xlsx-[0-9a-f-]{36}-image-1\.png$/);
+        expect(jpeg.name).toBe(png.name.replace('image-1.png', 'image-2.jpeg'));
+        expect(images.map((image) => image.mediaName)).toEqual([png.name, png.name, jpeg.name]);
+        expect(media.map(({ contentType, data }) => [contentType, [...data]])).toEqual([
+            ['image/png', [...PIXEL_PNG]],
+            ['image/jpeg', [...JPEG]],
+        ]);
+        expect(
+            readPictures(
+                pictures(twoCell([0, 0, 0, 0], [1, 0, 1, 0], pic('rIdP')), [['rIdP', '../media/a.png', PIXEL_PNG]]),
+            ).media[0].name,
+        ).not.toBe(png.name);
+    });
+
+    test('its turn is its a:xfrm rot, and sideways its anchor is its box turned a quarter', () => {
+        const { images } = readPictures(
+            pictures(
+                // 50 by 200 about (200, 125) in px, B2 and on at Excel's 64 px columns.
+                twoCell([2, 47 * PX, 1, 5 * PX], [3, 33 * PX, 11, 5 * PX], pic('rIdP', turned(90))) +
+                    twoCell([1, 0, 5, 0], [3, 0, 7, 10 * PX], pic('rIdP', turned(30))) +
+                    twoCell([1, 0, 5, 0], [3, 0, 7, 10 * PX], pic('rIdP', turned(-90))),
+                [['rIdP', '../media/image1.png', PIXEL_PNG]],
+            ),
+        );
+        expect(images.map(({ x, y, width, height, angle }) => [x, y, width, height, angle])).toEqual([
+            [100, 100, 200, 50, 90],
+            [64, 100, 128, 50, 30],
+            [103, 61, 50, 128, 270],
+        ]);
+    });
+
+    test("an SVG comes in as its svgBlip; EMF, WMF and TIFF, and a part that isn't there, are left out and counted", () => {
+        const svgBlip = `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="3" name="Picture"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rIdP"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="rIdS"/></a:ext></a:extLst></a:blip></xdr:blipFill><xdr:spPr/></xdr:pic>`;
+        const { images, media, warnings } = readPictures(
+            pictures(
+                twoCell([0, 0, 0, 0], [1, 0, 1, 0], svgBlip) +
+                    twoCell([0, 0, 2, 0], [1, 0, 3, 0], pic('rIdE')) +
+                    twoCell([0, 0, 4, 0], [1, 0, 5, 0], pic('rIdW')) +
+                    twoCell([0, 0, 6, 0], [1, 0, 7, 0], pic('rIdT')) +
+                    twoCell([0, 0, 8, 0], [1, 0, 9, 0], pic('rIdGone')),
+                [
+                    ['rIdP', '../media/image1.png', PIXEL_PNG],
+                    ['rIdS', '../media/image2.svg', SVG_BYTES],
+                    ['rIdE', '../media/image3.emf', JPEG],
+                    ['rIdW', '../media/image4.wmf', JPEG],
+                    ['rIdT', '../media/image5.tiff', JPEG],
+                ],
+            ),
+        );
+        expect(media.map(({ name, contentType }) => [name.slice(-11), contentType])).toEqual([
+            ['image-1.svg', 'image/svg+xml'],
+        ]);
+        expect(images.map((image) => image.mediaName)).toEqual([media[0].name]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 4 }]);
+    });
+
+    // markitdown's sample, written by openpyxl: four PNGs over three sheets, each a one-cell anchor at 300 by 80 px.
+    test("a real workbook's pictures come in, each sheet's in file order", () => {
+        const bytes = readFileSync(
+            join(import.meta.dir, '../../fixtures/workbooks/markitdown-xlsx_multiple_images.xlsx'),
+        );
+        const warnings: TransformWarning[] = [];
+        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 }, warnings);
+        expect(warnings).toEqual([]);
+        const placed = sheets.map((sheet) =>
+            floatingItems(sheet).map(({ object }) => [object.x, object.y, object.width, object.height]),
+        );
+        expect(placed).toEqual([
+            [
+                [0, 60, 300, 80],
+                [0, 160, 300, 80],
+            ],
+            [[0, 60, 300, 80]],
+            [[0, 60, 300, 80]],
+        ]);
+        const names = sheets.flatMap((sheet) => Object.values(sheet.images ?? {}).map((image) => image.mediaName));
+        expect(media.map((item) => item.name)).toEqual(names);
+        expect(media.map((item) => item.data.subarray(1, 4).toString())).toEqual(['PNG', 'PNG', 'PNG', 'PNG']);
+    });
+
+    test('pictures past the media budget are left out and counted, not the workbook', () => {
+        const anchors = (count: number) =>
+            Array.from({ length: count }, (_, i) => twoCell([0, 0, i, 0], [1, 0, i + 1, 0], pic(`rIdP${i}`))).join('');
+        const parts = (count: number) =>
+            Array.from({ length: count }, (_, i): [string, string, Uint8Array] => [
+                `rIdP${i}`,
+                `../media/image${i + 1}.png`,
+                PIXEL_PNG,
+            ]);
+        const bytes = readPictures(pictures(anchors(3), parts(3)), PIXEL_PNG.length * 2);
+        expect([bytes.images.length, bytes.media.length]).toEqual([2, 2]);
+        expect(bytes.warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
+        const count = MAX_MEDIA_PARTS + 2;
+        const many = readPictures(pictures(anchors(count), parts(count)));
+        expect([many.images.length, many.media.length]).toEqual([MAX_MEDIA_PARTS, MAX_MEDIA_PARTS]);
+        expect(many.warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
+    });
+
+    test("mc:AlternateContent around a picture reads the branch in the drawing's vocabulary", () => {
+        const { images } = readPictures(
+            pictures(
+                twoCell(
+                    [0, 0, 1, 0],
+                    [1, 0, 2, 0],
+                    `<mc:AlternateContent><mc:Choice Requires="a14">${pic('rIdX')}</mc:Choice><mc:Fallback>${pic('rIdP')}</mc:Fallback></mc:AlternateContent>`,
+                ),
+                [['rIdP', '../media/image1.png', PIXEL_PNG]],
+            ),
+        );
+        expect(images.map(({ y, height }) => [y, height])).toEqual([[20, 20]]);
     });
 });
 

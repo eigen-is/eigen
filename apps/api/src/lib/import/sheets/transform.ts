@@ -1,21 +1,35 @@
 import { encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
 import { SERVER_RECALC_BUDGET } from '../../document/sheets';
-import { type TransformWarning, toTransferableText } from '../../document/transform/protocol';
-import { xlsxToSheets } from './from-xlsx';
+import {
+    type SheetsImportJob,
+    type SheetsImportWorkerResult,
+    type TransformWarning,
+    toTransferableBuffer,
+    toTransferableText,
+} from '../../document/transform/protocol';
+import { readXlsx } from './from-xlsx';
 
-// Uploaded xlsx bytes → the lean snapshot JSON the main thread commits. Runs
-// inside the transform process (child.ts owns execution; the conversion logic
-// stays here in import/, pure over the buffer). The reader's caps ride along
-// inside xlsxToSheets with their exact 413s, and a recalc failure comes back as a
-// warning — an import must never fail because recalc hiccuped.
-export function importXlsxToSheetsSnapshot(data: ArrayBuffer): {
-    snapshotJson: ArrayBuffer;
-    warnings: TransformWarning[];
-} {
+// Uploaded xlsx bytes → the lean snapshot JSON the main thread commits, and the pictures its images name, which it
+// writes through Mount. Runs inside the transform process (child.ts owns execution; the conversion logic stays here in
+// import/, pure over the buffer). The reader's caps ride along inside readXlsx with their exact 413s, and a recalc
+// failure comes back as a warning — an import must never fail because recalc hiccuped.
+export function importXlsxToSheetsSnapshot(
+    data: ArrayBuffer,
+    job: Pick<SheetsImportJob, 'maxMediaBytes'>,
+): SheetsImportWorkerResult & { warnings: TransformWarning[] } {
     const warnings: TransformWarning[] = [];
-    const { sheets, computed } = recalcImportedSheets(xlsxToSheets(new Uint8Array(data), warnings), warnings);
-    return { snapshotJson: toTransferableText(encodeSheetsSnapshot(sheets, { computed })), warnings };
+    const read = readXlsx(new Uint8Array(data), job, warnings);
+    const { sheets, computed } = recalcImportedSheets(read.sheets, warnings);
+    return {
+        snapshotJson: toTransferableText(encodeSheetsSnapshot(sheets, { computed })),
+        images: read.media.map((image) => ({
+            name: image.name,
+            contentType: image.contentType,
+            data: toTransferableBuffer(image.data),
+        })),
+        warnings,
+    };
 }
 
 // Recompute formula cells through our engine once at import so the persisted

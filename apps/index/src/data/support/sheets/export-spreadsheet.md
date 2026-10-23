@@ -38,6 +38,7 @@ When you download as **Microsoft Excel (.xlsx)**, the following are preserved:
 - Hidden gridlines (if you hid them)
 - Conditional formatting rules, data validation rules, and hyperlinks
 - Charts, as charts you can edit in Excel (a rotated chart sits upright)
+- Images, over the same cells and at the same angle, in front of or behind the charts as in Sheets
 - Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)
 
 ## What to use each format for

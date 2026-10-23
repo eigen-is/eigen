@@ -10,10 +10,12 @@ import {
 import { drawingTheme } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { optional } from '../../core/opc';
-import type { TransformWarning } from '../../document/transform/protocol';
+import { MAX_DECOMPRESSED_BYTES } from '../../core/zip';
+import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
+import { type ImportedMedia, importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
-import { type Drawing, placeCharts, readDrawing } from './drawing';
+import { type Drawing, placeDrawings, readDrawing } from './drawing';
 import { readBudget, readInBatches, readPackage } from './package';
 import { readRules } from './rules';
 import { readSharedStrings } from './strings';
@@ -39,12 +41,27 @@ export const MAX_SHARED_FORMULA_TEXT = 16_000_000;
 // (docling's inflated test file, one sheet of a million rows); four times that recalcs in about a second at 1.4 GB.
 export const MAX_GRID_SLOTS = 110_000_000;
 
+export type XlsxOptions = {
+    // The upload cap, which bounds the pictures' bytes as an upload of each would be bounded.
+    maxMediaBytes: number;
+};
+
+// The sheets alone, their pictures' media names left unresolved: the shape the tests and the audit compare.
+export function xlsxToSheets(bytes: Uint8Array, warnings: TransformWarning[] = []): Sheet[] {
+    return readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, warnings).sheets;
+}
+
 // Every worksheet's grid and what lies past it, charged against the output budget as it is read. The cells count what
 // they emit, a value, a rich string's run, a border, a row's height or hidden flag, a merged or linked cell, a column's
 // width, a rule's range or a validated cell, and the grids recalc materialises; the text counts every value, display,
 // run, formula, link and rule text, each shared string and shared formula once per copy. A chart sheet is a sheet
-// without a grid. What was left out is counted in `warnings`.
-export function xlsxToSheets(bytes: Uint8Array, warnings: TransformWarning[] = []): Sheet[] {
+// without a grid. The pictures come back beside the sheets as the media files their images name. What was left out is
+// counted in `warnings`.
+export function readXlsx(
+    bytes: Uint8Array,
+    options: XlsxOptions,
+    warnings: TransformWarning[] = [],
+): { sheets: Sheet[]; media: ImportedMedia[] } {
     try {
         const book = readPackage(bytes);
         const budget = readBudget();
@@ -149,17 +166,21 @@ export function xlsxToSheets(bytes: Uint8Array, warnings: TransformWarning[] = [
         }
         // An import replaces the document's sheets: none read is a file it can't read, never an empty spreadsheet.
         if (sheets.length === 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
-        const dropped = placeCharts(drawings, {
+        const files = importMedia('xlsx', (path) => optional(() => book.pkg.zip.read(path)), options.maxMediaBytes);
+        const losses = new Map<CountedWarningCode, number>();
+        placeDrawings(drawings, {
             pkg: book.pkg,
             theme: drawingTheme(book.theme),
             sheetIds,
             spend: budget.spendElements,
             charge,
+            mediaName: files.name,
+            lost: (code) => losses.set(code, (losses.get(code) ?? 0) + 1),
         });
-        if (dropped > 0) warnings.push({ code: 'charts-dropped', count: dropped });
+        for (const [code, count] of losses) warnings.push({ code, count });
         // Excel refuses to hide every sheet, and the editor opens on one it shows.
         if (sheets.every((sheet) => sheet.hide === 1)) delete sheets[0].hide;
-        return sheets;
+        return { sheets, media: files.media };
     } catch (error) {
         throw importError(error, 'xlsx');
     }

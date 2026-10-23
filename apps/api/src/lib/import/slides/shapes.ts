@@ -13,7 +13,7 @@ import {
     TRANSPARENT_COLOR,
     type VectorElementPatch,
 } from '@workspace/lib/vector';
-import { drawingLines } from '../../core/drawingml';
+import { drawingLines, isSideways } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../core/ooxml';
 import { CHART_NOT_IMPORTED, droppedChart } from '../../core/ooxml-chart';
@@ -136,8 +136,7 @@ function inGroup(outer: Place, xfrm: Xfrm): Place {
     const mirrors = xfrm.flipH !== xfrm.flipV;
     return (shape) => {
         const centre = apply(turned, xfrm.x + (shape.x - child.x) * kx - cx, xfrm.y + (shape.y - child.y) * ky - cy);
-        const rot = normalizeAngle(shape.rot);
-        const sideways = (rot >= 45 && rot < 135) || (rot >= 225 && rot < 315);
+        const sideways = isSideways(shape.rot);
         return outer({
             x: cx + centre.x,
             y: cy + centre.y,

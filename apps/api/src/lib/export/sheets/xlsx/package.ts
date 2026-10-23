@@ -7,8 +7,8 @@ import { type PackagePart, type Relationship, relationshipsXml, relsPathOf, writ
 import type { ZipWriteEntry } from '../../../core/zip';
 import { MAX_SHEET_NAME_LENGTH, SHEET_NAME_FORBIDDEN } from '../../../document/spreadsheetml';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
-import { OFFICE_IMAGE_CONTENT_TYPES } from '../../office-image';
-import { drawingOf } from './drawing';
+import { OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia } from '../../office-image';
+import { drawingOf, type WorkbookPictures } from './drawing';
 import { sharedStringTable } from './strings';
 import { styleRegistry } from './styles';
 import { areaRef, filterArea, worksheetPart } from './worksheet';
@@ -19,7 +19,12 @@ import { areaRef, filterArea, worksheetPart } from './worksheet';
 
 const SPREADSHEETML = 'application/vnd.openxmlformats-officedocument.spreadsheetml';
 
-export function writeWorkbook(sheets: Sheet[], title: string, lost: (code: CountedWarningCode) => void): Uint8Array {
+export function writeWorkbook(
+    sheets: Sheet[],
+    title: string,
+    media: OfficeMedia[],
+    lost: (code: CountedWarningCode) => void,
+): Uint8Array {
     const names = sheetNames(sheets, lost);
     const active = activeTabOf(sheets);
     const written = new Map<string, string>();
@@ -32,9 +37,10 @@ export function writeWorkbook(sheets: Sheet[], title: string, lost: (code: Count
     const strings = sharedStringTable(lost);
     const parts: PackagePart[] = [];
     const files: ZipWriteEntry[] = [];
+    const pictures: WorkbookPictures = { media: new Map(media.map((item) => [item.name, item])), parts: new Map() };
     for (const [index, sheet] of sheets.entries()) {
         const path = `xl/worksheets/sheet${index + 1}.xml`;
-        const drawing = drawingOf(named[index], index + 1, named, lost);
+        const drawing = drawingOf(named[index], index + 1, named, pictures, lost);
         const part = worksheetPart(sheet, {
             name: names[index],
             names: written,

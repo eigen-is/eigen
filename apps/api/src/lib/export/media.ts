@@ -10,7 +10,7 @@ import { generateImagePreview } from '../shared/thumbnails';
 import { encodeOfficeImage, WEBP_SCAN_BYTES } from './office-image';
 
 // The formats an Office reader opens, which take a PNG or JPEG from the source file.
-const OFFICE_FORMATS = new Set<ExportTransformJob['format']>(['docx', 'pptx']);
+const OFFICE_FORMATS = new Set<ExportTransformJob['format']>(['docx', 'pptx', 'xlsx']);
 
 const TOO_LARGE = "This document's images are too large to export";
 
@@ -18,13 +18,13 @@ const TOO_LARGE = "This document's images are too large to export";
 // document names, as exact buffers the transform process gets a copy of (an SVG's sanitizing, base64
 // and the data: URIs happen there). All Mount I/O — and the globally capped thumbnail path behind
 // getScreenPreview — stays here: the transform never receives a Mount and never spawns thumbnail
-// Workers. A docx or pptx takes PNG or JPEG from the source file instead, since Word and PowerPoint
-// for the web and Google Docs show no WebP, with the thumbnail Worker's width and height for its extent.
+// Workers. A docx, pptx or xlsx takes PNG or JPEG from the source file instead, since Office for the web and
+// Google's editors show no WebP, with the thumbnail Worker's width and height for its extent.
 //
 // The bytes are held in the API's heap and copied over IPC, so what is sent is held to
 // MAX_DECOMPRESSED_BYTES, an import source's cap, as it is prepared. An SVG travels as its own bytes,
 // so the SVGs' declared sizes are charged before any read; a raster's preview is at most 2560 px,
-// and a docx's or pptx's source is read whole, one at a time, so only a source past the cap alone is
+// and an Office format's source is read whole, one at a time, so only a source past the cap alone is
 // refused unread. One file at a time, so a docx holds at most one of the thumbnail slots uploads and
 // previews share, and none once the job ends.
 export async function collectExportMedia(

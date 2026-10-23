@@ -1,16 +1,30 @@
 import { describe, expect, test } from 'bun:test';
 import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import type { Cell, Sheet, SheetChart } from '@workspace/lib/sheets';
-import { EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/core/ooxml';
+import {
+    type Cell,
+    floatingItems,
+    type Sheet,
+    type SheetChart,
+    type SheetFloatingObject,
+    type SheetImage,
+} from '@workspace/lib/sheets';
+import { A_NS, EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/core/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../../lib/core/ooxml-chart';
 import type { PackagePart } from '../../../../lib/core/opc';
 import { hasXmlName, type XmlElement, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
 import { openZip } from '../../../../lib/core/zip';
 import { pxToColumnWidth } from '../../../../lib/document/spreadsheetml';
-import type { CountedWarningCode, TransformWarning } from '../../../../lib/document/transform/protocol';
+import {
+    type CountedWarningCode,
+    type TransformWarning,
+    toTransferableBuffer,
+    toTransferableText,
+} from '../../../../lib/document/transform/protocol';
+import type { OfficeMedia } from '../../../../lib/export/office-image';
 import { sheetsToXlsx } from '../../../../lib/export/sheets/to-xlsx';
-import { DRAWING_CONTENT_TYPE, drawingOf } from '../../../../lib/export/sheets/xlsx/drawing';
-import { xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
+import { DRAWING_CONTENT_TYPE, drawingOf, type WorkbookPictures } from '../../../../lib/export/sheets/xlsx/drawing';
+import { readXlsx, xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
+import { PIXEL_PNG } from '../../../fixtures/pptx';
 import { xlsxFixture } from '../../../fixtures/xlsx';
 
 // A sheet's charts as its drawing part, read back by Eigen's own xlsx reader: each chart over the same pixels of the
@@ -80,7 +94,7 @@ function xml([, body]: PackagePart): string {
 // The workbook with Summary's drawing, read back.
 function roundTrip(sheets: Sheet[]): { sheets: Sheet[]; warnings: TransformWarning[]; lost: CountedWarningCode[] } {
     const lost: CountedWarningCode[] = [];
-    const drawing = drawingOf(sheets[0], 1, sheets, (code) => lost.push(code));
+    const drawing = drawingOf(sheets[0], 1, sheets, noPictures(), (code) => lost.push(code));
     if (!drawing) throw new Error('no drawing');
     const bytes = xlsxFixture({
         sheets: [
@@ -102,7 +116,35 @@ function roundTrip(sheets: Sheet[]): { sheets: Sheet[]; warnings: TransformWarni
     return { sheets: xlsxToSheets(bytes, warnings), warnings, lost };
 }
 
-const boxOf = ({ x, y, width, height }: SheetChart) => ({ x, y, width, height });
+const boxOf = ({ x, y, width, height }: SheetFloatingObject) => ({ x, y, width, height });
+
+function noPictures(): WorkbookPictures {
+    return picturesOf([]);
+}
+
+function picturesOf(media: OfficeMedia[]): WorkbookPictures {
+    return { media: new Map(media.map((item) => [item.name, item])), parts: new Map() };
+}
+
+const PNG: OfficeMedia = {
+    name: 'photo.png',
+    contentType: 'image/png',
+    data: toTransferableBuffer(PIXEL_PNG),
+    width: 1,
+    height: 1,
+};
+const SVG: OfficeMedia = {
+    name: 'drawing.svg',
+    contentType: 'image/svg+xml',
+    data: toTransferableText('<svg xmlns="http://www.w3.org/2000/svg"/>'),
+    png: toTransferableBuffer(PIXEL_PNG),
+    width: 10,
+    height: 10,
+};
+
+// Below the line, between the two charts, and above them turned a third of the way to upright.
+const BELOW: SheetImage = { id: 'below', index: 'a0V', x: 20, y: 10, width: 60, height: 30, mediaName: 'photo.png' };
+const ABOVE: SheetImage = { ...BELOW, id: 'above', index: 'a2', x: 120, angle: 30 };
 
 describe('drawingOf', () => {
     test('each chart reads back over the same pixels with the same spec, in paint order', () => {
@@ -119,14 +161,10 @@ describe('drawingOf', () => {
     });
 
     test('a two-cell anchor names the cells its corners land in, past hidden tracks', () => {
-        const drawing = drawingOf(SUMMARY, 1, [SUMMARY, MY_DATA], () => {});
+        const drawing = drawingOf(SUMMARY, 1, [SUMMARY, MY_DATA], noPictures(), () => {});
         const root = drawing && parseOoxml(xml(drawing.parts[0]));
         if (!root) throw new Error('no drawing');
-        const corners = xmlElements(root).map((anchor) =>
-            xmlElements(anchor)
-                .filter((corner) => hasXmlName(corner, XDR_NS, 'from') || hasXmlName(corner, XDR_NS, 'to'))
-                .map(cellOf),
-        );
+        const corners = xmlElements(root).map(cellsOf);
         // A1 to D11 for the line; x 450 is past A, B and the hidden C, 10 px into F, and y 330 past the hidden row 4.
         expect(corners).toEqual([
             [
@@ -141,7 +179,7 @@ describe('drawingOf', () => {
     });
 
     test('names its parts after the sheet, with their content types, the same bytes every time', () => {
-        const write = () => drawingOf(SUMMARY, 3, [SUMMARY, MY_DATA], () => {});
+        const write = () => drawingOf(SUMMARY, 3, [SUMMARY, MY_DATA], noPictures(), () => {});
         const drawing = write();
         expect(drawing?.path).toBe('xl/drawings/drawing3.xml');
         expect(drawing?.parts.map(([path, , type]) => [path, type])).toEqual([
@@ -158,11 +196,11 @@ describe('drawingOf', () => {
     test("a chart whose spec doesn't parse is left out and counted, and a sheet without charts has no drawing", () => {
         const lost: CountedWarningCode[] = [];
         const broken: Sheet = { ...SUMMARY, charts: byId({ ...INLINE, id: 'bad', spec: '{' }) };
-        expect(drawingOf(broken, 1, [broken], (code) => lost.push(code))).toBeUndefined();
+        expect(drawingOf(broken, 1, [broken], noPictures(), (code) => lost.push(code))).toBeUndefined();
         expect(lost).toEqual(['charts-dropped']);
-        expect(drawingOf(MY_DATA, 2, [MY_DATA], () => {})).toBeUndefined();
+        expect(drawingOf(MY_DATA, 2, [MY_DATA], noPictures(), () => {})).toBeUndefined();
         const mixed: Sheet = { ...SUMMARY, charts: { ...SUMMARY.charts, ...broken.charts } };
-        expect(drawingOf(mixed, 1, [mixed, MY_DATA], (code) => lost.push(code))?.parts).toHaveLength(4);
+        expect(drawingOf(mixed, 1, [mixed, MY_DATA], noPictures(), (code) => lost.push(code))?.parts).toHaveLength(4);
         expect(lost).toEqual(['charts-dropped', 'charts-dropped']);
     });
 
@@ -170,6 +208,86 @@ describe('drawingOf', () => {
         const { sheets } = roundTrip([SUMMARY]);
         const ranged = Object.values(sheets[0].charts ?? {}).find((chart) => chart.y === 30);
         expect(parseChartSpec(ranged?.spec ?? '')?.data).toMatchObject({ source: 'range', categories: null });
+    });
+});
+
+describe('a picture', () => {
+    test('is an xdr:pic over its cells in paint order among the charts, turned as it turns, related once', () => {
+        const lost: CountedWarningCode[] = [];
+        const gone: SheetImage = { ...BELOW, id: 'gone', index: 'a3', mediaName: 'gone.png' };
+        const sheet: Sheet = { ...SUMMARY, images: { below: BELOW, above: ABOVE, gone } };
+        const drawing = drawingOf(sheet, 1, [sheet, MY_DATA], picturesOf([PNG]), (code) => lost.push(code));
+        const root = drawing && parseOoxml(xml(drawing.parts[0]));
+        if (!root) throw new Error('no drawing');
+        expect(lost).toEqual(['images-dropped']);
+        const shapes = xmlElements(root).map((anchor) => xmlElements(anchor)[2]);
+        expect(shapes.map((shape) => shape.local)).toEqual(['graphicFrame', 'pic', 'graphicFrame', 'pic']);
+        const ids = shapes.map((shape) => descendant(shape, XDR_NS, 'cNvPr')?.attributes['id']);
+        expect(ids).toEqual(['2', '3', '4', '5']);
+        const xfrms = [shapes[1], shapes[3]].map((shape) => descendant(shape, A_NS, 'xfrm')?.attributes);
+        expect(xfrms.map((attributes) => attributes?.['rot'])).toEqual([undefined, String(30 * 60_000)]);
+        const embeds = [shapes[1], shapes[3]].map((shape) => descendant(shape, A_NS, 'blip')?.attributes['r:embed']);
+        expect(embeds).toEqual(['rId2', 'rId2']);
+        // The picture's corners, as a chart's: from 20 px into A and 10 into row 1 to 80 into A and 20 into the 40 px row 2.
+        expect(cellsOf(xmlElements(root)[1])).toEqual([
+            [0, 20, 0, 10],
+            [0, 80, 1, 20],
+        ]);
+        expect(drawing.files.map(({ name }) => name)).toEqual(['xl/media/image1.png']);
+        const rels = xml(drawing.parts[1]);
+        expect(rels).toContain(`Id="rId2" Type="${R}/image" Target="../media/image1.png"`);
+    });
+
+    test("an SVG goes in beside its PNG as the svgBlip, and a type Excel can't embed is left out and counted", () => {
+        const lost: CountedWarningCode[] = [];
+        const drawn: SheetImage = { ...BELOW, mediaName: 'drawing.svg' };
+        const webp: SheetImage = { ...BELOW, id: 'webp', index: 'a1', mediaName: 'still.webp' };
+        const sheet: Sheet = { name: 'Pictures', images: { below: drawn, webp } };
+        const pictures = picturesOf([SVG, { ...PNG, name: 'still.webp', contentType: 'image/webp' }]);
+        const drawing = drawingOf(sheet, 2, [sheet], pictures, (code) => lost.push(code));
+        expect(lost).toEqual(['images-dropped']);
+        expect(drawing?.files.map(({ name }) => name)).toEqual(['xl/media/image1.png', 'xl/media/image1.svg']);
+        const part = drawing ? xml(drawing.parts[0]) : '';
+        expect(part).toContain('<a:blip r:embed="rId2"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}">');
+        expect(part).toContain('r:embed="rId1"/>');
+    });
+
+    test('turned sideways, is anchored over its box turned a quarter, as Excel and LibreOffice place it', () => {
+        const upright: SheetImage = { ...BELOW, x: 100, y: 100, width: 200, height: 50, angle: 0 };
+        const placed = (angle: number) => {
+            const sheet: Sheet = { name: 'Pictures', images: { below: { ...upright, angle } } };
+            const drawing = drawingOf(sheet, 1, [sheet], picturesOf([PNG]), () => {});
+            const root = drawing && parseOoxml(xml(drawing.parts[0]));
+            if (!root) throw new Error('no drawing');
+            const [anchor] = xmlElements(root);
+            const xfrm = descendant(anchor, A_NS, 'xfrm');
+            const ext = xfrm && descendant(xfrm, A_NS, 'ext');
+            return [cellsOf(anchor), [ext?.attributes['cx'], ext?.attributes['cy']].map(Number)];
+        };
+        // 200 by 50 about (200, 125): upright from B6 to 10 px into D8; a quarter turn 50 by 200, from 75 px into B and 5
+        // into row 2 to 25 px into C and 5 into row 12.
+        expect(placed(30)).toEqual(placed(0));
+        expect(placed(0)).toEqual([
+            [
+                [1, 0, 5, 0],
+                [3, 0, 7, 10],
+            ],
+            [200 * EMU_PER_PX, 50 * EMU_PER_PX],
+        ]);
+        expect(placed(90)).toEqual([
+            [
+                [1, 75, 1, 5],
+                [2, 25, 11, 5],
+            ],
+            [50 * EMU_PER_PX, 200 * EMU_PER_PX],
+        ]);
+        expect(placed(250)).toEqual(placed(90));
+    });
+
+    test('a sheet of pictures only has a drawing, and one whose media is all missing none', () => {
+        const sheet: Sheet = { name: 'Pictures', images: { below: BELOW } };
+        expect(drawingOf(sheet, 1, [sheet], picturesOf([PNG]), () => {})?.parts).toHaveLength(2);
+        expect(drawingOf(sheet, 1, [sheet], noPictures(), () => {})).toBeUndefined();
     });
 });
 
@@ -221,6 +339,64 @@ describe('the workbook', () => {
         });
     });
 });
+
+describe('pictures read back by the import', () => {
+    test('keep their box, their turn, their bytes and their place among the charts', async () => {
+        const sideways: SheetImage = {
+            ...BELOW,
+            id: 'sideways',
+            index: 'a3',
+            x: 300,
+            y: 200,
+            width: 120,
+            height: 40,
+            angle: 90,
+        };
+        const drawn: SheetImage = { ...BELOW, id: 'drawn', index: 'a4', mediaName: 'drawing.svg', angle: 200 };
+        const summary: Sheet = { ...SUMMARY, images: { below: BELOW, above: ABOVE, sideways, drawn } };
+        const warnings: TransformWarning[] = [];
+        const bytes = await sheetsToXlsx([summary, MY_DATA], { media: [PNG, SVG], warnings });
+        expect(warnings).toEqual([]);
+        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 });
+        const items = floatingItems(sheets[0]);
+        expect(items.map(({ kind, object }) => [kind, boxOf(object), object.angle ?? 0])).toEqual([
+            ['chart', boxOf(INLINE), 0],
+            ['image', boxOf(BELOW), 0],
+            ['chart', boxOf(RANGED), 0],
+            ['image', boxOf(ABOVE), 30],
+            ['image', boxOf(sideways), 90],
+            ['image', boxOf(drawn), 200],
+        ]);
+        const named = new Map(media.map((item) => [item.name, item]));
+        const bytesOf = (object: SheetFloatingObject) =>
+            'mediaName' in object && typeof object.mediaName === 'string'
+                ? [...(named.get(object.mediaName)?.data ?? [])]
+                : [];
+        expect(items.filter(({ kind }) => kind === 'image').map(({ object }) => bytesOf(object))).toEqual([
+            [...PIXEL_PNG],
+            [...PIXEL_PNG],
+            [...PIXEL_PNG],
+            [...new Uint8Array(SVG.data)],
+        ]);
+        expect(media.map(({ contentType }) => contentType)).toEqual(['image/png', 'image/svg+xml']);
+    });
+});
+
+// An anchor's corners, each a cellOf.
+function cellsOf(anchor: XmlElement): number[][] {
+    return xmlElements(anchor)
+        .filter((corner) => hasXmlName(corner, XDR_NS, 'from') || hasXmlName(corner, XDR_NS, 'to'))
+        .map(cellOf);
+}
+
+function descendant(element: XmlElement, ns: string, local: string): XmlElement | undefined {
+    for (const child of xmlElements(element)) {
+        if (hasXmlName(child, ns, local)) return child;
+        const found = descendant(child, ns, local);
+        if (found) return found;
+    }
+    return undefined;
+}
 
 // A corner's column, its offset in px, its row and its offset.
 function cellOf(corner: XmlElement): number[] {

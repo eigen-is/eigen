@@ -3,14 +3,17 @@ import {
     REFERENCE_ROW_COUNT,
     type Sheet,
     type SheetChart,
+    type SheetFloatingObject,
+    type SheetImage,
     sheetColumnsWidth,
     sheetFloatingBox,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
-import { generateKeyBetween } from '@workspace/lib/vector';
-import type { DrawingTheme } from '../../core/drawingml';
+import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
+import { anchoredBox, type DrawingTheme } from '../../core/drawingml';
 import {
     A_NS,
+    ASVG_NS,
     alternativeFor,
     C_NS,
     EMU_PER_PX,
@@ -22,11 +25,21 @@ import {
 } from '../../core/ooxml';
 import { chartCost, chartPart, readChart } from '../../core/ooxml-chart';
 import { type OoxmlPackage, optional, type Relationship, relTarget } from '../../core/opc';
-import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlTrimmedText } from '../../core/xml';
+import {
+    hasXmlName,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlTrimmedText,
+} from '../../core/xml';
+import type { CountedWarningCode } from '../../document/transform/protocol';
+import { type MediaPart, pictureMediaPart } from '../image-types';
 
-// A worksheet's or a chart sheet's drawing: the anchors that place its charts over the grid, each read into a
-// SheetChart. Pictures and shapes are not read. A chart's refs may name any sheet, so the charts are placed once every
-// sheet has its id.
+// A worksheet's or a chart sheet's drawing: the anchors that place its charts and pictures over the grid, each read into
+// a SheetChart or a SheetImage. Shapes are not read. A chart's refs may name any sheet, so the drawings are placed once
+// every sheet has its id.
 
 export type Drawing = {
     sheet: Sheet;
@@ -61,52 +74,64 @@ export function readDrawing(
     };
 }
 
-export type ChartContext = {
+export type DrawingContext = {
     pkg: OoxmlPackage;
     theme: DrawingTheme;
     // A sheet's id by the name the workbook writes, lower-cased.
     sheetIds: ReadonlyMap<string, string>;
-    // A chart's elements, charged only when the budget left covers it: one it can't is left out.
+    // A chart's elements, or an anchor's tracks, charged only when the budget left covers them: one it can't is left out.
     spend(count: number): boolean;
     // Throws past the output budget, which a chart's spec string counts toward: enough charts refuse the workbook.
     charge(cells: number, text: number): void;
+    // A picture part's media file, null past the import's media budget (import/image-types.ts).
+    mediaName(part: MediaPart): string | undefined | null;
+    lost(code: CountedWarningCode): void;
 };
 
-// Each drawing's charts onto its sheet in file order, as chart-0, chart-1, … across the workbook; answers how many were
-// left out: a chart the reader can't draw, a part missing or damaged, a place no anchor names, one past the budget, and
-// each of Excel 2016's charts. A part is read once however many anchors name it, and each chart costs its elements and
-// points (chartCost) and the tracks walked to place it.
-export function placeCharts(drawings: Drawing[], context: ChartContext): number {
+// Each drawing's charts and pictures onto its sheet, painted in file order, the charts as chart-0, chart-1, … across the
+// workbook. Left out and counted: a chart the reader can't draw, a part missing or damaged, a place no anchor names, one
+// past the budget, and each of Excel 2016's charts; a picture of a type a sheet doesn't draw, its part missing or past
+// the media budget. A chart part is read once however many anchors name it, and each chart costs its elements and
+// points (chartCost) and every anchor the tracks walked to place it. A chart sheet shows its chart alone.
+export function placeDrawings(drawings: Drawing[], context: DrawingContext): void {
     const costs = new Map<XmlElement, number>();
     const specs = new Map<XmlElement, string | undefined>();
     let placed = 0;
-    let dropped = 0;
     for (const { sheet, chartSheet, anchors, rels } of drawings) {
-        for (const rel of rels.values()) if (rel.type.endsWith('/chartEx')) dropped++;
+        for (const rel of rels.values()) if (rel.type.endsWith('/chartEx')) context.lost('charts-dropped');
         let index: string | null = null;
+        const paint = () => {
+            index = generateKeyBetween(index, null);
+            return index;
+        };
         for (const anchor of anchors) {
-            const reference = chartIn(anchor);
-            if (!reference) continue;
-            const root = chartPart(context.pkg, rels, xmlAttr(reference, R_NS, 'id'), 'xl/charts/');
             const from = markerOf(xmlChild(anchor, XDR_NS, 'from'));
             const to = markerOf(xmlChild(anchor, XDR_NS, 'to'));
             const tracks = chartSheet ? 0 : [from, to].reduce((sum, at) => sum + (at ? at.col + at.row : 0), 0);
+            const picture = chartSheet ? undefined : pictureIn(anchor);
+            if (picture) {
+                const image = pictureOf(picture, rels, context, () => anchorBox(anchor, from, to, sheet), tracks);
+                if (image) (sheet.images ??= {})[image.id] = { ...image, index: paint() };
+                else context.lost('images-dropped');
+                continue;
+            }
+            const reference = chartIn(anchor);
+            if (!reference) continue;
+            const root = chartPart(context.pkg, rels, xmlAttr(reference, R_NS, 'id'), 'xl/charts/');
             if (root && !costs.has(root)) costs.set(root, chartCost(root));
             const cost = root && costs.get(root);
             const spec = root && cost !== undefined && context.spend(cost + tracks) ? specOf(root) : undefined;
             const box = spec && (chartSheet ? chartSheetBox(anchor) : anchorBox(anchor, from, to, sheet));
             if (!spec || !box) {
-                dropped++;
+                context.lost('charts-dropped');
                 continue;
             }
             context.charge(0, spec.length);
-            index = generateKeyBetween(index, null);
-            const chart: SheetChart = { id: `chart-${placed++}`, index, ...box, spec };
+            const chart: SheetChart = { id: `chart-${placed++}`, index: paint(), ...box, spec };
             (sheet.charts ??= {})[chart.id] = chart;
             if (chartSheet) break;
         }
     }
-    return dropped;
 
     // By the cells it names; a ref the sheet can't follow, a literal, a defined name, several areas, an area or a sheet
     // not in the workbook, brings the caches' numbers inline instead, which show but follow no cell.
@@ -124,6 +149,39 @@ export function placeCharts(drawings: Drawing[], context: ChartContext): number 
         specs.set(root, spec);
         return spec;
     }
+}
+
+// The xdr:pic an anchor shows.
+function pictureIn(anchor: XmlElement): XmlElement | undefined {
+    return elements(anchor).find((element) => hasXmlName(element, XDR_NS, 'pic'));
+}
+
+// A picture over its box, turned by its a:xfrm's rot as Eigen turns it, clockwise. Excel and LibreOffice anchor a
+// picture turned sideways over its box turned a quarter, so its own box is that one turned back (anchoredBox). Its
+// part is its svgBlip's, else its blip's.
+function pictureOf(
+    picture: XmlElement,
+    rels: ReadonlyMap<string, Relationship>,
+    context: DrawingContext,
+    place: () => Box | undefined,
+    tracks: number,
+): Omit<SheetImage, 'index'> | undefined {
+    const fill = xmlChild(picture, XDR_NS, 'blipFill');
+    const blip = fill && xmlChild(fill, A_NS, 'blip');
+    const extensions = blip && xmlChild(blip, A_NS, 'extLst');
+    const svg = extensions && xmlElements(extensions).flatMap((ext) => xmlChildren(ext, ASVG_NS, 'svgBlip'))[0];
+    const part =
+        pictureMediaPart(context.pkg, rels, svg && xmlAttr(svg, R_NS, 'embed'), 'xl/') ??
+        pictureMediaPart(context.pkg, rels, blip && xmlAttr(blip, R_NS, 'embed'), 'xl/');
+    if (!part || !context.spend(tracks + 1)) return undefined;
+    const anchored = place();
+    const mediaName = anchored && context.mediaName(part);
+    if (!anchored || !mediaName) return undefined;
+    const properties = xmlChild(picture, XDR_NS, 'spPr');
+    const xfrm = properties && xmlChild(properties, A_NS, 'xfrm');
+    const angle = normalizeAngle(Number(xfrm && xmlAttr(xfrm, '', 'rot')) / 60_000 || 0);
+    const { x, y, width, height } = rounded(anchoredBox(anchored, angle));
+    return { id: crypto.randomUUID(), x, y, width, height, ...(angle !== 0 && { angle }), mediaName };
 }
 
 // The c:chart an anchor's graphic frame shows.
@@ -149,7 +207,7 @@ function markerOf(element: XmlElement | undefined): Marker | undefined {
     return { col, colOff: emu(text('colOff')) ?? 0, row, rowOff: emu(text('rowOff')) ?? 0 };
 }
 
-type Box = Pick<SheetChart, 'x' | 'y' | 'width' | 'height'>;
+type Box = Pick<SheetFloatingObject, 'x' | 'y' | 'width' | 'height'>;
 
 // In grid px from A1: a two-cell anchor over the same cells as in Excel, through the sheet's own widths and heights,
 // between its corners whichever comes first; a one-cell anchor from its cell at its size; an absolute one where it

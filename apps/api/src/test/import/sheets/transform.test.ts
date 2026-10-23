@@ -4,9 +4,13 @@ import * as engine from '@workspace/sheet/engine';
 import { ZipReader } from '../../../lib/core/zip';
 import { SERVER_RECALC_BUDGET } from '../../../lib/document/sheets';
 import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
+import { sheetsToXlsx } from '../../../lib/export/sheets/to-xlsx';
 import { importXlsxToSheetsSnapshot } from '../../../lib/import/sheets/transform';
+import { PIXEL_PNG } from '../../fixtures/pptx';
 import { build, stored } from '../../fixtures/raw-zip';
 import { xlsxFixture } from '../../fixtures/xlsx';
+
+const JOB = { maxMediaBytes: 35 * 1024 * 1024 };
 
 // What reading the workbook throws: a slip is a file the reader can't read, an out-of-memory the transform process's.
 describe('a throw reading the xlsx', () => {
@@ -31,7 +35,7 @@ describe('a throw reading the xlsx', () => {
         });
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
-            expect(thrownBy(() => importXlsxToSheetsSnapshot(xlsx))).toMatchObject(refusal);
+            expect(thrownBy(() => importXlsxToSheetsSnapshot(xlsx, JOB))).toMatchObject(refusal);
         } finally {
             read.mockRestore();
             warn.mockRestore();
@@ -44,7 +48,7 @@ describe('a throw reading the xlsx', () => {
             throw outOfMemory;
         });
         try {
-            expect(thrownBy(() => importXlsxToSheetsSnapshot(xlsx))).toBe(outOfMemory);
+            expect(thrownBy(() => importXlsxToSheetsSnapshot(xlsx, JOB))).toBe(outOfMemory);
         } finally {
             read.mockRestore();
         }
@@ -67,6 +71,7 @@ describe("the formulas' ranges", () => {
         try {
             importXlsxToSheetsSnapshot(
                 toTransferableBuffer(xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1"><f>1+1</f></c></row>' }] })),
+                JOB,
             );
             expect(budgets).toEqual([SERVER_RECALC_BUDGET]);
         } finally {
@@ -85,10 +90,26 @@ describe('an imported rich-text cell', () => {
                 },
             ],
         });
-        const { snapshotJson } = importXlsxToSheetsSnapshot(toTransferableBuffer(Buffer.from(xlsx)));
+        const { snapshotJson } = importXlsxToSheetsSnapshot(toTransferableBuffer(Buffer.from(xlsx)), JOB);
         const [sheet] = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
         const cell = (c: number) => sheet.celldata?.find((entry) => entry.r === 0 && entry.c === c)?.v;
         expect(cell(0)).toEqual({ ct: { fa: 'General', t: 'inlineStr', s: [{ v: 'Rich', bl: 1 }, { v: ' text' }] } });
         expect(cell(1)?.v).toBe('Rich text!');
+    });
+});
+
+// The pictures cross back beside the snapshot, each the file an image names, for the main thread to write.
+describe('an imported picture', () => {
+    test('comes back as the media its image names', async () => {
+        const image = { id: 'photo', index: 'a0', x: 10, y: 10, width: 40, height: 30, mediaName: 'photo.png' };
+        const media = [{ name: 'photo.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG) }];
+        const xlsx = await sheetsToXlsx([{ name: 'Pictures', celldata: [], images: { photo: image } }], { media });
+        const { snapshotJson, images } = importXlsxToSheetsSnapshot(toTransferableBuffer(xlsx), JOB);
+        const [sheet] = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
+        const names = Object.values(sheet.images ?? {}).map((stored) => stored.mediaName);
+        expect(images.map(({ name, contentType, data }) => [name, contentType, [...new Uint8Array(data)]])).toEqual([
+            [names[0], 'image/png', [...PIXEL_PNG]],
+        ]);
+        expect(images[0].data).toBeInstanceOf(ArrayBuffer);
     });
 });
