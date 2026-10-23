@@ -3,6 +3,7 @@ import {
     REFERENCE_ROW_COUNT,
     type Sheet,
     type SheetChart,
+    sheetChartBox,
     sheetColumnsWidth,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
@@ -65,9 +66,9 @@ export type ChartContext = {
     theme: DrawingTheme;
     // A sheet's id by the name the workbook writes, lower-cased.
     sheetIds: ReadonlyMap<string, string>;
-    // Charged only when the budget left covers it.
+    // A chart's elements, charged only when the budget left covers it: one it can't is left out.
     spend(count: number): boolean;
-    // Throws past the output budget.
+    // Throws past the output budget, which a chart's spec string counts toward: enough charts refuse the workbook.
     charge(cells: number, text: number): void;
 };
 
@@ -150,8 +151,9 @@ function markerOf(element: XmlElement | undefined): Marker | undefined {
 
 type Box = Pick<SheetChart, 'x' | 'y' | 'width' | 'height'>;
 
-// In grid px from A1: a two-cell anchor over the same cells as in Excel, through the sheet's own widths and heights; a
-// one-cell anchor from its cell at its size; an absolute one where it says.
+// In grid px from A1: a two-cell anchor over the same cells as in Excel, through the sheet's own widths and heights,
+// between its corners whichever comes first; a one-cell anchor from its cell at its size; an absolute one where it
+// says.
 function anchorBox(
     anchor: XmlElement,
     from: Marker | undefined,
@@ -165,9 +167,13 @@ function anchorBox(
     const size = sizeOf(anchor);
     if (anchor.local === 'twoCellAnchor') {
         if (!from || !to) return undefined;
-        const start = point(from);
-        const end = point(to);
-        return rounded({ ...start, width: end.x - start.x, height: end.y - start.y });
+        const [start, end] = [point(from), point(to)];
+        return rounded({
+            x: Math.min(start.x, end.x),
+            y: Math.min(start.y, end.y),
+            width: Math.abs(end.x - start.x),
+            height: Math.abs(end.y - start.y),
+        });
     }
     if (anchor.local === 'oneCellAnchor') return from && size && rounded({ ...point(from), ...size });
     const position = xmlChild(anchor, XDR_NS, 'pos');
@@ -190,12 +196,7 @@ function sizeOf(anchor: XmlElement): Pick<Box, 'width' | 'height'> | undefined {
 }
 
 function rounded({ x, y, width, height }: Box): Box {
-    return {
-        x: Math.max(0, Math.round(x)),
-        y: Math.max(0, Math.round(y)),
-        width: Math.max(1, Math.round(width)),
-        height: Math.max(1, Math.round(height)),
-    };
+    return sheetChartBox({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
 }
 
 // An element's children, an mc:AlternateContent read as the branch this reader understands.

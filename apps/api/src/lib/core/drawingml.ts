@@ -50,6 +50,11 @@ export function readColorScheme(theme: XmlElement | undefined): ColorScheme {
     return colors;
 }
 
+// A theme part with no colour map over it, as a docx's and an xlsx's charts read theirs: the slots name themselves.
+export function drawingTheme(theme: XmlElement | undefined): DrawingTheme {
+    return { scheme: readColorScheme(theme), map: IDENTITY_COLOR_MAP };
+}
+
 // An a:clrMap, p:clrMap or c:clrMapOvr: its attributes over the identity, each naming a slot.
 export function readColorMap(element: XmlElement): ColorMap {
     const map = new Map(IDENTITY_COLOR_MAP);

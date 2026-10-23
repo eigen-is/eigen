@@ -1,9 +1,8 @@
 import { type CommandProps, Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
-import { parseChartSpec, sampleChartSpec } from '../../../charts';
+import { CHART_MAX_SIDE, parseChartSpec, sampleChartSpec } from '../../../charts';
 import type { ChartSpec, ChartType } from '../../../types/chart';
 import { renderChartSpecSvg } from '../../../vector/kinds/chart-render';
-import { MAX_PAPER_MM, mmToPx } from '../page';
 import {
     type FigureFrameAttrs,
     figureFrameAttributes,
@@ -14,10 +13,6 @@ import {
 
 // Google's inserted chart, which fits the default page's 642 px text column.
 export const CHART_DEFAULT_SIZE = { width: 600, height: 371 };
-
-// No page's text area is wider or taller than the largest page, Word's 22 inches (2112 px). A side a peer or a paste
-// sets past it would run the layout for seconds in every viewer and in the export.
-export const CHART_MAX_SIDE = Math.round(mmToPx(MAX_PAPER_MM));
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null). The spec is the
 // stored string, kept as it is even when it doesn't parse, as a canvas keeps it.

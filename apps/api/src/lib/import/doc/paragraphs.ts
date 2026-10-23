@@ -14,7 +14,7 @@ import {
     twipsToMm,
     twipsToPt,
 } from '@workspace/lib/docs/eigendoc';
-import { type DrawingTheme, IDENTITY_COLOR_MAP, readColorScheme } from '../../core/drawingml';
+import { type DrawingTheme, drawingTheme } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
@@ -135,7 +135,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         fields: [],
         graphicsDropped: 0,
         graphicParts: new Set(),
-        colors: { scheme: readColorScheme(pkg.theme), map: IDENTITY_COLOR_MAP },
+        colors: drawingTheme(pkg.theme),
         charts: new Map(),
         chartsDropped: 0,
         bodySize,

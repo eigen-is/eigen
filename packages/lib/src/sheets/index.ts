@@ -9,6 +9,7 @@ export {
     mergeEdgeSides,
     parseCellKey,
 } from './borders';
+export { sheetChartBox } from './chart-box';
 export {
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,

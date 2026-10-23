@@ -150,10 +150,18 @@ const WORDPROCESSING = 'application/vnd.openxmlformats-officedocument.wordproces
 // A header or footer part, word/<id>.xml, the final section names by its id; rels are its own relationships.
 export type DocxBand = { id: string; kind: 'header' | 'footer'; type?: string; xml: string; rels?: string };
 
-// The golden package with a body, a final section naming each band, its sectPr content, settings.xml's and styles.
+// The golden package with a body, a final section naming each band, its sectPr content, settings.xml's, styles and
+// parts.
 export async function buildDocxWithBands(
     bands: DocxBand[],
-    options: { sectPr?: string; settings?: string; body?: string; styles?: string; media?: DocxParts['media'] } = {},
+    options: {
+        sectPr?: string;
+        settings?: string;
+        body?: string;
+        styles?: string;
+        media?: DocxParts['media'];
+        contentTypes?: string;
+    } = {},
 ): Promise<ArrayBuffer> {
     const encode = (text: string) => new TextEncoder().encode(text);
     const references = bands
@@ -181,9 +189,13 @@ export async function buildDocxWithBands(
                 ? [`<Relationship Id="rIdSettings" Type="${RELATIONSHIP}/settings" Target="settings.xml"/>`]
                 : []),
         ].join(''),
-        contentTypes: bands
-            .map(({ id, kind }) => `<Override PartName="/word/${id}.xml" ContentType="${WORDPROCESSING}.${kind}+xml"/>`)
-            .join(''),
+        contentTypes:
+            bands
+                .map(
+                    ({ id, kind }) =>
+                        `<Override PartName="/word/${id}.xml" ContentType="${WORDPROCESSING}.${kind}+xml"/>`,
+                )
+                .join('') + (options.contentTypes ?? ''),
         media,
     });
 }

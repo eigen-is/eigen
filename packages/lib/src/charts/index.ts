@@ -1,5 +1,6 @@
 export { CHART_MESSAGES, FLAT_CHART_PAINT, layoutChart, layoutChartMessage } from './layout';
 export {
+    CHART_MAX_SIDE,
     chartColor,
     chartLabel,
     chartSearchText,

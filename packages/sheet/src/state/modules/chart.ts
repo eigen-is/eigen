@@ -1,5 +1,5 @@
 import { parseChartSpec } from '@workspace/lib/charts';
-import type { SheetChart } from '@workspace/lib/sheets';
+import { type SheetChart, sheetChartBox } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { generateKeyBetween, orderByFractionalIndex } from '@workspace/lib/vector';
 import type { Patch } from 'immer';
@@ -33,7 +33,7 @@ function addChart(ctx: Context, id: string, box: ChartBox, spec: string) {
     if (!sheet) return;
     const charts = (sheet.charts ??= {});
     const top = orderByFractionalIndex(Object.values(charts)).at(-1);
-    charts[id] = { id, index: generateKeyBetween(top?.index, null), ...box, spec };
+    charts[id] = { id, index: generateKeyBetween(top?.index, null), ...sheetChartBox(box), spec };
 }
 
 // A pasted chart lands on the selected cell at its copied size, its spec stored as it came, and selected.
@@ -43,9 +43,12 @@ export function pasteChart(ctx: Context, id: string, spec: string, size: Pick<Ch
     selectChart(ctx, id);
 }
 
+// Writes only the fields given, each clamped as the whole box is.
 export function updateChartBox(ctx: Context, id: string, box: Partial<ChartBox>) {
     const chart = currentSheet(ctx)?.charts?.[id];
-    if (chart) Object.assign(chart, box);
+    if (!chart) return;
+    const clamped = sheetChartBox({ ...chart, ...box });
+    for (const field of ['x', 'y', 'width', 'height'] as const) if (field in box) chart[field] = clamped[field];
 }
 
 export function setChartSpec(ctx: Context, id: string, spec: ChartSpec) {

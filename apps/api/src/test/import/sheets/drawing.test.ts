@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { parseChartSpec } from '@workspace/lib/charts';
-import type { Sheet } from '@workspace/lib/sheets';
+import { CHART_MAX_SIDE, parseChartSpec } from '@workspace/lib/charts';
+import {
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+    SHEET_DEFAULT_COL_WIDTH,
+    type Sheet,
+} from '@workspace/lib/sheets';
 import { CHART_CONTENT_TYPE } from '../../../lib/core/ooxml-chart';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { CHART_SHEET_SIZE } from '../../../lib/import/sheets/drawing';
@@ -115,7 +120,7 @@ function read(bytes: Uint8Array): { sheets: Sheet[]; warnings: TransformWarning[
 const chartsOf = (sheet: Sheet) => Object.values(sheet.charts ?? {});
 
 describe('a worksheet chart', () => {
-    // B is 160 px and C hidden, the rest the sheet's 72 px default; row 2 is 40 px, the rest 20 px.
+    // B is 140 px and C hidden, the rest Excel's 64 px default; row 2 is 40 px, the rest 20 px.
     test("a two-cell anchor spans the cells Excel draws it over, through the sheet's widths, heights and defaults", () => {
         const { sheets, warnings } = read(
             workbook({
@@ -133,7 +138,7 @@ describe('a worksheet chart', () => {
         );
         expect(sheets.map((sheet) => sheet.name)).toEqual(['Summary', 'My Data']);
         const [chart] = chartsOf(sheets[0]);
-        expect(chart).toMatchObject({ id: 'chart-0', x: 82, y: 20, width: 242, height: 105 });
+        expect(chart).toMatchObject({ id: 'chart-0', x: 74, y: 20, width: 214, height: 105 });
         expect(typeof chart.index).toBe('string');
         expect(sheets[1].charts).toBeUndefined();
         expect(warnings).toEqual([]);
@@ -172,10 +177,66 @@ describe('a worksheet chart', () => {
             }),
         );
         const [first, second] = chartsOf(sheets[0]).sort((a, b) => a.id.localeCompare(b.id));
-        expect(first).toMatchObject({ id: 'chart-0', x: 76, y: 40, width: 300, height: 200 });
+        expect(first).toMatchObject({ id: 'chart-0', x: 68, y: 40, width: 300, height: 200 });
         expect(second).toMatchObject({ id: 'chart-1', x: 50, y: 60, width: 400, height: 250 });
         expect(first.index < second.index).toBe(true);
         expect(first.spec).toBe(second.spec);
+    });
+
+    // Excel draws a two-cell anchor between its corners whichever comes first.
+    test('a two-cell anchor whose to is before its from spans the same cells', () => {
+        const { sheets } = read(
+            workbook({
+                sheets: [{ name: 'Data', data: DATA }],
+                anchors: twoCell([4, 0, 10, 0], [1, 10 * PX, 2, 0], graphicFrame('rId1')),
+                charts: [column('Data')],
+            }),
+        );
+        expect(chartsOf(sheets[0])[0]).toMatchObject({ x: 74, y: 40, width: 182, height: 160 });
+    });
+
+    // emu() reads up to 2^53 EMU, about 9.4e11 px, which the painter overflows its stack at.
+    test("a side past the max is the max, and a place past Excel's grid its edge", () => {
+        const FAR = 9e15;
+        const { sheets, warnings } = read(
+            workbook({
+                sheets: [{ name: 'Data', data: DATA }],
+                anchors:
+                    oneCell([0, 0, 0, 0], FAR, 200 * PX, graphicFrame('rId1')) +
+                    absolute(FAR, 0, 300 * PX, FAR, graphicFrame('rId1')) +
+                    twoCell([0, FAR, 0, 0], [2, 0, 3, FAR], graphicFrame('rId1')),
+                charts: [column('Data')],
+            }),
+        );
+        const edge = REFERENCE_COLUMN_COUNT * SHEET_DEFAULT_COL_WIDTH;
+        expect(
+            chartsOf(sheets[0])
+                .sort((a, b) => a.id.localeCompare(b.id))
+                .map(({ x, y, width, height }) => [x, y, width, height]),
+        ).toEqual([
+            [0, 0, CHART_MAX_SIDE, 200],
+            [edge, 0, 300, CHART_MAX_SIDE],
+            [128, 0, CHART_MAX_SIDE, CHART_MAX_SIDE],
+        ]);
+        expect(warnings).toEqual([]);
+    });
+
+    test('a sheet named twice in different case: its refs mean the first', () => {
+        const { sheets } = read(
+            workbook({
+                sheets: [
+                    { name: 'Data', data: DATA },
+                    { name: 'DATA', data: DATA },
+                ],
+                anchors: twoCell([0, 0, 0, 0], [2, 0, 10, 0], graphicFrame('rId1')),
+                charts: [column('data')],
+            }),
+        );
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Data', 'DATA (2)']);
+        expect(parseChartSpec(chartsOf(sheets[0])[0].spec)?.data).toMatchObject({
+            source: 'range',
+            categories: { sheetId: 'sheet-0' },
+        });
     });
 
     test("a ref ranges can't hold, a defined name, comes in with the caches' numbers inline", () => {
@@ -227,6 +288,26 @@ describe('a worksheet chart', () => {
         );
         const placed = chartsOf(sheets[0]).length;
         expect(placed).toBeGreaterThan(count - 20);
+        expect(warnings).toEqual([{ code: 'charts-dropped', count: count - placed }]);
+    });
+
+    // Placing an anchor walks the tracks before its corners, so a far one costs its columns and rows.
+    test('anchors far down the grid are charged their tracks, and those past the budget left out', () => {
+        const far = (REFERENCE_COLUMN_COUNT - 2 + REFERENCE_ROW_COUNT - 2) * 2;
+        const count = Math.floor(MAX_XLSX_ELEMENTS / far) + 3;
+        const { sheets, warnings } = read(
+            workbook({
+                sheets: [{ name: 'Data', data: DATA }],
+                anchors: twoCell(
+                    [REFERENCE_COLUMN_COUNT - 2, 0, REFERENCE_ROW_COUNT - 2, 0],
+                    [REFERENCE_COLUMN_COUNT - 1, 0, REFERENCE_ROW_COUNT - 1, 0],
+                    graphicFrame('rId1'),
+                ).repeat(count),
+                charts: [column('Data')],
+            }),
+        );
+        const placed = chartsOf(sheets[0]).length;
+        expect(placed).toBeLessThan(count - 2);
         expect(warnings).toEqual([{ code: 'charts-dropped', count: count - placed }]);
     });
 
