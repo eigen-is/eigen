@@ -9,7 +9,7 @@ import {
     readClipboardBox,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
-import { getFontName } from '@workspace/lib/constants/fonts';
+import { getFontName, readCssFontSize } from '@workspace/lib/constants/fonts';
 import {
     CHART_DEFAULT_SIZE,
     ITALIC_HEADING_LEVELS,
@@ -154,8 +154,9 @@ export function writeDocsClipboard(
         const { fontSize, color } = getComputedStyle(drawn);
         // An inherited color (the body's, a quote's) is left to the target, as a copied paragraph's is.
         const ownColor = color !== getComputedStyle(drawn.parentElement).color;
+        const size = readCssFontSize(fontSize);
         for (const p of dom.querySelectorAll<HTMLElement>(`p[data-type="${type}"]`)) {
-            p.style.fontSize = fontSize;
+            if (size !== undefined) p.style.fontSize = `${size}pt`;
             if (ownColor) p.style.color = color;
         }
     }

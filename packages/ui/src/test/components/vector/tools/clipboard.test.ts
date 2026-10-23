@@ -130,10 +130,10 @@ describe('buildSelectionData', () => {
         const text = data.items.find((i) => i.type === 'text');
         expect(text?.text).toBe('hello');
         // The FULL modeled set: dropping bold/italic/underline/spacing here is how they stopped
-        // surviving a copy into docs.
+        // surviving a copy into docs. The size crosses in pt: 20 px at 96 dpi.
         expect(text?.typography).toEqual({
             fontFamily: 'Excalifont',
-            fontSize: 20,
+            fontSize: 15,
             textAlign: 'left',
             color: '#e03131',
             fontWeight: 'normal',

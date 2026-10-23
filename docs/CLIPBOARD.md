@@ -20,6 +20,12 @@ Text, image and chart items carry no position: each app pastes at its own caret,
 
 `EigenClipboardTypography` is exactly the ten fields a canvas rich-text box stores, the widest set any consumer can place. The canvas writes and applies all ten. Docs maps the six it has nodes and marks for (font family, color, alignment, bold, italic, underline or strike), and sheets reads none. `fontFamily` is the `EIGEN_FONTS` name, not a CSS stack. The `text` is plain, so per-run marks do not survive. No item holds an equation: a docs copy that writes the payload puts one in its text item as its linear form ([DOCS.md](DOCS.md#an-equations-text-is-its-linear-form-and-the-find-bar-skips-it)), so a slide or a cell gets `x/2`, never the equation.
 
+## A font size crosses in pt
+
+Every font size that crosses between apps is in pt: a text item's `typography.fontSize`, and a `font-size` in the HTML beside the payload. One unit, because a canvas px stands for a different pt in a drawing than on a deck, and only the app at each end knows its own scale. Docs and Sheets store pt and write and read it as it is. The canvas stores px and converts through `canvasPxToPt` and `canvasPtToPx` (`packages/lib/src/vector/frames.ts`) at CSS's 96 dpi, 1 pt to 4/3 px, the scale a drawing's PDF and SVG print at. Slides converts at that scale too until a deck has a width of its own. A canvas-to-canvas copy keeps its px to the bit in the `elements` item instead ([§ A canvas selection rides as its stored records](#a-canvas-selection-rides-as-its-stored-records)).
+
+An HTML reader takes a size in pt as pt and in px at 96 dpi, through `readCssFontSize` (`packages/lib/src/constants/fonts.ts`): the docs paste, the sheets table paste, and a docs title's copy, which writes the size the page draws it at in pt.
+
 ## Both dimensions are mandatory
 
 Every item carries `width` and `height` in the source app's document units, measured at copy time. A producer that stores one dimension measures the other before it writes: a docs figure stores only its width, so the copy handler measures the rendered `<img>`.

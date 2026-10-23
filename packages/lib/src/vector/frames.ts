@@ -2,6 +2,7 @@
 // a drawing is the same canvas with no frames at all. Every frame of a deck has the deck's slide size —
 // elements may overhang and the frame clips them.
 
+import { ptToPx, pxToPt } from '../docs/eigendoc/page';
 import { serializeBackgroundFill } from './fill';
 import type { Point } from './geometry';
 import type { Extent } from './viewport';
@@ -18,6 +19,17 @@ export const SLIDE_SIZES: Readonly<Record<SlideSize, Readonly<Extent>>> = {
     '16:9': { width: FRAME_WIDTH, height: 1080 },
     '4:3': { width: FRAME_WIDTH, height: 1440 },
 };
+
+// A canvas font size as the pt the shared clipboard's text carries (EigenClipboardTypography), and back. A drawing
+// prints at CSS's 96 dpi, so its px is 3/4 pt. Slides is meant to cross at its deck's own width; until a deck has one,
+// it crosses at a drawing's scale.
+export function canvasPxToPt(px: number): number {
+    return pxToPt(px);
+}
+
+export function canvasPtToPx(pt: number): number {
+    return ptToPx(pt);
+}
 
 // The slide size closest in shape to a page of any size, for an importer: widescreen and 16:10 read as
 // 16:9, 4:3 and A4 as 4:3.

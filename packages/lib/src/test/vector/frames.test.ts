@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    canvasPtToPx,
+    canvasPxToPt,
     elementsInFrame,
     FRAME_FIELDS,
     framesFrom,
@@ -27,6 +29,15 @@ describe('SLIDE_SIZES', () => {
     // switch moves nothing off the page.
     test('16:9 is 1920x1080 and 4:3 keeps the width at 1920x1440', () => {
         expect(SLIDE_SIZES).toEqual({ '16:9': { width: 1920, height: 1080 }, '4:3': { width: 1920, height: 1440 } });
+    });
+});
+
+describe('canvasPxToPt', () => {
+    // A drawing prints at CSS's 96 dpi, so that is the pt a canvas px crosses the clipboard as.
+    test('a canvas px is 3/4 pt, and back', () => {
+        expect(canvasPxToPt(20)).toBe(15);
+        expect(canvasPtToPx(15)).toBe(20);
+        expect(canvasPtToPx(canvasPxToPt(48))).toBe(48);
     });
 });
 
