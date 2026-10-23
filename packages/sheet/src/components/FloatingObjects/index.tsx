@@ -1,5 +1,6 @@
 import { floatingItems, type SheetFloatingItem } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
+import { downloadChartImage } from '@workspace/ui/components/charts';
 import { ObjectContextMenu, useContextMenu } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { useZOrderHotkeys } from '@workspace/ui/components/properties-panel';
@@ -15,8 +16,9 @@ import {
     getSheetIndex,
     reorderFloatingObject,
     selectFloatingObject,
+    sheetChartClipboardItem,
 } from '../../state';
-import { ChartContent, DownloadChartMenuItem } from './ChartContent';
+import { ChartContent } from './ChartContent';
 import { FloatingObjectFrame } from './FloatingObjectFrame';
 import { ImageContent } from './ImageContent';
 
@@ -47,6 +49,8 @@ export function FloatingObjects() {
 
     const menuItem = contextMenu.item;
     const menuRef = menuItem && refOf(menuItem);
+    // A chart that draws #REF! or too much data has no item, and no Download image.
+    const menuChart = menuItem?.kind === 'chart' ? sheetChartClipboardItem(context, menuItem.object) : null;
 
     return (
         <div id="sheet-floating-objects">
@@ -79,6 +83,7 @@ export function FloatingObjects() {
                         ? settings.hooks?.resolveImagePath?.(menuItem.object.mediaName)
                         : undefined
                 }
+                onDownloadImage={menuChart ? () => downloadChartImage(menuChart) : undefined}
                 onArrange={(op) => menuRef && setContext((ctx) => reorderFloatingObject(ctx, menuRef, op))}
                 onCut={() => copyActiveObject(true)}
                 onCopy={() => copyActiveObject(false)}
@@ -98,7 +103,6 @@ export function FloatingObjects() {
                                       <ChartColumn className="h-4 w-4" /> Edit chart
                                   </DropdownMenuItem>
                               ),
-                              output: <DownloadChartMenuItem chart={menuItem.object} />,
                           }
                         : undefined
                 }

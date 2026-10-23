@@ -79,13 +79,14 @@ Right-click any object to open its menu. The actions are grouped in this order:
 2. **Duplicate**.
 3. **Order**, which opens **Bring to front**, **Bring forward**, **Send backward**, and **Send to back**.
 4. **Convert to shapes**, when the selection is one chart. It replaces the chart with ordinary shapes and text boxes that look the same, and leaves them all selected. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back.
-5. **Download original image**, on an image only. It saves the image file at its full size and in its own format.
-6. **Add comment**.
-7. **Delete**, on its own at the bottom.
+5. **Download original image**, on an image. It saves the image file at its full size and in its own format.
+6. **Download image**, on anything but a single image. It saves the selection as an SVG picture with a transparent background, named after the drawing. A chart on its own gets a white background and its title as its name.
+7. **Add comment**.
+8. **Delete**, on its own at the bottom.
 
 Right-click an empty spot on the canvas to get **Paste**.
 
-If you can only view the drawing, right-clicking an image gives you **Download original image** and nothing else.
+If you can only view the drawing, right-clicking an object gives you its download and nothing else: **Download original image** on an image, **Download image** on anything else.
 
 <div class="eigen-callout">
 

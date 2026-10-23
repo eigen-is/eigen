@@ -90,7 +90,7 @@ Right-click an object, point to **Order**, and choose:
 - **Send backward**: moves it one step toward the back.
 - **Send to back**: places the object behind all others.
 
-The same menu has **Cut**, **Copy**, **Paste**, **Duplicate**, **Add comment**, and **Delete**. On an image it also has **Download original image**, which saves the image file at its full size and in its own format. If you can only view the presentation, right-clicking an image gives you that option alone.
+The same menu has **Cut**, **Copy**, **Paste**, **Duplicate**, **Add comment**, and **Delete**. On an image it also has **Download original image**, which saves the image file at its full size and in its own format. On anything else it has **Download image**, which saves the selection as an SVG picture. If you can only view the presentation, right-clicking an object gives you its download alone.
 
 ## Delete an object
 

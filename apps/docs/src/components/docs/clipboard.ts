@@ -1,4 +1,5 @@
 import type { Editor, JSONContent } from '@tiptap/core';
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
 import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
@@ -20,6 +21,7 @@ import {
     type TitleType,
 } from '@workspace/lib/docs/eigendoc';
 import type {
+    EigenClipboardChartItem,
     EigenClipboardImageItem,
     EigenClipboardItem,
     EigenClipboardTextItem,
@@ -64,6 +66,14 @@ function textRunBox(view: EditorView, from: number, to: number): ClipboardBox {
     return box;
 }
 
+// A chart node as another app reads it, its look included: what a copy writes and Download image draws.
+export function chartClipboardItem(node: ProseMirrorNode): EigenClipboardChartItem | null {
+    const attrs = readChartAttrs(node.attrs);
+    const { spec, width, height } = attrs;
+    const box = { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
+    return spec ? buildChartClipboardItem({ spec, box, look: attrs }) : null;
+}
+
 // The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file
 // resolves, a chart item per chart with inline data, and the text between them as a text item, a line per
 // paragraph, an equation as its text, a page number as its # and a footnote as nothing. None → no items, and the
@@ -92,10 +102,7 @@ function copiedClipboardItems(
     view.state.doc.nodesBetween(from, to, (node, pos) => {
         if (node.type.name === 'footnote') return false;
         if (node.type.name === 'chart') {
-            const attrs = readChartAttrs(node.attrs);
-            const { spec, width, height } = attrs;
-            const box = { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
-            const item = spec ? buildChartClipboardItem({ spec, box, look: attrs }) : null;
+            const item = chartClipboardItem(node);
             if (item) push(pos, node.nodeSize, item);
             return;
         }

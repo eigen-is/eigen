@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:
 import type { TiptapEditorHTMLElement } from '@tiptap/core';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
+import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -26,6 +27,9 @@ const { CommandPaletteProvider } = await import('@workspace/ui');
 const { LayoutContext } = await import('@workspace/ui/components/layout/app/layout-context');
 const { PreviewProvider } = await import('@workspace/ui/components/preview-provider');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
+const download = await import('@workspace/lib/download');
+const { sampleChartSpec } = await import('@workspace/lib/charts');
+const fonts = stubCanvasImageFonts();
 
 let doc = new Y.Doc();
 let provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
@@ -1048,4 +1052,53 @@ test('a right-click on an equation in the band being edited opens its menu, whic
     await pick('On its own line');
     expect(doc.getXmlFragment('header').toString()).toContain('display="true"');
     expect(doc.getXmlFragment('default').toString()).not.toContain('equation');
+});
+
+// A chart's look is attributes of its node beside the spec; its labels draw in the look's color. No size draws it at
+// CHART_DEFAULT_SIZE, 600 × 371.
+function writeChart() {
+    const paragraph = new Y.XmlElement('paragraph');
+    const chart = new Y.XmlElement('chart');
+    chart.setAttribute('spec', JSON.stringify({ ...sampleChartSpec('column'), title: 'Light / dark' }));
+    chart.setAttribute('color', '#123456');
+    paragraph.insert(0, [chart]);
+    doc.getXmlFragment('default').insert(0, [paragraph]);
+}
+
+async function rightClickChart() {
+    const chart = bodyView()?.querySelector('.figure');
+    if (!chart) throw new Error('no chart');
+    await act(async () => chart.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+}
+
+test('a right-click on a chart offers a writer Download image beside Cut, Copy and Delete', async () => {
+    writeChart();
+    await render(WRITER);
+    await rightClickChart();
+    expect(menuRows()).toEqual(['Cut', 'Copy', '—', 'Download image', '—', 'Delete']);
+});
+
+test("a viewer's Download image saves the chart in its look on white, its font embedded, named for its title", async () => {
+    const saved = spyOn(download, 'downloadBlob').mockImplementation(() => {});
+    try {
+        writeChart();
+        await render({ canWrite: false, isMobile: false });
+        await rightClickChart();
+        expect(menuRows()).toEqual(['Download image']);
+        fonts.takeFetched();
+        await pick('Download image');
+        await frames();
+        expect(saved).toHaveBeenCalledTimes(1);
+        const [blob, name] = saved.mock.calls[0];
+        expect(name).toBe('Light dark.svg');
+        const svg = await blob.text();
+        expect(svg).toStartWith('<svg xmlns="http://www.w3.org/2000/svg" width="620" height="391"');
+        expect(svg).toContain('fill="#ffffff"');
+        expect(svg).toContain('>Light / dark<');
+        expect(svg).toContain('fill="#123456"');
+        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.woff2']);
+        expect(svg).toContain('font-family: "Inter"');
+    } finally {
+        saved.mockRestore();
+    }
 });

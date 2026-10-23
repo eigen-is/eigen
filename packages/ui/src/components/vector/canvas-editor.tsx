@@ -13,6 +13,7 @@ import {
     arrowRoute,
     type Box,
     boxCenter,
+    canvasImageName,
     computeSnapTargets,
     elementBounds,
     elementsInFrame,
@@ -143,7 +144,7 @@ export type CanvasHandle = {
     insertChart: (type: ChartType) => void;
     centerOn: (el: VectorElement) => void;
     // Every element the canvas shows, on its background, as the SVG the browser draws (Vector's File › Download).
-    downloadDrawing: (name: string) => void;
+    downloadDrawing: () => void;
 };
 
 type CanvasEditorProps = {
@@ -166,6 +167,8 @@ type CanvasEditorProps = {
     // Owner + mount of THIS document, for cross-mount image paste (re-upload into our media/ folder).
     ownerId: string;
     mountId: string;
+    // The document's name without its extension, which a downloaded image is named for.
+    fileName: string;
     // Selection is lifted to the editor so the properties panel and canvas share one source (the
     // slides editor/canvas idiom).
     selectedIds: string[];
@@ -214,6 +217,7 @@ export function CanvasEditor({
     canEdit,
     ownerId,
     mountId,
+    fileName,
     selectedIds,
     setSelectedIds,
     toggle,
@@ -928,12 +932,7 @@ export function CanvasEditor({
                 const box = elementBox(el);
                 centerOn(box.x + box.width / 2, box.y + box.height / 2);
             },
-            downloadDrawing: (name) =>
-                downloadImage(
-                    name,
-                    ordered.map((el) => el.id),
-                    meta.background,
-                ),
+            downloadDrawing: () => downloadImage(fileName, ordered, meta.background),
         };
         return () => {
             canvasRef.current = null;
@@ -946,6 +945,7 @@ export function CanvasEditor({
         insertChart,
         centerOn,
         downloadImage,
+        fileName,
         ordered,
         meta.background,
     ]);
@@ -1017,10 +1017,10 @@ export function CanvasEditor({
         }
         const p = clientToScene(e.clientX, e.clientY);
         const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
-        // A viewer's menu is the image download alone, so only an image opens it.
+        // A viewer's menu is the download alone, which an image without its file yet doesn't have.
         if (!canEdit) {
             const hit = hitId ? committedById.get(hitId) : undefined;
-            if (hit?.type === 'image' && resolveMediaPath(hit.mediaName))
+            if (hit && (hit.type !== 'image' || resolveMediaPath(hit.mediaName)))
                 objectContextMenu.handleContextMenu(e, hit.id);
             return;
         }
@@ -1040,6 +1040,17 @@ export function CanvasEditor({
     // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
     const menuItemId = objectContextMenu.item;
     const menuElement = menuItemId ? committedById.get(menuItemId) : undefined;
+    // Download image draws the selection, or for a viewer, who selects nothing, the element right-clicked; a single
+    // image downloads only its original file.
+    const menuSelection = canEdit
+        ? ordered.filter((el) => selectedIds.includes(el.id))
+        : menuElement
+          ? [menuElement]
+          : [];
+    const onMenuDownloadImage =
+        menuItemId && !(menuSelection.length === 1 && menuSelection[0].type === 'image')
+            ? () => downloadImage(canvasImageName(menuSelection, fileName), menuSelection)
+            : undefined;
     // Laid out only while the menu is open.
     const menuShapes = useMemo(
         () => (menuItemId ? selectionShapes(selectedIds, committedById) : []),
@@ -1702,6 +1713,7 @@ export function CanvasEditor({
                 contextMenu={objectContextMenu}
                 canEdit={canEdit}
                 imagePath={menuElement?.type === 'image' ? resolveMediaPath(menuElement.mediaName) : undefined}
+                onDownloadImage={onMenuDownloadImage}
                 onArrange={onMenuArrange}
                 onCut={onMenuCut}
                 onCopy={onMenuCopy}

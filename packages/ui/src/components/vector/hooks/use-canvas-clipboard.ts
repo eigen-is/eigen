@@ -565,14 +565,13 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         });
     };
 
-    // Download image: the payload a copy of `ids` writes, drawn by the browser. A whole drawing passes its background;
-    // a selection has none. No mutation carries a failure, so this reports its own.
+    // Download image: the elements as they are, drawn by the browser; only clipboard input passes the paste cap. A
+    // whole drawing passes its background, a selection has none. No mutation carries a failure, so this reports its own.
     const downloadImage = useCallback(
-        (name: string, ids: string[], background?: string) => {
-            const { data } = buildSelectionData(ordered, ids, meta, frameId, resolveMediaPath, slideWidth);
-            downloadCanvasImage(data.items, { name, background, fetchMedia: fetchMediaBlob }).catch(onMutationError);
+        (name: string, elements: VectorElement[], background?: string) => {
+            downloadCanvasImage(elements, { name, background, fetchMedia: fetchMediaBlob }).catch(onMutationError);
         },
-        [ordered, meta, frameId, resolveMediaPath, slideWidth, fetchMediaBlob],
+        [fetchMediaBlob],
     );
 
     return { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText, downloadImage };

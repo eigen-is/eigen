@@ -1,6 +1,5 @@
-import { isSketchCapped, parseChartSpec, readChartLook } from '@workspace/lib/charts';
+import { isSketchCapped, parseChartSpec } from '@workspace/lib/charts';
 import {
-    buildChartClipboardItem,
     buildImageClipboardItem,
     buildTextClipboardItem,
     classifyPaste,
@@ -22,7 +21,7 @@ import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, us
 import { v4 as uuidv4 } from 'uuid';
 import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
-import { inlineChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
+import { resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import {
@@ -54,6 +53,7 @@ import {
     type Settings,
     type Sheet as SheetType,
     settleCurrentSheet,
+    sheetChartClipboardItem,
     warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
@@ -587,15 +587,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 const sheet = context.sheets[getSheetIndex(context, context.currentSheetId) ?? -1];
                 if (activeObject?.kind === 'chart' && floating) {
                     const chart = sheet?.charts?.[activeObject.id];
-                    const inline = chart ? inlineChartSpec(chart, createContextResolver(context)) : null;
-                    const item =
-                        chart && inline
-                            ? buildChartClipboardItem({ spec: inline, box: chart, look: readChartLook(chart) })
-                            : null;
-                    if (!chart || !inline || !item) return;
+                    const item = chart ? sheetChartClipboardItem(context, chart) : null;
+                    if (!chart || !item) return;
                     e.preventDefault();
                     writeEigenClipboard(e, { version: 1, items: [item] });
-                    globalCache.current.copiedChart = { inline, spec: chart.spec };
+                    globalCache.current.copiedChart = { inline: item.spec, spec: chart.spec };
                     if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                     return;
                 }

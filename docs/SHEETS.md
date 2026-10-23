@@ -231,7 +231,7 @@ Touch follows Google Sheets on a phone: only the selected object is `touch-none`
 
 ## A floating object's menu, keys and aspect lock are Vector's
 
-Right-click, and a long press on touch, select the object and open the shared `ObjectContextMenu` ([LAYOUT.md](LAYOUT.md#menus-draw-their-rows-in-one-order)), so its rows read as a canvas object's do: Cut, Copy, Duplicate, Order, the download, Delete. A chart adds Edit chart and Download chart → SVG in their groups, and a viewer gets the download row only. Sheets objects take no comments, which hang off cells, so the menu has no Add comment. ⌘[ and ⌘] step the selected object down and up, with Shift to the back and front, through Vector's `useZOrderHotkeys`.
+Right-click, and a long press on touch, select the object and open the shared `ObjectContextMenu` ([LAYOUT.md](LAYOUT.md#menus-draw-their-rows-in-one-order)), so its rows read as a canvas object's do: Cut, Copy, Duplicate, Order, the download, Delete. A chart adds Edit chart and Download image in their groups, and a viewer gets the download row only. Sheets objects take no comments, which hang off cells, so the menu has no Add comment. ⌘[ and ⌘] step the selected object down and up, with Shift to the back and front, through Vector's `useZOrderHotkeys`.
 
 Keep aspect ratio is the app's `useAspectLock`, on by default for an image, whose photo distorts when stretched, and off for a chart, which redraws to any box. The app passes it to the workbook as `aspectLocked`, so the corner grips and the panel's checkbox follow one setting, and Shift inverts it while dragging. The app's panel (`apps/sheets/src/components/sheets/floating-object-panel.tsx`) shows X, Y, W, H and the angle, Arrange and Delete for both kinds, and Edit chart for a chart.
 
@@ -239,7 +239,7 @@ Keep aspect ratio is the app's `useAspectLock`, on by default for an image, whos
 
 Every component under the workbook context re-renders on every context change, a selection or a drag included, so `sheetChartSvg` (`state/modules/chart.ts`) keeps one drawing per chart record and the `data` matrices of the sheets its refs name. immer replaces the matrix whose cells an edit touched, so an edit feeding a chart redraws it on the next render and nothing else does. The key is the matrix, not the sheet: the API's `setSelection` and a sheet switch write the per-client `selections` onto the sheet object. A rotate or a move keeps the drawing, and a resize redraws at the preview's size. `packages/sheet/src/test/components/FloatingObjects/chart-content.test.tsx` counts the redraws.
 
-Download chart → SVG puts the painter's SVG on white, as the export draws it. It names the chart's font without embedding it, because the font files are bundled into the server's export only.
+Download image draws the chart as a copy carries it, through the canvas image writer: its ranges read into inline data (`sheetChartClipboardItem`), on white, with the faces its labels use embedded ([EXPORT.md](EXPORT.md#a-drawing-downloads-its-own-svg-and-prints-as-layers)). A chart that draws #REF! or too much data has no inline data, so its menu has no Download image. The value ticks draw as plain numbers, as in every app but Sheets ([CHARTS.md](CHARTS.md#a-chart-copies-between-apps-with-its-numbers-inline)).
 
 ## A selected chart copies itself, not the cells behind it
 

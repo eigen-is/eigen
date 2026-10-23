@@ -64,13 +64,14 @@ Right-click an object to open its menu. The commands appear in this order:
 - **Duplicate**.
 - **Order**, which opens **Bring to front**, **Bring forward**, **Send backward**, and **Send to back**.
 - **Convert to shapes**, when the selection is one chart. It replaces the chart with ordinary shapes and text boxes that look the same, and leaves them all selected. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back.
-- **Download original image**, on an image only. It saves the image file at its full size and in its own format.
+- **Download original image**, on an image. It saves the image file at its full size and in its own format.
+- **Download image**, on anything but a single image. It saves the selection as an SVG picture with a transparent background, named after the presentation. A chart on its own gets a white background and its title as its name.
 - **Add comment**, if you can comment on the presentation.
 - **Delete**, on its own at the bottom.
 
 Right-click an empty spot on the slide to get **Paste** and the slide's own commands: **New slide above**, **New slide below**, **Duplicate slide**, and **Delete slide**.
 
-If you can only view the presentation, right-clicking an image gives you **Download original image** and nothing else.
+If you can only view the presentation, right-clicking an object gives you its download and nothing else: **Download original image** on an image, **Download image** on anything else.
 
 <div class="eigen-callout">
 

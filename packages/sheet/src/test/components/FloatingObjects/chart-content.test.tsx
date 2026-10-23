@@ -1,10 +1,11 @@
 // A chart's own part of the floating frame on a mounted Workbook: it draws its range as SVG, redrawn only when a
-// sheet it reads changes, a double-click opens its editor, and its menu downloads it as SVG. What every floating
+// sheet it reads changes, a double-click opens its editor, and its menu downloads it as an image. What every floating
 // object does is in floating-objects.test.tsx.
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
+import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 
@@ -15,6 +16,7 @@ const { createRoot } = await import('react-dom/client');
 const { Workbook } = await import('../../../components/Workbook');
 const chartData = await import('../../../engine/chart-data');
 const download = await import('@workspace/lib/download');
+const fonts = stubCanvasImageFonts();
 type Sheet = import('../../../state').Sheet;
 type Op = import('../../../state').Op;
 type ChartEditorState = import('../../../state').ChartEditorState;
@@ -181,35 +183,33 @@ async function pick(label: string) {
     await act(async () => item.click());
 }
 
-test('Download chart → SVG saves the painter’s svg on white, for a viewer too', async () => {
+// The range is read into inline data, the chart item a copy writes, and drawn by the canvas image writer.
+test('Download image saves the chart with its range read in, on white, its font embedded, for a viewer too', async () => {
     const saved = spyOn(download, 'downloadBlob').mockImplementation(() => {});
+    const fetched = spyOn(globalThis, 'fetch').mockImplementation(
+        Object.assign(async () => new Response(new Uint8Array([1, 2, 3])), { preconnect: fetch.preconnect }),
+    );
     try {
         const { box } = await mount(false);
         const el = box()?.firstElementChild;
         if (!el) throw new Error('no chart');
         await openMenu(el);
-        expect(menuRows()).toEqual(['Download chart']);
-        await act(async () => {
-            document
-                .querySelector('[role="menuitem"][aria-haspopup="menu"]')
-                ?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
-        });
-        await act(async () => {
-            document
-                .querySelector('[role="menuitem"][aria-haspopup="menu"]')
-                ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-        });
-        await pick('SVG (.svg)');
+        expect(menuRows()).toEqual(['Download image']);
+        fonts.takeFetched();
+        await pick('Download image');
+        await act(async () => {});
         expect(saved).toHaveBeenCalledTimes(1);
         const [blob, name] = saved.mock.calls[0];
         expect(name).toBe('Scores.svg');
         expect(blob.type).toBe('image/svg+xml');
-        const saved_svg = await blob.text();
-        expect(saved_svg).toStartWith('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"');
-        // White under the painter's transparent background, as the export draws it.
-        expect(saved_svg).toContain('viewBox="0 0 400 300"><rect width="100%" height="100%" fill="#fff"/>');
-        expect(saved_svg).toContain('>Scores<');
+        const svg = await blob.text();
+        expect(svg).toStartWith('<svg xmlns="http://www.w3.org/2000/svg" width="420" height="320"');
+        expect(svg).toContain('fill="#ffffff"');
+        for (const label of ['Scores', 'Ajax', 'PSV', 'Points']) expect(svg).toContain(`>${label}<`);
+        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.woff2']);
+        expect(svg).toContain('data:font/woff2;base64,AQID');
     } finally {
         saved.mockRestore();
+        fetched.mockRestore();
     }
 });

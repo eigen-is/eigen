@@ -46,7 +46,7 @@ A tab closed mid-upload leaves its `pending:` name in the document, and no one c
 
 ## A download bypasses the preview
 
-`resolveMediaUrl` serves `/preview`, which re-encodes a raster image as WebP of at most 2560 px. So every embedded image's context menu carries `DownloadImageMenuItem` (`packages/ui/src/components/context-menu/object-menu-items.tsx`), which resolves the path and calls `downloadDriveFile` for the original bytes and name. A pending upload or a deleted file has no path, so the row hides. Downloading is a read, so viewers get it too: the canvas object menu shrinks to that row, a sheets image opens its own menu instead of the cell's, and a docs figure opens Download plus the comment rows ([COMMENTS.md](COMMENTS.md#a-docs-image-opens-its-own-menu-and-paints-its-own-mark)).
+`resolveMediaUrl` serves `/preview`, which re-encodes a raster image as WebP of at most 2560 px. So every embedded image's context menu carries `DownloadOriginalImageMenuItem` (`packages/ui/src/components/context-menu/object-menu-items.tsx`), which resolves the path and calls `downloadDriveFile` for the original bytes and name. A pending upload or a deleted file has no path, so the row hides. Downloading is a read, so viewers get it too: the canvas object menu shrinks to the download rows, a sheets image opens its own menu instead of the cell's, and a docs figure opens Download plus the comment rows ([COMMENTS.md](COMMENTS.md#a-docs-image-opens-its-own-menu-and-paints-its-own-mark)).
 
 ## The clipboard carries ids, the document stores names
 
