@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
-import { parseChartSpec } from '@workspace/lib/charts';
+import { parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import {
     DOCUMENT_LINE_RATIO,
     EIGEN_FONT_NAMES,
@@ -224,11 +224,12 @@ export async function eigendocToDocx(
 }
 
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
-// under that src, as it draws a chart under its spec and size. A media name holds no `/`, so no two keys meet.
+// under that src, as it draws a chart under its size, look and spec. A media name holds no `/`, so no two keys meet.
 function figureMediaKey(node: JSONContent): string | null {
     if (node.type === 'chart') {
-        const { spec, width, height } = readChartAttrs(node.attrs ?? {});
-        return `chart/${width}/${height}/${spec}`;
+        const attrs = node.attrs ?? {};
+        const { spec, width, height } = readChartAttrs(attrs);
+        return `chart/${width}/${height}/${JSON.stringify(readChartLook(attrs))}/${spec}`;
     }
     const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
     return mediaName ?? (src && splitDataUri(src) ? src : null);

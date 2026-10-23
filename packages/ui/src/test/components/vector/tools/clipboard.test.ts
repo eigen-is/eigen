@@ -219,15 +219,25 @@ describe('buildSelectionData', () => {
         expect(data.svg?.startsWith('<svg')).toBe(true);
     });
 
-    test('a chart ships a chart item, its spec as stored, for the apps that place no elements', () => {
+    test('a chart ships a chart item, its spec as stored and its look, for the apps that place no elements', () => {
         const el = chart('c1', 'a0');
         const { data } = buildSelectionData([el], ['c1'], meta, '', () => undefined);
         expect(data.items.map((i) => i.type)).toEqual(['elements', 'chart']);
+        if (el.type !== 'chart') throw new Error('expected a chart');
         expect(data.items[1]).toEqual({
             type: 'chart',
-            spec: el.type === 'chart' ? el.chart : '',
+            spec: el.chart,
             width: 640.5,
             height: 400,
+            look: {
+                fill: el.fill,
+                color: el.color,
+                strokeColor: el.strokeColor,
+                strokeWidth: el.strokeWidth,
+                strokeStyle: el.strokeStyle,
+                roughness: el.roughness,
+                seed: el.seed,
+            },
         });
         expect(readElementsClipboardItem(data.items)?.elements).toEqual([el]);
     });

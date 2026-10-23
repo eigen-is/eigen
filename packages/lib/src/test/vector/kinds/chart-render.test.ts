@@ -1,10 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import { CHART_MESSAGES, chartColor, FLAT_CHART_PAINT, layoutChart, sampleChartSpec } from '../../../charts';
+import {
+    CHART_MESSAGES,
+    chartColor,
+    chartPaintOf,
+    FLAT_CHART_LOOK,
+    layoutChart,
+    sampleChartSpec,
+} from '../../../charts';
 import { getFontFamily } from '../../../constants/fonts';
 import { escapeXml } from '../../../core/xml';
-import type { ChartData, ChartSpec } from '../../../types/chart';
-import { isTransparentFill, parseFill } from '../../../vector/fill';
-import { renderChartSpecSvg } from '../../../vector/kinds/chart-render';
+import type { ChartData, ChartLook, ChartSpec } from '../../../types/chart';
+import { serializeFill } from '../../../vector/fill';
+import { renderChartSpecSvg, renderChartSvg } from '../../../vector/kinds/chart-render';
 import { elementToSvg } from '../../../vector/scene-to-svg';
 
 const RANGE_SPEC: ChartSpec = {
@@ -55,7 +62,7 @@ describe('renderChartSpecSvg', () => {
             data: spec.data,
             width: 600,
             height: 371,
-            paint: FLAT_CHART_PAINT,
+            paint: chartPaintOf(FLAT_CHART_LOOK),
             formatTick: (value) => String(value),
         });
         for (const shape of shapes) expect([shape.id, svg.includes(elementToSvg(shape))]).toEqual([shape.id, true]);
@@ -118,15 +125,44 @@ describe('renderChartSpecSvg', () => {
         expect(fontsOf(svgOf(null))).toEqual(face('Inter'));
     });
 
-    test('the paint is the flat preset: solid marks, no background', () => {
-        expect(FLAT_CHART_PAINT.roughness).toBe(0);
-        expect(FLAT_CHART_PAINT.fillStyle).toBe('solid');
-        expect(isTransparentFill(parseFill(FLAT_CHART_PAINT.background))).toBe(true);
+    test('with no look it draws flat: solid marks, no background', () => {
         const svg = svgOf(sampleChartSpec('column'));
         expect(svg).toContain(`font-family="${escapeXml(getFontFamily('Inter'))}"`);
         expect(svg).not.toContain(':background');
         // a hatched mark is drawn as stroked sketch lines; a solid one is a filled path
         expect(svg).not.toContain(`stroke="${chartColor(0)}" stroke-width="1" fill="none"`);
         expect(svg).toContain(`fill="${chartColor(0)}"`);
+    });
+
+    test('a look draws as a canvas chart storing the same fields', () => {
+        const look: ChartLook = {
+            fill: serializeFill({ type: 'gradient', from: '#ffeeaa', to: 'transparent', angle: 90, style: 'hachure' }),
+            color: '#334455',
+            strokeColor: '#556677',
+            strokeWidth: 4,
+            strokeStyle: 'dotted',
+            roughness: 2,
+            seed: 99,
+        };
+        const spec = sampleChartSpec('column');
+        const svg = renderChartSpecSvg({ id: 'c1', spec, width: 600, height: 371, look });
+        const canvas = renderChartSvg({
+            id: 'c1',
+            type: 'chart',
+            x: 0,
+            y: 0,
+            width: 600,
+            height: 371,
+            angle: 0,
+            index: 'a0',
+            frameId: '',
+            commentCardIds: '',
+            opacity: 100,
+            chart: JSON.stringify(spec),
+            ...look,
+        });
+        expect(svg).toContain(canvas);
+        expect(svg).not.toBe(svgOf(spec));
+        expect(svg).toContain('<linearGradient id="fill-c1_3a_background"');
     });
 });

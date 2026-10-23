@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { chartColor, formatTickValue, layoutChart, layoutChartMessage, sampleChartSpec } from '../../charts';
+import {
+    chartColor,
+    chartPointCount,
+    formatTickValue,
+    layoutChart,
+    layoutChartMessage,
+    MAX_SKETCH_POINTS,
+    sampleChartSpec,
+} from '../../charts';
 import {
     CHART_STACKINGS,
     CHART_TYPES,
@@ -720,7 +728,7 @@ describe('legend', () => {
     test('top and bottom are a centered row of swatches, left and right a column', () => {
         const top = layout('column', { legend: 'top' });
         const swatches = rects(top, 'legend');
-        expect(swatches.map((swatch) => swatch.strokeColor)).toEqual([chartColor(0), chartColor(1)]);
+        expect(swatches.map((swatch) => swatch.fill)).toEqual([solidFill(chartColor(0)), solidFill(chartColor(1))]);
         expect(swatches[0].y).toBeCloseTo(swatches[1].y);
         const titleBottom = Math.max(...top.labels.filter((l) => l.bold).map((l) => labelBounds(l).bottom));
         expect(swatches[0].y).toBeGreaterThan(titleBottom);
@@ -746,11 +754,11 @@ describe('legend', () => {
             categories: ['A'],
             series: [series('S1', [1], null), series('S2', [2], '#123456'), series('S3', [3], null)],
         };
-        const out = layout('column', {}, { data });
+        const out = layout('column', {}, { data, paint: { fillStyle: 'hachure' } });
         const colors = [chartColor(0), '#123456', chartColor(2)];
         expect(rects(out, 'legend').map((swatch) => swatch.strokeColor)).toEqual(colors);
         expect(rects(out, 'bar').map((bar) => bar.strokeColor)).toEqual(colors);
-        expect(rects(out, 'bar').map((bar) => bar.fill)).toEqual(colors.map((color) => solidFill(color)));
+        expect(rects(out, 'bar').map((bar) => bar.fill)).toEqual(colors.map((color) => solidFill(color, 'hachure')));
     });
 
     test('a wide legend wraps into rows that stay inside the box', () => {
@@ -828,14 +836,11 @@ describe('pie', () => {
         for (const slice of pie) expect(slice.x).toBe(first.x);
     });
 
-    test('slices take sliceColors, then the palette; edges take the background', () => {
+    test('slices take sliceColors, then the palette', () => {
         const out = layout('pie', { sliceColors: ['#000000'] });
         const pie = slices(out);
         expect(pie[0].fill).toBe(solidFill('#000000'));
         expect(pie[1].fill).toBe(solidFill(chartColor(1)));
-        expect(pie.every((slice) => slice.strokeColor === '#ffffff')).toBe(true);
-        const bare = slices(layout('pie', {}, { paint: { background: serializeFill(TRANSPARENT_FILL) } }));
-        expect(bare[1].strokeColor).toBe(chartColor(1));
         const automatic = slices(layout('pie', { sliceColors: [null, '#000000'] }));
         expect(automatic.map((slice) => slice.fill)).toEqual(
             [chartColor(0), '#000000', chartColor(2), chartColor(3)].map((color) => solidFill(color)),
@@ -1136,6 +1141,102 @@ describe('edge cases', () => {
                         expect(spans[i - 1][1]).toBeLessThanOrEqual(spans[i][0] + 1e-9);
                 }
             }
+        }
+    });
+});
+
+describe('outlines follow the fill style', () => {
+    const legend = { legend: 'right' } as const;
+
+    test('a solid fill draws bars, slices and legend swatches with no outline, the bars filling their slots', () => {
+        const column = layout('column', legend, { paint: { strokeWidth: 4 } });
+        const pie = layout('pie', legend);
+        for (const shape of [
+            ...rects(column, 'bar'),
+            ...rects(column, 'legend'),
+            ...slices(pie),
+            ...rects(pie, 'legend'),
+        ])
+            expect([shape.id, shape.strokeColor]).toEqual([shape.id, 'transparent']);
+        for (const bar of rects(column, 'bar')) expect(bar.strokeWidth).toBe(0);
+    });
+
+    test.each(['hachure', 'cross-hatch', 'zigzag'] as const)('%s outlines each in its own color', (fillStyle) => {
+        const colors = [chartColor(0), chartColor(1)];
+        const column = layout('column', legend, { paint: { fillStyle, strokeWidth: 4 } });
+        const bars = rects(column, 'bar');
+        expect(new Set(bars.map((bar) => bar.strokeColor))).toEqual(new Set(colors));
+        for (const bar of bars) {
+            expect(bar.fill).toBe(solidFill(bar.strokeColor, fillStyle));
+            expect(bar.strokeWidth).toBeGreaterThan(0);
+        }
+        expect(rects(column, 'legend').map((swatch) => swatch.strokeColor)).toEqual(colors);
+        const pie = layout('pie', legend, { paint: { fillStyle } });
+        for (const slice of slices(pie)) expect(slice.fill).toBe(solidFill(slice.strokeColor, fillStyle));
+        expect(rects(pie, 'legend').map((swatch) => swatch.fill)).toEqual(slices(pie).map((slice) => slice.fill));
+    });
+
+    test('the axes and gridlines draw in the paint stroke whatever the fill style', () => {
+        for (const fillStyle of ['solid', 'cross-hatch'] as const) {
+            const out = layout('column', {}, { paint: { fillStyle, strokeColor: '#336699', strokeWidth: 4 } });
+            for (const rule of [...lines(out, 'gridline'), ...lines(out, 'baseline')])
+                expect([rule.strokeColor, rule.strokeWidth]).toEqual(['#336699', 4]);
+        }
+    });
+});
+
+describe('sketch cap', () => {
+    const SKETCH = { roughness: 2, fillStyle: 'cross-hatch', background: solidFill('#ffffff') } as const;
+    // `count` points over one series for a pie, four otherwise.
+    function wide(type: ChartType, count: number): ChartData {
+        const perSeries = type === 'pie' ? count : count / 4;
+        const categories = Array.from({ length: perSeries }, (_, i) => `C${i}`);
+        const rows = type === 'pie' ? 1 : 4;
+        return {
+            categories,
+            series: Array.from({ length: rows }, (_, s) =>
+                series(
+                    `S${s}`,
+                    categories.map((_, i) => 1 + ((i + s) % 5)),
+                    chartColor(s),
+                ),
+            ).map((s) => ({ ...s, markers: type === 'line' })),
+        };
+    }
+    const DATA_PARTS = new Set(['bar', 'slice', 'line', 'marker']);
+
+    test('counts the points the chart plots: a pie its first series, others every series', () => {
+        const spec = sampleChartSpec('column');
+        expect(chartPointCount(spec, wide('column', 40))).toBe(40);
+        expect(chartPointCount({ ...spec, type: 'pie' }, wide('column', 40))).toBe(10);
+    });
+
+    test.each([...CHART_TYPES])('%s: at the cap every shape keeps the sketch', (type) => {
+        const out = layout(type, { legend: 'top' }, { data: wide(type, MAX_SKETCH_POINTS), paint: SKETCH });
+        for (const shape of out.shapes) {
+            const part = shape.id.split(':')[1];
+            if (part === 'background') continue;
+            expect([part, shape.roughness]).toEqual([part, 2]);
+            if (shape.type === 'rectangle' || shape.type === 'pie')
+                expect([part, parseFill(shape.fill).style]).toEqual([part, 'cross-hatch']);
+        }
+    });
+
+    test.each([...CHART_TYPES])('%s: past the cap the data draws flat, the rest keeps the sketch', (type) => {
+        const out = layout(
+            type,
+            { legend: 'top' },
+            { data: wide(type, MAX_SKETCH_POINTS + 4), paint: SKETCH, width: 2000, height: 1200 },
+        );
+        const parts = new Set(out.shapes.map((shape) => shape.id.split(':')[1]));
+        expect(parts.has('legend')).toBe(true);
+        for (const shape of out.shapes) {
+            const part = shape.id.split(':')[1];
+            if (part === 'background') continue;
+            const data = DATA_PARTS.has(part);
+            expect([part, shape.roughness]).toEqual([part, data ? 0 : 2]);
+            if (shape.type === 'rectangle' || shape.type === 'pie')
+                expect([part, parseFill(shape.fill).style]).toEqual([part, data ? 'solid' : 'cross-hatch']);
         }
     });
 });

@@ -1,8 +1,11 @@
 import { type CommandProps, Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
-import { parseChartSpec, sampleChartSpec } from '../../../charts';
-import type { ChartSpec, ChartType } from '../../../types/chart';
+import { nanoid } from 'nanoid';
+import { parseChartSpec, readChartLook, sampleChartSpec } from '../../../charts';
+import { isRecord } from '../../../core/guards';
+import { CHART_LOOK_FIELDS, type ChartLook, type ChartSpec, type ChartType } from '../../../types/chart';
 import { renderChartSpecSvg } from '../../../vector/kinds/chart-render';
+import { randomSeed } from '../../../vector/write-vector';
 import { MAX_PAPER_MM, mmToPx } from '../page';
 import {
     type FigureFrameAttrs,
@@ -20,12 +23,14 @@ export const CHART_DEFAULT_SIZE = { width: 600, height: 371 };
 export const CHART_MAX_SIDE = Math.round(mmToPx(MAX_PAPER_MM));
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null). The spec is the
-// stored string, kept as it is even when it doesn't parse, as a canvas keeps it.
-export type ChartAttrs = FigureFrameAttrs & {
-    spec?: string | null;
-    width?: number | null;
-    height?: number | null;
-};
+// stored string, kept as it is even when it doesn't parse, as a canvas keeps it. The look is a canvas chart's own
+// fields, an attribute each, so a peer's stroke edit merges with another's sketch edit.
+export type ChartAttrs = FigureFrameAttrs &
+    Partial<ChartLook> & {
+        spec?: string | null;
+        width?: number | null;
+        height?: number | null;
+    };
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -40,27 +45,41 @@ declare module '@tiptap/core' {
 const side = (value: unknown) => (typeof value === 'number' && value > 0 ? Math.min(CHART_MAX_SIDE, value) : null);
 
 // A chart's attributes off untyped ones: a value of the wrong type reads as unset, and a side past the max as the max.
-export function readChartAttrs(attrs: Record<string, unknown>): ChartAttrs {
+// The look reads through the chart look validators, flat where unset.
+export function readChartAttrs(attrs: Record<string, unknown>): ChartAttrs & ChartLook {
     const { spec, width, height } = attrs;
     return {
         spec: typeof spec === 'string' ? spec : null,
         width: side(width),
         height: side(height),
+        ...readChartLook(attrs),
         ...readFigureFrameAttrs(attrs),
     };
 }
 
-// The chart drawn in Google's flat look at its stored size, or the placeholder for a spec that doesn't parse.
-export function chartSvg(spec: ChartSpec | null, { width, height }: ChartAttrs): string {
+// The chart drawn in its look at its stored size, or the placeholder for a spec that doesn't parse. Its id is new on
+// every draw, so no two charts on a page, or in a copy beside it, share a gradient's id.
+export function chartSvg(spec: ChartSpec | null, { width, height, ...look }: ChartAttrs): string {
     return renderChartSpecSvg({
-        id: 'chart',
+        id: `chart-${nanoid(10)}`,
         spec,
         width: width ?? CHART_DEFAULT_SIZE.width,
         height: height ?? CHART_DEFAULT_SIZE.height,
+        look: readChartLook(look),
     });
 }
 
 const sideOf = (element: HTMLElement, name: string) => side(Number(element.getAttribute(name)));
+
+// A pasted span.chart's look, one JSON attribute for every field, each read through the validators later.
+function lookOf(element: HTMLElement): Record<string, unknown> {
+    try {
+        const look: unknown = JSON.parse(element.getAttribute('data-look') ?? '');
+        return isRecord(look) ? look : {};
+    } catch {
+        return {};
+    }
+}
 
 // An inline atom like a figure, sharing its frame. A chart has no intrinsic aspect ratio, so it stores both sides.
 export const ChartNode = Node.create({
@@ -79,6 +98,12 @@ export const ChartNode = Node.create({
             spec: { default: null, parseHTML: (element: HTMLElement) => element.getAttribute('data-chart') || null },
             width: { default: null, parseHTML: (element: HTMLElement) => sideOf(element, 'data-width') },
             height: { default: null, parseHTML: (element: HTMLElement) => sideOf(element, 'data-height') },
+            ...Object.fromEntries(
+                CHART_LOOK_FIELDS.map((field) => [
+                    field,
+                    { default: null, parseHTML: (element: HTMLElement) => lookOf(element)[field] ?? null },
+                ]),
+            ),
             ...figureFrameAttributes(),
         };
     },
@@ -97,6 +122,7 @@ export const ChartNode = Node.create({
             'data-chart': attrs.spec ?? '',
             'data-width': attrs.width,
             'data-height': attrs.height,
+            'data-look': JSON.stringify(readChartLook(node.attrs)),
         };
         const img = {
             src: `data:image/svg+xml,${encodeURIComponent(chartSvg(spec, attrs))}`,
@@ -117,6 +143,7 @@ export const ChartNode = Node.create({
                         type: this.name,
                         attrs: {
                             spec: JSON.stringify(sampleChartSpec(type)),
+                            seed: randomSeed(),
                             width: Math.round(CHART_DEFAULT_SIZE.width * scale),
                             height: Math.round(CHART_DEFAULT_SIZE.height * scale),
                         },

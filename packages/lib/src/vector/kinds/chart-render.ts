@@ -4,15 +4,15 @@
 
 import {
     CHART_MESSAGES,
+    chartPaintOf,
     DEFAULT_CHART_FONT,
-    FLAT_CHART_PAINT,
+    FLAT_CHART_LOOK,
     formatTickValue,
     layoutChart,
     layoutChartMessage,
     parseChartSpec,
 } from '../../charts';
 import type { ChartBox, ChartDataError, ChartLayout, ChartShape, ChartSpecSvgInput } from '../../types/chart';
-import { parseFill } from '../fill';
 import { round } from '../geometry';
 import type { VectorChartElement } from '../types';
 import { ellipseKind } from './ellipse';
@@ -33,10 +33,15 @@ export function renderChartSvg(el: VectorChartElement): string {
     return chartBodySvg(chartBox(el), chartLayout(el));
 }
 
-// A complete <svg> of the box in the flat paint and the spec's font, which a document's HTML inlines and a
-// sheet overlays.
-export function renderChartSpecSvg({ spec, data, formatTick = formatTickValue, ...rest }: ChartSpecSvgInput): string {
-    const box = { ...rest, paint: FLAT_CHART_PAINT };
+// A complete <svg> of the box in its look and the spec's font, which a document's HTML inlines and a sheet overlays.
+export function renderChartSpecSvg({
+    spec,
+    data,
+    look = FLAT_CHART_LOOK,
+    formatTick = formatTickValue,
+    ...rest
+}: ChartSpecSvgInput): string {
+    const box = { ...rest, paint: chartPaintOf(look) };
     const resolved = data ?? (spec?.data.source === 'inline' ? spec.data : null);
     let body: string;
     if (spec === null || resolved === null) body = chartBodySvg(box, null);
@@ -74,24 +79,9 @@ function dataErrorMessage(error: ChartDataError): string {
     return messages[error];
 }
 
-// The fill's paint is the background and its hatch style the marks'; the stroke draws axes and gridlines.
-// The font is the spec's.
+// The element's own fields are its look; the font is the spec's.
 function chartBox(el: VectorChartElement): ChartBox {
-    return {
-        id: el.id,
-        width: el.width,
-        height: el.height,
-        paint: {
-            color: el.color,
-            background: el.fill,
-            strokeColor: el.strokeColor,
-            strokeWidth: el.strokeWidth,
-            strokeStyle: el.strokeStyle,
-            roughness: el.roughness,
-            seed: el.seed,
-            fillStyle: parseFill(el.fill).style,
-        },
-    };
+    return { id: el.id, width: el.width, height: el.height, paint: chartPaintOf(el) };
 }
 
 // Shape ids are `${chartId}:…`, so each one's scoped defs ids stay unique on the page.

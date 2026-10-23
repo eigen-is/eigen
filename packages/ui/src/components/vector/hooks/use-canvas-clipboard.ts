@@ -203,7 +203,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     if (crossMount) plan.crossMount.push({ index, item });
                     continue;
                 }
-                // A chart keeps its spec as it came, its font included, and takes the host's paint.
+                // A chart keeps its spec as it came, its font included, and its look as the element's own fields.
                 if (item.type === 'chart') {
                     const { width, height } = box;
                     plan.partials.push({
@@ -213,6 +213,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                         height,
                         angle,
                         chart: item.spec,
+                        ...item.look,
                     });
                     continue;
                 }

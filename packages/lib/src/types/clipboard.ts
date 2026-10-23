@@ -23,6 +23,8 @@
 // The `elements` item is the exception, and says why on itself — a canvas selection carries the stored
 // coordinates so a canvas→canvas paste can place it relative to where it was copied from.
 
+import type { ChartLook } from './chart';
+
 // Best-effort cross-app text styling. Canonical names shared with vector and the properties panel;
 // `fontFamily` is the EIGEN_FONTS name (per the fontFamily value canon), not a CSS stack. Every field
 // optional — a consumer applies the ones it understands and ignores the rest.
@@ -97,12 +99,14 @@ export type EigenClipboardElementsItem = {
 
 // A live chart: a ChartSpec string that always holds its numbers inline, since no host but the sheet it came
 // from can read a range. A sheet copy resolves its ranges into it at copy time; the reader drops a spec that
-// doesn't parse as inline data within the spec's limits, so no consumer stores a placeholder.
+// doesn't parse as inline data within the spec's limits, so no consumer stores a placeholder. The look travels
+// with it, read through the chart look validators, so a copy keeps its look in every app.
 export type EigenClipboardChartItem = {
     type: 'chart';
     spec: string;
     width: number;
     height: number;
+    look: ChartLook;
 };
 
 export type EigenClipboardItem =

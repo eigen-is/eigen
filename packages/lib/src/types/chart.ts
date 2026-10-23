@@ -2,6 +2,7 @@ import type {
     FillStyle,
     StrokeStyle,
     TextLine,
+    VectorChartElement,
     VectorEllipseElement,
     VectorLinearElement,
     VectorPieElement,
@@ -68,7 +69,21 @@ export type ChartData = { categories: string[]; series: InlineChartSeries[] };
 // spans rows and columns, Excel's #REF.
 export type ChartDataError = 'ref' | 'too-many-points';
 
-// What a chart paints with besides its spec's font; a canvas chart takes it from its element.
+// A chart's look: the fields a canvas chart element paints with, which a doc's and a sheet's chart store under the
+// same names beside the spec. Opacity is a canvas layer's, not the chart's.
+export const CHART_LOOK_FIELDS = [
+    'fill',
+    'color',
+    'strokeColor',
+    'strokeWidth',
+    'strokeStyle',
+    'roughness',
+    'seed',
+] as const satisfies readonly (keyof VectorChartElement)[];
+
+export type ChartLook = Pick<VectorChartElement, (typeof CHART_LOOK_FIELDS)[number]>;
+
+// What a chart paints with besides its spec's font, from its look (chartPaintOf).
 // background is a serialized Fill (transparent draws none); strokeColor and strokeStyle draw the axes and gridlines.
 export type ChartPaint = {
     color: string;
@@ -100,13 +115,14 @@ export type ChartLayoutInput = {
 export type ChartBox = Pick<ChartLayoutInput, 'id' | 'width' | 'height' | 'paint'>;
 
 // A chart outside a canvas, in a document or on a sheet: spec null for one that doesn't parse, and data the
-// sheet's resolved ranges or why it has none; inline data draws without it.
+// sheet's resolved ranges or why it has none; inline data draws without it. No look draws flat.
 export type ChartSpecSvgInput = {
     id: string;
     spec: ChartSpec | null;
     data?: ChartData | ChartDataError;
     width: number;
     height: number;
+    look?: ChartLook;
     formatTick?: ChartLayoutInput['formatTick'];
 };
 

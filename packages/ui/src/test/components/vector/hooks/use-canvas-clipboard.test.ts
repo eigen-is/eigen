@@ -10,8 +10,14 @@ installHappyDom();
 const { createElement } = await import('react');
 const { sampleChartSpec } = await import('@workspace/lib/charts');
 const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
-const { buildElementsClipboardItem, DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META, ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } =
-    await import('@workspace/lib/vector');
+const {
+    buildElementsClipboardItem,
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SCENE_META,
+    ELEMENT_KINDS,
+    solidFill,
+    VECTOR_STYLE_DEFAULTS,
+} = await import('@workspace/lib/vector');
 const { renderInDocument } = await import('../../../render-in-document');
 const { dropOutsideTextSelection, useCanvasClipboard } = await import(
     '../../../../components/vector/hooks/use-canvas-clipboard'
@@ -126,10 +132,29 @@ describe('⌘V of a chart item', () => {
 
     const spec = JSON.stringify(sampleChartSpec('bar'));
 
-    test("another app's chart lands as a chart element at its size, centered, its spec as it came", async () => {
-        const added = await pasteOnCanvas([{ type: 'chart', spec, width: 600.5, height: 371 }]);
+    const look = {
+        fill: solidFill('#ffeeaa', 'zigzag'),
+        color: '#ffffff',
+        strokeColor: '#336699',
+        strokeWidth: 4,
+        strokeStyle: 'dotted',
+        roughness: 2,
+        seed: 77,
+    } as const;
+
+    test("another app's chart lands as a chart element at its size, centered, its spec and look as they came", async () => {
+        const added = await pasteOnCanvas([{ type: 'chart', spec, width: 600.5, height: 371, look }]);
         expect(added).toEqual([
-            { type: 'chart', x: 960 - 600.5 / 2, y: 540 - 371 / 2, width: 600.5, height: 371, angle: 0, chart: spec },
+            {
+                type: 'chart',
+                x: 960 - 600.5 / 2,
+                y: 540 - 371 / 2,
+                width: 600.5,
+                height: 371,
+                angle: 0,
+                chart: spec,
+                ...look,
+            },
         ]);
     });
 
@@ -149,7 +174,7 @@ describe('⌘V of a chart item', () => {
         };
         const elements = buildElementsClipboardItem([record], 'f2');
         if (!elements) throw new Error('no elements item');
-        const added = await pasteOnCanvas([elements, { type: 'chart', spec, width: 640, height: 400 }]);
+        const added = await pasteOnCanvas([elements, { type: 'chart', spec, width: 640, height: 400, look }]);
         expect(added).toHaveLength(1);
         expect(added[0]).toMatchObject({ type: 'chart', x: 10, y: 20, width: 640, height: 400, chart: spec });
     });

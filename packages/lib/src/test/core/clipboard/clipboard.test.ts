@@ -1,5 +1,6 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { toast } from 'sonner';
+import { FLAT_CHART_LOOK } from '../../../charts';
 import { sampleChartSpec } from '../../../charts/spec';
 import {
     buildChartClipboardItem,
@@ -26,6 +27,7 @@ import type {
     EigenClipboardTextItem,
 } from '../../../types/clipboard';
 import type { DrivePath } from '../../../types/drive';
+import { serializeFill } from '../../../vector/fill';
 import { eigenMediaHref } from '../../../vector/media-refs';
 import { installHappyDom } from '../../happy-dom';
 
@@ -485,10 +487,25 @@ describe('chart items', () => {
     const raw = (item: unknown): DataTransfer =>
         stubClipboard({ [EIGEN_MIME]: JSON.stringify({ version: 1, items: [item] }) });
 
-    test('a chart with inline data builds an item at its box, with no angle, its spec as given', () => {
-        const item = buildChartClipboardItem({ spec: inline, box: { width: 600.5, height: 371.25 } });
-        expect(item).toEqual({ type: 'chart', spec: inline, width: 600.5, height: 371.25 });
+    const look = {
+        fill: serializeFill({ type: 'solid', color: '#ffeeaa', style: 'zigzag' }),
+        color: '#ffffff',
+        strokeColor: '#336699',
+        strokeWidth: 4,
+        strokeStyle: 'dotted',
+        roughness: 2,
+        seed: 77,
+    } as const;
+
+    test('a chart with inline data builds an item at its box, with no angle, its spec as given and its look', () => {
+        const item = buildChartClipboardItem({ spec: inline, box: { width: 600.5, height: 371.25 }, look });
+        expect(item).toEqual({ type: 'chart', spec: inline, width: 600.5, height: 371.25, look });
         if (item) expect(readClipboardBox(item)).toEqual({ width: 600.5, height: 371.25, angle: undefined });
+    });
+
+    test('a chart that has no look of its own copies flat', () => {
+        const item = buildChartClipboardItem({ spec: inline, box: { width: 600, height: 371 } });
+        expect(item?.look).toEqual(FLAT_CHART_LOOK);
     });
 
     test('a range, unreadable or oversized spec builds no item', () => {
@@ -498,11 +515,24 @@ describe('chart items', () => {
     });
 
     test('the reader keeps a chart with inline data and drops any other', () => {
-        const good: EigenClipboardItem = { type: 'chart', spec: inline, width: 600, height: 371 };
+        const good: EigenClipboardItem = { type: 'chart', spec: inline, width: 600, height: 371, look };
         expect(readEigenClipboard(raw(good))?.items).toEqual([good]);
         for (const spec of [range, 'null', 42, undefined]) {
             expect(readEigenClipboard(raw({ ...good, spec }))?.items).toEqual([]);
         }
         expect(readEigenClipboard(raw({ ...good, height: Number.NaN }))?.items).toEqual([]);
+    });
+
+    // The wire is any page's to write; the canvas reader's validators judge the look, and a missing one reads flat.
+    test('the reader reads the look through the chart look validators', () => {
+        const item = { type: 'chart', spec: inline, width: 600, height: 371 } as const;
+        expect(readEigenClipboard(raw(item))?.items).toEqual([{ ...item, look: FLAT_CHART_LOOK }]);
+        expect(readEigenClipboard(raw({ ...item, look: 'rough' }))?.items).toEqual([
+            { ...item, look: FLAT_CHART_LOOK },
+        ]);
+        const hostile = { ...look, color: 'url(#x)', roughness: 1e9, extra: 'x' };
+        expect(readEigenClipboard(raw({ ...item, look: hostile }))?.items).toEqual([
+            { ...item, look: { ...look, color: FLAT_CHART_LOOK.color, roughness: 10 } },
+        ]);
     });
 });

@@ -389,6 +389,7 @@ describe('doc export — figures', () => {
 });
 
 describe('doc export — charts', () => {
+    const SPEC = JSON.stringify(sampleChartSpec('column'));
     const chartDoc = (attrs: Record<string, unknown>, spec = sampleChartSpec('column')): JSONContent => ({
         type: 'doc',
         content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { spec: JSON.stringify(spec), ...attrs } }] }],
@@ -429,6 +430,32 @@ describe('doc export — charts', () => {
         expect(fontsOf(renderDocHtml(chartDoc({}), () => null))).toEqual(face('Inter'));
         const serif = { ...sampleChartSpec('column'), fontFamily: 'Source Serif 4' };
         expect(fontsOf(renderDocHtml(chartDoc({}, serif), () => null))).toEqual(face('Source Serif 4'));
+    });
+
+    // Two gradient charts on a page: each draws its own gradient, never the other's.
+    test("draws each chart's stored look, its gradient under an id of its own", async () => {
+        const gradient = (from: string) =>
+            JSON.stringify({ type: 'gradient', from, to: 'transparent', angle: 90, style: 'cross-hatch' });
+        const look = { roughness: 2, seed: 5, strokeColor: '#336699', fill: gradient('#ffeeaa') };
+        const chart = (attrs: Record<string, unknown>) => ({ type: 'chart', attrs: { spec: SPEC, ...attrs } });
+        const doc: JSONContent = {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [chart(look), chart({ ...look, fill: gradient('#aaeeff') })] }],
+        };
+        const { data } = await renderEigendocExport(
+            seededDoc(doc),
+            'pdf-html',
+            'Report.eigendoc',
+            async () => [],
+            undefined,
+        );
+        const html = sanitizeExportHtml(new TextDecoder().decode(data));
+        const ids = Array.from(html.matchAll(/<linearGradient id="([^"]+)"/g), (m) => m[1]);
+        expect(ids).toHaveLength(2);
+        expect(new Set(ids).size).toBe(2);
+        for (const id of ids) expect(html).toContain(`url(#${id})`);
+        expect(html).toContain('stroke="#336699"');
+        expect(html).not.toBe(renderDocHtml(chartDoc({}), () => null));
     });
 
     test('the sanitizer keeps every shape and label of the chart', () => {

@@ -1,4 +1,4 @@
-import { FLAT_CHART_PAINT } from '@workspace/lib/charts';
+import { FLAT_CHART_LOOK } from '@workspace/lib/charts';
 import type { VectorElementPatch } from '@workspace/lib/vector';
 import type { DrawingTheme } from '../../core/drawingml';
 import { A_NS, C_NS, R_NS } from '../../core/ooxml';
@@ -19,10 +19,10 @@ export type FrameChart =
 
 // Painted as a document's and a sheet's charts are, unfilled as PowerPoint's plot area; the font is the spec's.
 export const CHART_PAINT = {
-    fill: FLAT_CHART_PAINT.background,
-    strokeWidth: FLAT_CHART_PAINT.strokeWidth,
-    strokeStyle: FLAT_CHART_PAINT.strokeStyle,
-    roughness: FLAT_CHART_PAINT.roughness,
+    fill: FLAT_CHART_LOOK.fill,
+    strokeWidth: FLAT_CHART_LOOK.strokeWidth,
+    strokeStyle: FLAT_CHART_LOOK.strokeStyle,
+    roughness: FLAT_CHART_LOOK.roughness,
 } satisfies VectorElementPatch;
 
 const read = cachedBy<DrawingTheme, FrameChart | undefined>();
