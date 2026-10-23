@@ -125,6 +125,7 @@ async function openSubmenu(label: string) {
 
 const SHORT_ROW = ['Normal text', 'Inter', 'Decrease font size', 'Increase font size', 'Bold', 'Italic', 'Underline'];
 const MIDDLE_ROW = [...SHORT_ROW, 'Text color', 'Highlight color', 'Add link', 'Insert image'];
+const CLEAR_FORMATTING = `Clear formatting${formatForDisplay('Mod+\\')}`;
 const FULL_ROW = [...MIDDLE_ROW, 'Align', 'Bulleted list', 'Numbered list', 'Checklist', 'Clear formatting'];
 
 test.each([1920, 1300, 1000])('a writer gets the File, Edit, Format, Insert and Tools menus at %ipx', async (width) => {
@@ -185,7 +186,7 @@ test("Format's submenus follow Google Docs' names and order", async () => {
         'Table',
         'Image',
         '—',
-        'Clear formatting',
+        CLEAR_FORMATTING,
     ]);
 });
 
@@ -456,9 +457,64 @@ test('Clear formatting takes away every paragraph format in the selection', asyn
     editor.commands.setTextSelection({ from: 1, to: 12 });
     await render(1920, true);
     await openMenu('Format');
-    await clickItem('Clear formatting');
+    await clickItem(CLEAR_FORMATTING);
     expect(formats()).toEqual([{}, {}, {}, format]);
     expect(editor.getJSON().content?.[1]?.attrs?.['textAlign']).toBeNull();
+});
+
+// As Google's does: a comment's anchor and a link aren't formatting.
+test.each([
+    [
+        'the toolbar button',
+        async () => {
+            const button = [
+                ...document.querySelectorAll<HTMLElement>('[role="toolbar"][aria-label="Formatting"] button'),
+            ].find((candidate) => candidate.getAttribute('aria-label')?.startsWith('Clear formatting'));
+            await act(async () => button?.click());
+        },
+    ],
+    [
+        'Format › Clear formatting',
+        async () => {
+            await openMenu('Format');
+            await clickItem(CLEAR_FORMATTING);
+        },
+    ],
+])('%s keeps comments and links', async (_, clear) => {
+    const link = { type: 'link', attrs: { href: 'https://eigen.is' } };
+    const comment = { type: 'comment', attrs: { cardId: 'card-1' } };
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            {
+                type: 'heading',
+                attrs: { level: 2 },
+                content: [
+                    {
+                        type: 'text',
+                        text: 'Noted',
+                        marks: [{ type: 'bold' }, { type: 'textStyle', attrs: { color: '#ff0000' } }, comment],
+                    },
+                    { type: 'text', text: ' here', marks: [{ type: 'italic' }, link] },
+                    { type: 'equation', attrs: { mathml: '', commentCardId: 'card-2' } },
+                ],
+            },
+        ],
+    });
+    editor.commands.selectAll();
+    await render(1920, true);
+    await clear();
+    const block = editor.state.doc.firstChild;
+    expect(block?.type.name).toBe('paragraph');
+    const runs: [string, unknown[]][] = [];
+    block?.forEach((node) => {
+        runs.push([node.text ?? node.attrs['commentCardId'], node.marks.map((mark) => mark.toJSON())]);
+    });
+    expect(runs).toEqual([
+        ['Noted', [comment]],
+        [' here', [{ ...link, attrs: expect.objectContaining(link.attrs) }]],
+        ['card-2', []],
+    ]);
 });
 
 test('Custom spacing… and Indentation options… open their dialogs', async () => {

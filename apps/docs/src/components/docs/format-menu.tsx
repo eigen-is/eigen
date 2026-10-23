@@ -409,6 +409,7 @@ export const FormatMenu = ({
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={clearFormatting}>
             <RemoveFormatting className="h-4 w-4" /> Clear formatting
+            <DropdownMenuShortcut>{formatForDisplay('Mod+\\')}</DropdownMenuShortcut>
         </DropdownMenuItem>
     </ToolbarMenu>
 );

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { createDocument, Editor, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
 import {
+    BAND_EXCLUDED_NODES,
     DEFAULT_NORMAL_STYLE,
     DOCUMENT_PARAGRAPH_FORMAT,
     getDocExtensions,
@@ -273,6 +274,34 @@ describe('paragraph format commands', () => {
         expect(press('[', 219)).toBe(true);
         expect(press('[', 219)).toBe(true);
         expect(formatsOf(editor)).toEqual([{}]);
+        editor.destroy();
+    });
+});
+
+describe('Clear formatting', () => {
+    const link = { type: 'link', attrs: { href: 'https://eigen.is' } };
+    const comment = { type: 'comment', attrs: { cardId: 'card-1' } };
+    const marked = {
+        type: 'paragraph',
+        attrs: { indentLeft: 36 },
+        content: [{ type: 'text', text: 'ab', marks: [{ type: 'bold' }, comment, link] }],
+    };
+
+    test.each([
+        ['the body', extensions],
+        ['a band', getDocExtensions({ exclude: [...BAND_EXCLUDED_NODES] })],
+    ])('⌘\\ clears the format of %s and keeps its comment and link', (_, editorExtensions) => {
+        const editor = mount(docOf(marked), editorExtensions);
+        editor.commands.selectAll();
+        const handled = editor.view.someProp('handleKeyDown', (handle) =>
+            handle(editor.view, new KeyboardEvent('keydown', { key: '\\', keyCode: 220, ...MOD })),
+        );
+        expect(handled).toBe(true);
+        expect(formatsOf(editor)).toEqual([{}]);
+        expect(editor.state.doc.firstChild?.firstChild?.marks.map((mark) => mark.type.name).sort()).toEqual([
+            'comment',
+            'link',
+        ]);
         editor.destroy();
     });
 });

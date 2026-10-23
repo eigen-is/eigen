@@ -91,9 +91,11 @@ function autolink(type: MarkType, options: EigenLinkOptions): Plugin {
 type EigenLinkOptions = LinkOptions & { remote: (tr: Transaction) => boolean };
 
 // StarterKit's link with the autolink above in place of TipTap's, which is configured off (`autolink: false`); the mark
-// stays inclusive, as it is with TipTap's on, so text typed at a link's end joins it.
+// stays inclusive, as it is with TipTap's on, so text typed at a link's end joins it. Clear formatting keeps it, as
+// Google Docs' does.
 export const EigenLink = Link.extend<EigenLinkOptions>({
     inclusive: () => true,
+    clearable: false,
     addOptions() {
         return { ...Link.options, remote: () => false };
     },
