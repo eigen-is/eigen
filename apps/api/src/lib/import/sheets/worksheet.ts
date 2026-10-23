@@ -8,11 +8,11 @@ import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml'
 import { columnWidthToPx, DEFAULT_BASE_COL_WIDTH, DEFAULT_ROW_HEIGHT_PT } from '../../document/spreadsheetml';
 import { colorOf, resolveColor, type ThemePalette } from './styles';
 
-// A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden columns, the merges, the frozen panes and
-// gridlines, the filter's span and the hyperlinks. A merge's cells and a link's cell are placed before the grid is
-// read, so the grid's cell there takes them, and a place the grid holds no cell for still gets one. Only what the file
-// holds is walked: a merge's cells after its area is charged, a column range's columns after they are, and each column
-// once.
+// A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden
+// columns, the merges, the frozen panes and gridlines, the filter's span and the hyperlinks. A merge's cells and a
+// link's cell are placed before the grid is read, so the grid's cell there takes them, and a place the grid holds no
+// cell for still gets one. Only what the file holds is walked: a merge's cells after its area is charged, a column
+// range's columns after they are, and each column once.
 
 export type PlacedCell = { r: number; c: number; v: FortuneCell };
 
@@ -184,7 +184,7 @@ function readHyperlinks(rest: XmlElement, context: WorksheetContext, worksheet: 
         const location = xmlAttr(element, '', 'location');
         const rel = context.rels.get(xmlAttr(element, R_NS, 'id') ?? '');
         const target = rel?.external ? rel.target : undefined;
-        // A relationship to `#` and the location, which files written by ExcelJS (the old export) carry beside an internal link, is the location.
+        // A relationship to `#` beside the location, as ExcelJS writes an internal link, is the location.
         const link = mapHyperlink(
             target !== undefined && !target.startsWith('#')
                 ? `${target}${location ? `#${location}` : ''}`

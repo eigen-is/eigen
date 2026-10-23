@@ -13,7 +13,7 @@ import { escapeXml } from '@workspace/lib/xml';
 import { rangeToA1, valueIsError } from '@workspace/sheet/engine';
 import { MAX_FORMULA_LENGTH, withFuturePrefixes } from '../../../document/spreadsheetml';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
-import { cutText, type SharedStringTable } from './strings';
+import { BATCH_CHARS, cutText, type SharedStringTable } from './strings';
 import type { StyleRegistry } from './styles';
 
 // A worksheet's grid as <sheetData>'s rows, handed over a batch at a time so a sheet of millions of cells is never one
@@ -32,9 +32,7 @@ export type Grid = {
     rows(): Generator<string>;
 };
 
-const BATCH_CHARS = 1024 * 1024;
-
-function inGrid(r: number, c: number): boolean {
+export function inGrid(r: number, c: number): boolean {
     return (
         Number.isInteger(r) &&
         Number.isInteger(c) &&
@@ -45,7 +43,7 @@ function inGrid(r: number, c: number): boolean {
     );
 }
 
-function keyOf(r: number, c: number): number {
+export function keyOf(r: number, c: number): number {
     return r * REFERENCE_COLUMN_COUNT + c;
 }
 

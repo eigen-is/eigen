@@ -25,7 +25,6 @@ import {
     type CellResolver,
     type ComputeMap,
     cellWrapsText,
-    createArrayResolver,
     createCfFormulaEvaluator,
     type DataBar,
     evaluateConditionalFormat,
@@ -39,7 +38,7 @@ import { FONT_STACK_SANS } from '../../document/font-stacks';
 import type { HtmlExportMode } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
+import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } from './cell-style';
 
 // Sheet[] -> HTML: the full-workbook export document, the budgeted preview body and
 // the fixed-size PDF document. Runs inside the transform Worker (worker.ts owns
@@ -157,16 +156,7 @@ export const PREVIEW_SHEET_BUDGET: SheetPreviewBudget = { maxRows: 200, maxCols:
 // CF rule's own formula is evaluated against existing cell values.
 function createRenderContext(sheets: Sheet[]): { engine: FormulaEngine; resolver: CellResolver } {
     const engine = new FormulaEngine();
-    const resolver = createArrayResolver(
-        sheets.map((s) => ({
-            id: s.id ?? s.name,
-            name: s.name,
-            data: s.data ?? null,
-            calculationChain: [],
-            dynamicArrayCompute: [],
-        })),
-    );
-    return { engine, resolver };
+    return { engine, resolver: sheetsResolver(sheets) };
 }
 
 // The sheets the tabs show, as Excel prints them; the resolver still spans every sheet, hidden ones too.

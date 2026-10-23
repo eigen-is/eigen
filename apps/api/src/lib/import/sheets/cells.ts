@@ -5,6 +5,7 @@ import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import {
+    DATE_FORMAT,
     DAY_MS,
     DAYS_1904,
     EXCEL_EPOCH_MS,
@@ -168,7 +169,7 @@ function readCell(element: XmlElement, look: Look, context: GridContext, formula
         if (typeof value === 'number') {
             // numfmt renders a bare serial under General as a number, so a date without a format it can draw shows as
             // m/d/yyyy.
-            cell.m = date ? update(look.numFmt ?? 'm/d/yyyy', value) : numberDisplay(value, look.numFmt);
+            cell.m = date ? update(look.numFmt ?? DATE_FORMAT, value) : numberDisplay(value, look.numFmt);
         } else cell.m = typeof value === 'boolean' ? booleanDisplay(value) : value;
     }
     if (formula) cell.f = `=${formula}`;

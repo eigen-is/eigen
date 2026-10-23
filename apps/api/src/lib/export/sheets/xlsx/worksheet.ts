@@ -14,7 +14,7 @@ import { parseA1Range, quoteSheetName, rangeToA1, toA1, unquoteSheetName } from 
 import { R_NS, SML_NS } from '../../../core/ooxml';
 import { type Relationship, uriReference } from '../../../core/opc';
 import { MAX_SHEET_LINKS, pxToColumnWidth } from '../../../document/spreadsheetml';
-import { type GridContext, sheetGrid } from './cells';
+import { type GridContext, inGrid, keyOf, sheetGrid } from './cells';
 import { rulesXml } from './rules';
 import { argbOf } from './styles';
 
@@ -145,12 +145,12 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
     const linked = new Set(
         entries.map(([key]) => {
             const [r, c] = parseCellKey(key);
-            return r * REFERENCE_COLUMN_COUNT + c;
+            return keyOf(r, c);
         }),
     );
     const shown = new Map<number, string>();
     for (const { r, c, v } of sheet.celldata ?? []) {
-        const key = r * REFERENCE_COLUMN_COUNT + c;
+        const key = keyOf(r, c);
         if (!v || !linked.has(key)) continue;
         const text = v.ct?.s ? v.ct.s.map((run) => run.v ?? '').join('') : String(v.m ?? v.v ?? '');
         shown.set(key, text);
@@ -159,7 +159,7 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
     const items: string[] = [];
     for (const [key, { linkType, linkAddress }] of entries) {
         const [r, c] = parseCellKey(key);
-        if (!(r >= 0 && c >= 0 && r < REFERENCE_ROW_COUNT && c < REFERENCE_COLUMN_COUNT)) continue;
+        if (!inGrid(r, c)) continue;
         const ref = toA1(r, c);
         const location =
             linkType === 'sheet'
@@ -179,7 +179,7 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
             relationships.push({ type: `${R_NS}/hyperlink`, target: uriReference(target), external: true });
             items.push(`<hyperlink ref="${ref}" r:id="rId${relationships.length}"/>`);
         } else {
-            const display = shown.get(r * REFERENCE_COLUMN_COUNT + c) || linkAddress;
+            const display = shown.get(keyOf(r, c)) || linkAddress;
             items.push(
                 `<hyperlink ref="${ref}" location="${escapeXml(location ?? '')}" display="${escapeXml(display)}"/>`,
             );

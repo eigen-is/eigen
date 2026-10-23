@@ -11,6 +11,9 @@ import {
 // Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
 // format shares is core/ooxml.ts.
 
+// The format a date shows in when its own draws no date: Excel's for a bare serial in the US locale.
+export const DATE_FORMAT = 'm/d/yyyy';
+
 // Day 0 of Excel's 1900 date system is 1899-12-30, as Lotus 1-2-3 counted a 29 February 1900 that never was.
 export const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 export const DAY_MS = 86_400_000;
@@ -91,6 +94,8 @@ export const MAX_TEXT_LENGTH = 32_767;
 export const MAX_SHEET_NAME_LENGTH = 31;
 export const MAX_CELL_FORMATS = 64_000;
 export const MAX_SHEET_LINKS = 65_530;
+// Excel's limit on a validation's input message.
+export const MAX_PROMPT_LENGTH = 255;
 // The characters Excel refuses in a sheet's name; it refuses a quote at either end too.
 export const SHEET_NAME_FORBIDDEN = /[\\/?*[\]:]/g;
 
@@ -185,6 +190,22 @@ export const CF_CELL_IS_CONDITION = new Map<string, ConditionalFormatConditionNa
     ['between', 'between'],
     ['notBetween', 'notBetween'],
 ]);
+
+// The engine's top and bottom rules as a top10 rule's flags, one table both ways.
+export const TOP10_CONDITION = new Map<ConditionalFormatConditionName, { percent: boolean; bottom: boolean }>([
+    ['top10', { percent: false, bottom: false }],
+    ['top10_percent', { percent: true, bottom: false }],
+    ['last10', { percent: false, bottom: true }],
+    ['last10_percent', { percent: true, bottom: true }],
+]);
+
+// A duplicateValue rule's value and Excel's rule for it, one list both ways.
+const DUPLICATE_RULES: [string, string][] = [
+    ['0', 'duplicateValues'],
+    ['1', 'uniqueValues'],
+];
+export const DUPLICATE_XLSX_RULE = new Map(DUPLICATE_RULES);
+export const DUPLICATE_RULE = new Map(DUPLICATE_RULES.map(([value, type]) => [type, value]));
 
 // A data validation's type and the engine's for it, one list both ways. Excel's decimal admits any number, as the
 // engine's number does, while number_decimal rejects integers: it writes as decimal and reads back as number.

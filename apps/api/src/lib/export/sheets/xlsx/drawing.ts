@@ -7,7 +7,7 @@ import {
     sheetTrackAt,
 } from '@workspace/lib/sheets';
 import { normalizeAngle } from '@workspace/lib/vector';
-import { type CellResolver, createArrayResolver, resolveRangeChartData } from '@workspace/sheet/engine';
+import { type CellResolver, resolveRangeChartData } from '@workspace/sheet/engine';
 import { anchoredBox } from '../../../core/drawingml';
 import { A_NS, C_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../core/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../core/ooxml-chart';
@@ -16,6 +16,7 @@ import { type PackagePart, type Relationship, relationshipsXml, relsPathOf } fro
 import type { ZipWriteEntry } from '../../../core/zip';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
 import { blipXml, type OfficeImageParts, type OfficeMedia, officeImageParts } from '../../office-image';
+import { sheetsResolver } from '../cell-style';
 
 // A sheet's floating charts and pictures as its drawing part: the path its <drawing> relationship targets, the parts the
 // drawing adds to the package (itself, its relationships and its charts) and its media files.
@@ -78,7 +79,7 @@ export function drawingOf(
             lost('charts-dropped');
             continue;
         }
-        resolver ??= resolverOf(sheets);
+        resolver ??= sheetsResolver(sheets);
         const data = spec.data.source === 'range' ? resolveRangeChartData(spec.data, resolver) : undefined;
         const name = `chart${number}_${charts.length + 1}.xml`;
         charts.push([
@@ -115,19 +116,6 @@ function pictureParts(name: string, pictures: WorkbookPictures, files: ZipWriteE
     if (parts.svgPart) files.push({ name: `xl/media/${parts.svgPart}`, data: new Uint8Array(media.data), store: true });
     pictures.parts.set(name, parts);
     return parts;
-}
-
-// A chart's cells as the export's grid reads them: the dense data every sheet carries once materialized.
-function resolverOf(sheets: Sheet[]): CellResolver {
-    return createArrayResolver(
-        sheets.map((sheet) => ({
-            id: sheet.id ?? sheet.name,
-            name: sheet.name,
-            data: sheet.data ?? null,
-            calculationChain: [],
-            dynamicArrayCompute: [],
-        })),
-    );
 }
 
 type Placed = { x: number; y: number; width: number; height: number; angle: number };
