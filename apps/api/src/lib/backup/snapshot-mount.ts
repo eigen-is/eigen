@@ -80,7 +80,8 @@ export function pruneUnreachableRows(mountId: string, metadataPath: string): str
         db.run('PRAGMA foreign_keys = ON');
         db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify(dropped)]);
         // A dropped folder takes its contents with it through the foreign key, and no list names them. Counted, not
-        // read from the delete's changes: the triggers that clear search rows count there too.
+        // read from the delete's changes: Bun 1.4.4 counts only the statement's own rows, not the foreign-key
+        // cascade, and the cascade is what this wants.
         const left = db.query<{ count: number }, []>('SELECT COUNT(*) AS count FROM paths').get()?.count ?? 0;
         const inside = rows.length - dropped.length - left;
         console.warn(`[backup] mount ${mountId}: left out rows ${dropped.join(', ')} and ${inside} more inside them`);

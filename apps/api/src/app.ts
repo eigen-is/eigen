@@ -57,8 +57,8 @@ export const app = new Elysia({
     // options) only — `websocket` config set on a `.use()`d plugin (e.g.
     // collabRouter) is silently ignored. perMessageDeflate only negotiates the
     // extension; Bun deflates just the frames sent with compress=true
-    // (collabDocument's sendFrame). The shared compressor: a dedicated one holds ~180 KB of
-    // zlib state per socket. Safari drops a connection after a frame that ends the deflate
+    // (collabDocument's sendFrame). The shared compressor: a dedicated one holds ~282 KB of
+    // zlib state per socket (Bun 1.4.4's release notes). Safari drops a connection after a frame that ends the deflate
     // stream (BFINAL); collab-ws-payload.test.ts reads a frame off the wire and fails on one.
     websocket: {
         perMessageDeflate: true,

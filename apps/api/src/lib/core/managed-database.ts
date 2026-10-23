@@ -99,8 +99,8 @@ export class ManagedDatabase<S extends SchemaType> {
             }
         }
 
-        // create:false keeps a missing file an error; Bun needs an explicit access mode when create
-        // is off, otherwise it raises SQLITE_MISUSE.
+        // create:false keeps a missing file an error. Bun 1.4.4 accepts it alone on an existing file; the explicit
+        // readwrite mode states the access and costs nothing.
         this.rawDb = this.mustExist
             ? new Database(this.localPath, { readwrite: true, create: false })
             : new Database(this.localPath, { create: true });

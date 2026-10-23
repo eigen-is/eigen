@@ -113,7 +113,7 @@ Run them one at a time: two started together can pick the same subnet. `./docker
 
 ## CI
 
-`.github/workflows/check.yml` runs on every push to `main` or a `release-*` branch and on every pull request to `main`. Its `check` job installs with `--frozen-lockfile`, then runs `bun dedupe --check`, `bun run lint`, `bun run typecheck` and `bun run primitives:check`, then the tests:
+`.github/workflows/check.yml` runs on every push to `main` or a `release-*` branch and on every pull request to `main`. Its `check` job installs with `--frozen-lockfile`, then runs `bun dedupe --check`, `bun run lint`, `bun run typecheck` (each workspace runs `bun check --no-script`) and `bun run primitives:check`, then the tests:
 
 - `bun --filter '!@apps/api' test --timeout 30000`: the package suites, one sequential process each. They still depend on file order, which a [ROADMAP.md](ROADMAP.md) row tracks.
 - `bun --filter '@apps/api' test --parallel=4 --timeout 30000`: the API suite on four isolated workers.

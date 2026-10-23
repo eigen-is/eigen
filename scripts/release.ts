@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { $ } from 'bun';
 
@@ -15,7 +14,7 @@ const arg = process.argv[2] ?? 'patch';
 // package.json, using that version's CHANGELOG.md section as the notes. Draft by default,
 // so it can be reviewed on GitHub before it goes live.
 if (arg === 'publish') {
-    const pkg = JSON.parse(await readFile(PKG_PATH, 'utf8'));
+    const pkg = await Bun.file(PKG_PATH).json();
     const version: string = pkg.version;
     const tag = `v${version}`;
 
@@ -26,7 +25,7 @@ if (arg === 'publish') {
         process.exit(1);
     }
 
-    const lines = (await readFile(CHANGELOG_PATH, 'utf8')).split('\n');
+    const lines = (await Bun.file(CHANGELOG_PATH).text()).split('\n');
     const start = lines.findIndex((line) => line.startsWith(`## [${version}]`));
     if (start === -1) {
         console.error(`No CHANGELOG.md section for [${version}]. Fill it in before publishing.`);
@@ -64,8 +63,7 @@ if (arg !== 'patch' && arg !== 'minor' && arg !== 'major') {
 }
 const bump: Bump = arg;
 
-const pkgRaw = await readFile(PKG_PATH, 'utf8');
-const pkg = JSON.parse(pkgRaw);
+const pkg = await Bun.file(PKG_PATH).json();
 const current: string = pkg.version;
 const [major, minor, patch] = current.split('.').map(Number);
 const next =
@@ -76,7 +74,7 @@ const next =
           : `${major}.${minor}.${patch + 1}`;
 
 pkg.version = next;
-await writeFile(PKG_PATH, `${JSON.stringify(pkg, null, 2)}\n`);
+await Bun.write(PKG_PATH, `${JSON.stringify(pkg, null, 2)}\n`);
 
 const lastTag = (await $`git describe --tags --abbrev=0`.nothrow().quiet()).stdout.toString().trim();
 const range = lastTag ? `${lastTag}..HEAD` : 'HEAD';

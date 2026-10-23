@@ -7,7 +7,7 @@
     "*.css"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "bun check --no-script",
     "test": "bun test"
   },
   "devDependencies": {

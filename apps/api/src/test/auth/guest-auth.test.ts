@@ -1,9 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { user as userSchema, verification as verificationSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
+import { scopedPassword } from '../../lib/auth/guest-auth';
 import { _resetOtpRateLimitForTests, MAX_OTP_GUESSES, MAX_OTP_REQUESTS_PER_EMAIL } from '../../lib/auth/otp-rate-limit';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getOrgRole } from '../../lib/user';
@@ -12,6 +13,13 @@ import { assertJson, authedRequest, getTestContext } from '../setup';
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
 describe('Guest Auth', () => {
+    test('scopedPassword is the hex HMAC-SHA256 of scope:email under the auth secret', () => {
+        const expected = (scope: string) =>
+            createHmac('sha256', auth.options.secret).update(`${scope}:a@example.com`).digest('hex');
+        expect(scopedPassword('guest', 'a@example.com')).toBe(expected('guest'));
+        expect(scopedPassword('demo', 'a@example.com')).toBe(expected('demo'));
+    });
+
     let ctx: TestCtx;
     let aliceRootId: string;
 

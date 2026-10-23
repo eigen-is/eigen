@@ -4,7 +4,7 @@
     "test": "bun test --preload ./src/test/preload.ts",
     "dev": "bun run --env-file=../../.env.development --env-file=../../.env --watch src/index.ts",
     "buildfordocker": "bun build --minify --sourcemap --target=bun --entry-naming '[name].[ext]' --external 'node_modules/*' --external 'sharp' --external 'jsdom' --external 'css-tree' --external '@mathjax/src' --splitting src/index.ts src/lib/shared/thumbnail-worker.ts src/lib/document/transform/child.ts --outdir=./build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun check --no-script"
   },
   "dependencies": {
     "@better-auth/api-key": "^1.7.3",
@@ -60,10 +60,9 @@
   },
   "devDependencies": {
     "@elysiajs/eden": "^1.4.9",
-    "@types/bun": "^1.4.2",
+    "@types/bun": "^1.4.4",
     "@types/jsdom": "^28.0.3",
     "@types/markdown-it": "^14.2.0",
-    "bun-types": "latest",
     "drizzle-kit": "^0.31.10",
     "jszip": "^3.10.1"
   },

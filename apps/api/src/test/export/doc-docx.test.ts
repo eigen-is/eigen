@@ -2378,7 +2378,8 @@ describe('docx writer — figures', () => {
     const chartMedia = async (json: JSONContent) => withSvgFallbacks(await chartFigureMedia([json]));
 
     test("a chart is a picture of its SVG beside the SVG's PNG, at its width, its caption kept", async () => {
-        const spec = JSON.stringify(sampleChartSpec('column'));
+        const sample = sampleChartSpec('column');
+        const spec = JSON.stringify(sample);
         const json = doc(p(chartNode({ spec, width: 480, height: 300, caption: 'Points' })));
         const media = await chartMedia(json);
         expect(await blocksOf(json, media)).toEqual([
@@ -2400,7 +2401,7 @@ describe('docx writer — figures', () => {
         const zip = await unzip(json, undefined, media);
         const svg = await part(zip, 'word/media/image1.svg');
         expect([xmlAttr(svg, '', 'width'), xmlAttr(svg, '', 'height')]).toEqual(['480', '300']);
-        expect(entryText(zip, 'word/media/image1.svg')).toMatch(/<text[^>]*>UV<\/text>/);
+        expect(entryText(zip, 'word/media/image1.svg')).toContain(`>${sample.categoryAxis.title}</text>`);
         const { format, width, height } = await sharp(zip.read('word/media/image1.png')).metadata();
         expect([format, width, height]).toEqual(['png', 480, 300]);
     });
@@ -3213,6 +3214,8 @@ describe('docx writer — fonts', () => {
         }
         expect(keys).toHaveLength(8);
         expect(new Set(keys).size).toBe(keys.length);
+        // The key is SHA-256 of "Inter/Regular", pinned so the digest never drifts.
+        expect(keys).toContain('{B390F7A1-9B9C-EF91-C9F2-B6EDED1D075F}');
     });
 
     test("each family's font table entry carries its Regular file's panose and signature", async () => {
