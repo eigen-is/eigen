@@ -417,7 +417,7 @@ function SlideEditorInner({
                 />
             }
         >
-            {/* The rail is desktop-only: a phone pages with a swipe (spec D8), and a 52-wide column
+            {/* The rail is desktop-only: a phone pages with a swipe, and a 52-wide column
                 would take a third of the screen. */}
             {!isMobile && (
                 <SlidePanel
@@ -462,7 +462,7 @@ function SlideEditorInner({
                             onInsertImage={insertImage}
                             backgroundMenu={slideMenuSections(frameId)}
                             // A view-only deck pages on a one-finger swipe; an editable one keeps
-                            // that finger for the canvas (D4.13).
+                            // that finger for the canvas.
                             onSwipeFrame={canEdit ? undefined : stepFrame}
                         />
                     </div>
