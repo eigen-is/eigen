@@ -77,6 +77,18 @@ macOS refuses `setrlimit` for the data segment, so the transform process runs wi
 
 A suite that takes tens of seconds skips unless `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1` is set. The demo seeder contract test, `server/seed-demo.test.ts`, spawns the whole seeder in about 30 s. Run it with `EIGEN_SLOW_TESTS=1 bun run test:api` after you touch `apps/api/src/scripts/demo/` or a reader it decodes with.
 
+## Each Office writer has a corpus round-trip gate
+
+`apps/api/src/scripts/xlsx-audit.ts`, `docx-audit.ts` and `pptx-audit.ts` each have a `roundtrip` mode, the gate a change to that format's writer passes. Every corpus file the reader imports is written by our writer, its pictures prepared as an export prepares them, and imported again, and the two imports are compared: a workbook key by key, a doc node by node with its bands, page and Normal, a deck slide by slide and element by element in z-order, each length in the EMU the writer writes. A picture compares by its type and pixel size, since an import names its media afresh. Each file runs in a child process of its own under a time and memory cap, so a hang or a blow-up is a result, not the end of the run. A file the first import refuses, or the writer refuses (an empty deck), is skipped.
+
+A difference is listed when the format's `LISTED` table explains it, with a predicate that calls the writer's own helpers and a why that stands alone; any other is unlisted. The run writes `summary.md`, every kind with its count and examples, and exits 1 on a crash, a cut or an unlisted difference. `--writer <module>` runs another writer, which is how each script's test plants a broken one. The runner, the classification and the summary are `office-audit.ts`, shared by the three. The corpora are private, so a run's output stays outside the repo. Run one at a time: a heavy file's child peaks at several GB.
+
+```bash
+bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out /tmp/xlsx-roundtrip
+bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out /tmp/docx-roundtrip
+bun apps/api/src/scripts/pptx-audit.ts roundtrip <corpus dir...> --out /tmp/pptx-roundtrip
+```
+
 ## Storage faults are parked and driven, never slept through
 
 The drive resilience suites run on doubles at the `src/test/` root, and each double's header comment lists what it can fake. The rules:
