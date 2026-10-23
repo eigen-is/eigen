@@ -71,18 +71,18 @@ describe('sampleChartSpec', () => {
         }
     });
 
-    test("the sample: where a star's light goes, three sources over six bands; pie draws the Sun", () => {
+    test("the sample: where a star's light goes, three sources over seven 100 nm bins; pie draws the Sun", () => {
         const column = sampleChartSpec('column');
         expect(column.title).toBe("Where a star's light goes");
-        expect(column.categoryAxis.title).toBe('Wavelength');
-        expect(column.valueAxis.title).toBe('Share of light (%)');
+        expect(column.categoryAxis.title).toBe('Wavelength (nm)');
+        expect(column.valueAxis.title).toBe('Share of light, 300–1000 nm (%)');
         expect(column.legend).toBe('top');
         expect(column.valueAxis.gridlines).toBe(true);
         expect(column.data).toMatchObject({
             source: 'inline',
-            categories: ['UV', 'Blue', 'Green', 'Red', 'IR-A', 'IR-B/C'],
+            categories: ['300–400', '400–500', '500–600', '600–700', '700–800', '800–900', '900–1000'],
         });
-        expect(column.data.series.map((s) => s.name)).toEqual(['Sun', 'Bulb', 'Hot star']);
+        expect(column.data.series.map((s) => s.name)).toEqual(['Sun', 'Bulb (incandescent)', 'Hot star']);
         expect(column.stacking).toBe('none');
         const pie = sampleChartSpec('pie');
         expect(pie.legend).toBe('none');
@@ -107,17 +107,18 @@ describe('chartSearchText', () => {
     test("a chart's titles, series names and categories, a line each; none for a spec that doesn't parse", () => {
         expect(chartSearchText(sampleChartSpec('line')).split('\n')).toEqual([
             "Where a star's light goes",
-            'Wavelength',
-            'Share of light (%)',
+            'Wavelength (nm)',
+            'Share of light, 300–1000 nm (%)',
             'Sun',
-            'Bulb',
+            'Bulb (incandescent)',
             'Hot star',
-            'UV',
-            'Blue',
-            'Green',
-            'Red',
-            'IR-A',
-            'IR-B/C',
+            '300–400',
+            '400–500',
+            '500–600',
+            '600–700',
+            '700–800',
+            '800–900',
+            '900–1000',
         ]);
         expect(chartSearchText(null)).toBe('');
     });

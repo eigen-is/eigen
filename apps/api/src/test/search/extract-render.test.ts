@@ -112,7 +112,7 @@ describe('extractCollabText', () => {
             ],
         });
         expect((await extractCollabText('eigendoc', doc)).text).toBe(
-            "Before Team photo Scores by team Where a star's light goes Wavelength Share of light (%) Sun UV Blue Green Red IR-A IR-B/C",
+            "Before Team photo Scores by team Where a star's light goes Wavelength (nm) Share of light, 300–1000 nm (%) Sun 300–400 400–500 500–600 600–700 700–800 800–900 900–1000",
         );
         doc.destroy();
     });

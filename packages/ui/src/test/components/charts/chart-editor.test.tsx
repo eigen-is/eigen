@@ -259,7 +259,7 @@ describe('ChartEditor', () => {
         const editor = await mount(sample('bar'));
         await editor.type('Horizontal axis title', 'Points');
         expect(editor.last().valueAxis.title).toBe('Points');
-        expect(editor.last().categoryAxis.title).toBe('Wavelength');
+        expect(editor.last().categoryAxis.title).toBe('Wavelength (nm)');
         await editor.type('Vertical axis title', 'Team');
         expect(editor.last().categoryAxis.title).toBe('Team');
     });
@@ -387,7 +387,9 @@ describe('ChartEditor', () => {
     test('a pie has no axes; it colors its slices by category instead of its series', async () => {
         const editor = await mount(sample('pie'));
         expect(editor.sectionTitles()).toEqual(['Chart', 'Slices']);
-        expect(editor.rowLabels()).toEqual(expect.arrayContaining(['UV', 'Blue', 'Green', 'Red', 'IR-A', 'IR-B/C']));
+        expect(editor.rowLabels()).toEqual(
+            expect.arrayContaining(['300–400', '400–500', '500–600', '600–700', '700–800', '800–900', '900–1000']),
+        );
         expect(editor.rowLabels()).not.toContain('Sun');
     });
 
@@ -433,8 +435,8 @@ describe('ChartEditor', () => {
 
     test('a series color row is named for its series and writes that series alone', async () => {
         const editor = await mount(sample('column'));
-        expect(editor.rowLabels()).toEqual(expect.arrayContaining(['Sun', 'Bulb', 'Hot star']));
-        const trigger = editor.row('Bulb').querySelector('button');
+        expect(editor.rowLabels()).toEqual(expect.arrayContaining(['Sun', 'Bulb (incandescent)', 'Hot star']));
+        const trigger = editor.row('Bulb (incandescent)').querySelector('button');
         await act(async () => trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
         if (!swatch) throw new Error('the color popover has no swatch');
@@ -455,12 +457,12 @@ describe('ChartEditor', () => {
         const editor = await mount(spec);
         expect(editor.row('Sun').textContent).toBe('Automatic');
         expect(editor.row('Sun').querySelector<HTMLElement>('div')?.style.backgroundColor).toBeTruthy();
-        expect(editor.row('Bulb').textContent).toBe('#123456');
-        const reset = await editor.automatic('Bulb');
+        expect(editor.row('Bulb (incandescent)').textContent).toBe('#123456');
+        const reset = await editor.automatic('Bulb (incandescent)');
         if (!reset) throw new Error('a picked color offers no Automatic');
         await act(async () => reset.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         expect(editor.changes).toEqual([picked]);
-        expect(editor.row('Bulb').textContent).toBe('Automatic');
+        expect(editor.row('Bulb (incandescent)').textContent).toBe('Automatic');
         expect(await editor.automatic('Sun')).toBeUndefined();
     });
 
@@ -478,11 +480,11 @@ describe('ChartEditor', () => {
 
     test('a picked slice color resets to the palette in one write', async () => {
         const editor = await mount({ ...sample('pie'), sliceColors: [null, '#123456'] });
-        expect(editor.row('Blue').textContent).toBe('#123456');
-        expect(editor.row('Green').textContent).toBe('Automatic');
-        const reset = await editor.automatic('Blue');
+        expect(editor.row('400–500').textContent).toBe('#123456');
+        expect(editor.row('500–600').textContent).toBe('Automatic');
+        const reset = await editor.automatic('400–500');
         await act(async () => reset?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-        expect(editor.changes.map((spec) => spec.sliceColors)).toEqual([[null, null, null, null, null, null]]);
+        expect(editor.changes.map((spec) => spec.sliceColors)).toEqual([[null, null, null, null, null, null, null]]);
     });
 
     test("a range chart's series rows take the names its sheet resolved, and a deleted series has none", async () => {

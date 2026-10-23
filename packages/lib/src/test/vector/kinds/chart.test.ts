@@ -229,21 +229,22 @@ describe('chart text', () => {
     test('searchText is the title, axis titles, series names and categories', () => {
         expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: specJson() })).split('\n')).toEqual([
             "Where a star's light goes",
-            'Wavelength',
-            'Share of light (%)',
+            'Wavelength (nm)',
+            'Share of light, 300–1000 nm (%)',
             'Sun',
-            'Bulb',
+            'Bulb (incandescent)',
             'Hot star',
-            'UV',
-            'Blue',
-            'Green',
-            'Red',
-            'IR-A',
-            'IR-B/C',
+            '300–400',
+            '400–500',
+            '500–600',
+            '600–700',
+            '700–800',
+            '800–900',
+            '900–1000',
         ]);
         expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: 'nope' }))).toBe('');
         expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: RANGE_SPEC }))).toBe(
-            "Where a star's light goes\nWavelength\nShare of light (%)\nSales",
+            "Where a star's light goes\nWavelength (nm)\nShare of light, 300–1000 nm (%)\nSales",
         );
     });
 

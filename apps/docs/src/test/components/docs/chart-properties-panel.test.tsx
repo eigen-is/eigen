@@ -201,9 +201,9 @@ test("a Style toggle wraps the chart in one undo step and lights it, the spec's 
 test("the sample's colors are Automatic, and a picked color and a Stacking pick are one undo step each", async () => {
     const { undoManager, spec } = await mount();
     expect(row('Sun').textContent).toBe('Automatic');
-    expect(row('Bulb').textContent).toBe('Automatic');
+    expect(row('Bulb (incandescent)').textContent).toBe('Automatic');
 
-    await click(row('Bulb').querySelector('button') ?? document.body);
+    await click(row('Bulb (incandescent)').querySelector('button') ?? document.body);
     const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
     if (!swatch) throw new Error('the color popover has no swatch');
     await click(swatch);
@@ -229,7 +229,7 @@ test('Edit data saves the grid as one undo step', async () => {
 
     undoManager.undo();
     const undone = spec();
-    expect(undone?.data.source === 'inline' && undone.data.series[0].values[0]).toBe(12.2);
+    expect(undone?.data.source === 'inline' && undone.data.series[0].values[0]).toBe(13.1);
 });
 
 // A section's row control, beside its label span: the panel has several Style rows.
