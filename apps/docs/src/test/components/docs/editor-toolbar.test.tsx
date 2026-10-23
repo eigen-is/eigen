@@ -585,7 +585,7 @@ test.each([
     expect(submenuDisabled('Image')).toBe(!image);
 });
 
-test("Format › Table lists the table panel's actions in Google Docs' order and runs them", async () => {
+test("Format › Table lists the table panel's actions in Google Docs' order, the deletes last, and runs them", async () => {
     editor.commands.setContent(TABLE_AND_FIGURE);
     editor.commands.setTextSelection(7);
     await render(1920, true);
@@ -597,10 +597,6 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
         'Insert column left',
         'Insert column right',
         '—',
-        'Delete row',
-        'Delete column',
-        'Delete table',
-        '—',
         'Distribute columns',
         '—',
         'Merge cells',
@@ -608,6 +604,10 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
         '—',
         'Toggle header row',
         'Cell background color',
+        '—',
+        'Delete row',
+        'Delete column',
+        'Delete table',
     ]);
     // A caret merges nothing and splits only a merged cell.
     expect(submenuDisabled('Merge cells')).toBe(true);
@@ -664,10 +664,11 @@ const PAGE_NUMBER_ENTRIES = [
     'In the footer',
     'In the footer, not on the first page',
     '—',
+    'Page number',
     'Page count',
 ];
 
-test("Insert › Page elements holds Header, Footer and Google's page number presets with Page count", async () => {
+test("Insert › Page elements holds Header, Footer and Google's page number presets with Page number and Page count", async () => {
     await render(1920, true);
     await openMenu('Insert');
     await openSubmenu('Page elements');

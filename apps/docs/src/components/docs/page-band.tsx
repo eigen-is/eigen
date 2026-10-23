@@ -4,11 +4,11 @@ import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc
 import { bandEdge, bandHasContent, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
+import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
@@ -185,32 +185,39 @@ export function BandControls({
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" onCloseAutoFocus={keepEditorFocus(editor)}>
-                    <DropdownMenuItem onClick={() => setFormatOpen(true)}>
-                        {edge === 'header' ? (
+                    <MenuSections
+                        organize={
                             <>
-                                <PanelTop className="h-4 w-4" /> Header format…
+                                <DropdownMenuItem onClick={() => setFormatOpen(true)}>
+                                    {edge === 'header' ? (
+                                        <>
+                                            <PanelTop className="h-4 w-4" /> Header format…
+                                        </>
+                                    ) : (
+                                        <>
+                                            <PanelBottom className="h-4 w-4" /> Footer format…
+                                        </>
+                                    )}
+                                </DropdownMenuItem>
+                                <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger>
+                                        <Hash className="h-4 w-4" /> Page numbers
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                        <PageNumberItems editor={editor} onPreset={onPageNumbers} />
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
+                                    <FileSliders className="h-4 w-4" /> Page setup…
+                                </DropdownMenuItem>
                             </>
-                        ) : (
-                            <>
-                                <PanelBottom className="h-4 w-4" /> Footer format…
-                            </>
-                        )}
-                    </DropdownMenuItem>
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                            <Hash className="h-4 w-4" /> Page numbers
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                            <PageNumberItems editor={editor} onPreset={onPageNumbers} />
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
-                        <FileSliders className="h-4 w-4" /> Page setup…
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={onRemove}>
-                        <Trash2 className="h-4 w-4" /> Remove {edge}
-                    </DropdownMenuItem>
+                        }
+                        destructive={
+                            <DropdownMenuItem variant="destructive" onClick={onRemove}>
+                                <Trash2 className="h-4 w-4" /> Remove {edge}
+                            </DropdownMenuItem>
+                        }
+                    />
                 </DropdownMenuContent>
             </DropdownMenu>
             <HeadersAndFootersDialog

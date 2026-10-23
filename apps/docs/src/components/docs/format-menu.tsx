@@ -1,9 +1,10 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
-import { type BandEdge, readCellBackground } from '@workspace/lib/docs/eigendoc';
+import type { BandEdge } from '@workspace/lib/docs/eigendoc';
 import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
 import { ToolbarMenu } from '@workspace/ui';
+import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenuItem,
     DropdownMenuRadioGroup,
@@ -43,7 +44,6 @@ import {
     ListOrdered,
     ListRestart,
     type LucideIcon,
-    PaintBucket,
     PanelTop,
     Pilcrow,
     Quote,
@@ -64,7 +64,7 @@ import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
 import { PageNumberItems, type PageNumberPreset } from './page-numbers';
 import { paragraphStylesIn } from './paragraph-styles';
-import { TABLE_ACTION_ICONS } from './table-action-icons';
+import { tableMenuSections } from './table-menu-sections';
 
 // Format › Align and indent and the icon row's Align dropdown name each alignment alike.
 export const ALIGNMENT_LOOK: Record<TextAlign, { label: string; icon: LucideIcon }> = {
@@ -393,58 +393,7 @@ export const FormatMenu = ({
                 <Table className="h-4 w-4" /> Table
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-                <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>
-                    <TABLE_ACTION_ICONS.addRowBefore className="h-4 w-4" /> Insert row above
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>
-                    <TABLE_ACTION_ICONS.addRowAfter className="h-4 w-4" /> Insert row below
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()}>
-                    <TABLE_ACTION_ICONS.addColumnBefore className="h-4 w-4" /> Insert column left
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
-                    <TABLE_ACTION_ICONS.addColumnAfter className="h-4 w-4" /> Insert column right
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>
-                    <TABLE_ACTION_ICONS.deleteRow className="h-4 w-4" /> Delete row
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>
-                    <TABLE_ACTION_ICONS.deleteColumn className="h-4 w-4" /> Delete column
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().deleteTable().run()}>
-                    <TABLE_ACTION_ICONS.deleteTable className="h-4 w-4" /> Delete table
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => editor.chain().focus().distributeColumns().run()}>
-                    <TABLE_ACTION_ICONS.distributeColumns className="h-4 w-4" /> Distribute columns
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                    disabled={!active.canMergeCells}
-                    onClick={() => editor.chain().focus().mergeCells().run()}
-                >
-                    <TABLE_ACTION_ICONS.mergeCells className="h-4 w-4" /> Merge cells
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                    disabled={!active.canSplitCell}
-                    onClick={() => editor.chain().focus().splitCell().run()}
-                >
-                    <TABLE_ACTION_ICONS.splitCell className="h-4 w-4" /> Unmerge cells
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
-                    <TABLE_ACTION_ICONS.toggleHeaderRow className="h-4 w-4" /> Toggle header row
-                </DropdownMenuItem>
-                <ColorPickerMenuItem
-                    icon={PaintBucket}
-                    label="Cell background color"
-                    value={active.cellBackground}
-                    resetLabel="None"
-                    onChange={(color) =>
-                        editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
-                    }
-                />
+                <MenuSections {...tableMenuSections(editor, active)} />
             </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>

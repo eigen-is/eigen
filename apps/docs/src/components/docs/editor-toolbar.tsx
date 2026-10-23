@@ -77,6 +77,13 @@ export const keepEditorFocus = (editor: Editor) => (e: Event) => {
     if (!document.activeElement?.closest('[role="dialog"]')) editor.commands.focus(null, { scrollIntoView: false });
 };
 
+// A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's copy
+// and cut handlers (writeDocsClipboard, then ProseMirror's) write the clipboard as they would for the keys.
+export const runClipboardCommand = (editor: Editor, command: 'copy' | 'cut') => {
+    document.execCommand(command);
+    editor.commands.focus();
+};
+
 type EditorToolbarProps = {
     // The editor the caret is in: the body's, a band's while the band is edited, or the open note's.
     editor: Editor;
@@ -214,13 +221,6 @@ export const EditorToolbar = ({
 
     const keepActiveEditorFocus = keepEditorFocus(editor);
 
-    // A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's
-    // copy and cut handlers (writeDocsClipboard, then ProseMirror's) write the clipboard as they would for the keys.
-    const runClipboardCommand = (command: 'copy' | 'cut') => {
-        document.execCommand(command);
-        editor.commands.focus();
-    };
-
     const setTextColor = (color: string) => {
         if (color) {
             editor.chain().focus().setColor(color).run();
@@ -280,14 +280,14 @@ export const EditorToolbar = ({
                                 <>
                                     <DropdownMenuItem
                                         disabled={!canWrite || active.selectionEmpty}
-                                        onClick={() => runClipboardCommand('cut')}
+                                        onClick={() => runClipboardCommand(editor, 'cut')}
                                     >
                                         <Scissors className="h-4 w-4" /> Cut
                                         <DropdownMenuShortcut>{formatForDisplay('Mod+X')}</DropdownMenuShortcut>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         disabled={active.selectionEmpty}
-                                        onClick={() => runClipboardCommand('copy')}
+                                        onClick={() => runClipboardCommand(editor, 'copy')}
                                     >
                                         <Copy className="h-4 w-4" /> Copy
                                         <DropdownMenuShortcut>{formatForDisplay('Mod+C')}</DropdownMenuShortcut>
@@ -298,6 +298,7 @@ export const EditorToolbar = ({
                                         <DropdownMenuShortcut>{formatForDisplay('Mod+A')}</DropdownMenuShortcut>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
+                                        variant="destructive"
                                         disabled={!canWrite || active.selectionEmpty}
                                         onClick={() => editor.chain().focus().deleteSelection().run()}
                                     >

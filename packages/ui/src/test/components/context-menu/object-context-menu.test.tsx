@@ -2,6 +2,7 @@
 // rows it has no use for and adds its own to their groups, and a viewer sees only the rows that write nothing.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
@@ -34,16 +35,7 @@ async function openMenu(props: Partial<Parameters<typeof ObjectContextMenu>[0]>)
             ...props,
         }),
     ));
-    const menu = document.querySelector('[role="menu"]');
-    if (!menu) throw new Error('no menu');
-    // The label alone: a shortcut reads per platform.
-    return [...menu.children].map((row) =>
-        row.getAttribute('role') === 'separator'
-            ? '—'
-            : (row.textContent ?? '')
-                  .replace(row.querySelector('[data-slot="dropdown-menu-shortcut"]')?.textContent ?? '', '')
-                  .trim(),
-    );
+    return menuRows();
 }
 
 test("the canvas' menu keeps its rows in the one menu order, Delete last", async () => {

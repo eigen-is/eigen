@@ -2,7 +2,6 @@ import type { Editor } from '@tiptap/react';
 import type { BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { bandHasContent, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
-import { Files } from 'lucide-react';
 
 // Google's Insert › Page numbers pictures: a number on the right of the header or the footer, on every page or from
 // page 2.
@@ -68,12 +67,15 @@ export function applyPageNumberPreset(
 }
 
 type PageNumberItemsProps = {
-    // The editor Page count goes into, at its caret.
+    // The editor Page number and Page count go into, at its caret.
     editor: Editor;
     onPreset: (preset: PageNumberPreset) => void;
 };
 
-// The Page numbers submenu of Insert › Page elements, Format and a band's Options.
+const insertField = (editor: Editor, kind: 'page' | 'pages') =>
+    editor.chain().focus().insertContent({ type: 'pageNumber', attrs: { kind } }).run();
+
+// The Page numbers submenu of Insert › Page elements, Format and a band's Options. Text-only, so every label lines up.
 export const PageNumberItems = ({ editor, onPreset }: PageNumberItemsProps) => (
     <>
         {PAGE_NUMBER_PRESETS.map((preset) => (
@@ -82,17 +84,8 @@ export const PageNumberItems = ({ editor, onPreset }: PageNumberItemsProps) => (
             </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        {/* Google's Page count goes in at the caret, wherever it is. */}
-        <DropdownMenuItem
-            onClick={() =>
-                editor
-                    .chain()
-                    .focus()
-                    .insertContent({ type: 'pageNumber', attrs: { kind: 'pages' } })
-                    .run()
-            }
-        >
-            <Files className="h-4 w-4" /> Page count
-        </DropdownMenuItem>
+        {/* Google's Page number and Page count go in at the caret, wherever it is. */}
+        <DropdownMenuItem onClick={() => insertField(editor, 'page')}>Page number</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => insertField(editor, 'pages')}>Page count</DropdownMenuItem>
     </>
 );
