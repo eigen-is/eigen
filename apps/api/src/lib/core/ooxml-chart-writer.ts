@@ -1,0 +1,255 @@
+import { chartColor, FLAT_CHART_LOOK, GRIDLINE_OPACITY } from '@workspace/lib/charts';
+import { columnIndexToLabel } from '@workspace/lib/sheets';
+import type {
+    CellRangeRef,
+    ChartData,
+    ChartLook,
+    ChartSeriesStyle,
+    ChartSpec,
+    InlineChartSeries,
+    LegendPosition,
+    RangeChartData,
+    RangeChartSeries,
+} from '@workspace/lib/types/chart';
+import { isTransparentColor, parseFill } from '@workspace/lib/vector';
+import { escapeXml } from '@workspace/lib/xml';
+// The one engine module a chart's refs need, not the engine: a docx or pptx export never evaluates the formula engine.
+import { quoteSheetName } from '@workspace/sheet/engine/a1-notation';
+import { A_NS, C_NS, EMU_PER_PX, R_NS } from './ooxml';
+import { LEGEND_BY_POSITION, STACKING_BY_GROUPING } from './ooxml-chart';
+
+// A ChartSpec as a DrawingML chart part, c:chartSpace, the same in a docx, an xlsx and a pptx: the mirror of
+// ooxml-chart.ts, which reads it back as the same spec. Excel draws what Eigen draws: an automatic colour is written
+// as the palette's at its place, which the reader reads back as automatic, and the look as Excel's shape properties.
+
+export type ChartWriteOptions = {
+    // Range data's sheets by the names the workbook writes them under; a ref to a sheet it doesn't name is #REF!.
+    ranges?: (sheetId: string) => string | undefined;
+    // What range data's cells show (resolveRangeChartData), its series those with values: the refs' caches, which
+    // Excel shows until it recalculates. Without it the refs go alone.
+    cache?: ChartData;
+    // The flat look by default.
+    look?: ChartLook;
+};
+
+const CATEGORY_AXIS = 1;
+const VALUE_AXIS = 2;
+
+// The reader's spellings turned around, the first of each the one written: clustered, not standard; r, not tr.
+const GROUPING = turned(STACKING_BY_GROUPING);
+const LEGEND = turned(LEGEND_BY_POSITION);
+
+export function writeChart(spec: ChartSpec, { ranges, cache, look = FLAT_CHART_LOOK }: ChartWriteOptions = {}): string {
+    const text = textProperties(look.color, spec.fontFamily);
+    const group = groupXml(spec, look, ranges, cache);
+    const plot = spec.type === 'pie' ? group : `${group}${axesXml(spec, look)}`;
+    const legend = spec.legend === 'none' ? '' : legendXml(spec.legend);
+    const background = parseFill(look.fill);
+    const fill = background.type === 'solid' ? solidFill(background.color) : '<a:noFill/>';
+    return [
+        `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}">`,
+        '<c:date1904 val="0"/><c:lang val="en-US"/><c:roundedCorners val="0"/><c:chart>',
+        spec.title
+            ? `${titleXml(spec.title, { bold: true })}<c:autoTitleDeleted val="0"/>`
+            : '<c:autoTitleDeleted val="1"/>',
+        `<c:plotArea><c:layout/>${plot}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}`,
+        // Eigen reads a hidden row's cells like any other.
+        `<c:plotVisOnly val="0"/><c:dispBlanksAs val="${spec.blanks}"/></c:chart>`,
+        `<c:spPr>${fill}<a:ln><a:noFill/></a:ln></c:spPr>${text}</c:chartSpace>`,
+    ].join('');
+}
+
+type Ranges = ChartWriteOptions['ranges'];
+
+function groupXml(spec: ChartSpec, look: ChartLook, ranges: Ranges, cache: ChartData | undefined): string {
+    const series = seriesXml(spec, look, ranges, cache);
+    const axes = `<c:axId val="${CATEGORY_AXIS}"/><c:axId val="${VALUE_AXIS}"/>`;
+    if (spec.type === 'pie')
+        return `<c:pieChart><c:varyColors val="1"/>${series}<c:firstSliceAng val="0"/></c:pieChart>`;
+    if (spec.type === 'line') {
+        return `<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${series}<c:marker val="1"/>${axes}</c:lineChart>`;
+    }
+    const stacked = spec.stacking !== 'none';
+    return [
+        `<c:barChart><c:barDir val="${spec.type === 'bar' ? 'bar' : 'col'}"/>`,
+        `<c:grouping val="${GROUPING.get(spec.stacking)}"/><c:varyColors val="0"/>${series}`,
+        `<c:gapWidth val="150"/>${stacked ? '<c:overlap val="100"/>' : ''}${axes}</c:barChart>`,
+    ].join('');
+}
+
+// Each series in the spec's order, its place its idx and order, so the reader's palette slot is the one written.
+function seriesXml(spec: ChartSpec, look: ChartLook, ranges: Ranges, cache: ChartData | undefined): string {
+    const { data } = spec;
+    const sources =
+        data.source === 'inline'
+            ? data.series.map(({ name, values }) => inlineSource(data.categories, name, values))
+            : rangeSources(data, ranges, cache);
+    const styles: ChartSeriesStyle[] = data.series;
+    const width = Math.round(look.strokeWidth * EMU_PER_PX);
+    return styles
+        .map(({ color: picked, markers, smooth }, i) => {
+            const color = picked ?? chartColor(i);
+            const source = sources[i];
+            const head = `<c:idx val="${i}"/><c:order val="${i}"/>${source.name}`;
+            if (spec.type === 'line') {
+                const marker = markers
+                    ? `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solidFill(color)}<a:ln>${solidFill(color)}</a:ln></c:spPr></c:marker>`
+                    : '<c:marker><c:symbol val="none"/></c:marker>';
+                const line = `<c:spPr><a:ln w="${width}" cap="rnd">${solidFill(color)}<a:round/></a:ln></c:spPr>`;
+                return `<c:ser>${head}${line}${marker}${source.data}<c:smooth val="${smooth ? 1 : 0}"/></c:ser>`;
+            }
+            if (spec.type === 'pie') {
+                const points = i === 0 ? slicesXml(spec, source.points) : '';
+                return `<c:ser>${head}<c:spPr>${solidFill(color)}</c:spPr>${points}${PIE_LABELS}${source.data}</c:ser>`;
+            }
+            return `<c:ser>${head}<c:spPr>${solidFill(color)}</c:spPr><c:invertIfNegative val="0"/>${source.data}</c:ser>`;
+        })
+        .join('');
+}
+
+// Eigen labels a slice with its name and share, beside it.
+const PIE_LABELS =
+    '<c:dLbls><c:dLblPos val="outEnd"/><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="1"/><c:showSerName val="0"/><c:showPercent val="1"/><c:showBubbleSize val="0"/><c:showLeaderLines val="0"/></c:dLbls>';
+
+function slicesXml(spec: ChartSpec, points: number): string {
+    return Array.from({ length: points }, (_, i) => {
+        const color = spec.sliceColors[i] ?? chartColor(i);
+        return `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr>${solidFill(color)}</c:spPr></c:dPt>`;
+    }).join('');
+}
+
+// A series' name, categories and values, and how many points it plots.
+type Source = { name: string; data: string; points: number };
+
+function inlineSource(categories: string[], name: string, values: (number | null)[]): Source {
+    return {
+        name: `<c:tx><c:v>${escapeXml(name)}</c:v></c:tx>`,
+        data: `<c:cat><c:strLit>${pointsXml(categories)}</c:strLit></c:cat><c:val><c:numLit><c:formatCode>General</c:formatCode>${pointsXml(values)}</c:numLit></c:val>`,
+        points: Math.max(categories.length, values.length),
+    };
+}
+
+// A series without values has no place in the cache.
+function rangeSources(data: RangeChartData, ranges: Ranges, cache: ChartData | undefined): Source[] {
+    let resolved = 0;
+    return data.series.map((series) =>
+        rangeSource(data.categories, series, ranges, {
+            categories: cache?.categories,
+            series: series.values ? cache?.series[resolved++] : undefined,
+        }),
+    );
+}
+
+function rangeSource(
+    categories: CellRangeRef | null,
+    { name, values }: RangeChartSeries,
+    ranges: Ranges,
+    cache: { categories: string[] | undefined; series: InlineChartSeries | undefined },
+): Source {
+    const strCache = (points: string[] | undefined) => (points ? `<c:strCache>${pointsXml(points)}</c:strCache>` : '');
+    const numCache = cache.series
+        ? `<c:numCache><c:formatCode>General</c:formatCode>${pointsXml(cache.series.values)}</c:numCache>`
+        : '';
+    const formula = (ref: CellRangeRef) => `<c:f>${escapeXml(cellRange(ref, ranges))}</c:f>`;
+    const named = cache.series && [cache.series.name];
+    return {
+        name:
+            typeof name === 'string'
+                ? `<c:tx><c:v>${escapeXml(name)}</c:v></c:tx>`
+                : `<c:tx><c:strRef>${formula(name)}${strCache(named)}</c:strRef></c:tx>`,
+        data: [
+            categories ? `<c:cat><c:strRef>${formula(categories)}${strCache(cache.categories)}</c:strRef></c:cat>` : '',
+            values ? `<c:val><c:numRef>${formula(values)}${numCache}</c:numRef></c:val>` : '',
+        ].join(''),
+        points: values ? (values.row[1] - values.row[0] + 1) * (values.column[1] - values.column[0] + 1) : 0,
+    };
+}
+
+// A cache's or literal's points, a gap none.
+function pointsXml(points: readonly (string | number | null)[]): string {
+    const written = points.map((point, i) =>
+        point === null ? '' : `<c:pt idx="${i}"><c:v>${escapeXml(String(point))}</c:v></c:pt>`,
+    );
+    return `<c:ptCount val="${points.length}"/>${written.join('')}`;
+}
+
+// 'Sheet'!$A$2:$A$9 by the name the workbook writes.
+function cellRange(ref: CellRangeRef, ranges: Ranges): string {
+    const name = ranges?.(ref.sheetId);
+    if (name === undefined) return '#REF!';
+    const cell = (row: number, column: number) => `$${columnIndexToLabel(column)}$${row + 1}`;
+    const start = cell(ref.row[0], ref.column[0]);
+    const end = cell(ref.row[1], ref.column[1]);
+    return `${quoteSheetName(name)}!${start === end ? start : `${start}:${end}`}`;
+}
+
+// The category axis, then the value axis. A bar chart lies on its side. CHARTS.md: the category axis is maxMin when
+// (type === 'bar') !== reversed, and the value axis crosses it at that end, so it stays where Eigen draws it.
+function axesXml(spec: ChartSpec, look: ChartLook): string {
+    const { categoryAxis, valueAxis } = spec;
+    const sideways = spec.type === 'bar';
+    const maxMin = sideways !== categoryAxis.reversed;
+    const stroke = (opacity = 1) =>
+        `<a:ln w="${Math.round(look.strokeWidth * EMU_PER_PX)}">${solidFill(look.strokeColor, opacity)}</a:ln>`;
+    const deleted = (visible: boolean) => `<c:delete val="${visible ? 0 : 1}"/>`;
+    const noTicks = '<c:majorTickMark val="none"/><c:minorTickMark val="none"/>';
+    const scaling = (orientation: string, bounds = '') =>
+        `<c:scaling><c:orientation val="${orientation}"/>${bounds}</c:scaling>`;
+    const bounds = [
+        valueAxis.max === null ? '' : `<c:max val="${valueAxis.max}"/>`,
+        valueAxis.min === null ? '' : `<c:min val="${valueAxis.min}"/>`,
+    ].join('');
+    const format = valueAxis.format ?? 'General';
+    return [
+        `<c:catAx><c:axId val="${CATEGORY_AXIS}"/>${scaling(maxMin ? 'maxMin' : 'minMax')}${deleted(categoryAxis.visible)}`,
+        `<c:axPos val="${sideways ? 'l' : 'b'}"/>${axisTitleXml(categoryAxis.title, sideways)}`,
+        `<c:numFmt formatCode="General" sourceLinked="1"/>${noTicks}<c:tickLblPos val="low"/><c:spPr>${stroke()}</c:spPr>`,
+        `<c:crossAx val="${VALUE_AXIS}"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>`,
+        `<c:valAx><c:axId val="${VALUE_AXIS}"/>${scaling('minMax', bounds)}${deleted(valueAxis.visible)}`,
+        `<c:axPos val="${sideways ? 'b' : 'l'}"/>`,
+        valueAxis.gridlines
+            ? `<c:majorGridlines><c:spPr>${stroke(GRIDLINE_OPACITY / 100)}</c:spPr></c:majorGridlines>`
+            : '',
+        axisTitleXml(valueAxis.title, !sideways),
+        `<c:numFmt formatCode="${escapeXml(format)}" sourceLinked="${valueAxis.format === null ? 1 : 0}"/>${noTicks}`,
+        `<c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr><c:crossAx val="${CATEGORY_AXIS}"/>`,
+        `<c:crosses val="${maxMin ? 'max' : 'autoZero'}"/><c:crossBetween val="between"/></c:valAx>`,
+    ].join('');
+}
+
+function axisTitleXml(title: string, upright: boolean): string {
+    return title ? titleXml(title, { bold: false, turned: upright }) : '';
+}
+
+// A vertical axis's title turns a quarter, reading upward.
+function titleXml(title: string, { bold, turned = false }: { bold: boolean; turned?: boolean }): string {
+    const weight = bold ? 1 : 0;
+    return [
+        `<c:title><c:tx><c:rich><a:bodyPr${turned ? ' rot="-5400000" vert="horz"' : ''}/><a:lstStyle/>`,
+        `<a:p><a:pPr><a:defRPr b="${weight}"/></a:pPr><a:r><a:rPr lang="en-US" b="${weight}"/><a:t>${escapeXml(title)}</a:t></a:r></a:p>`,
+        '</c:rich></c:tx><c:overlay val="0"/></c:title>',
+    ].join('');
+}
+
+function legendXml(position: Exclude<LegendPosition, 'none'>): string {
+    return `<c:legend><c:legendPos val="${LEGEND.get(position)}"/><c:overlay val="0"/></c:legend>`;
+}
+
+// Every label's colour and the spec's font.
+function textProperties(color: string, font: string): string {
+    return `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr>${solidFill(color)}<a:latin typeface="${escapeXml(font)}"/></a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>`;
+}
+
+// A colour token (#rgb, #rrggbb, #rrggbbaa) as DrawingML, its alpha times `opacity` beside it; transparent is no fill.
+function solidFill(color: string, opacity = 1): string {
+    if (isTransparentColor(color)) return '<a:noFill/>';
+    const digits = color.slice(1);
+    const rgb = digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits.slice(0, 6);
+    const alpha = (digits.length === 8 ? Number.parseInt(digits.slice(6), 16) / 255 : 1) * opacity;
+    const share = alpha < 1 ? `<a:alpha val="${Math.round(alpha * 100_000)}"/>` : '';
+    return `<a:solidFill><a:srgbClr val="${rgb.toUpperCase()}">${share}</a:srgbClr></a:solidFill>`;
+}
+
+function turned<K, V>(read: ReadonlyMap<K, V>): Map<V, K> {
+    return new Map([...read].reverse().map(([key, value]) => [value, key]));
+}

@@ -92,14 +92,14 @@ const TYPES = new Map<string, ChartType>([
     ['pie3DChart', 'pie'],
 ]);
 
-const STACKING_BY_GROUPING = new Map<string, ChartStacking>([
+export const STACKING_BY_GROUPING: ReadonlyMap<string, ChartStacking> = new Map<string, ChartStacking>([
     ['clustered', 'none'],
     ['standard', 'none'],
     ['stacked', 'stacked'],
     ['percentStacked', 'percent'],
 ]);
 
-const LEGEND_BY_POSITION = new Map<string, LegendPosition>([
+export const LEGEND_BY_POSITION: ReadonlyMap<string, LegendPosition> = new Map<string, LegendPosition>([
     ['t', 'top'],
     ['b', 'bottom'],
     ['l', 'left'],
