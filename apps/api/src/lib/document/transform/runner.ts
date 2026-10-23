@@ -80,7 +80,7 @@ const MACHINE_MEMORY_KIB = Math.floor(process.constrainedMemory() / 1024);
 const JIT_RESERVATION_BYTES = '67108864';
 // A heap allocation JSC can't satisfy aborts the child, faults it or traps it (x86-64's crash), and the kernel's OOM
 // killer sends SIGKILL.
-const OUT_OF_MEMORY_SIGNALS = new Set<NodeJS.Signals>(['SIGABRT', 'SIGSEGV', 'SIGBUS', 'SIGTRAP', 'SIGKILL']);
+const OUT_OF_MEMORY_SIGNALS = new Set<number | NodeJS.Signals>(['SIGABRT', 'SIGSEGV', 'SIGBUS', 'SIGTRAP', 'SIGKILL']);
 
 // captureMs / prepMs: main-thread source-capture and media-preparation time measured
 // by the caller — logged per job because a fast transform with slow main-thread
@@ -137,7 +137,11 @@ function failed(outcome: ChildOutcome): DocumentTransformResponse {
 
 // How a child that ended without a reply ended. A death after it took the job is the job's memory; one before it, or
 // by any other signal or exit, is a crash: a broken install is not a file too large.
-function childOutcome(signal: NodeJS.Signals | null, killedBy: RunnerKill | undefined, acked: boolean): ChildOutcome {
+function childOutcome(
+    signal: number | NodeJS.Signals | null,
+    killedBy: RunnerKill | undefined,
+    acked: boolean,
+): ChildOutcome {
     if (killedBy) return killedBy;
     if (acked && signal && OUT_OF_MEMORY_SIGNALS.has(signal)) return 'out-of-memory';
     return 'crashed';

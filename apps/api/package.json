@@ -60,10 +60,9 @@
   },
   "devDependencies": {
     "@elysiajs/eden": "^1.4.9",
-    "@types/bun": "^1.4.2",
+    "@types/bun": "^1.4.4",
     "@types/jsdom": "^28.0.3",
     "@types/markdown-it": "^14.2.0",
-    "bun-types": "latest",
     "drizzle-kit": "^0.31.10",
     "jszip": "^3.10.1"
   },
