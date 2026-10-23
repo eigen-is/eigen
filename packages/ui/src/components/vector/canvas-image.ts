@@ -4,7 +4,7 @@
 // so the file draws the same in any SVG reader. DOM work, so the measuring lives here and the writing in lib.
 
 import { inlineSvgMedia } from '@workspace/lib/clipboard';
-import { type BundledFontFace, fontFaceCss } from '@workspace/lib/constants/fonts';
+import { fontFaceCss } from '@workspace/lib/constants/fonts';
 import { downloadBlob } from '@workspace/lib/download';
 import { bytesToBase64 } from '@workspace/lib/format';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
@@ -44,21 +44,16 @@ export async function downloadCanvasImage(
     const measured = await measureRichText(scene.elements);
     const richText = new Map([...measured].map(([id, box]) => [id, richTextSvg(box)]));
     const inlined = await inlineSvgMedia(sceneToSvg(scene, { resolveMedia: eigenMediaHref, richText }), fetchMedia);
-    const faces = await fontFaceCssOf(canvasImageFaces(scene.elements, measured));
-    const svg = spliceAfterSvgOpenTag(inlined, `<defs><style>${faces}</style></defs>`);
-    downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${name}.svg`);
-}
-
-async function fontFaceCssOf(faces: BundledFontFace[]): Promise<string> {
-    const rules = await Promise.all(
-        faces.map(async (face) => {
+    const faces = await Promise.all(
+        canvasImageFaces(scene.elements, measured).map(async (face) => {
             const response = await fetch(bundledFontUrl(face.file));
             if (!response.ok) throw new Error(`The ${face.family} font could not be loaded`);
             const bytes = new Uint8Array(await response.arrayBuffer());
             return fontFaceCss(face, `data:font/woff2;base64,${bytesToBase64(bytes)}`);
         }),
     );
-    return rules.join('\n');
+    const svg = spliceAfterSvgOpenTag(inlined, `<defs><style>${faces.join('\n')}</style></defs>`);
+    downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), `${name}.svg`);
 }
 
 // Each rich-text box laid out as its canvas layer is, the layer's own markup and style at the box's size under the
@@ -66,7 +61,27 @@ async function fontFaceCssOf(faces: BundledFontFace[]): Promise<string> {
 async function measureRichText(elements: VectorElement[]): Promise<Map<string, MeasuredRichText>> {
     const boxes = elements
         .filter((el): el is VectorRichTextElement => el.type === 'richtext')
-        .map((el) => ({ el, host: mountBox(el) }));
+        .map((el) => {
+            const host = document.createElement('div');
+            host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;
+            // Stored html arrives verbatim from any peer, so it is sanitized here as at every seam that renders it.
+            host.innerHTML = layerInnerHtml({
+                svg: '',
+                html: sanitizeToLightEditorHtml(el.html),
+                style: richTextCssText(el),
+            });
+            // A list marker is a ::marker no Range reaches, so the measured copy carries a number as text where the
+            // browser draws it: its own figures, ending where the item starts. A disc is no text (discOf).
+            for (const item of host.querySelectorAll<HTMLLIElement>('ol > li')) {
+                const marker = document.createElement('span');
+                marker.style.cssText = 'position:absolute;right:100%;white-space:pre;font-variant-numeric:tabular-nums';
+                marker.textContent = `${[...(item.parentElement?.children ?? [])].indexOf(item) + 1}. `;
+                item.style.position = 'relative';
+                item.prepend(marker);
+            }
+            document.body.append(host);
+            return { el, host };
+        });
     try {
         // Laying the boxes out asks for every face they draw in; the characters are read once those have loaded.
         for (const { host } of boxes) host.getBoundingClientRect();
@@ -75,26 +90,6 @@ async function measureRichText(elements: VectorElement[]): Promise<Map<string, M
     } finally {
         for (const { host } of boxes) host.remove();
     }
-}
-
-function mountBox(el: VectorRichTextElement): HTMLDivElement {
-    const host = document.createElement('div');
-    host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;
-    // Stored html arrives verbatim from any peer, so it is sanitized here as at every seam that renders it.
-    host.innerHTML = layerInnerHtml({ svg: '', html: sanitizeToLightEditorHtml(el.html), style: richTextCssText(el) });
-    for (const item of host.querySelectorAll<HTMLLIElement>('ol > li')) item.prepend(numberOf(item));
-    document.body.append(host);
-    return host;
-}
-
-// A list marker is a ::marker no Range reaches, so the measured copy carries a number as text where the browser
-// draws it: its own figures, ending where the item starts. A disc is no text (discOf).
-function numberOf(item: HTMLLIElement): HTMLSpanElement {
-    const marker = document.createElement('span');
-    marker.style.cssText = 'position:absolute;right:100%;white-space:pre;font-variant-numeric:tabular-nums';
-    marker.textContent = `${[...(item.parentElement?.children ?? [])].indexOf(item) + 1}. `;
-    item.style.position = 'relative';
-    return marker;
 }
 
 // A disc sits on its item's first line, at the item's start, in the item's font. A zero-width space at the start of
