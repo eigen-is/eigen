@@ -1,16 +1,11 @@
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
-import {
-    REFERENCE_COLUMN_COUNT,
-    REFERENCE_ROW_COUNT,
-    SHEET_DEFAULT_DIGIT_WIDTH,
-    SHEET_DEFAULT_FONT,
-} from '@workspace/lib/sheets';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
 import { isOn, R_NS, SML_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
-import { DEFAULT_BASE_COL_WIDTH, DEFAULT_ROW_HEIGHT_PT } from '../../document/spreadsheetml';
+import { columnWidthToPx, DEFAULT_BASE_COL_WIDTH, DEFAULT_ROW_HEIGHT_PT } from '../../document/spreadsheetml';
 import { colorOf, resolveColor, type ThemePalette } from './styles';
 
 // A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden columns, the merges, the frozen panes and
@@ -19,19 +14,12 @@ import { colorOf, resolveColor, type ThemePalette } from './styles';
 // holds is walked: a merge's cells after its area is charged, a column range's columns after they are, and each column
 // once.
 
-// The pixels of a column width unit in a file whose default font isn't Eigen's: Calibri 11's 7 px digit plus padding,
-// near enough. A width counts the file's own default font, so only Eigen's exports convert through Inter's digit.
-const OFFICE_DIGIT_WIDTH = 8;
-
-export function digitWidthOf(defaultFont: string | undefined): number {
-    return defaultFont === SHEET_DEFAULT_FONT.name ? SHEET_DEFAULT_DIGIT_WIDTH : OFFICE_DIGIT_WIDTH;
-}
-
 export type PlacedCell = { r: number; c: number; v: FortuneCell };
 
 export type WorksheetContext = {
     // The sheet's id, which a linked cell's backref names.
     id: string;
+    // The default font's widest digit, which a column width counts.
     digitWidth: number;
     // The sheet part's own.
     rels: ReadonlyMap<string, Relationship>;
@@ -112,14 +100,10 @@ function readDefaults(
     return {
         defaultColWidth:
             width > 0
-                ? columnPixels(width, digitWidth)
+                ? columnWidthToPx(width, digitWidth)
                 : Math.ceil(((base >= 0 ? base : DEFAULT_BASE_COL_WIDTH) * digitWidth + 5) / 8) * 8,
         defaultRowHeight: Math.round(ptToPx(points > 0 ? points : DEFAULT_ROW_HEIGHT_PT)),
     };
-}
-
-function columnPixels(width: number, digitWidth: number): number {
-    return Math.round(width * digitWidth);
 }
 
 // By min, each column takes the first <col> that reaches it. A <col> without a width keeps the sheet's default width.
@@ -137,7 +121,7 @@ function readColumns(rest: XmlElement, context: WorksheetContext, config: Worksh
         const to = Math.min(bound(col, 'max'), REFERENCE_COLUMN_COUNT);
         next = Math.max(next, to + 1);
         const width = Number.parseFloat(xmlAttr(col, '', 'width') ?? '');
-        const pixels = width > 0 ? columnPixels(width, context.digitWidth) : undefined;
+        const pixels = width > 0 ? columnWidthToPx(width, context.digitWidth) : undefined;
         const hidden = isOn(xmlAttr(col, '', 'hidden')) === true;
         if (from > to || (pixels === undefined && !hidden)) continue;
         context.charge(to - from + 1, 0);

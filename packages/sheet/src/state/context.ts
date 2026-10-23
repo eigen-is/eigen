@@ -395,7 +395,8 @@ export function getSheetConfig(ctx?: Context, id?: string | null) {
     return ctx.sheets?.[i]?.config;
 }
 
-// Accumulated in locals and assigned once: per-row writes through the immer draft cost ~3x on 100k rows.
+// Accumulated in locals and assigned once: per-row writes through the immer draft cost ~3x on 100k rows. A track is its
+// stored size with the gridline drawn on its last pixel, as Excel counts it and the export draws it.
 function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     const cfg = getSheetConfig(ctx);
     const rowlen = cfg?.rowlen;
@@ -407,7 +408,7 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     const visibledatarow: number[] = [];
     let rh_height = 0;
     for (let r = 0; r < rowCount; r += 1) {
-        if (rowhidden?.[r] == null) rh_height += (rowlen?.[r] || defaultrowlen) + 1;
+        if (rowhidden?.[r] == null) rh_height += rowlen?.[r] || defaultrowlen;
         visibledatarow.push(rh_height);
     }
     ctx.visibledatarow = visibledatarow;
@@ -422,7 +423,7 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
         // geometry recompute — persisting the clamp would ship an op and take an undo
         // entry from a render pass, on every client independently.
         if (!columnlen?.[c] && firstRow?.[c] && width > 300) width = 300;
-        if (colhidden?.[c] == null) ch_width += width + 1;
+        if (colhidden?.[c] == null) ch_width += width;
         visibledatacolumn.push(ch_width);
     }
     ctx.visibledatacolumn = visibledatacolumn;

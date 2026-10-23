@@ -44,6 +44,7 @@ import {
     DV_XLSX_OPERATOR,
     EXCEL_EPOCH_MS,
     NUMERIC,
+    pxToColumnWidth,
     withFuturePrefixes,
 } from '../../document/spreadsheetml';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from './cell-style';
@@ -89,7 +90,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
             state: sheet.hide === 1 && sheetIndex !== activeTab ? 'hidden' : 'visible',
             // sheetFormatPr: an unsized column or row opens in Excel at the size it has here.
             properties: {
-                defaultColWidth: sheetDefaultColWidth(sheet) / SHEET_DEFAULT_DIGIT_WIDTH,
+                defaultColWidth: pxToColumnWidth(sheetDefaultColWidth(sheet), SHEET_DEFAULT_DIGIT_WIDTH),
                 defaultRowHeight,
                 ...(tabColor && { tabColor: { argb: tabColor } }),
             },
@@ -98,7 +99,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 
         if (config.columnlen) {
             for (const [col, px] of Object.entries(config.columnlen)) {
-                worksheet.getColumn(Number(col) + 1).width = px / SHEET_DEFAULT_DIGIT_WIDTH;
+                worksheet.getColumn(Number(col) + 1).width = pxToColumnWidth(px, SHEET_DEFAULT_DIGIT_WIDTH);
             }
         }
 

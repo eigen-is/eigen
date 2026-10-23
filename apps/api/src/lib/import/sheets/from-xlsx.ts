@@ -14,8 +14,8 @@ import { readGrid } from './cells';
 import { readBudget, readInBatches, readPackage } from './package';
 import { readRules } from './rules';
 import { readSharedStrings } from './strings';
-import { defaultFontName, readDxfs, readLooks, themePalette } from './styles';
-import { digitWidthOf, readWorksheet } from './worksheet';
+import { defaultFontDigitWidth, readDxfs, readLooks, themePalette } from './styles';
+import { readWorksheet } from './worksheet';
 
 // xlsx bytes → Eigen's sheets, straight from the SpreadsheetML. Runs in the transform process.
 
@@ -48,7 +48,7 @@ export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
         const looks = readLooks(book.styles, palette);
         const strings = readSharedStrings(book.sharedStrings, palette, budget);
         const dxfs = readDxfs(book.styles, palette);
-        const digitWidth = digitWidthOf(defaultFontName(book.styles));
+        const digitWidth = defaultFontDigitWidth(book.styles);
         const emitted = { cells: 0, text: 0, span: 0, slots: 0, translated: 0 };
         const charge = (cells: number, text: number) => {
             emitted.cells += cells;

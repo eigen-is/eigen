@@ -44,7 +44,7 @@ The grid itself (cells, text, gridlines, borders, fill colors) is drawn on an HT
 
 - `Sheet/index.tsx` creates a `<canvas>` element sized to the container. On a context change or a scroll it asks for a redraw through `requestAnimationFrame`, so several changes in one frame paint once.
 - `state/canvas.ts` holds the `Canvas` facade class (`drawMain()`, `drawRowHeader()`, `drawColumnHeader()`, `drawFreezeLine()`). Per-cell painting lives in `state/render/`: `cellRender` in `cells.ts`, driven by the `collectVisibleCells → renderCells → renderMergedCells` phases.
-- Gridlines are stroked paths in the default stroke color (`state/render/types.ts`).
+- Gridlines are stroked paths in the default stroke color (`state/render/types.ts`), on each track's last pixel: a row or column is its stored size, gridline included (`calcRowColSize` in `state/context.ts`).
 - Cell text is `ctx.fillText()` with font metrics from `getMeasureText()`.
 - Cell backgrounds are `ctx.fillRect()` with the cell's fill color.
 - Borders use `ctx.setLineDash()` over the 13 border styles of `BORDER_STYLES` (`packages/lib/src/sheets/borders.ts`).

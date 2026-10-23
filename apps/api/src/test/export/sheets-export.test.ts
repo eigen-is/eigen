@@ -227,10 +227,11 @@ describe('Sheets xlsx export — fonts', () => {
         ]);
     });
 
-    test("a column width counts the default font's digits, and the import reads it back to the pixel", async () => {
+    test("a column width counts the default font's digits in 256ths, and the import reads it back to the pixel", async () => {
         const sheets: Sheet[] = [{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 90, 1: 131 } } }];
         const ws = getSheet(await exportAndReload(sheets), 'Sheet1');
         expect(ws.getColumn(1).width).toBe(10);
+        expect(ws.getColumn(2).width).toBe(14.5546875);
         expect((await roundTrip(sheets))[0].config?.columnlen).toEqual({ 0: 90, 1: 131 });
     });
 

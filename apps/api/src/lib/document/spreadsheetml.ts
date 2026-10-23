@@ -1,3 +1,5 @@
+import { SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
+
 // Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
 // format shares is core/ooxml.ts.
 
@@ -11,6 +13,65 @@ export const DAYS_1904 = 1462;
 // Excel's row at Calibri 11 in points.
 export const DEFAULT_BASE_COL_WIDTH = 8;
 export const DEFAULT_ROW_HEIGHT_PT = 15;
+
+// The default font's widest digit in pixels as Excel for Windows draws it at 96 dpi, by the least point size each holds
+// from. GDI's hinted advances, not the outline's, so measured: EPPlus' FontSize table, which the corpus' Excel-written
+// widths agree with. Aptos Narrow draws Calibri's grid, and a metric-compatible face counts as the one it stands in for.
+const CALIBRI_DIGIT: [number, number][] = [
+    [7.5, 6],
+    [9.5, 7],
+    [12, 8],
+    [12.5, 9],
+    [14, 10],
+    [15.5, 11],
+];
+const ARIAL_DIGIT: [number, number][] = [
+    [9, 7],
+    [10.5, 8],
+    [12, 9],
+    [13.5, 10],
+    [14, 11],
+    [15.5, 12],
+];
+const TIMES_DIGIT: [number, number][] = [
+    [10.5, 7],
+    [12, 8],
+    [12.5, 9],
+    [15, 10],
+    [15.5, 11],
+];
+const DIGIT_WIDTHS = new Map<string, [number, number][]>([
+    ['calibri', CALIBRI_DIGIT],
+    ['carlito', CALIBRI_DIGIT],
+    ['aptos narrow', CALIBRI_DIGIT],
+    ['arial', ARIAL_DIGIT],
+    ['liberation sans', ARIAL_DIGIT],
+    // Cambria's digits are Arial's up to 16 pt.
+    ['cambria', ARIAL_DIGIT],
+    ['caladea', ARIAL_DIGIT],
+    ['times new roman', TIMES_DIGIT],
+    ['liberation serif', TIMES_DIGIT],
+]);
+// Calibri 11's, Excel's default since 2007, and Arial 10's before it.
+const FALLBACK_DIGIT_WIDTH = 7;
+
+// An Eigen export's default font is Inter, whose digit the writer converts through.
+export function maxDigitWidth(font: string | undefined, size: number): number {
+    if (font === SHEET_DEFAULT_FONT.name) return SHEET_DEFAULT_DIGIT_WIDTH;
+    let digit = FALLBACK_DIGIT_WIDTH;
+    for (const [from, px] of DIGIT_WIDTHS.get(font?.toLowerCase() ?? '') ?? []) if (size >= from) digit = px;
+    return digit;
+}
+
+// A column width counts digits plus 5 px of padding, in 256ths of a digit (ECMA-376 Part 1 § 18.3.1.13). The writer
+// truncates to the 256th below, so the reader's half-256th rounding lands back on the pixel.
+export function columnWidthToPx(width: number, digit: number): number {
+    return Math.trunc(((256 * width + Math.trunc(128 / digit)) / 256) * digit);
+}
+
+export function pxToColumnWidth(px: number, digit: number): number {
+    return Math.trunc((px * 256) / digit) / 256;
+}
 
 // A number as a rule's operand holds it, unquoted; anything else is a reference, a function or a quoted string.
 export const NUMERIC = /^-?(?:\d+(?:\.\d*)?|\.\d+)$/;

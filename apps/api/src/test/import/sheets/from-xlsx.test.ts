@@ -192,7 +192,7 @@ describe('the reader', () => {
             xlsxFixture({ sheets: [{ data }], styles: STYLES, strings: STRINGS, colors: OFFICE_COLORS }),
         );
         // Custom heights in points to pixels; wrapped and large text grows its row.
-        expect(sheet.config?.rowlen).toEqual({ 0: 40, 1: 1410, 4: 28, 6: 78 });
+        expect(sheet.config?.rowlen).toEqual({ 0: 40, 1: 1590, 4: 28, 6: 78 });
         expect(sheet.config?.rowhidden).toEqual({ 2: 0, 4: 0 });
     });
 
@@ -204,7 +204,7 @@ describe('the reader', () => {
                 sheets: [{ data, before: '<sheetFormatPr defaultColWidth="10" defaultRowHeight="12.75"/>' }],
             }),
         );
-        expect(sheet).toMatchObject({ defaultColWidth: 80, defaultRowHeight: 17 });
+        expect(sheet).toMatchObject({ defaultColWidth: 70, defaultRowHeight: 17 });
         expect(sheet.config?.rowlen).toEqual({ 1: 20 });
     });
 
@@ -238,13 +238,14 @@ describe('the reader', () => {
             frozen: { type: 'rangeBoth', range: { row_focus: 1, column_focus: 0 } },
             filterRange: { row: [0, 8], column: [0, 1] },
         });
-        expect(first.config?.columnlen).toMatchObject({ 0: 246, 1: 32, 2: 100, 3: 100, 4: 100, 7: 73, 16383: 73 });
+        // Calibri 11's 7 px digit: Excel draws these at 215, 28, 87 and 64 px.
+        expect(first.config?.columnlen).toMatchObject({ 0: 215, 1: 28, 2: 87, 3: 87, 4: 87, 7: 64, 16383: 64 });
         expect(Object.keys(first.config?.colhidden ?? {})).toHaveLength(1 + 16384 - 7);
         expect(second).toMatchObject({
             frozen: { type: 'rangeRow', range: { row_focus: 0, column_focus: 0 } },
             filterRange: { row: [0, 1], column: [1, 2] },
         });
-        expect(second.config?.columnlen).toEqual({ 1: 320, 2: 320 });
+        expect(second.config?.columnlen).toEqual({ 1: 280, 2: 280 });
         expect(second.config?.colhidden).toEqual({ 3: 0 });
         expect(third.frozen).toBeUndefined();
     });

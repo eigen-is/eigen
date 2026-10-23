@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { REFERENCE_COLUMN_COUNT, SHEET_DEFAULT_DIGIT_WIDTH } from '@workspace/lib/sheets';
+import { REFERENCE_COLUMN_COUNT } from '@workspace/lib/sheets';
 import { parseOoxml } from '../../../lib/core/ooxml';
 import type { Relationship } from '../../../lib/core/opc';
 import { xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
-import { digitWidthOf, readWorksheet } from '../../../lib/import/sheets/worksheet';
+import { readWorksheet } from '../../../lib/import/sheets/worksheet';
 import { sheetXml, xlsxFixture } from '../../fixtures/xlsx';
 
 // A worksheet past its grid: columns, merges, views, the filter's span and the hyperlinks, and the cells merges and
@@ -33,13 +33,10 @@ function read(before: string, after = '', options: { digitWidth?: number; budget
 }
 
 describe('columns', () => {
-    test("a width counts the default font's digit, Inter's for Eigen's own files", () => {
-        expect(digitWidthOf('Inter')).toBe(SHEET_DEFAULT_DIGIT_WIDTH);
-        expect(digitWidthOf('Calibri')).toBe(8);
-        expect(digitWidthOf(undefined)).toBe(8);
-        const cols = '<cols><col min="1" max="1" width="10.5"/><col min="3" max="4" width="20"/></cols>';
-        expect(read(cols).config.columnlen).toEqual({ 0: 84, 2: 160, 3: 160 });
-        expect(read(cols, '', { digitWidth: 9 }).config.columnlen).toEqual({ 0: 95, 2: 180, 3: 180 });
+    test("a width counts the default font's digit, as Excel draws it", () => {
+        const cols = '<cols><col min="1" max="1" width="9.140625"/><col min="3" max="4" width="20.7109375"/></cols>';
+        expect(read(cols, '', { digitWidth: 7 }).config.columnlen).toEqual({ 0: 64, 2: 145, 3: 145 });
+        expect(read(cols, '', { digitWidth: 9 }).config.columnlen).toEqual({ 0: 82, 2: 186, 3: 186 });
     });
 
     test('hidden columns, and a column taking the first <col> by min that reaches it', () => {
@@ -305,8 +302,8 @@ describe('in the sheet', () => {
             '<mergeCells><mergeCell ref="B2:D2"/></mergeCells>',
             '<cols><col min="1" max="1" width="50"/></cols>',
         );
-        // 150 characters at 6.6 px each: 400 px is 3 lines, 216 px (three of the sheet's 72 px default columns) 5.
-        expect(sheet.config?.rowlen).toEqual({ 0: 65, 1: 105 });
+        // 150 characters at 6.6 px each: 350 px is 3 lines, 192 px (three of the sheet's 64 px default columns) 6.
+        expect(sheet.config?.rowlen).toEqual({ 0: 65, 1: 125 });
     });
 
     test('views, filter and columns reach the sheet', () => {
@@ -319,7 +316,7 @@ describe('in the sheet', () => {
             showGridLines: false,
             frozen: { type: 'rangeRow', range: { row_focus: 0, column_focus: 0 } },
             filterRange: { row: [0, 4], column: [0, 1] },
-            config: { columnlen: { 1: 96 }, colhidden: { 1: 0 } },
+            config: { columnlen: { 1: 84 }, colhidden: { 1: 0 } },
         });
     });
 });
