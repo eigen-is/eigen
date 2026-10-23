@@ -35,19 +35,34 @@ Below that you pick the chart's **Type** (**Bar**, **Column**, **Line**, or **Pi
 
 Click a cell to close the editor.
 
-## Move, resize, and remove a chart
+## Move, resize, rotate, and remove a chart
 
-Click a chart to select it. Drag it to move it, or drag a handle on its frame to resize it. Press Delete to remove the selected chart.
+Click a chart to select it. A frame with square handles appears around it.
 
-Hover over a chart and click the three dots in its top-right corner for its menu:
+- Drag the chart to move it.
+- Drag a corner or edge handle to resize it. Hold **Shift** while you drag a corner to keep the width and height in proportion.
+- Drag the round handle on the short stalk above the chart to rotate it. Hold **Shift** while you drag to snap the angle to steps of 15 degrees.
 
-- **Edit the chart** opens the **Chart editor**.
-- **Delete chart** removes it.
+On a phone or tablet, tap a chart to select it, then drag it. Swiping across a chart you haven't selected scrolls the sheet.
+
+Press Delete to remove the selected chart, or Esc to deselect it.
+
+While a chart is selected, a panel headed **Chart** opens on the right. It has the same **X**, **Y**, **W**, **H**, **Angle** and **Keep aspect ratio** as the [image panel](/support/sheets/images-in-a-spreadsheet), the **Arrange** buttons, **Edit chart** and **Delete chart**. The **Chart editor** ends with the same numbers.
+
+Right-click a chart, or press and hold it on a touch screen, for its menu:
+
+- **Cut** and **Copy**, as described below.
+- **Duplicate** puts a copy on top, a little down and to the right.
+- **Edit chart** opens the **Chart editor**.
+- **Order** brings the chart in front of the charts and images it overlaps, or sends it behind them.
 - **Download chart** → **SVG (.svg)** saves the chart as a picture. This works with view access too.
+- **Delete** removes it.
+
+Charts and images stack together. With a chart selected, **⌘]** brings it forward a step and **⌘[** sends it back a step, and adding **Shift** brings it to the front or sends it to the back. Use **Ctrl** in place of **⌘** on Windows.
 
 ## Copy a chart
 
-Select a chart and press **Ctrl+C** (Mac: **⌘C**) to copy it, or **Ctrl+X** (Mac: **⌘X**) to cut it. Cutting copies the chart and removes it. A chart that shows `#REF!` or **Too much data for a chart** can't be copied.
+Select a chart and press **Ctrl+C** (Mac: **⌘C**) to copy it, or **Ctrl+X** (Mac: **⌘X**) to cut it. **Cut** and **Copy** in the chart's menu and in the **Edit** menu do the same. Cutting copies the chart and removes it. A chart that shows `#REF!` or **Too much data for a chart** can't be copied.
 
 Paste it with **Ctrl+V** (Mac: **⌘V**):
 
