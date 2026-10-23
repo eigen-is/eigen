@@ -23,12 +23,6 @@ function generateOtp(): string {
     return String(num % 1_000_000).padStart(6, '0');
 }
 
-// Deterministic password nobody sees — exists so we can call auth.api.signInEmail to get a
-// response with signed session cookies. Scoped per flow so the two surfaces never collide.
-export function scopedPassword(scope: 'guest' | 'demo', email: string): string {
-    return new Bun.CryptoHasher('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
-}
-
 // Upsert the account's credential with the freshly derived password, then sign in and return the
 // response carrying the signed session cookie. Re-deriving + overwriting on every call is
 // load-bearing: it heals a tampered password so one visitor can't lock out the next.
@@ -38,7 +32,8 @@ export async function signInWithScopedPassword(
     email: string,
 ): Promise<Response> {
     const db = getAuthDrizzleDb();
-    const password = scopedPassword(scope, email);
+    // Nobody sees it: it only lets auth.api.signInEmail sign the cookie. Scoped so the two flows never collide.
+    const password = new Bun.CryptoHasher('sha256', auth.options.secret).update(`${scope}:${email}`).digest('hex');
     const hashedPassword = await hashPassword(password);
     const existingAccount = db.select().from(account).where(eq(account.userId, userId)).get();
     if (existingAccount) {
