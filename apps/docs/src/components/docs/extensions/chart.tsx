@@ -59,7 +59,11 @@ function ChartView(props: NodeViewProps) {
         height: height ?? CHART_DEFAULT_SIZE.height,
     };
     const parsed = useMemo(() => parseChartSpec(spec ?? ''), [spec]);
-    const svg = useMemo(() => chartSvg(parsed, size), [parsed, size.width, size.height]);
+    // node.attrs is a new object only when an attribute changes, the look's among them.
+    const svg = useMemo(
+        () => chartSvg(parsed, { ...readChartAttrs(node.attrs), ...size }),
+        [parsed, node.attrs, size.width, size.height],
+    );
     const box: Box | null = selected && isEditable ? { x: 0, y: 0, ...size, angle: 0 } : null;
 
     return (

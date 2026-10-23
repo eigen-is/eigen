@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { MAX_SKETCH_POINTS, sampleChartSpec } from '@workspace/lib/charts';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
     SLIDES_STYLE_DEFAULTS,
     solidFill,
     VECTOR_STYLE_DEFAULTS,
+    type VectorChartElement,
     type VectorElement,
     type VectorPathElement,
     type VectorRichTextElement,
@@ -55,11 +57,29 @@ function textBox(id: string, over: Partial<VectorRichTextElement> = {}): VectorR
     };
 }
 
+const DEFAULT_SERIES = { color: null, markers: false, smooth: false };
+
 let cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
     for (const cleanup of cleanups) await cleanup();
     cleanups = [];
 });
+
+function chart(over: Partial<VectorChartElement> = {}): VectorChartElement {
+    return {
+        ...DEFAULT_ELEMENT_PROPS,
+        ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
+        id: 'c',
+        type: 'chart',
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 400,
+        angle: 0,
+        index: 'a1',
+        ...over,
+    };
+}
 
 // `slideWidth` is a deck's, which Slides passes; a drawing passes none.
 async function renderPanel(el: VectorElement | VectorElement[], slideWidth?: number) {
@@ -200,5 +220,42 @@ describe('the stroke width', () => {
     test('a selection of unlike widths shows none', async () => {
         const { container } = await renderPanel([path({ strokeWidth: 2 }), path({ id: 'q', strokeWidth: 4 })]);
         expect(rowInput(container, 'Width').value).toBe('');
+    });
+});
+
+describe('the panel for a chart', () => {
+    const rowsOf = (container: HTMLElement, section: string) => {
+        const heading = [...container.querySelectorAll('h4')].find((h) => h.textContent === section);
+        return [...(heading?.parentElement?.querySelectorAll('span.w-14') ?? [])].map((s) => s.textContent?.trim());
+    };
+
+    // The hatch is the bars', so its row shows over a transparent background; the label color is the chart's own.
+    test('edits its label color, fill and hatch, stroke and sketch', async () => {
+        const { container, sections } = await renderPanel(chart());
+        expect(sections.slice(sections.indexOf('Labels'))).toEqual([
+            'Labels',
+            'Fill',
+            'Stroke',
+            'Sketch',
+            'Appearance',
+            'Arrange',
+        ]);
+        expect(rowsOf(container, 'Labels')).toEqual(['Color']);
+        expect(rowsOf(container, 'Fill')).toEqual(['Style']);
+        expect(container.textContent).not.toContain(`${MAX_SKETCH_POINTS} points`);
+    });
+
+    test('a chart beside a shape shows only the rows they share', async () => {
+        const { sections } = await renderPanel([chart(), path()]);
+        expect(sections).not.toContain('Labels');
+    });
+
+    test('says when its data draws without the sketch', async () => {
+        const spec = sampleChartSpec('pie');
+        const categories = Array.from({ length: MAX_SKETCH_POINTS + 1 }, (_, i) => `C${i}`);
+        const values = categories.map(() => 1);
+        const data = { source: 'inline', categories, series: [{ ...DEFAULT_SERIES, name: 'S', values }] };
+        const { container } = await renderPanel(chart({ chart: JSON.stringify({ ...spec, data }) }));
+        expect(container.textContent).toContain(`${MAX_SKETCH_POINTS} points`);
     });
 });

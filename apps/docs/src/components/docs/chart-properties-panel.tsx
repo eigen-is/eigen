@@ -1,9 +1,11 @@
 import { type Editor, useEditorState } from '@tiptap/react';
-import { parseChartSpec } from '@workspace/lib/charts';
+import { isSketchCapped, parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import { CHART_DEFAULT_SIZE, type ChartAttrs, readChartAttrs } from '@workspace/lib/docs/eigendoc';
+import { parseFill, serializeFill } from '@workspace/lib/vector';
 import { ChartEditor, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
     holdCapture,
+    PaintSections,
     PropertiesPanel,
     PropertyGestureContext,
     PropertyHistoryContext,
@@ -18,7 +20,7 @@ import { FigureField, FigureLayoutSection } from './figure-properties-panel';
 // The selected chart's attributes. useEditor re-renders on no transaction, and a write that keeps the chart selected
 // fires no selectionUpdate.
 function useSelectedChart(editor: Editor) {
-    const { spec, layout, alignment, caption, width, height } = useEditorState({
+    const { spec, ...rest } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
             const attrs = readChartAttrs(e.getAttributes('chart'));
@@ -29,10 +31,11 @@ function useSelectedChart(editor: Editor) {
                 caption: attrs.caption || '',
                 width: attrs.width ?? CHART_DEFAULT_SIZE.width,
                 height: attrs.height ?? CHART_DEFAULT_SIZE.height,
+                look: readChartLook(attrs),
             };
         },
     });
-    return { spec: useMemo(() => parseChartSpec(spec ?? ''), [spec]), layout, alignment, caption, width, height };
+    return { spec: useMemo(() => parseChartSpec(spec ?? ''), [spec]), ...rest };
 }
 
 // Each write one undo step, sealed from the typing around it; a typed title holds its step until the field is left.
@@ -47,7 +50,7 @@ type ChartPropertiesPanelProps = {
 };
 
 export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartPropertiesPanelProps) {
-    const { spec, layout, alignment, caption, width, height } = useSelectedChart(editor);
+    const { spec, layout, alignment, caption, width, height, look } = useSelectedChart(editor);
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
     // A field that writes as the user types keeps the caret out of the editor's keymap, so it hands ⌘Z to the doc.
     const history = useMemo(
@@ -67,6 +70,20 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                             onEditData={onEditData}
                         />
                     )}
+                    <PaintSections
+                        fill={look.fill}
+                        fillStyle={parseFill(look.fill).style}
+                        marksHatch
+                        strokeColor={look.strokeColor}
+                        strokeWidth={look.strokeWidth}
+                        strokeStyle={look.strokeStyle}
+                        strokeOptional
+                        roughness={look.roughness}
+                        color={look.color}
+                        sketchCapped={spec?.data.source === 'inline' && isSketchCapped(spec, spec.data)}
+                        onFill={(next) => write({ fill: serializeFill(next(parseFill(look.fill))) })}
+                        onChange={write}
+                    />
                     <FigureLayoutSection
                         layout={layout}
                         alignment={alignment}

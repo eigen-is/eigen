@@ -98,16 +98,16 @@ export function lineHeightField(v: unknown): number {
 
 // roughjs inputs. A negative strokeWidth reaches SVG as an invalid stroke-width, and an out-of-band
 // roughness or seed turns the generator's output into NaN coordinates.
-export function strokeWidth(v: unknown): number {
-    return clampNum(v, 0, 100, DEFAULT_ELEMENT_PROPS.strokeWidth);
+export function strokeWidth(v: unknown, fallback = DEFAULT_ELEMENT_PROPS.strokeWidth): number {
+    return clampNum(v, 0, 100, fallback);
 }
 
-export function roughness(v: unknown): number {
-    return clampNum(v, 0, 10, DEFAULT_ELEMENT_PROPS.roughness);
+export function roughness(v: unknown, fallback = DEFAULT_ELEMENT_PROPS.roughness): number {
+    return clampNum(v, 0, 10, fallback);
 }
 
-export function seed(v: unknown): number {
-    return clampNum(v, 1, 2 ** 31, DEFAULT_ELEMENT_PROPS.seed);
+export function seed(v: unknown, fallback = DEFAULT_ELEMENT_PROPS.seed): number {
+    return clampNum(v, 1, 2 ** 31, fallback);
 }
 
 export function clampCoord(n: number): number {

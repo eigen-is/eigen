@@ -108,7 +108,8 @@ Sections show only where they mean something for the object you picked.
 | Section | Shown for |
 |---|---|
 | **Transform**, **Stroke**, **Sketch**, **Appearance** | Every object |
-| **Fill** | Shapes and text, plus a closed line or drawing |
+| **Fill** | Shapes, text, and charts, plus a closed line or drawing |
+| **Labels** | Charts |
 | **Text**, **Spacing** | Text |
 | **Image** | Images |
 | **Shape** (**Corners**) | Rectangles, diamonds, text, and images |

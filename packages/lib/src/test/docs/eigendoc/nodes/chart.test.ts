@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { createDocument, Editor, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
-import { CHART_MAX_SIDE, sampleChartSpec } from '../../../../charts';
-import { CHART_DEFAULT_SIZE, getDocExtensions, readChartAttrs } from '../../../../docs/eigendoc';
+import { CHART_MAX_SIDE, FLAT_CHART_LOOK, sampleChartSpec } from '../../../../charts';
+import { CHART_DEFAULT_SIZE, chartSvg, getDocExtensions, readChartAttrs } from '../../../../docs/eigendoc';
+import type { ChartLook } from '../../../../types/chart';
+import { serializeFill } from '../../../../vector/fill';
 import { installHappyDom } from '../../../happy-dom';
 
 // generateHTML serializes through `document`, createDocument parses with DOMParser.
@@ -10,6 +12,15 @@ installHappyDom();
 
 const extensions = getDocExtensions();
 const SPEC = JSON.stringify(sampleChartSpec('column'));
+const LOOK: ChartLook = {
+    fill: serializeFill({ type: 'gradient', from: '#ffeeaa', to: 'transparent', angle: 90, style: 'hachure' }),
+    color: '#334455',
+    strokeColor: '#556677',
+    strokeWidth: 4,
+    strokeStyle: 'dashed',
+    roughness: 2,
+    seed: 4242,
+};
 const chartDoc = (attrs: Record<string, unknown>): JSONContent => ({
     type: 'doc',
     content: [
@@ -33,8 +44,9 @@ function chartsIn(html: string): Record<string, unknown>[] {
 
 describe('chart HTML', () => {
     // The clipboard carries a docs copy as this HTML, so a chart pastes back whole within Docs.
-    test('a chart survives the HTML round-trip with its spec, size and frame', () => {
+    test('a chart survives the HTML round-trip with its spec, size, look and frame', () => {
         const attrs = {
+            ...LOOK,
             spec: SPEC,
             width: 480,
             height: 300,
@@ -68,10 +80,20 @@ describe('chart HTML', () => {
         expect(chartsIn(html)).toMatchObject([{ spec: 'not a chart', width: 200, height: 100 }]);
     });
 
-    test('a chart with no spec or size renders at the default size', () => {
+    test('a chart with no spec, size or look renders at the default size, and pastes back flat', () => {
         const html = generateHTML(chartDoc({}), extensions);
         expect(html).toContain(`width="${CHART_DEFAULT_SIZE.width}"`);
-        expect(chartsIn(html)).toMatchObject([{ spec: null, width: null, height: null }]);
+        expect(chartsIn(html)).toMatchObject([{ spec: null, width: null, height: null, ...FLAT_CHART_LOOK }]);
+    });
+
+    test('a pasted span.chart reads its look through the chart look validators', () => {
+        const look = JSON.stringify({ ...LOOK, color: 'url(#x)', roughness: 1e9 });
+        const html = `<p><span class="chart" data-chart='${SPEC}' data-look='${look}'></span></p>`;
+        expect(readChartAttrs(chartsIn(html)[0])).toMatchObject({
+            ...LOOK,
+            color: FLAT_CHART_LOOK.color,
+            roughness: 10,
+        });
     });
 
     // A peer's write or a pasted span.chart sets any size; the layout runs for seconds at a side of millions.
@@ -95,7 +117,8 @@ describe('chart HTML', () => {
 
 describe('readChartAttrs', () => {
     test('reads the attributes a chart stores', () => {
-        expect(readChartAttrs({ spec: SPEC, width: 480, height: 300, layout: 'wrap-left' })).toEqual({
+        expect(readChartAttrs({ spec: SPEC, width: 480, height: 300, layout: 'wrap-left', ...LOOK })).toEqual({
+            ...LOOK,
             spec: SPEC,
             width: 480,
             height: 300,
@@ -104,6 +127,10 @@ describe('readChartAttrs', () => {
             layout: 'wrap-left',
             commentCardId: null,
         });
+    });
+
+    test('a chart that stores no look reads flat', () => {
+        expect(readChartAttrs({ spec: SPEC })).toMatchObject(FLAT_CHART_LOOK);
     });
 
     test('reads a value of the wrong type as unset', () => {
@@ -133,6 +160,27 @@ describe('readChartAttrs', () => {
     });
 });
 
+describe('chartSvg', () => {
+    const spec = sampleChartSpec('column');
+    const size = { width: 600, height: 371 };
+
+    test('draws the stored look', () => {
+        const flat = chartSvg(spec, size);
+        expect(chartSvg(spec, { ...size, ...readChartAttrs({ roughness: 2, seed: 9 }) })).not.toBe(flat);
+        expect(chartSvg(spec, { ...size, ...readChartAttrs({}) })).toBe(flat);
+    });
+
+    // Two charts on a page, or a page's chart and its copy, never share a gradient's id.
+    test('a gradient fill draws under an id no other drawing of a chart has', () => {
+        const ids = (svg: string) => Array.from(svg.matchAll(/<linearGradient id="([^"]+)"/g), (m) => m[1]);
+        const attrs = { ...size, ...readChartAttrs(LOOK) };
+        const [a] = ids(chartSvg(spec, attrs));
+        const [b] = ids(chartSvg(spec, attrs));
+        expect(a).toBeString();
+        expect(a).not.toBe(b);
+    });
+});
+
 describe('insertChart', () => {
     const editorWith = (text: string) =>
         new Editor({
@@ -151,6 +199,24 @@ describe('insertChart', () => {
         expect(chart?.type.name).toBe('chart');
         expect(chart?.attrs).toMatchObject({ spec: JSON.stringify(sampleChartSpec('bar')), ...CHART_DEFAULT_SIZE });
         expect(editor.getText()).toBe('ab');
+        editor.destroy();
+    });
+
+    // Flat, as Google's is, with a seed of its own, so a sketch picked later draws the same jitter everywhere.
+    test('a new chart is flat with a random seed', () => {
+        const editor = editorWith('ab');
+        editor.commands.insertChart('column');
+        editor.commands.setTextSelection(1);
+        editor.commands.insertChart('column');
+        const charts: Record<string, unknown>[] = [];
+        editor.state.doc.descendants((node) => {
+            if (node.type.name === 'chart') charts.push(node.attrs);
+        });
+        const [first, second] = charts.map(readChartAttrs);
+        const { seed: _seed, ...flat } = FLAT_CHART_LOOK;
+        expect(first).toMatchObject(flat);
+        expect(charts[0]['seed']).toBeNumber();
+        expect(first.seed).not.toBe(second.seed);
         editor.destroy();
     });
 

@@ -11,6 +11,7 @@ const { act, createElement, useState } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
 const { parseChartSpec } = await import('@workspace/lib/charts');
+const { parseFill } = await import('@workspace/lib/vector');
 const { getFontFamily } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Chart } = await import('../../../components/docs/extensions/chart');
@@ -229,4 +230,62 @@ test('Edit data saves the grid as one undo step', async () => {
     undoManager.undo();
     const undone = spec();
     expect(undone?.data.source === 'inline' && undone.data.series[0].values[0]).toBe(42);
+});
+
+// A section's row control, beside its label span: the panel has several Style rows.
+const sectionRow = (section: string, label: string) => {
+    const heading = [...document.querySelectorAll('h4')].find((h) => h.textContent === section);
+    const span = [...(heading?.parentElement?.querySelectorAll('span.w-14') ?? [])].find(
+        (s) => s.textContent?.trim() === label,
+    );
+    const control = span?.nextElementSibling;
+    if (!(control instanceof HTMLElement)) throw new Error(`no ${section} › ${label} row`);
+    return control;
+};
+const chooseIn = async (section: string, label: string, option: string) => {
+    const trigger = sectionRow(section, label).querySelector('[data-slot="select-trigger"]');
+    await act(async () => {
+        trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+        trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const list = [...document.querySelectorAll('[data-slot="select-content"]')].at(-1);
+    const item = [...(list?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])].find(
+        (el) => el.textContent?.trim() === option,
+    );
+    if (!item) throw new Error(`no "${option}" under ${section} › ${label}`);
+    await act(async () => {
+        item.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+        item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+};
+
+test("the look rows write the chart's own attributes, each one undo step, and the chart draws them", async () => {
+    const { editor, undoManager, spec } = await mount();
+    const attrs = () => editor.state.doc.nodeAt(1)?.attrs ?? {};
+    const sections = [...document.querySelectorAll('h4')].map((h) => h.textContent);
+    expect(sections).toEqual(expect.arrayContaining(['Labels', 'Fill', 'Stroke', 'Sketch']));
+    // Opacity is a canvas layer's.
+    expect(sections).not.toContain('Appearance');
+    const before = spec();
+    const drawn = () => document.querySelector('[data-document] svg')?.innerHTML;
+    const flat = drawn();
+
+    await chooseIn('Sketch', 'Style', 'Cartoonist');
+    expect(attrs().roughness).toBe(2);
+    expect(drawn()).not.toBe(flat);
+    await chooseIn('Fill', 'Style', 'Cross-hatch');
+    expect(parseFill(attrs().fill).style).toBe('cross-hatch');
+    await chooseIn('Stroke', 'Style', 'Dashed');
+    expect(attrs().strokeStyle).toBe('dashed');
+    expect(spec()).toEqual(before);
+
+    undoManager.undo();
+    expect(attrs().strokeStyle).not.toBe('dashed');
+    expect(parseFill(attrs().fill).style).toBe('cross-hatch');
+    await act(async () => {
+        undoManager.undo();
+        undoManager.undo();
+    });
+    expect(attrs().roughness).toBeNull();
+    expect(drawn()).toBe(flat);
 });

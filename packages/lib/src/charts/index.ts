@@ -1,4 +1,12 @@
-export { CHART_MESSAGES, FLAT_CHART_PAINT, layoutChart, layoutChartMessage } from './layout';
+export {
+    CHART_MESSAGES,
+    chartPointCount,
+    isSketchCapped,
+    layoutChart,
+    layoutChartMessage,
+    MAX_SKETCH_POINTS,
+} from './layout';
+export { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from './look';
 export {
     CHART_MAX_SIDE,
     chartColor,

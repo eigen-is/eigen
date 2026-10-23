@@ -39,6 +39,8 @@ When an image is selected, the properties panel shows an **Image** section. Use 
 
 With the chart selected, the properties panel shows its options. The **Chart** section sets the **Type**, the **Stacking** of a bar or column chart (**None**, **Standard** or **100%**), the **Title**, where the **Legend** goes, and the **Font** of all the chart's text. The **Horizontal axis** and **Vertical axis** sections hold each axis's **Title** and a **Show axis** box, which hides the axis's labels and line when you clear it. The axis with the categories also has **Reverse axis order**, which runs it the other way. The axis with the numbers also has **Min** and **Max**, which pick their own values while they're empty and are percents on a **100%** stack, and **Gridlines**. Switching **Stacking** to or from **100%** empties **Min** and **Max**. **Series** sets the color of each series. A pie chart has **Slices** instead, with a color for each slice. A color reads **Automatic** until you pick one; **Automatic** in a picked color's list puts it back.
 
+Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets the chart's background, and its **Style** how the bars and slices are drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag**. Solid bars and slices have no outline; hatched ones get an outline in their own color. **Stroke** sets the color, width, and style of the axes and gridlines, and **Sketch** how rough the chart looks. A chart with more than 200 values (for a pie, more than 200 slices) draws its bars, lines, and slices smooth and solid whatever the sketch, so it stays quick to show; the **Sketch** section says so.
+
 ### Edit the numbers
 
 1. Double-click the chart, or click **Edit data** in the properties panel.
@@ -50,7 +52,7 @@ You can paste cells copied from a spreadsheet into the grid, and copy cells out 
 
 **Convert to shapes**, in the properties panel or the right-click menu, turns the chart into ordinary shapes and text boxes you can edit one by one. You can't turn them back into a chart, but undo (**Cmd+Z** on a Mac, **Ctrl+Z** on Windows) right after brings the chart back.
 
-You can paste a chart copied in Sheets, Docs, or Vector onto a slide, and it stays a chart you can edit. A chart you copy on its own from a slide pastes into Docs and Sheets the same way; copied together with other objects, it pastes there as one picture. A chart copied from Sheets keeps the numbers it showed when you copied it. See [Arrange and align](/support/slides/arrange-and-align).
+You can paste a chart copied in Sheets, Docs, or Vector onto a slide, and it stays a chart you can edit. A chart you copy on its own from a slide pastes into Docs and Sheets the same way; copied together with other objects, it pastes there as one picture. A chart keeps its look, and a chart copied from Sheets keeps the numbers it showed when you copied it. See [Arrange and align](/support/slides/arrange-and-align).
 
 ## Add shapes and arrows
 

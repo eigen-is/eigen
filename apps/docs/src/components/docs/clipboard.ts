@@ -92,9 +92,10 @@ function copiedClipboardItems(
     view.state.doc.nodesBetween(from, to, (node, pos) => {
         if (node.type.name === 'footnote') return false;
         if (node.type.name === 'chart') {
-            const { spec, width, height } = readChartAttrs(node.attrs);
+            const attrs = readChartAttrs(node.attrs);
+            const { spec, width, height } = attrs;
             const box = { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
-            const item = spec ? buildChartClipboardItem({ spec, box }) : null;
+            const item = spec ? buildChartClipboardItem({ spec, box, look: attrs }) : null;
             if (item) push(pos, node.nodeSize, item);
             return;
         }
@@ -243,7 +244,7 @@ export async function insertEigenItems(
     }
 }
 
-// An image item as a figure under its stored name, a chart item as a chart.
+// An image item as a figure under its stored name, a chart item as a chart in its look.
 function atomContent(
     item: EigenClipboardItem,
     storedNames: Map<string, string | null>,
@@ -257,5 +258,6 @@ function atomContent(
     }
     if (item.type !== 'chart') return null;
     const scale = Math.min(1, columnWidth / item.width);
-    return { type: 'chart', attrs: { spec: item.spec, width: item.width * scale, height: item.height * scale } };
+    const { spec, look } = item;
+    return { type: 'chart', attrs: { spec, width: item.width * scale, height: item.height * scale, ...look } };
 }

@@ -14,7 +14,7 @@ const { prosemirrorJSONToYXmlFragment, yUndoPluginKey } = await import('@tiptap/
 const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pagePx, pageRecord } = await import(
     '@workspace/lib/docs/eigendoc'
 );
-const { sampleChartSpec } = await import('@workspace/lib/charts');
+const { FLAT_CHART_LOOK, sampleChartSpec } = await import('@workspace/lib/charts');
 const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
 const { docEditorOptions } = await import('../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
@@ -188,7 +188,10 @@ test('a chart item pastes into the body as a chart within the column, and into a
             bubbles: true,
             cancelable: true,
         });
-        writeEigenClipboard(event, { version: 1, items: [{ type: 'chart', spec, width: 2000, height: 1000 }] });
+        writeEigenClipboard(event, {
+            version: 1,
+            items: [{ type: 'chart', spec, width: 2000, height: 1000, look: FLAT_CHART_LOOK }],
+        });
         editor.view.dom.dispatchEvent(event);
     };
     const doc = new Y.Doc();

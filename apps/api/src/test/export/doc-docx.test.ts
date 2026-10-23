@@ -2405,6 +2405,16 @@ describe('docx writer — figures', () => {
         expect([format, width, height]).toEqual(['png', 480, 300]);
     });
 
+    test('two charts of one spec and size but different looks draw two pictures, each in its own look', async () => {
+        const spec = JSON.stringify(sampleChartSpec('column'));
+        const json = doc(p(chartNode({ spec }), chartNode({ spec, roughness: 2, seed: 5, strokeColor: '#336699' })));
+        const media = await chartMedia(json);
+        const svgs = media.filter((item) => item.contentType === 'image/svg+xml');
+        expect(svgs).toHaveLength(2);
+        const texts = svgs.map((item) => new TextDecoder().decode(item.data));
+        expect(texts.filter((svg) => svg.includes('stroke="#336699"'))).toHaveLength(1);
+    });
+
     test("a chart whose spec doesn't parse keeps its caption alone, as a figure without media does", async () => {
         const charts = doc(
             p(text('a'), chartNode({ spec: '{', caption: 'Lost', alignment: 'right' }), text('b')),

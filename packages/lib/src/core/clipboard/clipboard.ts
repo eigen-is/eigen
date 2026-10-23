@@ -1,5 +1,7 @@
 import { toast } from 'sonner';
+import { readChartLook } from '../../charts/look';
 import { parseChartSpec } from '../../charts/spec';
+import type { ChartLook } from '../../types/chart';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -80,13 +82,16 @@ function isInlineChartSpec(spec: unknown): spec is string {
 }
 
 // A chart item, or null for a spec no consumer could draw (range data, unreadable, over the size limit).
-// The spec rides as given, never re-serialized.
+// The spec rides as given, never re-serialized. The look is read off its holder, a canvas element among them, and a
+// host that stores none copies flat.
 export function buildChartClipboardItem(args: {
     spec: string;
     box: Pick<ClipboardBox, 'width' | 'height'>;
+    look?: ChartLook;
 }): EigenClipboardChartItem | null {
     if (!isInlineChartSpec(args.spec)) return null;
-    return { type: 'chart', spec: args.spec, width: args.box.width, height: args.box.height };
+    const look = readChartLook(args.look ?? {});
+    return { type: 'chart', spec: args.spec, width: args.box.width, height: args.box.height, look };
 }
 
 // Read the typed geometry off any item. Consumers size/rotate from this — there is no `meta` sniff
@@ -133,6 +138,12 @@ function isValidItem(item: unknown): item is EigenClipboardItem {
     }
 }
 
+// A chart's look through the chart look validators, so every consumer stores what a canvas reader would keep.
+function withChartLook(item: EigenClipboardItem): EigenClipboardItem {
+    if (item.type !== 'chart') return item;
+    return { ...item, look: readChartLook(isRecord(item.look) ? item.look : {}) };
+}
+
 function parseEigenJson(raw: string): EigenClipboardData | null {
     let parsed: unknown;
     try {
@@ -143,7 +154,7 @@ function parseEigenJson(raw: string): EigenClipboardData | null {
     if (!isRecord(parsed) || parsed.version !== 1 || !Array.isArray(parsed.items)) return null;
     return {
         version: 1,
-        items: parsed.items.filter(isValidItem),
+        items: parsed.items.filter(isValidItem).map(withChartLook),
         svg: typeof parsed.svg === 'string' ? parsed.svg : undefined,
     };
 }

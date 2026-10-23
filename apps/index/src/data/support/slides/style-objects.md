@@ -11,7 +11,7 @@ updated: 2026-10-23
 
 Select an object on a slide and the panel on the right fills with its style controls. This page lists every section, top to bottom, and what each control does.
 
-Which sections you see depends on the object. **Stroke**, **Sketch**, and **Appearance** show for everything. **Fill** shows for shapes and text boxes, not for images or arrows. The **Text**, **Image**, and arrow sections each show only for their own kind of object. With more than one object selected, you see the controls they share.
+Which sections you see depends on the object. **Stroke**, **Sketch**, and **Appearance** show for everything. **Fill** shows for shapes, text boxes, and charts, not for images or arrows. **Labels** shows for charts. The **Text**, **Image**, and arrow sections each show only for their own kind of object. With more than one object selected, you see the controls they share.
 
 With nothing selected, the panel shows the slide background instead. See [Slide backgrounds](/support/slides/slide-backgrounds).
 

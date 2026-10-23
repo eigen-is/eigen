@@ -4,6 +4,7 @@
 
 import type {
     ChartBox,
+    ChartData,
     ChartLabel,
     ChartLayout,
     ChartLayoutInput,
@@ -37,21 +38,11 @@ export const CHART_MESSAGES = {
     tooManyPoints: 'Too much data for a chart',
 };
 
-// The one paint of a chart in a document or a sheet, which store none: Google's flat look on the page's
-// own background, in the spec's font. strokeColor draws the baseline at full strength and the gridlines faint
-// (GRIDLINE_OPACITY), so a mid gray gives a clear baseline and Google's light gridlines. strokeWidth is
-// every shape's line; 2 is Google's series line width, so a line series reads at page scale, and it
-// lengthens a bar by only 1px an end.
-export const FLAT_CHART_PAINT: ChartPaint = {
-    color: '#202124',
-    background: serializeFill(TRANSPARENT_FILL),
-    strokeColor: '#757575',
-    strokeWidth: 2,
-    strokeStyle: 'solid',
-    roughness: 0,
-    seed: 1,
-    fillStyle: 'solid',
-};
+// Past this many points a chart's data marks (bars, slices, lines, markers) draw flat, while its background, gridlines,
+// axes and legend keep the sketch. A rough or hatched mark costs ~20x a flat one: at 2000 x 1200, cross-hatched, 200
+// points take 35-55 ms and 1.5-3.8 MB of SVG to draw on the server, and 400 points 70-110 ms and 3-7.5 MB, which every
+// viewer then parses and paints, and a doc copies as an <img> and prints.
+export const MAX_SKETCH_POINTS = 200;
 
 // Base text size as a share of the box's shorter side, as Google's charts scale theirs.
 const TEXT_SCALE = 0.035;
@@ -133,12 +124,29 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     const legend = placeLegend(ctx, spec.legend, items, frame);
     frame = legend.frame;
 
+    const marks = isSketchCapped(spec, data) ? flatMarks(ctx) : ctx;
     const plot =
         spec.type === 'pie'
-            ? layoutPie(ctx, spec, categories, values[0], frame)
-            : layoutCartesian(ctx, spec, categories, series, values, frame, formatTick);
+            ? layoutPie(marks, spec, categories, values[0], frame)
+            : layoutCartesian(ctx, marks, spec, categories, series, values, frame, formatTick);
     if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
+}
+
+// The values the chart plots: a pie's first series, every series' otherwise.
+export function chartPointCount(spec: ChartSpec, data: ChartData): number {
+    const plotted = spec.type === 'pie' ? data.series.slice(0, 1) : data.series;
+    return plotted.reduce((sum, series) => sum + series.values.length, 0);
+}
+
+// Whether the chart's data marks draw flat whatever its look, which a panel says.
+export function isSketchCapped(spec: ChartSpec, data: ChartData): boolean {
+    return chartPointCount(spec, data) > MAX_SKETCH_POINTS;
+}
+
+// The context the data marks draw in past MAX_SKETCH_POINTS: unsketched and solid, its labels still the chart's.
+function flatMarks(ctx: Context): Context {
+    return { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } };
 }
 
 // The chart's background and one centered line instead of a plot, as a chart with nothing to plot draws.
@@ -210,7 +218,8 @@ function placeLegend(
     const place = (item: LegendItem, index: number, text: string, x: number, top: number) => {
         const y = top + (lh - swatch) / 2;
         const fill = serializeFill({ type: 'solid', color: item.color, style: ctx.paint.fillStyle });
-        shapes.push(rectangle(ctx, `legend:${index}`, { x, y, width: swatch, height: swatch }, item.color, fill));
+        const box = { x, y, width: swatch, height: swatch };
+        shapes.push(rectangle(ctx, `legend:${index}`, box, outlineOf(ctx, item.color), fill));
         ctx.labels.push(label(ctx, text, x + indent, top, 'start'));
     };
     if (position === 'none' || items.length === 0) return { shapes, frame };
@@ -290,8 +299,10 @@ type ValueAxis = { lo: number; hi: number; ticks: number[]; texts: string[]; wid
 // room to the plot and draws no line, the baseline being the category axis's; its title and the gridlines stay.
 // A 100% stack plots shares and labels its ticks as percents, whatever the source cells' format; its min
 // and max are shares too, Excel's c:min and c:max (1 is 100%).
+// `marks` is the context the bars, lines and markers draw in.
 function layoutCartesian(
     ctx: Context,
+    marks: Context,
     spec: ChartSpec,
     categories: string[],
     series: PaintedSeries[],
@@ -423,8 +434,8 @@ function layoutCartesian(
         if (spec.valueAxis.gridlines && (t !== zero || !showNames))
             shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
     });
-    if (spec.type === 'line') shapes.push(...lineMarks(ctx, spec, series, values, band, scale));
-    else shapes.push(...barMarks(ctx, spec, series, values, band, scale, horizontal, stacked));
+    if (spec.type === 'line') shapes.push(...lineMarks(marks, spec, series, values, band, scale));
+    else shapes.push(...barMarks(marks, spec, series, values, band, scale, horizontal, stacked));
     if (showNames) shapes.push(rule('baseline', scale(zero)));
 
     const side = fit(ctx, sideTitle, plot.bottom - plot.top, fontSize, false);
@@ -581,8 +592,8 @@ function barMarks(
     const downs: number[] = [];
     const slot = stacked ? band.width : band.width / series.length;
     // An outline straddles its bar's edges, so a bar narrows by its outline to keep its slot, and side by
-    // side bars meet outline to outline; a slot thinner than two outlines thins the outline.
-    const stroke = Math.min(ctx.paint.strokeWidth, slot / 2);
+    // side bars meet outline to outline; a slot thinner than two outlines thins the outline. A solid bar has none.
+    const stroke = isOutlined(ctx) ? Math.min(ctx.paint.strokeWidth, slot / 2) : 0;
     series.forEach((s, si) => {
         const fill = serializeFill({ type: 'solid', color: s.color, style: ctx.paint.fillStyle });
         values[si].forEach((stored, c) => {
@@ -602,7 +613,10 @@ function barMarks(
             const box = horizontal
                 ? { x: Math.min(a, b), y: offset, width: Math.abs(b - a), height: slot - stroke }
                 : { x: offset, y: Math.min(a, b), width: slot - stroke, height: Math.abs(b - a) };
-            shapes.push({ ...rectangle(ctx, `bar:${si}:${c}`, box, s.color, fill), strokeWidth: stroke });
+            shapes.push({
+                ...rectangle(ctx, `bar:${si}:${c}`, box, outlineOf(ctx, s.color), fill),
+                strokeWidth: stroke,
+            });
         });
     });
     return shapes;
@@ -713,16 +727,14 @@ function layoutPie(
     const labeled = radius >= full / 2;
     if (!labeled) radius = full;
 
-    const background = parseFill(ctx.paint.background);
     const shapes = slices.map((slice) => {
         const color = sliceColor(spec, slice.c);
-        const edge = background.type === 'solid' && !isTransparentFill(background) ? background.color : color;
         const fill = serializeFill({ type: 'solid', color, style: ctx.paint.fillStyle });
         return pie(
             ctx,
             `slice:0:${slice.c}`,
             { x: cx - radius, y: cy - radius, width: 2 * radius, height: 2 * radius },
-            edge,
+            outlineOf(ctx, color),
             fill,
             slice.start,
             slice.sweep,
@@ -743,6 +755,16 @@ function layoutPie(
 function cap(offset: number, direction: number, limit: number): number {
     if (direction > 1e-9) return (limit - offset) / direction;
     return offset <= limit ? Number.POSITIVE_INFINITY : 0;
+}
+
+// A hatch is strokes inside an outline, so a hatched bar, slice or swatch is outlined in its own color; a solid one
+// draws none, as Google's do.
+function isOutlined(ctx: Context): boolean {
+    return ctx.paint.fillStyle !== 'solid';
+}
+
+function outlineOf(ctx: Context, color: string): string {
+    return isOutlined(ctx) ? color : TRANSPARENT_COLOR;
 }
 
 function measure(ctx: Context, text: string, fontSize = ctx.fontSize, bold = false): number {
