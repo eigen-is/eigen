@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, tabs, sheets-tabs, rename, reorder]
 related: [sheets/create-and-edit]
 order: 100
-updated: 2026-06-08
+updated: 2026-10-23
 ---
 
 A spreadsheet can contain as many sheets as you need. Each sheet has its own tab along the bottom of the editor. You can add, rename, reorder, and color-code them to keep your data organized.
@@ -38,7 +38,7 @@ You can also click the **⌄** arrow on a tab and choose **Move left** or **Move
 
 ## Copy a sheet
 
-Click the **⌄** arrow on a tab and choose **Copy**. A duplicate of the sheet appears next to the original.
+Click the **⌄** arrow on a tab and choose **Duplicate**. A copy of the sheet appears next to the original.
 
 ## Add a color to a tab
 

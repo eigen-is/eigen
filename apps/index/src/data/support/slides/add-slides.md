@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, presentation, reorder]
 related: [slides/create-and-edit]
 order: 30
-updated: 2026-09-29
+updated: 2026-10-23
 ---
 
 Each slide in your presentation appears as a numbered thumbnail in the panel on the left. You can add blank slides, duplicate one to reuse its layout, and drag them into any order.
@@ -20,11 +20,11 @@ To choose where it goes, right-click a thumbnail in the left panel, or an empty 
 
 ## Duplicate a slide
 
-Right-click the thumbnail of the slide you want to copy in the left panel, then choose **Duplicate**. The copy appears immediately after the original and becomes the active slide. It carries the same background and all the same objects, but without any comments.
+Right-click the thumbnail of the slide you want to copy in the left panel, then choose **Duplicate slide**. The copy appears immediately after the original and becomes the active slide. It carries the same background and all the same objects, but without any comments.
 
 ## Delete a slide
 
-Right-click the thumbnail in the left panel and choose **Delete**. You cannot delete the last remaining slide in a presentation. If **Delete** appears grayed out, the presentation has only one slide.
+Right-click the thumbnail in the left panel and choose **Delete slide**. You cannot delete the last remaining slide in a presentation. If **Delete slide** appears grayed out, the presentation has only one slide.
 
 ## Reorder slides
 

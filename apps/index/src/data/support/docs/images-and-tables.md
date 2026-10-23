@@ -55,7 +55,7 @@ On a wide screen, selecting an image also opens the **Image** panel on the right
 
 Right-click an image and choose **Download original image**. You get the image file at its full size and in its own format. This works with view access too.
 
-The same menu has **Add comment**, to comment on the image itself. See [Comment and discuss](/support/docs/comments).
+The same menu has **Cut**, **Copy**, and **Delete** for the image, and **Add comment**, to comment on the image itself. See [Comment and discuss](/support/docs/comments).
 
 ## Add a chart
 
