@@ -7,9 +7,7 @@ import {
     DUPLICATE_OFFSET,
     type NewVectorElement,
     type VectorElement,
-    type VectorElementPatch,
     type ZOp,
-    zOrderKeys,
 } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
 import type * as Y from 'yjs';
@@ -58,17 +56,20 @@ export function convertElementToShapes(
     if (ids.length) setSelection(ids);
 }
 
-// The z-order write, shared by the keyboard brackets and the properties panel's Arrange buttons so
-// the fractional-index math lives in one place. One sealed undo step, and a no-op when the block is
-// already at the edge.
+// The z-order write, shared by the keyboard brackets, the object menu and the properties panel's Arrange
+// buttons: the doc's reorder within the canvas' `elements`, one sealed undo step.
 export function applyZOrder(
     op: ZOp,
     elements: VectorElement[],
     selectedIds: string[],
-    updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void,
+    reorderElements: (ids: string[], selectedIds: string[], op: ZOp) => void,
     undoManager: Y.UndoManager | null,
 ): void {
-    const patches = zOrderKeys(elements, selectedIds, op);
-    if (!patches.length) return;
-    sealed(undoManager, () => updateElements(patches.map((p) => ({ id: p.id, fields: { index: p.index } }))));
+    sealed(undoManager, () =>
+        reorderElements(
+            elements.map((el) => el.id),
+            selectedIds,
+            op,
+        ),
+    );
 }

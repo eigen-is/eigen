@@ -32,6 +32,7 @@ type CanvasKeyboardParams = {
     undoManager: Y.UndoManager | null;
     deleteElements: (ids: string[]) => void;
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
+    reorderElements: (ids: string[], selectedIds: string[], op: ZOp) => void;
     duplicateElements: (ids: string[], dx: number, dy: number) => string[];
     onInsertImage?: () => void;
 };
@@ -206,7 +207,7 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     // fed vector's fractional-index write.
     const arrange = useCallback((op: ZOp) => {
         const p = live.current;
-        applyZOrder(op, p.elements, p.selectedIds, p.updateElements, p.undoManager);
+        applyZOrder(op, p.elements, p.selectedIds, p.reorderElements, p.undoManager);
     }, []);
     useZOrderHotkeys(enabled && hasSelection, arrange);
 }

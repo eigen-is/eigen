@@ -13,6 +13,8 @@ import {
     type StyleDefaults,
     topmostIndex,
     writeElementInDoc,
+    type ZOp,
+    zOrderKeys,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 
@@ -59,10 +61,27 @@ export function replaceElementInDoc(
 }
 
 // A stored fractional index, or '' when the entry has none — the duplicate pass only needs the relative
-// order, and read-vector heals a malformed index anyway.
+// order, and zOrderKeys repairs a malformed one.
 function indexOf(element: Y.Map<unknown>): string {
     const index = element.get('index');
     return typeof index === 'string' ? index : '';
+}
+
+// A z-order move over the STORED keys of `ids` (the canvas' scope: one frame's elements in frame mode), in
+// ONE transact. The scene's keys are healed in memory only, so a move computed from them would skip the
+// repair of a stored tie, and the next read would heal the tie around the moved element and undo the move.
+export function reorderElementsInDoc(doc: Y.Doc, ids: string[], selectedIds: string[], op: ZOp): void {
+    const elementsMap = doc.getMap('elements');
+    const stored = ids.flatMap((id) => {
+        const element = elementsMap.get(id);
+        return element instanceof Y.Map ? [{ id, index: indexOf(element) }] : [];
+    });
+    doc.transact(() => {
+        for (const { id, index } of zOrderKeys(stored, selectedIds, op)) {
+            const element = elementsMap.get(id);
+            if (element instanceof Y.Map) element.set('index', index);
+        }
+    });
 }
 
 function compareIndex(a: string, b: string): number {

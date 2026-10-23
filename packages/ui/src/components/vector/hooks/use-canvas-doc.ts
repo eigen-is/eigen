@@ -20,11 +20,12 @@ import {
     type VectorMeta,
     type VectorScene,
     writeElementInDoc,
+    type ZOp,
 } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
 import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import { duplicateElementsInDoc, replaceElementInDoc } from './element-writes';
+import { duplicateElementsInDoc, reorderElementsInDoc, replaceElementInDoc } from './element-writes';
 import {
     addFrameInDoc,
     deleteFrameInDoc,
@@ -241,6 +242,10 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [],
     );
 
+    const reorderElements = useCallback((ids: string[], selectedIds: string[], op: ZOp) => {
+        if (docRef.current) reorderElementsInDoc(docRef.current, ids, selectedIds, op);
+    }, []);
+
     // Frame ops: thin wrappers over frame-writes.ts, the way the element ops wrap element-writes.ts.
     // Each is a discrete op, so each is `sealed` — adding a page then renaming it must be two undo
     // steps. add/duplicate return the new frame id so the caller can activate it.
@@ -313,6 +318,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         deleteElementsUntracked,
         duplicateElements,
         replaceElement,
+        reorderElements,
         addFrame,
         deleteFrame,
         duplicateFrame,

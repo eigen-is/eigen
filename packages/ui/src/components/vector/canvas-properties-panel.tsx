@@ -98,10 +98,11 @@ function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Par
 
 type CanvasPropertiesPanelProps = {
     // The elements the canvas shows — z-order reorders the selection relative to the rest
-    // (computeZOrder needs both), so in frame mode this is that frame's elements, not the whole scene.
+    // (zOrderKeys needs both), so in frame mode this is that frame's elements, not the whole scene.
     elements: VectorElement[];
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
+    reorderElements: (ids: string[], selectedIds: string[], op: ZOp) => void;
     // A kind section's Convert to shapes: the doc's replace, and the selection the new elements take.
     replaceElement: (id: string, partials: NewVectorElement[]) => string[];
     setSelectedIds: (ids: string[]) => void;
@@ -122,6 +123,7 @@ export function CanvasPropertiesPanel({
     elements,
     selectedElements,
     updateElements,
+    reorderElements,
     replaceElement,
     setSelectedIds,
     undoManager,
@@ -219,7 +221,7 @@ export function CanvasPropertiesPanel({
         );
     };
 
-    const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
+    const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, reorderElements, undoManager);
 
     // Align / distribute / match-size over the shared arrange math. One transact, one undo step.
     // computeArrange no-ops below 2 (distribute below 3), so nothing to gate here.

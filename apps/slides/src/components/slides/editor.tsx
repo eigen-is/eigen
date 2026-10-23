@@ -366,6 +366,7 @@ function SlideEditorInner({
                     elements={frameElements}
                     selectedElements={selectedElements}
                     updateElements={doc.updateElements}
+                    reorderElements={doc.reorderElements}
                     replaceElement={doc.replaceElement}
                     setSelectedIds={setSelectedIds}
                     undoManager={doc.undoManager}

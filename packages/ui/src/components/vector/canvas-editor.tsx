@@ -233,6 +233,7 @@ export function CanvasEditor({
         deleteElementsUntracked,
         duplicateElements,
         replaceElement,
+        reorderElements,
         undoManager,
         provider,
     } = doc;
@@ -481,6 +482,7 @@ export function CanvasEditor({
         undoManager,
         deleteElements,
         updateElements,
+        reorderElements,
         duplicateElements,
         onInsertImage,
     });
@@ -1006,7 +1008,7 @@ export function CanvasEditor({
 
     // Menu ops act on the full selection, wired to the same writes as ⌘[/] , ⌘D, and Delete so the
     // menu and the keyboard stay one behavior (one sealed undo step each).
-    const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, updateElements, undoManager);
+    const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, reorderElements, undoManager);
     const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
     // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
