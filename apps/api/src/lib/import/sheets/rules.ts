@@ -12,12 +12,15 @@ import { iscelldata, parseA1Range, toA1 } from '@workspace/sheet/engine';
 import { isOn, SML_NS, X14_NS, XM_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import {
+    CF_CELL_IS_CONDITION,
     DAY_MS,
     DAYS_1904,
     DV_DATE_OPERATOR,
     DV_OPERATOR,
+    DV_TYPE,
     EXCEL_EPOCH_MS,
     NUMERIC,
+    withoutFuturePrefixes,
 } from '../../document/spreadsheetml';
 import { colorOf, type DxfLook, dxfLook, resolveColor, type ThemePalette } from './styles';
 import { cellKey } from './worksheet';
@@ -86,7 +89,7 @@ export function readRules(
             }
             if (ranges.length === 0) continue;
             for (const rule of rules) {
-                const formulas = formulasOf(rule).map(xmlText);
+                const formulas = formulasOf(rule).map((formula) => withoutFuturePrefixes(xmlText(formula)));
                 context.charge(
                     0,
                     formulas.reduce((text, formula) => text + formula.length, 0),
@@ -168,17 +171,6 @@ function* rangesOf(sqref: string, context: RulesContext): Generator<SingleRange>
     }
 }
 
-const CELL_IS_CONDITION = new Map<string, ConditionalFormatConditionName>([
-    ['greaterThan', 'greaterThan'],
-    ['greaterThanOrEqual', 'greaterThanOrEqual'],
-    ['lessThan', 'lessThan'],
-    ['lessThanOrEqual', 'lessThanOrEqual'],
-    ['equal', 'equal'],
-    ['notEqual', 'notEqual'],
-    ['between', 'between'],
-    ['notBetween', 'notBetween'],
-]);
-
 const CELL_IS_FORMULA_OP = new Map([
     ['greaterThan', '>'],
     ['greaterThanOrEqual', '>='],
@@ -233,7 +225,7 @@ function mapCfRule(
         conditionValue,
     });
     const operator = xmlAttr(rule, '', 'operator') ?? '';
-    const comparison = CELL_IS_CONDITION.get(operator);
+    const comparison = CF_CELL_IS_CONDITION.get(operator);
     if (type === 'cellIs' && comparison) {
         if (formulas.length === 0) return undefined;
         const literals = formulas.map(parseCfLiteral);
@@ -315,17 +307,6 @@ function extractSearchText(formula: string | undefined): string | null {
     const match = formula.match(/^NOT\(ISERROR\(SEARCH\("(.*)",/);
     return match ? match[1].replace(/""/g, '"') : null;
 }
-
-const DV_TYPE = new Map([
-    ['list', 'dropdown'],
-    ['whole', 'number_integer'],
-    // Excel "decimal" accepts ANY real number, like the engine's `number` type;
-    // the engine's `number_decimal` rejects integers and would block typing 5
-    // into a "decimal between 1..10" cell.
-    ['decimal', 'number'],
-    ['textLength', 'text_length'],
-    ['date', 'date'],
-]);
 
 // Column-wide validations ("D2:D1048576") are common in real workbooks, while the grid
 // covers only the data extent: a rule per cell of the column would put a multi-hundred-MB

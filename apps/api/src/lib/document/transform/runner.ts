@@ -180,6 +180,9 @@ const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, un
     'band-images-unanchored': (w) => typeof w['count'] === 'number',
     'band-content-dropped': (w) => typeof w['count'] === 'number',
     'band-blocks-cut': (w) => typeof w['count'] === 'number',
+    'conditional-formats-dropped': (w) => typeof w['count'] === 'number',
+    'validations-dropped': (w) => typeof w['count'] === 'number',
+    'validation-prompts-cut': (w) => typeof w['count'] === 'number',
 };
 
 function isValidWarning(warning: unknown): boolean {

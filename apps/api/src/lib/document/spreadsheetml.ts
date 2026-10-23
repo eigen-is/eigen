@@ -1,4 +1,5 @@
 import type { EigenFont } from '@workspace/lib/constants/fonts';
+import type { ConditionalFormatConditionName } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 
 // Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
@@ -74,9 +75,11 @@ export function pxToColumnWidth(px: number, digit: number): number {
     return Math.trunc((px * 256) / digit) / 256;
 }
 
-// Excel's limits on a formula's characters and a number format's.
+// Excel's limits on a formula's characters and a number format's, and on a string a formula quotes, a list
+// validation's literal among them.
 export const MAX_FORMULA_LENGTH = 8192;
 export const MAX_NUMBER_FORMAT_LENGTH = 255;
+export const MAX_FORMULA_STRING_LENGTH = 255;
 
 // ECMA-376 § 18.8.30's built-in formats that name one code whatever the locale.
 export const BUILTIN_NUMBER_FORMATS = new Map<number, string>([
@@ -129,6 +132,33 @@ export function decodeEscapes(text: string): string {
 
 // A number as a rule's operand holds it, unquoted; anything else is a reference, a function or a quoted string.
 export const NUMERIC = /^-?(?:\d+(?:\.\d*)?|\.\d+)$/;
+
+// A cellIs rule's operators, which the engine's comparisons are named after.
+export const CF_CELL_IS_CONDITION = new Map<string, ConditionalFormatConditionName>([
+    ['greaterThan', 'greaterThan'],
+    ['greaterThanOrEqual', 'greaterThanOrEqual'],
+    ['lessThan', 'lessThan'],
+    ['lessThanOrEqual', 'lessThanOrEqual'],
+    ['equal', 'equal'],
+    ['notEqual', 'notEqual'],
+    ['between', 'between'],
+    ['notBetween', 'notBetween'],
+]);
+
+// A data validation's type and the engine's for it, one list both ways. Excel's decimal admits any number, as the
+// engine's number does, while number_decimal rejects integers: it writes as decimal and reads back as number.
+const DV_TYPES: [string, string][] = [
+    ['list', 'dropdown'],
+    ['whole', 'number_integer'],
+    ['decimal', 'number'],
+    ['textLength', 'text_length'],
+    ['date', 'date'],
+];
+export const DV_TYPE = new Map(DV_TYPES);
+export const DV_XLSX_TYPE = new Map([
+    ...DV_TYPES.map(([type, engineType]): [string, string] => [engineType, type]),
+    ['number_decimal', 'decimal'],
+]);
 
 type DvOperator =
     | 'between'
