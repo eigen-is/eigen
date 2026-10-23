@@ -68,7 +68,7 @@ function TokenChip({
                     </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onDelete}>
+                <DropdownMenuItem variant="destructive" onClick={onDelete}>
                     <span className="w-4 shrink-0" />
                     <span>Delete</span>
                 </DropdownMenuItem>
