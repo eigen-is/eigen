@@ -114,9 +114,9 @@ function colsXml(sheet: Sheet): string {
         .filter((column) => Number.isInteger(column) && column >= 0 && column < REFERENCE_COLUMN_COUNT)
         .sort((a, b) => a - b);
     const attributesOf = (column: number) => {
-        const px = Number(columnlen[column]);
+        const px = Number(columnlen[column] ?? Number.NaN);
         const width =
-            px > 0 && Number.isFinite(px)
+            px >= 0 && Number.isFinite(px)
                 ? ` width="${pxToColumnWidth(px, SHEET_DEFAULT_DIGIT_WIDTH)}" customWidth="1"`
                 : '';
         return `${width}${colhidden[column] != null ? ' hidden="1"' : ''}`;

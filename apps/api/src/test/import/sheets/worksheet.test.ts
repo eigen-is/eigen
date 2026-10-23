@@ -39,11 +39,11 @@ describe('columns', () => {
         expect(read(cols, '', { digitWidth: 9 }).config.columnlen).toEqual({ 0: 82, 2: 186, 3: 186 });
     });
 
-    test('hidden columns, and a column taking the first <col> by min that reaches it', () => {
+    test('hidden columns, and a column taking the first <col> by min that reaches it; a width of 0 only when custom', () => {
         const { config } = read(
-            '<cols><col min="4" max="6" width="5"/><col min="2" max="4" width="10" hidden="1"/><col min="7" max="7" width="0" hidden="true"/></cols>',
+            '<cols><col min="4" max="6" width="5"/><col min="2" max="4" width="10" hidden="1"/><col min="7" max="7" width="0" hidden="true"/><col min="8" max="8" width="0" customWidth="1"/></cols>',
         );
-        expect(config.columnlen).toEqual({ 1: 80, 2: 80, 3: 80, 4: 40, 5: 40 });
+        expect(config.columnlen).toEqual({ 1: 80, 2: 80, 3: 80, 4: 40, 5: 40, 7: 0 });
         expect(config.colhidden).toEqual({ 1: 0, 2: 0, 3: 0, 6: 0 });
     });
 
