@@ -23,14 +23,16 @@ export type CommentInfo = {
     indicatorColor: string | null;
 };
 
-// The chart whose editor sidebar is open, on the current sheet; every sheet's name, for its data range; and
-// the categories and series names its range resolves to, which name a pie's slices and the series rows.
+// The chart whose editor sidebar is open, on the current sheet; every sheet's name, for its data range;
+// the categories and series names its range resolves to, which name a pie's slices and the series rows; and
+// whether its resolved data has more points than the sketch draws.
 export type ChartEditorState = {
     chart: SheetChart;
     sheetId: string;
     sheets: { id: string; name: string }[];
     categories: string[];
     seriesNames: string[];
+    sketchCapped: boolean;
 };
 
 export type Hooks = {

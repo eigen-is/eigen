@@ -1,4 +1,4 @@
-import { parseChartSpec } from '@workspace/lib/charts';
+import { isSketchCapped, parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import {
     buildChartClipboardItem,
     buildImageClipboardItem,
@@ -392,7 +392,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // biome-ignore lint/correctness/useExhaustiveDependencies: the resolver reads context.sheets alone; depending on `context` would rebuild on every selection and scroll
         const chartEditor = useMemo((): ChartEditorState | null => {
             if (!editingChart) return null;
-            const data = parseChartSpec(editingChart.spec)?.data;
+            const spec = parseChartSpec(editingChart.spec);
+            const data = spec?.data;
             const resolver = createContextResolver(context);
             const resolved = data?.source === 'range' ? resolveRangeChartData(data, resolver) : data;
             return {
@@ -401,6 +402,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 sheets: context.sheets.map(({ id, name }) => ({ id: id ?? '', name })),
                 categories: typeof resolved === 'object' ? resolved.categories : [],
                 seriesNames: data?.source === 'range' ? data.series.map((s) => seriesName(s.name, resolver)) : [],
+                sketchCapped: spec !== null && typeof resolved === 'object' && isSketchCapped(spec, resolved),
             };
         }, [editingChart, context.currentSheetId, context.sheets]);
         useEffect(() => {
@@ -586,7 +588,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 if (activeObject?.kind === 'chart' && floating) {
                     const chart = sheet?.charts?.[activeObject.id];
                     const inline = chart ? inlineChartSpec(chart, createContextResolver(context)) : null;
-                    const item = chart && inline ? buildChartClipboardItem({ spec: inline, box: chart }) : null;
+                    const item =
+                        chart && inline
+                            ? buildChartClipboardItem({ spec: inline, box: chart, look: readChartLook(chart) })
+                            : null;
                     if (!chart || !inline || !item) return;
                     e.preventDefault();
                     writeEigenClipboard(e, { version: 1, items: [item] });
@@ -703,9 +708,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             const copied = globalCache.current.copiedChart;
                             if (chartItems.length > 0) {
                                 setContextWithProduce((draftCtx) => {
-                                    for (const { spec, width, height } of chartItems) {
+                                    for (const { spec, width, height, look } of chartItems) {
                                         const own = copied?.inline === spec ? copied.spec : spec;
-                                        pasteChart(draftCtx, uuidv4(), own, { width, height });
+                                        pasteChart(draftCtx, uuidv4(), own, { width, height }, look);
                                     }
                                 });
                             }

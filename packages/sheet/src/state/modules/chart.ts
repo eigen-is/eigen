@@ -1,7 +1,7 @@
 import { parseChartSpec } from '@workspace/lib/charts';
 import { nextFloatingIndex, type SheetChart, sheetFloatingBox } from '@workspace/lib/sheets';
-import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
-import type { Box } from '@workspace/lib/vector';
+import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
+import { type Box, randomSeed } from '@workspace/lib/vector';
 import { renderSheetChartSvg } from '../../engine/chart-data';
 import { type ChartRangeRefusal, currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
 import type { CellMatrix } from '../../engine/types';
@@ -17,27 +17,40 @@ import { selectedCellOrigin } from './image';
 // Where a chart is inserted: upright, as nothing inserts one turned.
 export type ChartInsertBox = Omit<Box, 'angle'>;
 
+// Flat, as Google's is, with a seed of its own, so a sketch picked later jitters the same everywhere.
 export function insertChart(ctx: Context, id: string, box: ChartInsertBox, spec: ChartSpec) {
-    addChart(ctx, id, box, JSON.stringify(spec));
+    addChart(ctx, id, box, JSON.stringify(spec), { seed: randomSeed() });
 }
 
-function addChart(ctx: Context, id: string, box: ChartInsertBox, spec: string) {
+function addChart(ctx: Context, id: string, box: ChartInsertBox, spec: string, look: Partial<ChartLook>) {
     const sheet = editableCurrentSheet(ctx);
     if (!sheet) return;
     const charts = (sheet.charts ??= {});
-    charts[id] = { id, index: nextFloatingIndex(sheet), ...sheetFloatingBox(box), spec };
+    charts[id] = { id, index: nextFloatingIndex(sheet), ...sheetFloatingBox(box), spec, ...look };
 }
 
-// A pasted chart lands on the selected cell at its copied size, its spec stored as it came, and selected.
-export function pasteChart(ctx: Context, id: string, spec: string, size: Pick<ChartInsertBox, 'width' | 'height'>) {
+// A pasted chart lands on the selected cell at its copied size, its spec and look stored as they came, and selected.
+export function pasteChart(
+    ctx: Context,
+    id: string,
+    spec: string,
+    size: Pick<ChartInsertBox, 'width' | 'height'>,
+    look: ChartLook,
+) {
     if (!editableCurrentSheet(ctx)) return;
-    addChart(ctx, id, { ...selectedCellOrigin(ctx), ...size }, spec);
+    addChart(ctx, id, { ...selectedCellOrigin(ctx), ...size }, spec, look);
     selectFloatingObject(ctx, { kind: 'chart', id });
 }
 
 export function setChartSpec(ctx: Context, id: string, spec: ChartSpec) {
     const chart = editableCurrentSheet(ctx)?.charts?.[id];
     if (chart) chart.spec = JSON.stringify(spec);
+}
+
+// Writes only the look fields given, each its own op, so a peer's edit of another field merges.
+export function setChartLook(ctx: Context, id: string, look: Partial<ChartLook>) {
+    const chart = editableCurrentSheet(ctx)?.charts?.[id];
+    if (chart) Object.assign(chart, look);
 }
 
 // Google's default chart size.

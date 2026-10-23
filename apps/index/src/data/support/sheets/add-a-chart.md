@@ -33,6 +33,8 @@ The **Chart editor** opens whenever you double-click a chart. Under **Setup**:
 
 Below that you pick the chart's **Type** (**Bar**, **Column**, **Line**, or **Pie**), its **Stacking** (**None**, **Standard** or **100%**), **Title**, **Legend** and **Font**, the axis titles, whether each axis shows (**Show axis**), whether the category axis runs the other way (**Reverse axis order**), the lowest and highest value on the value axis (a percent on a **100%** stack, and automatic again when you switch to or from **100%**), the gridlines, and a color for each series or pie slice, which reads **Automatic** until you pick one.
 
+Below them, **Labels** sets the **Color** of all the chart's text. **Fill** sets the chart's background, and its **Style** how the bars and slices are drawn: **Solid**, **Hachure**, **Cross-hatch**, or **Zigzag**. Solid bars and slices have no outline; hatched ones get an outline in their own color. **Stroke** sets the color, width, and style of the axes and gridlines, and **Sketch** how rough the chart looks, from **Architect** (clean) to **Cartoonist**. A new chart starts clean and solid, like a Google Sheets chart. A chart with more than 200 values (for a pie, more than 200 slices) draws its bars, lines, and slices smooth and solid whatever the sketch, so it stays quick to show; the **Sketch** section says so. The chart prints and downloads in its look.
+
 Click a cell to close the editor.
 
 ## Move, resize, rotate, and remove a chart
@@ -68,6 +70,8 @@ Paste it with **Ctrl+V** (Mac: **⌘V**):
 
 - **In the same spreadsheet**, the copy reads the same cells as the original, so it changes when they do.
 - **In Docs, Slides, Vector, or another spreadsheet**, the chart keeps the numbers it showed when you copied it. It stays a chart you can edit there, and you change its numbers with **Edit data**.
+
+A pasted chart keeps its look, and a chart copied from Docs, Slides, or Vector pastes into a spreadsheet in its look too.
 
 <div class="eigen-callout">
 

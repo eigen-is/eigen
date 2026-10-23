@@ -8,6 +8,7 @@ import {
     SHEET_DEFAULT_ROW_HEIGHT,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
+import { serializeFill } from '@workspace/lib/vector';
 import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
@@ -1253,5 +1254,18 @@ describe('Sheets HTML export — charts', () => {
         const doc = sheetsHtmlDocument({ title: 'T', sheets: [sheetWithChart()], mediaUrls: NO_MEDIA, mode: 'pdf' });
         expect(svgOf(doc)).toContain('>Ajax<');
         expect(svgOf(doc)).toContain('<path d="M0 0 L');
+    });
+
+    test('a chart draws the look it stores, its hatch clipped to each bar, through the sanitizer', () => {
+        const fill = serializeFill({ type: 'solid', color: 'transparent', style: 'zigzag' });
+        const sheet: Sheet = {
+            ...sheetWithChart(),
+            charts: { c1: { ...chartOn('data'), fill, color: '#334455', roughness: 1, seed: 7 } },
+        };
+        const doc = sheetsHtmlDocument({ title: 'T', sheets: [sheet], mediaUrls: NO_MEDIA, mode: 'pdf' });
+        expect(svgOf(doc)).toContain('<clipPath id="');
+        expect(svgOf(doc)).toContain('<g clip-path="url(#');
+        expect(svgOf(doc)).toContain('fill="#334455"');
+        expect(svgOf(renderSheetsHtml([sheetWithChart()], NO_MEDIA).html)).not.toContain('<clipPath');
     });
 });

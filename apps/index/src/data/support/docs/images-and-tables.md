@@ -78,7 +78,7 @@ Below those, **Style** and **Align** place the chart as they place an image, and
 
 You can paste cells copied from a spreadsheet or a table in a document into the grid, and copy cells out of it. A paste fills the grid from the selected cell, and the grid grows to fit. A chart holds up to 12 series, 200 categories, and 2,000 values; when a paste has more, the dialog says how much it pasted and leaves the rest out. Numbers may have thousands separators, a currency sign or a percent sign, as a spreadsheet shows them.
 
-You can copy a chart from Sheets, Slides, or Vector and paste it into a document, where it stays a chart you can edit. A chart wider than the page shrinks to fit. Headers, footers, and footnotes don't take a chart pasted from another app. Copying a chart in a document and pasting it into Sheets, Slides, or Vector works the same way. A chart keeps its look when you paste it into a document, Slides, or Vector; Sheets shows it in its plain look.
+You can copy a chart from Sheets, Slides, or Vector and paste it into a document, where it stays a chart you can edit. A chart wider than the page shrinks to fit. Headers, footers, and footnotes don't take a chart pasted from another app. Copying a chart in a document and pasting it into Sheets, Slides, or Vector works the same way. A chart keeps its look wherever you paste it.
 
 A chart prints and downloads as a PDF, a web page, or a Word file, in its look. In the Word file it is a picture, so you can't change its data in Word. See [Export to Word, PDF, or HTML](/support/docs/export).
 

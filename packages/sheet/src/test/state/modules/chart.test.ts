@@ -3,7 +3,7 @@
 // joiner through replaySheetsOps. Every client and the joiner must end on the same charts.
 
 import { describe, expect, test } from 'bun:test';
-import { CHART_MAX_SIDE, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, FLAT_CHART_LOOK, parseChartSpec, readChartLook, sampleChartSpec } from '@workspace/lib/charts';
 import {
     decodeSheetsSnapshot,
     encodeSheetsSnapshot,
@@ -19,7 +19,7 @@ import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import { initSheetData } from '../../../state/api/sheet';
 import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
-import { insertChart, pasteChart, setChartSpec } from '../../../state/modules/chart';
+import { insertChart, pasteChart, setChartLook, setChartSpec } from '../../../state/modules/chart';
 import { updateFloatingBox } from '../../../state/modules/floating';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op, Sheet } from '../../../state/types';
@@ -102,7 +102,9 @@ describe('chart writers', () => {
             width: CHART_MAX_SIDE,
             height: CHART_MAX_SIDE,
         });
-        const pasted = author(workbook(), (ctx) => pasteChart(ctx, 'c3', SPEC, { width: 9.4e11, height: 300 }));
+        const pasted = author(workbook(), (ctx) =>
+            pasteChart(ctx, 'c3', SPEC, { width: 9.4e11, height: 300 }, FLAT_CHART_LOOK),
+        );
         expect(pasted.next.sheets[0].charts!.c3).toMatchObject({ x: 0, y: 0, width: CHART_MAX_SIDE, height: 300 });
     });
 
@@ -112,6 +114,32 @@ describe('chart writers', () => {
         expect(ops).toEqual([{ op: 'replace', id: S, path: ['charts', 'c1', 'spec'], value: JSON.stringify(spec) }]);
     });
 
+    // Insert → Chart stays flat, with a seed of its own so a sketch picked later jitters the same everywhere.
+    test('insert stores a random seed and no other look field', () => {
+        const { next } = author(workbook(), (ctx) => insertChart(ctx, 'c3', BOX, sampleChartSpec('line')));
+        const inserted = next.sheets[0].charts!.c3;
+        const lookFields = Object.keys(inserted).filter((key) => key in FLAT_CHART_LOOK);
+        expect(lookFields).toEqual(['seed']);
+        expect(inserted.seed).toBeGreaterThanOrEqual(1);
+        const again = author(workbook(), (ctx) => insertChart(ctx, 'c3', BOX, sampleChartSpec('line')));
+        expect(again.next.sheets[0].charts!.c3.seed).not.toBe(inserted.seed);
+        expect(readChartLook({ ...inserted, seed: FLAT_CHART_LOOK.seed })).toEqual(FLAT_CHART_LOOK);
+    });
+
+    test('a paste stores the look it came with', () => {
+        const look = { ...FLAT_CHART_LOOK, roughness: 2, seed: 77, color: '#334455' };
+        const { next } = author(workbook(), (ctx) => pasteChart(ctx, 'c3', SPEC, { width: 400, height: 300 }, look));
+        expect(readChartLook(next.sheets[0].charts!.c3)).toEqual(look);
+    });
+
+    test('a look edit writes only the fields given, each its own op', () => {
+        const { ops } = author(workbook(), (ctx) => setChartLook(ctx, 'c1', { roughness: 1, strokeColor: '#ff0000' }));
+        expect(ops.map((op) => [op.op, op.path, op.value])).toEqual([
+            ['add', ['charts', 'c1', 'roughness'], 1],
+            ['add', ['charts', 'c1', 'strokeColor'], '#ff0000'],
+        ]);
+    });
+
     test('a viewer writes nothing', () => {
         const base = produce(workbook(), (ctx: Context) => {
             ctx.allowEdit = false;
@@ -119,6 +147,7 @@ describe('chart writers', () => {
         for (const recipe of [
             (ctx: Context) => insertChart(ctx, 'c3', BOX, sampleChartSpec('line')),
             (ctx: Context) => setChartSpec(ctx, 'c1', sampleChartSpec('pie')),
+            (ctx: Context) => setChartLook(ctx, 'c1', { roughness: 2 }),
         ]) {
             expect(author(base, recipe).ops).toEqual([]);
         }
@@ -200,6 +229,30 @@ describe('charts converge over real ops', () => {
         expect(charts(onC.sheets)).toEqual(charts(onA.sheets));
         expect(charts(joiner)).toEqual(charts(onA.sheets));
         expect(Object.keys(onA.sheets[0].charts!).sort()).toEqual(['c1', 'c2', 'c3']);
+    });
+
+    test("two look edits on one chart merge with a peer's move and spec edit, on every client and a joiner", () => {
+        const base = workbook();
+        const a = author(base, (ctx) => setChartLook(ctx, 'c1', { roughness: 2 }));
+        const b = author(base, (ctx) => setChartLook(ctx, 'c1', { strokeWidth: 4 }));
+        const c = author(base, (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 }));
+        const d = author(base, (ctx) => setChartSpec(ctx, 'c1', sampleChartSpec('line')));
+        const all = [a, b, c, d];
+        const clients = all.map((self) =>
+            all.filter((other) => other !== self).reduce((ctx, other) => receive(ctx, other.ops), self.next),
+        );
+        const joiner = join(
+            base,
+            all.map(({ ops }) => ops),
+        );
+        for (const client of clients) expect(charts(client.sheets)).toEqual(charts(clients[0].sheets));
+        expect(charts(joiner)).toEqual(charts(clients[0].sheets));
+        expect(clients[0].sheets[0].charts!.c1).toMatchObject({
+            roughness: 2,
+            strokeWidth: 4,
+            x: 300,
+            spec: JSON.stringify(sampleChartSpec('line')),
+        });
     });
 
     test('a row insert on S shifts charts on S and on T alike on author, peer and joiner', () => {
