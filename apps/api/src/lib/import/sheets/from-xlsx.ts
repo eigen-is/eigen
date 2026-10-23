@@ -47,8 +47,8 @@ export type XlsxOptions = {
 };
 
 // The sheets alone, their pictures' media names left unresolved: the shape the tests and the audit compare.
-export function xlsxToSheets(bytes: Uint8Array, warnings: TransformWarning[] = []): Sheet[] {
-    return readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, warnings).sheets;
+export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
+    return readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, []).sheets;
 }
 
 // Every worksheet's grid and what lies past it, charged against the output budget as it is read. The cells count what
@@ -60,7 +60,7 @@ export function xlsxToSheets(bytes: Uint8Array, warnings: TransformWarning[] = [
 export function readXlsx(
     bytes: Uint8Array,
     options: XlsxOptions,
-    warnings: TransformWarning[] = [],
+    warnings: TransformWarning[],
 ): { sheets: Sheet[]; media: ImportedMedia[] } {
     try {
         const book = readPackage(bytes);

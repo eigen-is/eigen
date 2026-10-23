@@ -13,7 +13,7 @@ import { A_NS, EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/core/ooxml
 import { CHART_CONTENT_TYPE } from '../../../../lib/core/ooxml-chart';
 import type { PackagePart } from '../../../../lib/core/opc';
 import { hasXmlName, type XmlElement, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
-import { openZip } from '../../../../lib/core/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip } from '../../../../lib/core/zip';
 import { pxToColumnWidth } from '../../../../lib/document/spreadsheetml';
 import {
     type CountedWarningCode,
@@ -113,7 +113,8 @@ function roundTrip(sheets: Sheet[]): { sheets: Sheet[]; warnings: TransformWarni
         ],
     });
     const warnings: TransformWarning[] = [];
-    return { sheets: xlsxToSheets(bytes, warnings), warnings, lost };
+    const read = readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, warnings);
+    return { sheets: read.sheets, warnings, lost };
 }
 
 const boxOf = ({ x, y, width, height }: SheetFloatingObject) => ({ x, y, width, height });
@@ -379,7 +380,7 @@ describe('pictures read back by the import', () => {
         const warnings: TransformWarning[] = [];
         const bytes = exportXlsx([summary, MY_DATA], { media: [PNG, SVG], warnings });
         expect(warnings).toEqual([]);
-        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 });
+        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 }, []);
         const items = floatingItems(sheets[0]);
         expect(items.map(({ kind, object }) => [kind, boxOf(object), object.angle ?? 0])).toEqual([
             ['chart', boxOf(INLINE), 0],

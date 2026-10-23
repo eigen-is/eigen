@@ -10,11 +10,11 @@ import {
     type Sheet,
 } from '@workspace/lib/sheets';
 import { CHART_CONTENT_TYPE } from '../../../lib/core/ooxml-chart';
-import { openZip, writeZip } from '../../../lib/core/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/core/zip';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { CHART_SHEET_SIZE } from '../../../lib/import/sheets/drawing';
-import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
+import { readXlsx } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
 import { PIXEL_PNG } from '../../fixtures/pptx';
 import { type FixtureSheet, OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
@@ -120,7 +120,7 @@ function workbook({
 
 function read(bytes: Uint8Array): { sheets: Sheet[]; warnings: TransformWarning[] } {
     const warnings: TransformWarning[] = [];
-    return { sheets: xlsxToSheets(bytes, warnings), warnings };
+    return { sheets: readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, warnings).sheets, warnings };
 }
 
 const chartsOf = (sheet: Sheet) => Object.values(sheet.charts ?? {});
