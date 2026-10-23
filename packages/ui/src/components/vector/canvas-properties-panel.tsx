@@ -11,7 +11,7 @@
 // a stroke, and every kind is drawn by roughjs. What a capability cannot express — rich text's
 // typography, the image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI.
 
-import { isSketchCapped, parseChartSpec } from '@workspace/lib/charts';
+import { isInlineSketchCapped, parseChartSpec } from '@workspace/lib/charts';
 import type { Fill } from '@workspace/lib/types/background';
 import {
     type ArrangeOp,
@@ -234,7 +234,7 @@ export function CanvasPropertiesPanel({
     const charts = soleKind === 'chart' ? selectedElements.filter((el) => el.type === 'chart') : [];
     const sketchCapped = charts.some((el) => {
         const spec = parseChartSpec(el.chart);
-        return spec?.data.source === 'inline' && isSketchCapped(spec, spec.data);
+        return spec !== null && isInlineSketchCapped(spec);
     });
     const corners = getMergedValue(selectedElements, (el) => ('corners' in el ? el.corners : undefined));
     const roundness = getMergedValue(selectedElements, (el) => ('roundness' in el ? el.roundness : undefined));

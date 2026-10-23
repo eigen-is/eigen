@@ -147,6 +147,11 @@ export function isSketchCapped(spec: ChartSpec, data: ChartData): boolean {
     return chartPointCount(spec, data) > MAX_SKETCH_POINTS;
 }
 
+// The same for a chart that holds its data, as a doc's and a canvas's do; a range's lives on its sheet.
+export function isInlineSketchCapped(spec: ChartSpec): boolean {
+    return spec.data.source === 'inline' && isSketchCapped(spec, spec.data);
+}
+
 // The chart's background and one centered line instead of a plot, as a chart with nothing to plot draws.
 export function layoutChartMessage(box: ChartBox, text: string, fontFamily: string): ChartLayout {
     const ctx = context(box, fontFamily);

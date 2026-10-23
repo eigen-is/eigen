@@ -1,5 +1,5 @@
 import { type Editor, useEditorState } from '@tiptap/react';
-import { CHART_DEFAULT_SIZE, isSketchCapped, parseChartSpec, readChartLook } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, isInlineSketchCapped, parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import { type ChartAttrs, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
@@ -67,7 +67,7 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                             onChange={(next) => write({ spec: JSON.stringify(next) })}
                             look={look}
                             onLookChange={write}
-                            sketchCapped={spec.data.source === 'inline' && isSketchCapped(spec, spec.data)}
+                            sketchCapped={isInlineSketchCapped(spec)}
                             onEditData={onEditData}
                         />
                     )}

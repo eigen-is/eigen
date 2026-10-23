@@ -2,6 +2,7 @@ export {
     CHART_MESSAGES,
     chartPointCount,
     GRIDLINE_OPACITY,
+    isInlineSketchCapped,
     isSketchCapped,
     layoutChart,
     layoutChartMessage,
