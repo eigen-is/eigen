@@ -47,7 +47,7 @@ Click a symbol to add it at the cursor in the field. A fraction, a root, or anot
 
 ## Show an equation on its own line
 
-An equation sits in the line of text by default. To give it a line of its own, centered, turn on **Display** under **Layout** in the **Equation** panel. Turn it off to put the equation back in the text.
+An equation sits in the line of text by default. To give it a line of its own, centered, choose **On its own line** next to **Style** under **Layout** in the **Equation** panel. Choose **In line with text** to put the equation back in the text.
 
 ## Change or remove an equation
 

@@ -264,17 +264,25 @@ test('a space pasted with more text expands nothing', async () => {
     expect(field().value).toBe('\\frac ');
 });
 
-test('the Display toggle writes display and keeps the equation selected', async () => {
+test('the Style options write display and keep the equation selected', async () => {
     const editor = await mount();
-    const toggle = document.querySelector<HTMLButtonElement>('button[aria-label="Display on its own line"]');
-    expect(toggle?.getAttribute('aria-pressed')).toBe('false');
+    const inline = document.querySelector<HTMLButtonElement>('button[aria-label="In line with text"]');
+    const ownLine = document.querySelector<HTMLButtonElement>('button[aria-label="On its own line"]');
+    expect(inline?.getAttribute('aria-pressed')).toBe('true');
+    expect(ownLine?.getAttribute('aria-pressed')).toBe('false');
 
-    await act(async () => toggle?.click());
+    await act(async () => ownLine?.click());
 
     expect(stored(editor)?.['display']).toBe(true);
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
-    expect(toggle?.getAttribute('aria-pressed')).toBe('true');
+    expect(ownLine?.getAttribute('aria-pressed')).toBe('true');
+    expect(inline?.getAttribute('aria-pressed')).toBe('false');
     expect(preview()?.getAttribute('display')).toBe('block');
+
+    await act(async () => inline?.click());
+
+    expect(stored(editor)?.['display']).toBe(false);
+    expect(preview()?.getAttribute('display')).not.toBe('block');
 });
 
 const openMenu = (menu: string) =>
@@ -323,7 +331,7 @@ test.each([
 });
 
 // Shift and an arrow over it, or a drag across it, select it as text, and the panel reads it the same.
-test('an equation selected as text takes the draft and the Display toggle', async () => {
+test('an equation selected as text takes the draft and the Style options', async () => {
     const editor = await mount();
     await act(async () => editor.commands.setTextSelection({ from: 2, to: 3 }));
     await type('y');
@@ -332,15 +340,13 @@ test('an equation selected as text takes the draft and the Display toggle', asyn
     expect(editor.state.selection.toJSON()).toEqual({ type: 'text', anchor: 3, head: 3 });
 
     await act(async () => editor.commands.setTextSelection({ from: 2, to: 3 }));
-    await act(async () =>
-        document.querySelector<HTMLButtonElement>('button[aria-label="Display on its own line"]')?.click(),
-    );
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="On its own line"]')?.click());
     expect(stored(editor)?.['display']).toBe(true);
 });
 
-// A drag across two equations: the panel shows the last, and its LaTeX is that one's alone, while Display, as a
+// A drag across two equations: the panel shows the last, and its LaTeX is that one's alone, while Style, as a
 // figure's layout, is every one's.
-test('a selection of two equations writes the draft to the one shown and Display to both', async () => {
+test('a selection of two equations writes the draft to the one shown and Style to both', async () => {
     const editor = await mount({ mathml: typed('x^2') }, { mathml: typed('z') });
     await act(async () => editor.commands.setTextSelection({ from: 2, to: 4 }));
     expect(field().value).toBe('z');
@@ -349,9 +355,7 @@ test('a selection of two equations writes the draft to the one shown and Display
     expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
     expect(editor.state.doc.nodeAt(3)?.attrs['mathml']).toBe(typed('w'));
 
-    await act(async () =>
-        document.querySelector<HTMLButtonElement>('button[aria-label="Display on its own line"]')?.click(),
-    );
+    await act(async () => document.querySelector<HTMLButtonElement>('button[aria-label="On its own line"]')?.click());
     expect(stored(editor)?.['display']).toBe(true);
     expect(editor.state.doc.nodeAt(3)?.attrs['display']).toBe(true);
 });
