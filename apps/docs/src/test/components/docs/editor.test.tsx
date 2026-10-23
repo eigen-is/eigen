@@ -13,6 +13,7 @@ const window = installHappyDom();
 
 const Y = await import('yjs');
 const { WebsocketProvider } = await import('y-websocket');
+const { NodeSelection } = await import('@tiptap/pm/state');
 const { act, createElement, useState } = await import('react');
 const { formatForDisplay } = await import('@tanstack/react-hotkeys');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
@@ -428,12 +429,79 @@ test('word count from a band counts the body, and gives focus back to the band',
     expect(document.activeElement === bandView('header')).toBe(true);
 });
 
-test('the table panel stays closed while a band is edited', async () => {
+test('a table selected in the body closes its panel as a band is entered', async () => {
     await render(WRITER);
     await act(async () => void bodyView()?.editor?.commands.insertTable({ rows: 2, cols: 2 }));
     expect(document.body.textContent).toContain('Columns');
     await doubleClick('header');
     expect(document.body.textContent).not.toContain('Columns');
+});
+
+const headerEditor = () => {
+    const header = bandView('header')?.editor;
+    if (!header) throw new Error('no header editor');
+    return header;
+};
+
+const columns = (root: string) => doc.getXmlFragment(root).toString().split('<tableheader').length - 1;
+
+test('a table in the band being edited opens the table panel, which writes the band, its own undo taking it back', async () => {
+    write('default', 'Hello');
+    await render(WRITER);
+    await doubleClick('header');
+    const header = headerEditor();
+    await act(async () => void header.commands.insertTable({ rows: 2, cols: 2 }));
+    yUndoPluginKey.getState(header.state)?.undoManager.stopCapturing();
+    expect(document.body.textContent).toContain('Columns');
+
+    // The panel sits outside the page, so a press in it leaves the band edited.
+    const after = button('After');
+    await act(async () => void after?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+    await act(async () => after?.click());
+    expect(editing()).toEqual(['header']);
+    expect(columns('header')).toBe(3);
+    expect(doc.getXmlFragment('default').toString()).toBe('<paragraph>Hello</paragraph>');
+
+    await openMenu('Edit');
+    await pick(`Undo${formatForDisplay('Mod+Z')}`);
+    expect(columns('header')).toBe(2);
+});
+
+test('an image in the band being edited opens the Image panel, aligned only, writing the band', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    const header = headerEditor();
+    await act(async () => {
+        header.commands.insertContent({ type: 'figure', attrs: { src: 'data:image/png;base64,', width: 100 } });
+        header.commands.setNodeSelection(1);
+    });
+    const toggles = [...document.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')];
+    expect(toggles.map((t) => t.getAttribute('aria-label'))).toEqual(['Align left', 'Align center', 'Align right']);
+
+    await act(async () => toggles[2]?.click());
+    expect(doc.getXmlFragment('header').toString()).toContain('alignment="right"');
+    expect(editing()).toEqual(['header']);
+});
+
+test('an equation a click selects in the band being edited opens the Equation panel, which writes the band', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    const header = headerEditor();
+    await act(async () => void header.commands.insertEquation());
+    // Inserted, it is selected as by an arrow, which opens no panel.
+    expect(document.querySelector('textarea[aria-label="LaTeX"]')).toBeNull();
+    await act(async () => void header.commands.setTextSelection(1));
+    await act(async () =>
+        header.view.dispatch(
+            header.state.tr.setSelection(NodeSelection.create(header.state.doc, 1)).setMeta('pointer', true),
+        ),
+    );
+    const field = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="LaTeX"]');
+    expect(field).not.toBeNull();
+
+    await act(async () => button('On its own line')?.click());
+    expect(doc.getXmlFragment('header').toString()).toContain('display="true"');
+    expect(doc.getXmlFragment('default').toString()).not.toContain('equation');
 });
 
 // The trigger draws the paragraph's alignment, so its first icon names it.

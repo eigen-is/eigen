@@ -17,7 +17,7 @@ let unmount = async () => {};
 afterEach(() => unmount());
 
 // "a" at 1, the figure at 2, on a page whose text column is 600 px.
-async function mount(attrs: object = {}) {
+async function mount(attrs: object = {}, blockOnly = false) {
     const editor = new Editor({
         extensions: [...getDocExtensions({ exclude: ['figure', 'comment'] }), Figure],
         content: {
@@ -43,7 +43,7 @@ async function mount(attrs: object = {}) {
                 { 'data-document': '', style: { padding: 0 } },
                 createElement(EditorContent, { editor }),
             ),
-            createElement(FigurePropertiesPanel, { editor, onReplaceImage: () => {} }),
+            createElement(FigurePropertiesPanel, { editor, blockOnly, onReplaceImage: () => {} }),
         ),
     );
     const page = document.querySelector('[data-document]');
@@ -66,6 +66,18 @@ const nativeValueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.proto
 
 // The Style toggles, own line, wrap left and wrap right, come before Align's.
 const styleToggles = () => [...document.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')].slice(0, 3);
+
+// A band holds no float, as a docx import reads an anchored picture in a header as one on its own line.
+test('in a band the panel offers alignment alone, which puts a wrapped figure on its own line', async () => {
+    const editor = await mount({ layout: 'wrap-left' }, true);
+    const toggles = [...document.querySelectorAll<HTMLButtonElement>('button[aria-pressed]')];
+    expect(toggles.map((t) => t.getAttribute('aria-label'))).toEqual(['Align left', 'Align center', 'Align right']);
+
+    await act(async () => toggles[0]?.click());
+
+    expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ layout: 'block', alignment: 'left' });
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 2 });
+});
 
 test('a Style toggle keeps the figure selected and lights the new layout', async () => {
     const editor = await mount();

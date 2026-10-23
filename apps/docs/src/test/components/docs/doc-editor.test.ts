@@ -121,8 +121,8 @@ test("a band's editor deletes a node a band leaves out and keeps a comment's tex
     expect(doc.getXmlFragment('header').toString()).not.toContain('pageBreak');
 });
 
-// A band has no Equation panel, so Enter on a selected equation does what it does on a selected figure.
-test('Enter on a selected equation in a band does what it does on a selected figure', () => {
+// With no Equation panel to open, a phone's, Enter on a selected equation does what it does on a selected figure.
+test('Enter on a selected equation with no Equation panel does what it does on a selected figure', () => {
     const enterOn = (leaf: JSONContent) => {
         const header = mount(new Y.Doc(), HEADER);
         header.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [leaf] }] });

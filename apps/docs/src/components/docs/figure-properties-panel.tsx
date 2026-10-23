@@ -52,40 +52,54 @@ export function FigureField({
     );
 }
 
-// Where a figure sits: in its own line, aligned, or wrapped by the text on one side.
+// Where a figure sits: in its own line, aligned, or wrapped by the text on one side. A band holds no float, as a docx
+// import reads a header's anchored picture as one in its own line, so a band's offers the alignment alone, which puts a
+// pasted wrap in its own line.
 export function FigureLayoutSection({
     layout,
     alignment,
+    blockOnly = false,
     onChange,
 }: {
     layout: FigureLayout;
     alignment: FigureAlignment;
+    blockOnly?: boolean;
     onChange: (attributes: FigureFrameAttrs) => void;
 }) {
     return (
         <PropertySection title="Layout">
-            <PropertyRow label="Style">
-                <div className="flex items-center gap-1">
-                    <PropertyToggle pressed={layout === 'block'} onPressedChange={() => onChange({ layout: 'block' })}>
-                        <Rows3 className="h-4 w-4" />
-                    </PropertyToggle>
-                    <PropertyToggle
-                        pressed={layout === 'wrap-left'}
-                        onPressedChange={() => onChange({ layout: 'wrap-left' })}
-                    >
-                        <PanelLeft className="h-4 w-4" />
-                    </PropertyToggle>
-                    <PropertyToggle
-                        pressed={layout === 'wrap-right'}
-                        onPressedChange={() => onChange({ layout: 'wrap-right' })}
-                    >
-                        <PanelRight className="h-4 w-4" />
-                    </PropertyToggle>
-                </div>
-            </PropertyRow>
-            {layout === 'block' && (
+            {!blockOnly && (
+                <PropertyRow label="Style">
+                    <div className="flex items-center gap-1">
+                        <PropertyToggle
+                            pressed={layout === 'block'}
+                            onPressedChange={() => onChange({ layout: 'block' })}
+                        >
+                            <Rows3 className="h-4 w-4" />
+                        </PropertyToggle>
+                        <PropertyToggle
+                            pressed={layout === 'wrap-left'}
+                            onPressedChange={() => onChange({ layout: 'wrap-left' })}
+                        >
+                            <PanelLeft className="h-4 w-4" />
+                        </PropertyToggle>
+                        <PropertyToggle
+                            pressed={layout === 'wrap-right'}
+                            onPressedChange={() => onChange({ layout: 'wrap-right' })}
+                        >
+                            <PanelRight className="h-4 w-4" />
+                        </PropertyToggle>
+                    </div>
+                </PropertyRow>
+            )}
+            {(blockOnly || layout === 'block') && (
                 <PropertyRow label="Align">
-                    <AlignmentPicker value={alignment} onChange={(a) => onChange({ alignment: a })} />
+                    <AlignmentPicker
+                        value={layout === 'block' ? alignment : undefined}
+                        onChange={(a) =>
+                            onChange(layout === 'block' ? { alignment: a } : { layout: 'block', alignment: a })
+                        }
+                    />
                 </PropertyRow>
             )}
         </PropertySection>
@@ -94,10 +108,11 @@ export function FigureLayoutSection({
 
 type FigurePropertiesPanelProps = {
     editor: Editor;
+    blockOnly?: boolean;
     onReplaceImage: () => void;
 };
 
-export function FigurePropertiesPanel({ editor, onReplaceImage }: FigurePropertiesPanelProps) {
+export function FigurePropertiesPanel({ editor, blockOnly, onReplaceImage }: FigurePropertiesPanelProps) {
     const { resolveMediaUrl } = useMediaResolver();
     // useEditor re-renders on no transaction, and a write that keeps the figure selected fires no selectionUpdate.
     const { width, layout, alignment, alt, caption, mediaName } = useEditorState({
@@ -148,6 +163,7 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
             <FigureLayoutSection
                 layout={layout}
                 alignment={alignment}
+                blockOnly={blockOnly}
                 onChange={(attributes) => {
                     const fitted = widthWithinLayout(editor.view.dom, attributes.layout, width);
                     editor.commands.updateFigure(fitted === undefined ? attributes : { ...attributes, width: fitted });

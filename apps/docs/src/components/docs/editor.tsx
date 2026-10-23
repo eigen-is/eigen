@@ -318,6 +318,7 @@ const TiptapEditor = ({
         editable: canWrite,
         editing: editingBand,
         onLeave: leaveBand,
+        equation: { onEdit: () => editEquationRef.current() },
     });
     // The open footnote's one live editor, kept as long as the doc is open; it holds whichever note is open. A writer's
     // on a desktop or a tablet, as a band is.
@@ -327,6 +328,7 @@ const TiptapEditor = ({
         provider: null,
         editable: canWrite,
         target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current() },
+        equation: { onEdit: () => editEquationRef.current() },
     });
     const notes = useOpenNote(editor, noteEditor, bandsAllowed);
     leaveNoteRef.current = notes.leave;
@@ -388,7 +390,7 @@ const TiptapEditor = ({
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
     const { selectionPanel, equationFieldRef, editEquation, insertEquation } = useSelectionPanel(
-        editor,
+        activeEditor,
         isMobile,
         closePanels,
     );
@@ -478,9 +480,12 @@ const TiptapEditor = ({
     );
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    // The figure, chart, equation and table panels follow the body's selection, so a band being edited closes them.
+    // The properties panels follow the editor that has the selection. A chart's edits its data through the body's undo
+    // manager, so a note's chart opens none.
     const showSidebar =
-        !isMobile && (panel !== null || (canWrite && !editingBand && !notes.anchor && selectionPanel !== 'document'));
+        !isMobile &&
+        (panel !== null ||
+            (canWrite && selectionPanel !== 'document' && (selectionPanel !== 'chart' || activeEditor === editor)));
 
     // Slide the centered page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - page.width) / 2);
@@ -615,7 +620,8 @@ const TiptapEditor = ({
                                             : undefined
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
-                                    // Comments anchor in the body only, and the Equation panel edits the body's.
+                                    // Comments anchor in the body only. A band's or a note's equation comes from a paste or a
+                                    // Word file, which its panel edits.
                                     onAddComment={
                                         chatFolderId && !editingBand && !notes.anchor ? handleAddComment : undefined
                                     }
@@ -755,7 +761,8 @@ const TiptapEditor = ({
                                                 <PanelColumn activePanel={panel} {...panelProps} />
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
-                                                    editor={editor}
+                                                    editor={activeEditor}
+                                                    blockOnly={!!editingBand}
                                                     onReplaceImage={() => setReplacePickerOpen(true)}
                                                 />
                                             ) : lastPanelRef.current === 'chart' ? (
@@ -765,9 +772,12 @@ const TiptapEditor = ({
                                                     onEditData={() => setChartDataOpen(true)}
                                                 />
                                             ) : lastPanelRef.current === 'equation' ? (
-                                                <EquationPropertiesPanel editor={editor} fieldRef={equationFieldRef} />
+                                                <EquationPropertiesPanel
+                                                    editor={activeEditor}
+                                                    fieldRef={equationFieldRef}
+                                                />
                                             ) : (
-                                                <TablePropertiesPanel editor={editor} />
+                                                <TablePropertiesPanel editor={activeEditor} />
                                             )}
                                         </div>
                                     </div>

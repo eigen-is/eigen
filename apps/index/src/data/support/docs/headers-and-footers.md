@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, headers, footers, page-numbers, layout]
 related: [docs/print, docs/export]
 order: 55
-updated: 2026-10-19
+updated: 2026-10-23
 ---
 
 A header sits at the top of each page and a footer at the bottom. Use them for a title, a logo, or page numbers. You type them right on the page, in its top and bottom margins.
@@ -14,7 +14,7 @@ A header sits at the top of each page and a footer at the bottom. Use them for a
 ## Add a header or footer
 
 1. Double-click in the top margin of the page for the header, or in the bottom margin, after your last line, for the footer. An empty margin shows **Double-click to add a header** when you point at it. You can also open the **Insert** menu and choose **Page elements → Header** or **Page elements → Footer**, or choose **Format → Headers and footers**.
-2. Type what you want. The toolbar and the **Format** and **Insert** menus now work on the header or footer, so you can make text bold, align it, or add an image.
+2. Type what you want. The toolbar and the **Format** and **Insert** menus now work on the header or footer, so you can make text bold, align it, or add an image. Click an image or a table in it to open its panel on the right, as in your text. An image in a header or footer sits on its own line: you can align it, but text doesn't wrap around it.
 3. Press **Esc**, or click in your text, to go back to it.
 
 While you edit a header or footer, the rest of the page fades and a bar separates them, labeled **Header** or **Footer**. To change a header or footer later, double-click it. A single click does nothing, so a link in it still opens.
