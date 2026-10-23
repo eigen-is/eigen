@@ -2,9 +2,10 @@
 // sheet it reads changes, a double-click opens its editor, and its menu downloads it as an image. What every floating
 // object does is in floating-objects.test.tsx.
 import { afterEach, expect, spyOn, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { FLAT_CHART_LOOK, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
-import type { CellRangeRef } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartLook } from '@workspace/lib/types/chart';
+import { serializeFill } from '@workspace/lib/vector';
 import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
@@ -58,7 +59,7 @@ afterEach(async () => {
     cleanup = undefined;
 });
 
-async function mount(allowEdit = true) {
+async function mount(allowEdit = true, look: Partial<ChartLook> = {}) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -81,7 +82,7 @@ async function mount(allowEdit = true) {
                 cell(2, 1, 65),
             ],
             config: {},
-            charts: { c1: chart },
+            charts: { c1: { ...chart, ...look } },
         },
         { id: 's2', name: 'Two', order: 1, row: 20, column: 10, celldata: [cell(0, 0, 'x')], config: {} },
     ];
@@ -208,6 +209,45 @@ test('Download image saves the chart with its range read in, on white, its font 
         for (const label of ['Scores', 'Ajax', 'PSV', 'Points']) expect(svg).toContain(`>${label}<`);
         expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.woff2']);
         expect(svg).toContain('data:font/woff2;base64,AQID');
+    } finally {
+        saved.mockRestore();
+        fetched.mockRestore();
+    }
+});
+
+// A sketch look as the Chart editor stores it: rough, hatched, its labels in their own color.
+const SKETCH: Partial<ChartLook> = {
+    fill: serializeFill({ type: 'solid', color: '#ffeeaa', style: 'cross-hatch' }),
+    color: '#334455',
+    roughness: 2,
+    seed: 4242,
+};
+
+// Download image draws the item a copy writes, so it carries the look the chart stores, as ⌘C does.
+test('Download image saves a chart in the sketch look it stores', async () => {
+    const saved = spyOn(download, 'downloadBlob').mockImplementation(() => {});
+    const fetched = spyOn(globalThis, 'fetch').mockImplementation(
+        Object.assign(async () => new Response(new Uint8Array([1, 2, 3])), { preconnect: fetch.preconnect }),
+    );
+    const downloadImage = async (look: Partial<ChartLook>) => {
+        const { box } = await mount(false, look);
+        const el = box()?.firstElementChild;
+        if (!el) throw new Error('no chart');
+        await openMenu(el);
+        await pick('Download image');
+        await act(async () => {});
+        await cleanup?.();
+        cleanup = undefined;
+        return saved.mock.calls.at(-1)?.[0].text();
+    };
+    try {
+        const sketch = await downloadImage(SKETCH);
+        expect(sketch).toContain('fill="#334455"');
+        expect(sketch).toContain('<clipPath id="');
+        const flat = await downloadImage({});
+        expect(flat).not.toContain('fill="#334455"');
+        expect(flat).toContain(`fill="${FLAT_CHART_LOOK.color}"`);
+        expect(flat).not.toContain('<clipPath');
     } finally {
         saved.mockRestore();
         fetched.mockRestore();

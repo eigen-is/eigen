@@ -1,4 +1,4 @@
-import { parseChartSpec } from '@workspace/lib/charts';
+import { parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import { buildChartClipboardItem } from '@workspace/lib/clipboard';
 import { nextFloatingIndex, type SheetChart, sheetFloatingBox } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
@@ -104,9 +104,9 @@ export function sheetChartSvg(ctx: Context, chart: SheetChart): string {
     return svg;
 }
 
-// The chart as another app reads it, its ranges read into inline data: what a copy writes and Download image draws.
-// Null for a chart inlineChartSpec can't inline.
+// The chart as another app reads it, its ranges read into inline data and its look carried: what a copy writes and
+// Download image draws. Null for a chart inlineChartSpec can't inline.
 export function sheetChartClipboardItem(ctx: Context, chart: SheetChart): EigenClipboardChartItem | null {
     const inline = inlineChartSpec(chart, createContextResolver(ctx));
-    return inline ? buildChartClipboardItem({ spec: inline, box: chart }) : null;
+    return inline ? buildChartClipboardItem({ spec: inline, box: chart, look: readChartLook(chart) }) : null;
 }
