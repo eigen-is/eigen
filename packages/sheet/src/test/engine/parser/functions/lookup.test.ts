@@ -226,4 +226,14 @@ describe('INDEX', () => {
         expect(value('=INDEX(C1:D6,2,2)')).toBe(12);
         expect(value('=INDEX(B1:B6,3)')).toBe('Cherry');
     });
+
+    // Microsoft's INDEX: a one-row or one-column array takes its one index along itself.
+    test('one index into a one-row range picks along the row', () => {
+        expect(value('=INDEX(Across!A1:D1,2)')).toBe(20);
+        expect(value('=INDEX(Across!A1:D1,4)')).toBe(40);
+        expect(value('=INDEX(Across!A1:D1,5)')).toBe('#REF!');
+        expect(value('=INDEX(Across!A1:D1,1,3)')).toBe(30);
+        expect(value('=SUM(INDEX(Across!A1:D1,0))')).toBe(100);
+        expect(value('=INDEX(Across!A1:A3,2)')).toBe('a');
+    });
 });

@@ -144,15 +144,12 @@ export function xlookup(params: FunctionArg[]): FormulaOutput {
     return hit.length === 1 && hit[0].length === 1 ? hit[0][0] : hit;
 }
 
-// An override: formulajs reads a row_num or column_num of 0 as 1, where Excel gives the whole column or row.
+// An override: formulajs reads a row_num or column_num of 0 as 1, where Excel gives the whole column or row, and reads
+// a lone index into a one-row array as its row, where Excel picks along the row.
 export function index(params: FormulaArg[]): FormulaOutput | undefined {
     const [array, row, column] = params;
     // A blank cell is 0 too.
     const whole = (arg: FormulaArg) => arg === 0 || arg == null;
-    if (!whole(row) && !(params.length > 2 && whole(column))) return undefined;
-    const grid = toGrid(array);
-    // A lone index of 0 is the whole array, whether it is one row, one column or both.
-    if (params.length < 3) return grid;
     const position = (arg: FormulaArg, size: number) => {
         if (arg instanceof Error) throw arg;
         const value = Math.trunc(toNumber(arg ?? 0) ?? Number.NaN);
@@ -160,6 +157,16 @@ export function index(params: FormulaArg[]): FormulaOutput | undefined {
         if (value > size) throw Error(ERROR_REF);
         return value;
     };
+    if (params.length < 3) {
+        const grid = toGrid(array);
+        // A lone index of 0 is the whole array, whether it is one row, one column or both.
+        if (whole(row)) return grid;
+        if (grid.length !== 1) return undefined;
+        const c = position(row, grid[0].length);
+        return c === 0 ? grid : grid[0][c - 1];
+    }
+    if (!whole(row) && !whole(column)) return undefined;
+    const grid = toGrid(array);
     const r = position(row, grid.length);
     const c = position(column, grid[0].length);
     if (r === 0 && c === 0) return grid;
