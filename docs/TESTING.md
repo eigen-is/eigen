@@ -89,6 +89,15 @@ bun apps/api/src/scripts/docx-audit.ts roundtrip <corpus dir...> --out /tmp/docx
 bun apps/api/src/scripts/pptx-audit.ts roundtrip <corpus dir...> --out /tmp/pptx-roundtrip
 ```
 
+A refactor that must not change what a writer writes proves it byte for byte. `--dump <dir>` keeps each file our writer wrote as `<dir>/<corpus dir name>/<path in it>.<format>`, and refuses a dir another run filled. The writers are deterministic, so a run before the change and one after compare with `diff -rq`, which names every file whose bytes differ and every file only one run wrote:
+
+```bash
+bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out /tmp/before --dump /tmp/before-bytes
+# the change
+bun apps/api/src/scripts/xlsx-audit.ts roundtrip <corpus dir...> --out /tmp/after --dump /tmp/after-bytes
+diff -rq /tmp/before-bytes /tmp/after-bytes
+```
+
 ## Storage faults are parked and driven, never slept through
 
 The drive resilience suites run on doubles at the `src/test/` root, and each double's header comment lists what it can fake. The rules:

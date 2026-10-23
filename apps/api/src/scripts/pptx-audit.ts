@@ -4,7 +4,7 @@
 // z-order, each length in the EMU the writer writes it in, a picture by its type and pixel size.
 //
 // Usage:
-//   bun apps/api/src/scripts/pptx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--timeout <s>] [--max-rss <MB>]
+//   bun apps/api/src/scripts/pptx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { gradientStops } from '@workspace/lib/background';
@@ -31,6 +31,7 @@ import {
     type RoundtripDifference,
     type RoundtripGate,
     type RoundtripMeta,
+    type RoundtripOptions,
     roundtripChild,
     roundtripLine,
     runRoundtrip as runGate,
@@ -370,7 +371,10 @@ const PPTX_GATE: RoundtripGate = {
 
 // The round trip's child: the file imported into a deck as an import makes one, written by our writer with its
 // pictures prepared as an export prepares them, imported again, and the two decks compared.
-async function pptxRoundtripChild(file: string, options: { writer: string; reports: string }): Promise<void> {
+async function pptxRoundtripChild(
+    file: string,
+    options: { writer: string; reports: string; dump?: string },
+): Promise<void> {
     const Y = await import('yjs');
     const { readVectorFromDoc } = await import('@workspace/lib/vector');
     const { importPptxToSlidesUpdate } = await import('../lib/import/slides/transform');
@@ -387,7 +391,7 @@ async function pptxRoundtripChild(file: string, options: { writer: string; repor
         const media = images.map(({ name, contentType, data }) => ({ name, contentType, data: Buffer.from(data) }));
         return { scene: readVectorFromDoc(doc), media, pictures: new Map() };
     };
-    await roundtripChild(options.reports, async (step) => {
+    await roundtripChild(options, async (step) => {
         const data = await Bun.file(file).arrayBuffer();
         const a = await step('import', () => read(data));
         let media: Awaited<ReturnType<typeof officeMedia>> = [];
@@ -409,13 +413,7 @@ async function pptxRoundtripChild(file: string, options: { writer: string; repor
     });
 }
 
-export function runRoundtrip(options: {
-    corpora: string[];
-    out: string;
-    writer?: string;
-    timeoutMs?: number;
-    maxRssMb?: number;
-}): Promise<RoundtripMeta> {
+export function runRoundtrip(options: RoundtripOptions): Promise<RoundtripMeta> {
     return runGate(PPTX_GATE, options);
 }
 
@@ -429,16 +427,18 @@ if (import.meta.main) {
             timeout: { type: 'string' },
             'max-rss': { type: 'string' },
             reports: { type: 'string' },
+            dump: { type: 'string' },
         },
     });
     const [command, ...rest] = positionals;
     if (command === 'roundtrip-child' && rest.length === 1 && values.writer && values.reports) {
-        await pptxRoundtripChild(rest[0], { writer: values.writer, reports: values.reports });
+        await pptxRoundtripChild(rest[0], { writer: values.writer, reports: values.reports, dump: values.dump });
     } else if (command === 'roundtrip' && rest.length > 0 && values.out) {
         const meta = await runRoundtrip({
             corpora: rest,
             out: values.out,
             writer: values.writer,
+            dump: values.dump,
             timeoutMs: values.timeout ? Number(values.timeout) * 1000 : undefined,
             maxRssMb: values['max-rss'] ? Number(values['max-rss']) : undefined,
         });
@@ -446,7 +446,7 @@ if (import.meta.main) {
         if (!meta.pass) process.exit(1);
     } else {
         console.error(
-            'Usage: bun apps/api/src/scripts/pptx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--timeout <s>] [--max-rss <MB>]',
+            'Usage: bun apps/api/src/scripts/pptx-audit.ts roundtrip <corpus dir...> --out <dir> [--writer <module>] [--dump <dir>] [--timeout <s>] [--max-rss <MB>]',
         );
         process.exit(1);
     }

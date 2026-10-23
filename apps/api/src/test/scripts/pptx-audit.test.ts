@@ -93,6 +93,19 @@ describe('round trip', () => {
         );
     }, 60_000);
 
+    test('--dump keeps the bytes our writer wrote, under the file key, and refuses a dir another run filled', async () => {
+        const dir = await corpus('dumped', { 'deck.pptx': deck(), 'bad.pptx': 'no zip' });
+        const dump = path.join(scratch, 'dump');
+        await runRoundtrip({ corpora: [dir], out: path.join(scratch, 'out-dumped'), dump, timeoutMs: 30_000 });
+        expect(fs.readdirSync(path.join(dump, 'dumped'))).toEqual(['deck.pptx.pptx']);
+        expect(new TextDecoder().decode(fs.readFileSync(path.join(dump, 'dumped/deck.pptx.pptx')).subarray(0, 2))).toBe(
+            'PK',
+        );
+        await expect(runRoundtrip({ corpora: [dir], out: path.join(scratch, 'out-dumped'), dump })).rejects.toThrow(
+            `${dump} is not empty`,
+        );
+    }, 60_000);
+
     test('a writer that moves a box, changes a run and drops a picture fails the gate', async () => {
         const dir = await corpus('mutated', { 'deck.pptx': deck() });
         const planted = await writer(
