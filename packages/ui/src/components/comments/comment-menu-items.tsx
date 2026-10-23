@@ -4,7 +4,7 @@ import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, MessageSquare, MessageSquarePlus, Palette, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import { MenuSections } from '../context-menu/menu-sections';
-import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../dropdown-menu';
+import { ChoiceMenuSub, DropdownMenuItem } from '../dropdown-menu';
 import { AssigneeMenuItems } from './assignee-menu-items';
 
 export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | undefined };
@@ -71,23 +71,27 @@ export function CommentMenuItems({
                 </DropdownMenuItem>
             )}
             {onChangeColor && (
-                <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                        <Palette className="h-4 w-4" /> {Noun} color
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                        {EIGEN_STICKIES_COLORS[0].map((c) => (
-                            <DropdownMenuItem key={c.value} onClick={() => onChangeColor(card.id, c.value)}>
+                <ChoiceMenuSub
+                    trigger={
+                        <>
+                            <Palette className="h-4 w-4" /> {Noun} color
+                        </>
+                    }
+                    value={card.color}
+                    options={EIGEN_STICKIES_COLORS[0].map((c) => ({
+                        value: c.value,
+                        label: (
+                            <>
                                 <span
                                     className="h-4 w-4 shrink-0 rounded-full border border-border/50"
                                     style={{ backgroundColor: c.value }}
                                 />
-                                <span className="flex-1">{c.label}</span>
-                                {card.color === c.value && <Check className="h-4 w-4 shrink-0" />}
-                            </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                                {c.label}
+                            </>
+                        ),
+                    }))}
+                    onChange={(color) => onChangeColor(card.id, color)}
+                />
             )}
             {onAssign && members && currentUserEmail && chatName && (
                 <AssigneeMenuItems

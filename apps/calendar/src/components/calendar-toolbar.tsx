@@ -3,13 +3,20 @@ import { formatMonth } from '@workspace/lib/date';
 import { KebabTrigger, Toolbar, ToolbarTitle, useLayout } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
+    ChoiceMenuItems,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
 } from '@workspace/ui/components/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+// The view select and the phone's kebab offer the same views.
+const VIEW_MODES: { value: ViewMode; label: string }[] = [
+    { value: 'month', label: 'Month' },
+    { value: 'week', label: 'Week' },
+];
 
 type CalendarToolbarProps = {
     currentDate: Date;
@@ -82,25 +89,27 @@ export function CalendarToolbar({
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={onToday}>Today</DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => onViewModeChange('month')}>
-                            Month
-                            {viewMode === 'month' && <Check className="h-4 w-4 ml-auto" />}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onViewModeChange('week')}>
-                            Week
-                            {viewMode === 'week' && <Check className="h-4 w-4 ml-auto" />}
-                        </DropdownMenuItem>
+                        <ChoiceMenuItems value={viewMode} options={VIEW_MODES} onChange={onViewModeChange} />
                     </DropdownMenuContent>
                 </DropdownMenu>
             ) : (
                 <div className="flex items-center gap-2">
-                    <Select value={viewMode} onValueChange={(v) => onViewModeChange(v as ViewMode)}>
+                    <Select
+                        value={viewMode}
+                        onValueChange={(v) => {
+                            const mode = VIEW_MODES.find(({ value }) => value === v);
+                            if (mode) onViewModeChange(mode.value);
+                        }}
+                    >
                         <SelectTrigger className="w-24 h-8">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="month">Month</SelectItem>
-                            <SelectItem value="week">Week</SelectItem>
+                            {VIEW_MODES.map(({ value, label }) => (
+                                <SelectItem key={value} value={value}>
+                                    {label}
+                                </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>

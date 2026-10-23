@@ -1,8 +1,15 @@
 import { COMMENT_STATUS_LABELS, type useCommentFilter } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { Check, CircleDot, FilterX, Palette, Users } from 'lucide-react';
-import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../dropdown-menu';
+import { CircleDot, FilterX, Palette, Users } from 'lucide-react';
+import {
+    ChoiceMenuSub,
+    DropdownMenuCheckboxItem,
+    DropdownMenuItem,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+} from '../dropdown-menu';
 import { MemberCommandList, PinnedAssigneeFilterRows } from './member-command-list';
 
 type CommentFilterMenuItemsProps = {
@@ -53,42 +60,37 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
                     <Palette className="h-4 w-4" /> Color
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                    {EIGEN_STICKIES_COLORS[0].map((c) => {
-                        const active = colors?.has(c.value) ?? false;
-                        return (
-                            <DropdownMenuItem
-                                key={c.value}
-                                onClick={(e) => {
-                                    // Stay open: colors are a multi-toggle.
-                                    e.preventDefault();
-                                    filter.toggleColor(c.value);
-                                }}
-                            >
-                                <span
-                                    className="size-4 rounded-full shrink-0 border border-border/50"
-                                    style={{ backgroundColor: c.value }}
-                                />
-                                <span className="flex-1">{c.label.replace(/-\d+$/, '')}</span>
-                                {active && <Check className="h-4 w-4 ml-2 shrink-0" />}
-                            </DropdownMenuItem>
-                        );
-                    })}
-                </DropdownMenuSubContent>
-            </DropdownMenuSub>
-
-            <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                    <CircleDot className="h-4 w-4" /> Status
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
-                    {(['open', 'resolved', 'all'] as const).map((s) => (
-                        <DropdownMenuItem key={s} onClick={() => filter.setStatus(s)}>
-                            <span className="flex-1">{COMMENT_STATUS_LABELS[s]}</span>
-                            {status === s && <Check className="h-4 w-4 ml-2 shrink-0" />}
-                        </DropdownMenuItem>
+                    {EIGEN_STICKIES_COLORS[0].map((c) => (
+                        <DropdownMenuCheckboxItem
+                            key={c.value}
+                            checked={colors?.has(c.value) ?? false}
+                            // Stay open: colors are a multi-toggle.
+                            onSelect={(e) => e.preventDefault()}
+                            onCheckedChange={() => filter.toggleColor(c.value)}
+                        >
+                            <span
+                                className="size-4 rounded-full shrink-0 border border-border/50"
+                                style={{ backgroundColor: c.value }}
+                            />
+                            {c.label.replace(/-\d+$/, '')}
+                        </DropdownMenuCheckboxItem>
                     ))}
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
+
+            <ChoiceMenuSub
+                trigger={
+                    <>
+                        <CircleDot className="h-4 w-4" /> Status
+                    </>
+                }
+                value={status}
+                options={(['open', 'resolved', 'all'] as const).map((s) => ({
+                    value: s,
+                    label: COMMENT_STATUS_LABELS[s],
+                }))}
+                onChange={filter.setStatus}
+            />
 
             {filter.isActive && (
                 <DropdownMenuItem onClick={() => filter.clear()}>

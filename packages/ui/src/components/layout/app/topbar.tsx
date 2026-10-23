@@ -12,16 +12,12 @@ import { EigenLogo } from '../../braket/eigen-logo';
 import { Button } from '../../button';
 import { ConfirmDialog } from '../../confirm-dialog';
 import {
+    ChoiceMenuSub,
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
     DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '../../dropdown-menu';
 import { UserAvatar } from '../../user/user-avatar';
@@ -39,6 +35,12 @@ type TopbarProps = {
         useNavigate: () => NavigateFunction;
     };
 };
+
+const THEMES = [
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
+    { value: 'system', label: 'System' },
+] as const;
 
 const GUEST_APPS = new Set(['Drive', 'Docs', 'Stickies', 'Slides', 'Vector', 'Sheets', 'Chat']);
 
@@ -232,34 +234,17 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                             Settings
                         </a>
                     </DropdownMenuItem>
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                            <Palette />
-                            Theme
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                            <DropdownMenuRadioGroup value={settings?.theme ?? 'light'}>
-                                <DropdownMenuRadioItem
-                                    value="light"
-                                    onSelect={() => updateSettings.mutate({ theme: 'light' })}
-                                >
-                                    Light
-                                </DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem
-                                    value="dark"
-                                    onSelect={() => updateSettings.mutate({ theme: 'dark' })}
-                                >
-                                    Dark
-                                </DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem
-                                    value="system"
-                                    onSelect={() => updateSettings.mutate({ theme: 'system' })}
-                                >
-                                    System
-                                </DropdownMenuRadioItem>
-                            </DropdownMenuRadioGroup>
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                    <ChoiceMenuSub
+                        trigger={
+                            <>
+                                <Palette />
+                                Theme
+                            </>
+                        }
+                        value={settings?.theme ?? 'light'}
+                        options={THEMES}
+                        onChange={(theme) => updateSettings.mutate({ theme })}
+                    />
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                         <a href={getSupportUrl()}>
