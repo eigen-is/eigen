@@ -7,8 +7,10 @@ export const DAY_MS = 86_400_000;
 // A 1904 workbook counts its days from 1904-01-01, 1,462 days after the 1900 system's day 0.
 export const DAYS_1904 = 1462;
 
-// Excel's default row height in points: a row of it has no height of its own.
-export const DEFAULT_ROW_HEIGHT_PT = 15.75;
+// A sheet's defaults when its sheetFormatPr names none (ECMA-376 Part 1 § 18.3.1.81): baseColWidth's 8 digits, and
+// Excel's row at Calibri 11 in points.
+export const DEFAULT_BASE_COL_WIDTH = 8;
+export const DEFAULT_ROW_HEIGHT_PT = 15;
 
 // A number as a rule's operand holds it, unquoted; anything else is a reference, a function or a quoted string.
 export const NUMERIC = /^-?(?:\d+(?:\.\d*)?|\.\d+)$/;

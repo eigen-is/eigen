@@ -256,6 +256,12 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(decodeSheetsSnapshot(encoded)[0].charts).toEqual({});
     });
 
+    test("a sheet's default column width and row height round-trip", () => {
+        const sheets: Sheet[] = [{ id: 's', name: 'S', defaultColWidth: 64, defaultRowHeight: 17 }];
+        const [decoded] = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
+        expect(decoded).toMatchObject({ defaultColWidth: 64, defaultRowHeight: 17 });
+    });
+
     test('an empty cell object survives as {} rather than collapsing to null', () => {
         // An op patch recorded against the {} cell (['data', r, c, 'v']) must still
         // resolve through it after a round-trip; a null parent rolls back the batch.

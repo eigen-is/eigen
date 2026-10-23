@@ -183,7 +183,7 @@ describe('the reader', () => {
     test('row heights, hidden rows, and the heights of wrapped and large text', () => {
         const data = [
             '<row r="1" ht="30" customHeight="1"><c r="A1"><v>1</v></c></row>',
-            '<row r="2" ht="15.75"><c r="A2" s="11" t="s"><v>5</v></c></row>',
+            '<row r="2" ht="15"><c r="A2" s="11" t="s"><v>5</v></c></row>',
             '<row r="3" hidden="1"><c r="A3"><v>3</v></c></row>',
             '<row r="5" spans="1:2" ht="21" customHeight="1" hidden="true"><c r="B5"><v>5</v></c></row>',
             '<row r="7"><c r="A7" s="4" t="s"><v>3</v></c></row>',
@@ -192,8 +192,20 @@ describe('the reader', () => {
             xlsxFixture({ sheets: [{ data }], styles: STYLES, strings: STRINGS, colors: OFFICE_COLORS }),
         );
         // Custom heights in points to pixels; wrapped and large text grows its row.
-        expect(sheet.config?.rowlen).toEqual({ 0: 40, 1: 1050, 4: 28, 6: 78 });
+        expect(sheet.config?.rowlen).toEqual({ 0: 40, 1: 1410, 4: 28, 6: 78 });
         expect(sheet.config?.rowhidden).toEqual({ 2: 0, 4: 0 });
+    });
+
+    test("a row at the sheet's own default height stores none, and the sheet keeps the default", () => {
+        const data =
+            '<row r="1" ht="12.75"><c r="A1"><v>1</v></c></row><row r="2" ht="15"><c r="A2"><v>2</v></c></row>';
+        const [sheet] = xlsxToSheets(
+            xlsxFixture({
+                sheets: [{ data, before: '<sheetFormatPr defaultColWidth="10" defaultRowHeight="12.75"/>' }],
+            }),
+        );
+        expect(sheet).toMatchObject({ defaultColWidth: 80, defaultRowHeight: 17 });
+        expect(sheet.config?.rowlen).toEqual({ 1: 20 });
     });
 
     test('columns, frozen panes, gridlines and the filter', () => {

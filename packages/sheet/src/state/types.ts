@@ -172,16 +172,14 @@ export type AlternateFormatEntry = {
 // state, calc chain, filter criteria, dynamic-array spill ranges, …) that never
 // reach the wire shape. `config` is widened to state's SheetConfig. Frozen panes,
 // the autofilter range, data-validation rules, hyperlinks, floating images, the
-// hidden flag and the tab colour live on the lib Sheet — they persist, and the
-// server reads and writes them.
+// hidden flag, the tab colour and the default track sizes live on the lib Sheet —
+// they persist, and the server reads and writes them.
 export type Sheet = Omit<LibSheet, 'config'> & {
     config?: SheetConfig;
     addRows?: number;
     status?: number;
     selections?: Selection[];
     calcChain?: CalcChainEntry[];
-    defaultRowHeight?: number;
-    defaultColWidth?: number;
     // Pivot-table config — currently unreferenced in active code (only commented-
     // out callers in toolbar.ts / merge.ts); kept on the type for upstream
     // workbook-import compatibility.

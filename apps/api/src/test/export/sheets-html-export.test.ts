@@ -894,6 +894,21 @@ describe('Sheets export — content size (@page)', () => {
         });
     });
 
+    test("an unsized column or row takes the sheet's own default, in the grid, the page and the overlay", () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 2, c: 1, v: { v: 'grid' } }]),
+            defaultColWidth: 64,
+            defaultRowHeight: 17,
+            images: [{ id: 'img_1', mediaName: 'chart.png', x: 100, y: 60, width: 10, height: 10 }],
+        };
+        const out = renderSheetsHtml([sheet], new Map([['chart.png', 'data:image/png;base64,']]));
+        expect(out.css).toContain('{width:64px}');
+        expect(out.css).toContain('{height:17px}');
+        // One column and two rows sit left of and above the table.
+        expect(classesFor(out, 'left:36px;top:26px')).toHaveLength(1);
+        expect(getSheetContentSize(sheet)).toEqual({ width: 64, height: 36 });
+    });
+
     test('the PDF page of a huge sheet is capped at the PDF page limit', () => {
         const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'wide' } }]);
         sheet.config = { columnlen: { 0: 1e9 }, rowlen: { 0: 1e9 } };

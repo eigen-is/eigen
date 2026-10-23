@@ -1,3 +1,4 @@
+import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import {
     REFERENCE_COLUMN_COUNT,
@@ -9,9 +10,10 @@ import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
 import { isOn, R_NS, SML_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import { DEFAULT_BASE_COL_WIDTH, DEFAULT_ROW_HEIGHT_PT } from '../../document/spreadsheetml';
 import { colorOf, resolveColor, type ThemePalette } from './styles';
 
-// A worksheet past its grid: the tab colour, the column widths and hidden columns, the merges, the frozen panes and
+// A worksheet past its grid: the default column width and row height, the tab colour, the column widths and hidden columns, the merges, the frozen panes and
 // gridlines, the filter's span and the hyperlinks. A merge's cells and a link's cell are placed before the grid is
 // read, so the grid's cell there takes them, and a place the grid holds no cell for still gets one. Only what the file
 // holds is walked: a merge's cells after its area is charged, a column range's columns after they are, and each column
@@ -40,7 +42,10 @@ export type WorksheetContext = {
 
 export type Worksheet = {
     config: Pick<SheetConfig, 'merge' | 'columnlen' | 'colhidden'>;
-    sheet: Pick<Sheet, 'color' | 'hyperlink' | 'frozen' | 'showGridLines' | 'filterRange'>;
+    sheet: Pick<
+        Sheet,
+        'defaultColWidth' | 'defaultRowHeight' | 'color' | 'hyperlink' | 'frozen' | 'showGridLines' | 'filterRange'
+    >;
     // By cellKey, already charged.
     placed: Map<number, PlacedCell>;
 };
@@ -50,7 +55,11 @@ export function cellKey(r: number, c: number): number {
 }
 
 export function readWorksheet(rest: XmlElement | undefined, context: WorksheetContext): Worksheet {
-    const worksheet: Worksheet = { config: {}, sheet: {}, placed: new Map() };
+    const worksheet: Worksheet = {
+        config: {},
+        sheet: readDefaults(rest && xmlChild(rest, SML_NS, 'sheetFormatPr'), context.digitWidth),
+        placed: new Map(),
+    };
     if (!rest) return worksheet;
     const properties = xmlChild(rest, SML_NS, 'sheetPr');
     const color = resolveColor(colorOf(properties && xmlChild(properties, SML_NS, 'tabColor')), context.palette);
@@ -89,7 +98,31 @@ export function readWorksheet(rest: XmlElement | undefined, context: WorksheetCo
     return worksheet;
 }
 
-// By min, each column takes the first <col> that reaches it. A <col> without a width keeps Eigen's default width.
+// Always set, so an Excel sheet keeps Excel's pitch: a file without sheetFormatPr has Excel's own defaults. defaultColWidth
+// counts its padding already; without it Excel pads baseColWidth's digits with 4 px of margin and 1 px of gridline
+// (ECMA-376 Part 1 § 18.3.1.81) and rounds up to a multiple of 8 px (support.microsoft.com/kb/214123).
+function readDefaults(
+    format: XmlElement | undefined,
+    digitWidth: number,
+): Pick<Sheet, 'defaultColWidth' | 'defaultRowHeight'> {
+    const number = (name: string) => Number.parseFloat((format && xmlAttr(format, '', name)) ?? '');
+    const width = number('defaultColWidth');
+    const base = number('baseColWidth');
+    const points = number('defaultRowHeight');
+    return {
+        defaultColWidth:
+            width > 0
+                ? columnPixels(width, digitWidth)
+                : Math.ceil(((base >= 0 ? base : DEFAULT_BASE_COL_WIDTH) * digitWidth + 5) / 8) * 8,
+        defaultRowHeight: Math.round(ptToPx(points > 0 ? points : DEFAULT_ROW_HEIGHT_PT)),
+    };
+}
+
+function columnPixels(width: number, digitWidth: number): number {
+    return Math.round(width * digitWidth);
+}
+
+// By min, each column takes the first <col> that reaches it. A <col> without a width keeps the sheet's default width.
 function readColumns(rest: XmlElement, context: WorksheetContext, config: Worksheet['config']): void {
     const bound = (col: XmlElement, name: string) => Number.parseInt(xmlAttr(col, '', name) ?? '', 10);
     const cols = xmlChildren(rest, SML_NS, 'cols')
@@ -104,7 +137,7 @@ function readColumns(rest: XmlElement, context: WorksheetContext, config: Worksh
         const to = Math.min(bound(col, 'max'), REFERENCE_COLUMN_COUNT);
         next = Math.max(next, to + 1);
         const width = Number.parseFloat(xmlAttr(col, '', 'width') ?? '');
-        const pixels = width > 0 ? Math.round(width * context.digitWidth) : undefined;
+        const pixels = width > 0 ? columnPixels(width, context.digitWidth) : undefined;
         const hidden = isOn(xmlAttr(col, '', 'hidden')) === true;
         if (from > to || (pixels === undefined && !hidden)) continue;
         context.charge(to - from + 1, 0);

@@ -50,6 +50,36 @@ describe('columns', () => {
         expect(config.colhidden).toEqual({ 1: 0, 2: 0, 3: 0, 6: 0 });
     });
 
+    test("a sheet without sheetFormatPr takes Excel's default: 8.43 characters, 64 px at Calibri 11's 7 px digit, and 15 pt rows", () => {
+        expect(read('', '', { digitWidth: 7 }).sheet).toMatchObject({ defaultColWidth: 64, defaultRowHeight: 20 });
+        expect(
+            readWorksheet(undefined, { id: 's', digitWidth: 7, rels: RELS, palette: [], charge: () => {} }).sheet,
+        ).toMatchObject({ defaultColWidth: 64, defaultRowHeight: 20 });
+    });
+
+    test('defaultColWidth counts its padding already, and defaultRowHeight is in points', () => {
+        const { sheet } = read(
+            '<sheetFormatPr baseColWidth="10" defaultColWidth="11.42578125" defaultRowHeight="12.75"/>',
+        );
+        expect(sheet).toMatchObject({ defaultColWidth: 91, defaultRowHeight: 17 });
+    });
+
+    // ECMA-376 Part 1 § 18.3.1.81 pads the base with 4 px of margin and 1 px of gridline; Excel then rounds up to a
+    // multiple of 8 px (support.microsoft.com/kb/214123).
+    test('without defaultColWidth, baseColWidth digits are padded and rounded up to 8 px', () => {
+        expect(
+            read('<sheetFormatPr baseColWidth="10" defaultRowHeight="16"/>', '', { digitWidth: 7 }).sheet,
+        ).toMatchObject({ defaultColWidth: 80, defaultRowHeight: 21 });
+        expect(read('<sheetFormatPr defaultRowHeight="15"/>').sheet).toMatchObject({ defaultColWidth: 72 });
+    });
+
+    test('a zero, negative or unreadable default falls back as if absent', () => {
+        const { sheet } = read('<sheetFormatPr baseColWidth="x" defaultColWidth="0" defaultRowHeight="-1"/>', '', {
+            digitWidth: 7,
+        });
+        expect(sheet).toMatchObject({ defaultColWidth: 64, defaultRowHeight: 20 });
+    });
+
     // ExcelJS gave a <col> without a width 9 characters.
     test('a <col> without a width keeps the default width', () => {
         const { config } = read('<cols><col min="1" max="2" hidden="1"/><col min="3" max="3" style="1"/></cols>');
@@ -275,8 +305,8 @@ describe('in the sheet', () => {
             '<mergeCells><mergeCell ref="B2:D2"/></mergeCells>',
             '<cols><col min="1" max="1" width="50"/></cols>',
         );
-        // 150 characters at 6.6 px each: 400 px is 3 lines, 300 px (three default columns) 4.
-        expect(sheet.config?.rowlen).toEqual({ 0: 65, 1: 85 });
+        // 150 characters at 6.6 px each: 400 px is 3 lines, 216 px (three of the sheet's 72 px default columns) 5.
+        expect(sheet.config?.rowlen).toEqual({ 0: 65, 1: 105 });
     });
 
     test('views, filter and columns reach the sheet', () => {

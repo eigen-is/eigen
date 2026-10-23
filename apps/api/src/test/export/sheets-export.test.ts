@@ -233,6 +233,22 @@ describe('Sheets xlsx export — fonts', () => {
         expect(ws.getColumn(1).width).toBe(10);
         expect((await roundTrip(sheets))[0].config?.columnlen).toEqual({ 0: 90, 1: 131 });
     });
+
+    test("the sheet's default column width and row height, its own or the app's, round-trip", async () => {
+        const sheets: Sheet[] = [
+            { name: 'Excel', celldata: [], defaultColWidth: 72, defaultRowHeight: 17, config: { rowhidden: { 3: 0 } } },
+            { name: 'Eigen', celldata: [] },
+        ];
+        const buffer = await sheetsToXlsx(sheets);
+        expect(await readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toMatch(
+            /<sheetFormatPr defaultRowHeight="12.75" [^>]*defaultColWidth="8" customHeight="1"\/>/,
+        );
+        const [excel, eigen] = xlsxToSheets(buffer);
+        expect(excel).toMatchObject({ defaultColWidth: 72, defaultRowHeight: 17 });
+        // The hidden row is written at the sheet's default height, so it reads back with none of its own.
+        expect(excel.config?.rowlen).toBeUndefined();
+        expect(eigen).toMatchObject({ defaultColWidth: 100, defaultRowHeight: 20 });
+    });
 });
 
 describe('Sheets xlsx export — typed numbers', () => {

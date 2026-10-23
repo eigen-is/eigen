@@ -558,9 +558,9 @@ describe('document transform (eigensheets export)', () => {
 // Recorded from the import pipeline (xlsxToSheets + recalcImportedSheets +
 // encodeSheetsSnapshot) over buildImportFixture(), so the Worker and the main
 // thread are proven to emit the same bytes. Regenerate only for an intentional
-// converter or wire-format change (last moved by Eigen's own xlsx reader, whose
-// merged cell B6 keeps no copy of its anchor's value).
-const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '965dcd01c81fc8e5e293405ce134623e27ca795f490e0230a7c480998479cff5';
+// converter or wire-format change (last moved by each sheet's default column width
+// and row height, which the import always sets).
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '07039d074f55c743bbd93400484e4d2660f92a69463cc736a275002bb123265f';
 
 // Small but representative workbook: values, a stale cached formula result the
 // import recalc must correct, styles, a date format, a merge, a column width, a

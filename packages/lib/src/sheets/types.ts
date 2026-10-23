@@ -251,6 +251,9 @@ export type Sheet = {
     hide?: number;
     // The tab's colour, a CSS colour.
     color?: string;
+    // The CSS pixels of a column or row with no stored size, read through sheetDefaultColWidth/RowHeight.
+    defaultColWidth?: number;
+    defaultRowHeight?: number;
     config?: SheetConfig;
     celldata?: CellWithRowAndCol[];
     data?: CellMatrix;
