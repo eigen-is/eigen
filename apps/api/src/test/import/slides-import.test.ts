@@ -332,6 +332,32 @@ describe('Import… into a deck', () => {
         expect(await versionNames(deck.id)).toEqual([]);
     }, 60_000);
 
+    test('a Drive pick inserts after the slide its body names, as an upload does', async () => {
+        const deck = await seededDeck('import-from-drive-after-current');
+        const home = await getHome(ctx.alice.user.id);
+        const { doc } = await home.drive.getCollabDocument(mountId, deck.id);
+        writeFrameInDoc(doc, { id: 'fr-last', index: 'a5', name: 'Last slide' });
+        const source = await upload(PPTX, 'import-from-drive-after-current.pptx');
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${deck.id}/import-from-drive`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sourceOwnerId: ctx.alice.user.id,
+                    sourceMountId: mountId,
+                    sourcePathId: source.id,
+                    mode: 'insert',
+                    afterFrameId: 'fr-own',
+                }),
+            },
+        );
+        await assertJson<ImportResult>(res);
+        const scene = await readDeck(deck.id);
+        expect(scene.frames.map((frame) => frame.name)).toEqual(['Own slide', 'Welcome', '', 'Last slide']);
+    }, 60_000);
+
     test("a replace swaps the deck's slides and size for the file's, after saving a version that restores them", async () => {
         const deck = await seededDeck('import-replace', { slideSize: '16:9' });
         const result = await assertJson<ImportResult>(await importRequest(deck.id, STANDARD_PPTX, 'mode=replace'));
