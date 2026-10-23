@@ -319,7 +319,7 @@ describe('a key-derived write racing an ancestor move on a path-based mount', ()
 
 // A restore's, a move's and a delete's pre-lock checks go stale while they queue; each re-answers under the lock.
 describe('a restore, move or delete whose pre-lock check goes stale', () => {
-    test('a restore racing a same-name create answers 409 and clobbers nothing', async () => {
+    test('a restore racing a same-name create lands under a free name and clobbers nothing', async () => {
         const { mount, storage, folderId, fileId } = await fileInFolder('restore-vs-create');
         await mount.trashPath(fileId);
         const trashedKey = await mount.getStorageKey(fileId);
@@ -331,11 +331,13 @@ describe('a restore, move or delete whose pre-lock check goes stale', () => {
         await waiting;
         gate.release();
         const createdId = await create;
+        const restored = await restore;
 
-        await expect(restore).rejects.toMatchObject({ status: 409 });
+        expect(restored).toMatchObject({ id: fileId, name: 'notes (2).txt', parentId: folderId, trashedAt: null });
         expect(await storage.read(await mount.getStorageKey(createdId)).text()).toBe('NEW');
-        expect(await mount.getStorageKey(fileId)).toBe(trashedKey);
-        expect(await storage.exists(trashedKey)).toBe(true);
+        expect(await mount.getStorageKey(fileId)).toBe('before/notes (2).txt');
+        expect(await storage.read('before/notes (2).txt').text()).toBe('v0');
+        expect(await storage.exists(trashedKey)).toBe(false);
     });
 
     test('two moves that would form a cycle: the second answers 400 and the tree stays acyclic', async () => {
