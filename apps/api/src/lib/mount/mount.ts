@@ -1420,8 +1420,19 @@ export class Mount {
 
     // internal — used by mount/*.ts + versioning/snapshot.ts
     async invalidateAncestorsOf(pathId: string): Promise<void> {
-        const row = await this.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, pathId)).get();
-        if (row) await this.invalidateSizesFrom(row.parentId);
+        let parentId: string | null;
+        try {
+            const row = await this.db
+                .select({ parentId: paths.parentId })
+                .from(paths)
+                .where(eq(paths.id, pathId))
+                .get();
+            parentId = row?.parentId ?? null;
+        } catch (e) {
+            console.error(`[Mount] Could not invalidate the folder sizes above ${pathId}:`, e);
+            return;
+        }
+        await this.invalidateSizesFrom(parentId);
     }
 
     // NULL the cached size on `parentId` and every ancestor up to the mount root.
