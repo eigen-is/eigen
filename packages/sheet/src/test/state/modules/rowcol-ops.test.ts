@@ -6,13 +6,14 @@
 // including the undo-of-delete path that restores non-derivable config.
 
 import { describe, expect, test } from 'bun:test';
-import { applyPatches, enablePatches, produceWithPatches } from 'immer';
+import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Context } from '../../../state/context';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op, Sheet } from '../../../state/types';
 import { filterPatch, inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
+import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
 enablePatches();
@@ -244,4 +245,78 @@ describe('structural sharing through the immer produce', () => {
         expect(next.sheets[0].data?.[4]?.[2]?.mc).toEqual({ r: 4, c: 2, rs: 1, cs: 2 });
         expect(next.sheets[0].data?.[4]?.[3]?.mc).toEqual({ r: 4, c: 2 });
     });
+});
+
+// A row or column op writes each field of a sheet whole, a chart per object: a write inside a field a peer just
+// removed, such as the frozen pane's focus after an unfreeze, would fail on the peer and in the replay, taking the
+// whole batch with it, and would throw in the author's own undo.
+describe("a row or column op racing a peer's unfreeze", () => {
+    const frozenContext = () =>
+        produce(richContext(), (ctx: Context) => {
+            const [sheet] = ctx.sheets;
+            sheet.frozen = { type: 'rangeBoth', range: { row_focus: 2, column_focus: 2 } };
+            sheet.filterRange = { row: [0, 3], column: [0, 3] };
+            sheet.filter = {
+                1: { rowhidden: { 2: 0 }, optionstate: true, str: 0, edr: 3, cindex: 1, stc: 0, edc: 3 },
+            };
+            sheet.alternateFormatRules = [{ cellrange: { row: [1, 3], column: [1, 3] } }];
+        });
+    const size = (sheets: Sheet[]) => [sheets[0].data!.length, sheets[0].data![0].length];
+    const rows = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: 'id_1' } as const;
+    const columns = { ...rows, type: 'column' } as const;
+    const deletedRows = { type: 'row', start: 0, end: 0, id: 'id_1' } as const;
+    const deletedColumns = { ...deletedRows, type: 'column' } as const;
+
+    const cases = [
+        ['inserting rows', (ctx: Context) => insertRowCol(ctx, rows), { insertRowColOp: rows }, [6, 4]],
+        ['inserting columns', (ctx: Context) => insertRowCol(ctx, columns), { insertRowColOp: columns }, [4, 6]],
+        ['deleting rows', (ctx: Context) => deleteRowCol(ctx, deletedRows), { deleteRowColOp: deletedRows }, [3, 4]],
+        [
+            'deleting columns',
+            (ctx: Context) => deleteRowCol(ctx, deletedColumns),
+            { deleteRowColOp: deletedColumns },
+            [4, 3],
+        ],
+    ] as const;
+
+    // The edited sheet's fields reach a peer through sheetMetadataOps; the undo entry puts each back whole.
+    test.each(cases)('%s writes every sheet field whole, in the op and in its undo entry', (_, recipe, options) => {
+        const op = author(frozenContext(), recipe, options);
+        const into = [...op.patches, ...op.inverse].filter(
+            (p) => p.path.length > 3 && p.path[2] !== 'images' && p.path[2] !== 'charts',
+        );
+        expect(into.map((p) => p.path)).toEqual([]);
+    });
+
+    test.each(cases)(
+        '%s keeps its rows and columns on every client, and its undo applies',
+        (_, recipe, options, after) => {
+            const base = frozenContext();
+            const op = author(base, recipe, options);
+            const unfreeze = author(base, (ctx) => {
+                delete ctx.sheets[0].frozen;
+            });
+            const onA = receive(op.next, unfreeze.ops);
+            const onB = receive(unfreeze.next, op.ops);
+            for (const sheets of [
+                onA.sheets,
+                onB.sheets,
+                join(base, [op.ops, unfreeze.ops]),
+                join(base, [unfreeze.ops, op.ops]),
+            ]) {
+                expect(size(sheets)).toEqual([...after]);
+            }
+
+            const undone = applyPatches(onA, op.inverse);
+            const undoOptions = { ...inverseRowColOptions(options), restoreDeletedCells: 'deleteRowColOp' in options };
+            const undoOps = patchToOp(undone, op.inverse, undoOptions, true);
+            for (const sheets of [
+                undone.sheets,
+                receive(onB, undoOps).sheets,
+                join(base, [op.ops, unfreeze.ops, undoOps]),
+            ]) {
+                expect(size(sheets)).toEqual([4, 4]);
+            }
+        },
+    );
 });

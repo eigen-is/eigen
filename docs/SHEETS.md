@@ -207,7 +207,7 @@ A row or column insert or delete shifts every ref to the edited sheet, on every 
 
 A receiver runs the engine shift first and then the replace, last writer wins, since its shift can differ from the author's write-back: an undone delete ships as an insert, and an insert never grows a shrunk or nulled ref back; an undone insert never shrinks a ref the insert stopped at the grid's edge; and an undo or redo reverts a peer's later move of a shifted chart. An undone delete ships the edited sheet's `calcChain` for the same reason. `packages/sheet/src/test/state/modules/chart.test.ts` pins these on the author, a peer and a joiner.
 
-The other fields are written back whole, `data` above all, and those writes stay off the wire. So undoing a row op puts a whole `data` matrix back over a peer's later cell edits, on the undoing client only ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
+The other fields are written back whole, `data` above all, and those writes stay off the wire: of immer's own writes a row batch keeps only those into one image or chart (`writesOneFloatingObject` in `state/utils/patch.ts`). The editor-only shifts in `state/modules/rowcol.ts` write their fields whole too, `frozen` included, because the undo entry is immer's own inverse: a write inside a field a peer just removed, as an unfreeze removes `frozen`, would not resolve, and the undo would throw. `packages/sheet/src/test/state/modules/rowcol-ops.test.ts` pins both for inserts and deletes of rows and columns. So undoing a row op puts a whole `data` matrix back over a peer's later cell edits, on the undoing client only ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
 
 ## A range chart reads the grid's own values and labels
 

@@ -137,8 +137,8 @@ const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['sel
 
 // The row/col reducers write each sheet back field by field (writeBackSheets in rowcol.ts), so immer hands us a
 // replace per changed field, `data` above all. Shipping those copies the sheet's whole matrix into every collab
-// update — multi-MB on large sheets and the dominant cost of inserting a row — so patchToOp drops every
-// top-level field write. The paired insertRowCol/deleteRowCol special op lets every consumer (client applyOp and
+// update — multi-MB on large sheets and the dominant cost of inserting a row — so patchToOp drops them
+// (writesOneFloatingObject). The paired insertRowCol/deleteRowCol special op lets every consumer (client applyOp and
 // the BE replay both run the engine) re-derive the `data` shift instead of receiving it. The engine only rebuilds
 // `data` and the few config fields it owns, so we still have to ship the rest of the edited sheet's metadata
 // authoritatively: the reducer also shifts calcChain, filter, hyperlink, dataVerification,
@@ -173,6 +173,13 @@ function sheetMetadataOps(ctx: Context, id: string, restoringDelete: boolean): O
         metaOps.push({ op: 'replace', id, path: [field], value: sheet[field] });
     }
     return metaOps;
+}
+
+// Of immer's own writes a row or column batch keeps only those into one image or chart, an explicit set: every other
+// sheet field ships whole through sheetMetadataOps or is re-derived by the engine, so a write deeper into one, which a
+// peer's concurrent removal of that field would leave unresolved, can never cost a peer or the replay the batch.
+function writesOneFloatingObject(op: Op): boolean {
+    return op.path.length > 1 && PER_OBJECT_SHEET_FIELDS.has(op.path[0]);
 }
 
 // Only `sheets[*]` belongs on the wire — the rest of the Context is per-client UI state
@@ -211,8 +218,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         }
     });
     if (options?.insertRowColOp) {
-        // Drop the field writes of the sheets written back — see sheetMetadataOps.
-        ops = ops.filter((p) => p.path.length > 1 && p.path[0] !== 'data');
+        ops = ops.filter(writesOneFloatingObject);
         ops.push({
             op: 'insertRowCol',
             id: options.insertRowColOp.id,
@@ -260,8 +266,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
         }
         ops = [...ops, ...addtionalMergeOps(ops, options.insertRowColOp.id)];
     } else if (options?.deleteRowColOp) {
-        // Drop the field writes of the sheets written back — see sheetMetadataOps.
-        ops = ops.filter((p) => p.path.length > 1 && p.path[0] !== 'data');
+        ops = ops.filter(writesOneFloatingObject);
         ops.push({
             op: 'deleteRowCol',
             id: options.deleteRowColOp.id,

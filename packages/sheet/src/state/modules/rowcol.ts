@@ -38,6 +38,17 @@ const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet
     }
 };
 
+// Writes `frozen` whole, never into it: a peer's unfreeze removes it, and a write inside it would resolve on nothing.
+function shiftFrozenFocus(file: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
+    const { frozen } = file;
+    if (!frozen?.range) return;
+    const ranged = type === 'row' ? frozen.type === 'rangeRow' : frozen.type === 'rangeColumn';
+    if (!ranged && frozen.type !== 'rangeBoth') return;
+    const axis = type === 'row' ? 'row_focus' : 'column_focus';
+    const focus = shift(frozen.range[axis]);
+    if (focus !== frozen.range[axis]) file.frozen = { ...frozen, range: { ...frozen.range, [axis]: focus } };
+}
+
 function shiftStateOnlyFieldsForInsert(
     ctx: Context,
     op: { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom'; id: string },
@@ -185,21 +196,8 @@ function shiftStateOnlyFieldsForInsert(
         file.filterRange = newFilterObj.filterRange ?? undefined;
     }
 
-    // Freeze config update
-    const { frozen } = file;
-    if (frozen) {
-        const normalizedIndex = direction === 'lefttop' ? index - 1 : index;
-        if (type === 'row' && (frozen.type === 'rangeRow' || frozen.type === 'rangeBoth')) {
-            if ((frozen.range?.row_focus ?? -1) > normalizedIndex) {
-                frozen.range!.row_focus += count;
-            }
-        }
-        if (type === 'column' && (frozen.type === 'rangeColumn' || frozen.type === 'rangeBoth')) {
-            if ((frozen.range?.column_focus ?? -1) > normalizedIndex) {
-                frozen.range!.column_focus += count;
-            }
-        }
-    }
+    const normalizedIndex = direction === 'lefttop' ? index - 1 : index;
+    shiftFrozenFocus(file, type, (focus) => (focus > normalizedIndex ? focus + count : focus));
 
     // Inserted rows/columns clone the template's validation rules, not its hyperlinks.
     file.dataVerification = shiftCellKeyedForInsert(file.dataVerification, type, index, count, direction, cloneDeep);
@@ -382,20 +380,7 @@ function shiftStateOnlyFieldsForDelete(
         file.filterRange = newFilterObj.filterRange ?? undefined;
     }
 
-    // Freeze config update
-    const { frozen } = file;
-    if (frozen) {
-        if (type === 'row' && (frozen.type === 'rangeRow' || frozen.type === 'rangeBoth')) {
-            if ((frozen.range?.row_focus ?? -1) >= start) {
-                frozen.range!.row_focus -= Math.min(end, frozen.range!.row_focus) - start + 1;
-            }
-        }
-        if (type === 'column' && (frozen.type === 'rangeColumn' || frozen.type === 'rangeBoth')) {
-            if ((frozen.range?.column_focus ?? -1) >= start) {
-                frozen.range!.column_focus -= Math.min(end, frozen.range!.column_focus) - start + 1;
-            }
-        }
-    }
+    shiftFrozenFocus(file, type, (focus) => (focus >= start ? focus - (Math.min(end, focus) - start + 1) : focus));
 
     file.dataVerification = shiftCellKeyedForDelete(file.dataVerification, type, start, end);
     file.hyperlink = shiftCellKeyedForDelete(file.hyperlink, type, start, end);
