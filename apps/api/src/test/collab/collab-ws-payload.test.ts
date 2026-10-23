@@ -173,10 +173,10 @@ async function firstServerFrame(port: number): Promise<{ rsv1: boolean; payload:
 }
 
 describe('Collab WS deflate output', () => {
-    // Bun's shared compressor (`perMessageDeflate: true`) deflates a small message into a whole stream with
-    // BFINAL set. RFC 7692 allows that, but Safari (macOS and iOS) delivers the message and then drops the
-    // connection, so a doc whose first sync frame lands in that window (a state vector past ~170 clients)
-    // never loads there.
+    // No frame may end the deflate stream (BFINAL). RFC 7692 allows it, but Safari (macOS and iOS) delivers
+    // the message and then closes the connection, so a doc whose first sync frame is small enough to be
+    // deflated whole (a state vector past ~170 clients) would never load there. Bun's shared compressor
+    // (`perMessageDeflate: true`) stopped doing this in 1.4.4; this fails on an older Bun.
     test('a deflated frame leaves the deflate stream open', async () => {
         const ctx: TestCtx = await getTestContext();
         const appWsOptions = (ctx.app.config as { websocket?: Record<string, unknown> }).websocket ?? {};

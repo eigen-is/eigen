@@ -15,7 +15,7 @@ The sections follow the places where this picture needs care: big documents and 
 - The blobs in `data.db` are zstd on disk and raw on the wire, and the reader takes compressed and raw rows alike ([§ Yjs blobs](#yjs-blobs-are-zstd-on-disk-and-raw-on-the-wire)).
 - A read-only peer can still send awareness, so it is validated before it is applied ([§ Awareness frames](#awareness-frames-are-validated-before-apply)).
 - The route sends a heartbeat during a cold load, or the client would close the silent socket and retry forever ([§ The route speaks first](#the-route-speaks-first-during-a-cold-load)).
-- The WebSocket uses a dedicated deflate compressor, because Safari drops a connection after a frame from Bun's default one ([§ Deflated frames](#a-deflated-frame-never-ends-the-deflate-stream)).
+- The WebSocket uses Bun's shared deflate compressor, which is safe for Safari since Bun 1.4.4 and costs no per-socket zlib state ([§ Deflated frames](#a-deflated-frame-never-ends-the-deflate-stream)).
 - A backup restore rotates the home's data epoch, an id that changes only when the home's data is replaced, so a reconnecting tab reloads instead of syncing its old state over the restored copy ([§ Home replacement](#home-replacement-closes-every-socket)).
 - The editor waits on a latched `loaded`, never on `synced`, so a short outage keeps it mounted ([§ The client gates on `loaded`](#the-client-gates-on-loaded-never-synced)).
 
@@ -44,7 +44,7 @@ The same 30 s window bounds the whole-state sync reply, because a frame only cou
 
 ## A deflated frame never ends the deflate stream
 
-Bun's default compressor (`perMessageDeflate: true`, shared by all sockets) deflates a message under ~9 KB into a complete deflate stream, with the final-block bit (BFINAL) set. RFC 7692 allows that, but Safari on macOS and iOS delivers such a frame and then drops the connection ("The network connection was lost", a 1006 close on the server). Chrome accepts it. A doc edited by more than ~170 Yjs clients has a state vector over 1 KiB, so its very first frame, sync step 1, is deflated and Safari never loads it: the socket loops open → dropped → retry. So `app.ts` sets the dedicated `32KB` compressor, which always ends a frame with a sync flush and leaves the stream open, as browsers do themselves. It costs 32 KB of zlib state per socket and deflates a large sheet as well as the 256 KB `dedicated` one. `collab-ws-payload.test.ts` reads a deflated frame off a raw socket under the app config and fails on BFINAL.
+`app.ts` sets `perMessageDeflate: true`, Bun's compressor shared by all sockets. A dedicated one would hold ~180 KB of zlib state per socket (a shared one ~8 KB). RFC 7692 lets a compressor end a message's deflate stream with the final-block bit (BFINAL), but Safari on macOS and iOS then delivers the frame and drops the connection ("The network connection was lost", a 1006 close on the server). Chrome accepts it. A doc edited by more than ~170 Yjs clients has a state vector over 1 KiB, so its very first frame, sync step 1, is deflated and Safari would never load it: the socket loops open → dropped → retry. Bun's shared compressor did exactly that for small messages until 1.4.4, which ends a frame with a sync flush and leaves the stream open, as browsers do themselves, so the Bun version is pinned. `collab-ws-payload.test.ts` reads a deflated frame off a raw socket under the app config and fails on BFINAL.
 
 ## The route refuses before it speaks
 
