@@ -51,84 +51,84 @@ export function MarkdownToolbarButtons({ editor, sourceMode, onToggleSource }: M
                                 disabled={!editor.can().undo()}
                                 onClick={() => editor.chain().focus().undo().run()}
                             >
-                                <Undo className="h-4 w-4 mr-2" /> Undo
+                                <Undo className="h-4 w-4" /> Undo
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 disabled={!editor.can().redo()}
                                 onClick={() => editor.chain().focus().redo().run()}
                             >
-                                <Redo className="h-4 w-4 mr-2" /> Redo
+                                <Redo className="h-4 w-4" /> Redo
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <Type className="h-4 w-4 mr-2" /> Text
+                                    <Type className="h-4 w-4" /> Text
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().toggleBold().run()}>
-                                        <Bold className="h-4 w-4 mr-2" /> Bold
+                                        <Bold className="h-4 w-4" /> Bold
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().toggleItalic().run()}>
-                                        <Italic className="h-4 w-4 mr-2" /> Italic
+                                        <Italic className="h-4 w-4" /> Italic
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().toggleStrike().run()}>
-                                        <Strikethrough className="h-4 w-4 mr-2" /> Strikethrough
+                                        <Strikethrough className="h-4 w-4" /> Strikethrough
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().toggleCode().run()}>
-                                        <Code className="h-4 w-4 mr-2" /> Code
+                                        <Code className="h-4 w-4" /> Code
                                     </DropdownMenuItem>
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
                             <DropdownMenuSeparator />
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <Heading2 className="h-4 w-4 mr-2" /> Heading
+                                    <Heading2 className="h-4 w-4" /> Heading
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
-                                        <Pilcrow className="mr-2 h-4 w-4" /> Normal text
+                                        <Pilcrow className="h-4 w-4" /> Normal text
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
                                     >
-                                        <Heading1 className="mr-2 h-4 w-4" /> Heading 1
+                                        <Heading1 className="h-4 w-4" /> Heading 1
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
                                     >
-                                        <Heading2 className="mr-2 h-4 w-4" /> Heading 2
+                                        <Heading2 className="h-4 w-4" /> Heading 2
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
                                     >
-                                        <Heading3 className="mr-2 h-4 w-4" /> Heading 3
+                                        <Heading3 className="h-4 w-4" /> Heading 3
                                     </DropdownMenuItem>
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
                             <DropdownMenuSeparator />
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <List className="h-4 w-4 mr-2" /> Lists
+                                    <List className="h-4 w-4" /> Lists
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>
-                                        <List className="h-4 w-4 mr-2" /> Bulleted
+                                        <List className="h-4 w-4" /> Bulleted
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-                                        <ListOrdered className="h-4 w-4 mr-2" /> Numbered
+                                        <ListOrdered className="h-4 w-4" /> Numbered
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
-                                        <CheckSquare className="h-4 w-4 mr-2" /> Checklist
+                                        <CheckSquare className="h-4 w-4" /> Checklist
                                     </DropdownMenuItem>
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => editor.chain().focus().toggleBlockquote().run()}>
-                                <Quote className="h-4 w-4 mr-2" /> Blockquote
+                                <Quote className="h-4 w-4" /> Blockquote
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={onToggleSource}>
-                                <Code2 className="h-4 w-4 mr-2" /> Source mode
+                                <Code2 className="h-4 w-4" /> Source mode
                             </DropdownMenuItem>
                         </ToolbarMenu>
 
@@ -139,17 +139,17 @@ export function MarkdownToolbarButtons({ editor, sourceMode, onToggleSource }: M
                                     if (url) editor.chain().focus().setLink({ href: url }).run();
                                 }}
                             >
-                                <Link className="h-4 w-4 mr-2" /> Link
+                                <Link className="h-4 w-4" /> Link
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                                <Minus className="h-4 w-4 mr-2" /> Horizontal rule
+                                <Minus className="h-4 w-4" /> Horizontal rule
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={() =>
                                     editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
                                 }
                             >
-                                <Table className="h-4 w-4 mr-2" /> Table
+                                <Table className="h-4 w-4" /> Table
                             </DropdownMenuItem>
                         </ToolbarMenu>
                     </>

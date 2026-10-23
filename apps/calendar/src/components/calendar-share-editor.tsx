@@ -122,7 +122,7 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
                                     onClick={() => handleAddTeam(team.id)}
                                     disabled={currentShares.some((s) => s.targetId === teamOwnerId(team.id))}
                                 >
-                                    <Users className="h-4 w-4 mr-2" />
+                                    <Users className="h-4 w-4" />
                                     {team.name}
                                 </DropdownMenuItem>
                             ))}

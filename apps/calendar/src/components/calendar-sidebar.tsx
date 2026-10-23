@@ -89,16 +89,16 @@ function CalendarRow({
                             <KebabTrigger title="Calendar options" />
                             <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={onEdit}>
-                                    <Pencil className="h-4 w-4 mr-2" /> Edit calendar
+                                    <Pencil className="h-4 w-4" /> Edit calendar
                                 </DropdownMenuItem>
                                 {onImport && (
                                     <DropdownMenuItem onClick={onImport}>
-                                        <Upload className="h-4 w-4 mr-2" /> Import events…
+                                        <Upload className="h-4 w-4" /> Import events…
                                     </DropdownMenuItem>
                                 )}
                                 {onExport && (
                                     <DropdownMenuItem onClick={onExport}>
-                                        <Download className="h-4 w-4 mr-2" /> Export calendar
+                                        <Download className="h-4 w-4" /> Export calendar
                                     </DropdownMenuItem>
                                 )}
                             </DropdownMenuContent>

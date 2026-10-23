@@ -32,7 +32,7 @@ export function FindInDocumentMenuItem({ focusFindBarRef }: { focusFindBarRef: R
                 docSearchBar.open();
             }}
         >
-            <Search className="mr-2" />
+            <Search />
             Find in document
         </DropdownMenuItem>
     );

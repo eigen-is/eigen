@@ -185,18 +185,18 @@ export function BandControls({
                 <DropdownMenuContent align="end" onCloseAutoFocus={keepEditorFocus(editor)}>
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
-                            <Hash className="h-4 w-4 mr-2" /> Page numbers
+                            <Hash className="h-4 w-4" /> Page numbers
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             <PageNumberItems editor={editor} onPreset={onPageNumbers} />
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                     <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
-                        <FileSliders className="h-4 w-4 mr-2" /> Page setup…
+                        <FileSliders className="h-4 w-4" /> Page setup…
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onRemove}>
-                        <Trash2 className="h-4 w-4 mr-2" /> Remove {bandEdge(band)}
+                        <Trash2 className="h-4 w-4" /> Remove {bandEdge(band)}
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>

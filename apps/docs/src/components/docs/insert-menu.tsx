@@ -77,17 +77,17 @@ export function InsertMenu({
             }}
         >
             <DropdownMenuItem onClick={onLink}>
-                <Link className="h-4 w-4 mr-2" /> Link
+                <Link className="h-4 w-4" /> Link
             </DropdownMenuItem>
             {onInsertImage && (
                 <DropdownMenuItem onClick={onInsertImage}>
-                    <ImagePlus className="h-4 w-4 mr-2" /> Image
+                    <ImagePlus className="h-4 w-4" /> Image
                 </DropdownMenuItem>
             )}
             {'chart' in editor.schema.nodes && !inNote && (
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
-                        <ChartColumn className="h-4 w-4 mr-2" /> Chart
+                        <ChartColumn className="h-4 w-4" /> Chart
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                         {CHART_TYPE_OPTIONS.map((option) => (
@@ -101,7 +101,7 @@ export function InsertMenu({
                                         .run()
                                 }
                             >
-                                <option.icon className="h-4 w-4 mr-2" /> {option.label}
+                                <option.icon className="h-4 w-4" /> {option.label}
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuSubContent>
@@ -114,17 +114,17 @@ export function InsertMenu({
                         afterCloseRef.current = onInsertEquation;
                     }}
                 >
-                    <Sigma className="h-4 w-4 mr-2" /> Equation
+                    <Sigma className="h-4 w-4" /> Equation
                 </DropdownMenuItem>
             )}
             {!inNote && (
                 <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                    <Minus className="h-4 w-4 mr-2" /> Horizontal rule
+                    <Minus className="h-4 w-4" /> Horizontal rule
                 </DropdownMenuItem>
             )}
             {'pageBreak' in editor.schema.nodes && !inNote && (
                 <DropdownMenuItem onClick={() => editor.chain().focus().setPageBreak().run()}>
-                    <SeparatorHorizontal className="h-4 w-4 mr-2" /> Page break
+                    <SeparatorHorizontal className="h-4 w-4" /> Page break
                     <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
                 </DropdownMenuItem>
             )}
@@ -142,29 +142,29 @@ export function InsertMenu({
                             .run()
                     }
                 >
-                    <Table className="h-4 w-4 mr-2" /> Table
+                    <Table className="h-4 w-4" /> Table
                 </DropdownMenuItem>
             )}
             {'codeBlock' in editor.schema.nodes && !inNote && (
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
-                    <CodeXml className="h-4 w-4 mr-2" /> Code block
+                    <CodeXml className="h-4 w-4" /> Code block
                 </DropdownMenuItem>
             )}
             {onEnterBand && onPageNumbers && (
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
-                        <PanelsTopLeft className="h-4 w-4 mr-2" /> Page elements
+                        <PanelsTopLeft className="h-4 w-4" /> Page elements
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                         <DropdownMenuItem onClick={() => onEnterBand('header')}>
-                            <PanelTop className="h-4 w-4 mr-2" /> Header
+                            <PanelTop className="h-4 w-4" /> Header
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => onEnterBand('footer')}>
-                            <PanelBottom className="h-4 w-4 mr-2" /> Footer
+                            <PanelBottom className="h-4 w-4" /> Footer
                         </DropdownMenuItem>
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
-                                <Hash className="h-4 w-4 mr-2" /> Page numbers
+                                <Hash className="h-4 w-4" /> Page numbers
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
                                 <PageNumberItems editor={editor} onPreset={onPageNumbers} />
@@ -178,7 +178,7 @@ export function InsertMenu({
                                     afterCloseRef.current = onInsertFootnote;
                                 }}
                             >
-                                <Superscript className="h-4 w-4 mr-2" /> Footnote
+                                <Superscript className="h-4 w-4" /> Footnote
                                 <DropdownMenuShortcut>{formatForDisplay('Mod+Alt+F')}</DropdownMenuShortcut>
                             </DropdownMenuItem>
                         )}
@@ -189,7 +189,7 @@ export function InsertMenu({
                 <>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem disabled={!active.canComment} onClick={onAddComment}>
-                        <MessageSquarePlus className="h-4 w-4 mr-2" /> Comment
+                        <MessageSquarePlus className="h-4 w-4" /> Comment
                     </DropdownMenuItem>
                 </>
             )}

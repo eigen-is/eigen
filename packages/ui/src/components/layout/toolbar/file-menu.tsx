@@ -95,14 +95,14 @@ export function FileMenu({
             <ToolbarMenu label="File" onCloseAutoFocus={onCloseAutoFocus}>
                 {/* Section 1: Create & Open */}
                 <DropdownMenuItem onClick={() => setCreateOpen(true)}>
-                    <CreateIcon className="h-4 w-4 mr-2" /> {createLabel}
+                    <CreateIcon className="h-4 w-4" /> {createLabel}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setOpenPickerOpen(true)}>
-                    <Folder className="h-4 w-4 mr-2" /> Open…
+                    <Folder className="h-4 w-4" /> Open…
                 </DropdownMenuItem>
                 {canWrite && onImport && (
                     <DropdownMenuItem onClick={onImport}>
-                        <Upload className="h-4 w-4 mr-2" /> {importLabel ?? 'Import…'}
+                        <Upload className="h-4 w-4" /> {importLabel ?? 'Import…'}
                     </DropdownMenuItem>
                 )}
 
@@ -111,7 +111,7 @@ export function FileMenu({
                 {canDownload && onExport && (
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
-                            <Download className="h-4 w-4 mr-2" /> Download
+                            <Download className="h-4 w-4" /> Download
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             {downloadFormats.map((format) => (
@@ -124,18 +124,18 @@ export function FileMenu({
                 )}
                 {canWrite && (
                     <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                        <Pencil className="h-4 w-4 mr-2" /> Rename
+                        <Pencil className="h-4 w-4" /> Rename
                     </DropdownMenuItem>
                 )}
 
                 {/* Section 3: Share */}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onAccessDialogOpen}>
-                    <UserRoundPlus className="h-4 w-4 mr-2" /> Share
+                    <UserRoundPlus className="h-4 w-4" /> Share
                 </DropdownMenuItem>
                 {canWrite && (
                     <DropdownMenuItem onClick={() => setEmailOpen(true)}>
-                        <Mail className="h-4 w-4 mr-2" /> Email collaborators
+                        <Mail className="h-4 w-4" /> Email collaborators
                     </DropdownMenuItem>
                 )}
 
@@ -149,7 +149,7 @@ export function FileMenu({
                     <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
-                            <Trash2 className="h-4 w-4 mr-2" /> Move to trash
+                            <Trash2 className="h-4 w-4" /> Move to trash
                         </DropdownMenuItem>
                     </>
                 )}

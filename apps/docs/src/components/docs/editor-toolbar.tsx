@@ -263,10 +263,10 @@ export const EditorToolbar = ({
                             onCloseAutoFocus={keepActiveEditorFocus}
                         >
                             <DropdownMenuItem onClick={() => setPageSetupOpen(true)}>
-                                <FileSliders className="h-4 w-4 mr-2" /> Page setup…
+                                <FileSliders className="h-4 w-4" /> Page setup…
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={print}>
-                                <Printer className="h-4 w-4 mr-2" /> Print
+                                <Printer className="h-4 w-4" /> Print
                             </DropdownMenuItem>
                         </FileMenu>
 
@@ -283,26 +283,26 @@ export const EditorToolbar = ({
                                         disabled={!canWrite || active.selectionEmpty}
                                         onClick={() => runClipboardCommand('cut')}
                                     >
-                                        <Scissors className="h-4 w-4 mr-2" /> Cut
+                                        <Scissors className="h-4 w-4" /> Cut
                                         <DropdownMenuShortcut>{formatForDisplay('Mod+X')}</DropdownMenuShortcut>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         disabled={active.selectionEmpty}
                                         onClick={() => runClipboardCommand('copy')}
                                     >
-                                        <Copy className="h-4 w-4 mr-2" /> Copy
+                                        <Copy className="h-4 w-4" /> Copy
                                         <DropdownMenuShortcut>{formatForDisplay('Mod+C')}</DropdownMenuShortcut>
                                     </DropdownMenuItem>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={() => editor.chain().focus().selectAll().run()}>
-                                        <TextSelect className="h-4 w-4 mr-2" /> Select all
+                                        <TextSelect className="h-4 w-4" /> Select all
                                         <DropdownMenuShortcut>{formatForDisplay('Mod+A')}</DropdownMenuShortcut>
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
                                         disabled={!canWrite || active.selectionEmpty}
                                         onClick={() => editor.chain().focus().deleteSelection().run()}
                                     >
-                                        <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                        <Trash2 className="h-4 w-4" /> Delete
                                     </DropdownMenuItem>
                                 </>
                             }

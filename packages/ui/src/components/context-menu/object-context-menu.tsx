@@ -75,7 +75,7 @@ export function ObjectContextMenu<T>({
                         <>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={onConvertToShapes}>
-                                <Shapes className="h-4 w-4 mr-2" /> Convert to shapes
+                                <Shapes className="h-4 w-4" /> Convert to shapes
                             </DropdownMenuItem>
                         </>
                     )}

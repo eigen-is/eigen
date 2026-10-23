@@ -97,6 +97,8 @@ A row's state is a class in `packages/ui/src/styles/globals.css`, painted in the
 
 `ContextMenuAnchor` portals its zero-size trigger into `document.body`. The trigger sits at viewport coordinates, and a transformed ancestor (a dialog's centering translate) would otherwise become its containing block and open the menu somewhere else.
 
+A menu row's 16 px between icon and label lives in the item primitives in `dropdown-menu.tsx` (`gap-4`), which the Sheets right-click menu uses too. Put the bare icon in the row; never add `mr-*` or a `gap-*` override to a menu icon.
+
 ## Reordering uses dnd-kit, moving between lists uses native drag
 
 Reordering in place (a stickies column, the slides rail) uses `@dnd-kit`. Dragging between lists, onto a sidebar drop target, or to and from the OS uses native HTML5 drag: `useListDrag` and `useListDropTarget`, plus `useFileDropTarget` and `useFilePasteTarget` for OS files. dnd-kit never sees an OS file drop, and only the native path carries the drag type across lists.

@@ -19,7 +19,7 @@ export function FileActionMenuItems({ runner }: FileActionMenuItemsProps) {
                     onClick={() => runner.run(action)}
                     className="flex items-center"
                 >
-                    <action.icon className="h-4 w-4 mr-2" />
+                    <action.icon className="h-4 w-4" />
                     {action.label}
                 </DropdownMenuItem>
             ))}

@@ -22,7 +22,7 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
     return (
         <>
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="gap-2">
+                <DropdownMenuSubTrigger>
                     <Users className="h-4 w-4" /> Assigned to
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="w-64 p-0">
@@ -49,7 +49,7 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
             </DropdownMenuSub>
 
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="gap-2">
+                <DropdownMenuSubTrigger>
                     <Palette className="h-4 w-4" /> Color
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
@@ -65,7 +65,7 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
                                 }}
                             >
                                 <span
-                                    className="h-3 w-3 rounded-full mr-2 shrink-0 border border-border/50"
+                                    className="size-4 rounded-full shrink-0 border border-border/50"
                                     style={{ backgroundColor: c.value }}
                                 />
                                 <span className="flex-1">{c.label.replace(/-\d+$/, '')}</span>
@@ -77,7 +77,7 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
             </DropdownMenuSub>
 
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="gap-2">
+                <DropdownMenuSubTrigger>
                     <CircleDot className="h-4 w-4" /> Status
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
@@ -92,7 +92,7 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
 
             {filter.isActive && (
                 <DropdownMenuItem onClick={() => filter.clear()}>
-                    <FilterX className="h-4 w-4 mr-2" /> Clear filters
+                    <FilterX className="h-4 w-4" /> Clear filters
                 </DropdownMenuItem>
             )}
         </>

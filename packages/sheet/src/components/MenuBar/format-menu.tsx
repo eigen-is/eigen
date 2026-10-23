@@ -510,7 +510,7 @@ const DATA_BAR_PRESETS = [
 function ColorScaleSwatch({ presetKey }: { presetKey: string }) {
     const colors = CF_PRESETS[presetKey] ?? [];
     return (
-        <div className="flex w-12 h-4 mr-2 rounded-sm overflow-hidden border border-border">
+        <div className="flex w-12 h-4 rounded-sm overflow-hidden border border-border">
             {colors.map((c, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: static palette — order is meaningful, no stable id
                 <div key={`${presetKey}-${i}`} className="flex-1" style={{ backgroundColor: c }} />

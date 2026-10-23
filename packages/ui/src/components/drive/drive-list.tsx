@@ -72,12 +72,12 @@ export function DriveViewControls() {
                     <SortMenuItems />
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setMode('list')}>
-                        <List className="mr-2" />
+                        <List />
                         List
                         {mode === 'list' && <Check className="h-4 w-4 ml-auto" />}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setMode('grid')}>
-                        <LayoutGrid className="mr-2" />
+                        <LayoutGrid />
                         Grid
                         {mode === 'grid' && <Check className="h-4 w-4 ml-auto" />}
                     </DropdownMenuItem>
@@ -167,7 +167,7 @@ export function DriveListToolbar({
                 <DropdownMenuContent align="end">
                     {createItems.map(({ kind, icon: Icon, label, onSelect }) => (
                         <DropdownMenuItem key={kind} onClick={onSelect}>
-                            <Icon className="h-4 w-4 mr-2" />
+                            <Icon className="h-4 w-4" />
                             {label}
                         </DropdownMenuItem>
                     ))}
@@ -386,7 +386,7 @@ export function DriveList({
                             createMenu.close();
                         }}
                     >
-                        <Icon className="h-4 w-4 mr-2" />
+                        <Icon className="h-4 w-4" />
                         {label}
                     </DropdownMenuItem>
                 ))}

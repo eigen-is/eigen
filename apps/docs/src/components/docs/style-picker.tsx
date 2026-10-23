@@ -29,7 +29,7 @@ export const StylePicker = ({ editor, active, keepEditorFocus }: StylePickerProp
         </DropdownMenuTrigger>
         <DropdownMenuContent onCloseAutoFocus={keepEditorFocus}>
             <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
-                <Pilcrow className="mr-2 h-4 w-4" /> Normal text
+                <Pilcrow className="h-4 w-4" /> Normal text
             </DropdownMenuItem>
             <Separator className="my-1" />
             {paragraphStylesIn(editor.schema).map(({ name, type, attrs, icon: Icon, preview }) => (
@@ -37,7 +37,7 @@ export const StylePicker = ({ editor, active, keepEditorFocus }: StylePickerProp
                     key={name}
                     onClick={() => editor.chain().focus().toggleNode(type, 'paragraph', attrs).run()}
                 >
-                    <Icon className="mr-2 h-4 w-4" /> <span className={preview}>{name}</span>
+                    <Icon className="h-4 w-4" /> <span className={preview}>{name}</span>
                 </DropdownMenuItem>
             ))}
         </DropdownMenuContent>

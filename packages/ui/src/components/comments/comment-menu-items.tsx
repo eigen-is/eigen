@@ -67,7 +67,7 @@ export function CommentMenuItems({
             )}
             {onChangeColor && (
                 <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className="gap-2">
+                    <DropdownMenuSubTrigger>
                         <Palette className="h-4 w-4" /> {Noun} color
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>

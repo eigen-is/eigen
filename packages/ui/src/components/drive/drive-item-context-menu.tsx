@@ -113,7 +113,7 @@ function DriveItemActionsMenu({
                                 }}
                                 className="flex items-center"
                             >
-                                <FolderInput className="h-4 w-4 mr-2" />
+                                <FolderInput className="h-4 w-4" />
                                 Move {contextItems.length} items to…
                             </DropdownMenuItem>
                         )}
@@ -125,7 +125,7 @@ function DriveItemActionsMenu({
                                 }}
                                 className="flex items-center"
                             >
-                                <Copy className="h-4 w-4 mr-2" />
+                                <Copy className="h-4 w-4" />
                                 Copy {contextItems.length} items to…
                             </DropdownMenuItem>
                         )}
@@ -137,7 +137,7 @@ function DriveItemActionsMenu({
                                 }}
                                 className="flex items-center"
                             >
-                                <CopyPlus className="h-4 w-4 mr-2" />
+                                <CopyPlus className="h-4 w-4" />
                                 Duplicate {contextItems.length} items
                             </DropdownMenuItem>
                         )}
@@ -151,7 +151,7 @@ function DriveItemActionsMenu({
                         }}
                         className="flex items-center"
                     >
-                        <Trash2 className="h-4 w-4 mr-2" />
+                        <Trash2 className="h-4 w-4" />
                         Move {contextItems.length} items to trash
                     </DropdownMenuItem>
                 )}
