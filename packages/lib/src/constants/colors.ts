@@ -1,4 +1,4 @@
-// Based on Tailwind Colors. Pink #f6339a (the pink column's accent row) is Eigen's accent color.
+// Based on Tailwind Colors. The pink column's accent row is Eigen's accent color.
 
 export type EigenColor = {
     label: string;
@@ -258,8 +258,8 @@ export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) =>
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
 // The order calendars, labels, chart series and presence hand the accents out in. Pink, Eigen's accent, comes first;
 // each next one is the furthest (CIEDE2000) from those before it for normal vision and simulated deuteranopia, then
-// protanopia and tritanopia, so pink is followed by green, sky and amber. Yellow and lime (under 2:1 on white) sit past
-// the eighth, and rose and fuchsia, which sit close to pink, come late. colors.test.ts pins it.
+// protanopia and tritanopia. Yellow and lime (under 2:1 on white) sit past the eighth, and rose and fuchsia, which sit
+// close to pink, come late. colors.test.ts pins it.
 const EIGEN_ACCENT_ORDER = [
     'pink',
     'green',

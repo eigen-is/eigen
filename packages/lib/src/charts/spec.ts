@@ -79,11 +79,8 @@ export function defaultChartPresentation(type: ChartType): Omit<ChartSpec, 'type
 export const DEFAULT_CHART_SERIES_STYLE: ChartSeriesStyle = { color: null, markers: false, smooth: false };
 
 // Insert → Chart's sample, one dataset for every type since the Type switch keeps the data: the share of a source's
-// light per wavelength bin. A bin's value is Planck's B(λ,T) = 2hc²/λ⁵ / (e^(hc/λkT) − 1) integrated over the bin and
-// divided by the integral over 300–1000 nm, so each source sums to 100 inside that window, rounded to 0.1 by largest
-// remainder. Sun 5772 K, "Bulb (incandescent)" 2700 K, hot star 10000 K. Of each source's total energy, about 31% (Sun), 80% (bulb) and
-// 36% (hot star) falls outside the window. The bins are equal, 100 nm wide, so the bars compare and the peak moves with
-// temperature: the hot star's in the first bin, the Sun's in the second and third, the bulb's in the last. A pie draws the Sun.
+// light per 100 nm bin from 300 to 1000 nm, Planck's law at 5772 K (Sun), 2700 K (bulb) and 10000 K (hot star), each
+// source summing to 100, so the bars compare and the peak moves with temperature. A pie draws the Sun.
 export function sampleChartSpec(type: ChartType): ChartSpec {
     const categories = ['300–400', '400–500', '500–600', '600–700', '700–800', '800–900', '900–1000'];
     const sources = [
