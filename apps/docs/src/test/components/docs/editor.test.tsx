@@ -544,6 +544,41 @@ test('an image in the band being edited opens the Image panel, aligned only, wri
     expect(editing()).toEqual(['header']);
 });
 
+// A loaded image selected in `root`'s editor, its grips drawn.
+async function selectedImage(root: BandRoot | 'default') {
+    const view = root === 'default' ? bodyView() : bandView(root);
+    const editor = view?.editor;
+    if (!view || !editor) throw new Error(`no ${root} editor`);
+    await act(async () => {
+        editor.commands.insertContentAt(1, { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 100 } });
+        editor.commands.setNodeSelection(1);
+    });
+    const img = view.querySelector('.figure img');
+    if (!img) throw new Error('no image');
+    Object.defineProperties(img, { naturalWidth: { value: 200 }, naturalHeight: { value: 100 } });
+    await act(async () => void img.dispatchEvent(new Event('load')));
+    expect(view.querySelectorAll('.eigen-selection-handle').length).toBeGreaterThan(0);
+    return view;
+}
+
+// The grips draw from the editable flag as the image renders, which nothing re-renders: the image is deselected.
+test('an image selected in the band being edited drops its grips as the band is left', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    const view = await selectedImage('header');
+    await pressEscape(view);
+    expect(editing()).toEqual([]);
+    expect(view.querySelectorAll('.eigen-selection-handle').length).toBe(0);
+});
+
+test('an image selected in the body drops its grips as write access goes', async () => {
+    write('default', 'Hello');
+    await render(WRITER);
+    const view = await selectedImage('default');
+    await act(async () => setCanWrite(false));
+    expect(view.querySelectorAll('.eigen-selection-handle').length).toBe(0);
+});
+
 test('an equation a click selects in the band being edited opens the Equation panel, which writes the band', async () => {
     await render(WRITER);
     await doubleClick('header');

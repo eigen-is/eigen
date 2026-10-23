@@ -2,7 +2,7 @@ import { Extension, type Extensions, Node } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { Slice } from '@tiptap/pm/model';
-import { Selection } from '@tiptap/pm/state';
+import { NodeSelection, Selection } from '@tiptap/pm/state';
 import type { Editor, UseEditorOptions } from '@tiptap/react';
 import { useEditor } from '@tiptap/react';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
@@ -488,6 +488,11 @@ export function useDocEditor(
     // band entered or left, reach it here. Before paint, so an editor never shows a frame editable after it lost that.
     useLayoutEffect(() => {
         editor.setEditable(editable, false);
+        // A node view reads the flag as it renders and nothing re-renders it, so a selected image would keep its grips.
+        const { selection } = editor.state;
+        if (!editable && selection instanceof NodeSelection) {
+            editor.view.dispatch(editor.state.tr.setSelection(Selection.near(selection.$from)));
+        }
     }, [editor, editable]);
     // A note's images and fonts are the body's, which sweeps and collapses them.
     const sweeps = options.editable && !('body' in options.target);
