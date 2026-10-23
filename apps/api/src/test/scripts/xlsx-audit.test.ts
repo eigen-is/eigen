@@ -6,10 +6,12 @@ import { fileURLToPath } from 'node:url';
 import type { Sheet } from '@workspace/lib/sheets';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import {
+    classifyDifferences,
     compareRuns,
     drawHeldout,
     type Feature,
     runAudit,
+    runRoundtrip,
     tallySheets,
     tallySource,
     xlsxPackage,
@@ -22,6 +24,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'xlsx-audit-'));
 afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
 const READER = fileURLToPath(new URL('../../lib/import/sheets/from-xlsx.ts', import.meta.url));
+const WRITER = fileURLToPath(new URL('../../lib/export/sheets/to-xlsx.ts', import.meta.url));
 
 // Every feature the source side counts, once or a known number of times.
 const DATA = [
@@ -149,23 +152,23 @@ describe('tallies', () => {
     });
 });
 
+async function corpus(name: string, files: Record<string, Uint8Array | string>): Promise<string> {
+    const dir = path.join(scratch, name);
+    for (const [file, bytes] of Object.entries(files)) {
+        fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+        await Bun.write(path.join(dir, file), bytes);
+    }
+    return dir;
+}
+
+// Its own directory: Bun's resolver keeps a listing of a directory it loaded a module from.
+async function importer(name: string, source: string): Promise<string> {
+    const module = path.join(fs.mkdtempSync(path.join(scratch, 'importer-')), `${name}.ts`);
+    await Bun.write(module, source);
+    return module;
+}
+
 describe('runs', () => {
-    async function corpus(name: string, files: Record<string, Uint8Array>): Promise<string> {
-        const dir = path.join(scratch, name);
-        for (const [file, bytes] of Object.entries(files)) {
-            fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
-            await Bun.write(path.join(dir, file), bytes);
-        }
-        return dir;
-    }
-
-    // Its own directory: Bun's resolver keeps a listing of a directory it loaded a module from.
-    async function importer(name: string, source: string): Promise<string> {
-        const module = path.join(fs.mkdtempSync(path.join(scratch, 'importer-')), `${name}.ts`);
-        await Bun.write(module, source);
-        return module;
-    }
-
     test('the reader against itself is a pass; a planted difference is reported cell by cell and fails the gate', async () => {
         const dir = await corpus('planted', { 'book.xlsx': workbook(), 'nested/twin.xlsm': workbook() });
         const reader = path.join(scratch, 'out-reader');
@@ -292,4 +295,100 @@ describe('runs', () => {
             '**Gate: pass** on 8 files.',
         ]);
     }, 90_000);
+});
+
+describe('round trip', () => {
+    const history = xlsxPackage([
+        { name: 'History', body: '<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>' },
+    ]);
+
+    test('our writer brings every feature back; a refused file is skipped and a listed difference counted under its kind', async () => {
+        const dir = await corpus('roundtrip', {
+            'book.xlsx': workbook(),
+            'history.xlsx': history,
+            'bad.xlsx': 'no zip',
+        });
+        const out = path.join(scratch, 'out-roundtrip');
+        const meta = await runRoundtrip({ corpora: [dir], out, timeoutMs: 30_000 });
+        expect(meta.outcomes).toEqual({ ok: 2, skipped: 1, crash: 0, timeout: 0, memory: 0 });
+        expect([meta.pass, meta.unlisted, meta.listed]).toEqual([
+            true,
+            { differences: 0, files: 0 },
+            { differences: 11, files: 2 },
+        ]);
+        const summary = fs.readFileSync(path.join(out, 'summary.md'), 'utf8');
+        expect(summary).toContain(
+            '**Round trip pass: 3 files, 2 imported and written back, 1 skipped, 0 crashes, 0 cut; 0 unlisted differences in 0 files, 11 listed in 2.**',
+        );
+        expect(summary).toContain(
+            '| roundtrip/history.xlsx | sheet names repaired | listed | 1 | History!0: "History" → "History (2)" |',
+        );
+    }, 60_000);
+
+    test('a writer that moves a column by a pixel, changes a value and drops a merge fails the gate, each by kind', async () => {
+        const dir = await corpus('mutated', { 'book.xlsx': workbook() });
+        const planted = await importer(
+            'writer',
+            `import { sheetsToXlsx as write } from ${JSON.stringify(WRITER)};
+            export function sheetsToXlsx(sheets, options) {
+                const copy = structuredClone(sheets);
+                const [data] = copy;
+                data.config.columnlen[1] += 1;
+                data.celldata.find((cell) => cell.r === 0 && cell.c === 1).v.v = 41;
+                delete data.config.merge;
+                return write(copy, options);
+            }`,
+        );
+        const out = path.join(scratch, 'out-mutated');
+        const script = fileURLToPath(new URL('../../scripts/xlsx-audit.ts', import.meta.url));
+        const run = Bun.spawnSync([process.execPath, script, 'roundtrip', dir, '--out', out, '--writer', planted]);
+        expect(run.exitCode).toBe(1);
+        expect(run.stdout.toString()).toContain(
+            '\nRound trip FAIL: 1 files, 1 imported and written back, 0 skipped, 0 crashes, 0 cut; 6 unlisted differences in 1 files',
+        );
+        const summary = fs.readFileSync(path.join(out, 'summary.md'), 'utf8');
+        for (const row of [
+            '| columnlen | **unlisted** | 1 | 1 |',
+            '| cell v | **unlisted** | 1 | 1 |',
+            '| cell m | **unlisted** | 1 | 1 |',
+            '| merge | **unlisted** | 1 | 1 |',
+            '| cell mc | **unlisted** | 2 | 1 |',
+        ])
+            expect(summary).toContain(row);
+        expect(summary).toContain('| mutated/book.xlsx | columnlen | **unlisted** | 1 | Data!1: 140 → 141 |');
+    }, 60_000);
+
+    test('a writer that throws is a crash, at its stage', async () => {
+        const dir = await corpus('throws', { 'book.xlsx': workbook() });
+        const planted = await importer('throws', 'export function sheetsToXlsx() { throw new Error("writer broke"); }');
+        const out = path.join(scratch, 'out-throws');
+        const meta = await runRoundtrip({ corpora: [dir], out, writer: planted, timeoutMs: 30_000 });
+        expect([meta.pass, meta.outcomes.crash]).toEqual([false, 1]);
+        const result = JSON.parse(fs.readFileSync(path.join(out, 'files/throws/book.xlsx.json'), 'utf8'));
+        expect([result.outcome, result.stage, result.error.split('\n')[0]]).toEqual([
+            'crash',
+            'export',
+            'Error: writer broke',
+        ]);
+    }, 60_000);
+
+    test('a difference the spec explains is listed under its kind, any other under its feature', () => {
+        const sheet = (cell: Sheet['celldata']): Sheet[] => [{ name: 'S', celldata: cell }];
+        const groups = classifyDifferences({
+            warnings: new Map(),
+            a: sheet([
+                { r: 0, c: 0, v: { v: 'a', fs: 10 } },
+                { r: 0, c: 1, v: { v: 1, m: '1' } },
+            ]),
+            b: sheet([
+                { r: 0, c: 0, v: { v: 'a', ff: 'Inter' } },
+                { r: 0, c: 1, v: { v: 1, m: '1', ht: 2, fs: 11 } },
+            ]),
+        });
+        expect(groups.map(({ kind, listed, count }) => [kind, listed, count])).toEqual([
+            ['default font keys', true, 2],
+            ['number alignment', true, 1],
+            ['cell fs', false, 1],
+        ]);
+    });
 });

@@ -79,7 +79,8 @@ export function readGrid(rows: Iterable<XmlElement>, context: GridContext): Grid
             grid.rowhidden[r] = 0;
         }
         const height = Number.parseFloat(xmlAttr(row, '', 'ht') ?? '');
-        if (height > 0) {
+        // A custom height of 0 is a row Excel draws as none.
+        if (height > 0 || (height === 0 && isOn(xmlAttr(row, '', 'customHeight')))) {
             if (!grid.heights.has(r)) context.charge(1, 0);
             grid.heights.set(r, height);
         }

@@ -82,7 +82,7 @@ describe('a worksheet part', () => {
         const { xml } = partOf({
             name: 'Sheet1',
             celldata: [],
-            config: { columnlen: { 0: 90, 1: 90, 2: 131, 4: 90 }, colhidden: { 2: 0, 3: 0, 4: 0 } },
+            config: { columnlen: { 0: 90, 1: 90, 2: 131, 4: 90, 5: 0 }, colhidden: { 2: 0, 3: 0, 4: 0 } },
         });
         expect(xml).toContain(
             [
@@ -91,6 +91,7 @@ describe('a worksheet part', () => {
                 '<col min="3" max="3" width="14.5546875" customWidth="1" hidden="1"/>',
                 '<col min="4" max="4" hidden="1"/>',
                 '<col min="5" max="5" width="10" customWidth="1" hidden="1"/>',
+                '<col min="6" max="6" width="0" customWidth="1"/>',
                 '</cols>',
             ].join(''),
         );
@@ -115,8 +116,8 @@ describe('a worksheet part', () => {
         );
     });
 
-    test('links are a block of their own: web links by relationship, places in the workbook by location, the whole range kept', () => {
-        const { xml, relationships } = partOf(
+    test('links are a block of their own: web links by relationship, places in the workbook by location, the whole range kept; one it cannot write is counted', () => {
+        const { xml, relationships, lost } = partOf(
             {
                 name: 'Sheet1',
                 celldata: [
@@ -152,6 +153,7 @@ describe('a worksheet part', () => {
             { type: `${R}/hyperlink`, target: 'https://example.com/a%20b', external: true },
             { type: `${R}/hyperlink`, target: 'https://example.com/x!B2', external: true },
         ]);
+        expect(lost).toEqual(['links-dropped', 'links-dropped']);
     });
 
     test('a drawing is the first relationship, the links after it', () => {
