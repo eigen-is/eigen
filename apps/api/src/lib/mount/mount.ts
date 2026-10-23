@@ -468,7 +468,6 @@ export class Mount {
 
     async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
         name = validateName(name);
-        await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();
         // Derive the container mime from the canonical registry; only plain folders
         // have no eigendoc entry.
@@ -476,6 +475,8 @@ export class Mount {
         const fileValue = this.isPathBased ? name : '';
 
         await this.withTreeShared(async () => {
+            // Under the lock: on `local` a rename that took it first owns the key this write replaces.
+            await this.assertUniqueName(parentId, name);
             if (this.isPathBased && this.storage.mkdir) {
                 await this.storage.mkdir(await this.resolveWriteKey(parentId, fileValue));
             }
@@ -515,13 +516,14 @@ export class Mount {
         data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined,
     ): Promise<string> {
         name = validateName(name);
-        await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
         const fileValue = this.buildFileValue(fileId, name);
         const hash = data !== undefined ? await this.computeHash(data) : null;
 
         const searchable = isSearchableTextFile(mimeType, name);
         await this.withTreeShared(async () => {
+            // Under the lock: on `local` a rename that took it first owns the key this write replaces.
+            await this.assertUniqueName(parentId, name);
             // Storage write before DB insert (crash safety: orphaned file > orphaned row)
             if (data !== undefined) {
                 await this.storage.write(await this.resolveWriteKey(parentId, fileValue), data);
@@ -559,12 +561,13 @@ export class Mount {
         tempId: string,
     ): Promise<string> {
         name = validateName(name);
-        await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
         const fileValue = this.buildFileValue(fileId, name);
 
         const searchable = isSearchableTextFile(mimeType, name);
         await this.withTreeShared(async () => {
+            // Under the lock: on `local` a rename that took it first owns the key this write replaces.
+            await this.assertUniqueName(parentId, name);
             const storageKey = await this.resolveWriteKey(parentId, fileValue);
 
             await this.uploadFromTemp(storageKey, tempId);
