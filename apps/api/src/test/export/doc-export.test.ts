@@ -422,7 +422,7 @@ describe('doc export — charts', () => {
             );
             // Never wider than the column, its height following, by the prose rule the editor's node view draws with.
             expect(html).toMatch(/\.figure svg\s*\{[^}]*max-width: 100%;[^}]*height: auto;/);
-            expect(html).toMatch(/<text[^>]*>UV<\/text>/);
+            expect(html).toMatch(/<text[^>]*>300–400<\/text>/);
             expect(html).toContain('</svg><span class="figcaption">Points</span></span>');
             expect(html).not.toContain('<img');
         },
