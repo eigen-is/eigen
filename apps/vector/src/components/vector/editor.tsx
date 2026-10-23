@@ -156,6 +156,7 @@ export function VectorEditor({
                         elements={doc.elements}
                         selectedElements={selectedElements}
                         updateElements={doc.updateElements}
+                        reorderElements={doc.reorderElements}
                         replaceElement={doc.replaceElement}
                         setSelectedIds={setSelectedIds}
                         undoManager={doc.undoManager}

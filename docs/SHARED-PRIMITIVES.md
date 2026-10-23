@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1877 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1879 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (180)
+## Components (181)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -117,6 +117,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuAnchor` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/context-menu-anchor.tsx |
 | `DownloadImageMenuItem` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `ObjectActionMenuItems` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
+| `ObjectContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-context-menu.tsx |
 | `DocumentImportPicker` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/document-import-picker.tsx |
 | `DriveAccessList` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `DriveBrowser` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-browser.tsx |
@@ -531,7 +532,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (421)
+## Types (422)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -853,6 +854,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FixedSegment` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
 | `ImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
+| `IndexedElement` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `Layer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `MarqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
@@ -892,6 +894,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VerticalAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `ZOp` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `LatexCommand` | `@workspace/math` | packages/math/src/latex-commands.ts |
 | `MathNode` | `@workspace/math` | packages/math/src/tree.ts |
 | `MathRow` | `@workspace/math` | packages/math/src/tree.ts |
@@ -939,7 +942,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MergedValue` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-value.ts |
 | `PropertyHistory` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `TransformFields` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/transform-section.tsx |
-| `ZOp` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/z-order.tsx |
 | `DocSearchBarContextValue` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `DocSearchProviderProps` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `FlashRange` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |

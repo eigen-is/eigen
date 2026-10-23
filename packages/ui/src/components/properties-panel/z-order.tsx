@@ -1,14 +1,12 @@
-// Shared z-order ("Arrange") vocabulary + chrome for canvas apps. The WRITE stays with the host —
-// the canvas rewrites fractional indices — so this module owns the verbs and the UI only: the `ZOp`
-// union, the four Arrange buttons, and the keyboard brackets. Each host folds its own gates into
-// `enabled` and passes an `onApply` wired to its own reorder.
+// Shared z-order ("Arrange") chrome. The WRITE stays with the host, over lib's `zOrderKeys`, so this
+// module owns the UI only: the four Arrange buttons and the keyboard brackets. Each host folds its own
+// gates into `enabled` and passes an `onApply` wired to its own reorder.
 
+import type { ZOp } from '@workspace/lib/vector';
 import { BringToFront, ChevronDown, ChevronUp, SendToBack } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
-
-export type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
 
 // The Arrange row: send-to-back / send-backward / bring-forward / bring-to-front. Presentational —
 // the host owns what each op does.

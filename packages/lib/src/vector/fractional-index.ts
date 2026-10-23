@@ -250,7 +250,7 @@ export function generateNKeysBetween(
 // plain materialized objects, so repair mutates `index` in place.
 // ─────────────────────────────────────────────────────────────────────────────
 
-type IndexedElement = { id: string; index: string };
+export type IndexedElement = { id: string; index: string };
 
 // Format-check `index`, then confirm it sits strictly between its neighbors.
 export function isValidFractionalIndex(
@@ -369,4 +369,45 @@ export function syncInvalidIndices<T extends IndexedElement>(elements: T[]): T[]
         }
     }
     return elements;
+}
+
+export type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
+
+// The index writes for a z-order change, {id, index} per element whose key changes, [] for a no-op. The
+// selection moves as a block relative to the non-selected elements, so a non-contiguous selection collapses
+// into one clean gap (Excalidraw's raise/lower); for one element it is a one-step swap. Elements order by
+// index, then id. A tied or malformed key, which concurrent inserts leave behind, is repaired first and the
+// repair rides along in the writes: a key between two equal bounds can't exist (generateKeyBetween throws).
+export function zOrderKeys(elements: IndexedElement[], selectedIds: string[], op: ZOp): IndexedElement[] {
+    const stored = new Map(elements.map((e) => [e.id, e.index]));
+    const ordered = syncInvalidIndices(orderByFractionalIndex(elements).map(({ id, index }) => ({ id, index })));
+    const sel = ordered.filter((e) => selectedIds.includes(e.id));
+    const nonSel = ordered.filter((e) => !selectedIds.includes(e.id));
+    if (sel.length === 0) return [];
+
+    let keys: string[];
+    if (op === 'toFront') {
+        keys = generateNKeysBetween(nonSel[nonSel.length - 1]?.index ?? null, null, sel.length);
+    } else if (op === 'toBack') {
+        keys = generateNKeysBetween(null, nonSel[0]?.index ?? null, sel.length);
+    } else if (op === 'forward') {
+        const topPos = ordered.indexOf(sel[sel.length - 1]);
+        const above = ordered.slice(topPos + 1).find((e) => !selectedIds.includes(e.id));
+        if (!above) return []; // block already above every non-selected element
+        const aboveInNon = nonSel.indexOf(above);
+        keys = generateNKeysBetween(above.index, nonSel[aboveInNon + 1]?.index ?? null, sel.length);
+    } else {
+        const bottomPos = ordered.indexOf(sel[0]);
+        const below = ordered
+            .slice(0, bottomPos)
+            .reverse()
+            .find((e) => !selectedIds.includes(e.id));
+        if (!below) return []; // block already below every non-selected element
+        const belowInNon = nonSel.indexOf(below);
+        keys = generateNKeysBetween(nonSel[belowInNon - 1]?.index ?? null, below.index, sel.length);
+    }
+    sel.forEach((e, i) => {
+        e.index = keys[i];
+    });
+    return ordered.filter((e) => e.index !== stored.get(e.id));
 }

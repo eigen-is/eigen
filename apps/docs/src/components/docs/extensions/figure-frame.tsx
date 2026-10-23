@@ -10,7 +10,7 @@ import { ObjectTransform } from '@workspace/ui';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useCallback, useRef, useState } from 'react';
 import { textColumnWidth } from './text-column';
 
 // The resize floor of a figure's side (px).
@@ -50,39 +50,24 @@ export type FigureFrameOptions = {
 
 // A resize previews locally and writes once, at the commit. `fit` turns a dragged box into the size the node keeps.
 export function useFigureResize<T>({
-    active,
     getMaxWidth,
     fit,
     commit,
 }: {
-    active: boolean;
     getMaxWidth: () => number;
     fit: (box: Box, maxWidth: number) => T;
     commit: (size: T) => void;
-}): { preview: T | null; onTransform: (next: Box) => void; onCommit: (next: Box) => void } {
+}): {
+    preview: T | null;
+    onTransform: (next: Box) => void;
+    onCommit: (next: Box) => void;
+    onGestureEnd: () => void;
+} {
     const [preview, setPreview] = useState<T | null>(null);
     // ObjectTransform has no onStart, so the first onTransform of a gesture latches the max width: a forced layout
     // per move costs too much.
     const transformStarted = useRef(false);
     const gestureMaxWidth = useRef(Number.POSITIVE_INFINITY);
-
-    // ObjectTransform's Escape-cancel and no-move-click paths fire no onCommit, so a leftover preview would stick.
-    // Any pointerup drops it and re-arms the latch. Only the selected, editable figure holds these listeners, and the
-    // teardown clears too, so a deselect mid-gesture can't strand a stale preview.
-    useEffect(() => {
-        if (!active) return;
-        const clear = () => {
-            transformStarted.current = false;
-            setPreview((p) => (p === null ? p : null));
-        };
-        document.addEventListener('pointerup', clear);
-        document.addEventListener('pointercancel', clear);
-        return () => {
-            document.removeEventListener('pointerup', clear);
-            document.removeEventListener('pointercancel', clear);
-            clear();
-        };
-    }, [active]);
 
     const onTransform = useCallback(
         (next: Box) => {
@@ -96,16 +81,16 @@ export function useFigureResize<T>({
         [getMaxWidth, fit],
     );
 
-    const onCommit = useCallback(
-        (next: Box) => {
-            transformStarted.current = false;
-            setPreview(null);
-            commit(fit(next, gestureMaxWidth.current));
-        },
-        [fit, commit],
-    );
+    const onCommit = useCallback((next: Box) => commit(fit(next, gestureMaxWidth.current)), [fit, commit]);
 
-    return { preview, onTransform, onCommit };
+    // Every gesture ends here, an Escape or a click that commits nothing too, and a deselect mid-drag unmounts the
+    // transform, which ends it as well.
+    const onGestureEnd = useCallback(() => {
+        transformStarted.current = false;
+        setPreview(null);
+    }, []);
+
+    return { preview, onTransform, onCommit, onGestureEnd };
 }
 
 type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'extension' | 'getPos' | 'decorations'> & {
@@ -115,6 +100,7 @@ type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'ex
     resizeMode: 'aspect' | 'free';
     onTransform: (next: Box) => void;
     onCommit: (next: Box) => void;
+    onGestureEnd: () => void;
     label: string;
     keyShortcuts?: string;
     className?: string;
@@ -135,6 +121,7 @@ export function FigureFrame({
     resizeMode,
     onTransform,
     onCommit,
+    onGestureEnd,
     label,
     keyShortcuts,
     className,
@@ -198,6 +185,7 @@ export function FigureFrame({
                         // wide images (a 100 floor on a 4:1 banner's height forces width 400). The host's fit clamps.
                         onTransform={onTransform}
                         onCommit={onCommit}
+                        onGestureEnd={onGestureEnd}
                     />
                 )}
                 {/* After the transform, so its NE grip never covers the mark. A button, so ProseMirror leaves its

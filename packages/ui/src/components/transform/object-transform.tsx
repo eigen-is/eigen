@@ -84,6 +84,10 @@ export type ObjectTransformProps = {
     // closure are captured at pointerdown, and a viewport change mid-drag would silently
     // invalidate both.
     onCommit: (next: Box, start: Box) => void;
+    // Fires once per gesture, however it ends: after the commit, after an Escape's reset, after a press
+    // that never moved, or when this chrome unmounts mid-drag. A host that keeps its preview in state
+    // clears it here, as no other callback marks the end of a gesture that commits nothing.
+    onGestureEnd?: () => void;
 };
 
 export function ObjectTransform({
@@ -97,6 +101,7 @@ export function ObjectTransform({
     formatSize = defaultFormatSize,
     onTransform,
     onCommit,
+    onGestureEnd,
 }: ObjectTransformProps) {
     const [rotating, setRotating] = useState(false);
     // Frozen while any grip drag is active so a resize that shrinks the on-screen box below the side
@@ -107,7 +112,16 @@ export function ObjectTransform({
     // mid-drag would unmount us before teardown runs and leak them. One AbortController per gesture,
     // also aborted on unmount, guarantees removal.
     const dragAbort = useRef<AbortController | null>(null);
-    useEffect(() => () => dragAbort.current?.abort(), []);
+    const gestureEnd = useRef(onGestureEnd);
+    gestureEnd.current = onGestureEnd;
+    useEffect(
+        () => () => {
+            if (!dragAbort.current || dragAbort.current.signal.aborted) return;
+            dragAbort.current.abort();
+            gestureEnd.current?.();
+        },
+        [],
+    );
 
     const startResize = (e: React.PointerEvent, mode: string) => {
         e.preventDefault();
@@ -181,10 +195,12 @@ export function ObjectTransform({
             if (latest && !sameBox(latest, snapshot)) {
                 onCommit({ ...latest, angle: normalizeAngle(latest.angle) }, snapshot);
             }
+            onGestureEnd?.();
         };
         const cancel = () => {
             teardown();
             onTransform(snapshot);
+            onGestureEnd?.();
         };
         const onEnd = (pe: PointerEvent) => {
             if (pe.pointerId === pointerId) commit();
@@ -268,10 +284,12 @@ export function ObjectTransform({
             if (latest && !sameBox(latest, snapshot)) {
                 onCommit({ ...latest, angle: normalizeAngle(latest.angle) }, snapshot);
             }
+            onGestureEnd?.();
         };
         const cancel = () => {
             teardown();
             onTransform(snapshot);
+            onGestureEnd?.();
         };
         const onEnd = (pe: PointerEvent) => {
             if (pe.pointerId === pointerId) commit();

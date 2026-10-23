@@ -52,6 +52,7 @@ async function renderPanel(el: VectorPathElement) {
                 elements: [el],
                 selectedElements: [el],
                 updateElements: (patches) => writes.push(patches),
+                reorderElements: () => {},
                 replaceElement: () => [],
                 setSelectedIds: () => {},
                 undoManager: null,

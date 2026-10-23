@@ -9,7 +9,11 @@ import {
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { sealed } from '../../../../components/properties-panel/property-gesture';
-import { duplicateElementsInDoc, replaceElementInDoc } from '../../../../components/vector/hooks/element-writes';
+import {
+    duplicateElementsInDoc,
+    reorderElementsInDoc,
+    replaceElementInDoc,
+} from '../../../../components/vector/hooks/element-writes';
 import { addFrameInDoc } from '../../../../components/vector/hooks/frame-writes';
 
 function docWith(elements: Record<string, unknown>[], doc = new Y.Doc()): Y.Doc {
@@ -168,5 +172,44 @@ describe('replaceElementInDoc', () => {
         const shapes = shapesOfChart(doc);
         expect(replaceElementInDoc(doc, 'gone', shapes, VECTOR_STYLE_DEFAULTS)).toEqual([]);
         expect(storedIds(doc)).toEqual(['c1']);
+    });
+});
+
+describe('reorderElementsInDoc', () => {
+    // Two peers' concurrent inserts left b and c on one stored key; the read heals the tie in memory only.
+    const tied = () =>
+        docWith([
+            { ...RECT, id: 'a', index: 'a0' },
+            { ...RECT, id: 'b', index: 'a1' },
+            { ...RECT, id: 'c', index: 'a1' },
+            { ...RECT, id: 'd', index: 'a2' },
+        ]);
+    const order = (doc: Y.Doc) => readVectorFromDoc(doc).elements.map((el) => el.id);
+    const storedIndices = (doc: Y.Doc) =>
+        [...doc.getMap('elements').values()].map((m) => (m instanceof Y.Map ? m.get('index') : ''));
+
+    test('a move next to a stored tie writes the repair too, so the order sticks on the next read', () => {
+        const doc = tied();
+        reorderElementsInDoc(doc, ['a', 'b', 'c', 'd'], ['d'], 'backward');
+        expect(order(doc)).toEqual(['a', 'b', 'd', 'c']);
+        expect(new Set(storedIndices(doc)).size).toBe(4);
+    });
+
+    test('two peers making the same move concurrently converge on one order', () => {
+        const one = tied();
+        const two = new Y.Doc();
+        Y.applyUpdate(two, Y.encodeStateAsUpdate(one));
+        reorderElementsInDoc(one, ['a', 'b', 'c', 'd'], ['d'], 'backward');
+        reorderElementsInDoc(two, ['a', 'b', 'c', 'd'], ['d'], 'backward');
+        Y.applyUpdate(one, Y.encodeStateAsUpdate(two));
+        Y.applyUpdate(two, Y.encodeStateAsUpdate(one));
+        expect(order(one)).toEqual(['a', 'b', 'd', 'c']);
+        expect(order(two)).toEqual(order(one));
+    });
+
+    test('only the scope takes part: a frame moves its own elements past each other', () => {
+        const doc = tied();
+        reorderElementsInDoc(doc, ['a', 'd'], ['d'], 'toBack');
+        expect(order(doc)[0]).toBe('d');
     });
 });
