@@ -474,10 +474,13 @@ function gridOffset(sheet: Sheet, minRow: number, minCol: number): { left: numbe
 
 // Every image and chart in their one paint order, each with its box clamped as the editor's writers store it
 // (sheetFloatingBox), which also turns a string a peer stored into its number, and the box it covers as it turns,
-// which the page size, the window's origin and the preview's clip count.
+// which the page size, the window's origin and the preview's clip count. One turned past A1 tucks under the
+// editor's headers, but a page has none, so it moves right or down until it starts on the page.
 function floatingObjects(sheet: Sheet) {
     return floatingItems(sheet).map((item) => {
-        const box = sheetFloatingBox(item.object);
+        const stored = sheetFloatingBox(item.object);
+        const turned = getElementBounds(stored);
+        const box = { ...stored, x: stored.x - Math.min(0, turned.minX), y: stored.y - Math.min(0, turned.minY) };
         return { item, box, bounds: getElementBounds(box) };
     });
 }

@@ -14,13 +14,14 @@ import { selectedCellOrigin } from './image';
 // A chart's own writers, each on one chart of the current sheet: the box, its order and its deletion are every
 // floating object's (floating.ts).
 
-type ChartBox = Omit<Box, 'angle'>;
+// Where a chart is inserted: upright, as nothing inserts one turned.
+export type ChartInsertBox = Omit<Box, 'angle'>;
 
-export function insertChart(ctx: Context, id: string, box: ChartBox, spec: ChartSpec) {
+export function insertChart(ctx: Context, id: string, box: ChartInsertBox, spec: ChartSpec) {
     addChart(ctx, id, box, JSON.stringify(spec));
 }
 
-function addChart(ctx: Context, id: string, box: ChartBox, spec: string) {
+function addChart(ctx: Context, id: string, box: ChartInsertBox, spec: string) {
     const sheet = editableCurrentSheet(ctx);
     if (!sheet) return;
     const charts = (sheet.charts ??= {});
@@ -28,7 +29,7 @@ function addChart(ctx: Context, id: string, box: ChartBox, spec: string) {
 }
 
 // A pasted chart lands on the selected cell at its copied size, its spec stored as it came, and selected.
-export function pasteChart(ctx: Context, id: string, spec: string, size: Pick<ChartBox, 'width' | 'height'>) {
+export function pasteChart(ctx: Context, id: string, spec: string, size: Pick<ChartInsertBox, 'width' | 'height'>) {
     if (!editableCurrentSheet(ctx)) return;
     addChart(ctx, id, { ...selectedCellOrigin(ctx), ...size }, spec);
     selectFloatingObject(ctx, { kind: 'chart', id });

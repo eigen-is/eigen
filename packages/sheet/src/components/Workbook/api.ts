@@ -10,6 +10,7 @@ import type { Cell } from '../../engine/types';
 import {
     addSheet,
     api,
+    type ChartInsertBox,
     type Context,
     collectMatches,
     createContextResolver,
@@ -180,7 +181,7 @@ export function generateAPIs(
         // One op + undo step each, on the current sheet. The id is made here so the caller can
         // select the new chart; the recipe runs later, so a dry run on this state tells a viewer or
         // a missing sheet apart, which inserts nothing and returns null.
-        insertChart: (box: Omit<Box, 'angle'>, spec: ChartSpec): string | null => {
+        insertChart: (box: ChartInsertBox, spec: ChartSpec): string | null => {
             const id = uuidv4();
             const recipe = (draftCtx: Context) => insertChart(draftCtx, id, box, spec);
             if (produce(context, recipe) === context) return null;

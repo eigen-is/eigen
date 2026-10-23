@@ -979,6 +979,18 @@ describe('Sheets export — content size (@page)', () => {
         expect(getSheetContentSize(sheet)).toEqual({ width: 350, height: 450 });
     });
 
+    // A 100 × 500 image at A1 turned 90° covers -200 to 300 across: the page has no headers to tuck the left part
+    // under, so the object moves right until it starts on the page, and the page reaches its far side.
+    test('an object turned past A1 moves back onto the page', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: { v: 'grid' } }]),
+            images: imagesOf({ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 100, height: 500, angle: 90 }),
+        };
+        expect(getSheetContentSize(sheet)).toEqual({ width: 500, height: 300 });
+        const out = renderSheetsHtml([sheet], new Map([['chart.png', 'data:image/png;base64,AA==']]));
+        expect(classesFor(out, 'left:200px;top:0px;width:100px;height:500px')).toHaveLength(1);
+    });
+
     test('image extents are measured in the same offset space as the grid', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 2, c: 1, v: { v: 'grid' } }]),
