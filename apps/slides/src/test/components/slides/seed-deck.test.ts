@@ -27,6 +27,15 @@ describe('seedDeck', () => {
         expect(readVectorFromDoc(doc).meta.slideWidth).toBe(DEFAULT_SCENE_META.slideWidth);
     });
 
+    // A pptx with no slides imports its width and nothing to show, so the deck is seeded at the pptx's width.
+    test('a deck that stores its width keeps it', () => {
+        const doc = new Y.Doc();
+        doc.getMap('meta').set('slideWidth', 720);
+        seedDeck(doc);
+        expect(readVectorFromDoc(doc).frames).toHaveLength(1);
+        expect(doc.getMap('meta').get('slideWidth')).toBe(720);
+    });
+
     test('a deck that already has a slide is left alone', () => {
         const doc = new Y.Doc();
         seedDeck(doc);

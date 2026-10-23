@@ -3,6 +3,7 @@ export { CanvasEditor, type CanvasHandle } from './canvas-editor';
 export { CanvasPropertiesPanel } from './canvas-properties-panel';
 export { CanvasToolbar } from './canvas-toolbar';
 export { FrameThumbnail, FrameView } from './frame-view';
+export { updateMetaInDoc } from './hooks/frame-writes';
 export { useActiveFrame } from './hooks/use-active-frame';
 export { useCanvasCommentHost } from './hooks/use-canvas-comment-host';
 export { useCanvasDoc } from './hooks/use-canvas-doc';
