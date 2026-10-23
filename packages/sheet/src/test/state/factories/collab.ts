@@ -4,9 +4,11 @@
 // almost always uses the other, and because the pair is what makes divergence visible.
 
 import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
+import { generateAPIs } from '../../../components/Workbook/api';
+import { replaySheetsOps } from '../../../engine';
 import type { Context } from '../../../state/context';
 import type { Op } from '../../../state/types';
-import { filterPatch, opToPatch, patchToOp } from '../../../state/utils/patch';
+import { filterPatch, opToPatch, type PatchOptions, patchToOp } from '../../../state/utils/patch';
 
 enablePatches();
 
@@ -32,3 +34,36 @@ export function syncablePaths(base: Context, recipe: (ctx: Context) => void) {
     const [, patches] = produceWithPatches(base, recipe);
     return filterPatch(patches).map((p) => p.path);
 }
+
+// One edit as setContextWithProduce records it: the new state, its ops and its undo entry.
+export function author(base: Context, recipe: (ctx: Context) => void, options?: PatchOptions) {
+    const [next, patches, inverse] = produceWithPatches(base, recipe);
+    return {
+        next,
+        ops: patchToOp(next, filterPatch(patches), options),
+        patches: filterPatch(patches),
+        inverse: filterPatch(inverse),
+    };
+}
+
+// A peer applies a batch through the Workbook's own applyOp, which drops a batch that fails to apply.
+export function receive(ctx: Context, ops: Op[]): Context {
+    let next = ctx;
+    // biome-ignore lint/suspicious/noExplicitAny: applyOp reads settings only on the addSheet branch
+    const settings = {} as any;
+    const setContext = (recipe: (draft: Context) => void) => {
+        next = produce(next, recipe);
+    };
+    generateAPIs(
+        ctx,
+        setContext,
+        () => {},
+        () => {},
+        settings,
+        { undoList: [], redoList: [] },
+    ).applyOp(ops);
+    return next;
+}
+
+// A joiner replays the batches on the base's stored sheets.
+export const join = (base: Context, batches: Op[][]) => replaySheetsOps(structuredClone(base.sheets), batches);

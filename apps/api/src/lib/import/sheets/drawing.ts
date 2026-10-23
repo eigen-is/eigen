@@ -3,8 +3,8 @@ import {
     REFERENCE_ROW_COUNT,
     type Sheet,
     type SheetChart,
-    sheetChartBox,
     sheetColumnsWidth,
+    sheetFloatingBox,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
 import { generateKeyBetween } from '@workspace/lib/vector';
@@ -196,7 +196,12 @@ function sizeOf(anchor: XmlElement): Pick<Box, 'width' | 'height'> | undefined {
 }
 
 function rounded({ x, y, width, height }: Box): Box {
-    return sheetChartBox({ x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+    return sheetFloatingBox({
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(width),
+        height: Math.round(height),
+    });
 }
 
 // An element's children, an mc:AlternateContent read as the branch this reader understands.

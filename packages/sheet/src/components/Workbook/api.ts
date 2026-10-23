@@ -1,5 +1,6 @@
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
+import type { Box, ZOp } from '@workspace/lib/vector';
 import { applyPatches, produce } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import type { SetContextOptions } from '../../context';
@@ -9,17 +10,18 @@ import type { Cell } from '../../engine/types';
 import {
     addSheet,
     api,
-    type ChartBox,
     type Context,
     collectMatches,
     createContextResolver,
     createFilterOptions,
-    deleteChart,
+    deleteActiveObject,
+    deleteFloatingObject,
     deleteRowCol,
     deleteSheet,
+    type FloatingRef,
+    type GlobalCache,
     getFlowdata,
     getSheetIndex,
-    type Image,
     insertChart,
     insertImage,
     insertRowCol,
@@ -29,11 +31,11 @@ import {
     type Presence,
     type Range,
     registerSheetFormulas,
-    removeActiveImage,
     removeImageByMediaName,
-    reorderChart,
+    reorderFloatingObject,
     replaceAllMatches,
     replaceImageMediaName,
+    replaceMediaNameInHistory,
     replaceSearchMatch,
     revealSearchMatch,
     type SearchHighlight,
@@ -42,8 +44,7 @@ import {
     setChartDataRange,
     setChartSpec,
     setSearchHighlights,
-    updateChartBox,
-    updateImage,
+    updateFloatingBox,
 } from '../../state';
 
 export function generateAPIs(
@@ -52,6 +53,7 @@ export function generateAPIs(
     handleUndo: () => void,
     handleRedo: () => void,
     settings: Required<Settings>,
+    history: Pick<GlobalCache, 'undoList' | 'redoList'>,
 ) {
     return {
         applyOp: (ops: Op[]) => {
@@ -155,23 +157,30 @@ export function generateAPIs(
 
         // Pending→real swap after an upload/paste settles — a technical fixup, never the user's own
         // undo step (noUndo emits the op to peers but records no local undo entry).
-        replaceImageMediaName: (oldName: string, newName: string) =>
-            setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName), { noUndo: true }),
+        replaceImageMediaName: (oldName: string, newName: string) => {
+            setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName), { noUndo: true });
+            replaceMediaNameInHistory(history, oldName, newName);
+        },
 
         removeImageByMediaName: (name: string) =>
             setContext((draftCtx) => removeImageByMediaName(draftCtx, name), { noUndo: true }),
 
-        // ObjectTransform resize/rotate commit + properties-panel numeric edits — one op + undo step
-        // each (default setContext).
-        updateImage: (id: string, fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>>) =>
-            setContext((draftCtx) => updateImage(draftCtx, id, fields)),
+        // A move, the ObjectTransform resize/rotate commit and a properties-panel numeric edit: one op and
+        // undo step each.
+        updateFloatingBox: (ref: FloatingRef, fields: Partial<Box>) =>
+            setContext((draftCtx) => updateFloatingBox(draftCtx, ref, fields)),
 
-        removeActiveImage: () => setContext((draftCtx) => removeActiveImage(draftCtx)),
+        reorderFloatingObject: (ref: FloatingRef, op: ZOp) =>
+            setContext((draftCtx) => reorderFloatingObject(draftCtx, ref, op)),
+
+        deleteFloatingObject: (ref: FloatingRef) => setContext((draftCtx) => deleteFloatingObject(draftCtx, ref)),
+
+        deleteActiveObject: () => setContext(deleteActiveObject),
 
         // One op + undo step each, on the current sheet. The id is made here so the caller can
         // select the new chart; the recipe runs later, so a dry run on this state tells a viewer or
         // a missing sheet apart, which inserts nothing and returns null.
-        insertChart: (box: ChartBox, spec: ChartSpec): string | null => {
+        insertChart: (box: Omit<Box, 'angle'>, spec: ChartSpec): string | null => {
             const id = uuidv4();
             const recipe = (draftCtx: Context) => insertChart(draftCtx, id, box, spec);
             if (produce(context, recipe) === context) return null;
@@ -179,15 +188,7 @@ export function generateAPIs(
             return id;
         },
 
-        updateChartBox: (id: string, box: Partial<ChartBox>) =>
-            setContext((draftCtx) => updateChartBox(draftCtx, id, box)),
-
         setChartSpec: (id: string, spec: ChartSpec) => setContext((draftCtx) => setChartSpec(draftCtx, id, spec)),
-
-        reorderChart: (id: string, direction: 'forward' | 'backward') =>
-            setContext((draftCtx) => reorderChart(draftCtx, id, direction)),
-
-        deleteChart: (id: string) => setContext((draftCtx) => deleteChart(draftCtx, id)),
 
         // Sets the range up, or says why it holds no chart and writes nothing.
         setChartDataRange: (id: string, ref: CellRangeRef): ChartRangeRefusal | undefined => {

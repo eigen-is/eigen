@@ -245,7 +245,7 @@ function SheetEditorInner({
             if (!workbook) return [];
             const names: string[] = [];
             for (const sheet of workbook.getAllSheets()) {
-                for (const img of sheet.images ?? []) {
+                for (const img of Object.values(sheet.images ?? {})) {
                     if (isPendingMediaName(img.mediaName)) names.push(img.mediaName);
                 }
             }
@@ -305,7 +305,7 @@ function SheetEditorInner({
     // One op per edit; the workbook re-surfaces the committed image via onActiveImageChange.
     const handleImageTransform = useCallback(
         (fields: TransformFields) => {
-            if (activeImage) workbookRef.current?.updateImage(activeImage.id, fields);
+            if (activeImage) workbookRef.current?.updateFloatingBox({ kind: 'image', id: activeImage.id }, fields);
         },
         [activeImage],
     );
@@ -488,7 +488,7 @@ function SheetEditorInner({
                             aspectLocked={imageAspectLocked}
                             onAspectLockChange={setImageAspectLocked}
                             onChange={handleImageTransform}
-                            onDelete={() => workbookRef.current?.removeActiveImage()}
+                            onDelete={() => workbookRef.current?.deleteActiveObject()}
                         />
                     )}
                     {chartEditor && !panel && (

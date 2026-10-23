@@ -29,13 +29,13 @@ function withoutData(sheets: Sheet[]): Sheet[] {
     return sheets.map(({ data: _data, ...sheet }) => sheet);
 }
 
-// The replay materializes every config collection, the `images` list and `calcChain`, so the
-// editor's granular ops (`['config','rowlen','2']`, a whole-array image write, `['calcChain', 0]`)
+// The replay materializes every config collection, the `images` and `charts` maps and `calcChain`, so the
+// editor's granular ops (`['config','rowlen','2']`, `['images', id, 'x']`, `['calcChain', 0]`)
 // resolve against a stored sheet that predates them. Every sheet it returns carries that shape — the snapshot's and an addSheet op's
 // alike — so expectations built from raw fixtures have to carry it too.
 function normalized(sheets: Sheet[]): Sheet[] {
     return sheets.map((sheet) => {
-        const next = { ...sheet, config: { ...sheet.config }, images: sheet.images ?? [], calcChain: [] };
+        const next = { ...sheet, config: { ...sheet.config }, calcChain: [] };
         normalizeSheetConfig(next);
         return next;
     });

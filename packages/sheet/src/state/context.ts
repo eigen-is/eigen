@@ -10,6 +10,7 @@ import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/d
 import type { Cell, CellMatrix } from '../engine/types';
 import { FormulaCache } from './modules';
 import type { CellGlyph } from './modules/cell-glyph';
+import type { FloatingRef } from './modules/floating';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
 import type {
@@ -18,7 +19,6 @@ import type {
     FilterEntry,
     FilterOptions,
     GlobalCache,
-    Image,
     LinkCardProps,
     Presence,
     RangeDialogProps,
@@ -55,11 +55,8 @@ export type Context = {
     addDefaultRows: number;
     fullscreenmode: boolean;
     devicePixelRatio: number;
-    insertedImgs?: Image[];
-    editingInsertedImgs?: Image;
-    activeImg?: string;
-    // The selected chart on the current sheet, and whether its editor sidebar is open.
-    activeChart?: { id: string; editor: boolean };
+    // The selected image or chart on the current sheet, and whether a chart's editor sidebar is open.
+    activeObject?: FloatingRef & { editor: boolean };
     presences?: Presence[];
     // Transient find highlight state (UI-only, never persisted/synced — like
     // formulaRangeHighlight; filterPatch drops non-sheets[*] patches).
@@ -330,7 +327,6 @@ export function defaultContext(refs: RefValues): Context {
         shiftAnchor: undefined,
 
         iscopyself: true,
-        activeImg: undefined,
 
         orderbyindex: 0, // sort index
 

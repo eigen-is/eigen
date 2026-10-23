@@ -4,6 +4,7 @@
 
 import { partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
+import { isFloatingMap } from './floating';
 import type { Op, Sheet } from './types';
 
 export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
@@ -21,6 +22,7 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         // so dropping the synthetic patch here is safe; applying it would
         // throw immer error 14 ('only supports array indices') on the array.
         if (!op.id) continue;
+        if (op.path.length === 1 && op.path[0] === 'images' && !isFloatingMap(op.value)) continue;
         const i = sheets.findIndex((s) => s.id === op.id);
         if (i === -1) continue;
         patches.push({

@@ -156,7 +156,7 @@ describe('eigensheets preview (floating images)', () => {
             celldata: [{ r: 0, c: 0, v: cell }],
             data: [[cell]],
             config: {},
-            images: [{ id: 'img_1', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 }],
+            images: { img_1: { id: 'img_1', index: 'a0', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 } },
         };
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);
@@ -183,16 +183,17 @@ describe('eigensheets preview (floating images)', () => {
             name: 'Offset',
             celldata: [{ r: 4, c: 2, v: cell }],
             config: {},
-            images: [
-                {
+            images: {
+                img_1: {
                     id: 'img_1',
+                    index: 'a0',
                     mediaName: 'chart.png',
                     x: 4 * SHEET_DEFAULT_COL_WIDTH,
                     y: 6 * SHEET_DEFAULT_ROW_HEIGHT,
                     width: 160,
                     height: 120,
                 },
-            ],
+            },
         };
         const media = new Map([['chart.png', IMAGE_URL]]);
         // The C5 origin takes two columns and four rows off the stored geometry.
@@ -213,7 +214,7 @@ describe('eigensheets preview (floating images)', () => {
             name: 'Above',
             celldata: [{ r: 4, c: 2, v: cell }],
             config: {},
-            images: [{ id: 'img_1', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 }],
+            images: { img_1: { id: 'img_1', index: 'a0', mediaName: 'chart.png', x: 0, y: 0, width: 160, height: 60 } },
         };
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);
@@ -240,7 +241,7 @@ describe('eigensheets preview (floating images)', () => {
             celldata: [],
             data: [],
             config: {},
-            images: [{ id: 'img_1', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 }],
+            images: { img_1: { id: 'img_1', index: 'a0', mediaName: 'chart.png', x, y: 30, width: 160, height: 120 } },
         };
         const doc = new Y.Doc();
         seedSheetsDoc(doc, [sheet], []);

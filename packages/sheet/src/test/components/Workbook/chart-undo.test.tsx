@@ -64,7 +64,7 @@ test('undoing a move of a chart a peer deleted drops the entry and sends nothing
     await step((w) => {
         id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
     });
-    await step((w) => w.updateChartBox(id, { x: 300 }));
+    await step((w) => w.updateFloatingBox({ kind: 'chart', id: id }, { x: 300 }));
     await step((w) => w.applyOp(peerDeletes(id)));
     const before = sent.length;
     await step((w) => w.undo());
@@ -81,7 +81,7 @@ test('redoing a move of a chart a peer deleted drops the entry', async () => {
     await step((w) => {
         id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
     });
-    await step((w) => w.updateChartBox(id, { x: 300 }));
+    await step((w) => w.updateFloatingBox({ kind: 'chart', id: id }, { x: 300 }));
     await step((w) => w.undo());
     await step((w) => w.applyOp(peerDeletes(id)));
     const before = sent.length;

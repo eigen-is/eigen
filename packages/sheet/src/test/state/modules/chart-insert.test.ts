@@ -59,7 +59,7 @@ test('charts the selection below itself at Google’s size, selected with its ed
     expect(refused).toBeUndefined();
     // A1 is the left edge, the bottom of row 5 the top (visibledatarow is the bottom of each row).
     expect(chart).toMatchObject({ x: 0, y: 100, width: 600, height: 371 });
-    expect(next.activeChart).toEqual({ id: 'new', editor: true });
+    expect(next.activeObject).toEqual({ kind: 'chart', id: 'new', editor: true });
     const spec = parseChartSpec(chart?.spec ?? '');
     expect(spec).toMatchObject({ type: 'column', title: 'North, South and East', categoryAxis: { title: 'Month' } });
     expect(spec?.data).toMatchObject({
@@ -85,9 +85,11 @@ test('a viewer inserts nothing', () => {
 });
 
 test('the new chart takes the selection from a selected image', () => {
-    const { next } = insert({ ...workbook({ row: [0, 4], column: [0, 3] }), activeImg: 'img' });
-    expect(next.activeImg).toBeUndefined();
-    expect(next.activeChart).toEqual({ id: 'new', editor: true });
+    const { next } = insert({
+        ...workbook({ row: [0, 4], column: [0, 3] }),
+        activeObject: { kind: 'image', id: 'img', editor: false },
+    });
+    expect(next.activeObject).toEqual({ kind: 'chart', id: 'new', editor: true });
 });
 
 test('a selection or a table around one cell past the values a chart draws is refused as too much data', () => {

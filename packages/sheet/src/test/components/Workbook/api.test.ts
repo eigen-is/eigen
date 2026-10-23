@@ -52,6 +52,7 @@ function applyPeerOps(ctx: Context, ops: Op[]): Context {
         () => {},
         () => {},
         settings,
+        { undoList: [], redoList: [] },
     ).applyOp(ops);
     return next;
 }

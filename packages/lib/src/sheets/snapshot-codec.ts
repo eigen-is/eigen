@@ -7,6 +7,7 @@
 // decoder rebuilds is exactly today's shape.
 
 import { cloneSides, parseCellKey } from './borders';
+import { isFloatingMap } from './floating';
 import type {
     CalcChainEntry,
     Cell,
@@ -40,10 +41,9 @@ type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images' | 'cha
     config?: Omit<SheetConfig, 'borderInfo'>;
     cells?: EncodedCell[];
     borderCells?: EncodedBorder[];
-    // Floating images ride verbatim — a handful of small records per sheet, nothing
-    // to intern. The key is omitted when the sheet has none; decode materializes it.
-    images?: SheetImage[];
-    // Charts too: omitted when empty, materialized on decode.
+    // Floating images and charts ride verbatim, a handful of small records per sheet with nothing
+    // to intern. A map is omitted when empty; decode materializes it.
+    images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
 };
 
@@ -77,7 +77,7 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
             ...rest
         } = sheet as RuntimeSheet;
         const out: EncodedSheet = { ...rest };
-        if (images && images.length > 0) out.images = images;
+        if (images && Object.keys(images).length > 0) out.images = images;
         if (charts && Object.keys(charts).length > 0) out.charts = charts;
 
         // The dense matrix never goes on the wire, but it is the authoritative copy
@@ -126,10 +126,11 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
     if (f !== FORMAT) throw unknownFormat(f);
     return sheets.map((encoded) => {
         const { cells, borderCells, config, images, charts, ...rest } = encoded;
-        // Both are materialized on every sheet, the way normalizeSheetConfig materializes
-        // a config collection: the editor replaces `images` wholesale and writes each chart
-        // under its own key, and a patch resolves against a base that already carries the key.
-        const sheet: RuntimeSheet = { ...rest, images: images ?? [], charts: charts ?? {} };
+        // Both maps are materialized on every sheet, the way normalizeSheetConfig materializes a
+        // config collection: the editor writes each object under its own key, and a patch resolves
+        // against a base that already carries the map. An images array, stored before images became
+        // a map, is dropped: sheets keep no backward compatibility.
+        const sheet: RuntimeSheet = { ...rest, images: isFloatingMap(images) ? images : {}, charts: charts ?? {} };
 
         if (cells) {
             const celldata: CellWithRowAndCol[] = [];

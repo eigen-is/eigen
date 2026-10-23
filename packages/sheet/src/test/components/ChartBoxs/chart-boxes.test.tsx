@@ -223,7 +223,7 @@ test('a double-click opens the chart editor, and the editor follows the chart', 
             { id: 's2', name: 'Two' },
         ],
     });
-    await step((w) => w.updateChartBox('c1', { x: 10 }));
+    await step((w) => w.updateFloatingBox({ kind: 'chart', id: 'c1' }, { x: 10 }));
     expect(editors.at(-1)?.chart.x).toBe(10);
     await clickCell(container);
     expect(editors.at(-1)).toBeNull();

@@ -381,17 +381,7 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
 
 export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
     const [pure, specialOps] = opToPatchOnSheets(ctx.sheets, ops);
-    const patches: Patch[] = pure.map((p) => ({ ...p, path: ['sheets', ...p.path] }));
-    for (const op of ops) {
-        if (op.id && op.path[0] === 'images' && op.id === ctx.currentSheetId) {
-            patches.push({
-                op: op.op as 'add' | 'remove' | 'replace',
-                value: op.value,
-                path: ['insertedImgs'],
-            });
-        }
-    }
-    return [patches, specialOps];
+    return [pure.map((p) => ({ ...p, path: ['sheets', ...p.path] })), specialOps];
 }
 
 export function inverseRowColOptions(options?: PatchOptions): PatchOptions | undefined {

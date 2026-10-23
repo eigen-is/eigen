@@ -19,12 +19,11 @@ import { EllipsisVertical } from 'lucide-react';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import {
-    type ChartBox as ChartBoxFields,
-    deleteActiveChart,
+    deleteFloatingObject,
     getSheetIndex,
-    selectChart,
+    selectFloatingObject,
     sheetChartSvg,
-    updateChartBox,
+    updateFloatingBox,
 } from '../../state';
 
 // Resize floor (scene px === screen px; the grid is unzoomed).
@@ -47,7 +46,8 @@ export function ChartBoxs() {
 
 function ChartBox({ chart }: { chart: SheetChart }) {
     const { context, setContext } = useContext(WorkbookContext);
-    const active = context.activeChart?.id === chart.id;
+    const active = context.activeObject?.kind === 'chart' && context.activeObject.id === chart.id;
+    const ref = { kind: 'chart', id: chart.id } as const;
     const canEdit = context.allowEdit !== false;
 
     // A move or resize previews locally and writes once at the end of the gesture.
@@ -81,7 +81,7 @@ function ChartBox({ chart }: { chart: SheetChart }) {
     const startMove = (e: React.PointerEvent) => {
         if (e.button !== 0) return;
         e.stopPropagation();
-        setContext((ctx) => selectChart(ctx, chart.id));
+        setContext((ctx) => selectFloatingObject(ctx, ref));
         if (!canEdit) return;
         const controller = new AbortController();
         drag.current?.abort();
@@ -102,7 +102,7 @@ function ChartBox({ chart }: { chart: SheetChart }) {
                 controller.abort();
                 setPreview(null);
                 const { x, y } = moved(ev);
-                if (x !== chart.x || y !== chart.y) setContext((ctx) => updateChartBox(ctx, chart.id, { x, y }));
+                if (x !== chart.x || y !== chart.y) setContext((ctx) => updateFloatingBox(ctx, ref, { x, y }));
             },
             { signal: controller.signal },
         );
@@ -145,13 +145,13 @@ function ChartBox({ chart }: { chart: SheetChart }) {
             onContextMenu={(e) => e.stopPropagation()}
             onDoubleClick={(e) => {
                 e.stopPropagation();
-                if (canEdit) setContext((ctx) => selectChart(ctx, chart.id, true));
+                if (canEdit) setContext((ctx) => selectFloatingObject(ctx, ref, true));
             }}
             onKeyDown={(e) => {
                 if (e.key !== 'Escape') return;
                 e.stopPropagation();
                 setContext((ctx) => {
-                    ctx.activeChart = undefined;
+                    ctx.activeObject = undefined;
                 });
             }}
         >
@@ -177,7 +177,9 @@ function ChartBox({ chart }: { chart: SheetChart }) {
                     <MenuSections
                         create={
                             canEdit && (
-                                <DropdownMenuItem onClick={() => setContext((ctx) => selectChart(ctx, chart.id, true))}>
+                                <DropdownMenuItem
+                                    onClick={() => setContext((ctx) => selectFloatingObject(ctx, ref, true))}
+                                >
                                     Edit the chart
                                 </DropdownMenuItem>
                             )
@@ -196,8 +198,8 @@ function ChartBox({ chart }: { chart: SheetChart }) {
                                     variant="destructive"
                                     onClick={() =>
                                         setContext((ctx) => {
-                                            selectChart(ctx, chart.id);
-                                            deleteActiveChart(ctx);
+                                            deleteFloatingObject(ctx, ref);
+                                            ctx.activeObject = undefined;
                                         })
                                     }
                                 >
@@ -219,13 +221,13 @@ function ChartBox({ chart }: { chart: SheetChart }) {
                     onTransform={setPreview}
                     onCommit={(next, start) => {
                         setPreview(null);
-                        const fields: Partial<ChartBoxFields> = {};
+                        const fields: Partial<Box> = {};
                         if (next.x !== start.x) fields.x = next.x;
                         if (next.y !== start.y) fields.y = next.y;
                         if (next.width !== start.width) fields.width = next.width;
                         if (next.height !== start.height) fields.height = next.height;
                         if (Object.keys(fields).length > 0) {
-                            setContext((ctx) => updateChartBox(ctx, chart.id, fields));
+                            setContext((ctx) => updateFloatingBox(ctx, ref, fields));
                         }
                     }}
                 />

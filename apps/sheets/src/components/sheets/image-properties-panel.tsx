@@ -14,7 +14,7 @@ type ImagePropertiesPanelProps = {
 
 // Right-side panel for the active floating image (U4h). Composes the shared PropertiesPanel +
 // TransformSection so the numeric X/Y/W/H/° cluster and the keep-aspect checkbox match slides/vector.
-// Every edit is one op (writes through the workbook's updateImage path). Read-only viewers get a
+// Every edit is one op (writes through the workbook's updateFloatingBox path). Read-only viewers get a
 // disabled read-out.
 export function ImagePropertiesPanel({
     image,

@@ -101,6 +101,7 @@ describe('remote-op mirror (applyOp) still applies to viewers', () => {
             () => {},
             () => {},
             settings,
+            { undoList: [], redoList: [] },
         );
         workbook.applyOp(ops);
         return { vctx, next };

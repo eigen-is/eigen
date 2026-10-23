@@ -46,8 +46,7 @@ export function changeSheet(
 
     cancelNormalSelected(ctx);
     ctx.dataVerificationDropDownList = false;
-    ctx.activeImg = undefined;
-    ctx.activeChart = undefined;
+    ctx.activeObject = undefined;
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
     const record = ctx.sheetScrollRecord[id];
@@ -87,7 +86,6 @@ export function applySheetView(ctx: Context) {
     ctx.defaultrowlen = sheetDefaultRowHeight(sheet);
     ctx.defaultcollen = sheetDefaultColWidth(sheet);
     ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
-    ctx.insertedImgs = sheet.images;
     // A sheet added this recipe has no data until the Workbook effect initializes it.
     if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
     applySheetFilter(ctx);

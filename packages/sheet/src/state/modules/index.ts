@@ -12,6 +12,7 @@ export * from './cursor';
 export * from './data-verification';
 export * from './drop-cell';
 export * from './filter';
+export * from './floating';
 export * from './fonts';
 export * from './format-presets';
 export * from './formula-cache';

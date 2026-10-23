@@ -1,5 +1,5 @@
 import { chartColor, chartLabel, exceedsChartSpecBytes, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
-import { type SheetChart, sheetChartBox } from '@workspace/lib/sheets';
+import { type SheetChart, sheetFloatingBox } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
     ChartData,
@@ -70,7 +70,7 @@ export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): 
     const spec = parseChartSpec(chart.spec);
     const range = spec?.data.source === 'range' ? spec.data : null;
     const format = spec ? valueFormat(spec, resolver) : undefined;
-    const { width, height } = sheetChartBox(chart);
+    const { width, height } = sheetFloatingBox(chart);
     return renderChartSpecSvg({
         id: chart.id,
         spec,

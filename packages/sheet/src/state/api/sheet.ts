@@ -77,13 +77,16 @@ export function copySheet(ctx: Context, sheetId: string) {
     delete sheetData.status;
     sheetData.celldata = dataToCelldata(sheetData.data);
     delete sheetData.data;
-    // As in Excel and Google, a copy's charts read the copy where they read the sheet copied.
+    // A copy's images and charts take fresh ids, and its charts read the copy where they read the sheet copied, as
+    // in Excel and Google.
     const toCopy = (ref: CellRangeRef) => (ref.sheetId === sheetId ? { ...ref, sheetId: copyId } : ref);
+    const withFreshId = <T extends { id: string }>(object: T): [string, T] => {
+        const id = uuidv4();
+        return [id, { ...object, id }];
+    };
+    sheetData.images = Object.fromEntries(Object.values(sheetData.images ?? {}).map(withFreshId));
     sheetData.charts = Object.fromEntries(
-        Object.values(sheetData.charts ?? {}).map((chart) => {
-            const id = uuidv4();
-            return [id, { ...mapChartRefs(chart, toCopy), id }];
-        }),
+        Object.values(sheetData.charts ?? {}).map((chart) => withFreshId(mapChartRefs(chart, toCopy))),
     );
     api.addSheet(ctx, undefined, copyId, ctx.sheets[index].isPivotTable, sheetName, sheetData);
     const sheetOrderList: Record<string, number> = {};

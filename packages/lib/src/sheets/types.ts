@@ -120,14 +120,12 @@ export type BorderStyleName =
 
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
-// A floating image on a sheet: absolutely positioned over the grid in unzoomed grid
-// pixels (0,0 is A1's top-left), rotated about its own center. `mediaName` names the
-// file in the document's `media/` folder — the editor and the server renderers both
-// resolve it at render time (docs/MEDIA-REFERENCES.md). `angle` is absent on images
-// stored before rotation existed and reads as 0 at every render/commit site.
-export type SheetImage = {
+// An image or a chart floating over a sheet: unzoomed grid pixels from A1's top-left, rotated about its center by
+// `angle` degrees clockwise, absent reading as 0. `index` orders images and charts together for painting, a
+// fractional key with ties broken by id (floatingItems).
+export type SheetFloatingObject = {
     id: string;
-    mediaName: string;
+    index: string;
     x: number;
     y: number;
     width: number;
@@ -135,18 +133,13 @@ export type SheetImage = {
     angle?: number;
 };
 
-// A floating chart on a sheet, in the same grid pixels as SheetImage. `index` is a fractional
-// z-order key, ties broken by id. `spec` is the stored ChartSpec JSON, read only through
-// parseChartSpec (@workspace/lib/charts); its range refs name sheets by id.
-export type SheetChart = {
-    id: string;
-    index: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    spec: string;
-};
+// `mediaName` names the file in the document's `media/` folder, which the editor and the server renderers resolve at
+// render time (docs/MEDIA-REFERENCES.md).
+export type SheetImage = SheetFloatingObject & { mediaName: string };
+
+// `spec` is the stored ChartSpec JSON, read only through parseChartSpec (@workspace/lib/charts); its range refs name
+// sheets by id.
+export type SheetChart = SheetFloatingObject & { spec: string };
 
 // Per-cell data-validation rule, produced by the editor's state layer
 // (state/modules/data-verification.ts) and consumed by the canvas painter
@@ -283,12 +276,9 @@ export type Sheet = {
     // goToLink navigation. The linked cell carries the `hl` backref. linkType
     // ∈ webpage | sheet | cellrange (state/modules/hyperlink.ts).
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
-    // Floating images, in paint order. Empty on every sheet that has none — the
-    // decoder materializes the list the way normalizeSheetConfig materializes a
-    // config collection, so an op replacing it resolves against any base.
-    images?: SheetImage[];
-    // Floating charts by id. Materialized like the config collections, because each chart is
+    // Floating images and charts by id. Materialized like the config collections, because each object is
     // written as its own key and a first write to a missing map would ship the whole map.
+    images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
 };
 
