@@ -437,21 +437,17 @@ function adjustSelectionForInsert(
     }
 }
 
-// Per sheet, never `ctx.sheets = ...`: a wholesale reassignment makes immer emit one root-level
-// replace carrying the whole workbook, shipped over collab on every edit (rowcol-patches.test.ts).
-// The edited sheet, and one whose formulas moved, is written back whole. A sheet that changed only
-// through its charts gets each moved chart under its own key, so undo restores those charts and not
-// the whole sheet over a peer's later edits on it.
-function writeBackSheets(ctx: Context, sheets: Sheet[], id: string) {
+// Per sheet and per field, never `ctx.sheets = ...` or a whole sheet: a wholesale reassignment makes immer emit one
+// replace carrying the whole workbook, shipped over collab on every edit (rowcol-patches.test.ts), and a whole sheet's
+// undo would put back its images and charts over a peer's later ones. A moved chart is written under its own key; an
+// image never moves.
+function writeBackSheets(ctx: Context, sheets: Sheet[]) {
     sheets.forEach((next, i) => {
-        const sheet = ctx.sheets[i];
-        const before: Record<string, unknown> = sheet;
-        const after: Record<string, unknown> = next;
-        if (next.id === id || !Object.keys(next).every((key) => key === 'charts' || after[key] === before[key])) {
-            ctx.sheets[i] = next;
-            return;
+        const sheet: Record<string, unknown> = ctx.sheets[i];
+        for (const [key, value] of Object.entries(next)) {
+            if (key !== 'charts' && sheet[key] !== value) sheet[key] = value;
         }
-        const { charts } = sheet;
+        const { charts } = ctx.sheets[i];
         for (const chart of Object.values(next.charts ?? {})) {
             if (charts && charts[chart.id] !== chart) charts[chart.id] = chart;
         }
@@ -478,7 +474,7 @@ export function insertRowCol(
 
     const { type, index, count } = op;
 
-    writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, { ...op, id }), id);
+    writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, { ...op, id }));
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
@@ -547,7 +543,7 @@ export function deleteRowCol(
     const { type, start, end } = op;
     const slen = end - start + 1;
 
-    writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, { ...op, id }), id);
+    writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, { ...op, id }));
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;

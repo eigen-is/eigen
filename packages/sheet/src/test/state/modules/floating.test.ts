@@ -18,7 +18,9 @@ import {
     withoutDeletedFloatingEdits,
 } from '../../../state/modules/floating';
 import { insertImage, removeImageByMediaName, replaceImageMediaName } from '../../../state/modules/image';
+import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Sheet } from '../../../state/types';
+import { inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -199,5 +201,50 @@ describe('floating writers', () => {
         ]) {
             expect(author(base, recipe).ops).toEqual([]);
         }
+    });
+});
+
+// A row or column op moves no image, and only the charts whose refs it shifts: it, its undo and its redo write those
+// per object, so a peer's insert, delete or move of any other object on the sheet survives on every client.
+describe('row and column ops over floating objects', () => {
+    const grid = () => Array.from({ length: 10 }, () => Array.from({ length: 4 }, () => null));
+    const withGrid = () =>
+        produce(workbook(), (ctx: Context) => {
+            for (const sheet of ctx.sheets) sheet.data = grid();
+        });
+    const insertOp = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: S } as const;
+    const deleteOp = { type: 'row', start: 3, end: 6, id: S } as const;
+    const peerEdits = (ctx: Context) => {
+        insertImage(ctx, 'new.png', 40, 30);
+        deleteFloatingObject(ctx, { kind: 'image', id: 'i1' });
+        updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 });
+    };
+
+    test.each([
+        ['insert', (ctx: Context) => insertRowCol(ctx, insertOp), { insertRowColOp: insertOp }],
+        ['delete', (ctx: Context) => deleteRowCol(ctx, deleteOp), { deleteRowColOp: deleteOp }],
+    ] as const)("undoing a row %s keeps a peer's later insert, delete and move, everywhere", (_, recipe, options) => {
+        const base = withGrid();
+        const op = author(base, recipe, options);
+        const peerEdit = author(receive(base, op.ops), peerEdits);
+        const undone = applyPatches(receive(op.next, peerEdit.ops), op.inverse);
+        const undoOptions = { ...inverseRowColOptions(options), restoreDeletedCells: 'deleteRowColOp' in options };
+        const undoOps = patchToOp(undone, op.inverse, undoOptions, true);
+        const expected = objects(peerEdit.next.sheets);
+        expect(Object.keys(expected[0].images!)).toHaveLength(1);
+        expect(objects(undone.sheets)).toEqual(expected);
+        expect(objects(receive(peerEdit.next, undoOps).sheets)).toEqual(expected);
+        expect(objects(join(base, [op.ops, peerEdit.ops, undoOps]))).toEqual(expected);
+    });
+
+    test("a row insert racing a peer's image insert keeps the image, everywhere", () => {
+        const base = withGrid();
+        const op = author(base, (ctx) => insertRowCol(ctx, insertOp), { insertRowColOp: insertOp });
+        const peerInsert = author(base, (ctx) => insertImage(ctx, 'new.png', 40, 30));
+        const onA = receive(op.next, peerInsert.ops);
+        const onB = receive(peerInsert.next, op.ops);
+        expect(Object.keys(onB.sheets[0].images!)).toHaveLength(2);
+        expect(objects(onA.sheets)).toEqual(objects(onB.sheets));
+        expect(objects(join(base, [peerInsert.ops, op.ops]))).toEqual(objects(onB.sheets));
     });
 });
