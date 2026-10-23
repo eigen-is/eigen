@@ -78,23 +78,25 @@ export function defaultChartPresentation(type: ChartType): Omit<ChartSpec, 'type
 export const DEFAULT_CHART_SERIES_STYLE: ChartSeriesStyle = { color: null, markers: false, smooth: false };
 
 // Insert → Chart's sample, one dataset for every type since the Type switch keeps the data: the share of a source's
-// light per band, Planck's B(λ,T) = 2hc²/λ⁵ / (e^(hc/λkT) − 1) integrated over the band and divided by σT⁴/π. Bands in nm:
-// UV < 400, Blue 400–500, Green 500–600, Red 600–700, IR-A 700–1400, IR-B/C > 1400. Sun 5772 K, bulb 3000 K, hot
-// star 10000 K; rounded to 0.1 by largest remainder, so each sums to 100. A pie draws the Sun.
+// light per wavelength bin. A bin's value is Planck's B(λ,T) = 2hc²/λ⁵ / (e^(hc/λkT) − 1) integrated over the bin and
+// divided by the integral over 300–1000 nm, so each source sums to 100 inside that window, rounded to 0.1 by largest
+// remainder. Sun 5772 K, "Bulb (incandescent)" 2700 K, hot star 10000 K. Of each source's total energy, about 31% (Sun), 80% (bulb) and
+// 36% (hot star) falls outside the window. The bins are equal, 100 nm wide, so the bars compare and the peak moves with
+// temperature: the hot star's in the first bin, the Sun's in the second and third, the bulb's in the last. A pie draws the Sun.
 export function sampleChartSpec(type: ChartType): ChartSpec {
-    const categories = ['UV', 'Blue', 'Green', 'Red', 'IR-A', 'IR-B/C'];
+    const categories = ['300–400', '400–500', '500–600', '600–700', '700–800', '800–900', '900–1000'];
     const sources = [
-        { name: 'Sun', values: [12.2, 12.6, 12.8, 11.3, 37.1, 14.0] },
-        { name: 'Bulb', values: [0.2, 1.1, 2.6, 4.4, 43.3, 48.4] },
-        { name: 'Hot star', values: [48.1, 15.3, 10.4, 7.0, 15.5, 3.7] },
+        { name: 'Sun', values: [13.1, 18.3, 18.6, 16.5, 13.7, 11.0, 8.8] },
+        { name: 'Bulb (incandescent)', values: [0.3, 2.5, 7.5, 14.3, 20.9, 25.8, 28.7] },
+        { name: 'Hot star', values: [32.4, 23.8, 16.2, 11.0, 7.5, 5.3, 3.8] },
     ];
     const defaults = defaultChartPresentation(type);
     return {
         ...defaults,
         type,
         title: "Where a star's light goes",
-        categoryAxis: { ...defaults.categoryAxis, title: 'Wavelength' },
-        valueAxis: { ...defaults.valueAxis, title: 'Share of light (%)' },
+        categoryAxis: { ...defaults.categoryAxis, title: 'Wavelength (nm)' },
+        valueAxis: { ...defaults.valueAxis, title: 'Share of light, 300–1000 nm (%)' },
         data: {
             source: 'inline',
             categories,

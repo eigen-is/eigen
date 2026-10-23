@@ -52,7 +52,7 @@ describe('renderChartSpecSvg', () => {
         ).toBe(true);
         expect(svg.endsWith('</svg>')).toBe(true);
         expect(svg).toContain('Where a star&apos;s light goes');
-        expect(svg).toContain('IR-B/C');
+        expect(svg).toContain('900–1000');
     });
 
     test('each shape draws as its own element would', () => {

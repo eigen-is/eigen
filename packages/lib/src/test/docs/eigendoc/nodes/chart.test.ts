@@ -65,7 +65,7 @@ describe('chart HTML', () => {
         expect(span?.getAttribute('data-height')).toBe('300');
         const img = span?.querySelector('img');
         expect(img?.getAttribute('alt')).toBe("Where a star's light goes");
-        expect(decodeURIComponent(img?.getAttribute('src') ?? '')).toContain('>UV</text>');
+        expect(decodeURIComponent(img?.getAttribute('src') ?? '')).toContain('>300–400</text>');
         expect(chartsIn(html)).toHaveLength(1);
         let figures = 0;
         createDocument(html, getSchema(extensions)).descendants((node) => {

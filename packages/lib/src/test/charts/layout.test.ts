@@ -501,7 +501,7 @@ describe('category labels', () => {
 
     test('fit under their band upright', () => {
         const out = layout('column');
-        for (const band of ['UV', 'Blue', 'Green', 'Red', 'IR-A', 'IR-B/C']) {
+        for (const band of ['300–400', '400–500', '500–600', '600–700', '700–800', '800–900', '900–1000']) {
             expect(out.labels.find((label) => label.text === band)?.rotate).toBe(0);
         }
     });
@@ -561,7 +561,7 @@ describe('category labels', () => {
         const points = out.labels.find((label) => label.text === 'Points');
         expect(teams?.rotate).toBe(0);
         expect(points?.rotate).toBe(-90);
-        const uv = out.labels.find((label) => label.text === 'UV');
+        const uv = out.labels.find((label) => label.text === '300–400');
         expect(teams && uv && teams.y > uv.y).toBe(true);
     });
     // Thin bands put a centered name's half line past the plot's ends.
@@ -751,7 +751,7 @@ describe('legend', () => {
             const column = rects(layout('column', { legend: side }), 'legend');
             expect(column[0].x).toBeCloseTo(column[1].x);
             expect(column[1].y).toBeGreaterThan(column[0].y);
-            expect(side === 'left' ? column[0].x < 100 : column[0].x > 500).toBe(true);
+            expect(side === 'left' ? column[0].x < 100 : column[0].x > 400).toBe(true);
         }
         expect(rects(layout('column', { legend: 'none' }), 'legend')).toEqual([]);
     });
@@ -831,10 +831,10 @@ describe('pie', () => {
     test("slices sweep their share clockwise from 12 o'clock and sum to 360", () => {
         const out = layout('pie');
         const pie = slices(out);
-        expect(pie).toHaveLength(6);
+        expect(pie).toHaveLength(7);
         expect(pie[0].startAngle).toBe(270);
         expect(pie.reduce((sum, slice) => sum + slice.sweepAngle, 0)).toBeCloseTo(360);
-        expect(pie[0].sweepAngle).toBeCloseTo((12.2 / 100) * 360);
+        expect(pie[0].sweepAngle).toBeCloseTo((13.1 / 100) * 360);
         for (let i = 1; i < pie.length; i++) {
             expect(pie[i].startAngle).toBeCloseTo((pie[i - 1].startAngle + pie[i - 1].sweepAngle) % 360);
         }
@@ -850,8 +850,8 @@ describe('pie', () => {
         expect(pie[1].fill).toBe(solidFill(chartColor(1)));
         const automatic = slices(layout('pie', { sliceColors: [null, '#000000'] }));
         expect(automatic.map((slice) => slice.fill)).toEqual(
-            [chartColor(0), '#000000', chartColor(2), chartColor(3), chartColor(4), chartColor(5)].map((color) =>
-                solidFill(color),
+            [chartColor(0), '#000000', chartColor(2), chartColor(3), chartColor(4), chartColor(5), chartColor(6)].map(
+                (color) => solidFill(color),
             ),
         );
     });
