@@ -129,7 +129,7 @@ export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
     | (BytesTransformJob & { data: ArrayBuffer });
 
-// The warnings that count what a read skipped or an import left out.
+// The warnings that count what a read skipped, an import left out or an export cut.
 export type CountedWarningCode =
     | 'corrupt-blobs-skipped'
     | 'blocks-flattened'
@@ -151,7 +151,14 @@ export type CountedWarningCode =
     | 'band-blocks-cut'
     | 'conditional-formats-dropped'
     | 'validations-dropped'
-    | 'validation-prompts-cut';
+    | 'validation-prompts-cut'
+    | 'sheet-names-changed'
+    | 'cells-dropped'
+    | 'texts-cut'
+    | 'formulas-dropped'
+    | 'number-formats-dropped'
+    | 'cell-formats-dropped'
+    | 'links-dropped';
 
 export type TransformWarning =
     | { code: 'recalc-failed'; message: string }

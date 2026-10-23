@@ -80,6 +80,13 @@ export function pxToColumnWidth(px: number, digit: number): number {
 export const MAX_FORMULA_LENGTH = 8192;
 export const MAX_NUMBER_FORMAT_LENGTH = 255;
 export const MAX_FORMULA_STRING_LENGTH = 255;
+// Excel's limits on a cell's text, a sheet's name, a workbook's cell formats and a sheet's links.
+export const MAX_TEXT_LENGTH = 32_767;
+export const MAX_SHEET_NAME_LENGTH = 31;
+export const MAX_CELL_FORMATS = 64_000;
+export const MAX_SHEET_LINKS = 65_530;
+// The characters Excel refuses in a sheet's name; it refuses a quote at either end too.
+export const SHEET_NAME_FORBIDDEN = /[\\/?*[\]:]/g;
 
 // ECMA-376 § 18.8.30's built-in formats that name one code whatever the locale.
 export const BUILTIN_NUMBER_FORMATS = new Map<number, string>([
@@ -128,6 +135,18 @@ export function decodeEscapes(text: string): string {
     return text.includes('_x')
         ? text.replace(ESCAPED, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
         : text;
+}
+
+// A control character XML 1.0 can't hold, and a literal escape's underscore. Tab, line feed and carriage return XML
+// holds, and the C1 controls past U+007F.
+const UNESCAPED = /[\p{Cc}\uFFFE\uFFFF]|_(?=x[0-9A-Fa-f]{4}_)/gu;
+
+export function encodeEscapes(text: string): string {
+    return text.replace(UNESCAPED, (char) => {
+        const code = char.charCodeAt(0);
+        const held = char === '\t' || char === '\n' || char === '\r' || (code >= 0x7f && code < 0xfffe);
+        return held ? char : `_x${code.toString(16).toUpperCase().padStart(4, '0')}_`;
+    });
 }
 
 // A number as a rule's operand holds it, unquoted; anything else is a reference, a function or a quoted string.
