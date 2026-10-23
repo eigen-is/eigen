@@ -213,7 +213,10 @@ function chartSpec(
         if (ref) return cellRange(xmlTrimmedText(child(ref, 'f')), data.ranges);
         return child(source, 'numLit') || child(source, 'strLit') ? unsupported() : null;
     };
-    const firstValues = range(child(first, 'val'));
+    // The sheet draws a row or a column of values or categories, never an area.
+    const line = (ref: CellRangeRef | null) =>
+        ref && ref.row[0] !== ref.row[1] && ref.column[0] !== ref.column[1] ? unsupported() : ref;
+    const firstValues = line(range(child(first, 'val')));
     let categoryRange = range(categories);
     // A multi-level ref spans a column per level, or a row when the values run across, the innermost last.
     if (categoryRange && child(categories, 'multiLvlStrRef')) {
@@ -223,6 +226,7 @@ function chartSpec(
                 ? { ...categoryRange, column: [column[1], column[1]] }
                 : { ...categoryRange, row: [row[1], row[1]] };
     }
+    categoryRange = line(categoryRange);
     const size = firstValues
         ? (firstValues.row[1] - firstValues.row[0] + 1) * (firstValues.column[1] - firstValues.column[0] + 1)
         : 0;
@@ -237,7 +241,7 @@ function chartSpec(
                 return {
                     ...style(ser),
                     name: (child(name, 'strRef') && range(name)) ?? seriesName(ser),
-                    values: range(child(ser, 'val')),
+                    values: line(range(child(ser, 'val'))),
                 };
             }),
         },
