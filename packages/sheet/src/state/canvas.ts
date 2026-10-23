@@ -11,13 +11,13 @@ import { canvasColors } from './render/colors';
 import { drawFilterUI } from './render/filter-ui';
 import { mainVisibleRange } from './render/geometry';
 import { drawColumnHeader, drawRowHeader } from './render/headers';
-import { clearCellOverflowCache, computeCellOverflowMap } from './render/overflow';
+import { computeCellOverflowMap } from './render/overflow';
 import { collectVisibleCells, renderCells, renderMergedCells } from './render/phases';
 import type { RenderPass } from './render/types';
 import { getSheetIndex } from './utils';
 
-// The render caches (measured text, overflow rows) survive the multi-pass
-// draw bursts; 100ms without a drawMain call invalidates them.
+// The measured-text cache survives the multi-pass draw bursts; 100ms without a
+// drawMain call invalidates it.
 let renderCacheClearTimeout: ReturnType<typeof setTimeout> | undefined;
 
 export class Canvas {
@@ -111,6 +111,7 @@ export class Canvas {
         renderCtx.fillStyle = canvasColors(this.canvasElement).cellText;
 
         const sheetIndex = getSheetIndex(this.sheetCtx, this.sheetCtx.currentSheetId);
+        const dataVerification = sheetIndex == null ? undefined : this.sheetCtx.sheets[sheetIndex].dataVerification;
 
         const pass: RenderPass = {
             sheetCtx: this.sheetCtx,
@@ -127,9 +128,16 @@ export class Canvas {
             colEnd,
             flowdata,
             cfCompute: getComputeMap(this.sheetCtx),
-            dataVerification: sheetIndex == null ? undefined : this.sheetCtx.sheets[sheetIndex].dataVerification,
-            // Overflow cell configuration for render area
-            cellOverflowMap: computeCellOverflowMap(this.sheetCtx, renderCtx, colStart, colEnd, rowStart, rowEnd),
+            dataVerification,
+            cellOverflowMap: computeCellOverflowMap(
+                this.sheetCtx,
+                renderCtx,
+                dataVerification,
+                colStart,
+                colEnd,
+                rowStart,
+                rowEnd,
+            ),
             drawGridLines: !this.sheetCtx.currentSheetIsPivot && this.sheetCtx.showGridLines,
         };
 
@@ -156,7 +164,6 @@ export class Canvas {
 
         renderCacheClearTimeout = setTimeout(() => {
             clearMeasureTextCache();
-            clearCellOverflowCache();
         }, 100);
     }
 

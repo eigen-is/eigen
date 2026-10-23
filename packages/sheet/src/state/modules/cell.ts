@@ -54,7 +54,8 @@ export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize
     } else if (attr === 'fs') {
         value ||= defaultFontSize.toString();
     } else if (attr === 'tb') {
-        value ||= '0';
+        // Text overflows unless set to clip ('0') or wrap ('2'), as in Google Sheets and Excel.
+        value ||= '1';
     }
 
     return value;
