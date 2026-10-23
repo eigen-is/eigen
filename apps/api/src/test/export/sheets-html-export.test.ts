@@ -17,6 +17,8 @@ import {
     renderSheetsPreviewHtml,
     sheetsHtmlDocument,
 } from '../../lib/export/sheets/render';
+import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
+import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { NO_MEDIA } from '../setup';
 
 // Build a Sheet with both `data` (matrix form, required by the CF engine) and `celldata`
@@ -660,6 +662,30 @@ describe('Sheets HTML export — cell styling', () => {
         expect(css({ v: '#N/A', m: '#N/A', ct: { fa: 'General', t: 'e' } })).toContain('text-align:center');
         expect(css({ v: 42, m: '42', ht: 1 })).toContain('text-align:left');
         expect(css({ v: 'text', m: 'text' })).not.toContain('text-align');
+    });
+
+    test('an imported number without an alignment, horizontal="general" too, renders right; imported text keeps none', () => {
+        const [sheet] = xlsxToSheets(
+            xlsxFixture({
+                sheets: [
+                    {
+                        data: rowsXml([
+                            ['A1', 42],
+                            ['B1', 7, 1],
+                            ['C1', 'text'],
+                        ]),
+                    },
+                ],
+                styles: '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0"><alignment horizontal="general"/></xf></cellXfs>',
+            }),
+        );
+        const css = (v: Cell | null | undefined) =>
+            v ? renderSheetsHtml([makeSheet([{ r: 0, c: 0, v }])], NO_MEDIA).css : '';
+        const [number, general, text] = (sheet?.celldata ?? []).map(({ v }) => v);
+        expect([number?.ht, general?.ht]).toEqual([undefined, undefined]);
+        expect(css(number)).toContain('text-align:right');
+        expect(css(general)).toContain('text-align:right');
+        expect(css(text)).not.toContain('text-align');
     });
 
     test('rt = "vertical" produces vertical writing-mode', () => {

@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
+import { setCellValue } from '../../../state/modules/cell';
 import { clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet } from '../../../state/modules/text';
 import type { Cell } from '../../../state/types';
 import { contextFactory } from '../factories/context';
@@ -59,6 +60,30 @@ describe('state/modules/text — getCellTextInfo wrap', () => {
     test('a wrapped date stays on one line', () => {
         const info = layout({ v: 45000, m: '2023-03-15', ct: { fa: 'yyyy-MM-dd', t: 'd' }, tb: '2' });
         expect(info?.values.map((word) => word.content)).toEqual(['2023-03-15']);
+    });
+});
+
+// Excel's General alignment: a number without its own alignment, typed or as the xlsx import stores one, draws right.
+describe('state/modules/text — getCellTextInfo General alignment', () => {
+    beforeEach(() => {
+        clearMeasureTextCache();
+    });
+
+    function typed(text: string): Cell {
+        const data: (Cell | null)[][] = [[null]];
+        setCellValue(contextFactory() as Context, 0, 0, data, text);
+        return data[0][0] ?? {};
+    }
+
+    // The gap left of the text in a 40 px cell: 2 px of padding drawn left, the rest drawn right.
+    const leftOf = (cell: Cell) => layout(cell)?.textLeftAll;
+
+    test('a typed number and an imported one draw right, text left', () => {
+        const imported = { v: 42, m: '42', ct: { fa: 'General', t: 'n' } };
+        expect(leftOf(typed('42'))).toBe(40 - 14 - 2);
+        expect(leftOf(imported)).toBe(40 - 14 - 2);
+        expect(leftOf(typed('ab'))).toBe(2);
+        expect(leftOf({ ...imported, ht: 1 })).toBe(2);
     });
 });
 
