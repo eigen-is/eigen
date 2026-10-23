@@ -9,12 +9,14 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
+import { withSvgFallbacks } from '../office-image';
 
 // Materialized doc → export bytes. Runs inside the transform Worker (worker.ts owns
 // execution; the format logic stays here in export/, pure over Sheet[] + title).
 // Per-format renderers load lazily so an HTML export never evaluates the xlsx writer.
 // Recalc failure serves replayed values with a warning — an export must never fail
-// because recalc hiccuped. Floating images embed as data: URIs; xlsx ignores them.
+// because recalc hiccuped. Floating images embed as data: URIs, and go into an xlsx as the Office media prep made them,
+// an SVG beside its PNG.
 export async function renderEigensheetsExport(
     doc: Y.Doc,
     format: SheetExportFormat,
@@ -40,7 +42,8 @@ export async function renderEigensheetsExport(
         }
         case 'xlsx': {
             const { sheetsToXlsx } = await import('./to-xlsx');
-            return { data: toTransferableBuffer(await sheetsToXlsx(sheets, { title, warnings })), warnings };
+            const media = await withSvgFallbacks(await loadMedia(mediaNamesIn(sheets.map((sheet) => sheet.images))));
+            return { data: toTransferableBuffer(await sheetsToXlsx(sheets, { title, warnings, media })), warnings };
         }
     }
 }

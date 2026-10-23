@@ -116,7 +116,7 @@ async function serveExport(
 }
 
 // The one main-thread entry every export takes: run the shared transform seam, and prepare
-// the media the child names once it has read the document (an xlsx names none). The Worker
+// the media the child names once it has read the document. The Worker
 // returns the finished bytes — the UTF-8 document for html and pdf-html, the zip for xlsx,
 // docx and pptx.
 export async function runDocumentExport(

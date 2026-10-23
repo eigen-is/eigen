@@ -4,7 +4,7 @@ import { type ExportMedia, toTransferableBuffer } from '../document/transform/pr
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../shared/thumbnail-timeout';
 import type { ImageResult, WorkerInput } from '../shared/thumbnail-worker';
 
-// An image in a docx or pptx: the media item, and for an SVG the PNG a reader without SVG draws. The PNG is drawn and
+// An image in a docx, pptx or xlsx: the media item, and for an SVG the PNG a reader without SVG draws. The PNG is drawn and
 // read inside the transform process, so it never crosses the boundary on ExportMedia.
 export type OfficeMedia = ExportMedia & { png?: ArrayBuffer };
 

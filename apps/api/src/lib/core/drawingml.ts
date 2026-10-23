@@ -1,3 +1,4 @@
+import { normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { A_NS } from './ooxml';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from './xml';
@@ -281,4 +282,21 @@ export function drawingLines(body: XmlElement): string[] {
         lines.push(line);
     }
     return lines;
+}
+
+// A shape turned within 45° of a quarter turn: a group scales it along its swapped axes, and a spreadsheet anchors it by
+// its box turned that quarter.
+export function isSideways(degrees: number): boolean {
+    const turn = normalizeAngle(degrees);
+    return (turn >= 45 && turn < 135) || (turn >= 225 && turn < 315);
+}
+
+type Box = { x: number; y: number; width: number; height: number };
+
+// The cells Excel and LibreOffice place a picture turned `degrees` over: its box, or, sideways, its box turned a quarter
+// about its centre, its sides swapped. Its own inverse, so the reader takes the picture's box back from its anchor.
+export function anchoredBox(box: Box, degrees: number): Box {
+    if (!isSideways(degrees)) return box;
+    const { x, y, width, height } = box;
+    return { x: x + (width - height) / 2, y: y + (height - width) / 2, width: height, height: width };
 }
