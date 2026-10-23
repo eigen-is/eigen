@@ -64,12 +64,7 @@ function FigureView(props: NodeViewProps) {
 
     const getMaxWidth = useCallback(() => figureMaxWidth(containerRef.current, layout), [layout]);
     const commitWidth = useCallback((next: number) => setAttributes({ width: next }), [setAttributes]);
-    const resize = useFigureResize({
-        active: selected && isEditable,
-        getMaxWidth,
-        fit: fitFigureWidth,
-        commit: commitWidth,
-    });
+    const resize = useFigureResize({ getMaxWidth, fit: fitFigureWidth, commit: commitWidth });
 
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;
@@ -129,6 +124,7 @@ function FigureView(props: NodeViewProps) {
             resizeMode="aspect"
             onTransform={resize.onTransform}
             onCommit={resize.onCommit}
+            onGestureEnd={resize.onGestureEnd}
             label="Resize image"
             keyShortcuts={FIGURE_RESIZE_KEYS}
             className={cn(failed && 'min-w-[min(10rem,100%)]')}

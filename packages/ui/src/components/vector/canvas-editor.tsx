@@ -47,6 +47,7 @@ import {
     type VectorArrowElement,
     type VectorElement,
     type VectorElementPatch,
+    type ZOp,
 } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { sealed } from '@workspace/ui/components/properties-panel';
@@ -58,13 +59,11 @@ import { useDialogOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
-import { useContextMenu } from '../context-menu';
+import { ObjectContextMenu, useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
 import { HintPill } from '../hint-pill';
 import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
-import type { ZOp } from '../properties-panel/z-order';
 import { ObjectTransform } from '../transform/object-transform';
-import { CanvasObjectMenu } from './canvas-object-menu';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
 import { EmptyOutlines } from './empty-outline';
@@ -1671,7 +1670,7 @@ export function CanvasEditor({
                     {Math.round(zoom * 100)}%
                 </HintPill>
             )}
-            <CanvasObjectMenu
+            <ObjectContextMenu
                 contextMenu={objectContextMenu}
                 canEdit={canEdit}
                 imagePath={menuElement?.type === 'image' ? resolveMediaPath(menuElement.mediaName) : undefined}

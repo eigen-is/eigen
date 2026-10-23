@@ -33,6 +33,7 @@ import {
     type VectorElement,
     type VectorElementPatch,
     type VectorLinearElement,
+    type ZOp,
 } from '@workspace/lib/vector';
 import {
     AlignSection,
@@ -51,7 +52,6 @@ import {
     PropertySection,
     sealed,
     TransformSection,
-    type ZOp,
     ZOrderButtons,
 } from '@workspace/ui/components/properties-panel';
 import { type ReactNode, useCallback } from 'react';

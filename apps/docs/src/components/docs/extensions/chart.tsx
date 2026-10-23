@@ -51,7 +51,7 @@ function ChartView(props: NodeViewProps) {
             }),
         [editor, getPos],
     );
-    const resize = useFigureResize({ active: selected && isEditable, getMaxWidth, fit: fitChart, commit: commitSize });
+    const resize = useFigureResize({ getMaxWidth, fit: fitChart, commit: commitSize });
 
     // A resize lays the chart out again at every move, as the canvas does.
     const size = resize.preview ?? {
@@ -70,6 +70,7 @@ function ChartView(props: NodeViewProps) {
             resizeMode="free"
             onTransform={resize.onTransform}
             onCommit={resize.onCommit}
+            onGestureEnd={resize.onGestureEnd}
             label="Resize chart"
         >
             <span

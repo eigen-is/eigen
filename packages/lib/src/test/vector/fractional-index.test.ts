@@ -6,6 +6,8 @@ import {
     orderByFractionalIndex,
     syncInvalidIndices,
     validateOrderKey,
+    type ZOp,
+    zOrderKeys,
 } from '../../vector/fractional-index';
 
 const isSorted = (keys: string[]) => keys.every((k, i) => i === 0 || keys[i - 1] < k);
@@ -111,5 +113,77 @@ describe('syncInvalidIndices', () => {
         ];
         syncInvalidIndices(els);
         expect(els.map((e) => e.index)).toEqual(['a0', 'a1', 'a2']);
+    });
+});
+
+describe('zOrderKeys', () => {
+    const ZOPS: ZOp[] = ['forward', 'backward', 'toFront', 'toBack'];
+    const keyed = (ids: string, keys: string[]) => [...ids].map((id, i) => ({ id, index: keys[i] }));
+    // The paint order once the writes land, bottom first.
+    const paintOrder = (elements: { id: string; index: string }[], selectedIds: string[], op: ZOp) => {
+        const writes = new Map(zOrderKeys(elements, selectedIds, op).map((w) => [w.id, w.index]));
+        const next = elements.map((e) => ({ id: e.id, index: writes.get(e.id) ?? e.index }));
+        return orderByFractionalIndex(next)
+            .map((e) => e.id)
+            .join('');
+    };
+    // One element's step or jump in the list, the result every op must reach.
+    const moved = (order: string, id: string, op: ZOp) => {
+        const rest = [...order].filter((c) => c !== id);
+        const at = order.indexOf(id);
+        const to = { forward: at + 1, backward: at - 1, toFront: rest.length, toBack: 0 }[op];
+        rest.splice(Math.max(0, Math.min(rest.length, to)), 0, id);
+        return rest.join('');
+    };
+
+    const ABCD = keyed('abcd', ['a0', 'a1', 'a2', 'a3']);
+
+    test.each(ZOPS)('%s moves one element one step or to the edge, writing only its key', (op) => {
+        for (const id of 'bc') {
+            expect(paintOrder(ABCD, [id], op)).toBe(moved('abcd', id, op));
+            expect(zOrderKeys(ABCD, [id], op).map((w) => w.id)).toEqual([id]);
+        }
+    });
+
+    test('a non-contiguous selection moves as one block past its next neighbour', () => {
+        expect(paintOrder(ABCD, ['a', 'c'], 'forward')).toBe('bdac');
+        expect(paintOrder(ABCD, ['b', 'd'], 'backward')).toBe('bdac');
+        expect(paintOrder(ABCD, ['a', 'c'], 'toFront')).toBe('bdac');
+        expect(paintOrder(ABCD, ['b', 'd'], 'toBack')).toBe('bdac');
+    });
+
+    test('at the edge, with nothing selected, or with everything selected it writes nothing', () => {
+        expect(zOrderKeys(ABCD, ['d'], 'forward')).toEqual([]);
+        expect(zOrderKeys(ABCD, ['a'], 'backward')).toEqual([]);
+        expect(zOrderKeys(ABCD, [], 'toFront')).toEqual([]);
+        expect(zOrderKeys(ABCD, ['a', 'b', 'c', 'd'], 'forward')).toEqual([]);
+        expect(zOrderKeys(ABCD, ['a', 'b', 'c', 'd'], 'backward')).toEqual([]);
+    });
+
+    // Two peers inserting at once can write the same key; malformed keys come from a schemaless store.
+    const TIED = [
+        keyed('pqrs', ['a0', 'a0', 'a0', 'a1']),
+        keyed('pqrs', ['a0', 'a1', 'a1', 'a1']),
+        keyed('pqrs', ['a0', 'a0', 'a1', 'a1']),
+        keyed('pqrs', ['a1', 'a1', 'a1', 'a1']),
+        keyed('pqrs', ['a0', '', 'garbage', 'a1']),
+    ];
+
+    test.each(ZOPS)('%s on tied or malformed keys never throws and moves from the order they read in', (op) => {
+        for (const elements of TIED) {
+            const before = orderByFractionalIndex(elements)
+                .map((e) => e.id)
+                .join('');
+            for (const id of 'pqrs') {
+                expect(paintOrder(elements, [id], op)).toBe(moved(before, id, op));
+            }
+        }
+    });
+
+    test('a tie between two peers resolves the same whichever order they arrive in', () => {
+        const peers = keyed('xyz', ['a0', 'a0', 'a1']);
+        const reversed = [...peers].reverse();
+        expect(zOrderKeys(reversed, ['z'], 'backward')).toEqual(zOrderKeys(peers, ['z'], 'backward'));
+        expect(paintOrder(peers, ['z'], 'backward')).toBe('xzy');
     });
 });

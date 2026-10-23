@@ -3,6 +3,7 @@
 
 import { downloadDriveFile } from '@workspace/lib/download';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { ZOp } from '@workspace/lib/vector';
 import {
     ArrowDownToLine,
     ArrowUpToLine,
@@ -16,7 +17,6 @@ import {
     Trash2,
 } from 'lucide-react';
 import { DropdownMenuItem } from '../dropdown-menu';
-import type { ZOp } from '../properties-panel/z-order';
 
 // The Arrange group: Bring to front / Bring forward / Send backward / Send to back (front at top,
 // matching the properties-panel order + labels). Presentational — the host owns what each op does.
