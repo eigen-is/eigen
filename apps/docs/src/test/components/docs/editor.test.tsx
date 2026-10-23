@@ -926,6 +926,22 @@ test('a right-click in a table cell offers a writer the table menu, its deletes 
     ).toEqual(['Delete row', 'Delete column', 'Delete table']);
 });
 
+test('a right-click on a cell whose pointer resolves between the cells still offers the table menu', async () => {
+    await render(WRITER);
+    await bodyTable();
+    const cell = bodyCell()?.closest('td');
+    const view = bodyView()?.editor?.view;
+    if (!cell || !view) throw new Error('no cell');
+    // Table start, outside every cell.
+    const tablePos = view.posAtDOM(cell.closest('table') ?? cell, 0) - 1;
+    const hit = spyOn(view, 'posAtCoords').mockReturnValue({ pos: tablePos, inside: -1 });
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
+    await act(async () => cell.dispatchEvent(event));
+    hit.mockRestore();
+    expect(event.defaultPrevented).toBe(true);
+    expect(menuRows()).toContain('Delete table');
+});
+
 test('the table menu acts on the cell right-clicked', async () => {
     await render(WRITER);
     await bodyTable();
