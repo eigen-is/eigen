@@ -1,7 +1,12 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Box } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui';
-import { ContextMenuAnchor, DownloadImageMenuItem, useContextMenu } from '@workspace/ui/components/context-menu';
+import {
+    ContextMenuAnchor,
+    DownloadImageMenuItem,
+    MenuSections,
+    useContextMenu,
+} from '@workspace/ui/components/context-menu';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -196,7 +201,7 @@ export function ImgBoxs() {
                 return <InactiveImage key={img.id} img={img} onContextMenu={onContextMenu} />;
             })}
             <ContextMenuAnchor contextMenu={contextMenu}>
-                <DownloadImageMenuItem path={contextMenu.item} />
+                <MenuSections output={<DownloadImageMenuItem path={contextMenu.item} />} />
             </ContextMenuAnchor>
         </div>
     );
