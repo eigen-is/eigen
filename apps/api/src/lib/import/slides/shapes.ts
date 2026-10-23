@@ -13,7 +13,7 @@ import {
     TRANSPARENT_COLOR,
     type VectorElementPatch,
 } from '@workspace/lib/vector';
-import { drawingLines, isSideways } from '../../core/drawingml';
+import { DEGREE, drawingLines, isSideways } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../core/ooxml';
 import { CHART_NOT_IMPORTED, droppedChart } from '../../core/ooxml-chart';
@@ -22,7 +22,7 @@ import type { CountedWarningCode } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
 import { type CustomGeometry, closedPath, customGeometry } from './custom-geometry';
-import { DEGREE, evaluateGuides, type Guides, guideListOf } from './guides';
+import { evaluateGuides, type Guides, guideListOf } from './guides';
 import {
     decorationsOf,
     elementGradientAngle,

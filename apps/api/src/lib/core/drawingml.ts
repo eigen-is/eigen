@@ -42,6 +42,9 @@ const NO_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
 
 export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
 
+// DrawingML counts an angle in 60,000ths of a degree.
+export const DEGREE = 60_000;
+
 // A stored colour token (#rgb, #rrggbb, #rrggbbaa) as an a:srgbClr, its alpha times `opacity` beside it; null for
 // transparent or anything else.
 export function colorXml(color: string, opacity = 1): string | null {
@@ -161,7 +164,7 @@ function baseColor(element: XmlElement, theme: DrawingTheme): Rgba | null | unde
                 : [fromLinear(r), fromLinear(g), fromLinear(b), 1];
         }
         case 'hslClr': {
-            const hue = Number(attr('hue')) / 60000;
+            const hue = Number(attr('hue')) / DEGREE;
             const sat = percent(attr('sat'));
             const lum = percent(attr('lum'));
             return Number.isFinite(hue) && sat !== undefined && lum !== undefined
@@ -307,7 +310,7 @@ export function isSideways(degrees: number): boolean {
     return (turn >= 45 && turn < 135) || (turn >= 225 && turn < 315);
 }
 
-type Box = { x: number; y: number; width: number; height: number };
+export type Box = { x: number; y: number; width: number; height: number };
 
 // The cells Excel and LibreOffice place a picture turned `degrees` over: its box, or, sideways, its box turned a quarter
 // about its centre, its sides swapped. Its own inverse, so the reader takes the picture's box back from its anchor.

@@ -3,14 +3,13 @@ import {
     REFERENCE_ROW_COUNT,
     type Sheet,
     type SheetChart,
-    type SheetFloatingObject,
     type SheetImage,
     sheetColumnsWidth,
     sheetFloatingBox,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
-import { anchoredBox, type DrawingTheme } from '../../core/drawingml';
+import { anchoredBox, type Box, DEGREE, type DrawingTheme } from '../../core/drawingml';
 import {
     A_NS,
     ASVG_NS,
@@ -108,20 +107,30 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
             const from = markerOf(xmlChild(anchor, XDR_NS, 'from'));
             const to = markerOf(xmlChild(anchor, XDR_NS, 'to'));
             const tracks = chartSheet ? 0 : [from, to].reduce((sum, at) => sum + (at ? at.col + at.row : 0), 0);
-            const picture = chartSheet ? undefined : pictureIn(anchor);
+            const picture = chartSheet
+                ? undefined
+                : elements(anchor).find((element) => hasXmlName(element, XDR_NS, 'pic'));
             if (picture) {
                 const image = pictureOf(picture, rels, context, () => anchorBox(anchor, from, to, sheet), tracks);
                 if (image) (sheet.images ??= {})[image.id] = { ...image, index: paint() };
                 else context.lost('images-dropped');
                 continue;
             }
-            const reference = chartIn(anchor);
+            // The c:chart the anchor's graphic frame shows.
+            const frame = elements(anchor).find((element) => hasXmlName(element, XDR_NS, 'graphicFrame'));
+            const graphic = frame && xmlChild(frame, A_NS, 'graphic');
+            const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
+            const reference = data && xmlChild(data, C_NS, 'chart');
             if (!reference) continue;
             const root = chartPart(context.pkg, rels, xmlAttr(reference, R_NS, 'id'), 'xl/charts/');
             if (root && !costs.has(root)) costs.set(root, chartCost(root));
             const cost = root && costs.get(root);
             const spec = root && cost !== undefined && context.spend(cost + tracks) ? specOf(root) : undefined;
-            const box = spec && (chartSheet ? chartSheetBox(anchor) : anchorBox(anchor, from, to, sheet));
+            const box =
+                spec &&
+                (chartSheet
+                    ? rounded({ x: 0, y: 0, ...(sizeOf(anchor) ?? CHART_SHEET_SIZE) })
+                    : anchorBox(anchor, from, to, sheet));
             if (!spec || !box) {
                 context.lost('charts-dropped');
                 continue;
@@ -142,11 +151,6 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
         specs.set(root, spec);
         return spec;
     }
-}
-
-// The xdr:pic an anchor shows.
-function pictureIn(anchor: XmlElement): XmlElement | undefined {
-    return elements(anchor).find((element) => hasXmlName(element, XDR_NS, 'pic'));
 }
 
 // A picture over its box, turned by its a:xfrm's rot as Eigen turns it, clockwise. Excel and LibreOffice anchor a
@@ -172,17 +176,9 @@ function pictureOf(
     if (!anchored || !mediaName) return undefined;
     const properties = xmlChild(picture, XDR_NS, 'spPr');
     const xfrm = properties && xmlChild(properties, A_NS, 'xfrm');
-    const angle = normalizeAngle(Number(xfrm && xmlAttr(xfrm, '', 'rot')) / 60_000 || 0);
+    const angle = normalizeAngle(Number(xfrm && xmlAttr(xfrm, '', 'rot')) / DEGREE || 0);
     const { x, y, width, height } = rounded(anchoredBox(anchored, angle));
     return { id: crypto.randomUUID(), x, y, width, height, ...(angle !== 0 && { angle }), mediaName };
-}
-
-// The c:chart an anchor's graphic frame shows.
-function chartIn(anchor: XmlElement): XmlElement | undefined {
-    const frame = elements(anchor).find((element) => hasXmlName(element, XDR_NS, 'graphicFrame'));
-    const graphic = frame && xmlChild(frame, A_NS, 'graphic');
-    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-    return data && xmlChild(data, C_NS, 'chart');
 }
 
 type Marker = { col: number; colOff: number; row: number; rowOff: number };
@@ -199,8 +195,6 @@ function markerOf(element: XmlElement | undefined): Marker | undefined {
     if (!Number.isInteger(row) || row < 0 || row >= REFERENCE_ROW_COUNT) return undefined;
     return { col, colOff: emu(text('colOff')) ?? 0, row, rowOff: emu(text('rowOff')) ?? 0 };
 }
-
-type Box = Pick<SheetFloatingObject, 'x' | 'y' | 'width' | 'height'>;
 
 // In grid px from A1: a two-cell anchor over the same cells as in Excel, through the sheet's own widths and heights,
 // between its corners whichever comes first; a one-cell anchor from its cell at its size; an absolute one where it
@@ -233,10 +227,6 @@ function anchorBox(
     return x !== undefined && y !== undefined && size
         ? rounded({ x: x / EMU_PER_PX, y: y / EMU_PER_PX, ...size })
         : undefined;
-}
-
-function chartSheetBox(anchor: XmlElement): Box {
-    return rounded({ x: 0, y: 0, ...(sizeOf(anchor) ?? CHART_SHEET_SIZE) });
 }
 
 function sizeOf(anchor: XmlElement): Pick<Box, 'width' | 'height'> | undefined {

@@ -8,7 +8,7 @@ import {
 } from '@workspace/lib/sheets';
 import { normalizeAngle } from '@workspace/lib/vector';
 import { type CellResolver, resolveRangeChartData } from '@workspace/sheet/engine';
-import { anchoredBox } from '../../../core/drawingml';
+import { anchoredBox, DEGREE } from '../../../core/drawingml';
 import { A_NS, C_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../core/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../core/ooxml-chart';
 import { writeChart } from '../../../core/ooxml-chart-writer';
@@ -153,7 +153,7 @@ function chartFrameXml(id: number, rId: string): string {
 // Stretched over its box, as the editor draws it, and turned clockwise as Eigen turns it, in 60,000ths of a degree. The
 // transform states the anchor's box, which LibreOffice sizes the picture by.
 function pictureXml({ x, y, width, height, angle }: Placed, id: number, blip: string): string {
-    const rot = Math.round(normalizeAngle(angle) * 60_000);
+    const rot = Math.round(normalizeAngle(angle) * DEGREE);
     return [
         `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${id}" name="Picture ${id - 1}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>`,
         `<xdr:blipFill>${blip}<a:stretch><a:fillRect/></a:stretch></xdr:blipFill>`,

@@ -47,7 +47,7 @@ import {
 } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
-import { colorXml, solidFillXml, THEME_TYPE, themeXml } from '../../core/drawingml';
+import { colorXml, DEGREE, solidFillXml, THEME_TYPE, themeXml } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
 import { A_NS, AHYP_NS, EMU_PER_POINT, P_NS, R_NS } from '../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../core/opc';
@@ -230,7 +230,7 @@ function degrees(radians: number): number {
 
 // Degrees clockwise as DrawingML's 60,000ths, within one turn.
 function angle(value: number): number {
-    return Math.round(normalizeAngle(value) * 60_000) % 21_600_000;
+    return Math.round(normalizeAngle(value) * DEGREE) % (360 * DEGREE);
 }
 
 function elementXml(el: VectorElement, slide: Slide): string {
