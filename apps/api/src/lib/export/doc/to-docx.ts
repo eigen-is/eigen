@@ -800,6 +800,7 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
         });
         if (BOXED.has(node.type ?? '') && BOXED.has(nodes[index - 1]?.type ?? ''))
             keepApart(blocks, written, context.pkg.styles);
+        if (node.type === 'pageBreak') while (isBlankLine(blocks, blocks.length - 1)) blocks.pop();
         // A loop, not a spread: a code block of a million lines is a million arguments.
         for (const block of written) blocks.push(block);
     }
@@ -807,6 +808,23 @@ function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: Context,
     if (inline.length > 0 || (textblock && pieces.length === 0)) flush();
     if (textblock) shareMargins(blocks, pieces, props, context.pkg.styles);
     return blocks;
+}
+
+// A blank line before a page break draws nothing in Word, but readers whose page holds less push it onto a page of its
+// own, the break then adding another; the reader leaves it out too. The line a wrapped figure floats from stays.
+function isBlankLine(blocks: Block[], index: number): boolean {
+    const block = blocks[index];
+    const previous = blocks[index - 1];
+    return (
+        block !== undefined &&
+        !('table' in block) &&
+        block.runs === '' &&
+        block.props.style === undefined &&
+        !block.props.numPr &&
+        !block.props.pBdr &&
+        !block.inset &&
+        !(previous && 'table' in previous && previous.float)
+    );
 }
 
 // The pieces share their textblock's margins: the first takes the one above, the last the one below, none at a split.

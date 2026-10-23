@@ -625,6 +625,19 @@ describe('docx writer — page breaks', () => {
         expect(texts(after ?? body)).toBe('after');
     });
 
+    test('blank lines before a page break are left out, as the reader leaves them out', async () => {
+        const blank = { type: 'paragraph' };
+        const centred = { type: 'paragraph', attrs: { textAlign: 'center' } };
+        expect(await blocksOf(doc(p(text('before')), centred, blank, PAGE_BREAK, blank, p(text('after'))))).toEqual([
+            `<w:p>${run('before')}</w:p>`,
+            PAGE_BREAK_XML,
+            '<w:p/>',
+            `<w:p>${run('after')}</w:p>`,
+        ]);
+        const body = await bodyOf(doc(table(tr(td({}, p(text('before')), blank, PAGE_BREAK, p(text('after')))))));
+        expect(xmlChildren(descendants(body, W, 'tc')[0] ?? body, W, 'p').map(texts)).toEqual(['before', '', 'after']);
+    });
+
     test('the Page Break style shrinks the paragraph mark the break leaves to 1 pt', async () => {
         const pageBreak = style(await styles(), 'PageBreak');
         expect(w(child(pageBreak, 'name'), 'val')).toBe('Page Break');
@@ -2207,6 +2220,13 @@ describe('docx writer — figures', () => {
         ).toEqual([floating('left', 220, cell), `<w:p>${run('before ')}${run('after')}</w:p>`]);
         const [right] = await blocksOf(doc(p(figure({ ...CHART, width: 220, layout: 'wrap-right' })), p(text('x'))));
         expect(right).toBe(floating('right', 220, floatingImage(chart(220))));
+    });
+
+    test('the line a wrapped figure floats from stays before a page break, the figure on its page', async () => {
+        const [, line, pageBreak] = await blocksOf(
+            doc(p(figure({ ...CHART, width: 220, layout: 'wrap-left' })), { type: 'pageBreak' }),
+        );
+        expect([line, pageBreak]).toEqual(['<w:p/>', PAGE_BREAK_XML]);
     });
 
     test("a wrapped figure in a list item or quote floats from its container's text edge, clear of the bullet and bar", async () => {
