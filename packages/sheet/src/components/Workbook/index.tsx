@@ -35,7 +35,6 @@ import {
     defaultContext,
     defaultSettings,
     deleteActiveObject,
-    editsDeletedFloatingObject,
     ensureSheetIndex,
     filterPatch,
     type GlobalCache,
@@ -55,6 +54,7 @@ import {
     settleCurrentSheet,
     sheetChartClipboardItem,
     warmFormulaCellInfoMap,
+    withoutDeletedFloatingEdits,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
@@ -292,8 +292,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.undoList.pop();
             if (history) {
                 setContext((ctx_) => {
-                    // A peer deleted the image or chart this entry edits: drop the entry, applying it would throw.
-                    if (editsDeletedFloatingObject(ctx_, history.inversePatches)) return ctx_;
+                    // A peer deleted an image or chart this entry edits: immer throws on those writes, the rest apply.
+                    history.inversePatches = withoutDeletedFloatingEdits(ctx_, history.inversePatches);
+                    if (history.inversePatches.length === 0) return ctx_;
                     if (history.options?.deleteSheetOp) {
                         history.inversePatches[0].path[1] = ctx_.sheets.length;
                         const order = history.options.deletedSheet?.value?.order as number;
@@ -346,7 +347,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.redoList.pop();
             if (history) {
                 setContext((ctx_) => {
-                    if (editsDeletedFloatingObject(ctx_, history.patches)) return ctx_;
+                    history.patches = withoutDeletedFloatingEdits(ctx_, history.patches);
+                    if (history.patches.length === 0) return ctx_;
                     const newContext = produce(applyPatches(ctx_, history.patches), settleCurrentSheet);
                     globalCache.current.undoList.push(history);
                     emitOp(newContext, history.patches, history.options);
@@ -582,33 +584,29 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // other app can draw; this workbook keeps its ranges for a paste here. A chart that draws
                 // #REF! or too much data copies nothing. A cut deletes it, as Google's does. Read from
                 // ctx.sheets, not the editable current sheet, so a viewer copies too.
-                const { activeObject } = context;
-                const sheet = context.sheets[getSheetIndex(context, context.currentSheetId) ?? -1];
-                if (activeObject?.kind === 'chart' && floating) {
-                    const chart = sheet?.charts?.[activeObject.id];
-                    const item = chart ? sheetChartClipboardItem(context, chart) : null;
-                    if (!chart || !item) return;
+                if (activeChart && floating) {
+                    const item = sheetChartClipboardItem(context, activeChart);
+                    if (!item) return;
                     e.preventDefault();
                     writeEigenClipboard(e, { version: 1, items: [item] });
-                    globalCache.current.copiedChart = { inline: item.spec, spec: chart.spec };
+                    globalCache.current.copiedChart = { inline: item.spec, spec: activeChart.spec };
                     if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                     return;
                 }
                 // A selected floating image takes precedence over the pending cell copy: its
                 // copy is a pure image — eigen JSON only, no text/plain and no png, as vector's is (a
                 // native copy event can't await a media/ blob fetch, so png is dropped). A cut deletes it.
-                const activeImg = activeObject?.kind === 'image' ? sheet?.images?.[activeObject.id] : undefined;
-                if (activeImg && floating) {
-                    const source = mergedSettings.hooks?.resolveImagePath?.(activeImg.mediaName);
+                if (activeImage && floating) {
+                    const source = mergedSettings.hooks?.resolveImagePath?.(activeImage.mediaName);
                     if (source) {
                         e.preventDefault();
                         // Drop any cell table the keyboard copy staged, so a later native-menu copy
                         // with no image active can't emit this stale table.
                         consumePendingCopy();
                         const item = buildImageClipboardItem({
-                            mediaName: activeImg.mediaName,
+                            mediaName: activeImage.mediaName,
                             source,
-                            box: { width: activeImg.width, height: activeImg.height, angle: activeImg.angle },
+                            box: { width: activeImage.width, height: activeImage.height, angle: activeImage.angle },
                         });
                         writeEigenClipboard(e, { version: 1, items: [item] });
                         if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
@@ -630,7 +628,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 };
                 writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },
-            [context, mergedSettings.hooks, setContextWithProduce],
+            [activeChart, activeImage, context, mergedSettings.hooks, setContextWithProduce],
         );
 
         const onPaste = useCallback(

@@ -9,7 +9,7 @@ import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import type { Op } from '../../../state/types';
-import { emitOps } from '../../state/factories/collab';
+import { emitOps, join } from '../../state/factories/collab';
 import { contextFactory } from '../../state/factories/context';
 import { edit, pasteInternal, sel, typed } from '../../state/factories/edit-cycle';
 
@@ -159,5 +159,21 @@ describe('applyOp and the formula dependency map', () => {
         const next = applyPeerOps(ctx, [{ op: 'addSheet', id: 'id_3', path: [], value: added }]);
 
         expect(next.formulaCache.formulaCellInfoMap![key(0, 1, 'id_3')]?.calc_funcStr).toBe('=A1*2');
+    });
+});
+
+// replaySheetsOps rolls a failing batch back whole, so a live client must too or it disagrees with a joiner.
+describe('applyOp and a batch that fails halfway', () => {
+    it('applies none of it, a row delete before the failing patch included, as the replay does', () => {
+        const ops: Op[] = [
+            { op: 'deleteRowCol', id: 'id_1', path: [], value: { type: 'row', start: 3, end: 3, id: 'id_1' } },
+            { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } },
+            { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 },
+        ];
+        const ctx = makeCtx(null);
+        const peer = applyPeerOps(ctx, ops);
+        const [joiner] = join(ctx, [ops]);
+        expect(peer.sheets[0].data).toEqual(ctx.sheets[0].data);
+        expect(joiner.data).toEqual(ctx.sheets[0].data);
     });
 });

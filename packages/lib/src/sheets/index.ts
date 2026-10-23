@@ -25,6 +25,7 @@ export {
 } from './defaults';
 export {
     floatingItems,
+    floatingWriteFilter,
     nextFloatingIndex,
     type SheetFloatingItem,
     type SheetFloatingKind,

@@ -20,7 +20,7 @@ import { initSheetData } from '../../../state/api/sheet';
 import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
 import { insertChart, pasteChart, setChartLook, setChartSpec } from '../../../state/modules/chart';
-import { updateFloatingBox } from '../../../state/modules/floating';
+import { updateFloatingBox, withoutDeletedFloatingEdits } from '../../../state/modules/floating';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op, Sheet } from '../../../state/types';
 import { inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
@@ -267,6 +267,22 @@ describe('charts converge over real ops', () => {
         expect(charts(joiner)).toEqual(charts(insert.next.sheets));
     });
 
+    // A row op writes a shifted chart's spec alone, so a peer's move or delete of that chart at once survives.
+    test.each<[string, Op[], number[]]>([
+        ['moves', [{ op: 'replace', id: T, path: ['charts', 't1', 'x'], value: 300 }], [300]],
+        ['deletes', [{ op: 'remove', id: T, path: ['charts', 't1'] }], []],
+    ])('a row insert racing a peer that %s a shifted chart ends identical everywhere', (_, peer, xs) => {
+        const base = workbook();
+        const op = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: S } as const;
+        const insert = author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        const onA = receive(insert.next, peer);
+        const onB = receive(receive(base, peer), insert.ops);
+        expect(Object.values(onA.sheets[1].charts!).map((c) => c.x)).toEqual(xs);
+        expect(charts(onB.sheets)).toEqual(charts(onA.sheets));
+        expect(charts(join(base, [insert.ops, peer]))).toEqual(charts(onA.sheets));
+        expect(charts(join(base, [peer, insert.ops]))).toEqual(charts(onA.sheets));
+    });
+
     test('undoing a row delete restores a shrunk ref on S and a nulled ref on T everywhere', () => {
         const base = workbook();
         const del = { type: 'row', start: 3, end: 6, id: S } as const;
@@ -286,15 +302,18 @@ describe('charts converge over real ops', () => {
         expect(charts(joiner)).toEqual(charts(base.sheets));
     });
 
-    // Workbook's handleUndo and handleRedo, after a peer typed 42 in T!A1 and moved t1.
+    // Workbook's handleUndo and handleRedo, after a peer's edit: typing 42 in T!A1 and moving t1, or deleting t1.
     function undoRedoAfterPeer(base: Context, peerEdit: Op[]) {
         const del = { type: 'row', start: 3, end: 6, id: S } as const;
         const deleted = author(base, (ctx) => deleteRowCol(ctx, del), { deleteRowColOp: del });
-        const undone = applyPatches(receive(deleted.next, peerEdit), deleted.inverse);
+        const afterPeer = receive(deleted.next, peerEdit);
+        const inverse = withoutDeletedFloatingEdits(afterPeer, deleted.inverse);
+        const undone = applyPatches(afterPeer, inverse);
         const undoOptions = { ...inverseRowColOptions({ deleteRowColOp: del }), restoreDeletedCells: true };
-        const undoOps = patchToOp(undone, deleted.inverse, undoOptions, true);
-        const redone = applyPatches(undone, deleted.patches);
-        const redoOps = patchToOp(redone, deleted.patches, { deleteRowColOp: del });
+        const undoOps = patchToOp(undone, inverse, undoOptions, true);
+        const patches = withoutDeletedFloatingEdits(undone, deleted.patches);
+        const redone = applyPatches(undone, patches);
+        const redoOps = patchToOp(redone, patches, { deleteRowColOp: del });
         const peerUndone = receive(receive(receive(base, deleted.ops), peerEdit), undoOps);
         return {
             undo: {
@@ -325,12 +344,13 @@ describe('charts converge over real ops', () => {
         }
         expect(rangeData(undo.author, 1, 't1')).toEqual(rangeData(base.sheets, 1, 't1'));
         expect(rangeData(redo.author, 1, 't1')?.categories).toBeNull();
+        expect([undo.author[1].charts!.t1.x, redo.author[1].charts!.t1.x]).toEqual([99, 99]);
     });
 
-    test('an undone row delete brings back a shifted chart a peer deleted, on every client', () => {
+    test('undoing and redoing a row delete keeps a shifted chart a peer deleted deleted, on every client', () => {
         const { undo, redo } = undoRedoAfterPeer(workbook(), [{ op: 'remove', id: T, path: ['charts', 't1'] }]);
         for (const { author, peer, joiner } of [undo, redo]) {
-            expect(author[1].charts!.t1).toBeDefined();
+            expect(author[1].charts!.t1).toBeUndefined();
             expect(charts(peer)).toEqual(charts(author));
             expect(charts(joiner)).toEqual(charts(author));
         }

@@ -1,5 +1,5 @@
 import type { SheetImage } from '@workspace/lib/sheets';
-import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
+import { ImagePlaceholder } from '@workspace/ui/components/media';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 

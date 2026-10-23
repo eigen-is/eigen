@@ -4,7 +4,7 @@ import { downloadChartImage } from '@workspace/ui/components/charts';
 import { ObjectContextMenu, useContextMenu } from '@workspace/ui/components/context-menu';
 import { useZOrderHotkeys } from '@workspace/ui/components/properties-panel';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import {
     copyActiveObject,
@@ -30,6 +30,7 @@ export function FloatingObjects() {
     const items = index == null ? [] : floatingItems(context.sheets[index]);
     const { activeObject } = context;
     const canEdit = context.allowEdit !== false;
+    const [ringLayer, setRingLayer] = useState<HTMLDivElement | null>(null);
 
     // The menu acts on the object it opened on, which it selects, so Cut and Copy reach the Workbook's listener.
     const contextMenu = useContextMenu<SheetFloatingItem>();
@@ -55,6 +56,7 @@ export function FloatingObjects() {
                     key={item.object.id}
                     item={item}
                     active={activeObject?.kind === item.kind && activeObject.id === item.object.id}
+                    ringLayer={ringLayer}
                     longPress={longPress.bind(item)}
                     onContextMenu={(e) => {
                         select(item);
@@ -70,6 +72,7 @@ export function FloatingObjects() {
                     }
                 </FloatingObjectFrame>
             ))}
+            <div ref={setRingLayer} />
             <ObjectContextMenu
                 contextMenu={contextMenu}
                 canEdit={canEdit}

@@ -1,9 +1,10 @@
 import { CHART_MAX_SIDE } from '@workspace/lib/charts';
-import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
+import { nextFloatingIndex, type SheetImage, sheetFloatingBox } from '@workspace/lib/sheets';
+import { mapValues } from 'es-toolkit';
 import type { Patch } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import { type Context, getFlowdata } from '../context';
-import type { GlobalCache } from '../types';
+import type { GlobalCache, Sheet } from '../types';
 import { mergeBorder } from '.';
 import { editableCurrentSheet } from './floating';
 
@@ -24,20 +25,29 @@ export function removeImageByMediaName(ctx: Context, name: string) {
     }
 }
 
-// The swap of a pending name records no undo step, so an entry that brings its image back, a redone insert or an undone
-// delete, would still bring the pending name, which resolves to nothing; it takes the real name too.
+// The swap of a pending name records no undo step, so an entry that brings its image back, a redone insert or copy, an
+// undone delete of the image or of its sheet, would still bring the pending name, which resolves to nothing; it takes
+// the real name too, in a patch at any depth down to the image and in the deleted sheet an undo ships.
 export function replaceMediaNameInHistory(
     history: Pick<GlobalCache, 'undoList' | 'redoList'>,
     oldName: string,
     newName: string,
 ) {
-    const rename = (patch: Patch): Patch =>
-        patch.path[2] === 'images' && patch.path.length === 4 && patch.value?.mediaName === oldName
-            ? { ...patch, value: { ...patch.value, mediaName: newName } }
-            : patch;
+    const image = (value: SheetImage) => (value.mediaName === oldName ? { ...value, mediaName: newName } : value);
+    const images = (value: Record<string, SheetImage>) => mapValues(value, image);
+    const sheet = (value: Sheet) => (value.images ? { ...value, images: images(value.images) } : value);
+    const rename = (patch: Patch): Patch => {
+        if (patch.path[0] !== 'sheets' || patch.value == null) return patch;
+        if (patch.path.length === 2) return { ...patch, value: sheet(patch.value) };
+        if (patch.path[2] !== 'images') return patch;
+        if (patch.path.length === 3) return { ...patch, value: images(patch.value) };
+        return patch.path.length === 4 ? { ...patch, value: image(patch.value) } : patch;
+    };
     for (const entry of [...history.undoList, ...history.redoList]) {
         entry.patches = entry.patches.map(rename);
         entry.inversePatches = entry.inversePatches.map(rename);
+        const deleted = entry.options?.deletedSheet;
+        if (deleted?.value) deleted.value = sheet(deleted.value);
     }
 }
 

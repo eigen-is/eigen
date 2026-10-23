@@ -1,4 +1,10 @@
-import { floatingItems, nextFloatingIndex, type SheetFloatingKind, sheetFloatingBox } from '@workspace/lib/sheets';
+import {
+    floatingItems,
+    floatingWriteFilter,
+    nextFloatingIndex,
+    type SheetFloatingKind,
+    sheetFloatingBox,
+} from '@workspace/lib/sheets';
 import { type Box, DUPLICATE_OFFSET, type ZOp, zOrderKeys } from '@workspace/lib/vector';
 import type { Patch } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
@@ -6,13 +12,15 @@ import type { Context } from '../context';
 import { getSheetIndex } from '../utils';
 
 // What images and charts share. Each writer touches one object of the current sheet and nothing else, field by field,
-// so a batch on an object a peer deleted fails whole on every client and in the replay. What writes a whole object
-// brings one a peer deleted back on every client, last writer wins: redoing its insert, undoing its delete, and
-// undoing or redoing a row or column op that shifted a chart.
+// so a write on an object a peer deleted is dropped on every client and in the replay. What writes a whole object,
+// redoing its insert or undoing its delete, brings one a peer deleted back only where the delete arrived first.
 
 export type FloatingRef = { kind: SheetFloatingKind; id: string };
 
 const FIELD = { image: 'images', chart: 'charts' } as const;
+
+// The fields of a box a gesture writes, each only when it changed.
+export const FLOATING_BOX_FIELDS = ['x', 'y', 'width', 'height', 'angle'] as const;
 
 // The current sheet, when this client may write to it.
 export function editableCurrentSheet(ctx: Context) {
@@ -26,7 +34,7 @@ export function updateFloatingBox(ctx: Context, { kind, id }: FloatingRef, field
     const object = editableCurrentSheet(ctx)?.[FIELD[kind]]?.[id];
     if (!object) return;
     const clamped = sheetFloatingBox({ ...object, ...fields });
-    for (const field of ['x', 'y', 'width', 'height', 'angle'] as const) {
+    for (const field of FLOATING_BOX_FIELDS) {
         if (field in fields) object[field] = clamped[field];
     }
 }
@@ -77,12 +85,8 @@ export function deleteActiveObject(ctx: Context) {
     ctx.activeObject = undefined;
 }
 
-// A field patch on an object a peer deleted cannot resolve, and immer throws on it; the object's own add and remove
-// (a path ending at its id) still apply.
-export function editsDeletedFloatingObject(ctx: Context, patches: Patch[]): boolean {
-    return patches.some(({ path: [root, sheet, field, id, ...rest] }) => {
-        if (root !== 'sheets' || typeof sheet !== 'number' || rest.length === 0) return false;
-        if (field !== 'images' && field !== 'charts') return false;
-        return ctx.sheets[sheet]?.[field]?.[id] == null;
-    });
+// What of an undo or redo entry still applies, by the rule every client and the replay apply to its batch.
+export function withoutDeletedFloatingEdits(ctx: Context, patches: Patch[]): Patch[] {
+    const applies = floatingWriteFilter(ctx.sheets);
+    return patches.filter(({ op, path: [root, ...path], value }) => root !== 'sheets' || applies({ op, path, value }));
 }

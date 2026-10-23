@@ -27,11 +27,12 @@ const NO_MORE_SHEET =
     'The workbook contains at least one visual worksheet. To delete the selected worksheet, please insert a new worksheet or show a hidden worksheet.';
 
 type Props = {
+    id: string;
     sheet: Sheet;
     isDropPlaceholder?: boolean;
 };
 
-export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
+export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => {
     const { context, setContext } = useContext(WorkbookContext);
     const [editing, setEditing] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -71,10 +72,10 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
 
     const onDragStart = useCallback(
         (e: React.DragEvent<HTMLDivElement>) => {
-            if (context.allowEdit === true) e.dataTransfer.setData('sheetId', `${sheet.id}`);
+            if (context.allowEdit === true) e.dataTransfer.setData('sheetId', id);
             e.stopPropagation();
         },
-        [context.allowEdit, sheet.id],
+        [context.allowEdit, id],
     );
 
     const onDrop = useCallback(
@@ -82,14 +83,13 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             if (context.allowEdit === false) return;
             const draggingId = e.dataTransfer.getData('sheetId');
             setContext((draftCtx) => {
-                const droppingId = sheet.id;
                 let draggingSheet: Sheet | undefined;
                 let droppingSheet: Sheet | undefined;
                 const sorted = [...draftCtx.sheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                 for (const [i, f] of sorted.entries()) {
                     f.order = i;
                     if (f.id === draggingId) draggingSheet = f;
-                    else if (f.id === droppingId) droppingSheet = f;
+                    else if (f.id === id) droppingSheet = f;
                 }
                 if (draggingSheet && droppingSheet) {
                     draggingSheet.order = droppingSheet.order! - 0.1;
@@ -104,41 +104,24 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             setDragOver(false);
             e.stopPropagation();
         },
-        [context.allowEdit, isDropPlaceholder, setContext, sheet.id],
+        [context.allowEdit, isDropPlaceholder, setContext, id],
     );
 
     const moveSheet = useCallback(
         (delta: number) => {
-            if (context.allowEdit === false || !sheet) return;
+            if (context.allowEdit === false) return;
             setContext((ctx) => {
                 let currentOrder = -1;
                 const sorted = ctx.sheets.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                 for (const [i, _sheet] of sorted.entries()) {
                     _sheet.order = i;
-                    if (_sheet.id === sheet.id) currentOrder = i;
+                    if (_sheet.id === id) currentOrder = i;
                 }
-                api.setSheetOrder(ctx, { [sheet.id!]: currentOrder + delta });
+                api.setSheetOrder(ctx, { [id]: currentOrder + delta });
             });
         },
-        [context.allowEdit, setContext, sheet],
+        [context.allowEdit, setContext, id],
     );
-
-    const deleteSheetWithConfirm = () => {
-        const shownSheets = context.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
-        if (context.sheets.length > 1 && shownSheets.length > 1) {
-            showAlert('Are you sure to delete', 'yesno', () => {
-                setContext(
-                    (ctx) => {
-                        deleteSheet(ctx, sheet.id!);
-                    },
-                    { deleteSheetOp: { id: sheet.id! } },
-                );
-                hideAlert();
-            });
-        } else {
-            showAlert(NO_MORE_SHEET, 'ok');
-        }
-    };
 
     const menuItems = (
         <MenuSections
@@ -147,10 +130,10 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                     <DropdownMenuItem onClick={() => setEditing(true)}>Rename</DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
-                            if (context.allowEdit === false || !sheet?.id) return;
+                            if (context.allowEdit === false) return;
                             setContext(
                                 (ctx) => {
-                                    api.copySheet(ctx, sheet.id!);
+                                    api.copySheet(ctx, id);
                                 },
                                 { addSheetOp: true },
                             );
@@ -168,19 +151,19 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                         resetLabel="Reset color"
                         contentClassName="sheet-mousedown-cancel"
                         onChange={(color) => {
-                            if (context.allowEdit === false || !sheet?.id) return;
+                            if (context.allowEdit === false) return;
                             setContext((ctx) => {
-                                const index = getSheetIndex(ctx, sheet.id!);
+                                const index = getSheetIndex(ctx, id);
                                 if (index != null) ctx.sheets[index].color = color || undefined;
                             });
                         }}
                     />
                     <DropdownMenuItem
                         onClick={() => {
-                            if (context.allowEdit === false || !sheet) return;
+                            if (context.allowEdit === false) return;
                             setContext((ctx) => {
                                 const shownSheets = ctx.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
-                                if (shownSheets.length > 1) api.hideSheet(ctx, sheet.id as string);
+                                if (shownSheets.length > 1) api.hideSheet(ctx, id);
                                 else showAlert(NO_MORE_SHEET, 'ok');
                             });
                         }}
@@ -196,7 +179,20 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                 </>
             }
             destructive={
-                <DropdownMenuItem variant="destructive" onClick={deleteSheetWithConfirm}>
+                <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => {
+                        const shownSheets = context.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
+                        if (context.sheets.length < 2 || shownSheets.length < 2) {
+                            showAlert(NO_MORE_SHEET, 'ok');
+                            return;
+                        }
+                        showAlert(`Delete the sheet "${sheet.name}"?`, 'yesno', () => {
+                            setContext((ctx) => deleteSheet(ctx, id), { deleteSheetOp: { id } });
+                            hideAlert();
+                        });
+                    }}
+                >
                     Delete
                 </DropdownMenuItem>
             }
@@ -206,11 +202,11 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     const selectSheet = useCallback(() => {
         if (isDropPlaceholder) return;
         setContext((draftCtx) => {
-            changeSheet(draftCtx, sheet.id!);
+            changeSheet(draftCtx, id);
             deselectFloatingObject(draftCtx);
             cancelNormalSelected(draftCtx);
         });
-    }, [isDropPlaceholder, setContext, sheet]);
+    }, [isDropPlaceholder, setContext, id]);
 
     const onRootKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLDivElement>) => {

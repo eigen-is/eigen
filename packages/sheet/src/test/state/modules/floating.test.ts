@@ -5,20 +5,28 @@
 import { describe, expect, test } from 'bun:test';
 import { CHART_MAX_SIDE, sampleChartSpec } from '@workspace/lib/charts';
 import { floatingItems, type SheetChart, type SheetImage } from '@workspace/lib/sheets';
-import { applyPatches, produce } from 'immer';
+import { applyPatches, type Patch, produce } from 'immer';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
+import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { insertChart } from '../../../state/modules/chart';
 import {
     deleteActiveObject,
     deleteFloatingObject,
-    editsDeletedFloatingObject,
     reorderFloatingObject,
     selectFloatingObject,
     updateFloatingBox,
+    withoutDeletedFloatingEdits,
 } from '../../../state/modules/floating';
-import { insertImage, removeImageByMediaName, replaceImageMediaName } from '../../../state/modules/image';
+import {
+    insertImage,
+    removeImageByMediaName,
+    replaceImageMediaName,
+    replaceMediaNameInHistory,
+} from '../../../state/modules/image';
+import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Sheet } from '../../../state/types';
+import { inverseRowColOptions, type PatchOptions, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -88,7 +96,7 @@ describe('floating writers', () => {
             ]);
         });
 
-        test(`a batch on a ${kind} a peer deleted fails whole everywhere, and its undo entry is recognized`, () => {
+        test(`an edit to a ${kind} a peer deleted is dropped everywhere, and from its undo entry`, () => {
             const base = workbook();
             const move = author(base, (ctx) => updateFloatingBox(ctx, { kind, id }, { x: 300 }));
             const removal = author(base, (ctx) => deleteFloatingObject(ctx, { kind, id }));
@@ -97,12 +105,57 @@ describe('floating writers', () => {
             expect(gone.sheets[0][field]).toEqual({});
             expect(join(base, [removal.ops, move.ops])[0][field]).toEqual({});
             const peerGone = receive(move.next, removal.ops);
-            expect(editsDeletedFloatingObject(peerGone, move.inverse)).toBe(true);
             expect(() => applyPatches(peerGone, move.inverse)).toThrow();
-            expect(editsDeletedFloatingObject(move.next, move.inverse)).toBe(false);
-            expect(editsDeletedFloatingObject(removal.next, removal.inverse)).toBe(false);
+            expect(withoutDeletedFloatingEdits(peerGone, move.inverse)).toEqual([]);
+            expect(withoutDeletedFloatingEdits(move.next, move.inverse)).toEqual(move.inverse);
+            expect(withoutDeletedFloatingEdits(removal.next, removal.inverse)).toEqual(removal.inverse);
         });
     }
+
+    // setContextWithProduce merges every write of a panel gesture into one entry: its own earlier write can bring back
+    // the object a later one edits, so only an object missing where the write lands drops it, on the author, a peer
+    // and a joiner alike.
+    test('a merged entry that deletes or inserts an object it edits undoes and redoes whole, everywhere', () => {
+        const merged = (base: Context, ...recipes: ((ctx: Context) => void)[]) => {
+            let next = base;
+            const entry = { patches: [] as Patch[], inverse: [] as Patch[] };
+            for (const recipe of recipes) {
+                const step = author(next, recipe);
+                next = step.next;
+                entry.patches.push(...step.patches);
+                entry.inverse.unshift(...step.inverse);
+            }
+            return { next, ops: patchToOp(next, entry.patches), ...entry };
+        };
+        // Workbook's handleUndo and handleRedo: the entry's writes that still apply, and the batch they ship.
+        const replay = (ctx: Context, patches: Patch[]) => {
+            const kept = withoutDeletedFloatingEdits(ctx, patches);
+            const next = applyPatches(ctx, kept);
+            return { next, ops: patchToOp(next, kept) };
+        };
+        const base = workbook();
+        const deleted = merged(
+            base,
+            (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 }),
+            (ctx) => deleteFloatingObject(ctx, { kind: 'chart', id: 'c1' }),
+        );
+        const undone = replay(deleted.next, deleted.inverse);
+        expect(objects(undone.next.sheets)).toEqual(objects(base.sheets));
+        expect(objects(receive(deleted.next, undone.ops).sheets)).toEqual(objects(base.sheets));
+        expect(objects(join(base, [deleted.ops, undone.ops]))).toEqual(objects(base.sheets));
+
+        const inserted = merged(
+            base,
+            (ctx) => insertChart(ctx, 'c2', BOX, sampleChartSpec('line')),
+            (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c2' }, { x: 300 }),
+        );
+        const back = replay(inserted.next, inserted.inverse);
+        const redone = replay(back.next, inserted.patches);
+        const expected = objects(inserted.next.sheets);
+        expect(objects(redone.next.sheets)).toEqual(expected);
+        expect(objects(receive(back.next, redone.ops).sheets)).toEqual(expected);
+        expect(objects(join(base, [inserted.ops, back.ops, redone.ops]))).toEqual(expected);
+    });
 
     test('three clients editing different images end identical, and so does a joiner', () => {
         const base = produce(workbook(), (ctx: Context) => {
@@ -145,6 +198,24 @@ describe('floating writers', () => {
         expect(paintOrder(moved.next)).toEqual(['i1', 'c1']);
     });
 
+    // The insert repairs the tie on i2 in its own batch; a peer deleting i2 at once must not cost the insert.
+    test('an insert over tied indices survives a peer deleting a tied object, on every client and a joiner', () => {
+        const base = produce(workbook(), (ctx: Context) => {
+            ctx.sheets[0].images!.i2 = image('i2', 'a2');
+        });
+        const insert = author(base, (ctx) => insertImage(ctx, 'new.png', 40, 30));
+        const removal = author(base, (ctx) => deleteFloatingObject(ctx, { kind: 'image', id: 'i2' }));
+        expect(insert.ops.map((op) => op.path)).toContainEqual(['images', 'i2', 'index']);
+        const onA = receive(insert.next, removal.ops);
+        const onB = receive(removal.next, insert.ops);
+        const joiner = join(base, [removal.ops, insert.ops]);
+        expect(Object.keys(onA.sheets[0].images!)).toHaveLength(2);
+        expect(objects(onB.sheets)).toEqual(objects(onA.sheets));
+        expect(objects(joiner)).toEqual(objects(onA.sheets));
+        const undone = applyPatches(onA, withoutDeletedFloatingEdits(onA, insert.inverse));
+        expect(objects(undone.sheets)).toEqual(objects(removal.next.sheets));
+    });
+
     test('a media rename and a pending removal reach an image on another sheet', () => {
         const renamed = author(workbook(), (ctx) => replaceImageMediaName(ctx, 'pending:t1', 'photo.png'));
         expect(renamed.ops).toEqual([
@@ -181,5 +252,91 @@ describe('floating writers', () => {
         ]) {
             expect(author(base, recipe).ops).toEqual([]);
         }
+    });
+});
+
+// A row or column op moves no image, and only the charts whose refs it shifts: it, its undo and its redo write those
+// per object, so a peer's insert, delete or move of any other object on the sheet survives on every client.
+const grid = () => Array.from({ length: 10 }, () => Array.from({ length: 4 }, () => null));
+const withGrid = () =>
+    produce(workbook(), (ctx: Context) => {
+        for (const sheet of ctx.sheets) sheet.data = grid();
+    });
+const insertOp = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: S } as const;
+
+describe('row and column ops over floating objects', () => {
+    const deleteOp = { type: 'row', start: 3, end: 6, id: S } as const;
+    const peerEdits = (ctx: Context) => {
+        insertImage(ctx, 'new.png', 40, 30);
+        deleteFloatingObject(ctx, { kind: 'image', id: 'i1' });
+        updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 });
+    };
+
+    test.each([
+        ['insert', (ctx: Context) => insertRowCol(ctx, insertOp), { insertRowColOp: insertOp }],
+        ['delete', (ctx: Context) => deleteRowCol(ctx, deleteOp), { deleteRowColOp: deleteOp }],
+    ] as const)("undoing a row %s keeps a peer's later insert, delete and move, everywhere", (_, recipe, options) => {
+        const base = withGrid();
+        const op = author(base, recipe, options);
+        const peerEdit = author(receive(base, op.ops), peerEdits);
+        const undone = applyPatches(receive(op.next, peerEdit.ops), op.inverse);
+        const undoOptions = { ...inverseRowColOptions(options), restoreDeletedCells: 'deleteRowColOp' in options };
+        const undoOps = patchToOp(undone, op.inverse, undoOptions, true);
+        const expected = objects(peerEdit.next.sheets);
+        expect(Object.keys(expected[0].images!)).toHaveLength(1);
+        expect(objects(undone.sheets)).toEqual(expected);
+        expect(objects(receive(peerEdit.next, undoOps).sheets)).toEqual(expected);
+        expect(objects(join(base, [op.ops, peerEdit.ops, undoOps]))).toEqual(expected);
+    });
+
+    test("a row insert racing a peer's image insert keeps the image, everywhere", () => {
+        const base = withGrid();
+        const op = author(base, (ctx) => insertRowCol(ctx, insertOp), { insertRowColOp: insertOp });
+        const peerInsert = author(base, (ctx) => insertImage(ctx, 'new.png', 40, 30));
+        const onA = receive(op.next, peerInsert.ops);
+        const onB = receive(peerInsert.next, op.ops);
+        expect(Object.keys(onB.sheets[0].images!)).toHaveLength(2);
+        expect(objects(onA.sheets)).toEqual(objects(onB.sheets));
+        expect(objects(join(base, [peerInsert.ops, op.ops]))).toEqual(objects(onB.sheets));
+    });
+});
+
+// The swap of a pending name records no undo step: every entry that brings an image back must take the real name, a
+// whole sheet's included, or the zombie sweep deletes the image a minute later.
+describe('a pending name in the undo stack', () => {
+    const history = (...entries: { patches: Patch[]; inversePatches: Patch[]; options?: PatchOptions }[]) => ({
+        undoList: entries,
+        redoList: [],
+    });
+    const names = (sheet: Sheet | undefined) => Object.values(sheet?.images ?? {}).map((image) => image.mediaName);
+
+    test('undoing a row insert made while T uploads keeps the real name', () => {
+        const op = { ...insertOp, id: T };
+        const inserted = author(withGrid(), (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        const entries = history({ patches: inserted.patches, inversePatches: inserted.inverse });
+        const settled = produce(inserted.next, (ctx: Context) => replaceImageMediaName(ctx, 'pending:t1', 'photo.png'));
+        replaceMediaNameInHistory(entries, 'pending:t1', 'photo.png');
+        expect(names(applyPatches(settled, entries.undoList[0].inversePatches).sheets[1])).toEqual(['photo.png']);
+    });
+
+    test('redoing a copy of a sheet whose upload settled names the copied image', () => {
+        const copied = author(workbook(), (ctx) => copySheet(ctx, T));
+        const entries = history({ patches: copied.patches, inversePatches: copied.inverse });
+        replaceMediaNameInHistory(entries, 'pending:t1', 'photo.png');
+        expect(names(applyPatches(workbook(), entries.undoList[0].patches).sheets[2])).toEqual(['photo.png']);
+    });
+
+    // Workbook records a sheet's delete as the sheet itself, in the inverse and in the options its undo ships.
+    test('undoing the delete of a sheet whose upload settled names its image', () => {
+        const deleted = structuredClone(workbook().sheets[1]);
+        const deletedSheet = { id: T, value: deleted };
+        const entries = history({
+            patches: [],
+            inversePatches: [{ op: 'add', path: ['sheets', 0], value: deleted }],
+            options: { deleteSheetOp: { id: T }, deletedSheet },
+        });
+        replaceMediaNameInHistory(entries, 'pending:t1', 'photo.png');
+        expect(names(entries.undoList[0].inversePatches[0].value)).toEqual(['photo.png']);
+        expect(names(deletedSheet.value)).toEqual(['photo.png']);
     });
 });

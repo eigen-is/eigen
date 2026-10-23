@@ -13,6 +13,10 @@ import type { CellOverflowItem, CellOverflowMap } from './types';
 // Bounds the per-row walk for a source scrolled out of view: 256 columns is wider than any text a cell shows.
 export const OVERFLOW_REACH_COLUMNS = 256;
 
+// The painter lays text out 2px in from its side of a box that gives up 2px to the grid line (cellTextBox), so text
+// needs 4px more than its own width to show whole.
+const TEXT_INSET = 4;
+
 // A value of any kind stops a spill, a space or a formula's empty result included, and so does a merge; style doesn't.
 function blocksOverflow(cell: Cell | null | undefined): boolean {
     if (!cell) return false;
@@ -52,7 +56,7 @@ export function rowOverflowSpans(
         const start = colStartX(edges, c, 0);
         const end = colEndX(edges, c, 0);
         const width = textWidth(cell, c);
-        const extra = width - (end - start);
+        const extra = width + TEXT_INSET - (end - start);
         if (extra <= 0) return;
 
         const textStart = align === '1' ? start : align === '2' ? start - extra : start - extra / 2;
@@ -120,10 +124,10 @@ export function computeCellOverflowMap(
 }
 
 export function overflowColIn(map: CellOverflowMap, r: number, c: number, colEnd: number) {
-    let colIn = false; // Whether this cell is within an overflow cell's render range
-    let colLast = false; // Whether this cell is the last column in an overflow cell's render range
-    let rowIndex: number | undefined; // Overflow cell row index
-    let colIndex: number | undefined; // Overflow cell column index
+    let colIn = false;
+    let colLast = false;
+    let rowIndex: number | undefined;
+    let colIndex: number | undefined;
     let stc: number | undefined;
     let edc: number | undefined;
 

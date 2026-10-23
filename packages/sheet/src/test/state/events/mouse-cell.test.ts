@@ -13,7 +13,7 @@ import { describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { cellGlyphAtPointer, handleCellAreaMouseDown } from '../../../state/events/mouse-cell';
-import { cellTextBox, checkboxRect } from '../../../state/modules/data-verification';
+import { cellTextBox, checkboxAlign, checkboxRect } from '../../../state/modules/data-verification';
 import type { DataVerificationRule, GlobalCache } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
@@ -39,9 +39,9 @@ function tickBoxContext(): Context {
     return ctx;
 }
 
-// A2's painted tick box. A2 spans x 0..74, y 20..40; the alignment attrs an
-// empty style yields are NaN, the painter's left/middle default.
-const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), Number.NaN, Number.NaN);
+// A2's painted tick box. A2 spans x 0..74, y 20..40; an unaligned box drawn alone is centred, and the vt an
+// empty style yields is NaN, the painter's middle default.
+const PAINTED_BOX = checkboxRect(cellTextBox(0, 20, 74, 40), checkboxAlign(null, TICK_BOX, 'FALSE'), Number.NaN);
 
 function mouseDownAt(ctx: Context, x: number, y: number) {
     const container = win.document.createElement('div') as unknown as HTMLDivElement;

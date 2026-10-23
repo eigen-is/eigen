@@ -12,6 +12,7 @@ import {
     type CellGlyphRect,
     CHECKBOX_LABEL_GAP,
     cellTextBox,
+    checkboxAlign,
     checkboxRect,
     dropdownChevronRect,
     isCheckboxChecked,
@@ -192,9 +193,12 @@ export function nullCellRender(
         // An empty cell inside a tick-box range still shows an unchecked box, so the
         // range reads as one uniform column.
         if (rule.type === 'checkbox') {
-            const horizonAlign = Number(normalizedAttr(flowdata, r, c, 'ht'));
             const verticalAlign = Number(normalizedAttr(flowdata, r, c, 'vt'));
-            drawTickBox(renderCtx, checkboxRect(box, horizonAlign, verticalAlign), false);
+            drawTickBox(
+                renderCtx,
+                checkboxRect(box, checkboxAlign(flowdata?.[r]?.[c], rule, null), verticalAlign),
+                false,
+            );
         } else if (rule.type === 'dropdown') {
             renderDropdownChevron(pass, r, c, box);
         }
@@ -284,7 +288,6 @@ export function cellRender(
     const space_width = 2;
     const space_height = 2;
 
-    const horizonAlign = Number(normalizedAttr(flowdata, r, c, 'ht'));
     const verticalAlign = Number(normalizedAttr(flowdata, r, c, 'vt'));
 
     const checksCF = checkCF(r, c, cfCompute);
@@ -378,7 +381,7 @@ export function cellRender(
         renderCtx.rect(box.left, box.top, box.width, box.height);
         renderCtx.clip();
 
-        const rect = checkboxRect(box, horizonAlign, verticalAlign);
+        const rect = checkboxRect(box, checkboxAlign(cell, rule, value), verticalAlign);
         drawTickBox(renderCtx, rect, isCheckboxChecked(rule, value));
 
         if (showsCheckboxLabel(rule, value)) {

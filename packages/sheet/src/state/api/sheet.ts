@@ -56,21 +56,15 @@ export function showSheet(ctx: Context, sheetId: string) {
     ctx.sheets[index].hide = undefined;
 }
 
-function generateCopySheetName(ctx: Context, sheetId: string) {
-    const index = getSheetIndex(ctx, sheetId);
-    if (index == null) return sheetId;
-    return copySheetName(
-        ctx.sheets[index].name,
-        ctx.sheets.map((sheet) => sheet.name),
-    );
-}
-
 export function copySheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
     const order = ctx.sheets[index].order! + 1;
-    const sheetName = generateCopySheetName(ctx, sheetId);
+    const sheetName = copySheetName(
+        ctx.sheets[index].name,
+        ctx.sheets.map((sheet) => sheet.name),
+    );
     const sheetData = cloneDeep(ctx.sheets[index]);
     const copyId = uuidv4();
     sheetData.id = copyId;

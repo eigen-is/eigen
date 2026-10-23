@@ -40,8 +40,8 @@ describe('cellGlyphAt', () => {
         const ctx = contextFactory({ selections: [] }) as Context;
         ctx.sheets[0].data![0][0] = { v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } };
         ctx.sheets[0].dataVerification = { '0_0': TICK_BOX };
-        expect(cellGlyphAt(ctx, 5, 10)).toBe('checkbox');
-        expect(cellGlyphAt(ctx, 40, 10)).toBeUndefined();
+        expect(cellGlyphAt(ctx, 36, 10)).toBe('checkbox');
+        expect(cellGlyphAt(ctx, 5, 10)).toBeUndefined();
     });
 
     test('the comment triangle in the top-right corner', () => {

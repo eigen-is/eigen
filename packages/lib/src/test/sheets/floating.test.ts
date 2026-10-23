@@ -6,7 +6,7 @@ import {
     SHEET_DEFAULT_COL_WIDTH,
     SHEET_DEFAULT_ROW_HEIGHT,
 } from '../../sheets/defaults';
-import { floatingItems, nextFloatingIndex, sheetFloatingBox } from '../../sheets/floating';
+import { floatingItems, floatingWriteFilter, nextFloatingIndex, sheetFloatingBox } from '../../sheets/floating';
 import type { Sheet, SheetChart, SheetImage } from '../../sheets/types';
 
 const BOX = { x: 10, y: 20, width: 40, height: 30 };
@@ -95,5 +95,36 @@ describe('nextFloatingIndex', () => {
         expect(repaired > 'a0').toBe(true);
         expect(index > repaired).toBe(true);
         expect(sheet.images?.i1.index).toBe('a0');
+    });
+});
+
+describe('floatingWriteFilter', () => {
+    const sheets = (): Sheet[] => [{ name: 'S', images: {}, charts: { c1: chart('c1', 'a1') } }];
+    const kept = (writes: { op: string; path: (string | number)[]; value?: unknown }[]) =>
+        writes.filter(floatingWriteFilter(sheets())).map(({ path }) => path.join('/'));
+
+    test('a write into an object lands where the batch has left it, else where it stood', () => {
+        expect(
+            kept([
+                { op: 'replace', path: [0, 'charts', 'gone', 'x'], value: 1 },
+                { op: 'add', path: [0, 'charts', 'c2'], value: chart('c2', 'a2') },
+                { op: 'replace', path: [0, 'charts', 'c2', 'x'], value: 1 },
+                { op: 'replace', path: [0, 'charts', 'c1', 'x'], value: 1 },
+                { op: 'remove', path: [0, 'charts', 'c1'] },
+                { op: 'replace', path: [0, 'charts', 'c1', 'y'], value: 1 },
+            ]),
+        ).toEqual(['0/charts/c2', '0/charts/c2/x', '0/charts/c1/x', '0/charts/c1']);
+    });
+
+    test('a whole map or sheet the batch writes holds the objects it carries', () => {
+        expect(
+            kept([
+                { op: 'replace', path: [0, 'images'], value: { i1: image('i1', 'a0') } },
+                { op: 'replace', path: [0, 'images', 'i1', 'x'], value: 1 },
+                { op: 'replace', path: [0], value: { name: 'S', charts: {} } },
+                { op: 'replace', path: [0, 'charts', 'c1', 'x'], value: 1 },
+                { op: 'replace', path: [0, 'images', 'i1', 'y'], value: 1 },
+            ]),
+        ).toEqual(['0/images', '0/images/i1/x', '0']);
     });
 });
