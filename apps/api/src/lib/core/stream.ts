@@ -3,7 +3,8 @@ import { ApiError, payloadTooLarge, storageUnavailable } from './errors';
 const YIELD_EVERY_BYTES = 2 * 1024 * 1024;
 
 // The empty second immediate keeps the loop awake: inside `expect().rejects`, which waits on its promise
-// synchronously, Bun otherwise sleeps until the next timer before it runs what the first one resolved.
+// synchronously, Bun otherwise sleeps until the next timer before it runs what the first one resolved
+// (oven-sh/bun#46558).
 export function eventLoopTurn(): Promise<void> {
     return new Promise((resolve) =>
         setImmediate(() => {
