@@ -1,6 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider } from '@workspace/lib/drive';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { VECTOR_STYLE_DEFAULTS, type VectorElement } from '@workspace/lib/vector';
 import { useLayout } from '@workspace/ui';
 import { ColorRow, PropertySection, useAspectLock } from '@workspace/ui/components/properties-panel';
@@ -187,7 +187,7 @@ export function VectorEditor({
                         canEdit={canEdit}
                         ownerId={ownerId}
                         mountId={path.mountId}
-                        fileName={stripEigenExtension(path.name)}
+                        fileName={path.name}
                         tool={tool}
                         setTool={setTool}
                         toolLocked={toolLocked}
