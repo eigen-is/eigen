@@ -240,6 +240,11 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): 
     const tree = spTreeOf(inheritance.slide.root);
     const walk: Walk = { deck, inheritance, part: inheritance.slide, copied: false, out };
     if (tree) readTree(walk, xmlElements(tree), root, 0, undefined);
+    // A slide without a title keeps the name its cSld gives it, which the writer writes a frame's name to.
+    const cSld = childOf(inheritance.slide.root, P_NS, 'cSld');
+    out.title ||= Array.from((cSld && xmlAttr(cSld, '', 'name')?.trim()) ?? '')
+        .slice(0, MAX_TITLE_CHARS)
+        .join('');
     return out;
 }
 

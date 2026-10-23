@@ -113,9 +113,9 @@ const ELEMENTS: NewVectorElement[] = [
 
 const BACKGROUND: BackgroundFill = { type: 'gradient', from: '#102030', to: '#f0e0d0', angle: 135 };
 
-function roundTrip(elements = ELEMENTS) {
+function roundTrip(elements = ELEMENTS, name = '') {
     const doc = new Y.Doc();
-    writeFrameInDoc(doc, { id: 'f1', index: 'a0', ...FRAME, background: serializeBackgroundFill(BACKGROUND) });
+    writeFrameInDoc(doc, { id: 'f1', index: 'a0', name, ...FRAME, background: serializeBackgroundFill(BACKGROUND) });
     const keys = generateNKeysBetween(null, null, elements.length);
     for (const [i, element] of elements.entries())
         writeElementInDoc(doc, { ...element, frameId: 'f1' }, keys[i], SLIDES_STYLE_DEFAULTS, `el-${i}`);
@@ -220,6 +220,10 @@ describe('a deck exported and read back', () => {
                     endArrowhead: element.endArrowhead,
                 });
         }
+    });
+
+    test("keeps the slide's name, which no title gives it", () => {
+        expect(roundTrip([], 'Agenda').deck.slides[0].name).toBe('Agenda');
     });
 
     test('keeps a picture and its bytes', () => {
