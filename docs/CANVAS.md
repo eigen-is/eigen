@@ -82,6 +82,8 @@ Rich text carries the class `eigen-canvas-text` everywhere, backed by `packages/
 
 Gradients carry nine stops sampled in OKLab (`packages/lib/src/background/gradient.ts`), because browsers and WeasyPrint blend two stops in sRGB, through a muddy gray.
 
+A kind names its own defs (a gradient, a hatch's or a rounded image's clip, an arrow label's mask) after its element's id, and a `url(#…)` lands on the page's first def of that id. The Slides rail and present mode draw the canvas's elements again on the same page, from the stored fields, while the canvas draws a drag's preview, so `FrameView` passes `ElementLayer` an `idScope` from `useId` that `layerContent` prefixes those ids with. Without it a shape resized on the canvas would clip its hatch to the rail's old outline.
+
 ## A binding is stored on the arrow only
 
 An arrow is the one kind that depends on other elements. Its math lives in `packages/lib/src/vector/` (`geometry.ts`, `outline.ts`, `elbow-route.ts`, `elbow-pins.ts`), its handles in `packages/ui/src/components/vector/tools/`.
