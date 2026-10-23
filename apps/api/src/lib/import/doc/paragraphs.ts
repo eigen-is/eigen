@@ -20,10 +20,11 @@ import { isAlternateContent, W_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES } from '../../document/wordml';
+import { mediaNamer } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
 import { byFace, type FontTable, fontMark, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
-import type { DocxChart, MediaPart } from './drawings';
+import type { DocxChart, DocxImagePart } from './drawings';
 import { type Numbering, readNumbering } from './numbering';
 import { alternative, type DocxPackage, descendants, type Part, twipsOf, w, wChild } from './package';
 import { type Field, type Piece, type RunContext, walkInline } from './runs';
@@ -52,8 +53,8 @@ export type Reader = {
     styles: Styles;
     numbering: Numbering;
     // A random prefix per import, so a replace's pictures land beside the ones a restored version names.
-    mediaPrefix: string;
-    images: MediaPart[];
+    nameMedia: (index: number, extension: string) => string;
+    images: DocxImagePart[];
     imageNames: Map<string, string>;
     // Each note by type and id, its part beside it, and each as read at its depth: a note is read once per depth
     // however often it is referenced. The notes being read, outermost first.
@@ -126,7 +127,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         fontTable,
         styles,
         numbering: readNumbering(pkg.numbering, styles),
-        mediaPrefix: `docx-${crypto.randomUUID()}`,
+        nameMedia: mediaNamer('docx'),
         images: [],
         imageNames: new Map(),
         noteElements: noteElements(pkg),

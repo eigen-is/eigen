@@ -43,16 +43,16 @@ function imageType(reader: Reader, path: string): string | undefined {
 // sharp has no loader for these, so no screen preview shows them.
 export const UNSHOWN_IMAGE_TYPES = new Set(['image/bmp', 'image/x-wmf', 'image/x-emf']);
 
-export type MediaPart = { name: string; path: string; contentType: string };
+export type DocxImagePart = { name: string; path: string; contentType: string };
 
-// One media file per image part, named by the import's prefix and encounter order.
+// One media file per image part, named in encounter order.
 function mediaName(reader: Reader, path: string): string | undefined {
     const known = reader.imageNames.get(path);
     if (known) return known;
     const contentType = imageType(reader, path);
     const extension = contentType && IMAGE_EXTENSION_BY_MIME.get(contentType);
     if (!contentType || !extension || !reader.pkg.zip.entry(path)) return undefined;
-    const name = `${reader.mediaPrefix}-image-${reader.images.length + 1}.${extension}`;
+    const name = reader.nameMedia(reader.images.length + 1, extension);
     reader.images.push({ name, path, contentType });
     reader.imageNames.set(path, name);
     return name;
