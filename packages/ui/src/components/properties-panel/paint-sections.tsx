@@ -1,6 +1,6 @@
 // The paint rows every drawn object shares: a chart's label color, the fill and its hatch, the stroke and the
-// sketch. The canvas panel shows them for any selection, merging each across it, and the Docs chart panel for one
-// chart; each host writes what a row hands back to its own store.
+// sketch. The canvas panel shows them for any selection, merging each across it, and ChartSections for one chart, in
+// Docs and Sheets; each host writes what a row hands back to its own store.
 
 import { MAX_SKETCH_POINTS } from '@workspace/lib/charts';
 import type { Fill, FillPaint } from '@workspace/lib/types/background';
