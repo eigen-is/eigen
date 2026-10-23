@@ -38,7 +38,8 @@ export const IDENTITY_COLOR_MAP: ColorMap = new Map([
     ...SCHEME_SLOTS.map((slot): [string, string] => [slot, slot]),
 ]);
 
-const NO_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
+// A part without a theme: no scheme colours, the identity map.
+export const NO_DRAWING_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
 
 export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
 
@@ -99,7 +100,7 @@ export function readColorScheme(theme: XmlElement | undefined): ColorScheme {
     const scheme = elements && xmlChild(elements, A_NS, 'clrScheme');
     const colors = new Map<string, string>();
     for (const slot of SCHEME_SLOTS) {
-        const color = scheme && drawingColor(xmlChild(scheme, A_NS, slot), NO_THEME);
+        const color = scheme && drawingColor(xmlChild(scheme, A_NS, slot), NO_DRAWING_THEME);
         if (color) colors.set(slot, color);
     }
     return colors;

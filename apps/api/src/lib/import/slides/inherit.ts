@@ -4,7 +4,7 @@ import {
     DEGREE,
     type DrawingTheme,
     drawingColor,
-    drawingTheme,
+    NO_DRAWING_THEME,
     percent,
     readColorMap,
     readColorScheme,
@@ -149,7 +149,7 @@ export function createInheritance(pkg: PptxPackage): (slide: Part) => SlideInher
 }
 
 const NO_THEME: SlideTheme = {
-    colors: drawingTheme(undefined),
+    colors: NO_DRAWING_THEME,
     fonts: { major: '', minor: '' },
     formats: { fills: [], backgrounds: [], lines: [] },
 };
