@@ -1,6 +1,6 @@
 import { SHEET_DEFAULT_FONT, type Sheet } from '@workspace/lib/sheets';
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
-import { quoteSheetName } from '@workspace/sheet/engine';
+import { quoteSheetName, rangeToA1 } from '@workspace/sheet/engine';
 import { THEME_TYPE, themeXml } from '../../../core/drawingml';
 import { R_NS, SML_NS } from '../../../core/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, relsPathOf, writePackage } from '../../../core/opc';
@@ -11,7 +11,7 @@ import { OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia } from '../../office-image
 import { drawingOf, type WorkbookPictures } from './drawing';
 import { sharedStringTable } from './strings';
 import { styleRegistry } from './styles';
-import { areaRef, filterArea, worksheetPart } from './worksheet';
+import { filterArea, worksheetPart } from './worksheet';
 
 // The workbook as a package: the sheets' names, workbook.xml and its relationships, and every part declared before any
 // is written. A part's body is pulled when the zip writer reaches it, so the sheets come first, then the shared strings
@@ -100,7 +100,7 @@ export function workbookXml(sheets: Sheet[], names: string[], active: number): s
         const area = filterArea(sheet);
         return area
             ? [
-                  `<definedName name="_xlnm._FilterDatabase" localSheetId="${index}" hidden="1">${escapeXml(`${quoteSheetName(names[index])}!${areaRef(area, true)}`)}</definedName>`,
+                  `<definedName name="_xlnm._FilterDatabase" localSheetId="${index}" hidden="1">${escapeXml(`${quoteSheetName(names[index])}!${rangeToA1(area, true)}`)}</definedName>`,
               ]
             : [];
     });

@@ -10,7 +10,7 @@ import {
     type Sheet,
 } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { toA1, valueIsError } from '@workspace/sheet/engine';
+import { rangeToA1, valueIsError } from '@workspace/sheet/engine';
 import { MAX_FORMULA_LENGTH, withFuturePrefixes } from '../../../document/spreadsheetml';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
 import { cutText, type SharedStringTable } from './strings';
@@ -87,12 +87,7 @@ export function sheetGrid(sheet: Sheet, context: GridContext): Grid {
     };
     for (const { r, c } of cells) span(r, c);
     for (const key of borders) span(Math.floor(key / REFERENCE_COLUMN_COUNT), key % REFERENCE_COLUMN_COUNT);
-    const dimension =
-        bottom < 0
-            ? 'A1'
-            : top === bottom && left === right
-              ? toA1(top, left)
-              : `${toA1(top, left)}:${toA1(bottom, right)}`;
+    const dimension = bottom < 0 ? 'A1' : rangeToA1({ row: [top, bottom], column: [left, right] });
 
     const labels: string[] = [];
     const cellXml = (r: number, c: number, cell: Cell | undefined, border: CellBorderSides | undefined): string => {

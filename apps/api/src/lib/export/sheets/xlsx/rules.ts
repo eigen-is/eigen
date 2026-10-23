@@ -7,7 +7,7 @@ import type {
 } from '@workspace/lib/sheets';
 import { parseCellKey } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { iscelldata, toA1 } from '@workspace/sheet/engine';
+import { iscelldata, rangeToA1, toA1 } from '@workspace/sheet/engine';
 import { cssColorToHex } from '../../../document/colors';
 import {
     CF_CELL_IS_CONDITION,
@@ -52,7 +52,7 @@ function conditionalFormattingXml(
     const written: { sqref: string; rule: CfRule }[] = [];
     for (const rule of rules) {
         const cfRule = cfRuleOf(rule);
-        if (cfRule) written.push({ sqref: rule.cellrange.map(refOf).join(' '), rule: cfRule });
+        if (cfRule) written.push({ sqref: rule.cellrange.map((range) => rangeToA1(range)).join(' '), rule: cfRule });
         else lost('conditional-formats-dropped');
     }
     // Excel resolves overlapping rules by the lowest priority number, the engine by the last rule. Excel keeps the
@@ -190,10 +190,11 @@ function dataValidationsXml(
             lost('validation-prompts-cut');
         }
         const { type, operator, formulas } = validation;
+        const sqref = ranges.map((range) => rangeToA1(range)).join(' ');
         validations.push(
             `<dataValidation type="${type}"${operator ? ` operator="${operator}"` : ''} allowBlank="1"` +
                 `${prompt ? ' showInputMessage="1"' : ''}${rule.prohibitInput ? ' showErrorMessage="1"' : ''}` +
-                `${prompt ? ` prompt="${escapeXml(prompt)}"` : ''} sqref="${ranges.map(refOf).join(' ')}">` +
+                `${prompt ? ` prompt="${escapeXml(prompt)}"` : ''} sqref="${sqref}">` +
                 formulas
                     .map((formula, index) => `<formula${index + 1}>${escapeXml(formula)}</formula${index + 1}>`)
                     .join('') +
@@ -269,11 +270,6 @@ function rectanglesOf(cells: [number, number][]): SingleRange[] {
         }
     }
     return rectangles;
-}
-
-function refOf({ row, column }: SingleRange): string {
-    const start = toA1(row[0], column[0]);
-    return row[0] === row[1] && column[0] === column[1] ? start : `${start}:${toA1(row[1], column[1])}`;
 }
 
 function absoluteRef(ref: string): string {

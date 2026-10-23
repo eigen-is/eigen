@@ -8,6 +8,7 @@
 export {
     parseA1Range,
     quoteSheetName,
+    rangeToA1,
     rowIndexToLabel,
     toA1,
     unquoteSheetName,
