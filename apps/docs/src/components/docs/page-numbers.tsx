@@ -1,7 +1,8 @@
 import type { Editor } from '@tiptap/react';
-import type { BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
-import { bandHasContent, FIRST_PAGE_BAND } from '@workspace/lib/docs/eigendoc';
+import type { BandRoot, PageNumberKind, PageSetup } from '@workspace/lib/docs/eigendoc';
+import { bandHasContent, FIRST_PAGE_BAND, PAGE_NUMBER_KINDS } from '@workspace/lib/docs/eigendoc';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { PAGE_NUMBER_FIELD_NAMES } from './extensions/page-number';
 
 // Google's Insert › Page numbers pictures: a number on the right of the header or the footer, on every page or from
 // page 2.
@@ -72,7 +73,7 @@ type PageNumberItemsProps = {
     onPreset: (preset: PageNumberPreset) => void;
 };
 
-const insertField = (editor: Editor, kind: 'page' | 'pages') =>
+const insertField = (editor: Editor, kind: PageNumberKind) =>
     editor.chain().focus().insertContent({ type: 'pageNumber', attrs: { kind } }).run();
 
 // The Page numbers submenu of Insert › Page elements, Format and a band's Options. Text-only, so every label lines up.
@@ -85,7 +86,10 @@ export const PageNumberItems = ({ editor, onPreset }: PageNumberItemsProps) => (
         ))}
         <DropdownMenuSeparator />
         {/* Google's Page number and Page count go in at the caret, wherever it is. */}
-        <DropdownMenuItem onClick={() => insertField(editor, 'page')}>Page number</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => insertField(editor, 'pages')}>Page count</DropdownMenuItem>
+        {PAGE_NUMBER_KINDS.map((kind) => (
+            <DropdownMenuItem key={kind} onClick={() => insertField(editor, kind)}>
+                {PAGE_NUMBER_FIELD_NAMES[kind]}
+            </DropdownMenuItem>
+        ))}
     </>
 );
