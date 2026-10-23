@@ -4,7 +4,13 @@ import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/
 import { ApiError } from '../../core/errors';
 import { isOn, SML_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
-import { DAY_MS, DAYS_1904, EXCEL_EPOCH_MS, withoutFuturePrefixes } from '../../document/spreadsheetml';
+import {
+    DAY_MS,
+    DAYS_1904,
+    EXCEL_EPOCH_MS,
+    MAX_FORMULA_LENGTH,
+    withoutFuturePrefixes,
+} from '../../document/spreadsheetml';
 import { IMPORT_MESSAGES, TOO_MANY_CELLS } from '../messages';
 import { type SharedString, stringOf, textOf } from './strings';
 import { type Look, NO_LOOK, type ThemePalette } from './styles';
@@ -12,8 +18,6 @@ import { cellKey, type PlacedCell } from './worksheet';
 
 // A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula, look and rich text,
 // the borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column numbers.
-
-const MAX_FORMULA_LENGTH = 8192;
 
 export type GridContext = {
     looks: Look[];

@@ -1,6 +1,7 @@
 import type { InlineStringSegment } from '@workspace/lib/sheets';
 import { SML_NS } from '../../core/ooxml';
 import { hasXmlName, type XmlElement, xmlChild, xmlElements, xmlText } from '../../core/xml';
+import { decodeEscapes } from '../../document/spreadsheetml';
 import { type ReadBudget, readInBatches } from './package';
 import { fontLook, type ThemePalette } from './styles';
 
@@ -28,7 +29,7 @@ export function stringOf(element: XmlElement, palette: ThemePalette): SharedStri
         const t = run ? xmlChild(child, SML_NS, 't') : hasXmlName(child, SML_NS, 't') ? child : undefined;
         if (run) rich = true;
         if (!run && !t) continue;
-        const text = t ? decoded(xmlText(t)) : '';
+        const text = t ? decodeEscapes(xmlText(t)) : '';
         const properties = run ? xmlChild(child, SML_NS, 'rPr') : undefined;
         runs.push(properties ? { v: text, ...fontLook(properties, palette) } : text);
     }
@@ -38,13 +39,4 @@ export function stringOf(element: XmlElement, palette: ThemePalette): SharedStri
 
 export function textOf(string: SharedString): string {
     return typeof string === 'string' ? string : string.text;
-}
-
-// A character XML can't hold is written _xHHHH_, and _x005F_ escapes the underscore of a literal one.
-const ESCAPED = /_x([0-9A-Fa-f]{4})_/g;
-
-function decoded(text: string): string {
-    return text.includes('_x')
-        ? text.replace(ESCAPED, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
-        : text;
 }
