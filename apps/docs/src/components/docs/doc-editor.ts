@@ -2,7 +2,7 @@ import { Extension, type Extensions, Node } from '@tiptap/core';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { Slice } from '@tiptap/pm/model';
-import { Selection } from '@tiptap/pm/state';
+import { NodeSelection, Selection } from '@tiptap/pm/state';
 import type { Editor, UseEditorOptions } from '@tiptap/react';
 import { useEditor } from '@tiptap/react';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
@@ -370,7 +370,7 @@ export function docEditorOptions({
                 // and the selection's Add comment, which would otherwise open their own menus over a cell.
                 contextmenu: (view, event) => {
                     const target = editor();
-                    const pos = cellPosAt(view, event.target);
+                    const pos = cellPosAt(view, event);
                     if (!table || !target || pos === null || !table.onContextMenu(target, pos, event)) return false;
                     event.preventDefault();
                     return true;
@@ -488,6 +488,11 @@ export function useDocEditor(
     // band entered or left, reach it here. Before paint, so an editor never shows a frame editable after it lost that.
     useLayoutEffect(() => {
         editor.setEditable(editable, false);
+        // A node view reads the flag as it renders and nothing re-renders it, so a selected image would keep its grips.
+        const { selection } = editor.state;
+        if (!editable && selection instanceof NodeSelection) {
+            editor.view.dispatch(editor.state.tr.setSelection(Selection.near(selection.$from)));
+        }
     }, [editor, editable]);
     // A note's images and fonts are the body's, which sweeps and collapses them.
     const sweeps = options.editable && !('body' in options.target);
@@ -496,10 +501,10 @@ export function useDocEditor(
     // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
     // A viewer's deletion would be dropped by the server.
     useZombieMediaSweep({
-        ready: !!editor && sweeps,
+        ready: sweeps,
         scan: () => {
             const names: string[] = [];
-            editor?.state.doc.descendants((node) => {
+            editor.state.doc.descendants((node) => {
                 if (
                     node.type.name === 'figure' &&
                     typeof node.attrs.mediaName === 'string' &&
@@ -512,7 +517,6 @@ export function useDocEditor(
             return names;
         },
         remove: (names) => {
-            if (!editor) return;
             for (const name of names) swapFigureMediaName(editor, name, null);
         },
     });
@@ -521,7 +525,7 @@ export function useDocEditor(
     // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
     // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
     useEffect(() => {
-        if (!editor || !sweeps) return;
+        if (!sweeps) return;
         normalizeFontFamilyMarks(editor);
     }, [editor, sweeps]);
 

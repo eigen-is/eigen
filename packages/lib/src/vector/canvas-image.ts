@@ -20,17 +20,18 @@ export function canvasImageScene(
     content: VectorElement[] | EigenClipboardChartItem,
     drawingBackground?: string,
 ): VectorScene {
-    const elements = Array.isArray(content) ? content : chartItemElements(content);
+    let elements: VectorElement[] = [];
+    if (Array.isArray(content)) elements = content;
+    else {
+        const { spec, width, height, look } = content;
+        const record: Record<string, unknown> = { ...look, id: 'chart', type: 'chart', chart: spec, width, height };
+        const el = readElementFromFields({ get: (key: string) => record[key] });
+        if (el) elements = [el];
+    }
     const background =
         drawingBackground ??
         (elements.length === 1 && elements[0].type === 'chart' ? CHART_PAPER : DEFAULT_SCENE_META.background);
     return { elements, frames: [], meta: { ...DEFAULT_SCENE_META, background } };
-}
-
-function chartItemElements({ spec, width, height, look }: EigenClipboardChartItem): VectorElement[] {
-    const record: Record<string, unknown> = { ...look, id: 'chart', type: 'chart', chart: spec, width, height };
-    const el = readElementFromFields({ get: (key: string) => record[key] });
-    return el ? [el] : [];
 }
 
 // A chart's file is named for its title, less what a file name can't hold; one without a title is "Chart". Anything

@@ -124,7 +124,10 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     const legend = placeLegend(ctx, spec.legend, items, frame);
     frame = legend.frame;
 
-    const marks = isSketchCapped(spec, data) ? flatMarks(ctx) : ctx;
+    // Past MAX_SKETCH_POINTS the data marks draw unsketched and solid, their labels still the chart's.
+    const marks: Context = isSketchCapped(spec, data)
+        ? { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } }
+        : ctx;
     const plot =
         spec.type === 'pie'
             ? layoutPie(marks, spec, categories, values[0], frame)
@@ -144,9 +147,9 @@ export function isSketchCapped(spec: ChartSpec, data: ChartData): boolean {
     return chartPointCount(spec, data) > MAX_SKETCH_POINTS;
 }
 
-// The context the data marks draw in past MAX_SKETCH_POINTS: unsketched and solid, its labels still the chart's.
-function flatMarks(ctx: Context): Context {
-    return { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } };
+// The same for a chart that holds its data, as a doc's and a canvas's do; a range's lives on its sheet.
+export function isInlineSketchCapped(spec: ChartSpec): boolean {
+    return spec.data.source === 'inline' && isSketchCapped(spec, spec.data);
 }
 
 // The chart's background and one centered line instead of a plot, as a chart with nothing to plot draws.

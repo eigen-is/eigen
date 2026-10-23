@@ -118,11 +118,15 @@ function tableOf(view: EditorView, tableDom: HTMLTableElement): { table: PMNode;
     return view.nodeDOM(pos)?.firstChild === tableDom ? { table: $start.parent, pos } : null;
 }
 
-// Where in a cell a right-click landed, from the DOM it landed on; null outside a table.
-export function cellPosAt(view: EditorView, target: EventTarget | null): number | null {
-    if (!(target instanceof Node) || !view.dom.contains(target)) return null;
-    const pos = view.posAtDOM(target, 0);
-    return cellAround(view.state.doc.resolve(pos)) ? pos : null;
+// Where in a cell a right-click landed, at the pointer: the start of the element it hit would fall outside a selection
+// within that paragraph. Null outside a table.
+export function cellPosAt(view: EditorView, event: MouseEvent): number | null {
+    if (!(event.target instanceof Node) || !view.dom.contains(event.target)) return null;
+    const pos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+    if (pos !== undefined && cellAround(view.state.doc.resolve(pos))) return pos;
+    // Cell padding or a border resolves between the cells: the cell under the pointer still has its menu.
+    const cell = event.target instanceof Element ? event.target.closest('td, th') : null;
+    return cell && view.dom.contains(cell) ? view.posAtDOM(cell, 0) : null;
 }
 
 // Takes over columnResizing's drag from mousedown to mouseup and keeps the rest of it: the hover that finds the border,

@@ -11,6 +11,7 @@ import {
     useSharedCalendars,
     useUpdateCalendar,
     useUpdateSharedCalendar,
+    type ViewMode,
 } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
@@ -96,20 +97,18 @@ function CalendarRow({
                                         </DropdownMenuItem>
                                     }
                                     output={
-                                        (onImport || onExport) && (
-                                            <>
-                                                {onImport && (
-                                                    <DropdownMenuItem onClick={onImport}>
-                                                        <Upload className="h-4 w-4" /> Import events…
-                                                    </DropdownMenuItem>
-                                                )}
-                                                {onExport && (
-                                                    <DropdownMenuItem onClick={onExport}>
-                                                        <Download className="h-4 w-4" /> Export calendar
-                                                    </DropdownMenuItem>
-                                                )}
-                                            </>
-                                        )
+                                        <>
+                                            {onImport && (
+                                                <DropdownMenuItem onClick={onImport}>
+                                                    <Upload className="h-4 w-4" /> Import events…
+                                                </DropdownMenuItem>
+                                            )}
+                                            {onExport && (
+                                                <DropdownMenuItem onClick={onExport}>
+                                                    <Download className="h-4 w-4" /> Export calendar
+                                                </DropdownMenuItem>
+                                            )}
+                                        </>
                                     }
                                 />
                             </DropdownMenuContent>
@@ -176,7 +175,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     };
 
     // Recomputed at click time: a tab left open across midnight would navigate to yesterday's period.
-    const navigateToCurrentPeriod = (e: MouseEvent, mode: 'month' | 'week') => {
+    const navigateToCurrentPeriod = (e: MouseEvent, mode: ViewMode) => {
         e.preventDefault();
         const range = mode === 'month' ? getMonthRange(new Date()) : getWeekRange(new Date());
         navigate({

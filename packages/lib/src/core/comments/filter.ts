@@ -4,10 +4,13 @@ import type { CommentCard } from '../../types/comments';
 
 export type CommentAssigneeFilter = 'all' | 'me' | 'unassigned' | { email: string };
 
+// In the Status submenu's order.
+export const COMMENT_STATUS_FILTERS = ['open', 'resolved', 'all'] as const;
+
 export type CommentFilter = {
     assignee: CommentAssigneeFilter;
     colors: Set<string> | null; // null = all; matches card.color || ''
-    status: 'open' | 'resolved' | 'all';
+    status: (typeof COMMENT_STATUS_FILTERS)[number];
 };
 
 export const DEFAULT_COMMENT_FILTER: CommentFilter = { assignee: 'all', colors: null, status: 'open' };

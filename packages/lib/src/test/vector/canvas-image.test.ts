@@ -82,6 +82,7 @@ describe('canvasImageScene', () => {
         const item = buildChartClipboardItem({
             spec: JSON.stringify(sampleChartSpec('pie')),
             box: { width: 9, height: 9 },
+            look: FLAT_CHART_LOOK,
         });
         if (!item) throw new Error('no chart item');
         expect(canvasImageScene(item).meta.background).toBe('#ffffff');

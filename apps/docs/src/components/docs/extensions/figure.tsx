@@ -5,7 +5,7 @@ import type { FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { FigureNode, readFigureFrameAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
-import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
+import { ImagePlaceholder } from '@workspace/ui/components/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {

@@ -97,16 +97,13 @@ export function DriveItemMenuItems({
             open={
                 <>
                     {canOpen && onItemOpen && (
-                        <DropdownMenuItem onClick={run(() => onItemOpen(item))} className="flex items-center">
+                        <DropdownMenuItem onClick={run(() => onItemOpen(item))}>
                             <ArrowRight className="h-4 w-4" />
                             Open
                         </DropdownMenuItem>
                     )}
                     {href && (
-                        <DropdownMenuItem
-                            onClick={run(() => window.open(href, '_blank', 'noopener,noreferrer'))}
-                            className="flex items-center"
-                        >
+                        <DropdownMenuItem onClick={run(() => window.open(href, '_blank', 'noopener,noreferrer'))}>
                             <ExternalLink className="h-4 w-4" />
                             Open in new tab
                         </DropdownMenuItem>
@@ -118,13 +115,13 @@ export function DriveItemMenuItems({
                 (onRename || onDuplicate) && (
                     <>
                         {onRename && (
-                            <DropdownMenuItem onClick={run(() => onRename(item))} className="flex items-center">
+                            <DropdownMenuItem onClick={run(() => onRename(item))}>
                                 <Pencil className="h-4 w-4" />
                                 Rename
                             </DropdownMenuItem>
                         )}
                         {onDuplicate && (
-                            <DropdownMenuItem onClick={run(() => onDuplicate([item]))} className="flex items-center">
+                            <DropdownMenuItem onClick={run(() => onDuplicate([item]))}>
                                 <CopyPlus className="h-4 w-4" />
                                 Duplicate
                             </DropdownMenuItem>
@@ -136,13 +133,13 @@ export function DriveItemMenuItems({
                 (onMoveTo || onCopyTo) && (
                     <>
                         {onMoveTo && (
-                            <DropdownMenuItem onClick={run(() => onMoveTo([item]))} className="flex items-center">
+                            <DropdownMenuItem onClick={run(() => onMoveTo([item]))}>
                                 <FolderInput className="h-4 w-4" />
                                 Move to…
                             </DropdownMenuItem>
                         )}
                         {onCopyTo && (
-                            <DropdownMenuItem onClick={run(() => onCopyTo([item]))} className="flex items-center">
+                            <DropdownMenuItem onClick={run(() => onCopyTo([item]))}>
                                 <Copy className="h-4 w-4" />
                                 Copy to…
                             </DropdownMenuItem>
@@ -207,7 +204,7 @@ export function DriveItemMenuItems({
                             </DropdownMenuSubContent>
                         </DropdownMenuSub>
                     )}
-                    <DropdownMenuItem disabled={isPending} onClick={run(toggle)} className="flex items-center">
+                    <DropdownMenuItem disabled={isPending} onClick={run(toggle)}>
                         {direct ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
                         {label}
                     </DropdownMenuItem>
@@ -216,11 +213,7 @@ export function DriveItemMenuItems({
             destructive={
                 allowDelete &&
                 onDelete && (
-                    <DropdownMenuItem
-                        variant="destructive"
-                        onClick={run(() => onDelete([item]))}
-                        className="flex items-center"
-                    >
+                    <DropdownMenuItem variant="destructive" onClick={run(() => onDelete([item]))}>
                         <Trash2 className="h-4 w-4" />
                         {isSharedWithMe(item) ? 'Remove shared item' : 'Move to trash'}
                     </DropdownMenuItem>

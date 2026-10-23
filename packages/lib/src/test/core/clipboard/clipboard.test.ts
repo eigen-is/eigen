@@ -504,14 +504,14 @@ describe('chart items', () => {
     });
 
     test('a chart that has no look of its own copies flat', () => {
-        const item = buildChartClipboardItem({ spec: inline, box: { width: 600, height: 371 } });
+        const item = buildChartClipboardItem({ spec: inline, box: { width: 600, height: 371 }, look: {} });
         expect(item?.look).toEqual(FLAT_CHART_LOOK);
     });
 
     test('a range, unreadable or oversized spec builds no item', () => {
         const box = { width: 10, height: 10 };
         const oversized = JSON.stringify({ ...sampleChartSpec('column'), title: 'x'.repeat(70 * 1024) });
-        for (const spec of [range, '{', oversized]) expect(buildChartClipboardItem({ spec, box })).toBeNull();
+        for (const spec of [range, '{', oversized]) expect(buildChartClipboardItem({ spec, box, look })).toBeNull();
     });
 
     test('the reader keeps a chart with inline data and drops any other', () => {

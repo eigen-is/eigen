@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1946 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1952 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -536,7 +536,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (439)
+## Types (440)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -629,6 +629,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CalendarItem` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarOption` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarShare` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `CalendarSharePermission` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ChatAttachment` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMatch` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMessage` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
@@ -980,7 +981,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1002)
+## Utilities & constants (1007)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1112,6 +1113,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `truncateRRule` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `viewerTimeZone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `WEEKDAY_HEADERS` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `CHART_DEFAULT_SIZE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `CHART_MAX_SIDE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `CHART_MESSAGES` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `chartColor` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
@@ -1130,6 +1132,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `GRIDLINE_OPACITY` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `INLINE_GRID_MAX_CATEGORIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `INLINE_GRID_MAX_SERIES` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `isInlineSketchCapped` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `isSketchCapped` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `layoutChart` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
 | `layoutChartMessage` | `@workspace/lib/charts` | packages/lib/src/charts/layout.ts |
@@ -1191,6 +1194,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `restoreYjsDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/yjs-utils.ts |
 | `parseQuery` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/parse-query.ts |
 | `applyCardPatch` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
+| `COMMENT_STATUS_FILTERS` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `COMMENT_STATUS_LABELS` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `DEFAULT_COMMENT_FILTER` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `findCardIdByChatName` | `@workspace/lib/comments` | packages/lib/src/core/comments/find-card-id-by-chat-name.ts |
@@ -1333,7 +1337,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BAND_ROOTS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `bandEdge` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `bandHasContent` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
-| `CHART_DEFAULT_SIZE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `chartSvg` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `cmText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `DEFAULT_NORMAL_STYLE` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/normal-style.ts |
@@ -1512,6 +1515,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `reportImportCounts` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `unreadableLine` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `aclPrincipalsToResolve` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
+| `CALENDAR_SHARE_PERMISSIONS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CARD_TITLE_MAX_LENGTH` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
@@ -1526,6 +1530,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_MIME_SLIDES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_STICKIES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_VECTOR` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DRIVE_SORT_KEYS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_DOC` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_FILE` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1970,6 +1975,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isVectorFontLoaded` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `loadVectorFont` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `measureVectorText` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
+| `updateMetaInDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/frame-writes.ts |
 | `VECTOR_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
 | `isLayerAbove` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |

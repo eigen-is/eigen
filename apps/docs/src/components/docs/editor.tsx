@@ -63,9 +63,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
-import { chartClipboardItem, pasteFromClipboard } from './clipboard';
+import { chartClipboardItem, pasteFromClipboard, runClipboardCommand } from './clipboard';
 import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
-import { EditorToolbar, runClipboardCommand } from './editor-toolbar';
+import { EditorToolbar } from './editor-toolbar';
 import { equationMenuSections } from './equation-menu-sections';
 import { EquationPropertiesPanel } from './equation-properties-panel';
 import {
@@ -79,6 +79,7 @@ import {
     selectCommentAnchor,
     updateCommentDecorations,
 } from './extensions/comment-mark';
+import type { EquationOptions } from './extensions/equation';
 import { insertNote } from './extensions/footnote';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { FootnoteList } from './footnote-list';
@@ -281,6 +282,11 @@ const TiptapEditor = ({
         [isMobile, openComments],
     );
 
+    // Every editor's equations open the one Equation panel and menu.
+    const equation: Omit<EquationOptions, 'onOpenComment'> = {
+        onEdit: isMobile ? undefined : () => editEquationRef.current(),
+        onContextMenu: (...args) => equationContextMenuRef.current(...args),
+    };
     const editor = useDocEditor(
         {
             media,
@@ -297,11 +303,7 @@ const TiptapEditor = ({
                 onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
                 onEditData: () => setChartDataOpen(true),
             },
-            equation: {
-                onOpenComment: handleCommentClick,
-                onEdit: isMobile ? undefined : () => editEquationRef.current(),
-                onContextMenu: (...args) => equationContextMenuRef.current(...args),
-            },
+            equation: { ...equation, onOpenComment: handleCommentClick },
             table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
             footnote: { onOpen: (pos) => openNoteRef.current(pos), onInsert: () => insertFootnoteRef.current() },
             extensions: [
@@ -349,10 +351,7 @@ const TiptapEditor = ({
         editable: canWrite,
         editing: editingBand,
         onLeave: leaveBand,
-        equation: {
-            onEdit: () => editEquationRef.current(),
-            onContextMenu: (...args) => equationContextMenuRef.current(...args),
-        },
+        equation,
         table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
     });
     // The open footnote's one live editor, kept as long as the doc is open; it holds whichever note is open. A writer's
@@ -363,10 +362,7 @@ const TiptapEditor = ({
         provider: null,
         editable: canWrite,
         target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current() },
-        equation: {
-            onEdit: () => editEquationRef.current(),
-            onContextMenu: (...args) => equationContextMenuRef.current(...args),
-        },
+        equation,
     });
     const notes = useOpenNote(editor, noteEditor, bandsAllowed);
     leaveNoteRef.current = notes.leave;
@@ -418,7 +414,7 @@ const TiptapEditor = ({
     );
 
     const handleAddComment = () => {
-        if (!editor || !chatFolderId) return;
+        if (!chatFolderId) return;
         const { from, to } = editor.state.selection;
         const text = commentAnchorText(editor.state.doc, from, to);
         if (!text.trim()) return;
@@ -467,7 +463,7 @@ const TiptapEditor = ({
         const comment = commentMenuItem(nodeCommentCardId(node));
         if (!canWrite && !imagePath && !chart && !comment) return;
         // Selected first, so Add comment anchors to it.
-        editor?.commands.setNodeSelection(pos);
+        editor.commands.setNodeSelection(pos);
         figureContextMenu.handleContextMenu(event, { imagePath, chart, comment });
     };
     const menuChart = figureContextMenu.item?.chart;
@@ -490,7 +486,8 @@ const TiptapEditor = ({
     const equationContextMenu = useContextMenu<EquationMenuItem>();
     equationContextMenuRef.current = (target, node, pos, event) => {
         if (!target.isEditable) return;
-        target.commands.setNodeSelection(pos);
+        // Selected as a click selects it, which opens its panel.
+        target.chain().setNodeSelection(pos).setMeta('pointer', true).run();
         const comment = commentMenuItem(nodeCommentCardId(node));
         equationContextMenu.handleContextMenu(event, { editor: target, display: node.attrs.display === true, comment });
     };
@@ -498,12 +495,12 @@ const TiptapEditor = ({
     const afterEquationMenuRef = useRef<(() => void) | null>(null);
 
     const removeCommentMarks = (cardId: string) => {
-        if (editor) removeCommentAnchors(editor, cardId);
+        removeCommentAnchors(editor, cardId);
     };
 
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
-            if (!editor || !pendingMarkRange) return;
+            if (!pendingMarkRange) return;
             const range = pendingMarkRange;
             const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (card) =>
                 addCommentAnchor(editor, range, card.id),
@@ -519,7 +516,6 @@ const TiptapEditor = ({
 
     // Sync resolved IDs + colors into the ProseMirror decoration plugin
     useEffect(() => {
-        if (!editor) return;
         const resolved = new Set<string>();
         const colorMap = new Map<string, string>();
         for (const cardId of activeComments.ids) {
@@ -567,8 +563,6 @@ const TiptapEditor = ({
         needsScaleRef.current = needsScale;
         if (needsScale && documentRef.current) setDocHeight(documentRef.current.offsetHeight);
     }, [needsScale]);
-
-    if (!editor) return null;
 
     // Desktop reveals the anchor and switches an activity tap over to comments; the mobile pane hides
     // the editor, so it just opens the card.
@@ -628,57 +622,20 @@ const TiptapEditor = ({
             part="delete"
         />
     );
-    const tableMenu = (item: TableMenuItem) => {
-        const rows = tableMenuSections(item.editor, item.cells);
-        return (
-            <MenuSections
-                {...rows}
-                clipboard={
-                    <ClipboardMenuItems
-                        onCut={() => runClipboardCommand(item.editor, 'cut')}
-                        onCopy={() => runClipboardCommand(item.editor, 'copy')}
-                        onPaste={() => void pasteFromClipboard(item.editor).catch(() => {})}
-                    />
-                }
-                collaborate={commentRows(item, canAnchorComment(item.editor.state))}
-                destructive={
-                    <>
-                        {rows.destructive}
-                        {commentDelete(item)}
-                    </>
-                }
-            />
-        );
-    };
-    const equationMenu = (item: EquationMenuItem) => {
-        const rows = equationMenuSections(
-            item.editor,
-            item.display,
+    const tableItem = tableContextMenu.item;
+    const tableRows = tableItem && tableMenuSections(tableItem.editor, tableItem.cells);
+    const equationItem = equationContextMenu.item;
+    const equationRows =
+        equationItem &&
+        equationMenuSections(
+            equationItem.editor,
+            equationItem.display,
             isMobile
                 ? undefined
                 : () => {
                       afterEquationMenuRef.current = editEquation;
                   },
         );
-        return (
-            <MenuSections
-                {...rows}
-                clipboard={
-                    <ClipboardMenuItems
-                        onCut={() => runClipboardCommand(item.editor, 'cut')}
-                        onCopy={() => runClipboardCommand(item.editor, 'copy')}
-                    />
-                }
-                collaborate={commentRows(item, true)}
-                destructive={
-                    <>
-                        {rows.destructive}
-                        {commentDelete(item)}
-                    </>
-                }
-            />
-        );
-    };
 
     const bandControls = editingBand && (
         <BandControls
@@ -959,12 +916,10 @@ const TiptapEditor = ({
             <ContextMenuAnchor contextMenu={figureContextMenu}>
                 <MenuSections
                     clipboard={
-                        canWrite && (
-                            <ClipboardMenuItems
-                                onCut={() => runClipboardCommand(editor, 'cut')}
-                                onCopy={() => runClipboardCommand(editor, 'copy')}
-                            />
-                        )
+                        <ClipboardMenuItems
+                            onCut={canWrite ? () => runClipboardCommand(editor, 'cut') : undefined}
+                            onCopy={() => runClipboardCommand(editor, 'copy')}
+                        />
                     }
                     output={
                         (figureContextMenu.item?.imagePath || menuChart) && (
@@ -1008,7 +963,25 @@ const TiptapEditor = ({
             </ContextMenuAnchor>
 
             <ContextMenuAnchor contextMenu={tableContextMenu}>
-                {tableContextMenu.item && tableMenu(tableContextMenu.item)}
+                {tableItem && tableRows && (
+                    <MenuSections
+                        {...tableRows}
+                        clipboard={
+                            <ClipboardMenuItems
+                                onCut={() => runClipboardCommand(tableItem.editor, 'cut')}
+                                onCopy={() => runClipboardCommand(tableItem.editor, 'copy')}
+                                onPaste={() => void pasteFromClipboard(tableItem.editor).catch(() => {})}
+                            />
+                        }
+                        collaborate={commentRows(tableItem, canAnchorComment(tableItem.editor.state))}
+                        destructive={
+                            <>
+                                {tableRows.destructive}
+                                {commentDelete(tableItem)}
+                            </>
+                        }
+                    />
+                )}
             </ContextMenuAnchor>
 
             <ContextMenuAnchor
@@ -1021,7 +994,24 @@ const TiptapEditor = ({
                     else equationContextMenu.restoreFocus();
                 }}
             >
-                {equationContextMenu.item && equationMenu(equationContextMenu.item)}
+                {equationItem && equationRows && (
+                    <MenuSections
+                        {...equationRows}
+                        clipboard={
+                            <ClipboardMenuItems
+                                onCut={() => runClipboardCommand(equationItem.editor, 'cut')}
+                                onCopy={() => runClipboardCommand(equationItem.editor, 'copy')}
+                            />
+                        }
+                        collaborate={commentRows(equationItem, true)}
+                        destructive={
+                            <>
+                                {equationRows.destructive}
+                                {commentDelete(equationItem)}
+                            </>
+                        }
+                    />
+                )}
             </ContextMenuAnchor>
 
             <ContextMenuAnchor contextMenu={selectionContextMenu}>

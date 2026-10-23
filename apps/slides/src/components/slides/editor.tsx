@@ -1,6 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     elementsInFrame,
     parseBackgroundFill,
@@ -417,7 +417,7 @@ function SlideEditorInner({
                 />
             }
         >
-            {/* The rail is desktop-only: a phone pages with a swipe (spec D8), and a 52-wide column
+            {/* The rail is desktop-only: a phone pages with a swipe, and a 52-wide column
                 would take a third of the screen. */}
             {!isMobile && (
                 <SlidePanel
@@ -443,7 +443,7 @@ function SlideEditorInner({
                             canEdit={canEdit}
                             ownerId={ownerId}
                             mountId={path.mountId}
-                            fileName={stripEigenExtension(path.name)}
+                            fileName={path.name}
                             tool={tool}
                             setTool={setTool}
                             toolLocked={toolLocked}
@@ -462,7 +462,7 @@ function SlideEditorInner({
                             onInsertImage={insertImage}
                             backgroundMenu={slideMenuSections(frameId)}
                             // A view-only deck pages on a one-finger swipe; an editable one keeps
-                            // that finger for the canvas (D4.13).
+                            // that finger for the canvas.
                             onSwipeFrame={canEdit ? undefined : stepFrame}
                         />
                     </div>

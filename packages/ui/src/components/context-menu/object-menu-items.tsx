@@ -24,9 +24,11 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '../dropdown-menu';
+import { Z_ORDER_ROWS } from '../properties-panel/z-order';
 
-// Google Slides' Order ▸, front at top, with the brackets useZOrderHotkeys answers to. Presentational: the host owns
-// what each op does.
+const ORDER_ICONS = { toFront: ArrowUpToLine, forward: ChevronUp, backward: ChevronDown, toBack: ArrowDownToLine };
+
+// Google Slides' Order ▸, with the brackets useZOrderHotkeys answers to. Presentational: the host owns what each op does.
 export function OrderMenuSub({ onApply }: { onApply: (op: ZOp) => void }) {
     return (
         <DropdownMenuSub>
@@ -34,22 +36,15 @@ export function OrderMenuSub({ onApply }: { onApply: (op: ZOp) => void }) {
                 <Layers className="h-4 w-4" /> Order
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-                <DropdownMenuItem onClick={() => onApply('toFront')}>
-                    <ArrowUpToLine className="h-4 w-4" /> Bring to front
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+]')}</DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onApply('forward')}>
-                    <ChevronUp className="h-4 w-4" /> Bring forward
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+]')}</DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onApply('backward')}>
-                    <ChevronDown className="h-4 w-4" /> Send backward
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+[')}</DropdownMenuShortcut>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onApply('toBack')}>
-                    <ArrowDownToLine className="h-4 w-4" /> Send to back
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+[')}</DropdownMenuShortcut>
-                </DropdownMenuItem>
+                {Z_ORDER_ROWS.map(({ op, label, hotkey }) => {
+                    const Icon = ORDER_ICONS[op];
+                    return (
+                        <DropdownMenuItem key={op} onClick={() => onApply(op)}>
+                            <Icon className="h-4 w-4" /> {label}
+                            <DropdownMenuShortcut>{formatForDisplay(hotkey)}</DropdownMenuShortcut>
+                        </DropdownMenuItem>
+                    );
+                })}
             </DropdownMenuSubContent>
         </DropdownMenuSub>
     );

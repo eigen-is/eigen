@@ -5,6 +5,7 @@
 // authored one. Its two ids are FIXED rather than fresh: two peers can open the same empty deck at the same moment and
 // both seed it, and the same keys make those two writes converge on one title slide instead of two.
 
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import {
     DEFAULT_SCENE_META,
     generateKeyBetween,
@@ -14,6 +15,7 @@ import {
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';
+import { updateMetaInDoc } from '@workspace/ui/components/vector';
 import type * as Y from 'yjs';
 
 const SEED_ORIGIN = Symbol('deck-seed');
@@ -21,9 +23,9 @@ const SEED_ORIGIN = Symbol('deck-seed');
 const SEED_FRAME_ID = 'fr-deck-seed';
 const SEED_ELEMENT_ID = 'el-deck-seed';
 
-// The color a brand-new deck opens on — the title slide only. Every later page, including one added
+// The color a brand-new deck opens on, Eigen's accent — the title slide only. Every later page, including one added
 // with +, is painted with the shared DEFAULT_FRAME_BACKGROUND by writeFrame.
-const SEED_BACKGROUND_COLOR = '#f6339a';
+const SEED_BACKGROUND_COLOR = EIGEN_ACCENT_COLORS_SHUFFLED[0].value;
 
 // The centered title band a deck has always opened with, in 16:9 frame coordinates (0,0 → 1920,1080):
 // a new deck is 16:9.
@@ -51,8 +53,9 @@ export function seedDeck(doc: Y.Doc): void {
         const index = generateKeyBetween(null, null);
         const background = serializeBackgroundFill({ type: 'solid', color: SEED_BACKGROUND_COLOR });
         writeFrameInDoc(doc, { id: SEED_FRAME_ID, index, background });
-        // A deck that stores no width is an older one (UNSTORED_SLIDE_WIDTH), so a new deck states its own.
-        doc.getMap('meta').set('slideWidth', DEFAULT_SCENE_META.slideWidth);
+        // A deck that stores no width is an older one (UNSTORED_SLIDE_WIDTH), so a new deck states its own; a pptx
+        // with no slides imported its width.
+        if (!doc.getMap('meta').has('slideWidth')) updateMetaInDoc(doc, { slideWidth: DEFAULT_SCENE_META.slideWidth });
         writeElementInDoc(
             doc,
             { type: 'richtext', frameId: SEED_FRAME_ID, ...WELCOME },

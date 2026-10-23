@@ -22,12 +22,7 @@ export function FileActionMenuItems({ runner, group }: FileActionMenuItemsProps)
     return runner.actions
         .filter((action) => action.group === group)
         .map((action) => (
-            <DropdownMenuItem
-                key={action.id}
-                disabled={runner.isPending}
-                onClick={() => runner.run(action)}
-                className="flex items-center"
-            >
+            <DropdownMenuItem key={action.id} disabled={runner.isPending} onClick={() => runner.run(action)}>
                 <action.icon className="h-4 w-4" />
                 {action.label}
             </DropdownMenuItem>

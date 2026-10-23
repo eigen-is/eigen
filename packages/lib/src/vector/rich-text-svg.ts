@@ -51,19 +51,15 @@ function adjoins(a: MeasuredChar, b: MeasuredChar): boolean {
 }
 
 // An SVG 1.1 reader takes no rgba(), so the alpha rides in fill-opacity with the rest of the opacity.
-function paint(color: string, opacity: number): { fill: string; opacity: number } {
-    const match = color.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\s*\)$/);
-    if (!match) return { fill: color, opacity };
-    const hex = match
-        .slice(1, 4)
-        .map((channel) => Math.round(Number(channel)).toString(16).padStart(2, '0'))
-        .join('');
-    const alpha = match[4] === undefined ? 1 : Number(match[4]) / (match[5] ? 100 : 1);
-    return { fill: `#${hex}`, opacity: alpha * opacity };
-}
-
 function fillAttrs(color: string, opacity: number): string {
-    const { fill, opacity: alpha } = paint(color, opacity);
+    const match = color.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+)(%?))?\s*\)$/);
+    const fill = match
+        ? `#${match
+              .slice(1, 4)
+              .map((channel) => Math.round(Number(channel)).toString(16).padStart(2, '0'))
+              .join('')}`
+        : color;
+    const alpha = (match?.[4] === undefined ? 1 : Number(match[4]) / (match[5] ? 100 : 1)) * opacity;
     return ` fill="${escapeXml(fill)}"${alpha < 1 ? ` fill-opacity="${round(alpha)}"` : ''}`;
 }
 

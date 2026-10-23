@@ -11,8 +11,6 @@ const DIST = join(ROOT, '..', '..', 'dist', 'index');
 const GEN = join(ROOT, 'src', 'content', '.generated');
 const DOMAIN = process.env['DOMAIN']?.replace(/\/+$/, '');
 const PUBLIC_ORIGIN = DOMAIN ? `https://${DOMAIN}` : undefined;
-const DEFAULT_DESCRIPTION =
-    'Eigen is a self-hosted alternative to Google Workspace: mail, drive, docs, sheets, slides, drawings, stickies, calendar, contacts and chat. Syncs with your own apps over IMAP, SMTP, CalDAV, CardDAV and WebDAV. Opens and saves Word, Excel and PowerPoint files. You control your data.';
 
 function publicUrl(path: string): string | undefined {
     if (!PUBLIC_ORIGIN) return undefined;
@@ -35,7 +33,7 @@ type PageArticle = ArticleRef & { body: ArticleBody };
 type PrerenderRoute = { path: string; meta: PageMeta; article?: ArticleRef };
 
 // Build the route list: the home page, plus the /blog and /support trees.
-function routes(): PrerenderRoute[] {
+function routes(shellDescription: string): PrerenderRoute[] {
     const blogArticles = manifest('blog').articles;
     const support = manifest('support').articles;
     const latestBlog = blogArticles[0];
@@ -46,11 +44,11 @@ function routes(): PrerenderRoute[] {
             // cleanly in place (AuthProvider renders children on the first client render
             // for this ungated app rather than a null loading fallback).
             path: '/',
-            meta: { title: 'eigen', description: DEFAULT_DESCRIPTION, url: publicUrl('/'), type: 'website' },
+            meta: { title: 'eigen', description: shellDescription, url: publicUrl('/'), type: 'website' },
         },
         {
             path: '/blog',
-            meta: { title: 'Blog - eigen', description: DEFAULT_DESCRIPTION, url: publicUrl('/blog'), type: 'website' },
+            meta: { title: 'Blog - eigen', description: shellDescription, url: publicUrl('/blog'), type: 'website' },
             // The blog index renders the latest post in full.
             article: latestBlog ? { collection: 'blog', slug: latestBlog.slug } : undefined,
         },
@@ -122,13 +120,13 @@ function routes(): PrerenderRoute[] {
     return list;
 }
 
-function withMeta(html: string, m: PageMeta): string {
+function withMeta(html: string, m: PageMeta, shellDescription: string): string {
     const t = escapeHtml(m.title);
     const d = escapeHtml(m.description);
     const page = html
         .replace('<title>eigen</title>', `<title>${t}</title>`)
         .replace('property="og:title" content="eigen"', `property="og:title" content="${t}"`)
-        .replaceAll(`content="${DEFAULT_DESCRIPTION}"`, `content="${d}"`)
+        .replaceAll(`content="${shellDescription}"`, `content="${d}"`)
         .replace('content="website"', `content="${m.type}"`);
     const ogUrl = m.url ? `<meta property="og:url" content="${escapeHtml(m.url)}"/>` : '';
     // OG scrapers ignore relative og:image URLs — absolutize when the origin is known.
@@ -193,7 +191,11 @@ async function main() {
             render: (url: string, article: PageArticle | null) => Promise<{ appHtml: string; dehydrationHtml: string }>;
         };
         const shell = readFileSync(join(DIST, 'index.html'), 'utf-8');
-        const all = routes();
+        // index.html holds the site's description, which the home page and the blog index keep and every other page
+        // replaces in the meta description and og:description.
+        const shellDescription = shell.match(/<meta name="description"\s+content="([^"]*)"/)?.[1];
+        if (!shellDescription) throw new Error('index.html has no meta description');
+        const all = routes(shellDescription);
         for (const route of all) {
             const article = route.article ? readArticle(route.article) : null;
             const { appHtml, dehydrationHtml } = await render(route.path, article);
@@ -211,7 +213,7 @@ async function main() {
                 ? `<script type="application/json" id="eigen-article-body">${JSON.stringify(article).replace(/<\//g, '<\\/')}</script>`
                 : '';
             const canonical = route.meta.url ? `<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>` : '';
-            const page = withMeta(shell, route.meta)
+            const page = withMeta(shell, route.meta, shellDescription)
                 .replace('</head>', `${hoisted}${canonical}${jsonLd(route.meta)}</head>`)
                 // Append TanStack Router's dehydration <script> (sets window.$_TSR)
                 // after the inlined body. It's a plain inline script in the body, so it

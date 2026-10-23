@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { spaceApi } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { DriveSortDir, DriveSortKey, DriveViewMode, DriveViewPreferences } from '@workspace/lib/types/drive';
+import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateSpaceSettings, spaceKeys } from '../../space/hooks/keys';
@@ -23,7 +24,7 @@ function readCache(key: string): DriveViewPreferences {
         const v = JSON.parse(window.localStorage.getItem(key) || '');
         prefs = {
             mode: v.mode === 'grid' ? 'grid' : 'list',
-            sortKey: v.sortKey === 'modified' || v.sortKey === 'size' ? v.sortKey : 'name',
+            sortKey: DRIVE_SORT_KEYS.find((key) => key === v.sortKey) ?? 'name',
             sortDir: v.sortDir === 'desc' ? 'desc' : 'asc',
         };
     } catch {}

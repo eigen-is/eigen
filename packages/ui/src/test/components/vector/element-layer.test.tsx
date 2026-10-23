@@ -230,6 +230,22 @@ describe('the layer body', () => {
         expect(html.indexOf('<svg')).toBeGreaterThan(-1);
         expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('editing'));
     });
+
+    // A url(#…) lands on the page's first def of that id, so the Slides rail's copy of a shape mid-resize on the
+    // canvas would clip the canvas's hatch to the rail's old outline.
+    test('a scoped copy of a hatched shape names its defs apart from the canvas', () => {
+        const el = rect({ fill: solidFill('#dddddd', 'hachure'), width: 60, height: 40 });
+        const html = renderToStaticMarkup(
+            <>
+                <ElementLayer el={el} />
+                <ElementLayer el={el} idScope="rail" />
+            </>,
+        );
+        const ids = [...html.matchAll(/ id="([^"]+)"/g)].map(([, id]) => id);
+        expect(ids).toHaveLength(2);
+        expect(new Set(ids).size).toBe(2);
+        for (const id of ids) expect(html).toContain(`url(#${id})`);
+    });
 });
 
 describe('rich text is sanitized at the mount seam', () => {

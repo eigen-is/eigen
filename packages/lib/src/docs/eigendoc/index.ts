@@ -12,7 +12,7 @@ export { getDocExtensions } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';
 export type { Caps } from './nodes/caps';
 export type { ChartAttrs } from './nodes/chart';
-export { CHART_DEFAULT_SIZE, ChartNode, chartSvg, readChartAttrs } from './nodes/chart';
+export { ChartNode, chartSvg, readChartAttrs } from './nodes/chart';
 export { CommentMarkSchema } from './nodes/comment-mark';
 export { EquationNode, equationMath, parseMathml, readEquation } from './nodes/equation';
 export type { Equation } from './nodes/equation-paste';

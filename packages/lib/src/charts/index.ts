@@ -2,6 +2,7 @@ export {
     CHART_MESSAGES,
     chartPointCount,
     GRIDLINE_OPACITY,
+    isInlineSketchCapped,
     isSketchCapped,
     layoutChart,
     layoutChartMessage,
@@ -9,6 +10,7 @@ export {
 } from './layout';
 export { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from './look';
 export {
+    CHART_DEFAULT_SIZE,
     CHART_MAX_SIDE,
     chartColor,
     chartLabel,

@@ -8,7 +8,7 @@ import {
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { ChartType } from '@workspace/lib/types/chart';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     arrowRoute,
     type Box,
@@ -167,7 +167,7 @@ type CanvasEditorProps = {
     // Owner + mount of THIS document, for cross-mount image paste (re-upload into our media/ folder).
     ownerId: string;
     mountId: string;
-    // The document's name without its extension, which a downloaded image is named for.
+    // The document's file name, which a downloaded image is named for, less its extension.
     fileName: string;
     // Selection is lifted to the editor so the properties panel and canvas share one source (the
     // slides editor/canvas idiom).
@@ -233,6 +233,7 @@ export function CanvasEditor({
     onInsertImage,
     backgroundMenu,
 }: CanvasEditorProps) {
+    const imageName = stripEigenExtension(fileName);
     const {
         elements,
         meta,
@@ -932,7 +933,7 @@ export function CanvasEditor({
                 const box = elementBox(el);
                 centerOn(box.x + box.width / 2, box.y + box.height / 2);
             },
-            downloadDrawing: () => downloadImage(fileName, ordered, meta.background),
+            downloadDrawing: () => downloadImage(imageName, ordered, meta.background),
         };
         return () => {
             canvasRef.current = null;
@@ -945,7 +946,7 @@ export function CanvasEditor({
         insertChart,
         centerOn,
         downloadImage,
-        fileName,
+        imageName,
         ordered,
         meta.background,
     ]);
@@ -1049,7 +1050,7 @@ export function CanvasEditor({
           : [];
     const onMenuDownloadImage =
         menuItemId && !(menuSelection.length === 1 && menuSelection[0].type === 'image')
-            ? () => downloadImage(canvasImageName(menuSelection, fileName), menuSelection)
+            ? () => downloadImage(canvasImageName(menuSelection, imageName), menuSelection)
             : undefined;
     // Laid out only while the menu is open.
     const menuShapes = useMemo(
@@ -1492,10 +1493,13 @@ export function CanvasEditor({
             onContextMenu={onContextMenu}
             onPaste={onPaste}
             // A press is the canvas' gesture. With text selected over the scene, Safari drags that selection
-            // from any press (Chrome from selectable text), and the page then gets no pointerup. A text
-            // editor keeps its own drag.
+            // from any press (Chrome from selectable text), and the page then gets no pointerup. A drag that
+            // starts in a text editor stays its own; a selection's drag starts at its text node.
             onDragStart={(e) => {
-                if (!isTypingTarget()) e.preventDefault();
+                const from = e.target instanceof Text ? e.target.parentElement : e.target;
+                const editor =
+                    from instanceof HTMLTextAreaElement || (from instanceof HTMLElement && from.isContentEditable);
+                if (!editor) e.preventDefault();
             }}
             {...fileDropProps}
         >

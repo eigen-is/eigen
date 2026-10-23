@@ -3,6 +3,7 @@ import { getDriveImportFromDriveUrl, getDriveImportUrl } from '@workspace/lib/ap
 import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive';
 import { toast } from 'sonner';
 import { onMutationError } from '../../api-error';
+import { invalidateVersions } from '../../versioning/keys';
 import { driveKeys } from './keys';
 
 // The import route answers with what the file held that did not come over (a pptx's tables, say) or, for a deck with
@@ -36,6 +37,7 @@ export function useImportDocument(ownerId: string, mountId: string) {
         },
         onSuccess: (data, variables) => {
             queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, variables.pathId) });
+            invalidateVersions(queryClient, ownerId, mountId, variables.pathId);
             toastSummary(data);
         },
         onError: onMutationError,
@@ -69,6 +71,7 @@ export function useImportFromDrive(ownerId: string, mountId: string) {
         },
         onSuccess: (data, variables) => {
             queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, variables.pathId) });
+            invalidateVersions(queryClient, ownerId, mountId, variables.pathId);
             toastSummary(data);
         },
         onError: onMutationError,

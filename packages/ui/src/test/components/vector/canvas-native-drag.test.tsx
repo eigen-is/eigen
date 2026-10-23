@@ -170,3 +170,14 @@ test("a drag inside a text box being edited stays the browser's", async () => {
     editable.focus();
     expect(nativeDragFrom(editable)).toBe(true);
 });
+
+test('a drag from the scene is canceled while a text box is being edited', async () => {
+    await render();
+    await act(async () => {
+        layer('label').dispatchEvent(new window.MouseEvent('dblclick', { bubbles: true, clientX: 150, clientY: 60 }));
+    });
+    const editable = layer('label').querySelector<HTMLElement>('[contenteditable="true"]');
+    if (!editable) throw new Error('no editor');
+    editable.focus();
+    expect(nativeDragFrom(layer('bar'))).toBe(false);
+});

@@ -1,7 +1,7 @@
 import { type CommandProps, Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { nanoid } from 'nanoid';
-import { CHART_MAX_SIDE, parseChartSpec, readChartLook, sampleChartSpec } from '../../../charts';
+import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, parseChartSpec, readChartLook, sampleChartSpec } from '../../../charts';
 import { isRecord } from '../../../core/guards';
 import { CHART_LOOK_FIELDS, type ChartLook, type ChartSpec, type ChartType } from '../../../types/chart';
 import { renderChartSpecSvg } from '../../../vector/kinds/chart-render';
@@ -13,9 +13,6 @@ import {
     readFigureFrameAttrs,
     updateFigureNodes,
 } from './figure-frame';
-
-// Google's inserted chart, which fits the default page's 642 px text column.
-export const CHART_DEFAULT_SIZE = { width: 600, height: 371 };
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null). The spec is the
 // stored string, kept as it is even when it doesn't parse, as a canvas keeps it. The look is a canvas chart's own

@@ -480,7 +480,8 @@ export type DrivePath = {
 };
 
 export type DriveViewMode = 'list' | 'grid';
-export type DriveSortKey = 'name' | 'modified' | 'size';
+export const DRIVE_SORT_KEYS = ['name', 'modified', 'size'] as const;
+export type DriveSortKey = (typeof DRIVE_SORT_KEYS)[number];
 export type DriveSortDir = 'asc' | 'desc';
 export type DriveViewPreferences = { mode: DriveViewMode; sortKey: DriveSortKey; sortDir: DriveSortDir };
 

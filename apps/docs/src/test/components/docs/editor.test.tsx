@@ -380,7 +380,7 @@ test('a menu closed with Esc hands focus back to the band being edited, and Opti
 });
 
 // Radix hands focus back a tick after a menu unmounts, and by then Tiptap has destroyed the editors of a document that
-// closed with it.
+// closed with it, Insert › Equation's pick waiting for that tick too.
 test('a document closed with the body’s or a band’s menu open throws nothing', async () => {
     const errors: unknown[] = [];
     const onError = (event: InstanceType<typeof window.Event>) => errors.push('error' in event ? event.error : event);
@@ -389,6 +389,15 @@ test('a document closed with the body’s or a band’s menu open throws nothing
         await render(WRITER);
         await openMenu('Insert');
         await unmount();
+        await render(WRITER);
+        await openMenu('Insert');
+        await act(async () => {
+            [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+                .find((item) => item.textContent?.trim() === 'Equation')
+                ?.click();
+            await unmount();
+        });
+        await frames();
         await render(WRITER);
         await doubleClick('header');
         await openMenu('Options');
@@ -542,6 +551,41 @@ test('an image in the band being edited opens the Image panel, aligned only, wri
     await act(async () => toggles[2]?.click());
     expect(doc.getXmlFragment('header').toString()).toContain('alignment="right"');
     expect(editing()).toEqual(['header']);
+});
+
+// A loaded image selected in `root`'s editor, its grips drawn.
+async function selectedImage(root: BandRoot | 'default') {
+    const view = root === 'default' ? bodyView() : bandView(root);
+    const editor = view?.editor;
+    if (!view || !editor) throw new Error(`no ${root} editor`);
+    await act(async () => {
+        editor.commands.insertContentAt(1, { type: 'figure', attrs: { src: 'data:image/png;base64,', width: 100 } });
+        editor.commands.setNodeSelection(1);
+    });
+    const img = view.querySelector('.figure img');
+    if (!img) throw new Error('no image');
+    Object.defineProperties(img, { naturalWidth: { value: 200 }, naturalHeight: { value: 100 } });
+    await act(async () => void img.dispatchEvent(new Event('load')));
+    expect(view.querySelectorAll('.eigen-selection-handle').length).toBeGreaterThan(0);
+    return view;
+}
+
+// The grips draw from the editable flag as the image renders, which nothing re-renders: the image is deselected.
+test('an image selected in the band being edited drops its grips as the band is left', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    const view = await selectedImage('header');
+    await pressEscape(view);
+    expect(editing()).toEqual([]);
+    expect(view.querySelectorAll('.eigen-selection-handle').length).toBe(0);
+});
+
+test('an image selected in the body drops its grips as write access goes', async () => {
+    write('default', 'Hello');
+    await render(WRITER);
+    const view = await selectedImage('default');
+    await act(async () => setCanWrite(false));
+    expect(view.querySelectorAll('.eigen-selection-handle').length).toBe(0);
 });
 
 test('an equation a click selects in the band being edited opens the Equation panel, which writes the band', async () => {
@@ -814,10 +858,15 @@ test("a viewer's right-click on an image with no rows for it opens no menu", asy
     expect(event.defaultPrevented).toBe(false);
 });
 
-const rightClick = async (target: Element | null | undefined) => {
+// happy-dom lays nothing out to hit-test, so the pointer lands at `pos`, else at the target's start.
+const rightClick = async (target: Element | null | undefined, pos?: number) => {
     if (!target) throw new Error('nothing to right-click');
+    const view = target.closest<TiptapEditorHTMLElement>('.ProseMirror')?.editor?.view;
+    const hit =
+        view && spyOn(view, 'posAtCoords').mockReturnValue({ pos: pos ?? view.posAtDOM(target, 0), inside: -1 });
     const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
     await act(async () => target.dispatchEvent(event));
+    hit?.mockRestore();
     return event;
 };
 
@@ -877,6 +926,22 @@ test('a right-click in a table cell offers a writer the table menu, its deletes 
     ).toEqual(['Delete row', 'Delete column', 'Delete table']);
 });
 
+test('a right-click on a cell whose pointer resolves between the cells still offers the table menu', async () => {
+    await render(WRITER);
+    await bodyTable();
+    const cell = bodyCell()?.closest('td');
+    const view = bodyView()?.editor?.view;
+    if (!cell || !view) throw new Error('no cell');
+    // Table start, outside every cell.
+    const tablePos = view.posAtDOM(cell.closest('table') ?? cell, 0) - 1;
+    const hit = spyOn(view, 'posAtCoords').mockReturnValue({ pos: tablePos, inside: -1 });
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
+    await act(async () => cell.dispatchEvent(event));
+    hit.mockRestore();
+    expect(event.defaultPrevented).toBe(true);
+    expect(menuRows()).toContain('Delete table');
+});
+
 test('the table menu acts on the cell right-clicked', async () => {
     await render(WRITER);
     await bodyTable();
@@ -922,6 +987,17 @@ test('a right-click inside a cell selection keeps it, so Merge cells merges it',
     await rightClick(bodyCell());
     await pick('Merge cells');
     expect(doc.getXmlFragment('default').toString()).toContain('colspan="2"');
+});
+
+test('a right-click inside a text selection in a cell keeps it, so Copy copies it', async () => {
+    await render(WRITER);
+    await bodyTable();
+    const body = bodyEditor();
+    await act(async () => void body.commands.insertContentAt(body.state.selection.from, 'Total'));
+    await act(async () => void body.commands.setTextSelection({ from: 5, to: 7 }));
+    await rightClick(bodyView()?.querySelector('th p'), 6);
+    expect(body.state.selection.from).toBe(5);
+    expect(body.state.selection.to).toBe(7);
 });
 
 // The menu fires the native cut and copy ⌘X and ⌘C fire, as Edit › Cut and Copy do.
@@ -1043,6 +1119,20 @@ test('the equation menu sets its display, opens its panel and deletes it', async
     expect(doc.getXmlFragment('default').toString()).toBe('<paragraph>x</paragraph>');
 });
 
+// A right-click selects as a click does, so a table's cell around the equation leaves its panel shut.
+test('a right-click on an equation in a table cell opens the Equation panel', async () => {
+    await render(WRITER);
+    await bodyTable();
+    const body = bodyEditor();
+    await act(async () => void body.commands.insertEquation());
+    await act(async () => void body.commands.setTextSelection(body.state.selection.from));
+    expect(document.body.textContent).toContain('Columns');
+    await rightClick(bodyView()?.querySelector('.equation'));
+    expect(menuRows()).toEqual([...EQUATION_ROWS, '—', 'Delete equation']);
+    expect(document.querySelector('textarea[aria-label="LaTeX"]')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Columns');
+});
+
 test('the equation menu’s Cut cuts the equation it was opened on', async () => {
     let cut: string | undefined;
     document.execCommand = mock((_command: string) => {
@@ -1114,7 +1204,7 @@ test("a viewer's Download image saves the chart in its look on white, its font e
         writeChart();
         await render({ canWrite: false, isMobile: false });
         await rightClickChart();
-        expect(menuRows()).toEqual(['Download image']);
+        expect(menuRows()).toEqual(['Copy', '—', 'Download image']);
         fonts.takeFetched();
         await pick('Download image');
         await frames();

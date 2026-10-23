@@ -565,8 +565,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         });
     };
 
-    // Download image: the elements as they are, drawn by the browser; only clipboard input passes the paste cap. A
-    // whole drawing passes its background, a selection has none. No mutation carries a failure, so this reports its own.
+    // Download image: the elements as the browser draws them, on the drawing's background when it is the whole drawing.
     const downloadImage = useCallback(
         (name: string, elements: VectorElement[], background?: string) => {
             downloadCanvasImage(elements, { name, background, fetchMedia: fetchMediaBlob }).catch(onMutationError);

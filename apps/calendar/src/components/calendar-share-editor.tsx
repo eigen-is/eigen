@@ -2,6 +2,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
+import { CALENDAR_SHARE_PERMISSIONS } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { ContactAddRow, useContactInput } from '@workspace/ui/components/contacts';
 import {
@@ -55,14 +56,11 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
 
     const handlePermissionChange = useCallback(
         (targetId: string, permission: string) => {
+            const next = CALENDAR_SHARE_PERMISSIONS.find((p) => p === permission);
             if (permission === 'remove') {
                 onChange(currentShares.filter((s) => s.targetId !== targetId));
-            } else {
-                onChange(
-                    currentShares.map((s) =>
-                        s.targetId === targetId ? { ...s, permission: permission as CalendarShare['permission'] } : s,
-                    ),
-                );
+            } else if (next) {
+                onChange(currentShares.map((s) => (s.targetId === targetId ? { ...s, permission: next } : s)));
             }
         },
         [currentShares, onChange],

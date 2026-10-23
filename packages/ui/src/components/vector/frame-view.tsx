@@ -17,7 +17,7 @@ import {
 } from '@workspace/lib/vector';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
-import { memo, useMemo, useRef } from 'react';
+import { memo, useId, useMemo, useRef } from 'react';
 import { ElementLayer } from './element-layer';
 import { CANVAS_PAPER_CLASS } from './paper';
 
@@ -41,6 +41,8 @@ export function FrameView({ frame, elements, resolveMedia, interactive, classNam
     const lastScale = useRef(0);
     if (width > 0) lastScale.current = width / frame.width;
     const scale = lastScale.current;
+    // The rail and present mode draw the canvas's elements again on its page.
+    const idScope = useId();
 
     const own = useMemo(() => orderByFractionalIndex(elementsInFrame(elements, frame.id)), [elements, frame.id]);
     const byId = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
@@ -67,7 +69,9 @@ export function FrameView({ frame, elements, resolveMedia, interactive, classNam
                 style={{ width: frame.width, height: frame.height, transform: `scale(${scale})` }}
             >
                 {scale > 0 &&
-                    own.map((el) => <ElementLayer key={el.id} el={el} resolveMedia={resolveMedia} byId={byId} />)}
+                    own.map((el) => (
+                        <ElementLayer key={el.id} el={el} resolveMedia={resolveMedia} byId={byId} idScope={idScope} />
+                    ))}
             </div>
         </div>
     );
