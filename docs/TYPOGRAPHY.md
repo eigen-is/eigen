@@ -52,7 +52,7 @@ A cell's `ff` is an index into `EIGEN_FONTS` or a font name, and a rich-text run
 
 ## The xlsx export makes Inter the workbook's default font
 
-ExcelJS writes Calibri as the workbook's default font, the first font of `styles.xml`, which a cell with no font of its own draws in. So `to-xlsx.ts` rewrites that font to the sheet default, and the file opens in the font Eigen drew. Every font the writer writes names its face and size, and a bundled face its `<family>` number (1 serif, 2 sans, 3 mono, 4 script), so a reader without Inter substitutes a face of the same kind.
+The xlsx writer writes the sheet default as the workbook's default font, the first font of `styles.xml`, which a cell with no font of its own draws in, so the file opens in the font Eigen drew. It names no colour, so text is automatic: the import gives every cell of a format that font whole, and a colour there would read back as one the cell picked. Every font the writer writes names its face and size, and a bundled face its `<family>` number (1 serif, 2 sans, 3 mono, 4 script), so a reader without Inter substitutes a face of the same kind.
 
 The default font is also the unit of a column width: an xlsx width counts the file's own default font's widest digit (ECMA-376 Part 1 § 18.3.1.13). `SHEET_DEFAULT_DIGIT_WIDTH` derives Inter's from `FONT_METRICS` at 10 pt, 9 px. The writer converts through it, and so does the importer for a file whose default font is Inter, so an export's widths survive the round trip to the pixel. Any other file converts through Excel's digit for its default font and size, so an Excel column keeps the pixels it has in Excel ([SHEETS.md](SHEETS.md#some-xlsx-round-trip-drifts-are-decisions)).
 
