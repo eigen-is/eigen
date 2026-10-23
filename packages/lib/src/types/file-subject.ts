@@ -50,10 +50,14 @@ export type FileActionId =
     | 'import-mail'
     | 'import-calendar';
 
+// The menu group a file action's row sits in, named as MenuSections names it (docs/LAYOUT.md § Menus).
+export type FileActionGroup = 'open' | 'convert' | 'output';
+
 export type FileAction = {
     id: FileActionId;
     label: string;
     icon: LucideIcon;
+    group: FileActionGroup;
     // Derived facts first: most rows decide on those alone and never look at what holds the file.
     applies: (info: SubjectInfo, subject: FileSubject) => boolean;
     // The route behind the row refuses a guest, so the row is hidden for one. `applies` cannot answer

@@ -12,8 +12,9 @@ import {
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState, ToolbarTitle } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { MenuSections } from '@workspace/ui/components/context-menu';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
-import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -62,26 +63,29 @@ function TrashRoute() {
         (items: DrivePath[], close: () => void) => {
             const suffix = items.length > 1 ? ` ${items.length} items` : '';
             return (
-                <>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            for (const item of items) restorePath.mutate(item.id);
-                            close();
-                        }}
-                    >
-                        <RotateCcw className="h-4 w-4" /> Restore{suffix}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                        onClick={() => {
-                            setDeleteItems(items);
-                            close();
-                        }}
-                        className="text-destructive"
-                    >
-                        <Trash2 className="h-4 w-4" /> Delete{suffix} permanently
-                    </DropdownMenuItem>
-                </>
+                <MenuSections
+                    organize={
+                        <DropdownMenuItem
+                            onClick={() => {
+                                for (const item of items) restorePath.mutate(item.id);
+                                close();
+                            }}
+                        >
+                            <RotateCcw className="h-4 w-4" /> Restore{suffix}
+                        </DropdownMenuItem>
+                    }
+                    destructive={
+                        <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => {
+                                setDeleteItems(items);
+                                close();
+                            }}
+                        >
+                            <Trash2 className="h-4 w-4" /> Delete{suffix} permanently
+                        </DropdownMenuItem>
+                    }
+                />
             );
         },
         [restorePath],

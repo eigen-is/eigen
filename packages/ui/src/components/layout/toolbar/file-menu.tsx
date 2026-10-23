@@ -154,7 +154,7 @@ export function FileMenu({
                 {canWrite && (
                     <>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
+                        <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
                             <Trash2 className="h-4 w-4" /> Move to trash
                         </DropdownMenuItem>
                     </>

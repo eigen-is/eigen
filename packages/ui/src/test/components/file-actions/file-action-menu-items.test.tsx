@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
 import { fileActionsFor } from '@workspace/lib/file-actions';
-import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
-import type { FileAction, FileSubject } from '@workspace/lib/types/file-subject';
+import { subjectFromMailAttachment, subjectFromPath } from '@workspace/lib/file-subject';
+import type { FileAction, FileActionGroup, FileSubject } from '@workspace/lib/types/file-subject';
 import { installHappyDom } from '../../happy-dom';
+import { menuRows } from '../../menu-rows';
 
 installHappyDom();
 
@@ -10,6 +11,7 @@ const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { DropdownMenu, DropdownMenuContent } = await import('../../../components/dropdown-menu');
 const { FileActionMenuItems } = await import('../../../components/file-actions/file-action-menu-items');
+const { drivePath } = await import('../../drive-path');
 
 const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
     contentType: 'text/vcard',
@@ -17,7 +19,7 @@ const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
     size: 2048,
 });
 
-async function openMenu(props: { subject: FileSubject | null }) {
+async function openMenu(props: { subject: FileSubject | null; group?: FileActionGroup }) {
     const ran: FileAction[] = [];
     const runner = {
         subject: props.subject,
@@ -37,7 +39,11 @@ async function openMenu(props: { subject: FileSubject | null }) {
             createElement(
                 DropdownMenu,
                 { open: true },
-                createElement(DropdownMenuContent, null, createElement(FileActionMenuItems, { runner })),
+                createElement(
+                    DropdownMenuContent,
+                    null,
+                    createElement(FileActionMenuItems, { runner, group: props.group }),
+                ),
             ),
         );
     });
@@ -51,9 +57,28 @@ async function openMenu(props: { subject: FileSubject | null }) {
     return { rows, labels, ran, cleanup };
 }
 
-test('draws every row the registry allows, in its order', async () => {
-    const { labels, cleanup } = await openMenu({ subject });
-    expect(labels).toEqual(['Quick preview', 'Download', 'Save to Drive…', 'Import to Contacts']);
+test('draws every row the registry allows, each in its menu group', async () => {
+    const { cleanup } = await openMenu({ subject });
+    expect(menuRows()).toEqual(['Quick preview', '—', 'Download', 'Save to Drive…', 'Import to Contacts']);
+    await cleanup();
+});
+
+// A Drive file's menu puts Quick preview by Open and a convert among its own object actions.
+test('a convertible Drive file draws Quick preview, the converts and the downloads in three groups', async () => {
+    const docx = subjectFromPath(
+        drivePath({
+            name: 'Brief.docx',
+            mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }),
+    );
+    const { cleanup } = await openMenu({ subject: docx });
+    expect(menuRows()).toEqual(['Quick preview', '—', 'Convert to Document', '—', 'Download']);
+    await cleanup();
+});
+
+test('a group draws its rows alone', async () => {
+    const { labels, cleanup } = await openMenu({ subject, group: 'output' });
+    expect(labels).toEqual(['Download', 'Save to Drive…', 'Import to Contacts']);
     await cleanup();
 });
 
