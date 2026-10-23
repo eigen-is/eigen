@@ -176,6 +176,13 @@ const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, un
     'band-images-unanchored': (w) => typeof w['count'] === 'number',
     'band-content-dropped': (w) => typeof w['count'] === 'number',
     'band-blocks-cut': (w) => typeof w['count'] === 'number',
+    'sheet-names-changed': (w) => typeof w['count'] === 'number',
+    'cells-dropped': (w) => typeof w['count'] === 'number',
+    'texts-cut': (w) => typeof w['count'] === 'number',
+    'formulas-dropped': (w) => typeof w['count'] === 'number',
+    'number-formats-dropped': (w) => typeof w['count'] === 'number',
+    'cell-formats-dropped': (w) => typeof w['count'] === 'number',
+    'links-dropped': (w) => typeof w['count'] === 'number',
 };
 
 function isValidWarning(warning: unknown): boolean {
