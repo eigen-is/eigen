@@ -9,6 +9,7 @@ import type { Context } from '../../../state/context';
 import {
     applyDataVerification,
     cellTextBox,
+    checkboxAlign,
     checkboxChange,
     checkboxRect,
     confirmMessage,
@@ -261,8 +262,15 @@ describe('cellTextBox', () => {
 });
 
 describe('isCheckboxClick', () => {
-    // A default left/middle rule puts the 10px box at x 2..12, y 5..15.
+    // A cell without its own alignment centres the 10px box, at x 31..41, y 5..15.
     const box = cellTextBox(0, 0, 74, 20);
+
+    // As Google centres it: ticked, unticked and empty boxes sit in one place, unless the cell has its own alignment.
+    test('a tick box is centred unless its cell is aligned', () => {
+        const ticked = { v: true, m: 'TRUE', ct: { fa: 'General', t: 'b' } };
+        expect([ticked, { ...ticked, v: false, m: 'FALSE' }, null, {}].map(checkboxAlign)).toEqual([0, 0, 0, 0]);
+        expect([1, 2, 0].map((ht) => checkboxAlign({ ...ticked, ht }))).toEqual([1, 2, 0]);
+    });
 
     test('places the box by the cell alignment', () => {
         expect(checkboxRect(box, 1, 0)).toEqual({ x: 2, y: 5, size: 10 });
@@ -277,11 +285,11 @@ describe('isCheckboxClick', () => {
             [null, null, null, null],
             [null, null, null, null],
         ]);
-        expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(true);
+        expect(isCheckboxClick(ctx, 0, 0, box, 36, 9)).toBe(true);
         // Just outside the box on each axis, and out in the empty rest of the cell.
-        expect(isCheckboxClick(ctx, 0, 0, box, 13, 9)).toBe(false);
-        expect(isCheckboxClick(ctx, 0, 0, box, 7, 16)).toBe(false);
-        expect(isCheckboxClick(ctx, 0, 0, box, 60, 9)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 42, 9)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 36, 16)).toBe(false);
+        expect(isCheckboxClick(ctx, 0, 0, box, 7, 9)).toBe(false);
     });
 
     test('every pixel of the painted box answers a click, its top row included', () => {
@@ -291,7 +299,7 @@ describe('isCheckboxClick', () => {
             [null, null, null, null],
             [null, null, null, null],
         ]);
-        const rect = checkboxRect(box, 1, 0);
+        const rect = checkboxRect(box, 0, 0);
         for (const [x, y] of [
             [rect.x, rect.y],
             [rect.x + rect.size, rect.y],

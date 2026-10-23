@@ -346,15 +346,15 @@ export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellVal
     return String(cellValue).toUpperCase() === item.value1.toUpperCase();
 }
 
-// A tick box sits where the cell's own alignment puts it, else left: General alignment centres a boolean, which would
-// move a ticked box off the column an empty cell's box draws in.
+// A tick box sits where the cell's own alignment puts it, else centred, as in Google Sheets, whatever the value: a
+// ticked, an unticked and an empty box sit in one place.
 export function checkboxAlign(cell: Cell | null | undefined): number {
-    return cell?.ht == null ? 1 : Number(normalizedCellAttr(cell, 'ht'));
+    return cell?.ht == null ? 0 : Number(normalizedCellAttr(cell, 'ht'));
 }
 
 // `horizonAlign` is checkboxAlign's and `verticalAlign` the normalized vt attr
 // (ht 0 center / 1 left / 2 right, vt 0 middle / 1 top / 2 bottom); an empty
-// cell yields NaN, which lands on the same left/middle default the painter uses.
+// cell's vt is NaN, which lands on the same middle default the painter uses.
 export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: number): CellGlyphRect {
     let x = box.left + CHECKBOX_PADDING;
     if (horizonAlign === 0) {
