@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { collabKeys } from '../../../core/collab/hooks/keys';
 import { driveKeys } from '../../../core/drive/hooks/keys';
 import { handleDriveSSEvent } from '../../../core/drive/sse-handlers';
 
@@ -59,6 +60,25 @@ describe('handleDriveSSEvent — DRIVE_ACL_SHARED / DRIVE_ACL_UNSHARED', () => {
             expect(hasKey(invalidated, [...driveKeys.owner(OWNER), 'effective-members'])).toBe(true);
         }
     });
+});
+
+// An open document reads its canRead/canWrite from its info query, so an owner who makes a writer a viewer, on the
+// document or on a folder above it, reaches the open tab now. A role change on an existing share is DRIVE_ACL_UPDATED.
+test('every ACL event refreshes the access of the open documents at and below the path', () => {
+    for (const type of [
+        SSEventType.DRIVE_ACL_UPDATED,
+        SSEventType.DRIVE_ACL_SHARED,
+        SSEventType.DRIVE_ACL_UNSHARED,
+    ] as const) {
+        const queryClient = new QueryClient();
+        const own = collabKeys.document(OWNER, MOUNT, PATH);
+        const below = collabKeys.document(OWNER, MOUNT, 'doc-below');
+        const elsewhere = collabKeys.document(OWNER, 'mount-2', 'doc-elsewhere');
+        for (const key of [own, below, elsewhere]) queryClient.setQueryData(key, { canWrite: true });
+        handleDriveSSEvent(driveEvent(type), queryClient);
+        const invalidated = (key: readonly unknown[]) => queryClient.getQueryState(key)?.isInvalidated;
+        expect([invalidated(own), invalidated(below), invalidated(elsewhere)]).toEqual([true, true, false]);
+    }
 });
 
 describe('handleDriveSSEvent — DRIVE_FILE_UPLOADED (overwrite)', () => {

@@ -415,7 +415,7 @@ const { AuthProvider } = await import('@workspace/lib/auth');
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
-const { useDocEditor, useDocMedia } = await import('../../../components/docs/doc-editor');
+const { useBandEditors, useDocEditor, useDocMedia } = await import('../../../components/docs/doc-editor');
 
 type Media = ReturnType<typeof useDocMedia>;
 
@@ -646,4 +646,56 @@ test("the font-name pass reaches a note's text", async () => {
         'fontFamily="Source Serif 4"',
         'fontFamily="Source Serif 4"',
     ]);
+});
+
+// An owner who makes a writer a viewer, or a viewer a writer, changes what the open tab can do now: TipTap keeps an
+// editor's editable flag across renders, so without a follow the body would take typing the server drops.
+test.each([
+    ['a writer made a viewer', true],
+    ['a viewer made a writer', false],
+])('every editor of %s follows, with no remount', async (_, before) => {
+    const doc = new Y.Doc();
+    const undoManager = createDocUndoManager(doc);
+    let setCanWrite = (_canWrite: boolean) => {};
+    const shown: { editors: InstanceType<typeof Editor>[] } = { editors: [] };
+    function Host() {
+        const [canWrite, set] = useState(before);
+        setCanWrite = set;
+        const media = useDocMedia(path);
+        const options = { media, yDoc: doc, provider: null, editable: canWrite };
+        const body = useDocEditor({ ...options, target: { undoManager, cardIds: () => new Set() } });
+        const note = useDocEditor({ ...options, target: { body: () => body, onLeave: () => {} } });
+        const bands = useBandEditors({ ...options, editing: canWrite ? 'header' : null, onLeave: () => {} });
+        shown.editors = [body, note, bands.header];
+        return null;
+    }
+    ({ unmount } = await render(createElement(Host)));
+    const built = shown.editors;
+    expect(built.map((editor) => editor.isEditable)).toEqual([before, before, before]);
+
+    await act(async () => setCanWrite(!before));
+    expect(shown.editors).toEqual(built);
+    expect(built.map((editor) => editor.isEditable)).toEqual([!before, !before, !before]);
+
+    await act(async () => setCanWrite(before));
+    expect(built.map((editor) => editor.isEditable)).toEqual([before, before, before]);
+});
+
+// A band takes edits only while it is the one being edited, and only from a writer.
+test("a band left or entered by a viewer's tab takes no edits", async () => {
+    const doc = new Y.Doc();
+    const shown: { bands: Record<string, InstanceType<typeof Editor>> } = { bands: {} };
+    function Host() {
+        shown.bands = useBandEditors({
+            media: useDocMedia(path),
+            yDoc: doc,
+            provider: null,
+            editable: false,
+            editing: 'header',
+            onLeave: () => {},
+        });
+        return null;
+    }
+    ({ unmount } = await render(createElement(Host)));
+    expect(Object.values(shown.bands).map((editor) => editor.isEditable)).toEqual([false, false, false, false]);
 });

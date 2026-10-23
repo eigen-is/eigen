@@ -5,7 +5,6 @@ import type { DriveACL, DriveAccessCheckResult, DrivePath, DriveVisibility } fro
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { invalidateCollabDocument } from '../../collab/hooks/keys';
 import { driveKeys, invalidateAclSharedOrUnshared, invalidateAclUpdated } from './keys';
 
 // UPDATE ACL
@@ -47,7 +46,6 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             if (currentUserId && currentUserId !== ownerId) {
                 invalidateAclSharedOrUnshared(queryClient, currentUserId);
             }
-            invalidateCollabDocument(queryClient, ownerId, variables.path.mountId, variables.path.id);
             toast.success('Sharing updated');
         },
         onError: onMutationError,
