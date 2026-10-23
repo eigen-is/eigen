@@ -11,6 +11,7 @@ import {
     relationshipsXml,
     relOfType,
     relsPathOf,
+    relTarget,
     writePackage,
 } from '../../lib/core/opc';
 import * as xml from '../../lib/core/xml';
@@ -96,6 +97,19 @@ describe('the relationship of a type', () => {
         expect(relOfType(read, 'styles')).toBe('word/styles.xml');
         expect(relOfType(read, 'image')).toBe('word/a.png');
         expect(relOfType(read, 'numbering')).toBeUndefined();
+    });
+});
+
+describe('the relationship of an id', () => {
+    test("is the part it names when internal and of the type, Strict's too", () => {
+        const read = rels(
+            `<Relationship Id="rId1" Type="http://purl.oclc.org/ooxml/officeDocument/relationships/image" Target="a.png"/><Relationship Id="rId2" Type="${IMAGE}" Target="https://example.com/b.png" TargetMode="External"/>`,
+        );
+        expect(relTarget(read, 'rId1', 'image')).toBe('word/a.png');
+        expect(relTarget(read, 'rId1', 'chart')).toBeUndefined();
+        expect(relTarget(read, 'rId2', 'image')).toBeUndefined();
+        expect(relTarget(read, 'rId3', 'image')).toBeUndefined();
+        expect(relTarget(read, undefined, 'image')).toBeUndefined();
     });
 });
 

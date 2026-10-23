@@ -10,12 +10,12 @@ import {
     type VerticalAlign,
 } from '@workspace/lib/vector';
 import { percent } from '../../core/drawingml';
-import { A_NS, EMU_PER_POINT, isAlternateContent, isOn, R_NS } from '../../core/ooxml';
+import { A_NS, EMU_PER_POINT, emu, isAlternateContent, isOn, R_NS } from '../../core/ooxml';
 import type { Relationship } from '../../core/opc';
 import { type XmlElement, xmlAttr, xmlElements, xmlText } from '../../core/xml';
 import { colorOf, fillIn, paintOf, type ShapeProperties, type SlideTheme } from './inherit';
 import { charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
-import { alternative, emu, type Lost } from './package';
+import { alternative, type Lost } from './package';
 
 // A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
 // font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and

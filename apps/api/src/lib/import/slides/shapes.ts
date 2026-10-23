@@ -14,7 +14,8 @@ import {
 } from '@workspace/lib/vector';
 import { drawingLines } from '../../core/drawingml';
 import { ApiError } from '../../core/errors';
-import { A_NS, C_NS, DGM_NS, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../core/ooxml';
+import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../core/ooxml';
+import { CHART_NOT_IMPORTED, droppedChart } from '../../core/ooxml-chart';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES } from '../messages';
@@ -45,7 +46,7 @@ import {
     type Xfrm,
 } from './inherit';
 import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
-import { alternative, blipMedia, type DeckWalk, emu, type Lost, type Part } from './package';
+import { alternative, blipMedia, type DeckWalk, type Lost, type Part } from './package';
 import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
 
@@ -71,19 +72,13 @@ export const PPTX_STYLE: StyleDefaults = {
 // What a dropped object leaves on the slide in its place, and the warning that counts it.
 const DROPPED = {
     table: { label: 'Table not imported', code: 'tables-dropped' },
-    chart: { label: 'Chart not imported', code: 'charts-dropped' },
+    chart: { label: CHART_NOT_IMPORTED, code: 'charts-dropped' },
     diagram: { label: 'SmartArt not imported', code: 'diagrams-dropped' },
     ole: { label: 'Embedded object not imported', code: 'objects-dropped' },
     object: { label: 'Object not imported', code: 'objects-dropped' },
     picture: { label: 'Picture not imported', code: 'images-dropped' },
 } satisfies Record<string, { label: string; code: CountedWarningCode }>;
 type Dropped = keyof typeof DROPPED;
-
-// A chart the reader can't draw as the file does says which kind it was, and its title.
-function droppedChart({ title, name }: { title: string; name: string }): string[] {
-    const label = name ? `${name} chart not imported` : DROPPED.chart.label;
-    return title ? [label, title] : [label];
-}
 
 const GRAPHIC_KINDS = new Map<string, Dropped>([
     [TBL_NS, 'table'],

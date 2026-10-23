@@ -1,7 +1,8 @@
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
-import { A_NS, ASVG_NS, alternativeFor, EMU_PER_POINT, P_NS, POINTS_PER_UNIT, R_NS } from '../../core/ooxml';
-import { openPackage, optional, type Relationship, relOfType } from '../../core/opc';
+import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../core/ooxml';
+import { chartPart } from '../../core/ooxml-chart';
+import { openPackage, optional, type Relationship, relOfType, relTarget } from '../../core/opc';
 import type { XmlElement } from '../../core/xml';
 import { PML, PRESENTATION_TYPE, THEME_TYPE } from '../../document/presentationml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
@@ -29,9 +30,6 @@ const PART_TYPES = {
     theme: THEME_TYPE,
 };
 export type PartKind = keyof typeof PART_TYPES;
-
-// A graphic frame's chart, parsed only under ppt/charts/ and of this type; never its own relationships.
-const CHART_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
 
 // Pictures are read raw, never parsed, and only these of the types an import stores: the media a slide shows.
 const SLIDE_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml']);
@@ -103,8 +101,7 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
     if (ids.length > MAX_SLIDES) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
     // PowerPoint lists a slide once; a list naming one again would read it again.
     const listed = ids.flatMap((id) => {
-        const rel = presentation.rels.get(prefixedAttrOf(id, R_NS, 'id') ?? '');
-        const path = rel && !rel.external && rel.type.endsWith('/slide') ? rel.target : undefined;
+        const path = relTarget(presentation.rels, prefixedAttrOf(id, R_NS, 'id'), 'slide');
         return path && pkg.contentTypeOf(path) === PART_TYPES.slide && pkg.zip.entry(path) ? [path] : [];
     });
     const slides = [...new Set(listed)];
@@ -120,51 +117,24 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
             );
         return parts.get(path);
     };
-    const charts = new Map<string, XmlElement | undefined>();
     return {
         presentation,
         slides,
         related,
         slide: (path) => read(path, 'slide'),
-        chart: (from, id) => {
-            const rel = id ? from.rels.get(id) : undefined;
-            const path = rel && !rel.external && rel.type.endsWith('/chart') ? rel.target : undefined;
-            if (!path?.startsWith('ppt/charts/') || pkg.contentTypeOf(path) !== CHART_TYPE) return undefined;
-            if (!charts.has(path))
-                charts.set(
-                    path,
-                    optional(() => pkg.part(path)),
-                );
-            return charts.get(path);
-        },
+        chart: (from, id) => chartPart(pkg, from.rels, id, 'ppt/charts/'),
         media: (from, id) => {
-            const rel = id ? from.rels.get(id) : undefined;
-            if (!rel || rel.external || !rel.type.endsWith('/image') || !rel.target.startsWith('ppt/'))
-                return undefined;
-            const declared = pkg.contentTypeOf(rel.target);
+            const path = relTarget(from.rels, id, 'image');
+            if (!path?.startsWith('ppt/')) return undefined;
+            const declared = pkg.contentTypeOf(path);
             const contentType = declared && (MIME_ALIASES.get(declared) ?? declared);
             const extension =
                 contentType && SLIDE_IMAGE_TYPES.has(contentType) && IMAGE_EXTENSION_BY_MIME.get(contentType);
-            const entry = pkg.zip.entry(rel.target);
-            return contentType && extension && entry
-                ? { path: rel.target, contentType, extension, size: entry.size }
-                : undefined;
+            const entry = pkg.zip.entry(path);
+            return contentType && extension && entry ? { path, contentType, extension, size: entry.size } : undefined;
         },
         readMedia: (path) => optional(() => pkg.zip.read(path)),
     };
-}
-
-// ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
-// Past 64 characters it is none unread: no coordinate needs more, and a file's 4 MB one would be parsed at each use.
-const MAX_COORDINATE_CHARS = 64;
-
-export function emu(value: string | undefined): number | undefined {
-    if (value === undefined || value.length > MAX_COORDINATE_CHARS) return undefined;
-    const [, number, unit = ''] = value.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
-    const points = POINTS_PER_UNIT.get(unit);
-    const result =
-        unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;
-    return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
 }
 
 function isSvgExtension(extension: XmlElement): boolean {

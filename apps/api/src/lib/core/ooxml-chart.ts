@@ -20,6 +20,7 @@ import {
 import { numberDisplay, parseA1Range, unquoteSheetName } from '@workspace/sheet/engine';
 import { type DrawingTheme, drawingColor, drawingLines, readColorMap } from './drawingml';
 import { A_NS, alternativeFor, C_NS, isAlternateContent, isOn } from './ooxml';
+import { type OoxmlPackage, optional, type Relationship, relTarget } from './opc';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, xmlTrimmedText } from './xml';
 
 // A DrawingML chart part, c:chartSpace, the same in a docx, an xlsx and a pptx, read into a ChartSpec. A chart the spec
@@ -30,6 +31,55 @@ export type ChartSource = 'cache' | { ranges: (sheetName: string) => string | un
 
 // name is PowerPoint's for the chart's type, as Insert Chart lists it (Clustered Column, Pie of Pie, Combo), or none.
 export type ChartRead = { spec: ChartSpec } | { unsupported: { title: string; name: string } };
+
+export const CHART_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
+
+// The c:chartSpace an r:id names: only through a chart relationship, under the format's charts folder (ppt/charts/,
+// word/charts/, xl/charts/) and of the chart content type, never its own relationships. A missing or damaged part is
+// none, and costs only its chart.
+export function chartPart(
+    pkg: Pick<OoxmlPackage, 'part' | 'contentTypeOf'>,
+    rels: ReadonlyMap<string, Relationship>,
+    id: string | undefined,
+    folder: string,
+): XmlElement | undefined {
+    const path = relTarget(rels, id, 'chart');
+    if (!path?.startsWith(folder) || pkg.contentTypeOf(path) !== CHART_CONTENT_TYPE) return undefined;
+    return optional(() => pkg.part(path));
+}
+
+// A part's elements and the points readChart builds from them: what a format charges before it reads a chart. A cache
+// sizes its points by its c:ptCount, else by its last c:pt, whatever it holds, and the reader builds each series, the
+// categories and the slices up to the longest before the spec's cap on all points together refuses them.
+export function chartCost(root: XmlElement): number {
+    let nodes = 0;
+    let series = 0;
+    let longest = 0;
+    const open = [root];
+    for (let element = open.pop(); element; element = open.pop()) {
+        nodes++;
+        if (element.ns === C_NS && element.local === 'ser') series++;
+        const points =
+            element.ns !== C_NS
+                ? 0
+                : element.local === 'ptCount'
+                  ? Number(xmlAttr(element, '', 'val'))
+                  : element.local === 'pt'
+                    ? Number(xmlAttr(element, '', 'idx')) + 1
+                    : 0;
+        if (points > longest) longest = Math.min(points, MAX_CHART_POINTS);
+        for (const found of xmlElements(element)) open.push(found);
+    }
+    return nodes + (Math.min(series, MAX_CHART_SERIES) + 2) * longest;
+}
+
+export const CHART_NOT_IMPORTED = 'Chart not imported';
+
+// What a format shows for a chart readChart can't draw: which kind it was, and its title.
+export function droppedChart({ title, name }: { title: string; name: string }): string[] {
+    const label = name ? `${name} chart not imported` : CHART_NOT_IMPORTED;
+    return title ? [label, title] : [label];
+}
 
 const TYPES = new Map<string, ChartType>([
     ['barChart', 'column'],

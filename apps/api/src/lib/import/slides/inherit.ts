@@ -8,10 +8,10 @@ import {
     readColorMap,
     readColorScheme,
 } from '../../core/drawingml';
-import { A_NS, isOn, P_NS } from '../../core/ooxml';
+import { A_NS, emu, isOn, P_NS } from '../../core/ooxml';
 import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf } from './lookup';
-import { blipMedia, type DeckWalk, emu, type Lost, type Part, type PptxPackage } from './package';
+import { blipMedia, type DeckWalk, type Lost, type Part, type PptxPackage } from './package';
 
 // What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
 // map, the background, and the shapes the layout and master draw beneath the slide's own.

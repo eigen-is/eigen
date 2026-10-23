@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { parseChartSpec } from '@workspace/lib/charts';
 import { TRANSPARENT_COLOR } from '@workspace/lib/vector';
+import { CHART_CONTENT_TYPE } from '../../../lib/core/ooxml-chart';
 import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import {
@@ -23,8 +24,7 @@ import {
 const OPTIONS = { maxMediaBytes: 35 * 1024 * 1024 };
 const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
-const CHART_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
-const chartType = (path: string, type = CHART_TYPE) => `<Override PartName="/${path}" ContentType="${type}"/>`;
+const chartType = (path: string, type = CHART_CONTENT_TYPE) => `<Override PartName="/${path}" ContentType="${type}"/>`;
 
 // A frame of 600×300 px at (100, 50) naming its chart by r:id.
 const frame = (id = 'rId5', x = 100, y = 50) =>

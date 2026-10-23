@@ -39,6 +39,16 @@ export function relOfType(rels: ReadonlyMap<string, Relationship>, type: string)
     return undefined;
 }
 
+// The part an r:id names, when its relationship is internal and of this type, matched as relOfType matches it.
+export function relTarget(
+    rels: ReadonlyMap<string, Relationship>,
+    id: string | undefined,
+    type: string,
+): string | undefined {
+    const rel = id === undefined ? undefined : rels.get(id);
+    return rel && !rel.external && rel.type.endsWith(`/${type}`) ? rel.target : undefined;
+}
+
 // A relationship target percent-encodes what a URI reference can't hold; `%` stays, so an encoded href encodes no
 // further.
 export function uriReference(href: string): string {
