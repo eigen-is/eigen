@@ -63,9 +63,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
-import { chartClipboardItem, pasteFromClipboard } from './clipboard';
+import { chartClipboardItem, pasteFromClipboard, runClipboardCommand } from './clipboard';
 import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
-import { EditorToolbar, runClipboardCommand } from './editor-toolbar';
+import { EditorToolbar } from './editor-toolbar';
 import { equationMenuSections } from './equation-menu-sections';
 import { EquationPropertiesPanel } from './equation-properties-panel';
 import {

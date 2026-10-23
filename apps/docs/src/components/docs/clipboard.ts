@@ -124,6 +124,13 @@ function copiedClipboardItems(
     return items;
 }
 
+// A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's copy
+// and cut handlers (writeDocsClipboard, then ProseMirror's) write the clipboard as they would for the keys.
+export const runClipboardCommand = (editor: Editor, command: 'copy' | 'cut') => {
+    document.execCommand(command);
+    editor.commands.focus();
+};
+
 // A menu's Paste. No ClipboardEvent reaches a menu row, so it reads the clipboard, which asks the browser's permission,
 // and hands its HTML, text and images to the editor's own paste in one, so the editor's paste handler and cleanup run
 // on it as on ⌘V.

@@ -55,6 +55,7 @@ import {
     Underline,
 } from 'lucide-react';
 import { useState } from 'react';
+import { runClipboardCommand } from './clipboard';
 import { CustomSpacingDialog } from './custom-spacing-dialog';
 import { ALIGNMENT_LOOK, FormatMenu } from './format-menu';
 import { useToolbarState } from './hooks/use-toolbar-state';
@@ -76,13 +77,6 @@ export const keepEditorFocus = (editor: Editor) => (e: Event) => {
     if (editor.isDestroyed || !editor.isEditable) return;
     e.preventDefault();
     if (!document.activeElement?.closest('[role="dialog"]')) editor.commands.focus(null, { scrollIntoView: false });
-};
-
-// A menu pick has no clipboard event of its own, so execCommand fires the one ⌘C and ⌘X fire, and the editor's copy
-// and cut handlers (writeDocsClipboard, then ProseMirror's) write the clipboard as they would for the keys.
-export const runClipboardCommand = (editor: Editor, command: 'copy' | 'cut') => {
-    document.execCommand(command);
-    editor.commands.focus();
 };
 
 type EditorToolbarProps = {
