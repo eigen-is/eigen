@@ -69,9 +69,11 @@ import { WordCountDialog } from './word-count-dialog';
 
 // A closing menu hands focus to the editor the caret is in, whether a pick, Esc or a press outside closed it, rather than
 // back to its trigger, which would swallow the next keystrokes; a pick's own command focuses it a frame later. A dialog
-// the pick opened keeps focus, and a viewer's menu returns it to the trigger, as the editor can't take it.
+// the pick opened keeps focus, and a viewer's menu returns it to the trigger, as the editor can't take it. Radix hands
+// focus back a tick after the menu unmounts, when Tiptap has destroyed the editors of a document that closed with it,
+// which still read as editable.
 export const keepEditorFocus = (editor: Editor) => (e: Event) => {
-    if (!editor.isEditable) return;
+    if (editor.isDestroyed || !editor.isEditable) return;
     e.preventDefault();
     if (!document.activeElement?.closest('[role="dialog"]')) editor.commands.focus(null, { scrollIntoView: false });
 };
