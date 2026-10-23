@@ -4,11 +4,10 @@ import * as engine from '@workspace/sheet/engine';
 import { ZipReader } from '../../../lib/core/zip';
 import { SERVER_RECALC_BUDGET } from '../../../lib/document/sheets';
 import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
-import { sheetsToXlsx } from '../../../lib/export/sheets/to-xlsx';
 import { importXlsxToSheetsSnapshot } from '../../../lib/import/sheets/transform';
 import { PIXEL_PNG } from '../../fixtures/pptx';
 import { build, stored } from '../../fixtures/raw-zip';
-import { xlsxFixture } from '../../fixtures/xlsx';
+import { exportXlsx, xlsxFixture } from '../../fixtures/xlsx';
 
 const JOB = { maxMediaBytes: 35 * 1024 * 1024 };
 
@@ -103,7 +102,7 @@ describe('an imported picture', () => {
     test('comes back as the media its image names', async () => {
         const image = { id: 'photo', index: 'a0', x: 10, y: 10, width: 40, height: 30, mediaName: 'photo.png' };
         const media = [{ name: 'photo.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG) }];
-        const xlsx = await sheetsToXlsx([{ name: 'Pictures', celldata: [], images: { photo: image } }], { media });
+        const xlsx = exportXlsx([{ name: 'Pictures', celldata: [], images: { photo: image } }], { media });
         const { snapshotJson, images } = importXlsxToSheetsSnapshot(toTransferableBuffer(xlsx), JOB);
         const [sheet] = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
         const names = Object.values(sheet.images ?? {}).map((stored) => stored.mediaName);

@@ -125,8 +125,8 @@ seed() {
     # A workbook of one cell, imported as an operator imports an xlsx into a sheet.
     docker run --rm --entrypoint bun -e CELL="$SHEET_CELL" "$(api_image)" -e '
         const { sheetsToXlsx } = require("./src/lib/export/sheets/to-xlsx");
-        sheetsToXlsx([{ name: "Sheet1", celldata: [{ r: 0, c: 0, v: { v: process.env.CELL } }] }])
-            .then((bytes) => process.stdout.write(bytes));
+        const sheets = [{ name: "Sheet1", celldata: [{ r: 0, c: 0, v: { v: process.env.CELL } }] }];
+        process.stdout.write(sheetsToXlsx(sheets, { title: "", warnings: [], media: [] }));
     ' >"$SCRATCH/seed.xlsx"
     curl -sk -b "$JAR" -o /dev/null -X POST -H 'Content-Type: application/octet-stream' -H 'Origin: https://localhost' \
         --data-binary "@$SCRATCH/seed.xlsx" "$BASE$drive/file/$SHEET_ID/import" || true

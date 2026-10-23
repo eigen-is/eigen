@@ -1348,7 +1348,7 @@ async function roundtripChild(file: string, options: { writer: string; reports: 
         let prepared: OfficeMedia[] = [];
         const bytes = await step('export', async () => {
             prepared = await officeMedia(a.media);
-            return sheetsToXlsx(a.sheets, { warnings: exported, media: prepared });
+            return sheetsToXlsx(a.sheets, { title: '', warnings: exported, media: prepared });
         });
         const b = await step('reimport', () => readXlsx(bytes, limits));
         const warnings = new Map(exported.map((warning) => [warning.code, 'count' in warning ? warning.count : 1]));

@@ -22,11 +22,10 @@ import {
     toTransferableText,
 } from '../../../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../../../lib/export/office-image';
-import { sheetsToXlsx } from '../../../../lib/export/sheets/to-xlsx';
 import { DRAWING_CONTENT_TYPE, drawingOf, type WorkbookPictures } from '../../../../lib/export/sheets/xlsx/drawing';
 import { readXlsx, xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { PIXEL_PNG } from '../../../fixtures/pptx';
-import { xlsxFixture } from '../../../fixtures/xlsx';
+import { exportXlsx, xlsxFixture } from '../../../fixtures/xlsx';
 
 // A sheet's charts as its drawing part, read back by Eigen's own xlsx reader: each chart over the same pixels of the
 // same cells, and its spec the same.
@@ -325,7 +324,7 @@ describe('the workbook', () => {
         const turned: SheetChart = { ...RANGED, angle: 30, color: '#AA0000', strokeColor: '#00AA00' };
         const summary: Sheet = { ...SUMMARY, charts: byId(INLINE, turned) };
         const warnings: TransformWarning[] = [];
-        const bytes = await sheetsToXlsx([summary, stored], { warnings });
+        const bytes = exportXlsx([summary, stored], { warnings });
         expect(warnings).toEqual([]);
         const zip = openZip(bytes);
         const part = (path: string) => new TextDecoder().decode(zip.read(path) ?? new Uint8Array());
@@ -353,7 +352,7 @@ describe('the workbook', () => {
         const image = { id: 'picture', index: 'a0V', x: 0, y: 0, width: 10, height: 10, mediaName: 'a.png' };
         const summary: Sheet = { ...SUMMARY, images: { picture: image } };
         const history: Sheet = { ...stored, name: 'History' };
-        const [read] = xlsxToSheets(await sheetsToXlsx([summary, history]));
+        const [read] = xlsxToSheets(exportXlsx([summary, history]));
         const charts = Object.values(read.charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
         expect(charts.map(boxOf)).toEqual([INLINE, RANGED].map(boxOf));
         expect(parseChartSpec(charts[1].spec)?.data).toMatchObject({
@@ -378,7 +377,7 @@ describe('pictures read back by the import', () => {
         const drawn: SheetImage = { ...BELOW, id: 'drawn', index: 'a4', mediaName: 'drawing.svg', angle: 200 };
         const summary: Sheet = { ...SUMMARY, images: { below: BELOW, above: ABOVE, sideways, drawn } };
         const warnings: TransformWarning[] = [];
-        const bytes = await sheetsToXlsx([summary, MY_DATA], { media: [PNG, SVG], warnings });
+        const bytes = exportXlsx([summary, MY_DATA], { media: [PNG, SVG], warnings });
         expect(warnings).toEqual([]);
         const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 });
         const items = floatingItems(sheets[0]);

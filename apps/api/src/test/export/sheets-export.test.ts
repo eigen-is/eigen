@@ -7,11 +7,11 @@ import { type XmlElement, xmlChildren, xmlElements, xmlText } from '../../lib/co
 import { openZip } from '../../lib/core/zip';
 import type { TransformWarning } from '../../lib/document/transform/protocol';
 import { exportDocument } from '../../lib/export/export-document';
-import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
 import { getHome } from '../../lib/home/get-home';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { seedDocumentMedia } from '../fixtures/golden-documents';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
+import { exportXlsx } from '../fixtures/xlsx';
 import { driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // The raw XML, for what the import doesn't read back: the form a part is written in.
@@ -24,7 +24,7 @@ function readZipEntry(bytes: Uint8Array, path: string): string {
 // The committed regression net: every export feature must close the full loop back through the importer onto the
 // engine encoding.
 async function roundTrip(sheets: Sheet[]): Promise<Sheet[]> {
-    return xlsxToSheets(await sheetsToXlsx(sheets));
+    return xlsxToSheets(exportXlsx(sheets));
 }
 
 function cellAt(sheet: Sheet, r: number, c: number) {
@@ -93,7 +93,7 @@ describe("Excel's future functions", () => {
                 ],
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const xml = readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
         expect(xml).toContain('<f>_xlfn.IFNA(B1,0)</f>');
         expect(xml).toContain('<f>_xlfn._xlws.SORT(C1:C2)+SUM(C1:C2)</f>');
@@ -118,7 +118,7 @@ describe('Sheets xlsx export', () => {
                 ],
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const rotations = [...readZipEntry(buffer, 'xl/styles.xml').matchAll(/textRotation="(\d+)"/g)];
         expect(rotations.map(([, degrees]) => degrees)).toEqual(['45', '90', '135', '180', '255']);
         const [sheet] = xlsxToSheets(buffer);
@@ -143,7 +143,7 @@ describe('Sheets xlsx export', () => {
                 ],
             },
         ];
-        const xml = readZipEntry(await sheetsToXlsx(sheets), 'xl/styles.xml');
+        const xml = readZipEntry(exportXlsx(sheets), 'xl/styles.xml');
         expect(xml).toContain('<name val="Georgia"/>');
         expect(xml).toContain('<name val="Times New Roman"/>');
     });
@@ -160,7 +160,7 @@ describe('Sheets xlsx export', () => {
                 ],
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const styles = readZipEntry(buffer, 'xl/styles.xml');
         expect(styles).toContain('formatCode="[$€]#,##0.00"');
         expect(styles).toContain('formatCode="m/d/yyyy"');
@@ -179,7 +179,7 @@ describe('Sheets xlsx export', () => {
 
 describe('Sheets xlsx export — fonts', () => {
     test('the workbook default font is Inter at the sheet default size, not a theme font', async () => {
-        const xml = readZipEntry(await sheetsToXlsx([{ name: 'Sheet1', celldata: [] }]), 'xl/styles.xml');
+        const xml = readZipEntry(exportXlsx([{ name: 'Sheet1', celldata: [] }]), 'xl/styles.xml');
         expect(xml.match(/<fonts\b[^>]*>(<font>.*?<\/font>)/)?.[1]).toBe(
             '<font><sz val="10"/><name val="Inter"/><family val="2"/></font>',
         );
@@ -203,7 +203,7 @@ describe('Sheets xlsx export — fonts', () => {
                 ],
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const fonts = readZipEntry(buffer, 'xl/styles.xml').match(/<fonts\b.*<\/fonts>/)?.[0];
         expect(fonts).toContain('<font><b/><sz val="10"/><name val="Inter"/><family val="2"/></font>');
         expect(fonts).toContain('<font><sz val="10"/><name val="Source Serif 4"/><family val="1"/></font>');
@@ -218,7 +218,7 @@ describe('Sheets xlsx export — fonts', () => {
 
     test("a column width counts the default font's digits in 256ths, and the import reads it back to the pixel", async () => {
         const sheets: Sheet[] = [{ name: 'Sheet1', celldata: [], config: { columnlen: { 0: 90, 1: 131 } } }];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain(
             '<cols><col min="1" max="1" width="10" customWidth="1"/><col min="2" max="2" width="14.5546875" customWidth="1"/></cols>',
         );
@@ -230,7 +230,7 @@ describe('Sheets xlsx export — fonts', () => {
             { name: 'Excel', celldata: [], defaultColWidth: 72, defaultRowHeight: 17, config: { rowhidden: { 3: 0 } } },
             { name: 'Eigen', celldata: [] },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain(
             '<sheetFormatPr defaultColWidth="8" defaultRowHeight="12.75" customHeight="1"/>',
         );
@@ -247,7 +247,7 @@ describe('Sheets xlsx export — typed numbers', () => {
         const sheets: Sheet[] = [
             { name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { v: 28254, m: '28254', ct: { fa: 'General', t: 'n' } } }] },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain('<c r="A1"><v>28254</v></c>');
         expect(cellAt(xlsxToSheets(buffer)[0], 0, 0)).toMatchObject({ v: 28254, ct: { t: 'n' } });
     });
@@ -267,7 +267,7 @@ describe('Sheets xlsx export — hidden rows/cols', () => {
                 config: { rowhidden: { '1': 0, '4': 0 }, colhidden: { '2': 0, '3': 0 } },
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const xml = readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
         expect(xml).toContain('<row r="5" hidden="1"></row>');
         expect(xml).toContain('<col min="3" max="4" hidden="1"/>');
@@ -304,7 +304,7 @@ describe('Sheets xlsx export — frozen panes', () => {
             },
             { name: 'Plain', celldata: [{ r: 0, c: 0, v: { v: 'x' } }] },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet3.xml')).toContain(
             '<pane xSplit="3" ySplit="2" topLeftCell="D3" activePane="bottomRight" state="frozen"/>',
         );
@@ -328,7 +328,7 @@ describe('Sheets xlsx export — frozen panes', () => {
                 frozen: { type: 'rangeRow', range: { row_focus: 0, column_focus: 0 } },
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const xml = readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
         expect(xml.match(/<sheetView\b/g)).toHaveLength(1);
         expect(xml).toMatch(/<sheetView showGridLines="0"[^>]*><pane ySplit="1"/);
@@ -352,7 +352,7 @@ describe('Sheets xlsx export — autofilter', () => {
             },
             { name: 'Plain', celldata: [{ r: 0, c: 0, v: { v: 'x' } }] },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain('<autoFilter ref="B2:D10"/>');
         expect(readZipEntry(buffer, 'xl/worksheets/sheet2.xml')).not.toContain('<autoFilter');
         expect(readZipEntry(buffer, 'xl/workbook.xml')).toContain(
@@ -374,7 +374,7 @@ describe('Sheets xlsx export — autofilter', () => {
                 filterRange: { row: [4, 437], column: [0, 368] },
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain('<autoFilter ref="A5:NE438"/>');
         expect(xlsxToSheets(buffer)[0].filterRange).toEqual({ row: [4, 437], column: [0, 368] });
     });
@@ -404,7 +404,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             { name: 'CF', celldata: [{ r: 0, c: 1, v: { v: 12 } }], conditionalFormatRules: rules },
         ];
         // Engine order is last-write-wins; Excel priority 1 wins → last rule gets priority 1. One range is one block.
-        const written = writtenFormats(await sheetsToXlsx(sheets));
+        const written = writtenFormats(exportXlsx(sheets));
         expect([...written.keys()]).toEqual(['B1:B5']);
         expect(written.get('B1:B5')?.map(({ attributes }) => attributes)).toMatchObject([
             { type: 'cellIs', operator: 'lessThanOrEqual', priority: '2', dxfId: '0' },
@@ -448,7 +448,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 3 } }], conditionalFormatRules: rules },
         ];
-        const written = writtenFormats(await sheetsToXlsx(sheets));
+        const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('A1:A4')?.map(({ formulas }) => formulas)).toEqual([['2', '5'], ['"say ""hi"""']]);
         // Excel's containsText carries its SEARCH formula, at the first range's top-left.
         expect(written.get('A1:A4 C1:C4')).toMatchObject([
@@ -476,7 +476,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         };
         const started = performance.now();
         const warnings: TransformWarning[] = [];
-        const buffer = await sheetsToXlsx([{ name: 'CF', celldata: [], conditionalFormatRules: [rule] }], { warnings });
+        const buffer = exportXlsx([{ name: 'CF', celldata: [], conditionalFormatRules: [rule] }], { warnings });
         expect(performance.now() - started).toBeLessThan(1_000);
         expect(writtenFormats(buffer).size).toBe(0);
         expect(warnings).toEqual([{ code: 'conditional-formats-dropped', count: 1 }]);
@@ -496,7 +496,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }], conditionalFormatRules: rules },
         ];
-        expect(writtenFormats(await sheetsToXlsx(sheets)).get('B2:B4')).toMatchObject([
+        expect(writtenFormats(exportXlsx(sheets)).get('B2:B4')).toMatchObject([
             { attributes: { type: 'expression' }, formulas: ['LEN(B2)>2'] },
         ]);
 
@@ -521,7 +521,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }], conditionalFormatRules: rules },
         ];
-        const written = writtenFormats(await sheetsToXlsx(sheets));
+        const written = writtenFormats(exportXlsx(sheets));
         expect([...written.keys()]).toEqual(['B2:B4 D2:D4']);
         expect(written.get('B2:B4 D2:D4')).toMatchObject([
             { attributes: { type: 'expression' }, formulas: ['LEN(B2)>2'] },
@@ -552,7 +552,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 5 } }], conditionalFormatRules: rules },
         ];
-        const written = writtenFormats(await sheetsToXlsx(sheets)).get('A1:A10') ?? [];
+        const written = writtenFormats(exportXlsx(sheets)).get('A1:A10') ?? [];
         expect(written.map(({ attributes }) => attributes)).toMatchObject([
             { type: 'top10', rank: '7' },
             { type: 'top10', rank: '15', percent: '1' },
@@ -588,7 +588,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
                 conditionalFormatRules: rules,
             },
         ];
-        const written = writtenFormats(await sheetsToXlsx(sheets));
+        const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('B1:B5')).toMatchObject([
             { cfvos: ['min', 'percentile', 'max'], colors: ['FF0000FF', 'FFFFFF00', 'FFFF0000'] },
         ]);
@@ -622,7 +622,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
         ];
         const warnings: TransformWarning[] = [];
-        const written = writtenFormats(await sheetsToXlsx(sheets, { warnings }));
+        const written = writtenFormats(exportXlsx(sheets, { warnings }));
         expect([...written.keys()]).toEqual(['A1:A5']);
         expect(written.get('A1:A5')?.map(({ attributes }) => attributes)).toMatchObject([
             { type: 'cellIs', operator: 'equal', priority: '1' },
@@ -655,7 +655,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
         ];
-        const written = writtenFormats(await sheetsToXlsx(sheets));
+        const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('A1:A5')).toMatchObject([{ attributes: { type: 'duplicateValues', priority: '2' } }]);
         expect(written.get('C2:C4')).toMatchObject([{ attributes: { type: 'uniqueValues', priority: '1' } }]);
 
@@ -683,7 +683,7 @@ describe('Sheets xlsx export — conditional formatting', () => {
         const sheets: Sheet[] = [
             { name: 'CF', celldata: [{ r: 0, c: 0, v: { v: 1 } }], conditionalFormatRules: rules },
         ];
-        const written = writtenFormats(await sheetsToXlsx(sheets));
+        const written = writtenFormats(exportXlsx(sheets));
         expect(written.get('A1:A5 C1:C10 E1')).toMatchObject([{ attributes: { type: 'duplicateValues' } }]);
 
         const rt = await roundTrip(sheets);
@@ -708,7 +708,7 @@ describe('Sheets xlsx export — data validation', () => {
             { name: 'Other Sheet', celldata: [{ r: 0, c: 1, v: { v: 'Option 1' } }] },
         ];
         // Equal rules coalesce into one rectangle.
-        const written = writtenValidations(await sheetsToXlsx(sheets));
+        const written = writtenValidations(exportXlsx(sheets));
         expect(written.get('B2:B3')).toMatchObject({
             attributes: { type: 'list', allowBlank: '1' },
             formulas: ['"Red,Green,Blue"'],
@@ -731,7 +731,7 @@ describe('Sheets xlsx export — data validation', () => {
             '6_0': dvRule({ type: 'date', type2: 'earlierThan', value1: '2024-03-01' }),
         };
         const sheets: Sheet[] = [{ name: 'DV', celldata: [{ r: 0, c: 0, v: { v: 5 } }], dataVerification: rules }];
-        const written = writtenValidations(await sheetsToXlsx(sheets));
+        const written = writtenValidations(exportXlsx(sheets));
         // between is the default operator; dates are serials.
         expect(written.get('A1')).toMatchObject({ attributes: { type: 'whole' }, formulas: ['1', '10'] });
         expect(written.get('A2')).toMatchObject({
@@ -764,7 +764,7 @@ describe('Sheets xlsx export — data validation', () => {
             },
         ];
         const warnings: TransformWarning[] = [];
-        const written = writtenValidations(await sheetsToXlsx(sheets, { warnings }));
+        const written = writtenValidations(exportXlsx(sheets, { warnings }));
         expect([...written.keys()]).toEqual(['A1']);
         expect(written.get('A1')).toMatchObject({ attributes: { type: 'decimal' }, formulas: ['1', '10'] });
         expect(warnings).toEqual([{ code: 'validations-dropped', count: 2 }]);
@@ -787,7 +787,7 @@ describe('Sheets xlsx export — data validation', () => {
                 },
             },
         ];
-        const written = writtenValidations(await sheetsToXlsx(sheets));
+        const written = writtenValidations(exportXlsx(sheets));
         expect(written.get('B2')).toMatchObject({
             attributes: { type: 'custom' },
             formulas: ['ISNUMBER(SEARCH("foo",B2))'],
@@ -810,7 +810,7 @@ describe('Sheets xlsx export — data validation', () => {
                 },
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(writtenValidations(buffer).size).toBe(0);
 
         const [sheet] = xlsxToSheets(buffer);
@@ -834,7 +834,7 @@ describe('Sheets xlsx export — data validation', () => {
                 dataVerification: { '0_0': hinted, '1_0': blocking },
             },
         ];
-        const written = writtenValidations(await sheetsToXlsx(sheets));
+        const written = writtenValidations(exportXlsx(sheets));
         expect(written.get('A1')?.attributes).toMatchObject({ showInputMessage: '1', prompt: 'Choose Yes or No' });
         expect(written.get('A1')?.attributes['showErrorMessage']).toBeUndefined();
         // stop is Excel's default error style.
@@ -858,7 +858,7 @@ describe('Sheets xlsx export — cell borders', () => {
             '4_4': { l: thin, s: thin },
         };
         const sheets: Sheet[] = [{ name: 'Sheet1', celldata: [{ r: 1, c: 1, v: { v: 'x' } }], config: { borderInfo } }];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/styles.xml')).toContain(
             '<border diagonalDown="1"><left/><right/><top/><bottom/><diagonal style="thin"><color rgb="FF000000"/></diagonal></border>',
         );
@@ -892,7 +892,7 @@ describe('Sheets xlsx export — merged-cell borders', () => {
                 config: { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } }, borderInfo },
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet1.xml')).toContain('<mergeCell ref="A1:B2"/>');
         const [sheet] = xlsxToSheets(buffer);
         expect(sheet.config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
@@ -908,7 +908,7 @@ describe('Sheets xlsx export — the tabs', () => {
             { name: 'Hidden', celldata: [], hide: 1, color: 'rgb(0, 128, 255)' },
             { name: 'Plain', celldata: [] },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/workbook.xml')).toContain(
             '<sheet name="Hidden" sheetId="2" state="hidden" r:id="rId2"/>',
         );
@@ -933,7 +933,7 @@ describe('Sheets xlsx export — the active tab', () => {
             { name: 'Shown', celldata: [] },
             { name: 'Later', celldata: [] },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/workbook.xml')).toMatch(/<workbookView\b[^>]*\bactiveTab="1"/);
         expect(xlsxToSheets(buffer)[0].hide).toBe(1);
         expect(readZipEntry(buffer, 'xl/worksheets/sheet2.xml')).toMatch(/<sheetView\b[^>]*\btabSelected="1"/);
@@ -974,7 +974,7 @@ describe('Sheets xlsx export — inline rich text', () => {
                 ],
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         expect(readZipEntry(buffer, 'xl/sharedStrings.xml')).toContain(
             '<r><rPr><i/><strike/><u/><sz val="14"/><color rgb="FF0080FF"/><rFont val="Georgia"/></rPr><t>world</t></r>',
         );
@@ -1023,7 +1023,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
                 },
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const rels = readZipEntry(buffer, 'xl/worksheets/_rels/sheet1.xml.rels');
         expect(rels).toContain('Target="mailto:erikjan@example.com" TargetMode="External"');
 
@@ -1046,7 +1046,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
                 hyperlink: { '0_0': { linkType: 'webpage', linkAddress: 'javascript:alert(1)' } },
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const xml = readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
         expect(xml).not.toContain('<hyperlink');
         expect(openZip(buffer).names()).not.toContain('xl/worksheets/_rels/sheet1.xml.rels');
@@ -1074,7 +1074,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
             { name: 'My Sheet', celldata: [] },
             { name: "It's", celldata: [] },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         // Per ECMA-376 an r:id on a hyperlink wins over its location, so Excel authors internal links location-only.
         // Google's importer labels them from display; without one it shows its rewritten #gid=N target.
         const xml = readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
@@ -1111,7 +1111,7 @@ describe('Sheets xlsx export — hyperlinks', () => {
             { name: 'Sheet2', celldata: [] },
             { name: 'Sheet 2', celldata: [] },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const xml = readZipEntry(buffer, 'xl/worksheets/sheet1.xml');
         expect(xml).toContain('location="Sheet2!B2:C3"');
         expect(xml).toContain('location="&apos;Sheet1&apos;!D4"');
@@ -1212,7 +1212,7 @@ describe('Sheets xlsx export — colors', () => {
                 config: { borderInfo: { '0_0': { l: { style: 1, color: '#00f' } } } },
             },
         ];
-        const buffer = await sheetsToXlsx(sheets);
+        const buffer = exportXlsx(sheets);
         const argbs = [...readZipEntry(buffer, 'xl/styles.xml').matchAll(/rgb="([0-9A-Fa-f]+)"/g)].map(
             ([, argb]) => argb,
         );
@@ -1236,7 +1236,7 @@ describe('Sheets xlsx export — colors', () => {
             },
             { type: 'dataBar', cellrange: [{ row: [0, 0], column: [2, 2] }], format: ['#63c'] },
         ];
-        const buffer = await sheetsToXlsx([{ name: 'Sheet1', celldata: [], conditionalFormatRules: rules }]);
+        const buffer = exportXlsx([{ name: 'Sheet1', celldata: [], conditionalFormatRules: rules }]);
         const argbs = [...readZipEntry(buffer, 'xl/styles.xml').matchAll(/rgb="([0-9A-Fa-f]+)"/g)].map(
             ([, argb]) => argb,
         );
