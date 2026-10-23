@@ -1,7 +1,6 @@
 import { toast } from 'sonner';
 import { readChartLook } from '../../charts/look';
 import { parseChartSpec } from '../../charts/spec';
-import type { ChartLook } from '../../types/chart';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -82,15 +81,15 @@ function isInlineChartSpec(spec: unknown): spec is string {
 }
 
 // A chart item, or null for a spec no consumer could draw (range data, unreadable, over the size limit).
-// The spec rides as given, never re-serialized. The look is read off its holder, a canvas element among them, and a
-// missing field copies flat.
+// The spec rides as given, never re-serialized. The look is read off its holder, a canvas element or a doc's chart
+// node among them, and a missing field copies flat.
 export function buildChartClipboardItem(args: {
     spec: string;
     box: Pick<ClipboardBox, 'width' | 'height'>;
-    look?: ChartLook;
+    look: Record<string, unknown>;
 }): EigenClipboardChartItem | null {
     if (!isInlineChartSpec(args.spec)) return null;
-    const look = readChartLook(args.look ?? {});
+    const look = readChartLook(args.look);
     return { type: 'chart', spec: args.spec, width: args.box.width, height: args.box.height, look };
 }
 
