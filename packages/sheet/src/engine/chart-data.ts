@@ -1,9 +1,10 @@
-import { chartColor, chartLabel, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
+import { chartColor, chartLabel, exceedsChartSpecBytes, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
     ChartData,
     ChartDataError,
+    ChartSpec,
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
@@ -68,10 +69,7 @@ export function seriesName(name: RangeChartSeries['name'], resolver: CellResolve
 export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): string {
     const spec = parseChartSpec(chart.spec);
     const range = spec?.data.source === 'range' ? spec.data : null;
-    const first = range?.series.find((s) => s.values)?.values;
-    const format =
-        spec?.valueAxis.format ??
-        (first ? resolver.getCell(first.sheetId, first.row[0], first.column[0])?.ct?.fa : undefined);
+    const format = spec ? valueFormat(spec, resolver) : undefined;
     return renderChartSpecSvg({
         id: chart.id,
         spec,
@@ -80,6 +78,37 @@ export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): 
         height: chart.height,
         formatTick: (value) => numberDisplay(value, format),
     });
+}
+
+// The value axis's own format, or for a range chart the first value cell's.
+function valueFormat(spec: ChartSpec, resolver: CellResolver): string | undefined {
+    if (spec.valueAxis.format !== null) return spec.valueAxis.format;
+    const first = spec.data.source === 'range' ? spec.data.series.find((s) => s.values)?.values : null;
+    return first ? resolver.getCell(first.sheetId, first.row[0], first.column[0])?.ct?.fa : undefined;
+}
+
+// The chart as a copy carries it to a host with no cells: its ranges read into inline data, and the source
+// cells' tick format written on the axis. An automatic color stays automatic unless a deleted series before
+// it would shift its index, and an inline chart is its stored string. Null for a chart that draws #REF!, too
+// much data or nothing, or whose numbers pass the spec's size limit.
+export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): string | null {
+    const spec = parseChartSpec(chart.spec);
+    if (spec?.data.source !== 'range') return spec ? chart.spec : null;
+    const resolved = resolveRangeChartData(spec.data, resolver);
+    if (typeof resolved === 'string') return null;
+    const kept = spec.data.series.flatMap(({ values, color }, i) => (values ? [{ color, i }] : []));
+    const inline = JSON.stringify({
+        ...spec,
+        valueAxis: { ...spec.valueAxis, format: valueFormat(spec, resolver) ?? null },
+        data: {
+            source: 'inline',
+            categories: resolved.categories,
+            series: resolved.series.map((s, j) =>
+                kept[j].color === null && kept[j].i === j ? { ...s, color: null } : s,
+            ),
+        },
+    });
+    return exceedsChartSpecBytes(inline) ? null : inline;
 }
 
 function size(ref: CellRangeRef): number {

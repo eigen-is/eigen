@@ -1,5 +1,7 @@
 import { toast } from 'sonner';
+import { parseChartSpec } from '../../charts/spec';
 import type {
+    EigenClipboardChartItem,
     EigenClipboardData,
     EigenClipboardImageItem,
     EigenClipboardItem,
@@ -71,11 +73,28 @@ export function buildTextClipboardItem(args: {
     };
 }
 
+// The one test of a chart item's spec, the builder's and the reader's: inline data that parses within the
+// spec's limits.
+function isInlineChartSpec(spec: unknown): spec is string {
+    return typeof spec === 'string' && parseChartSpec(spec)?.data.source === 'inline';
+}
+
+// A chart item, or null for a spec no consumer could draw (range data, unreadable, over the size limit).
+// The spec rides as given, never re-serialized.
+export function buildChartClipboardItem(args: {
+    spec: string;
+    box: Pick<ClipboardBox, 'width' | 'height'>;
+}): EigenClipboardChartItem | null {
+    if (!isInlineChartSpec(args.spec)) return null;
+    return { type: 'chart', spec: args.spec, width: args.box.width, height: args.box.height };
+}
+
 // Read the typed geometry off any item. Consumers size/rotate from this — there is no `meta` sniff
 // to fall back to (geometry is only ever on the typed fields).
 export function readClipboardBox(item: EigenClipboardItem): ClipboardBox {
-    // The elements item's box is the selection's bounds — a whole set, so it carries no rotation.
-    return { width: item.width, height: item.height, angle: item.type === 'elements' ? undefined : item.angle };
+    // The elements item's box is the selection's bounds — a whole set, so it carries no rotation; a chart has none.
+    const angle = item.type === 'text' || item.type === 'image' ? item.angle : undefined;
+    return { width: item.width, height: item.height, angle };
 }
 
 // A text item with a real payload, not an empty carrier. The canvas writes one per rich-text box, empty
@@ -107,6 +126,8 @@ function isValidItem(item: unknown): item is EigenClipboardItem {
             // The records themselves are re-validated per element by the document reader
             // (readElementsClipboardItem → readElementFromFields), which clamps hostile values.
             return Array.isArray(item.elements) && typeof item.sourceFrameId === 'string';
+        case 'chart':
+            return isInlineChartSpec(item.spec);
         default:
             return false;
     }

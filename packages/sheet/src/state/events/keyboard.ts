@@ -157,6 +157,8 @@ function handleControlPlusArrowKey(ctx: Context, e: KeyboardEvent, shiftPressed:
     }
 }
 
+const floatingObjectSelected = (ctx: Context) => ctx.activeChart != null || ctx.activeImg != null;
+
 export function handleWithCtrlOrMetaKey(
     ctx: Context,
     cache: GlobalCache,
@@ -200,8 +202,9 @@ export function handleWithCtrlOrMetaKey(
         // Ctrl + B: bold
         handleBold(ctx, cellInput);
     } else if (e.code === 'KeyC') {
-        // Ctrl + C: copy
-        handleCopy(ctx);
+        // Ctrl + C: copy. A selected chart or image copies itself in the Workbook's copy listener, and the
+        // cells behind it are not marked copied.
+        if (!floatingObjectSelected(ctx)) handleCopy(ctx);
         e.stopPropagation();
         return;
     } else if (e.code === 'KeyV') {
@@ -214,7 +217,7 @@ export function handleWithCtrlOrMetaKey(
         e.stopPropagation();
         return;
     } else if (e.code === 'KeyX') {
-        handleCut(ctx);
+        if (!floatingObjectSelected(ctx)) handleCut(ctx);
         e.stopPropagation();
         return;
     } else if (e.code === 'KeyZ') {

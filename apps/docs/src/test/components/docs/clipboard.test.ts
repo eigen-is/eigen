@@ -56,7 +56,7 @@ async function paste(
         extensions: getDocExtensions(),
         editorProps: { transformPastedHTML: (html) => cleanPastedHTML(html, 600, cardIds, DOCUMENT_FONT) },
     });
-    await insertEigenItems(target, clipboard.eigen?.items ?? [], clipboard.html, pastedMediaName);
+    await insertEigenItems(target, clipboard.eigen?.items ?? [], clipboard.html, pastedMediaName, 600);
     return target;
 }
 
@@ -303,7 +303,8 @@ test('a text item pastes its text literally', async () => {
     expect(blocks(target)).toEqual([['if a<b and c>d then'], ['AT&amp;T']]);
 });
 
-// A chart rides the docs HTML, not an eigen item, so within Docs it pastes back whole, alone or beside a figure.
+// A chart writes its item for the other apps, and within Docs pastes back whole through the docs HTML, alone or
+// beside a figure.
 test('a chart copies and pastes back whole within Docs, alone or beside a figure', async () => {
     const chart = {
         type: 'chart',
@@ -326,14 +327,34 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
     };
 
     const alone = copy([paragraph(text('a'), chart)]);
-    expect(alone.eigen).toBeUndefined();
-    const target = new Editor({ extensions: getDocExtensions() });
-    target.view.pasteHTML(cleanPastedHTML(alone.html, 600, new Set(), DOCUMENT_FONT));
-    expect(chartsIn(target)).toEqual([chart.attrs]);
+    expect(alone.eigen?.items.at(-1)).toEqual({ type: 'chart', spec: chart.attrs.spec, width: 300, height: 200 });
+    expect(chartsIn(await paste(alone))).toEqual([chart.attrs]);
 
     const beside = copy([paragraph(figure('a.png'), chart)]);
-    expect(beside.eigen?.items.map((item) => item.type)).toEqual(['image']);
+    expect(beside.eigen?.items.map((item) => item.type)).toEqual(['image', 'chart']);
     expect(chartsIn(await paste(beside))).toEqual([chart.attrs]);
+
+    const placeholder = copy([paragraph(text('a'), { ...chart, attrs: { ...chart.attrs, spec: '{' } })]);
+    expect(placeholder.eigen).toBeUndefined();
+});
+
+// Sheets, Slides and Vector write no docs HTML: a chart item lands as a chart node, its width capped at the column
+// with its shape kept, and its sizes otherwise as they came.
+test('a chart item from another app pastes as a chart, capped at the column', async () => {
+    const spec = JSON.stringify(sampleChartSpec('line'));
+    const items = [
+        { type: 'chart' as const, spec, width: 400.5, height: 250.25 },
+        { type: 'chart' as const, spec, width: 1200, height: 675 },
+    ];
+    const target = await paste({ eigen: { version: 1, items }, html: '', text: '', files: [], imageFiles: [] });
+    const charts: Record<string, unknown>[] = [];
+    target.state.doc.descendants((node) => {
+        if (node.type.name === 'chart') charts.push(node.attrs);
+    });
+    expect(charts).toMatchObject([
+        { spec, width: 400.5, height: 250.25 },
+        { spec, width: 600, height: 337.5 },
+    ]);
 });
 
 // A copy with no figure, title or upright italic is ProseMirror's own, so it never serializes the selection itself.

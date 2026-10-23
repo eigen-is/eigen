@@ -1,22 +1,24 @@
-import { afterAll, describe, expect, test } from 'bun:test';
-import { Window } from 'happy-dom';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { installHappyDom } from '../../../happy-dom';
 
 // ⌘C/⌘X leave the clipboard to a live text selection outside the canvas — the user is copying that
 // run, not the shapes behind it. The canvas surface is `select-none`, so nothing on it ever collapses
-// a selection made elsewhere: the pointerdown that selects an element drops it instead. This file
-// borrows a happy-dom document the way the element-layer test next door does.
-const window = new Window();
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.document = window.document;
-g.Node = window.Node;
+// a selection made elsewhere: the pointerdown that selects an element drops it instead. ⌘V places
+// another app's chart item as a chart element, and a canvas copy's own elements item as itself.
+installHappyDom();
 
-afterAll(() => {
-    g.document = undefined;
-    g.Node = undefined;
-});
-
-const { dropOutsideTextSelection } = await import('../../../../components/vector/hooks/use-canvas-clipboard');
+const { createElement } = await import('react');
+const { sampleChartSpec } = await import('@workspace/lib/charts');
+const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
+const { buildElementsClipboardItem, DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META, ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } =
+    await import('@workspace/lib/vector');
+const { renderInDocument } = await import('../../../render-in-document');
+const { dropOutsideTextSelection, useCanvasClipboard } = await import(
+    '../../../../components/vector/hooks/use-canvas-clipboard'
+);
+type EigenClipboardItem = import('@workspace/lib/types/clipboard').EigenClipboardItem;
+type NewVectorElement = import('@workspace/lib/vector').NewVectorElement;
+type VectorElement = import('@workspace/lib/vector').VectorElement;
 
 function selectContents(node: Node): Selection {
     const range = document.createRange();
@@ -66,5 +68,89 @@ describe('dropOutsideTextSelection', () => {
     test('a canvas that never mounted is a no-op', () => {
         surfaces();
         expect(() => dropOutsideTextSelection(null)).not.toThrow();
+    });
+});
+
+describe('⌘V of a chart item', () => {
+    let unmount: (() => Promise<void>) | undefined;
+    afterEach(async () => {
+        await unmount?.();
+        unmount = undefined;
+    });
+
+    async function pasteOnCanvas(items: EigenClipboardItem[]): Promise<NewVectorElement[]> {
+        const added: NewVectorElement[] = [];
+        const addElements = mock((partials: NewVectorElement[]) => {
+            added.push(...partials);
+            return partials.map((_, i) => `new-${i}`);
+        });
+        const noop = () => {};
+        function Host() {
+            useCanvasClipboard({
+                canEdit: true,
+                textEditingRef: { current: false },
+                containerRef: { current: null },
+                viewport: 'frame',
+                frameId: 'f1',
+                styleDefaults: VECTOR_STYLE_DEFAULTS,
+                ordered: [],
+                meta: DEFAULT_SCENE_META,
+                selectedIds: [],
+                setSelectedIds: noop,
+                addElement: () => undefined,
+                addElements,
+                updateElements: noop,
+                updateElementUntracked: noop,
+                deleteElements: noop,
+                deleteElementsUntracked: noop,
+                undoManager: null,
+                viewportCenterScene: () => ({ x: 960, y: 540 }),
+                insertImageFiles: async () => {},
+                mediaFolderId: null,
+                resolveMediaPath: () => undefined,
+                resolveMediaUrl: () => null,
+                uploadFile: async () => null,
+            });
+            return null;
+        }
+        ({ unmount } = await renderInDocument(createElement(Host)));
+        const event = new ClipboardEvent('paste', {
+            clipboardData: new DataTransfer(),
+            bubbles: true,
+            cancelable: true,
+        });
+        writeEigenClipboard(event, { version: 1, items });
+        document.dispatchEvent(event);
+        return added;
+    }
+
+    const spec = JSON.stringify(sampleChartSpec('bar'));
+
+    test("another app's chart lands as a chart element at its size, centered, its spec as it came", async () => {
+        const added = await pasteOnCanvas([{ type: 'chart', spec, width: 600.5, height: 371 }]);
+        expect(added).toEqual([
+            { type: 'chart', x: 960 - 600.5 / 2, y: 540 - 371 / 2, width: 600.5, height: 371, angle: 0, chart: spec },
+        ]);
+    });
+
+    test("a canvas copy's chart pastes from its elements item, not as a second chart", async () => {
+        const record: VectorElement = {
+            ...DEFAULT_ELEMENT_PROPS,
+            ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
+            id: 'c1',
+            type: 'chart',
+            index: 'a0',
+            x: 10,
+            y: 20,
+            width: 640,
+            height: 400,
+            angle: 0,
+            chart: spec,
+        };
+        const elements = buildElementsClipboardItem([record], 'f2');
+        if (!elements) throw new Error('no elements item');
+        const added = await pasteOnCanvas([elements, { type: 'chart', spec, width: 640, height: 400 }]);
+        expect(added).toHaveLength(1);
+        expect(added[0]).toMatchObject({ type: 'chart', x: 10, y: 20, width: 640, height: 400, chart: spec });
     });
 });

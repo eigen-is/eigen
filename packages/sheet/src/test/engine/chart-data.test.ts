@@ -1,9 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { chartColor, MAX_CHART_LABEL_LENGTH, MAX_CHART_POINTS, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    chartColor,
+    MAX_CHART_LABEL_LENGTH,
+    MAX_CHART_POINTS,
+    parseChartSpec,
+    sampleChartSpec,
+} from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
+import { inlineChartSpec, renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
 import type { Cell } from '../../engine/types';
 
 const STYLE = { color: '#2a78d6', markers: false, smooth: false };
@@ -206,5 +212,101 @@ describe('renderSheetChartSvg', () => {
 
     test('a stored axis format wins over the cells’', () => {
         expect(renderSheetChartSvg(chart('0.00'), shares)).toContain('>0.50<');
+    });
+});
+
+describe('inlineChartSpec', () => {
+    const sheetChart = (spec: object): SheetChart => ({
+        id: 'c1',
+        index: 'a0',
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 300,
+        spec: JSON.stringify(spec),
+    });
+    const auto = (values: CellRangeRef | null, name: string | CellRangeRef = 'Points'): RangeChartSeries => ({
+        ...series(values, name),
+        color: null,
+    });
+    const rangeChart = (...list: RangeChartSeries[]) =>
+        sheetChart({ ...sampleChartSpec('line'), title: 'Scores', data: data(ref([1, 3], [0, 0]), ...list) });
+
+    test('a range chart copies as the same chart with its cells read into inline data', () => {
+        const spec = parseChartSpec(
+            inlineChartSpec(rangeChart(auto(ref([1, 3], [2, 2]), ref([0, 0], [1, 1]))), resolver) ?? '',
+        );
+        expect(spec).toEqual({
+            ...sampleChartSpec('line'),
+            title: 'Scores',
+            data: {
+                source: 'inline',
+                categories: ['Ajax', 'PSV', ''],
+                series: [{ color: null, markers: false, smooth: false, name: 'Points', values: [3, 1000, 7] }],
+            },
+        });
+    });
+
+    test('an automatic color stays automatic, and one a deleted series before it would shift keeps its color', () => {
+        const copied = inlineChartSpec(
+            rangeChart(auto(ref([1, 3], [1, 1])), auto(null), auto(ref([1, 3], [2, 2]))),
+            resolver,
+        );
+        const colors = parseChartSpec(copied ?? '')?.data.series.map((s) => s.color);
+        expect(colors).toEqual([null, chartColor(2)]);
+    });
+
+    test('ticks drawn from the source cells keep their format, and a stored format stays', () => {
+        const percent: Cell = { v: 0.25, m: '25%', ct: { fa: '0%', t: 'n' } };
+        const shares = createArrayResolver([
+            {
+                id: 's1',
+                name: 'Sheet1',
+                data: [[{ v: 'Ajax', m: 'Ajax' }, percent]],
+                calculationChain: [],
+                dynamicArrayCompute: [],
+            },
+        ]);
+        const spec = sampleChartSpec('column');
+        const withFormat = (format: string | null) =>
+            sheetChart({
+                ...spec,
+                valueAxis: { ...spec.valueAxis, format },
+                data: data(ref([0, 0], [0, 0]), series(ref([0, 0], [1, 1]))),
+            });
+        expect(parseChartSpec(inlineChartSpec(withFormat(null), shares) ?? '')?.valueAxis.format).toBe('0%');
+        expect(parseChartSpec(inlineChartSpec(withFormat('0.00'), shares) ?? '')?.valueAxis.format).toBe('0.00');
+    });
+
+    test('an inline chart copies its stored spec as it is', () => {
+        const chart = { ...sheetChart(sampleChartSpec('pie')), spec: `${JSON.stringify(sampleChartSpec('pie'))} ` };
+        expect(inlineChartSpec(chart, resolver)).toBe(chart.spec);
+    });
+
+    test('a chart showing #REF!, too much data or nothing copies nothing', () => {
+        expect(inlineChartSpec(rangeChart(auto(ref([1, 3], [1, 2]))), resolver)).toBeNull();
+        expect(inlineChartSpec(rangeChart(auto(ref([0, MAX_CHART_POINTS], [1, 1]))), resolver)).toBeNull();
+        expect(inlineChartSpec({ ...rangeChart(), spec: '{' }, resolver)).toBeNull();
+    });
+
+    test('a chart whose cells pass the spec’s size limit copies nothing', () => {
+        const rows = 1000;
+        const long = createArrayResolver([
+            {
+                id: 's1',
+                name: 'Sheet1',
+                data: Array.from({ length: rows }, (_, r) => [
+                    { v: 'x'.repeat(100) + r, m: 'x'.repeat(100) + r },
+                    { v: r },
+                ]),
+                calculationChain: [],
+                dynamicArrayCompute: [],
+            },
+        ]);
+        const chart = sheetChart({
+            ...sampleChartSpec('column'),
+            data: data(ref([0, rows - 1], [0, 0]), series(ref([0, rows - 1], [1, 1]))),
+        });
+        expect(inlineChartSpec(chart, long)).toBeNull();
     });
 });

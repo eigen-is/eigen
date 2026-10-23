@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, charts, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-10-18
+updated: 2026-10-23
 ---
 
 You can insert images, charts, and tables anywhere in a document. Images can come from your device or from Drive. Charts start with sample data you then edit. Tables start as a 3×3 grid and you can grow them from there.
@@ -75,6 +75,8 @@ On a wide screen, selecting a chart opens the **Chart** panel on the right side 
 4. Click **Save** to update the chart, or **Cancel** to leave it as it was.
 
 You can paste cells copied from a spreadsheet or a table in a document into the grid, and copy cells out of it. A paste fills the grid from the selected cell, and the grid grows to fit. A chart holds up to 12 series, 200 categories, and 2,000 values; when a paste has more, the dialog says how much it pasted and leaves the rest out. Numbers may have thousands separators, a currency sign or a percent sign, as a spreadsheet shows them.
+
+You can copy a chart from Sheets, Slides, or Vector and paste it into a document, where it stays a chart you can edit. A chart wider than the page shrinks to fit. Headers, footers, and footnotes don't take a chart pasted from another app. Copying a chart in a document and pasting it into Sheets, Slides, or Vector works the same way.
 
 A chart prints and downloads as a PDF, a web page, or a Word file. In the Word file it is a picture, so you can't change its data in Word. See [Export to Word, PDF, or HTML](/support/docs/export).
 

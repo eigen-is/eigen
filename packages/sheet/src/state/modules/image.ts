@@ -42,7 +42,8 @@ export function removeImageByMediaName(ctx: Context, name: string) {
     if (ctx.insertedImgs.length !== before) saveImage(ctx);
 }
 
-export function insertImage(ctx: Context, mediaName: string, width: number, height: number, angle: number = 0) {
+// Where an inserted or pasted floating object lands: the top-left of the selected cell, or of its merge.
+export function selectedCellOrigin(ctx: Context): { x: number; y: number } {
     const last = ctx.selections?.[ctx.selections.length - 1];
     let rowIndex = last?.row_focus;
     let colIndex = last?.column_focus;
@@ -67,14 +68,17 @@ export function insertImage(ctx: Context, mediaName: string, width: number, heig
             [left] = margeset.column;
         }
     }
+    return { x: left, y: top };
+}
+
+export function insertImage(ctx: Context, mediaName: string, width: number, height: number, angle: number = 0) {
     // Stored as given — the caller has already sized the image (OS-file/upload inserts run the
     // shared fitImageSize; typed clipboard sizes are authoritative). No sizing quirk lives here.
     // `angle` is 0 for fresh inserts; an eigen image paste carries the source rotation through (U5c).
     const img = {
         id: generateImageId(),
         mediaName,
-        x: left,
-        y: top,
+        ...selectedCellOrigin(ctx),
         width,
         height,
         angle,

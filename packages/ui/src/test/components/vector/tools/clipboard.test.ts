@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import { CLIPBOARD_SVG_MAX_ELEMENTS, extractClipboardSvgMetadata } from '@workspace/lib/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -64,6 +65,17 @@ const richtext = (id: string, index: string, html = '<p>hello</p>'): VectorEleme
     fontSize: 20,
     strokeColor: '#111111',
     color: '#e03131',
+});
+
+const chart = (id: string, index: string, spec = JSON.stringify(sampleChartSpec('column'))): VectorElement => ({
+    ...BASE,
+    ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
+    id,
+    type: 'chart',
+    index,
+    width: 640.5,
+    height: 400,
+    chart: spec,
 });
 
 const elbowArrow = (id: string, index: string): VectorElement => ({
@@ -205,6 +217,44 @@ describe('buildSelectionData', () => {
             () => undefined,
         );
         expect(data.svg?.startsWith('<svg')).toBe(true);
+    });
+
+    test('a chart ships a chart item, its spec as stored, for the apps that place no elements', () => {
+        const el = chart('c1', 'a0');
+        const { data } = buildSelectionData([el], ['c1'], meta, '', () => undefined);
+        expect(data.items.map((i) => i.type)).toEqual(['elements', 'chart']);
+        expect(data.items[1]).toEqual({
+            type: 'chart',
+            spec: el.type === 'chart' ? el.chart : '',
+            width: 640.5,
+            height: 400,
+        });
+        expect(readElementsClipboardItem(data.items)?.elements).toEqual([el]);
+    });
+
+    test('a chart-only selection ships NO svg, so docs and sheets paste a live chart and not a picture', () => {
+        const { data } = buildSelectionData(
+            [chart('c1', 'a0'), chart('c2', 'a1')],
+            ['c1', 'c2'],
+            meta,
+            '',
+            () => undefined,
+        );
+        expect(data.svg).toBeUndefined();
+        expect(data.items.filter((i) => i.type === 'chart')).toHaveLength(2);
+    });
+
+    test('a chart beside a shape keeps the svg, and a chart that draws its placeholder ships no chart item', () => {
+        const { data } = buildSelectionData(
+            [rect('r1', 'a0'), chart('c1', 'a1')],
+            ['r1', 'c1'],
+            meta,
+            '',
+            () => undefined,
+        );
+        expect(data.svg?.startsWith('<svg')).toBe(true);
+        const broken = buildSelectionData([chart('c1', 'a0', '{')], ['c1'], meta, '', () => undefined);
+        expect(broken.data.items.map((i) => i.type)).toEqual(['elements']);
     });
 
     test('a selection past the element cap ships the typed items alone', () => {
