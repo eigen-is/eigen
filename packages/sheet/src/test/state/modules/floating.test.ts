@@ -5,8 +5,9 @@
 import { describe, expect, test } from 'bun:test';
 import { CHART_MAX_SIDE, sampleChartSpec } from '@workspace/lib/charts';
 import { floatingItems, type SheetChart, type SheetImage } from '@workspace/lib/sheets';
-import { applyPatches, produce } from 'immer';
+import { applyPatches, type Patch, produce } from 'immer';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
+import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { insertChart } from '../../../state/modules/chart';
 import {
@@ -17,10 +18,15 @@ import {
     updateFloatingBox,
     withoutDeletedFloatingEdits,
 } from '../../../state/modules/floating';
-import { insertImage, removeImageByMediaName, replaceImageMediaName } from '../../../state/modules/image';
+import {
+    insertImage,
+    removeImageByMediaName,
+    replaceImageMediaName,
+    replaceMediaNameInHistory,
+} from '../../../state/modules/image';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Sheet } from '../../../state/types';
-import { inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
+import { inverseRowColOptions, type PatchOptions, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -206,13 +212,14 @@ describe('floating writers', () => {
 
 // A row or column op moves no image, and only the charts whose refs it shifts: it, its undo and its redo write those
 // per object, so a peer's insert, delete or move of any other object on the sheet survives on every client.
+const grid = () => Array.from({ length: 10 }, () => Array.from({ length: 4 }, () => null));
+const withGrid = () =>
+    produce(workbook(), (ctx: Context) => {
+        for (const sheet of ctx.sheets) sheet.data = grid();
+    });
+const insertOp = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: S } as const;
+
 describe('row and column ops over floating objects', () => {
-    const grid = () => Array.from({ length: 10 }, () => Array.from({ length: 4 }, () => null));
-    const withGrid = () =>
-        produce(workbook(), (ctx: Context) => {
-            for (const sheet of ctx.sheets) sheet.data = grid();
-        });
-    const insertOp = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: S } as const;
     const deleteOp = { type: 'row', start: 3, end: 6, id: S } as const;
     const peerEdits = (ctx: Context) => {
         insertImage(ctx, 'new.png', 40, 30);
@@ -246,5 +253,45 @@ describe('row and column ops over floating objects', () => {
         expect(Object.keys(onB.sheets[0].images!)).toHaveLength(2);
         expect(objects(onA.sheets)).toEqual(objects(onB.sheets));
         expect(objects(join(base, [peerInsert.ops, op.ops]))).toEqual(objects(onB.sheets));
+    });
+});
+
+// The swap of a pending name records no undo step: every entry that brings an image back must take the real name, a
+// whole sheet's included, or the zombie sweep deletes the image a minute later.
+describe('a pending name in the undo stack', () => {
+    const history = (...entries: { patches: Patch[]; inversePatches: Patch[]; options?: PatchOptions }[]) => ({
+        undoList: entries,
+        redoList: [],
+    });
+    const names = (sheet: Sheet | undefined) => Object.values(sheet?.images ?? {}).map((image) => image.mediaName);
+
+    test('undoing a row insert made while T uploads keeps the real name', () => {
+        const op = { ...insertOp, id: T };
+        const inserted = author(withGrid(), (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        const entries = history({ patches: inserted.patches, inversePatches: inserted.inverse });
+        const settled = produce(inserted.next, (ctx: Context) => replaceImageMediaName(ctx, 'pending:t1', 'photo.png'));
+        replaceMediaNameInHistory(entries, 'pending:t1', 'photo.png');
+        expect(names(applyPatches(settled, entries.undoList[0].inversePatches).sheets[1])).toEqual(['photo.png']);
+    });
+
+    test('redoing a copy of a sheet whose upload settled names the copied image', () => {
+        const copied = author(workbook(), (ctx) => copySheet(ctx, T));
+        const entries = history({ patches: copied.patches, inversePatches: copied.inverse });
+        replaceMediaNameInHistory(entries, 'pending:t1', 'photo.png');
+        expect(names(applyPatches(workbook(), entries.undoList[0].patches).sheets[2])).toEqual(['photo.png']);
+    });
+
+    // Workbook records a sheet's delete as the sheet itself, in the inverse and in the options its undo ships.
+    test('undoing the delete of a sheet whose upload settled names its image', () => {
+        const deleted = structuredClone(workbook().sheets[1]);
+        const deletedSheet = { id: T, value: deleted };
+        const entries = history({
+            patches: [],
+            inversePatches: [{ op: 'add', path: ['sheets', 0], value: deleted }],
+            options: { deleteSheetOp: { id: T }, deletedSheet },
+        });
+        replaceMediaNameInHistory(entries, 'pending:t1', 'photo.png');
+        expect(names(entries.undoList[0].inversePatches[0].value)).toEqual(['photo.png']);
+        expect(names(deletedSheet.value)).toEqual(['photo.png']);
     });
 });

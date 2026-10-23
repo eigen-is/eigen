@@ -191,7 +191,7 @@ The selected object is `ctx.activeObject`, an image or a chart and whether a cha
 
 ## A pending upload's name is swapped on every sheet and in the undo stack
 
-An image inserted from an upload carries a `pending:` name until the upload settles ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)). `replaceImageMediaName` and `removeImageByMediaName` walk every sheet, because the user may have switched tabs since the insert, and the zombie sweep collects pending names from every sheet too. The swap records no undo step, so the entry that inserted the image still holds the pending name, and a redo, or the undo of a delete, would bring back an image that never resolves. `replaceMediaNameInHistory` renames it in the undo and redo stacks as well (`packages/sheet/src/test/components/Workbook/image-undo.test.tsx`).
+An image inserted from an upload carries a `pending:` name until the upload settles ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)). `replaceImageMediaName` and `removeImageByMediaName` walk every sheet, because the user may have switched tabs since the insert, and the zombie sweep collects pending names from every sheet too. The swap records no undo step, so the entry that inserted the image still holds the pending name, and a redo, or the undo of a delete, would bring back an image that never resolves. `replaceMediaNameInHistory` renames it in the undo and redo stacks as well, in a patch on the image, on its sheet's images map or on the whole sheet, a copied or deleted sheet's included (`packages/sheet/src/test/components/Workbook/image-undo.test.tsx`, `packages/sheet/src/test/state/modules/floating.test.ts`).
 
 ## A chart is a floating record whose refs name sheets by id
 
