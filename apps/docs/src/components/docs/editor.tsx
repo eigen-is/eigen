@@ -26,12 +26,14 @@ import {
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
+import { downloadChartImage } from '@workspace/ui/components/charts';
 import {
     type CommentContextMenuItem,
     CommentLifecycleDialogs,
@@ -42,6 +44,7 @@ import {
 import {
     ClipboardMenuItems,
     ContextMenuAnchor,
+    DownloadImageMenuItem,
     DownloadOriginalImageMenuItem,
     MenuSections,
     useContextMenu,
@@ -59,6 +62,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
+import { chartClipboardItem } from './clipboard';
 import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
 import { EditorToolbar, runClipboardCommand } from './editor-toolbar';
 import { EquationPropertiesPanel } from './equation-properties-panel';
@@ -428,17 +432,20 @@ const TiptapEditor = ({
     const selectionContextMenu = useContextMenu<boolean>();
     const figureContextMenu = useContextMenu<{
         imagePath: DrivePath | undefined;
+        chart: EigenClipboardChartItem | null;
         comment: CommentContextMenuItem | null;
     }>();
     // Opens only when a row will render; otherwise the browser's own menu shows.
     figureContextMenuRef.current = (node, pos, event) => {
         const imagePath = media.resolveMediaPath(node.attrs.mediaName ?? '');
+        const chart = node.type.name === 'chart' ? chartClipboardItem(node) : null;
         const comment = commentMenuItem(nodeCommentCardId(node));
-        if (!canWrite && !imagePath && !comment) return;
+        if (!canWrite && !imagePath && !chart && !comment) return;
         // Selected first, so Add comment anchors to it.
         editor?.commands.setNodeSelection(pos);
-        figureContextMenu.handleContextMenu(event, { imagePath, comment });
+        figureContextMenu.handleContextMenu(event, { imagePath, chart, comment });
     };
+    const menuChart = figureContextMenu.item?.chart;
 
     const removeCommentMarks = (cardId: string) => {
         if (editor) removeCommentAnchors(editor, cardId);
@@ -838,8 +845,13 @@ const TiptapEditor = ({
                         )
                     }
                     output={
-                        figureContextMenu.item?.imagePath && (
-                            <DownloadOriginalImageMenuItem path={figureContextMenu.item.imagePath} />
+                        (figureContextMenu.item?.imagePath || menuChart) && (
+                            <>
+                                <DownloadOriginalImageMenuItem path={figureContextMenu.item?.imagePath} />
+                                <DownloadImageMenuItem
+                                    onDownload={menuChart ? () => downloadChartImage(menuChart) : undefined}
+                                />
+                            </>
                         )
                     }
                     collaborate={
