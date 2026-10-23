@@ -99,7 +99,7 @@ export function PageBands({ edge, editors, setup, editing, onEnter, controls }: 
                 const rule = edited && shows(root) && (
                     <div
                         data-band-rule
-                        className="flex h-9 cursor-default items-center gap-3 border-y border-dashed border-muted-foreground/50 bg-muted px-4 text-sm"
+                        className="flex h-9 cursor-default items-center gap-3 border-y border-border bg-muted px-4 text-sm"
                         style={{ marginLeft: `-${left}mm`, marginRight: `-${right}mm` }}
                     >
                         <span data-band-label className="font-medium">

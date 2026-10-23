@@ -620,12 +620,10 @@ const TiptapEditor = ({
                                             : undefined
                                     }
                                     onReplaceImage={() => setReplacePickerOpen(true)}
-                                    // Comments anchor in the body only. A band's or a note's equation comes from a paste or a
-                                    // Word file, which its panel edits.
-                                    onAddComment={
-                                        chatFolderId && !editingBand && !notes.anchor ? handleAddComment : undefined
-                                    }
-                                    onInsertEquation={editingBand || notes.anchor ? undefined : insertEquation}
+                                    // Comments anchor in the body only, and a band's or a note's equation comes from a paste
+                                    // or a Word file, which its panel edits: Insert greys both out there.
+                                    onAddComment={chatFolderId ? handleAddComment : undefined}
+                                    onInsertEquation={insertEquation}
                                     onInsertFootnote={bandsAllowed ? insertFootnote : undefined}
                                     inNote={!!notes.anchor}
                                     onEnterBand={bandsAllowed ? (edge) => enterBand(entryBand(edge)) : undefined}
@@ -727,11 +725,7 @@ const TiptapEditor = ({
                                         <EditorContent
                                             editor={editor}
                                             data-page-body
-                                            // Dimmed and still editable while a band is edited; printed as it is.
-                                            className={cn(
-                                                'row-start-2 h-full min-w-0 tiptap-wrapper',
-                                                editingBand && 'opacity-50 print:opacity-100',
-                                            )}
+                                            className="row-start-2 h-full min-w-0 tiptap-wrapper"
                                         />
                                         <FootnoteList
                                             body={editor}

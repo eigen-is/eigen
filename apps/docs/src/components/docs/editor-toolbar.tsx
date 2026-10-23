@@ -336,6 +336,7 @@ export const EditorToolbar = ({
                                     onInsertEquation={onInsertEquation}
                                     onInsertFootnote={onInsertFootnote}
                                     inNote={inNote}
+                                    held={editor !== body}
                                     onEnterBand={onEnterBand}
                                     onPageNumbers={onPageNumbers}
                                 />

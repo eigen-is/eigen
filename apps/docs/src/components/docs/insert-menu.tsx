@@ -45,10 +45,13 @@ type InsertMenuProps = {
     onInsertFootnote?: () => void;
     // A note holds paragraphs only, and no chart, whose panel follows the body.
     inNote: boolean;
+    // A band or a note is the active editor, not the body.
+    held: boolean;
 };
 
 // What a band can't hold is missing from its editor's schema, and a command for a node the schema lacks throws. A note's
-// schema is the body's, so what a note can't hold is left out by hand.
+// schema is the body's, so what a note can't hold is disabled by hand. Those items stay in the menu greyed out, as in
+// Google.
 export function InsertMenu({
     editor,
     active,
@@ -59,6 +62,7 @@ export function InsertMenu({
     onInsertEquation,
     onInsertFootnote,
     inNote,
+    held,
     onEnterBand,
     onPageNumbers,
 }: InsertMenuProps) {
@@ -84,32 +88,31 @@ export function InsertMenu({
                     <ImagePlus className="h-4 w-4" /> Image
                 </DropdownMenuItem>
             )}
-            {'chart' in editor.schema.nodes && !inNote && (
-                <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                        <ChartColumn className="h-4 w-4" /> Chart
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                        {CHART_TYPE_OPTIONS.map((option) => (
-                            <DropdownMenuItem
-                                key={option.value}
-                                onClick={() =>
-                                    editor
-                                        .chain()
-                                        .focus()
-                                        .insertChart(option.value, textColumnWidth(editor.view.dom) ?? undefined)
-                                        .run()
-                                }
-                            >
-                                <option.icon className="h-4 w-4" /> {option.label}
-                            </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuSubContent>
-                </DropdownMenuSub>
-            )}
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={inNote || !('chart' in editor.schema.nodes)}>
+                    <ChartColumn className="h-4 w-4" /> Chart
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                    {CHART_TYPE_OPTIONS.map((option) => (
+                        <DropdownMenuItem
+                            key={option.value}
+                            onClick={() =>
+                                editor
+                                    .chain()
+                                    .focus()
+                                    .insertChart(option.value, textColumnWidth(editor.view.dom) ?? undefined)
+                                    .run()
+                            }
+                        >
+                            <option.icon className="h-4 w-4" /> {option.label}
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
             {/* Where Google's Insert › Symbols › Equation sits: after the chart, before the horizontal line. */}
             {onInsertEquation && (
                 <DropdownMenuItem
+                    disabled={held}
                     onClick={() => {
                         afterCloseRef.current = onInsertEquation;
                     }}
@@ -117,39 +120,38 @@ export function InsertMenu({
                     <Sigma className="h-4 w-4" /> Equation
                 </DropdownMenuItem>
             )}
-            {!inNote && (
-                <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                    <Minus className="h-4 w-4" /> Horizontal rule
-                </DropdownMenuItem>
-            )}
-            {'pageBreak' in editor.schema.nodes && !inNote && (
-                <DropdownMenuItem onClick={() => editor.chain().focus().setPageBreak().run()}>
-                    <SeparatorHorizontal className="h-4 w-4" /> Page break
-                    <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
-                </DropdownMenuItem>
-            )}
-            {!inNote && (
-                <DropdownMenuItem
-                    onClick={() =>
-                        editor
-                            .chain()
-                            .focus()
-                            .insertTable({
-                                rows: 3,
-                                cols: 3,
-                                withHeaderRow: true,
-                            })
-                            .run()
-                    }
-                >
-                    <Table className="h-4 w-4" /> Table
-                </DropdownMenuItem>
-            )}
-            {'codeBlock' in editor.schema.nodes && !inNote && (
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
-                    <CodeXml className="h-4 w-4" /> Code block
-                </DropdownMenuItem>
-            )}
+            <DropdownMenuItem disabled={inNote} onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+                <Minus className="h-4 w-4" /> Horizontal rule
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                disabled={inNote || !('pageBreak' in editor.schema.nodes)}
+                onClick={() => editor.chain().focus().setPageBreak().run()}
+            >
+                <SeparatorHorizontal className="h-4 w-4" /> Page break
+                <DropdownMenuShortcut>{formatForDisplay('Mod+Enter')}</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                disabled={inNote}
+                onClick={() =>
+                    editor
+                        .chain()
+                        .focus()
+                        .insertTable({
+                            rows: 3,
+                            cols: 3,
+                            withHeaderRow: true,
+                        })
+                        .run()
+                }
+            >
+                <Table className="h-4 w-4" /> Table
+            </DropdownMenuItem>
+            <DropdownMenuItem
+                disabled={inNote || !('codeBlock' in editor.schema.nodes)}
+                onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            >
+                <CodeXml className="h-4 w-4" /> Code block
+            </DropdownMenuItem>
             {onEnterBand && onPageNumbers && (
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
@@ -188,7 +190,7 @@ export function InsertMenu({
             {onAddComment && (
                 <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem disabled={!active.canComment} onClick={onAddComment}>
+                    <DropdownMenuItem disabled={held || !active.canComment} onClick={onAddComment}>
                         <MessageSquarePlus className="h-4 w-4" /> Comment
                     </DropdownMenuItem>
                 </>
