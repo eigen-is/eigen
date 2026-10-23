@@ -1,7 +1,8 @@
-// The object menu draws the canvas' rows in one order, and a host without a clipboard or duplicate (Sheets) drops
-// those rows and adds its own after the object actions; a viewer sees only the download rows.
+// The object menu draws the canvas' rows in MenuSections' order, a host with one object (a Sheets chart) drops the
+// rows it has no use for and adds its own to their groups, and a viewer sees only the rows that write nothing.
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
@@ -30,53 +31,58 @@ async function openMenu(props: Partial<Parameters<typeof ObjectContextMenu>[0]>)
             contextMenu,
             canEdit: true,
             imagePath: undefined,
-            onArrange: noop,
             onDelete: noop,
             ...props,
         }),
     ));
-    const menu = document.querySelector('[role="menu"]');
-    if (!menu) throw new Error('no menu');
-    return [...menu.children].map((row) =>
-        row.getAttribute('role') === 'separator' ? '—' : (row.textContent?.trim() ?? ''),
-    );
+    return menuRows();
 }
 
-const ARRANGE = ['Bring to front', 'Bring forward', 'Send backward', 'Send to back'];
-
-test("the canvas' menu keeps its rows and their order", async () => {
+test("the canvas' menu keeps its rows in the one menu order, Delete last", async () => {
     const rows = await openMenu({
-        onCopy: noop,
+        onArrange: noop,
         onCut: noop,
+        onCopy: noop,
         onPaste: noop,
         onDuplicate: noop,
         onConvertToShapes: noop,
+        onComment: noop,
     });
     expect(rows).toEqual([
-        ...ARRANGE,
-        '—',
-        'Copy',
         'Cut',
+        'Copy',
         'Paste',
         '—',
         'Duplicate',
-        'Delete',
+        '—',
+        'Order',
         '—',
         'Convert to shapes',
+        '—',
+        'Add comment',
+        '—',
+        'Delete',
     ]);
 });
 
-test('a host without clipboard or duplicate rows gets Arrange, Delete and its own rows, each group once', async () => {
+test('a host without clipboard or duplicate rows gets its own rows in their groups, each group once', async () => {
     const rows = await openMenu({
-        children: createElement(DropdownMenuItem, { children: 'Edit chart' }),
+        hostSections: {
+            create: createElement(DropdownMenuItem, { children: 'Edit chart' }),
+            output: createElement(DropdownMenuItem, { children: 'Download chart' }),
+        },
     });
-    expect(rows).toEqual([...ARRANGE, '—', 'Delete', '—', 'Edit chart']);
+    expect(rows).toEqual(['Edit chart', '—', 'Download chart', '—', 'Delete']);
 });
 
-test("a viewer sees the host's rows without Arrange or Delete", async () => {
+test("a viewer sees the host's rows that write nothing, without Order or Delete", async () => {
     const rows = await openMenu({
         canEdit: false,
-        children: createElement(DropdownMenuItem, { children: 'Download chart' }),
+        onArrange: noop,
+        hostSections: {
+            create: createElement(DropdownMenuItem, { children: 'Edit chart' }),
+            output: createElement(DropdownMenuItem, { children: 'Download chart' }),
+        },
     });
     expect(rows).toEqual(['Download chart']);
 });

@@ -4,6 +4,7 @@ import type { SheetChart } from '@workspace/lib/sheets';
 import { type Box, orderByFractionalIndex } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -173,29 +174,38 @@ function ChartBox({ chart }: { chart: SheetChart }) {
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="sheet-mousedown-cancel">
-                    {canEdit && (
-                        <>
-                            <DropdownMenuItem onClick={() => setContext((ctx) => selectChart(ctx, chart.id, true))}>
-                                Edit the chart
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onClick={() =>
-                                    setContext((ctx) => {
-                                        selectChart(ctx, chart.id);
-                                        deleteActiveChart(ctx);
-                                    })
-                                }
-                            >
-                                Delete chart
-                            </DropdownMenuItem>
-                        </>
-                    )}
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>Download chart</DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                            <DropdownMenuItem onClick={download}>SVG (.svg)</DropdownMenuItem>
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                    <MenuSections
+                        create={
+                            canEdit && (
+                                <DropdownMenuItem onClick={() => setContext((ctx) => selectChart(ctx, chart.id, true))}>
+                                    Edit the chart
+                                </DropdownMenuItem>
+                            )
+                        }
+                        output={
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>Download chart</DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent className="sheet-mousedown-cancel">
+                                    <DropdownMenuItem onClick={download}>SVG (.svg)</DropdownMenuItem>
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                        }
+                        destructive={
+                            canEdit && (
+                                <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() =>
+                                        setContext((ctx) => {
+                                            selectChart(ctx, chart.id);
+                                            deleteActiveChart(ctx);
+                                        })
+                                    }
+                                >
+                                    Delete chart
+                                </DropdownMenuItem>
+                            )
+                        }
+                    />
                 </DropdownMenuContent>
             </DropdownMenu>
             {active && canEdit && (

@@ -14,6 +14,7 @@ type CommentLifecycleMenuItemsProps = {
     noun?: string;
     onAddComment?: () => void;
     onDelete?: (cardId: string) => void;
+    part?: 'rows' | 'delete';
 };
 
 export function CommentLifecycleMenuItems({
@@ -23,6 +24,7 @@ export function CommentLifecycleMenuItems({
     noun,
     onAddComment,
     onDelete,
+    part,
 }: CommentLifecycleMenuItemsProps) {
     const { setOpenCardId, openCardForEdit, updateCard, resolveComment, assignComment, members } = lifecycle;
     const { user } = useAuth();
@@ -31,6 +33,7 @@ export function CommentLifecycleMenuItems({
         <CommentMenuItems
             item={item}
             noun={noun}
+            part={part}
             onAddComment={canWrite ? onAddComment : undefined}
             onOpen={setOpenCardId}
             onEdit={canWrite ? openCardForEdit : undefined}

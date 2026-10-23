@@ -2,7 +2,13 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Camera } from 'lucide-react';
 import { useRef } from 'react';
 import { Button } from './button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './dropdown-menu';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from './dropdown-menu';
 import { UserAvatar } from './user/user-avatar';
 
 export type AvatarEditorProps = {
@@ -49,7 +55,14 @@ export function AvatarEditor({ name, email, userId, imageUrl, onUpload, onRemove
                     <DropdownMenuItem onSelect={() => fileInputRef.current?.click()}>
                         Upload from files
                     </DropdownMenuItem>
-                    {onRemove && <DropdownMenuItem onSelect={() => onRemove()}>Remove avatar</DropdownMenuItem>}
+                    {onRemove && (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onSelect={() => onRemove()}>
+                                Remove avatar
+                            </DropdownMenuItem>
+                        </>
+                    )}
                 </DropdownMenuContent>
             </DropdownMenu>
         </div>

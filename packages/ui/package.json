@@ -111,6 +111,7 @@
     "./hooks/*": "./src/hooks/*.ts",
     "./test/drive-path": "./src/test/drive-path.ts",
     "./test/happy-dom": "./src/test/happy-dom.ts",
+    "./test/menu-rows": "./src/test/menu-rows.ts",
     "./test/render-in-document": "./src/test/render-in-document.ts"
   }
 }

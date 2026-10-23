@@ -16,6 +16,7 @@ import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/drive';
 import { KebabTrigger, SidebarBody, SidebarItem, SidebarSection, TooltipButton } from '@workspace/ui';
+import { MenuSections } from '@workspace/ui/components/context-menu';
 import { FileImportPicker, ProgressDialog } from '@workspace/ui/components/drive';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { StorageUsage } from '@workspace/ui/components/home';
@@ -88,19 +89,29 @@ function CalendarRow({
                         <DropdownMenu>
                             <KebabTrigger title="Calendar options" />
                             <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={onEdit}>
-                                    <Pencil className="h-4 w-4" /> Edit calendar
-                                </DropdownMenuItem>
-                                {onImport && (
-                                    <DropdownMenuItem onClick={onImport}>
-                                        <Upload className="h-4 w-4" /> Import events…
-                                    </DropdownMenuItem>
-                                )}
-                                {onExport && (
-                                    <DropdownMenuItem onClick={onExport}>
-                                        <Download className="h-4 w-4" /> Export calendar
-                                    </DropdownMenuItem>
-                                )}
+                                <MenuSections
+                                    create={
+                                        <DropdownMenuItem onClick={onEdit}>
+                                            <Pencil className="h-4 w-4" /> Edit calendar
+                                        </DropdownMenuItem>
+                                    }
+                                    output={
+                                        (onImport || onExport) && (
+                                            <>
+                                                {onImport && (
+                                                    <DropdownMenuItem onClick={onImport}>
+                                                        <Upload className="h-4 w-4" /> Import events…
+                                                    </DropdownMenuItem>
+                                                )}
+                                                {onExport && (
+                                                    <DropdownMenuItem onClick={onExport}>
+                                                        <Download className="h-4 w-4" /> Export calendar
+                                                    </DropdownMenuItem>
+                                                )}
+                                            </>
+                                        )
+                                    }
+                                />
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>

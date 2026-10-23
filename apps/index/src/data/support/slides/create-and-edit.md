@@ -58,7 +58,7 @@ To select more than one object, hold **Shift** and click each one. With two or m
 
 ## Change the layer order
 
-Right-click any object to open its context menu. From there you can:
+Right-click any object to open its context menu and point to **Order**. From there you can:
 
 - **Bring forward** or **Send backward** to shift the object one step in the stack.
 - **Bring to front** or **Send to back** to move it to the very top or bottom.

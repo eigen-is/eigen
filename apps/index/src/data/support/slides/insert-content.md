@@ -83,14 +83,14 @@ Select an image and use the properties panel to give it an outline. The **Stroke
 
 ## Change the layering order
 
-Right-click an object and choose from the menu:
+Right-click an object, point to **Order**, and choose:
 
 - **Bring to front**: places the object in front of all others.
 - **Bring forward**: moves it one step toward the front.
 - **Send backward**: moves it one step toward the back.
 - **Send to back**: places the object behind all others.
 
-The same menu has **Copy**, **Cut**, **Paste**, **Duplicate**, **Delete**, and **Add comment**. On an image it also has **Download original image**, which saves the image file at its full size and in its own format. If you can only view the presentation, right-clicking an image gives you that option alone.
+The same menu has **Cut**, **Copy**, **Paste**, **Duplicate**, **Add comment**, and **Delete**. On an image it also has **Download original image**, which saves the image file at its full size and in its own format. If you can only view the presentation, right-clicking an image gives you that option alone.
 
 ## Delete an object
 

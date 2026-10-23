@@ -109,7 +109,7 @@ export function FileMenu({
                 )}
 
                 {/* Section 2: Export & Rename */}
-                {(canDownload || canWrite) && <DropdownMenuSeparator />}
+                <DropdownMenuSeparator />
                 {canDownload && (
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
@@ -146,7 +146,7 @@ export function FileMenu({
                 )}
 
                 {/* Section 4: Version history & Print */}
-                {(canWrite || children) && <DropdownMenuSeparator />}
+                <DropdownMenuSeparator />
                 {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
                 {children}
 
@@ -154,7 +154,7 @@ export function FileMenu({
                 {canWrite && (
                     <>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
+                        <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
                             <Trash2 className="h-4 w-4" /> Move to trash
                         </DropdownMenuItem>
                     </>

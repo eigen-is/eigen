@@ -172,7 +172,6 @@ export type Settings = {
     rowHeaderWidth?: number;
     columnHeaderHeight?: number;
     defaultFontSize?: number;
-    sheetTabContextMenu?: string[];
     filterContextMenu?: string[];
     generateSheetId?: () => string;
     hooks?: Hooks;
@@ -199,16 +198,6 @@ export const defaultSettings: Required<Settings> = {
     rowHeaderWidth: SHEET_ROW_HEADER_WIDTH,
     columnHeaderHeight: SHEET_COLUMN_HEADER_HEIGHT,
     defaultFontSize: SHEET_DEFAULT_FONT_SIZE,
-    sheetTabContextMenu: [
-        'delete',
-        'copy',
-        'rename',
-        'color',
-        'hide',
-        '|',
-        'move',
-        // "focus",
-    ], // custom sheet tab right-click menu
     filterContextMenu: [
         'sort-by-asc',
         'sort-by-desc',

@@ -7,6 +7,7 @@ import type { TiptapEditorHTMLElement } from '@tiptap/core';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 const window = installHappyDom();
@@ -750,4 +751,38 @@ test('a viewer sees the Normal the doc stores', async () => {
     expect(document.querySelector<HTMLElement>('[data-document]')?.style.getPropertyValue('--doc-font-size')).toBe(
         '12pt',
     );
+});
+
+function writeFigure() {
+    const paragraph = new Y.XmlElement('paragraph');
+    const figure = new Y.XmlElement('figure');
+    figure.setAttribute('mediaName', 'chart.png');
+    paragraph.insert(0, [figure]);
+    doc.getXmlFragment('default').insert(0, [paragraph]);
+}
+
+// Google's image menu holds Cut and Copy; Delete, red, goes last and alone, as every Eigen menu draws it.
+test('a right-click on an image offers a writer Cut, Copy and Delete, and Delete takes the image out', async () => {
+    writeFigure();
+    await render(WRITER);
+    const figure = bodyView()?.querySelector('.figure');
+    if (!figure) throw new Error('no figure');
+    await act(async () => figure.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    expect(menuRows()).toEqual(['Cut', 'Copy', '—', 'Delete']);
+    expect(document.querySelector('[role="menuitem"][data-variant="destructive"]')?.textContent?.trim()).toBe('Delete');
+
+    await pick('Delete');
+    expect(doc.getXmlFragment('default').toString()).not.toContain('figure');
+});
+
+// A viewer with nothing to download or comment on keeps the browser's own menu.
+test("a viewer's right-click on an image with no rows for it opens no menu", async () => {
+    writeFigure();
+    await render({ canWrite: false, isMobile: false });
+    const figure = bodyView()?.querySelector('.figure');
+    if (!figure) throw new Error('no figure');
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    await act(async () => figure.dispatchEvent(event));
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(event.defaultPrevented).toBe(false);
 });

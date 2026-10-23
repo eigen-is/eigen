@@ -9,7 +9,12 @@ import {
     type VectorElement,
 } from '@workspace/lib/vector';
 import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
+import {
+    ContextMenuAnchor,
+    MenuSections,
+    type MenuSectionsProps,
+    useContextMenu,
+} from '@workspace/ui/components/context-menu';
 import { DocumentImportPicker } from '@workspace/ui/components/drive';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
@@ -186,7 +191,7 @@ function SlideEditorInner({
         addSlideAfter(index > 0 ? doc.frames[index - 1].id : null);
     };
 
-    // One menu for a slide, opened from its rail thumbnail or from empty space on the canvas.
+    // The rail thumbnail's menu; empty space on the canvas opens the canvas' own, with these rows below its Paste.
     const slideMenu = useContextMenu<string>();
     const menuFrameId = slideMenu.item;
 
@@ -194,6 +199,27 @@ function SlideEditorInner({
         const copyId = duplicateFrame(id);
         if (copyId) setFrameId(copyId);
     };
+
+    const slideMenuSections = (id: string): MenuSectionsProps => ({
+        create: (
+            <>
+                <DropdownMenuItem onClick={() => addSlideAbove(id)}>
+                    <ArrowUpToLine className="h-4 w-4" /> New slide above
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => addSlideAfter(id)}>
+                    <ArrowDownToLine className="h-4 w-4" /> New slide below
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => duplicateSlide(id)}>
+                    <CopyPlus className="h-4 w-4" /> Duplicate slide
+                </DropdownMenuItem>
+            </>
+        ),
+        destructive: (
+            <DropdownMenuItem variant="destructive" disabled={doc.frames.length <= 1} onClick={() => deleteFrame(id)}>
+                <Trash2 className="h-4 w-4" /> Delete slide
+            </DropdownMenuItem>
+        ),
+    });
 
     const enterPresent = useCallback(() => {
         // Nothing to show on a frameless deck, and latching isPresenting there would take fullscreen
@@ -433,7 +459,7 @@ function SlideEditorInner({
                             searchMatchedIds={searchMatchedIds}
                             searchActiveId={searchActiveId}
                             onInsertImage={insertImage}
-                            onEmptyContextMenu={(e) => slideMenu.handleContextMenu(e, frameId)}
+                            backgroundMenu={slideMenuSections(frameId)}
                             // A view-only deck pages on a one-finger swipe; an editable one keeps
                             // that finger for the canvas (D4.13).
                             onSwipeFrame={canEdit ? undefined : stepFrame}
@@ -451,28 +477,7 @@ function SlideEditorInner({
                 </div>
             )}
             <ContextMenuAnchor contextMenu={slideMenu}>
-                {menuFrameId && (
-                    <>
-                        <DropdownMenuItem onClick={() => addSlideAbove(menuFrameId)}>
-                            <ArrowUpToLine className="h-4 w-4" /> New slide above
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => addSlideAfter(menuFrameId)}>
-                            <ArrowDownToLine className="h-4 w-4" /> New slide below
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => duplicateSlide(menuFrameId)}>
-                            <CopyPlus className="h-4 w-4" /> Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            variant="destructive"
-                            disabled={doc.frames.length <= 1}
-                            onClick={() => deleteFrame(menuFrameId)}
-                        >
-                            <Trash2 className="h-4 w-4" /> Delete
-                        </DropdownMenuItem>
-                    </>
-                )}
+                {menuFrameId && <MenuSections {...slideMenuSections(menuFrameId)} />}
             </ContextMenuAnchor>
             <DocumentImportPicker
                 path={path}

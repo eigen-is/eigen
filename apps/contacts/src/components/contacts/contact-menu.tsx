@@ -7,8 +7,9 @@ import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { ChatCreateWizard } from '@workspace/ui/components/chat';
 import { EXPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
+import { MenuSections } from '@workspace/ui/components/context-menu';
 import { ProgressDialog } from '@workspace/ui/components/drive';
-import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { LabelAssignSubMenu } from '@workspace/ui/components/labels';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import { Download, Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';
@@ -70,8 +71,6 @@ export function useContactMenu() {
         const canMail = canReach && mailEnabled;
 
         const canExport = !!showExport && contacts.length > 0;
-        const topGroup = canReach || (!!single && !!showPrint) || canExport;
-        const editGroup = (!!single && !!onEdit) || (!!onDelete && contacts.length > 0 && !hasSelf);
 
         const labelIds = labels.map((l) => l.id);
         const assignedToAll = labelIds.filter((id) => contacts.every((c) => (c.labels ?? []).includes(id)));
@@ -80,89 +79,60 @@ export function useContactMenu() {
         );
 
         return (
-            <>
-                {canMail && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            openWriteEmailTo(eligiblePeople.map((p) => p.email));
-                            close();
-                        }}
-                    >
-                        <Mail className="h-4 w-4" />
-                        {eligible.length === 1 ? 'Send email' : `Send email to ${eligible.length} contacts`}
-                    </DropdownMenuItem>
-                )}
-                {canReach && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            // One eligible contact keeps the direct-open probe (its full address
-                            // list lets startChatWith prefer the registered account); several open
-                            // the wizard directly, pre-filled with every eligible person.
-                            if (eligible.length === 1) {
-                                void startChat(
-                                    (eligible[0].email ?? []).filter((e) => e.trim().length > 0),
-                                    eligiblePeople[0].name,
-                                );
-                            } else {
-                                setChatWith(eligiblePeople);
-                            }
-                            close();
-                        }}
-                    >
-                        <MessageSquare className="h-4 w-4" />
-                        {eligible.length === 1 ? 'Start chat' : `Start chat with ${eligible.length} contacts`}
-                    </DropdownMenuItem>
-                )}
-                {single && showPrint && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            printDocument();
-                            close();
-                        }}
-                    >
-                        <Printer className="h-4 w-4" /> Print
-                    </DropdownMenuItem>
-                )}
-                {canExport && (
-                    <DropdownMenuItem
-                        disabled={isExporting}
-                        onClick={() => {
-                            void exportContacts(contacts.map((c) => c.id));
-                            close();
-                        }}
-                    >
-                        <Download className="h-4 w-4" />
-                        {contacts.length === 1 ? 'Export vCard' : `Export ${contacts.length} vCards`}
-                    </DropdownMenuItem>
-                )}
-
-                {topGroup && editGroup && <DropdownMenuSeparator />}
-
-                {single && onEdit && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onEdit(single);
-                            close();
-                        }}
-                    >
-                        <Pencil className="h-4 w-4" /> Edit
-                    </DropdownMenuItem>
-                )}
-                {onDelete && contacts.length > 0 && !hasSelf && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onDelete(contacts);
-                            close();
-                        }}
-                    >
-                        <Trash2 className="h-4 w-4" />
-                        {contacts.length === 1 ? 'Delete' : `Delete ${contacts.length} contacts`}
-                    </DropdownMenuItem>
-                )}
-
-                {onToggleLabel && labels.length > 0 && contacts.length > 0 && (
-                    <>
-                        {(topGroup || editGroup) && <DropdownMenuSeparator />}
+            <MenuSections
+                open={
+                    canReach && (
+                        <>
+                            {canMail && (
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        openWriteEmailTo(eligiblePeople.map((p) => p.email));
+                                        close();
+                                    }}
+                                >
+                                    <Mail className="h-4 w-4" />
+                                    {eligible.length === 1 ? 'Send email' : `Send email to ${eligible.length} contacts`}
+                                </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    // One eligible contact keeps the direct-open probe (its full address
+                                    // list lets startChatWith prefer the registered account); several open
+                                    // the wizard directly, pre-filled with every eligible person.
+                                    if (eligible.length === 1) {
+                                        void startChat(
+                                            (eligible[0].email ?? []).filter((e) => e.trim().length > 0),
+                                            eligiblePeople[0].name,
+                                        );
+                                    } else {
+                                        setChatWith(eligiblePeople);
+                                    }
+                                    close();
+                                }}
+                            >
+                                <MessageSquare className="h-4 w-4" />
+                                {eligible.length === 1 ? 'Start chat' : `Start chat with ${eligible.length} contacts`}
+                            </DropdownMenuItem>
+                        </>
+                    )
+                }
+                create={
+                    single &&
+                    onEdit && (
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onEdit(single);
+                                close();
+                            }}
+                        >
+                            <Pencil className="h-4 w-4" /> Edit
+                        </DropdownMenuItem>
+                    )
+                }
+                organize={
+                    onToggleLabel &&
+                    labels.length > 0 &&
+                    contacts.length > 0 && (
                         <LabelAssignSubMenu
                             labels={labels}
                             assignedLabelIds={assignedToAll}
@@ -172,9 +142,51 @@ export function useContactMenu() {
                                 close();
                             }}
                         />
+                    )
+                }
+                output={
+                    <>
+                        {canExport && (
+                            <DropdownMenuItem
+                                disabled={isExporting}
+                                onClick={() => {
+                                    void exportContacts(contacts.map((c) => c.id));
+                                    close();
+                                }}
+                            >
+                                <Download className="h-4 w-4" />
+                                {contacts.length === 1 ? 'Export vCard' : `Export ${contacts.length} vCards`}
+                            </DropdownMenuItem>
+                        )}
+                        {single && showPrint && (
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    printDocument();
+                                    close();
+                                }}
+                            >
+                                <Printer className="h-4 w-4" /> Print
+                            </DropdownMenuItem>
+                        )}
                     </>
-                )}
-            </>
+                }
+                destructive={
+                    onDelete &&
+                    contacts.length > 0 &&
+                    !hasSelf && (
+                        <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() => {
+                                onDelete(contacts);
+                                close();
+                            }}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                            {contacts.length === 1 ? 'Delete' : `Delete ${contacts.length} contacts`}
+                        </DropdownMenuItem>
+                    )
+                }
+            />
         );
     };
 

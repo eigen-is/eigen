@@ -2,6 +2,7 @@
 // to the find bar. A host's selection entries sit in a group of their own between Undo and Find, for viewers too.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../../happy-dom';
+import { collapseSeparators } from '../../../menu-rows';
 import { renderInDocument } from '../../../render-in-document';
 
 installHappyDom();
@@ -43,14 +44,17 @@ async function open() {
 
 // The open menu's entries in order, a separator as '—', the shortcut hint dropped.
 const entries = () =>
-    [...document.querySelectorAll('[role="menu"] [role="menuitem"], [role="menu"] [role="separator"]')].map((entry) =>
-        entry.getAttribute('role') === 'separator'
-            ? '—'
-            : [...entry.childNodes]
-                  .filter((node) => node.nodeType === Node.TEXT_NODE)
-                  .map((node) => node.textContent)
-                  .join('')
-                  .trim(),
+    collapseSeparators(
+        [...document.querySelectorAll('[role="menu"] [role="menuitem"], [role="menu"] [role="separator"]')].map(
+            (entry) =>
+                entry.getAttribute('role') === 'separator'
+                    ? '—'
+                    : [...entry.childNodes]
+                          .filter((node) => node.nodeType === Node.TEXT_NODE)
+                          .map((node) => node.textContent)
+                          .join('')
+                          .trim(),
+        ),
     );
 
 // Opens the menu, picks an item and waits out the timer on which the closing menu restores focus.

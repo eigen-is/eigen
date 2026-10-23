@@ -11,7 +11,8 @@ import { textOutsideNotes } from './footnote';
 export type CommentMarkOptions = {
     onCommentClick?: (cardId: string) => void;
     onCommentContextMenu?: (cardId: string, event: MouseEvent) => void;
-    onSelectionContextMenu?: (event: MouseEvent) => void;
+    // True when it opened a menu; false leaves the browser's own.
+    onSelectionContextMenu?: (event: MouseEvent) => boolean;
     onAddComment?: () => void;
     onToggleCommentPanel?: () => void;
 };
@@ -187,9 +188,8 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                                 return true;
                             }
                             // Right-click on a selection a comment can anchor on → selection context menu
-                            if (canAnchorComment(view.state) && onSelectionContextMenu) {
+                            if (canAnchorComment(view.state) && onSelectionContextMenu?.(event)) {
                                 event.preventDefault();
-                                onSelectionContextMenu(event);
                                 return true;
                             }
                             return false;

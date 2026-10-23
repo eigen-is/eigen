@@ -6,7 +6,7 @@ category: Editing
 tags: [vector, selection, align, arrange, layers]
 related: [vector/draw-shapes-and-text, vector/style-objects, vector/zoom-pan-and-shortcuts]
 order: 40
-updated: 2026-10-13
+updated: 2026-10-23
 ---
 
 Once you have a few objects on a drawing, Vector gives you the tools to place them exactly. This article covers selecting objects, moving and resizing them, setting exact values, changing the stacking order, and lining objects up with each other.
@@ -52,7 +52,7 @@ As you drag or resize an object near another one, Vector shows thin guide lines 
 
 ## Change the stacking order
 
-Objects stack in the order you add them, with newer objects in front. To reorder the selection, use the **Arrange** section of the properties panel, or the right-click menu. Four actions are available:
+Objects stack in the order you add them, with newer objects in front. To reorder the selection, use the **Arrange** section of the properties panel, or **Order** in the right-click menu. Four actions are available:
 
 - **Bring to front** (**⌘⇧]**): move it above everything.
 - **Bring forward** (**⌘]**): move it up one step.
@@ -75,12 +75,15 @@ Select three or more objects to unlock **Distribute horizontally** and **Distrib
 
 Right-click any object to open its menu. The actions are grouped in this order:
 
-1. **Bring to front**, **Bring forward**, **Send backward**, **Send to back**.
-2. **Copy**, **Cut**, **Paste**.
-3. **Duplicate**, **Delete**.
+1. **Cut**, **Copy**, **Paste**.
+2. **Duplicate**.
+3. **Order**, which opens **Bring to front**, **Bring forward**, **Send backward**, and **Send to back**.
 4. **Convert to shapes**, when the selection is one chart. It replaces the chart with ordinary shapes and text boxes that look the same, and leaves them all selected. You can't turn them back into a chart, but undo (**⌘Z**, or **Ctrl+Z** on Windows) right after brings the chart back.
 5. **Download original image**, on an image only. It saves the image file at its full size and in its own format.
 6. **Add comment**.
+7. **Delete**, on its own at the bottom.
+
+Right-click an empty spot on the canvas to get **Paste**.
 
 If you can only view the drawing, right-clicking an image gives you **Download original image** and nothing else.
 

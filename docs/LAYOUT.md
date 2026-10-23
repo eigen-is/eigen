@@ -1,6 +1,6 @@
 # Layout
 
-> **TLDR:** Every app is `EigenApp` (the provider stack) around `AppShell` (topbar, sidebar, content), and every page is a `ColumnLayout` of `Column`s with the toolbar passed as a prop. The shell lives in `packages/ui/src/components/layout/`, Drive's file UI in `packages/ui/src/components/drive/`. Four things are not obvious from the code: on a phone only the `mobileColumn` renders and the sidebar is a column, not an overlay; z-index is one project-wide scale and app code sets none; buttons navigate in the same tab while links inside content open a new tab; and every document-level keymap stands down while a dialog is open.
+> **TLDR:** Every app is `EigenApp` (the provider stack) around `AppShell` (topbar, sidebar, content), and every page is a `ColumnLayout` of `Column`s with the toolbar passed as a prop. The shell lives in `packages/ui/src/components/layout/`, Drive's file UI in `packages/ui/src/components/drive/`. Five things are not obvious from the code: on a phone only the `mobileColumn` renders and the sidebar is a column, not an overlay; every context and ⋮ menu draws its rows in one order, with a destructive row last and red; z-index is one project-wide scale and app code sets none; buttons navigate in the same tab while links inside content open a new tab; and every document-level keymap stands down while a dialog is open.
 
 This doc governs the frame every app draws its pages in and the conventions that make the apps feel like one product: the shell, the columns, the gutter, Drive's file UI, lists, drag, the keyboard, layering and where a click opens. Read it before you add a page, a list, a menu or a shortcut. The pieces live in `packages/ui`, with their logic in `packages/lib`, so an app composes the shared pieces instead of laying out its own, and a fix to the shell reaches every app at once. Phones and touch screens add their own rules on top ([MOBILE.md](MOBILE.md)).
 
@@ -62,9 +62,39 @@ The engine, parsers, providers and commands live in `packages/lib/src/core/comma
 
 ## One item menu serves the row and the detail column
 
-`DriveItemMenuItems` (`drive-item-menu.tsx`) is the menu both the row's context menu and the detail column's kebab draw. Between its Open rows and its own item actions it draws the shared file actions through `FileActionMenuItems`, minus `save-to-drive`, because Drive's own Copy to… already says that. Each host passes the sorted listing as siblings, so Quick preview pages through the folder the way the Space key does ([PREVIEWS.md](PREVIEWS.md#the-host-mounts-the-runners-dialogs)).
+`DriveItemMenuItems` (`drive-item-menu.tsx`) is the menu both the row's context menu and the detail column's kebab draw. It draws the shared file actions through `FileActionMenuItems` one group at a time, each beside its own rows in the menu order ([Menus draw their rows in one order](#menus-draw-their-rows-in-one-order)), minus `save-to-drive`, because Drive's own Copy to… already says that. Each host passes the sorted listing as siblings, so Quick preview pages through the folder the way the Space key does ([PREVIEWS.md](PREVIEWS.md#the-host-mounts-the-runners-dialogs)).
 
 `DriveBrowser` (`drive-browser.tsx`) is a lighter layer over the same table, with a breadcrumb and a mount list but no dialogs and no detail column. The file picker and the location field use it.
+
+## Menus draw their rows in one order
+
+Every right-click menu and every ⋮ menu composes `MenuSections` (`packages/ui/src/components/context-menu/menu-sections.tsx`). A host hands each row to a named group, and the component draws the groups in a fixed order with a separator between two that are there. The order is the one source, so a user finds Copy, Download or Delete in the same place in every app, and a new menu cannot drift from it.
+
+| Group | Rows |
+|---|---|
+| `open` | Open, Open in new tab, Quick preview, View comment, Reply, Forward |
+| `clipboard` | Cut, Copy, Paste, in that order, from `ClipboardMenuItems` with their shortcuts |
+| `create` | New slide, Insert, Duplicate, Edit, Rename |
+| `organize` | Move to, Copy to, Archive, labels, color, assign, resolve, hide, sort, filter, Clear contents |
+| `arrange` | A canvas object's `OrderMenuSub` (Google Slides' Order ▸), a sheet tab's Move left and right |
+| `convert` | Convert to shapes, Convert to Sheet, Document or Slides |
+| `output` | Download, Export, Print, Save to Drive, Import to… |
+| `collaborate` | Add comment, Share ▸, Watch |
+| `destructive` | Delete, Move to trash, Remove…, Delete row or column |
+
+Shared rows know their group. A `FileAction` in `packages/lib/src/core/file-actions.ts` names one (`open`, `convert` or `output`), and `FileActionMenuItems` draws all three in their places, or one when the host passes `group`, as Drive does to put Quick preview by Open. The comment rows take the groups themselves on a card's own menu; in a menu about something else (a cell, an image) the host draws `part="rows"` in its collaborate group and `part="delete"` in its destructive group, so the comment's Delete sits with the cell's.
+
+`DropdownMenuSeparator` hides itself when it opens the menu, follows another separator or has no row after it. A row component may render nothing (`DownloadImageMenuItem` with no path, the comment rows for a viewer), and the separator before it then goes too, so no host writes separator logic of its own. Tests read a menu as a user sees it through `menuRows` and `collapseSeparators` in `packages/ui/src/test/menu-rows.ts`, since happy-dom draws no CSS.
+
+Menubar menus (File, Edit, Format) keep Google's order, which a user knows from Docs, but their destructive rows are red too.
+
+## A row that deletes is red and last
+
+**A row that deletes, trashes or removes is `variant="destructive"`**, red with its icon, and sits alone in the last group. Move to trash is red even though Trash restores it, and a Sheets row's or a table's Delete row goes there too, apart from its Insert. Google draws none of these red and puts Delete in the middle of a menu; Eigen follows iOS and Material instead, so the one row that loses work is the one a user finds last and sees coloured. Log out is last but plain, since it loses nothing, and Clear contents is an object action.
+
+A share dialog's role Remove is a `SelectItem` with the same `variant`, behind a `SelectSeparator`.
+
+`scripts/check-standards.ts` gates it as a hard zero: a `DropdownMenuItem` or `SelectItem` that draws a `Trash2` icon, or whose label says Delete, Remove or to trash, fails without the variant, and so does one tinted by `text-destructive`, which leaves the icon grey. A toggle's label (`'Remove' : 'Add'` space before) is an undo and passes.
 
 ## The document apps reach Drive through one config
 

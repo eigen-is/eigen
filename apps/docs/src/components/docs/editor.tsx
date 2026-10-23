@@ -39,21 +39,28 @@ import {
     CommentMenuItems,
     PanelColumn,
 } from '@workspace/ui/components/comments';
-import { ContextMenuAnchor, DownloadImageMenuItem, useContextMenu } from '@workspace/ui/components/context-menu';
+import {
+    ClipboardMenuItems,
+    ContextMenuAnchor,
+    DownloadImageMenuItem,
+    MenuSections,
+    useContextMenu,
+} from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
+import { Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { ChartDataEditor, ChartPropertiesPanel } from './chart-properties-panel';
 import { useBandEditors, useDocEditor, useDocMedia } from './doc-editor';
-import { EditorToolbar } from './editor-toolbar';
+import { EditorToolbar, runClipboardCommand } from './editor-toolbar';
 import { EquationPropertiesPanel } from './equation-properties-panel';
 import {
     addCommentAnchor,
@@ -284,7 +291,9 @@ const TiptapEditor = ({
                         if (item) commentContextMenu.openAt(item, event.clientX, event.clientY);
                     },
                     onSelectionContextMenu: (event) => {
+                        if (!handleAddCommentRef.current) return false;
                         selectionContextMenu.openAt(true, event.clientX, event.clientY);
+                        return true;
                     },
                     onAddComment: () => handleAddCommentRef.current?.(),
                     onToggleCommentPanel: toggleComments,
@@ -387,7 +396,7 @@ const TiptapEditor = ({
         setPendingMarkRange({ from, to, text });
         setAddOpen(true);
     };
-    handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
+    handleAddCommentRef.current = canWrite && chatFolderId ? handleAddComment : null;
 
     const { selectionPanel, equationFieldRef, editEquation, insertEquation } = useSelectionPanel(
         activeEditor,
@@ -421,12 +430,11 @@ const TiptapEditor = ({
         imagePath: DrivePath | undefined;
         comment: CommentContextMenuItem | null;
     }>();
-    const canAddComment = canWrite && !!chatFolderId;
     // Opens only when a row will render; otherwise the browser's own menu shows.
     figureContextMenuRef.current = (node, pos, event) => {
         const imagePath = media.resolveMediaPath(node.attrs.mediaName ?? '');
         const comment = commentMenuItem(nodeCommentCardId(node));
-        if (!imagePath && !comment && !canAddComment) return;
+        if (!canWrite && !imagePath && !comment) return;
         // Selected first, so Add comment anchors to it.
         editor?.commands.setNodeSelection(pos);
         figureContextMenu.handleContextMenu(event, { imagePath, comment });
@@ -820,16 +828,48 @@ const TiptapEditor = ({
             />
 
             <ContextMenuAnchor contextMenu={figureContextMenu}>
-                <DownloadImageMenuItem path={figureContextMenu.item?.imagePath} />
-                {figureContextMenu.item?.imagePath && (figureContextMenu.item.comment || canAddComment) && (
-                    <DropdownMenuSeparator />
-                )}
-                <CommentLifecycleMenuItems
-                    lifecycle={lifecycle}
-                    item={figureContextMenu.item?.comment ?? null}
-                    canWrite={canWrite}
-                    onAddComment={chatFolderId ? handleAddComment : undefined}
-                    onDelete={removeCommentMarks}
+                <MenuSections
+                    clipboard={
+                        canWrite && (
+                            <ClipboardMenuItems
+                                onCut={() => runClipboardCommand(editor, 'cut')}
+                                onCopy={() => runClipboardCommand(editor, 'copy')}
+                            />
+                        )
+                    }
+                    output={
+                        figureContextMenu.item?.imagePath && (
+                            <DownloadImageMenuItem path={figureContextMenu.item.imagePath} />
+                        )
+                    }
+                    collaborate={
+                        <CommentLifecycleMenuItems
+                            lifecycle={lifecycle}
+                            item={figureContextMenu.item?.comment ?? null}
+                            canWrite={canWrite}
+                            onAddComment={chatFolderId ? handleAddComment : undefined}
+                            part="rows"
+                        />
+                    }
+                    destructive={
+                        <>
+                            {canWrite && (
+                                <DropdownMenuItem
+                                    variant="destructive"
+                                    onClick={() => editor.chain().focus().deleteSelection().run()}
+                                >
+                                    <Trash2 className="h-4 w-4" /> Delete
+                                </DropdownMenuItem>
+                            )}
+                            <CommentLifecycleMenuItems
+                                lifecycle={lifecycle}
+                                item={figureContextMenu.item?.comment ?? null}
+                                canWrite={canWrite}
+                                onDelete={removeCommentMarks}
+                                part="delete"
+                            />
+                        </>
+                    }
                 />
             </ContextMenuAnchor>
 

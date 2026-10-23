@@ -2,6 +2,7 @@
 // Tools reaches everyone, viewers included.
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { collapseSeparators } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 const window = installHappyDom();
@@ -91,11 +92,13 @@ const menuItems = () => [...document.querySelectorAll('[role="menuitem"]')].map(
 
 // The last-opened menu's items in order, a separator as '—'.
 const openMenuEntries = () =>
-    [
-        ...([...document.querySelectorAll('[role="menu"]')]
-            .at(-1)
-            ?.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="separator"]') ?? []),
-    ].map((entry) => (entry.getAttribute('role') === 'separator' ? '—' : entry.textContent?.trim()));
+    collapseSeparators(
+        [
+            ...([...document.querySelectorAll('[role="menu"]')]
+                .at(-1)
+                ?.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="separator"]') ?? []),
+        ].map((entry) => (entry.getAttribute('role') === 'separator' ? '—' : entry.textContent?.trim())),
+    );
 
 // A menu trigger by its text, or by its name when it is an icon.
 const menuTrigger = (label: string) =>
@@ -585,7 +588,7 @@ test.each([
     expect(submenuDisabled('Image')).toBe(!image);
 });
 
-test("Format › Table lists the table panel's actions in Google Docs' order and runs them", async () => {
+test("Format › Table lists the table panel's actions in Google Docs' order, the deletes last, and runs them", async () => {
     editor.commands.setContent(TABLE_AND_FIGURE);
     editor.commands.setTextSelection(7);
     await render(1920, true);
@@ -597,10 +600,6 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
         'Insert column left',
         'Insert column right',
         '—',
-        'Delete row',
-        'Delete column',
-        'Delete table',
-        '—',
         'Distribute columns',
         '—',
         'Merge cells',
@@ -608,6 +607,10 @@ test("Format › Table lists the table panel's actions in Google Docs' order and
         '—',
         'Toggle header row',
         'Cell background color',
+        '—',
+        'Delete row',
+        'Delete column',
+        'Delete table',
     ]);
     // A caret merges nothing and splits only a merged cell.
     expect(submenuDisabled('Merge cells')).toBe(true);
@@ -664,10 +667,11 @@ const PAGE_NUMBER_ENTRIES = [
     'In the footer',
     'In the footer, not on the first page',
     '—',
+    'Page number',
     'Page count',
 ];
 
-test("Insert › Page elements holds Header, Footer and Google's page number presets with Page count", async () => {
+test("Insert › Page elements holds Header, Footer and Google's page number presets with Page number and Page count", async () => {
     await render(1920, true);
     await openMenu('Insert');
     await openSubmenu('Page elements');
@@ -1055,12 +1059,16 @@ test('Mod+Shift+C opens the word count, for a viewer too', async () => {
 // Google Docs' Edit menu, Paste aside: Cut and Copy, then Select all and Delete, each group set apart.
 const editEntries = async () => {
     await openMenu('Edit');
-    return openMenuEntries().map((entry, index) => {
-        const item = [...document.querySelectorAll('[role="menu"]')]
-            .at(-1)
-            ?.querySelectorAll('[role="menuitem"], [role="separator"]')[index];
-        return item?.hasAttribute('data-disabled') ? `${entry} (disabled)` : entry;
-    });
+    const items = [...document.querySelectorAll('[role="menu"]')]
+        .at(-1)
+        ?.querySelectorAll('[role="menuitem"], [role="separator"]');
+    return collapseSeparators(
+        [...(items ?? [])].map((item) =>
+            item.getAttribute('role') === 'separator'
+                ? '—'
+                : `${item.textContent?.trim()}${item.hasAttribute('data-disabled') ? ' (disabled)' : ''}`,
+        ),
+    );
 };
 
 const TWO_WORDS = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello world' }] }] };

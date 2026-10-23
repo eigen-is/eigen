@@ -17,7 +17,10 @@ const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { useBandEditors, useDocMedia } = await import('../../../components/docs/doc-editor');
 const { useYMapRead } = await import('../../../components/docs/hooks/use-y-map-read');
-const { applyPageNumberPreset, PAGE_NUMBER_PRESETS } = await import('../../../components/docs/page-numbers');
+const { applyPageNumberPreset, PAGE_NUMBER_PRESETS, PageNumberItems } = await import(
+    '../../../components/docs/page-numbers'
+);
+const { ContextMenuAnchor } = await import('@workspace/ui/components/context-menu');
 const { createDocUndoManager, writePageSetup } = await import('../../../components/docs/page-setup');
 
 type Preset = (typeof PAGE_NUMBER_PRESETS)[number];
@@ -53,6 +56,11 @@ function Host({ doc }: { doc: InstanceType<typeof Y.Doc> }) {
         Fragment,
         null,
         BAND_ROOTS.map((root) => createElement(EditorContent, { key: root, editor: bands[root] })),
+        // The submenu's rows, open on the footer's editor as the band's Options › Page numbers draws them.
+        createElement(ContextMenuAnchor, {
+            contextMenu: { isOpen: true, position: { x: 0, y: 0 }, close: () => {}, restoreFocus: () => {} },
+            children: createElement(PageNumberItems, { editor: bands.footer, onPreset: () => {} }),
+        }),
     );
 }
 
@@ -133,4 +141,29 @@ test('not on the first page takes the page number off the first page and keeps w
     expect(doc.getXmlFragment('header').toString()).toBe(RIGHT_NUMBER);
     expect(doc.getXmlFragment('footer').toString()).toBe(RIGHT_NUMBER);
     expect(doc.getXmlFragment('footerFirst').toString()).not.toContain('pagenumber');
+});
+
+// Google's Page number and Page count go in at the caret, wherever it is, below the presets.
+test.each([
+    ['Page number', 'page'],
+    ['Page count', 'pages'],
+] as const)('%s puts a %s field at the caret', async (label, kind) => {
+    const doc = new Y.Doc();
+    await render(doc);
+    const rows = [...document.querySelectorAll('[role="menuitem"]')];
+    expect(rows.map((row) => row.textContent)).toEqual([
+        ...PAGE_NUMBER_PRESETS.map((p) => p.label),
+        'Page number',
+        'Page count',
+    ]);
+    await act(async () => {
+        editors?.footer.commands.insertContent('Page ');
+    });
+    const row = rows.find((r) => r.textContent === label);
+    await act(async () => {
+        row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(doc.getXmlFragment('footer').toString()).toBe(
+        `<paragraph>Page <pagenumber kind="${kind}"></pagenumber></paragraph>`,
+    );
 });

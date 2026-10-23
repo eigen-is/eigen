@@ -603,6 +603,7 @@ function ConditionalFormattingSubmenu() {
                     <DropdownMenuSubTrigger>Delete rule</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         <DropdownMenuItem
+                            variant="destructive"
                             onClick={() => {
                                 setContext((ctx) => {
                                     clearSheetRules(ctx);

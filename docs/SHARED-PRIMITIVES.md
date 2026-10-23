@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1924 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1928 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -112,12 +112,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PanelColumn` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/panel-column.tsx |
 | `ContactAddRow` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/contact-add-row.tsx |
 | `ContactAutosuggest` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/contact-autosuggest.tsx |
-| `ArrangeMenuItems` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `ClipboardMenuItems` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `ContextMenuAnchor` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/context-menu-anchor.tsx |
 | `DownloadImageMenuItem` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
-| `ObjectActionMenuItems` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
+| `MenuSections` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `ObjectContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-context-menu.tsx |
+| `OrderMenuSub` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `DocumentImportPicker` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/document-import-picker.tsx |
 | `DriveAccessList` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `DriveBrowser` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-browser.tsx |
@@ -534,7 +534,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (434)
+## Types (436)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -829,6 +829,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DocSearchSession` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `FileAction` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
+| `FileActionGroup` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `FileActionId` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `FileImportSource` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `FileSubject` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
@@ -936,6 +937,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PresenceUser` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
 | `CommentContextMenuItem` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
 | `ContactAutosuggestProps` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/types.ts |
+| `MenuSectionsProps` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `DriveAccessListProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `DriveGridProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-grid.tsx |
 | `DriveLocationValue` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-field.tsx |
@@ -973,7 +975,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (987)
+## Utilities & constants (989)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1963,4 +1965,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `drivePath` | `@workspace/ui/test/drive-path` | packages/ui/src/test/drive-path.ts |
 | `installHappyDom` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
+| `collapseSeparators` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
+| `menuRows` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
 | `renderInDocument` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |

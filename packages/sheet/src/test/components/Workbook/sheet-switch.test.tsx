@@ -1,5 +1,6 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { menuRows } from '@workspace/ui/test/menu-rows';
 
 installHappyDom();
 
@@ -124,4 +125,59 @@ test('undoing an added sheet lands on the first visible sheet in tab order', asy
     });
     expect(workbook().getAllSheets()).toHaveLength(3);
     expect(current()).toBe('Two');
+});
+
+// A tab's menu in the one menu order: Delete, which Google puts first, goes last and red.
+test("a tab's right-click menu reads Rename, Duplicate, color and Hide, the moves, then Delete alone", async () => {
+    const { container } = await mountWorkbook();
+    await act(async () => {
+        tab(container, 'Two').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    });
+    expect(menuRows()).toEqual([
+        'Rename',
+        'Duplicate',
+        '—',
+        'Change color',
+        'Hide',
+        '—',
+        'Move left',
+        'Move right',
+        '—',
+        'Delete',
+    ]);
+    expect(document.querySelector('[data-variant="destructive"]')?.textContent).toBe('Delete');
+});
+
+// A cell's menu in the one menu order: Clear contents with the other object actions, the deletes last and red.
+test("a cell's right-click menu puts Delete row and Delete column last, alone and red", async () => {
+    const { container } = await mountWorkbook();
+    const cellArea = container.querySelector('.sheet-cell-area');
+    if (!cellArea) throw new Error('no cell area');
+    await act(async () => {
+        cellArea.dispatchEvent(
+            new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 40 }),
+        );
+    });
+    expect(menuRows()).toEqual([
+        'Cut',
+        'Copy',
+        'Paste',
+        '—',
+        'Insert 1 row above',
+        'Insert 1 column to the left',
+        '—',
+        'Insert link',
+        'Tick box',
+        '—',
+        'Clear contents',
+        'Create a filter',
+        'Sort range A → Z',
+        'Sort range Z → A',
+        '—',
+        'Delete row',
+        'Delete column',
+    ]);
+    expect(
+        [...document.querySelectorAll('[data-variant="destructive"]')].map((row) => row.textContent?.trim()),
+    ).toEqual(['Delete row', 'Delete column']);
 });

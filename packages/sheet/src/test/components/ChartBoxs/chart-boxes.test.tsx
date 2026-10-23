@@ -6,6 +6,7 @@ import { sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { menuRows } from '@workspace/ui/test/menu-rows';
 
 installHappyDom();
 
@@ -242,11 +243,13 @@ async function pick(label: string) {
     await act(async () => item.click());
 }
 
-test('⋮ Edit the chart opens the editor, Delete chart removes it', async () => {
+test('⋮ Edit the chart opens the editor, Delete chart, red and last, removes it', async () => {
     const { box, editors, charts } = await mount();
     const el = box();
     if (!el) throw new Error('no chart');
     await openMenu(el);
+    expect(menuRows()).toEqual(['Edit the chart', '—', 'Download chart', '—', 'Delete chart']);
+    expect(document.querySelector('[data-variant="destructive"]')?.textContent).toBe('Delete chart');
     await pick('Edit the chart');
     expect(editors.at(-1)?.chart.id).toBe('c1');
     await openMenu(el);
