@@ -381,7 +381,7 @@ Column widths and row heights:
 
 Rules and comments:
 
-- `duplicateValue` exports as Excel's `duplicateValues` or `uniqueValues` rule and re-imports as itself. `occurrenceDate` is editor-only and is not exported.
+- Top or bottom, above-average, duplicate-value and data-bar rules export as Excel's own (`top10`, `aboveAverage`, `duplicateValues`, `dataBar`), which Excel and Eigen read and Google Sheets doesn't show. `duplicateValue` exports as Excel's `duplicateValues` or `uniqueValues` rule and re-imports as itself. `occurrenceDate` is editor-only and is not exported.
 - `operandOf` (`export/sheets/xlsx/rules.ts`) quotes exotic numeric literals (`1e5`, `+5`) as text. The engine compares with `Number()`, so rendering is unaffected.
 - The data-validation exporter always writes `allowBlank: true`, Excel's UI default.
 - Tick boxes are editor-only. The cells export their values and the rule is dropped: OOXML has no cell tick box, and a `"TRUE,FALSE"` list would re-import as a dropdown, a different feature.

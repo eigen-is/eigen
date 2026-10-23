@@ -96,10 +96,9 @@ export function sheetGrid(sheet: Sheet, context: GridContext): Grid {
 
     const labels: string[] = [];
     const cellXml = (r: number, c: number, cell: Cell | undefined, border: CellBorderSides | undefined): string => {
-        // A merge's other cells show the first's value, so they hold only their own look.
-        const constituent = cell?.mc !== undefined && (cell.mc.r !== r || cell.mc.c !== c);
+        // A merge's other cells keep their values, as Excel keeps them for the formulas that read them.
         const s = context.styles.xf(cell, border);
-        const value = cell && !constituent ? valueXml(cell, context) : undefined;
+        const value = cell && valueXml(cell, context);
         if (!value && s === 0) return '';
         labels[c] ??= columnIndexToLabel(c);
         const attributes = `${s ? ` s="${s}"` : ''}${value?.t ? ` t="${value.t}"` : ''}`;

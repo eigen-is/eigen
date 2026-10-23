@@ -1115,12 +1115,6 @@ const isDefaultFace = (face: unknown) =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
-// A merge's other cell, which points back at its anchor without the span.
-const isConstituent = (cell: Cell | undefined) => cell?.mc !== undefined && cell.mc.rs === undefined;
-
-// What a cell holds as its value, and what the import derives from one.
-const VALUE_KEYS = new Set(['cell v', 'cell m', 'cell f', 'cell ct.t', 'cell ct.s']);
-
 // The differences the spec explains (.superpowers/xlsx-writer/SPEC.md § 2, § 3), each kind with why it is no loss or
 // a loss the spec accepts. A difference none matches is unlisted, and fails the gate.
 export const LISTED: {
@@ -1137,16 +1131,6 @@ export const LISTED: {
                 (b === undefined || b === SHEET_DEFAULT_FONT_SIZE)) ||
             (feature === 'cell ff' && (a === undefined || isDefaultFace(a)) && (b === undefined || isDefaultFace(b))) ||
             (feature === 'cell ct.s' && canonical(withoutDefaultFont(a)) === canonical(withoutDefaultFont(b))),
-    },
-    {
-        kind: 'merged-cell values',
-        why: "§ 3.5: a merge's other cells write only their look, as Excel shows the first cell's value over the merge; a value the source held under it is not written",
-        matches: ({ feature, a, b, cells }) =>
-            isConstituent(cells?.a) &&
-            isConstituent(cells?.b) &&
-            cells?.b?.v === undefined &&
-            cells?.b?.f === undefined &&
-            (VALUE_KEYS.has(feature) || (feature === 'cell ct.fa' && a === 'General' && b === undefined)),
     },
     {
         kind: 'single-cell merges',

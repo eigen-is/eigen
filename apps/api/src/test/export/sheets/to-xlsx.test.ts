@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
+import { recalcSheets } from '@workspace/sheet/engine';
 import { openZip } from '../../../lib/core/zip';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { sheetsToXlsx } from '../../../lib/export/sheets/to-xlsx';
@@ -17,6 +18,24 @@ function cellAt(sheet: Sheet, r: number, c: number) {
 }
 
 describe('an xlsx export read back by the import', () => {
+    test('keeps the values under a merge, so a formula reading one computes the same', async () => {
+        const sheets: Sheet[] = [
+            {
+                id: 'data',
+                name: 'Data',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 1, m: '1', mc: { r: 0, c: 0, rs: 1, cs: 2 } } },
+                    { r: 0, c: 1, v: { v: 5, m: '5', mc: { r: 0, c: 0 } } },
+                    { r: 0, c: 2, v: { v: 10, m: '10', f: '=B1*2' } },
+                ],
+                config: { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } },
+            },
+        ];
+        const [data] = recalcSheets(xlsxToSheets(await sheetsToXlsx(sheets)));
+        expect(cellAt(data, 0, 1)).toMatchObject({ v: 5, mc: { r: 0, c: 0 } });
+        expect(cellAt(data, 0, 2)?.v).toBe(10);
+    });
+
     test('keeps the values, types, looks, sizes, merges, panes and hidden tracks', async () => {
         const thin = { style: 1, color: '#000000' };
         const sheets: Sheet[] = [
