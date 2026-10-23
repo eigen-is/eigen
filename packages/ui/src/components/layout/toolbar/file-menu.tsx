@@ -95,7 +95,6 @@ export function FileMenu({
     return (
         <>
             <ToolbarMenu label="File" onCloseAutoFocus={onCloseAutoFocus}>
-                {/* Section 1: Create & Open */}
                 <DropdownMenuItem onClick={() => setCreateOpen(true)}>
                     <CreateIcon className="h-4 w-4" /> {createLabel}
                 </DropdownMenuItem>
@@ -108,7 +107,6 @@ export function FileMenu({
                     </DropdownMenuItem>
                 )}
 
-                {/* Section 2: Export & Rename */}
                 <DropdownMenuSeparator />
                 {canDownload && (
                     <DropdownMenuSub>
@@ -134,7 +132,6 @@ export function FileMenu({
                     </DropdownMenuItem>
                 )}
 
-                {/* Section 3: Share */}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onAccessDialogOpen}>
                     <UserRoundPlus className="h-4 w-4" /> Share
@@ -145,12 +142,10 @@ export function FileMenu({
                     </DropdownMenuItem>
                 )}
 
-                {/* Section 4: Version history & Print */}
                 <DropdownMenuSeparator />
                 {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
                 {children}
 
-                {/* Section 5: Move to trash */}
                 {canWrite && (
                     <>
                         <DropdownMenuSeparator />
