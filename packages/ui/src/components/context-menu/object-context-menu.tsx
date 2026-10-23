@@ -8,7 +8,7 @@ import { CopyPlus, Shapes, Trash2 } from 'lucide-react';
 import { CommentMenuItems } from '../comments/comment-menu-items';
 import { DropdownMenuItem } from '../dropdown-menu';
 import { ContextMenuAnchor } from './context-menu-anchor';
-import { MenuSections, type MenuSectionsProps } from './menu-sections';
+import { MenuSections } from './menu-sections';
 import {
     ClipboardMenuItems,
     DownloadImageMenuItem,
@@ -35,9 +35,6 @@ type ObjectContextMenuProps<T> = {
     onConvertToShapes?: () => void;
     // Raises a comment on the right-clicked object; omitted when the user can't comment.
     onComment?: () => void;
-    // The host's own rows for this kind of object, each after the shared rows of its group; a viewer's too, so the
-    // host leaves out what writes.
-    hostSections?: Pick<MenuSectionsProps, 'create' | 'organize' | 'output'>;
 };
 
 export function ObjectContextMenu<T>({
@@ -53,18 +50,16 @@ export function ObjectContextMenu<T>({
     onDelete,
     onConvertToShapes,
     onComment,
-    hostSections = {},
 }: ObjectContextMenuProps<T>) {
-    const output = (imagePath || onDownloadImage || hostSections.output) && (
+    const output = (imagePath || onDownloadImage) && (
         <>
             <DownloadOriginalImageMenuItem path={imagePath} />
             <DownloadImageMenuItem onDownload={onDownloadImage} />
-            {hostSections.output}
         </>
     );
     return (
         <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
-            {!canEdit && <MenuSections organize={hostSections.organize} output={output} />}
+            {!canEdit && <MenuSections output={output} />}
             {canEdit && contextMenu.isOpen && (
                 <MenuSections
                     clipboard={
@@ -73,18 +68,12 @@ export function ObjectContextMenu<T>({
                         )
                     }
                     create={
-                        (onDuplicate || hostSections.create) && (
-                            <>
-                                {onDuplicate && (
-                                    <DropdownMenuItem onClick={onDuplicate}>
-                                        <CopyPlus className="h-4 w-4" /> Duplicate
-                                    </DropdownMenuItem>
-                                )}
-                                {hostSections.create}
-                            </>
+                        onDuplicate && (
+                            <DropdownMenuItem onClick={onDuplicate}>
+                                <CopyPlus className="h-4 w-4" /> Duplicate
+                            </DropdownMenuItem>
                         )
                     }
-                    organize={hostSections.organize}
                     arrange={onArrange && <OrderMenuSub onApply={onArrange} />}
                     convert={
                         onConvertToShapes && (
