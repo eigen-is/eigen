@@ -100,10 +100,12 @@ async function render({
     canWrite,
     isMobile,
     mediaFolderId = null,
+    chatFolderId = null,
 }: {
     canWrite: boolean;
     isMobile: boolean;
     mediaFolderId?: string | null;
+    chatFolderId?: string | null;
 }) {
     window.happyDOM.setViewport({ width: 1920, height: 1000 });
     function Editor() {
@@ -113,7 +115,7 @@ async function render({
             path,
             canWrite: writer,
             mediaFolderId,
-            chatFolderId: null,
+            chatFolderId,
             onAccessDialogOpen: () => {},
         });
     }
@@ -225,7 +227,7 @@ async function openSubmenu(label: string) {
 // A browser runs the frame after the menu closed and before it unmounts.
 const pick = (label: string) =>
     inBrowserFrames(() =>
-        [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+        [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')]
             .find((entry) => entry.textContent?.trim() === label)
             ?.click(),
     );
@@ -785,4 +787,265 @@ test("a viewer's right-click on an image with no rows for it opens no menu", asy
     await act(async () => figure.dispatchEvent(event));
     expect(document.querySelector('[role="menu"]')).toBeNull();
     expect(event.defaultPrevented).toBe(false);
+});
+
+const rightClick = async (target: Element | null | undefined) => {
+    if (!target) throw new Error('nothing to right-click');
+    const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 });
+    await act(async () => target.dispatchEvent(event));
+    return event;
+};
+
+const bodyEditor = () => {
+    const body = bodyView()?.editor;
+    if (!body) throw new Error('no body editor');
+    return body;
+};
+
+const count = (root: string, tag: string) => doc.getXmlFragment(root).toString().split(`<${tag}`).length - 1;
+
+// A 2×2 table in the body, its header row on top; the caret waits in its first cell.
+async function bodyTable() {
+    await act(async () => void bodyEditor().commands.insertTable({ rows: 2, cols: 2 }));
+}
+
+// The second row's first cell: a body cell, away from the caret insertTable leaves in the header row.
+const bodyCell = (root: ParentNode | null | undefined = bodyView()) => root?.querySelector('td p');
+
+const TABLE_ROWS = [
+    'Insert row above',
+    'Insert row below',
+    'Insert column left',
+    'Insert column right',
+    '—',
+    'Distribute columns',
+    '—',
+    'Merge cells',
+    'Unmerge cells',
+    '—',
+    'Toggle header row',
+    'Cell background color',
+];
+
+// Google's table menu, in Eigen's group order: the clipboard, the inserts, the table's format, the comment, then the
+// deletes, red and last.
+test('a right-click in a table cell offers a writer the table menu, its deletes red and last', async () => {
+    await render(WRITER);
+    await bodyTable();
+    const event = await rightClick(bodyCell());
+    expect(event.defaultPrevented).toBe(true);
+    expect(menuRows()).toEqual([
+        'Cut',
+        'Copy',
+        'Paste',
+        '—',
+        ...TABLE_ROWS,
+        '—',
+        'Delete row',
+        'Delete column',
+        'Delete table',
+    ]);
+    expect(
+        [...document.querySelectorAll('[role="menuitem"][data-variant="destructive"]')].map((item) =>
+            item.textContent?.trim(),
+        ),
+    ).toEqual(['Delete row', 'Delete column', 'Delete table']);
+});
+
+test('the table menu acts on the cell right-clicked', async () => {
+    await render(WRITER);
+    await bodyTable();
+    await rightClick(bodyCell());
+    await pick('Insert row above');
+    expect(count('default', 'tablerow')).toBe(3);
+    // Above the cell right-clicked, not the header row the caret was in: the header row stays first.
+    expect(doc.getXmlFragment('default').toString()).toMatch(/^<table[^>]*><tablerow><tableheader/);
+
+    await rightClick(bodyCell());
+    await pick('Insert column right');
+    expect(count('default', 'tableheader')).toBe(3);
+
+    await rightClick(bodyCell());
+    await pick('Delete row');
+    expect(count('default', 'tablerow')).toBe(2);
+
+    await rightClick(bodyCell());
+    await pick('Delete column');
+    expect(count('default', 'tableheader')).toBe(2);
+
+    await rightClick(bodyCell());
+    await pick('Toggle header row');
+    expect(count('default', 'tableheader')).toBe(0);
+
+    await rightClick(bodyCell());
+    await pick('Delete table');
+    expect(count('default', 'table')).toBe(0);
+});
+
+test('a right-click inside a cell selection keeps it, so Merge cells merges it', async () => {
+    const { CellSelection } = await import('@tiptap/pm/tables');
+    await render(WRITER);
+    await bodyTable();
+    const body = bodyEditor();
+    const cells: number[] = [];
+    body.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'tableCell') cells.push(pos);
+    });
+    await act(async () =>
+        body.view.dispatch(body.state.tr.setSelection(CellSelection.create(body.state.doc, cells[0], cells[1]))),
+    );
+    await rightClick(bodyCell());
+    await pick('Merge cells');
+    expect(doc.getXmlFragment('default').toString()).toContain('colspan="2"');
+});
+
+// The menu fires the native cut and copy ⌘X and ⌘C fire, as Edit › Cut and Copy do.
+test.each([
+    ['Cut', 'cut', 'Mod+X'],
+    ['Copy', 'copy', 'Mod+C'],
+])('the table menu’s %s runs the native %s', async (label, command, shortcut) => {
+    const execCommand = mock((_command: string) => true);
+    document.execCommand = execCommand;
+    await render(WRITER);
+    await bodyTable();
+    await rightClick(bodyCell());
+    await pick(`${label}${formatForDisplay(shortcut)}`);
+    expect(execCommand.mock.calls).toEqual([[command]]);
+});
+
+// No ClipboardEvent reaches a menu row, so Paste reads the clipboard itself and hands it to the editor's own paste.
+test('the table menu’s Paste pastes what the clipboard holds into the cell', async () => {
+    const read = mock(async () => [{ types: ['text/plain'], getType: async () => new Blob(['pasted']) }]);
+    Object.defineProperty(navigator, 'clipboard', { value: { read }, configurable: true });
+    await render(WRITER);
+    await bodyTable();
+    await rightClick(bodyCell());
+    await pick(`Paste${formatForDisplay('Mod+V')}`);
+    await frames();
+    expect(read).toHaveBeenCalled();
+    expect(doc.getXmlFragment('default').toString()).toContain('<tablecell colspan="1" rowspan="1"><paragraph>pasted');
+});
+
+test('the table menu offers Add comment on a cell’s text, where a comment anchors', async () => {
+    await render({ ...WRITER, chatFolderId: 'chats' });
+    await bodyTable();
+    const body = bodyEditor();
+    await act(async () => void body.commands.insertContentAt(body.state.selection.from, 'Total'));
+    await act(async () => void body.commands.setTextSelection({ from: 3, to: 8 }));
+    await rightClick(bodyView()?.querySelector('th p'));
+    expect(menuRows()).toEqual([
+        'Cut',
+        'Copy',
+        'Paste',
+        '—',
+        ...TABLE_ROWS,
+        '—',
+        'Add comment',
+        '—',
+        'Delete row',
+        'Delete column',
+        'Delete table',
+    ]);
+    await pick('Add comment');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('New comment');
+});
+
+test("a viewer's right-click in a table cell opens no menu and leaves the browser's", async () => {
+    await render({ canWrite: false, isMobile: false });
+    await bodyTable();
+    const event = await rightClick(bodyCell());
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(event.defaultPrevented).toBe(false);
+});
+
+test('a right-click in a table in the band being edited opens its menu, which writes the band', async () => {
+    write('default', 'Hello');
+    await render(WRITER);
+    await doubleClick('header');
+    await act(async () => void headerEditor().commands.insertTable({ rows: 2, cols: 2 }));
+    await rightClick(bodyCell(bandView('header')));
+    await pick('Insert row below');
+    expect(count('header', 'tablerow')).toBe(3);
+    expect(doc.getXmlFragment('default').toString()).toBe('<paragraph>Hello</paragraph>');
+});
+
+const EQUATION_ROWS = ['Cut', 'Copy', '—', 'Edit equation', '—', 'In line with text', 'On its own line'];
+
+// An empty equation in the body, after the text.
+async function bodyEquation(as = WRITER) {
+    write('default', 'x');
+    await render(as);
+    await act(async () => void bodyEditor().chain().setTextSelection(2).insertEquation().run());
+}
+
+test('a right-click on an equation offers a writer its menu, Delete equation red and last', async () => {
+    await bodyEquation();
+    const event = await rightClick(bodyView()?.querySelector('.equation'));
+    expect(event.defaultPrevented).toBe(true);
+    expect(menuRows()).toEqual([...EQUATION_ROWS, '—', 'Delete equation']);
+    expect(document.querySelector('[role="menuitem"][data-variant="destructive"]')?.textContent?.trim()).toBe(
+        'Delete equation',
+    );
+    // The display it has is the one checked.
+    expect(document.querySelector('[role="menuitemradio"][aria-checked="true"]')?.textContent?.trim()).toBe(
+        'In line with text',
+    );
+});
+
+test('the equation menu sets its display, opens its panel and deletes it', async () => {
+    await bodyEquation();
+    await rightClick(bodyView()?.querySelector('.equation'));
+    await pick('On its own line');
+    expect(doc.getXmlFragment('default').toString()).toContain('display="true"');
+
+    await rightClick(bodyView()?.querySelector('.equation'));
+    await pick('Edit equation');
+    await frames();
+    const field = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="LaTeX"]');
+    expect(field).not.toBeNull();
+    expect(document.activeElement === field).toBe(true);
+
+    await rightClick(bodyView()?.querySelector('.equation'));
+    await pick('Delete equation');
+    expect(doc.getXmlFragment('default').toString()).toBe('<paragraph>x</paragraph>');
+});
+
+test('the equation menu’s Cut cuts the equation it was opened on', async () => {
+    let cut: string | undefined;
+    document.execCommand = mock((_command: string) => {
+        cut = bodyEditor().state.selection.content().content.firstChild?.type.name;
+        return true;
+    });
+    await bodyEquation();
+    await act(async () => void bodyEditor().commands.setTextSelection(1));
+    await rightClick(bodyView()?.querySelector('.equation'));
+    await pick(`Cut${formatForDisplay('Mod+X')}`);
+    expect(cut).toBe('equation');
+});
+
+test('the equation menu offers Add comment where comments are on', async () => {
+    write('default', 'x');
+    await render({ ...WRITER, chatFolderId: 'chats' });
+    await act(async () => void bodyEditor().chain().setTextSelection(2).insertEquation().run());
+    await rightClick(bodyView()?.querySelector('.equation'));
+    expect(menuRows()).toEqual([...EQUATION_ROWS, '—', 'Add comment', '—', 'Delete equation']);
+});
+
+test("a viewer's right-click on an equation opens no menu", async () => {
+    await bodyEquation({ canWrite: false, isMobile: false });
+    const event = await rightClick(bodyView()?.querySelector('.equation'));
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(event.defaultPrevented).toBe(false);
+});
+
+test('a right-click on an equation in the band being edited opens its menu, which writes the band', async () => {
+    await render(WRITER);
+    await doubleClick('header');
+    await act(async () => void headerEditor().commands.insertEquation());
+    await rightClick(bandView('header')?.querySelector('.equation'));
+    // Comments anchor in the body only.
+    expect(menuRows()).toEqual([...EQUATION_ROWS, '—', 'Delete equation']);
+    await pick('On its own line');
+    expect(doc.getXmlFragment('header').toString()).toContain('display="true"');
+    expect(doc.getXmlFragment('default').toString()).not.toContain('equation');
 });

@@ -117,6 +117,26 @@ function copiedClipboardItems(
     return items;
 }
 
+// A menu's Paste. No ClipboardEvent reaches a menu row, so it reads the clipboard, which asks the browser's permission,
+// and hands its HTML, text and images to the editor's own paste in one, so the editor's paste handler and cleanup run
+// on it as on ⌘V.
+export async function pasteFromClipboard(editor: Editor): Promise<void> {
+    const transfer = new DataTransfer();
+    for (const item of await navigator.clipboard.read()) {
+        for (const type of item.types) {
+            if (type === 'text/html' || type === 'text/plain')
+                transfer.setData(type, await (await item.getType(type)).text());
+            else if (type.startsWith('image/'))
+                transfer.items.add(new File([await item.getType(type)], 'image', { type }));
+        }
+    }
+    editor.commands.focus();
+    const event = new ClipboardEvent('paste', { clipboardData: transfer });
+    const html = transfer.getData('text/html');
+    if (html) editor.view.pasteHTML(html, event);
+    else editor.view.pasteText(transfer.getData('text/plain'), event);
+}
+
 // A copy or cut with eigen items writes them beside ProseMirror's own HTML and text, and a cut deletes the
 // selection as ProseMirror's handler would. Bound in handleDOMEvents, so it runs before that handler, whose
 // cut deletes the selection before any later listener reads it. Google Docs and Word read a run by its look, so an

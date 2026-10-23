@@ -6,15 +6,18 @@ export function collapseSeparators(rows: (string | undefined)[]): (string | unde
     );
 }
 
-// The open menu's rows, each label without its shortcut, which reads per platform.
+// The open menu's rows, each label without its shortcut, which reads per platform. A group's rows (a radio group's)
+// read one by one.
 export function menuRows(): (string | undefined)[] {
     return collapseSeparators(
-        [...(document.querySelector('[role="menu"]')?.children ?? [])].map((row) =>
-            row.getAttribute('role') === 'separator'
-                ? '—'
-                : (row.textContent ?? '')
-                      .replace(row.querySelector('[data-slot="dropdown-menu-shortcut"]')?.textContent ?? '', '')
-                      .trim(),
-        ),
+        [...(document.querySelector('[role="menu"]')?.children ?? [])]
+            .flatMap((row) => (row.getAttribute('role') === 'group' ? [...row.children] : [row]))
+            .map((row) =>
+                row.getAttribute('role') === 'separator'
+                    ? '—'
+                    : (row.textContent ?? '')
+                          .replace(row.querySelector('[data-slot="dropdown-menu-shortcut"]')?.textContent ?? '', '')
+                          .trim(),
+            ),
     );
 }
