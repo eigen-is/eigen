@@ -3,18 +3,29 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { DocumentImportOptions, ImportResult } from '@workspace/lib/types/drive';
 import { renderHook } from '../../../render-hook';
-import { fetchCalls, installTransferHarness, OWNER, served, toasts, trackingClient } from '../../../transfer-harness';
+import {
+    fetchCalls,
+    hasKey,
+    installTransferHarness,
+    OWNER,
+    served,
+    toasts,
+    trackingClient,
+} from '../../../transfer-harness';
 
 installTransferHarness();
 
 const SUMMARY = '1 table was not imported.';
 const INSERT: DocumentImportOptions = { mode: 'insert', afterFrameId: 'fr 1' };
 
-async function importFrom(source: 'device' | 'drive', result: ImportResult | { summary: unknown }): Promise<string[]> {
+async function importFrom(
+    source: 'device' | 'drive',
+    result: ImportResult | { summary: unknown },
+): Promise<{ toasts: string[]; invalidated: readonly unknown[][] }> {
     const { act } = await import('react');
     const { useImportDocument, useImportFromDrive } = await import('../../../../core/drive/hooks/use-import-document');
     served.importResponse = result;
-    const { queryClient } = trackingClient();
+    const { queryClient, invalidated } = trackingClient();
     const { latest, unmount } = await renderHook(
         () => ({ device: useImportDocument(OWNER, 'm1'), drive: useImportFromDrive(OWNER, 'm1') }),
         queryClient,
@@ -34,7 +45,7 @@ async function importFrom(source: 'device' | 'drive', result: ImportResult | { s
         await done.catch(() => {});
     });
     await unmount();
-    return [...toasts];
+    return { toasts: [...toasts], invalidated };
 }
 
 describe('Import… of a pptx', () => {
@@ -43,19 +54,19 @@ describe('Import… of a pptx', () => {
     });
 
     test('a file from the device toasts its summary', async () => {
-        expect(await importFrom('device', { success: true, summary: SUMMARY })).toEqual([`info: ${SUMMARY}`]);
+        expect((await importFrom('device', { success: true, summary: SUMMARY })).toasts).toEqual([`info: ${SUMMARY}`]);
     });
 
     test('a file from Drive toasts its summary', async () => {
-        expect(await importFrom('drive', { success: true, summary: SUMMARY })).toEqual([`info: ${SUMMARY}`]);
+        expect((await importFrom('drive', { success: true, summary: SUMMARY })).toasts).toEqual([`info: ${SUMMARY}`]);
     });
 
     test('an import that lost nothing toasts nothing', async () => {
-        expect(await importFrom('device', { success: true, summary: null })).toEqual([]);
+        expect((await importFrom('device', { success: true, summary: null })).toasts).toEqual([]);
     });
 
     test('a body that is no import result is an error, never a summary', async () => {
-        expect(await importFrom('device', { success: true, summary: 3 })).toEqual([
+        expect((await importFrom('device', { success: true, summary: 3 })).toasts).toEqual([
             'error: Unexpected response from the import',
         ]);
     });
@@ -78,5 +89,13 @@ describe('the import mode', () => {
             mode: 'insert',
             afterFrameId: 'fr 1',
         });
+    });
+});
+
+describe('an import', () => {
+    // It writes the document, so an open Version history must show the new version.
+    test.each(['device', 'drive'] as const)('from the %s refreshes the version history', async (source) => {
+        const { invalidated } = await importFrom(source, { success: true, summary: null });
+        expect(hasKey(invalidated, ['versions', OWNER, 'm1', 'deck'])).toBe(true);
     });
 });
