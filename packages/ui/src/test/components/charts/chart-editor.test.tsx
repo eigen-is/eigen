@@ -3,7 +3,7 @@ import {
     applyChartSpecChange,
     chartColor,
     DEFAULT_CHART_SERIES_STYLE,
-    readChartSpec,
+    parseChartSpec,
     sampleChartSpec,
 } from '@workspace/lib/charts';
 import { EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
@@ -47,7 +47,7 @@ async function mount(
     document.body.append(container);
     const root = createRoot(container);
     let current = spec;
-    let stored: StoredChartSpec = readChartSpec(JSON.stringify(spec)).stored;
+    let stored: StoredChartSpec = JSON.parse(JSON.stringify(spec));
     const draw = async () => {
         const editor = createElement(ChartEditor, {
             spec: current,
@@ -55,7 +55,7 @@ async function mount(
             ...host,
             onChange: (change: ChartSpecChange) => {
                 stored = applyChartSpecChange(stored, change);
-                const next = readChartSpec(JSON.stringify(stored)).spec;
+                const next = parseChartSpec(JSON.stringify(stored));
                 if (!next) throw new Error('the change made a spec that does not read');
                 changes.push(next);
                 current = next;

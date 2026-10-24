@@ -7,5 +7,5 @@ import { chartImageName } from '@workspace/lib/vector';
 import { downloadCanvasImage } from '../vector/canvas-image';
 
 export function downloadChartImage(item: EigenClipboardChartItem): void {
-    downloadCanvasImage(item, { name: chartImageName(item.spec) }).catch(onMutationError);
+    downloadCanvasImage(item, { name: chartImageName(item.parts) }).catch(onMutationError);
 }

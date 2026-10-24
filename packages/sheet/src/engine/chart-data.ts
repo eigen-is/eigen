@@ -3,12 +3,14 @@
 // and write a keyed part an entry at a time.
 
 import {
-    applyChartSpecChange,
     chartColor,
     chartLabel,
     chartPointMoves,
     chartSeriesStyle,
+    chartSpecTexts,
+    chartSpecWrites,
     exceedsChartSpecBytes,
+    isChartSpecKey,
     MAX_CHART_POINTS,
     readChartLook,
     readChartSpec,
@@ -23,6 +25,7 @@ import type {
     ChartDataError,
     ChartSpec,
     ChartSpecChange,
+    ChartSpecTexts,
     RangeChartData,
     RangeChartSeries,
     SheetChartSpecParts,
@@ -107,14 +110,17 @@ function valueFormat(spec: ChartSpec, resolver: CellResolver): string | undefine
     return first ? resolver.getCell(first.sheetId, first.row[0], first.column[0])?.ct?.fa : undefined;
 }
 
-// The chart as a copy carries it to a host with no cells: its ranges read into inline data, and the source
-// cells' tick format written on the axis. An automatic color stays automatic unless a deleted series before
-// it would shift its index, which writes the color it draws in, and an inline chart is its stored parts joined. A ref
-// this build doesn't know is left out, as it would name cells the host doesn't have. Null for a chart that draws
-// #REF!, too much data or nothing, or whose numbers pass the spec's size limit.
-export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): string | null {
+// The chart as a copy carries it to a host with no cells, its parts as text: its ranges read into inline data, and the
+// source cells' tick format written on the axis. An automatic color stays automatic unless a deleted series before
+// it would shift its index, which writes the color it draws in. Every part the copy doesn't touch is the text it
+// stores, a keyed part its entries joined, and a newer build's part goes too. A ref this build doesn't know is left
+// out, as it would name cells the host doesn't have. Null for a chart that draws #REF!, too much data or nothing, or
+// whose numbers pass the spec's size limit.
+export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): ChartSpecTexts | null {
     const { stored, spec } = readChartSpec(chart);
-    if (spec?.data.source !== 'range') return spec ? JSON.stringify(stored) : null;
+    const texts = chartSpecTexts(chart);
+    if (!spec || !texts) return null;
+    if (spec.data.source !== 'range') return texts;
     const resolved = resolveRangeChartData(spec.data, resolver);
     if (typeof resolved === 'string') return null;
     const kept = spec.data.series.flatMap(({ id, values }, i) => (values ? [{ id, i }] : []));
@@ -131,7 +137,7 @@ export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): stri
         { op: 'set', path: ['axes', 'y', 'labels', 'format'], value: valueFormat(spec, resolver) ?? null },
         ...shifted,
     ];
-    const inline = JSON.stringify(applyChartSpecChange(stored, change));
+    const inline = { ...texts, ...chartSpecWrites(stored, change) };
     return exceedsChartSpecBytes(inline) ? null : inline;
 }
 
@@ -197,10 +203,10 @@ function withSheetChartSpecWrites(chart: SheetChart, writes: SheetChartSpecWrite
     return next;
 }
 
-// A clipboard item's one string as a Sheets chart's parts, a part the item lacks empty, a keyed one an empty record.
-export function sheetChartSpecParts(spec: string): SheetChartSpecParts {
-    const { stored } = readChartSpec(spec);
-    const parts: SheetChartSpecParts = {
+// A chart's spec fields for a copy of it in this workbook: every prefixed key, a newer build's too, each record one of
+// its own, so the copy shares none with the chart. A part it lacks is empty, a keyed one an empty record.
+export function copySheetChartSpec(chart: SheetChart): SheetChartSpecParts {
+    const copy: SheetChartSpecParts = {
         specChart: '',
         specTitle: '',
         specLegend: '',
@@ -210,11 +216,10 @@ export function sheetChartSpecParts(spec: string): SheetChartSpecParts {
         specPoints: {},
         specData: '',
     };
-    // A part at a time, so no data beside series or points drops an entry the item carries.
-    for (const [part, value] of Object.entries(stored)) {
-        writeSheetChartSpec(parts, sheetChartSpecWrites({}, [{ op: 'set', path: [part], value }]));
+    for (const [key, value] of Object.entries(chart)) {
+        if (isChartSpecKey(key)) Object.assign(copy, { [key]: isRecord(value) ? { ...value } : value });
     }
-    return parts;
+    return copy;
 }
 
 // A record shaped as a CellRangeRef. A key beside its three is accepted, as the reader accepts it.

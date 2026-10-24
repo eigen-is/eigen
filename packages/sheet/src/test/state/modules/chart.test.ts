@@ -8,6 +8,7 @@ import {
     DEFAULT_CHART_SERIES_STYLE,
     FLAT_CHART_LOOK,
     MAX_CHART_SPEC_ENTRIES,
+    newChartSpecParts,
     newSheetChartSpecParts,
     readChartLook,
     readChartSpec,
@@ -48,7 +49,7 @@ enablePatches();
 const S = 'id_1';
 const T = 'id_2';
 const BOX = { x: 10, y: 20, width: 400, height: 300 };
-const SPEC = JSON.stringify(sampleChartSpec('column'));
+const SPEC = newSheetChartSpecParts(sampleChartSpec('column'));
 const TO_LINE: ChartSpecChange = [{ op: 'set', path: ['chart', 'type'], value: 'line' }];
 
 const ref = (sheetId: string, row: [number, number], column: [number, number] = [1, 1]): CellRangeRef => ({
@@ -158,13 +159,17 @@ describe('chart writers', () => {
         expect(readChartLook(next.sheets[0].charts!.c3)).toEqual(look);
     });
 
-    // The item carries one string; split into parts, each keyed one a record, it keeps every entry as it came.
-    test('a paste stores the spec as it came, a part per field', () => {
+    // The item carries each part's text; a keyed one split into entries keeps every entry as it came.
+    test('a paste stores the parts as they came, a keyed part the item lacks an empty record', () => {
         const sample = sampleChartSpec('pie');
-        const spec = JSON.stringify({ ...sample, series: { ...sample.series, 's-9': { color: '#00ff00' } } });
-        const { next } = author(workbook(), (ctx) => pasteChart(ctx, 'c3', spec, BOX, FLAT_CHART_LOOK));
+        const { specPoints, ...parts } = newChartSpecParts({
+            ...sample,
+            series: { ...sample.series, 's-9': { ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' } },
+        });
+        const fields = newSheetChartSpecParts(parts);
+        const { next } = author(workbook(), (ctx) => pasteChart(ctx, 'c3', fields, BOX, FLAT_CHART_LOOK));
         const pasted = next.sheets[0].charts!.c3;
-        expect(readChartSpec(pasted).stored).toEqual(readChartSpec(spec).stored);
+        expect(readChartSpec(pasted).stored).toEqual(readChartSpec({ ...parts, specPoints }).stored);
         expect(pasted.specPoints).toEqual({});
     });
 

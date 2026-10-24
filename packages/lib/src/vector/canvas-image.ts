@@ -25,10 +25,8 @@ export function canvasImageScene(
     let elements: VectorElement[] = [];
     if (Array.isArray(content)) elements = content;
     else {
-        const { spec, width, height, look } = content;
-        const resolved = readChartSpec(spec).spec;
-        const parts = resolved ? newChartSpecParts(resolved) : {};
-        const record = { ...look, ...parts, id: 'chart', type: 'chart', width, height };
+        const { parts, width, height, look } = content;
+        const record = { ...look, ...newChartSpecParts(parts), id: 'chart', type: 'chart', width, height };
         const el = readElementFromFields(new Map(Object.entries(record)));
         if (el) elements = [el];
     }
@@ -40,7 +38,7 @@ export function canvasImageScene(
 
 // A chart's file is named for its title, less what a file name can't hold; one without a title is "Chart". Anything
 // else is a selection of the file.
-export function chartImageName(chart: string | Readonly<Record<string, unknown>>): string {
+export function chartImageName(chart: Readonly<Record<string, unknown>>): string {
     const title = readChartSpec(chart).spec?.title.text ?? '';
     return (
         title

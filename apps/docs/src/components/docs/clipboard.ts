@@ -1,7 +1,7 @@
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
-import { CHART_DEFAULT_SIZE, mapChartSpecParts, readChartSpec } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, newChartSpecParts } from '@workspace/lib/charts';
 import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
     buildChartClipboardItem,
@@ -71,8 +71,7 @@ export function chartClipboardItem(node: ProseMirrorNode): EigenClipboardChartIt
     const attrs = readChartAttrs(node.attrs);
     const { width, height } = attrs;
     const box = { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
-    // The item carries one string, the stored parts joined.
-    return buildChartClipboardItem({ spec: JSON.stringify(readChartSpec(node.attrs).stored), box, look: attrs });
+    return buildChartClipboardItem({ chart: node.attrs, box, look: attrs });
 }
 
 // The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file
@@ -293,9 +292,8 @@ function atomContent(
     }
     if (item.type !== 'chart') return null;
     const scale = Math.min(1, columnWidth / item.width);
-    // Its spec as it came, a part per attribute.
-    const { stored } = readChartSpec(item.spec);
-    const parts = mapChartSpecParts((part) => (stored[part] === undefined ? '' : JSON.stringify(stored[part])));
+    // Its parts as they came, an attribute each; the schema declares no attribute for a newer build's part.
+    const parts = newChartSpecParts(item.parts);
     const { look } = item;
     return { type: 'chart', attrs: { ...parts, width: item.width * scale, height: item.height * scale, ...look } };
 }

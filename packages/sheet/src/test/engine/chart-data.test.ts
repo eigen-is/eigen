@@ -6,12 +6,19 @@ import {
     FLAT_CHART_LOOK,
     MAX_CHART_LABEL_LENGTH,
     MAX_CHART_POINTS,
+    newChartSpecParts,
     newSheetChartSpecParts,
-    parseChartSpec,
+    readChartSpec,
     sampleChartSpec,
 } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
-import type { CellRangeRef, ChartSpec, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
+import type {
+    CellRangeRef,
+    ChartSpec,
+    ChartSpecTexts,
+    RangeChartData,
+    RangeChartSeries,
+} from '@workspace/lib/types/chart';
 import { serializeFill } from '@workspace/lib/vector';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { inlineChartSpec, mapChartRefs, renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
@@ -264,14 +271,14 @@ describe('inlineChartSpec', () => {
             data: data(ref([1, 3], [0, 0]), ...list),
         });
     // The copy's colors by its data's series, null automatic.
-    const colorsOf = (copied: string | null) => {
-        const spec = parseChartSpec(copied ?? '');
+    const colorsOf = (copied: ChartSpecTexts | null) => {
+        const spec = readChartSpec(copied ?? {}).spec;
         return spec?.data.series.map(({ id }) => spec.series[id].color);
     };
 
     test('a range chart copies as the same chart with its cells read into inline data', () => {
-        const spec = parseChartSpec(
-            inlineChartSpec(rangeChart([series(ref([1, 3], [2, 2]), ref([0, 0], [1, 1]))]), resolver) ?? '',
+        const { spec } = readChartSpec(
+            inlineChartSpec(rangeChart([series(ref([1, 3], [2, 2]), ref([0, 0], [1, 1]))]), resolver) ?? {},
         );
         expect(spec).toEqual({
             ...sampleChartSpec('line'),
@@ -300,7 +307,7 @@ describe('inlineChartSpec', () => {
             resolver,
         );
         expect(colorsOf(copied)).toEqual([chartColor(1), '#ff0000']);
-        expect(JSON.parse(copied ?? '{}').series['s-1']).toEqual({ color: chartColor(1) });
+        expect(JSON.parse(copied?.specSeries ?? '{}')['s-1']).toEqual({ color: chartColor(1) });
     });
 
     test('ticks drawn from the source cells keep their format, and a stored format stays', () => {
@@ -321,17 +328,18 @@ describe('inlineChartSpec', () => {
                 axes: { ...spec.axes, y: { ...spec.axes.y, labels: { format } } },
                 data: data(ref([0, 0], [0, 0]), series(ref([0, 0], [1, 1]))),
             });
-        const formatOf = (copied: string | null) => parseChartSpec(copied ?? '')?.axes.y.labels.format;
+        const formatOf = (copied: ChartSpecTexts | null) => readChartSpec(copied ?? {}).spec?.axes.y.labels.format;
         expect(formatOf(inlineChartSpec(withFormat(null), shares))).toBe('0%');
         expect(formatOf(inlineChartSpec(withFormat('0.00'), shares))).toBe('0.00');
     });
 
-    test('an inline chart copies its stored spec as it is', () => {
+    // The text each part stores, so one that doesn't parse and a newer build's travel as they are.
+    test('an inline chart copies its parts as stored, a keyed part its entries joined', () => {
         const pie = sampleChartSpec('pie');
-        const chart = { ...sheetChart(pie), specData: JSON.stringify({ ...pie.data, future: 1 }) };
-        expect(JSON.parse(inlineChartSpec(chart, resolver) ?? '{}')).toEqual({
-            ...pie,
-            data: { ...pie.data, future: 1 },
+        const kept = { specData: JSON.stringify({ ...pie.data, future: 1 }), specTitle: '{"text":', specFuture: '[1]' };
+        expect(inlineChartSpec({ ...sheetChart(pie), ...kept }, resolver)).toEqual({
+            ...newChartSpecParts(pie),
+            ...kept,
         });
     });
 
@@ -378,7 +386,8 @@ describe('inlineChartSpec', () => {
     };
 
     test("a ref this build doesn't know is left out of the copy, the other keys kept", () => {
-        const copied = JSON.parse(inlineChartSpec(newer(), resolver) ?? '{}');
+        const texts = inlineChartSpec(newer(), resolver);
+        const copied = { chart: JSON.parse(texts?.specChart ?? '{}'), data: JSON.parse(texts?.specData ?? '{}') };
         expect(copied.chart.future).toBe(1);
         expect(copied.data).toMatchObject({ source: 'inline', future: 2, categories: ['Ajax', 'PSV', ''] });
         expect(copied.data.series).toEqual([{ id: 's-0', name: 'Points', values: [42, null, null], dash: 'dot' }]);

@@ -7,7 +7,6 @@ import {
     INLINE_GRID_MAX_SERIES,
     MAX_CHART_LABEL_LENGTH,
     parseChartSpec,
-    readChartSpec,
 } from '@workspace/lib/charts';
 import type { ChartSpec, ChartSpecChange, InlineChartData, StoredChartSpec } from '@workspace/lib/types/chart';
 import { installHappyDom } from '../../happy-dom';
@@ -82,10 +81,10 @@ async function open(spec: InlineSpec, raw: object = spec) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
-    let stored: StoredChartSpec = readChartSpec(JSON.stringify(raw)).stored;
+    let stored: StoredChartSpec = JSON.parse(JSON.stringify(raw));
     // A rerender is the host's spec changing under the open dialog, a peer's edit.
     const rerender = async (next: InlineSpec, nextRaw: object = next) => {
-        stored = readChartSpec(JSON.stringify(nextRaw)).stored;
+        stored = JSON.parse(JSON.stringify(nextRaw));
         await act(async () => {
             root.render(
                 createElement(ChartDataDialog, {

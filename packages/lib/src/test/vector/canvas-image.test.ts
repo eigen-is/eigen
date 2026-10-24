@@ -1,7 +1,7 @@
 // The pure half of Download image: the elements it draws, what they are drawn on, which faces the file embeds and
 // what the file is called. The browser half (layout, fetches) is packages/ui's canvas image writer.
 import { describe, expect, test } from 'bun:test';
-import { FLAT_CHART_LOOK, readChartSpec, sampleChartSpec } from '../../charts';
+import { FLAT_CHART_LOOK, newChartSpecParts, readChartSpec, sampleChartSpec } from '../../charts';
 import { buildChartClipboardItem } from '../../core/clipboard/clipboard';
 import { canvasImageFaces, canvasImageName, canvasImageScene, chartImageName } from '../../vector/canvas-image';
 import { solidFill } from '../../vector/fill';
@@ -47,7 +47,7 @@ describe('canvasImageScene', () => {
 
     test('a chart another app copies draws as the one chart element a paste makes of it, at the origin', () => {
         const item = buildChartClipboardItem({
-            spec: JSON.stringify(sampleChartSpec('column')),
+            chart: newChartSpecParts(sampleChartSpec('column')),
             box: { width: 480, height: 300 },
             look: { ...FLAT_CHART_LOOK, fill: solidFill('#ff0000'), strokeColor: '#00ff00', roughness: 2, seed: 7 },
         });
@@ -79,7 +79,7 @@ describe('canvasImageScene', () => {
     test('a single chart draws on white, as a chart in a doc or a sheet does', () => {
         expect(canvasImageScene([chart({ id: 'c' })]).meta.background).toBe('#ffffff');
         const item = buildChartClipboardItem({
-            spec: JSON.stringify(sampleChartSpec('pie')),
+            chart: newChartSpecParts(sampleChartSpec('pie')),
             box: { width: 9, height: 9 },
             look: FLAT_CHART_LOOK,
         });
@@ -100,12 +100,14 @@ describe('canvasImageName', () => {
 
     test("a chart is named for its title, without the characters a file name can't hold", () => {
         expect(canvasImageName([titled('Q3: sales / costs?')], 'Plan')).toBe('Q3 sales costs');
-        expect(chartImageName(JSON.stringify({ ...sampleChartSpec('bar'), title: { text: 'Light' } }))).toBe('Light');
+        expect(chartImageName(newChartSpecParts({ ...sampleChartSpec('bar'), title: { text: 'Light' } }))).toBe(
+            'Light',
+        );
     });
 
     test('a chart without a title, or one that does not parse, is "Chart"', () => {
         expect(canvasImageName([titled('  ')], 'Plan')).toBe('Chart');
-        expect(chartImageName('{')).toBe('Chart');
+        expect(chartImageName({ ...newChartSpecParts(sampleChartSpec('bar')), specData: '{' })).toBe('Chart');
     });
 
     test('anything else is a selection of the file', () => {

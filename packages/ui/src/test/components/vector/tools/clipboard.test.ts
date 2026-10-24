@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import { CLIPBOARD_SVG_MAX_ELEMENTS, extractClipboardSvgMetadata } from '@workspace/lib/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorChartElement, VectorElement, VectorMeta } from '@workspace/lib/vector';
@@ -233,7 +233,7 @@ describe('buildSelectionData', () => {
         if (el.type !== 'chart') throw new Error('expected a chart');
         expect(data.items[1]).toEqual({
             type: 'chart',
-            spec: expect.any(String),
+            parts: expect.any(Object),
             width: 640.5,
             height: 400,
             look: {
@@ -247,8 +247,17 @@ describe('buildSelectionData', () => {
             },
         });
         const item = data.items[1];
-        expect(item.type === 'chart' && JSON.parse(item.spec)).toEqual(sampleChartSpec('column', 'Excalifont'));
+        expect(item.type === 'chart' && readChartSpec(item.parts).spec).toEqual(
+            sampleChartSpec('column', 'Excalifont'),
+        );
         expect(readElementsClipboardItem(data.items)?.elements).toEqual([el]);
+    });
+
+    // The parts as stored text, so a newer build's part and one that doesn't parse reach the other app as they are here.
+    test('a chart item carries a part a newer build added and a part that does not parse', () => {
+        const el = Object.assign(chart('c1', 'a0', { specTitle: '{"text":' }), { specFuture: '{"later":true}' });
+        const { data } = buildSelectionData([el], ['c1'], meta, '', () => undefined);
+        expect(data.items[1]).toMatchObject({ parts: { specTitle: '{"text":', specFuture: '{"later":true}' } });
     });
 
     test('a chart-only selection ships NO svg, so docs and sheets paste a live chart and not a picture', () => {

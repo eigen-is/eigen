@@ -123,6 +123,10 @@ export const CHART_SPEC_PART_KEY = {
 
 export const CHART_SPEC_PART_KEYS = Object.values(CHART_SPEC_PART_KEY);
 
+// A chart's parts as a canvas and a doc store them and the clipboard carries them: each prefixed key's JSON text, this
+// build's parts and a newer one's, parsed or not.
+export type ChartSpecTexts = { readonly [key: string]: string };
+
 // A chart's parts on Sheets: a keyed part a record from each entry's path, / -joined, to that entry's JSON, so two
 // peers who edit two entries both keep their edit; the other parts a JSON string each.
 export type SheetChartSpecParts = {

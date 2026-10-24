@@ -138,7 +138,7 @@ describe("⌘V of another app's items", () => {
         return added;
     }
 
-    const spec = JSON.stringify(sampleChartSpec('bar'));
+    const parts = newChartSpecParts(sampleChartSpec('bar'));
 
     const look = {
         fill: solidFill('#ffeeaa', 'zigzag'),
@@ -151,7 +151,7 @@ describe("⌘V of another app's items", () => {
     } as const;
 
     test("another app's chart lands as a chart element at its size, centered, its spec and look as they came", async () => {
-        const added = await pasteOnCanvas([{ type: 'chart', spec, width: 600.5, height: 371, look }]);
+        const added = await pasteOnCanvas([{ type: 'chart', parts, width: 600.5, height: 371, look }]);
         expect(added).toEqual([
             {
                 type: 'chart',
@@ -164,6 +164,16 @@ describe("⌘V of another app's items", () => {
                 ...look,
             },
         ]);
+    });
+
+    // Each part as the text it came as: a newer build's part is kept, one that doesn't parse stays as it is, and a keyed
+    // part the item lacks is the empty record a new chart holds.
+    test("another app's chart keeps every part it carries, and a keyed part it lacks lands empty", async () => {
+        const { specPoints, ...rest } = parts;
+        const carried = { ...rest, specTitle: '{"text":', specFuture: '{"later":true}' };
+        const added = await pasteOnCanvas([{ type: 'chart', parts: carried, width: 600, height: 371, look }]);
+        expect(added).toEqual([expect.objectContaining({ ...carried, specPoints: '{}' })]);
+        expect(specPoints).toBe('{}');
     });
 
     // A 10 pt cell copied from Sheets: the wire's size is pt, so it lands in a drawing as 10 pt at 96 dpi, not as 10 px.
@@ -201,7 +211,7 @@ describe("⌘V of another app's items", () => {
         };
         const elements = buildElementsClipboardItem([record], 'f2');
         if (!elements) throw new Error('no elements item');
-        const added = await pasteOnCanvas([elements, { type: 'chart', spec, width: 640, height: 400, look }]);
+        const added = await pasteOnCanvas([elements, { type: 'chart', parts, width: 640, height: 400, look }]);
         expect(added).toHaveLength(1);
         expect(added[0]).toMatchObject({
             type: 'chart',

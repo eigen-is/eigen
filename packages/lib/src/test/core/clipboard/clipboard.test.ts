@@ -1,7 +1,13 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { toast } from 'sonner';
 import { FLAT_CHART_LOOK } from '../../../charts';
-import { sampleChartSpec } from '../../../charts/spec';
+import {
+    MAX_CHART_SPEC_BYTES,
+    MAX_CHART_SPEC_DEPTH,
+    MAX_CHART_SPEC_ENTRIES,
+    newChartSpecParts,
+    sampleChartSpec,
+} from '../../../charts/spec';
 import {
     buildChartClipboardItem,
     clipboardTextItemHasContent,
@@ -479,8 +485,8 @@ describe('readEigenClipboard — the forged-wire seam', () => {
 });
 
 describe('chart items', () => {
-    const inline = JSON.stringify(sampleChartSpec('column'));
-    const range = JSON.stringify({
+    const inline = newChartSpecParts(sampleChartSpec('column'));
+    const range = newChartSpecParts({
         ...sampleChartSpec('column'),
         data: { source: 'range', categories: null, series: [] },
     });
@@ -496,36 +502,67 @@ describe('chart items', () => {
         roughness: 2,
         seed: 77,
     } as const;
+    const box = { width: 600, height: 371 };
+    const good: EigenClipboardItem = { type: 'chart', parts: inline, ...box, look };
+    const utf8 = (text: string) => new TextEncoder().encode(text).length;
 
-    test('a chart with inline data builds an item at its box, with no angle, its spec as given and its look', () => {
-        const item = buildChartClipboardItem({ spec: inline, box: { width: 600.5, height: 371.25 }, look });
-        expect(item).toEqual({ type: 'chart', spec: inline, width: 600.5, height: 371.25, look });
+    test('a chart with inline data builds an item at its box, with no angle, its parts as given and its look', () => {
+        const item = buildChartClipboardItem({ chart: inline, box: { width: 600.5, height: 371.25 }, look });
+        expect(item).toEqual({ type: 'chart', parts: inline, width: 600.5, height: 371.25, look });
         if (item) expect(readClipboardBox(item)).toEqual({ width: 600.5, height: 371.25, angle: undefined });
     });
 
     test('a chart that has no look of its own copies flat', () => {
-        const item = buildChartClipboardItem({ spec: inline, box: { width: 600, height: 371 }, look: {} });
+        const item = buildChartClipboardItem({ chart: inline, box, look: {} });
         expect(item?.look).toEqual(FLAT_CHART_LOOK);
     });
 
-    test('a range, unreadable or oversized spec builds no item', () => {
-        const box = { width: 10, height: 10 };
-        const oversized = JSON.stringify({ ...sampleChartSpec('column'), title: { text: 'x'.repeat(70 * 1024) } });
-        for (const spec of [range, '{', oversized]) expect(buildChartClipboardItem({ spec, box, look })).toBeNull();
+    // Each part is the text its host stores, so one that doesn't parse reads the same on the other side.
+    test('the item carries every part as stored text, a part a newer build added and one that does not parse', () => {
+        const chart = { ...inline, specTitle: '{"text":', specFuture: '{"later":true}', id: 'c1', width: 9 };
+        const item = buildChartClipboardItem({ chart, box, look });
+        expect(item?.parts).toEqual({ ...inline, specTitle: '{"text":', specFuture: '{"later":true}' });
+        expect(readEigenClipboard(raw(item))?.items).toEqual(item ? [item] : []);
+    });
+
+    test('a range, unreadable or oversized chart builds no item', () => {
+        const oversized = { ...inline, specTitle: JSON.stringify({ text: 'x'.repeat(70 * 1024) }) };
+        for (const chart of [range, { ...inline, specData: '{' }, oversized, {}]) {
+            expect(buildChartClipboardItem({ chart, box, look })).toBeNull();
+        }
     });
 
     test('the reader keeps a chart with inline data and drops any other', () => {
-        const good: EigenClipboardItem = { type: 'chart', spec: inline, width: 600, height: 371, look };
         expect(readEigenClipboard(raw(good))?.items).toEqual([good]);
-        for (const spec of [range, 'null', 42, undefined]) {
-            expect(readEigenClipboard(raw({ ...good, spec }))?.items).toEqual([]);
+        for (const parts of [range, { ...inline, specData: 'null' }, 'null', 42, undefined]) {
+            expect(readEigenClipboard(raw({ ...good, parts }))?.items).toEqual([]);
         }
         expect(readEigenClipboard(raw({ ...good, height: Number.NaN }))?.items).toEqual([]);
     });
 
+    // The limits a host's read applies, so no host stores what another would read as nothing.
+    test('the reader refuses an item past the byte, depth or entry limit, or holding anything but part texts', () => {
+        const used = Object.entries(inline).reduce((sum, [key, text]) => sum + utf8(key + text), 0);
+        const room = MAX_CHART_SPEC_BYTES - used - 'specFuture'.length;
+        const padded = (bytes: number) => ({ ...inline, specFuture: 'x'.repeat(bytes) });
+        expect(readEigenClipboard(raw({ ...good, parts: padded(room) }))?.items).toHaveLength(1);
+        const deep = `${'['.repeat(MAX_CHART_SPEC_DEPTH + 1)}${']'.repeat(MAX_CHART_SPEC_DEPTH + 1)}`;
+        const entries = Object.fromEntries(
+            Array.from({ length: MAX_CHART_SPEC_ENTRIES + 1 }, (_, i) => [`specX${i}`, '']),
+        );
+        const refused = [
+            padded(room + 1),
+            { ...inline, specFuture: deep },
+            { ...inline, ...entries },
+            { ...inline, specFuture: { 'a/1': '{}' } },
+            { ...inline, future: '{}' },
+        ];
+        for (const parts of refused) expect(readEigenClipboard(raw({ ...good, parts }))?.items).toEqual([]);
+    });
+
     // The wire is any page's to write; the canvas reader's validators judge the look, and a missing one reads flat.
     test('the reader reads the look through the chart look validators', () => {
-        const item = { type: 'chart', spec: inline, width: 600, height: 371 } as const;
+        const item = { type: 'chart', parts: inline, width: 600, height: 371 } as const;
         expect(readEigenClipboard(raw(item))?.items).toEqual([{ ...item, look: FLAT_CHART_LOOK }]);
         expect(readEigenClipboard(raw({ ...item, look: 'rough' }))?.items).toEqual([
             { ...item, look: FLAT_CHART_LOOK },

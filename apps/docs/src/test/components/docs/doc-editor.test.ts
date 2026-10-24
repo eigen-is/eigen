@@ -15,7 +15,7 @@ const { prosemirrorJSONToYXmlFragment, yUndoPluginKey } = await import('@tiptap/
 const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pagePx, pageRecord } = await import(
     '@workspace/lib/docs/eigendoc'
 );
-const { FLAT_CHART_LOOK, sampleChartSpec } = await import('@workspace/lib/charts');
+const { FLAT_CHART_LOOK } = await import('@workspace/lib/charts');
 const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
 const { docEditorOptions } = await import('../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
@@ -183,7 +183,7 @@ test('an image pasted into a band lands in that editor, under the name its re-up
 // A chart from Sheets, Slides or Vector: the body places it within its text column, a band, which has no chart node,
 // places nothing.
 test('a chart item pastes into the body as a chart within the column, and into a band as nothing', async () => {
-    const spec = JSON.stringify(sampleChartSpec('column'));
+    const parts = sampleChartParts('column');
     const pasteChart = (editor: InstanceType<typeof Editor>) => {
         const event = new ClipboardEvent('paste', {
             clipboardData: new DataTransfer(),
@@ -192,7 +192,7 @@ test('a chart item pastes into the body as a chart within the column, and into a
         });
         writeEigenClipboard(event, {
             version: 1,
-            items: [{ type: 'chart', spec, width: 2000, height: 1000, look: FLAT_CHART_LOOK }],
+            items: [{ type: 'chart', parts, width: 2000, height: 1000, look: FLAT_CHART_LOOK }],
         });
         editor.view.dom.dispatchEvent(event);
     };

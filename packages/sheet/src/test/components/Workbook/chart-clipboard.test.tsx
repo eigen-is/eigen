@@ -4,8 +4,8 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import {
     FLAT_CHART_LOOK,
+    newChartSpecParts,
     newSheetChartSpecParts,
-    parseChartSpec,
     readChartLook,
     readChartSpec,
     sampleChartSpec,
@@ -13,7 +13,7 @@ import {
 import { buildChartClipboardItem, readEigenClipboard, writeEigenClipboard } from '@workspace/lib/clipboard';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
-import { serializeFill } from '@workspace/lib/vector';
+import { readElementFromFields, serializeFill } from '@workspace/lib/vector';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -71,6 +71,7 @@ async function mount({
     allowEdit = true,
     spec = rangeSpec(ref([1, 2], [1, 1])),
     look = {} as Partial<ChartLook>,
+    newer = {} as Record<string, string>,
 } = {}) {
     const container = document.createElement('div');
     document.body.append(container);
@@ -93,7 +94,7 @@ async function mount({
                 cell(2, 1, 65),
             ],
             config: {},
-            charts: { c1: { ...chart, ...newSheetChartSpecParts(spec), ...look } },
+            charts: { c1: { ...chart, ...newSheetChartSpecParts(spec), ...look, ...newer } },
         },
     ];
     await act(async () => {
@@ -146,7 +147,7 @@ test('⌘C on a selected chart writes the chart with its cells as inline data, a
         const [item, ...rest] = readEigenClipboard(clipboardData)?.items ?? [];
         expect(rest).toEqual([]);
         expect(item).toMatchObject({ type: 'chart', width: 400, height: 300 });
-        expect(item?.type === 'chart' && parseChartSpec(item.spec)?.data).toEqual({
+        expect(item?.type === 'chart' && readChartSpec(item.parts).spec?.data).toEqual({
             source: 'inline',
             categories: ['Ajax', 'PSV'],
             series: [{ id: 's-1', name: 'Points', values: [42, 65] }],
@@ -204,6 +205,21 @@ test('⌘V in the workbook the chart came from pastes a duplicate linked to its 
     expect(charts()).toEqual([chart]);
 });
 
+// A newer build's part rides the item as its text, and a paste here takes the chart's own fields, records of its own.
+test('a copy carries a part a newer build added, and its paste here keeps it with the ranges', async () => {
+    const newer = { specFuture: '{"later":true}' };
+    const { select, charts } = await mount({ newer });
+    await select();
+    const { clipboardData } = await shortcut('KeyC');
+    expect(readEigenClipboard(clipboardData)?.items[0]).toMatchObject({ type: 'chart', parts: newer });
+    await shortcut('KeyV', clipboardData);
+    const [source, pasted] = charts();
+    expect(pasted && readChartSpec(pasted).stored).toEqual(readChartSpec(chart).stored);
+    expect(pasted).toMatchObject(newer);
+    expect(pasted?.specSeries).toEqual(source?.specSeries);
+    expect(pasted?.specSeries).not.toBe(source?.specSeries);
+});
+
 test('⌘X then ⌘V in the same workbook moves the chart and keeps its ranges', async () => {
     const { select, charts } = await mount();
     await select();
@@ -228,13 +244,13 @@ test('⌘V in another workbook pastes the inline chart', async () => {
     await shortcut('KeyV', clipboardData);
     const pasted = target.charts().find((c) => c.id !== 'c1');
     expect(pasted && readChartSpec(pasted).stored).toEqual(
-        inline?.type === 'chart' ? readChartSpec(inline.spec).stored : {},
+        inline?.type === 'chart' ? readChartSpec(inline.parts).stored : {},
     );
 });
 
 test('a chart item another app wrote pastes as an inline chart at its size', async () => {
-    const spec = JSON.stringify(sampleChartSpec('pie'));
-    const item = buildChartClipboardItem({ spec, box: { width: 320.5, height: 200 }, look: {} });
+    const chart = newChartSpecParts(sampleChartSpec('pie'));
+    const item = buildChartClipboardItem({ chart, box: { width: 320.5, height: 200 }, look: {} });
     if (!item) throw new Error('no item');
     const clipboardData = new DataTransfer();
     writeEigenClipboard(new ClipboardEvent('copy', { clipboardData }), { version: 1, items: [item] });
@@ -262,8 +278,8 @@ test('⌘C carries the look the chart stores, and a chart storing none copies fl
 });
 
 test('a chart from Docs or Vector pastes with its look and copies back out with it', async () => {
-    const spec = JSON.stringify(sampleChartSpec('column'));
-    const item = buildChartClipboardItem({ spec, box: { width: 320, height: 200 }, look: ROUGH });
+    const parts = newChartSpecParts(sampleChartSpec('column'));
+    const item = buildChartClipboardItem({ chart: parts, box: { width: 320, height: 200 }, look: ROUGH });
     if (!item) throw new Error('no item');
     const clipboardData = new DataTransfer();
     writeEigenClipboard(new ClipboardEvent('copy', { clipboardData }), { version: 1, items: [item] });
@@ -274,5 +290,30 @@ test('a chart from Docs or Vector pastes with its look and copies back out with 
     expect(pasted && readChartLook(pasted)).toEqual(ROUGH);
 
     const back = await shortcut('KeyC');
-    expect(readEigenClipboard(back.clipboardData)?.items[0]).toMatchObject({ type: 'chart', spec, look: ROUGH });
+    expect(readEigenClipboard(back.clipboardData)?.items[0]).toMatchObject({ type: 'chart', parts, look: ROUGH });
+});
+
+// Every host's copy is the parts as text, so a chart passing through Sheets reads the same where it lands. A doc
+// holds only this build's parts; a canvas keeps a newer one too. A part that doesn't parse keeps its text.
+test('a chart from Docs or a canvas pasted here and copied on lands on a canvas with every part it had', async () => {
+    const parts = { ...newChartSpecParts(sampleChartSpec('column')), specTitle: '{"text":' };
+    const docAttrs = { ...parts, specPoints: null, width: 320, caption: '' };
+    const canvasElement = { ...parts, specFuture: '{"later":true}', type: 'chart', id: 'e1' };
+    for (const source of [docAttrs, canvasElement]) {
+        const item = buildChartClipboardItem({ chart: source, box: { width: 320, height: 200 }, look: {} });
+        if (!item) throw new Error('no item');
+        const clipboardData = new DataTransfer();
+        writeEigenClipboard(new ClipboardEvent('copy', { clipboardData }), { version: 1, items: [item] });
+        const { select } = await mount();
+        await select();
+        await shortcut('KeyV', clipboardData);
+        const back = await shortcut('KeyC');
+        const copied = readEigenClipboard(back.clipboardData)?.items[0];
+        if (copied?.type !== 'chart') throw new Error('no copy');
+        const pastedOnCanvas = { id: 'e2', type: 'chart', ...newChartSpecParts(copied.parts) };
+        const landed = readElementFromFields(new Map(Object.entries(pastedOnCanvas)));
+        const kept = { ...newChartSpecParts(item.parts), specPoints: '{}' };
+        expect(landed).toMatchObject(source === canvasElement ? { ...kept, specFuture: '{"later":true}' } : kept);
+        await cleanups.shift()?.();
+    }
 });

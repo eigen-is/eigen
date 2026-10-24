@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1992 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1994 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -536,7 +536,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (453)
+## Types (454)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -817,6 +817,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChartSpecPart` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpecPartKey` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartSpecSvgInput` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
+| `ChartSpecTexts` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartStacking` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `ChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `InlineChartData` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -994,7 +995,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1034)
+## Utilities & constants (1035)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1139,8 +1140,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `chartPointMoves` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartSearchText` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartSeriesStyle` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
-| `chartSpecByteCounter` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartSpecChange` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
+| `chartSpecTexts` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `chartSpecWrites` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `DEFAULT_CHART_FONT` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
 | `DEFAULT_CHART_SERIES_STYLE` | `@workspace/lib/charts` | packages/lib/src/charts/spec.ts |
@@ -1925,6 +1926,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `snapBoxToTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapSlideFontSize` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `solidFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
+| `storedElementFields` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `storedFields` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `stripEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |

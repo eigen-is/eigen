@@ -24,6 +24,7 @@ import type {
     ChartSpecOp,
     ChartSpecPart,
     ChartSpecPartKey,
+    ChartSpecTexts,
     ChartType,
     InlineChartData,
     InlineChartSeries,
@@ -42,7 +43,8 @@ import {
     CHART_TYPES,
     LEGEND_POSITIONS,
 } from '../types/chart';
-import { bool, color, fontFamily, oneOf, str } from '../vector/kinds/read-fields';
+import type { YMapLike } from '../vector/kinds/read-fields';
+import { bool, color, fontFamily, isYMapLike, oneOf, str } from '../vector/kinds/read-fields';
 import { prop } from '../vector/types';
 
 // Hard limits: every peer lays out and paints whatever is stored, so they bound one chart's cost.
@@ -262,6 +264,27 @@ function byteBudget(): (text: string) => boolean {
     };
 }
 
+// Every prefixed key's text, as a canvas or a doc stores it and the clipboard carries it, off a host's record or a
+// stored Y.Map: a string as stored, whether it parses or not, and a Sheets keyed part's entries joined. A record under a
+// key this build doesn't know is left out, since how deep its entries sit is unknown. Null past the byte limit, counted
+// as exceedsChartSpecBytes counts, so a forged record of a million keys costs what fits under it.
+export function chartSpecTexts(chart: Readonly<Record<string, unknown>> | YMapLike): Record<string, string> | null {
+    const read = isYMapLike(chart) ? (key: string) => chart.get(key) : (key: string) => own(chart, key);
+    const exceeds = chartSpecByteCounter();
+    const texts: Record<string, string> = {};
+    for (const key of isYMapLike(chart) ? chart.keys() : Object.keys(chart)) {
+        if (!isChartSpecKey(key)) continue;
+        const value = read(key);
+        if (exceeds(key, value)) return null;
+        const part = PART_OF_KEY.get(key);
+        if (typeof value === 'string') texts[key] = value;
+        else if (part && isKeyedPart(part) && isRecord(value)) {
+            texts[key] = JSON.stringify(keyedPart(value, CHART_SPEC_PARTS[part]));
+        }
+    }
+    return texts;
+}
+
 // Counted on the string, in one pass before the parse; a bracket inside a JSON string is text.
 export function exceedsChartSpecDepth(value: string): boolean {
     let depth = 0;
@@ -295,18 +318,14 @@ export function chartSearchText(spec: ChartSpec | null): string {
         .join('\n');
 }
 
-// Takes what peers store, one string or a host's record of parts, so the size limit is measured on it. stored is what a
-// writer applies a change onto and a copy carries; past the size limit it is empty. A string past the depth limit or no
-// JSON object is empty too; on a record such a part is absent, a keyed one empty, so the other parts still read.
-export function readChartSpec(value: string | Readonly<Record<string, unknown>>): {
+// Takes what peers store, a host's record of parts, so the size limit is measured on it. stored is what a writer applies
+// a change onto; past the size limit it is empty. A part past the depth limit or no JSON object is absent, a keyed one
+// empty, so the other parts still read.
+export function readChartSpec(value: Readonly<Record<string, unknown>>): {
     stored: StoredChartSpec;
     spec: ChartSpec | null;
 } {
     if (exceedsChartSpecBytes(value)) return { stored: {}, spec: null };
-    if (typeof value === 'string') {
-        const stored = storedRecord(value);
-        return stored ? { stored, spec: resolved(stored) } : { stored: {}, spec: null };
-    }
     const stored: StoredRecord = Object.create(null);
     for (const part of PARTS) {
         const raw = value[CHART_SPEC_PART_KEY[part]];
@@ -321,6 +340,8 @@ const PARTS = Object.keys(CHART_SPEC_PARTS).filter((part): part is ChartSpecPart
 );
 
 const isKeyedPart = (part: ChartSpecPart): part is ChartSpecKeyedPart => CHART_SPEC_PARTS[part] > 0;
+
+const PART_OF_KEY: ReadonlyMap<string, ChartSpecPart> = new Map(PARTS.map((part) => [CHART_SPEC_PART_KEY[part], part]));
 
 // The fields a Sheets chart holds as a record from its creation on.
 export const SHEET_CHART_KEYED_PART_KEYS: ReadonlySet<string> = new Set(
@@ -376,8 +397,10 @@ function resolved(stored: StoredChartSpec): ChartSpec | null {
     }
 }
 
+// A spec as one string, as the OOXML reader builds one: the resolved view, null past the byte or depth limit.
 export function parseChartSpec(value: string): ChartSpec | null {
-    return readChartSpec(value).spec;
+    const stored = exceedsChartSpecBytes(value) ? undefined : storedRecord(value);
+    return stored ? resolved(stored) : null;
 }
 
 // Edit data rebuilds the data from the keys this build reads, so a key it doesn't (a newer build's array beside a
@@ -458,30 +481,44 @@ export function mapChartSpecParts(text: (part: ChartSpecPart) => string): Record
     };
 }
 
-// A chart made from nothing, by an insert, an import or a test: every part, a keyed one {} when it has no entries.
-export function newChartSpecParts(spec: ChartSpec): Record<ChartSpecPartKey, string> {
-    return mapChartSpecParts((part) => JSON.stringify(spec[part]));
+// A spec's parts are values; texts hold strings only.
+const isChartSpec = (from: ChartSpec | ChartSpecTexts): from is ChartSpec => isRecord(from['chart']);
+
+// A chart's parts as a canvas or a doc stores them: made from a spec, by an insert, an import or a test, or pasted as
+// another host's texts, each kept as it came and a newer build's part with them. Every part is there, a keyed one {}
+// when it has no entries, one the texts lack '' and a keyed one {}.
+export function newChartSpecParts(from: ChartSpec | ChartSpecTexts): Record<ChartSpecPartKey, string> {
+    if (isChartSpec(from)) return mapChartSpecParts((part) => JSON.stringify(from[part]));
+    const text = (part: ChartSpecPart) => from[CHART_SPEC_PART_KEY[part]] ?? (isKeyedPart(part) ? '{}' : '');
+    return { ...from, ...mapChartSpecParts(text) };
 }
 
 // The same on Sheets, where every keyed part is a record from the start: a recipe that made one and set an entry in it
-// would ship the record whole, and two peers' first entries would collide.
-export function newSheetChartSpecParts(spec: ChartSpec): SheetChartSpecParts {
+// would ship the record whole, and two peers' first entries would collide. A pasted keyed part's text is split into its
+// entries, so one that doesn't parse has none; every other text is kept as it came.
+export function newSheetChartSpecParts(from: ChartSpec | ChartSpecTexts): SheetChartSpecParts {
+    const spec = isChartSpec(from) ? from : null;
+    const texts: ChartSpecTexts = isChartSpec(from) ? {} : from;
+    const text = (part: ChartSpecPart) =>
+        spec ? JSON.stringify(spec[part]) : (texts[CHART_SPEC_PART_KEY[part]] ?? '');
     const entries = (part: ChartSpecKeyedPart) => {
         const record: Record<string, string> = {};
-        entryWrites(undefined, spec[part], CHART_SPEC_PARTS[part], [], (entry, value) => {
-            if (value !== null) record[entry] = value;
+        const value = spec ? spec[part] : storedRecord(texts[CHART_SPEC_PART_KEY[part]]);
+        entryWrites(undefined, value, CHART_SPEC_PARTS[part], [], (entry, written) => {
+            if (written !== null) record[entry] = written;
         });
         return record;
     };
     return {
-        specChart: JSON.stringify(spec.chart),
-        specTitle: JSON.stringify(spec.title),
-        specLegend: JSON.stringify(spec.legend),
+        ...texts,
+        specChart: text('chart'),
+        specTitle: text('title'),
+        specLegend: text('legend'),
         specAxes: entries('axes'),
         specPlots: entries('plots'),
         specSeries: entries('series'),
         specPoints: entries('points'),
-        specData: JSON.stringify(spec.data),
+        specData: text('data'),
     };
 }
 

@@ -1,6 +1,13 @@
 import { toast } from 'sonner';
 import { readChartLook } from '../../charts/look';
-import { parseChartSpec } from '../../charts/spec';
+import {
+    chartSpecByteCounter,
+    chartSpecTexts,
+    exceedsChartSpecDepth,
+    isChartSpecKey,
+    readChartSpec,
+} from '../../charts/spec';
+import type { ChartSpecTexts } from '../../types/chart';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -74,23 +81,32 @@ export function buildTextClipboardItem(args: {
     };
 }
 
-// The one test of a chart item's spec, the builder's and the reader's: inline data that parses within the
-// spec's limits.
-function isInlineChartSpec(spec: unknown): spec is string {
-    return typeof spec === 'string' && parseChartSpec(spec)?.data.source === 'inline';
+// The one test of a chart item's parts, the builder's and the reader's: a text under each key and every key a part's,
+// within the spec's byte and depth limits, counted as a host's read counts them, so no host stores parts another would
+// read as nothing; and inline data that reads.
+function isInlineChartParts(parts: unknown): parts is ChartSpecTexts {
+    if (!isRecord(parts)) return false;
+    const exceeds = chartSpecByteCounter();
+    const fits = Object.keys(parts).every((key) => {
+        const text = parts[key];
+        return isChartSpecKey(key) && typeof text === 'string' && !exceeds(key, text) && !exceedsChartSpecDepth(text);
+    });
+    return fits && readChartSpec(parts).spec?.data.source === 'inline';
 }
 
-// A chart item, or null for a spec no consumer could draw (range data, unreadable, over the size limit).
-// The spec rides as given, never re-serialized. The look is read off its holder, a canvas element or a doc's chart
-// node among them, and a missing field copies flat.
+// A chart item, or null for parts no consumer could draw (range data, unreadable, over a limit). The parts ride as
+// their holder stores them, never re-serialized, so one that doesn't parse and a newer build's arrive as they left.
+// The parts and the look are read off their holder (a canvas element, a doc's chart node, a sheet chart's inline
+// copy), and a missing look field copies flat.
 export function buildChartClipboardItem(args: {
-    spec: string;
+    chart: Readonly<Record<string, unknown>>;
     box: Pick<ClipboardBox, 'width' | 'height'>;
     look: Record<string, unknown>;
 }): EigenClipboardChartItem | null {
-    if (!isInlineChartSpec(args.spec)) return null;
+    const parts = chartSpecTexts(args.chart);
+    if (!isInlineChartParts(parts)) return null;
     const look = readChartLook(args.look);
-    return { type: 'chart', spec: args.spec, width: args.box.width, height: args.box.height, look };
+    return { type: 'chart', parts, width: args.box.width, height: args.box.height, look };
 }
 
 // Read the typed geometry off any item. Consumers size/rotate from this — there is no `meta` sniff
@@ -131,7 +147,7 @@ function isValidItem(item: unknown): item is EigenClipboardItem {
             // (readElementsClipboardItem → readElementFromFields), which clamps hostile values.
             return Array.isArray(item.elements) && typeof item.sourceFrameId === 'string';
         case 'chart':
-            return isInlineChartSpec(item.spec);
+            return isInlineChartParts(item.parts);
         default:
             return false;
     }

@@ -23,6 +23,7 @@ import {
     MAX_CHART_SERIES,
     MAX_CHART_SPEC_BYTES,
     MAX_CHART_SPEC_DEPTH,
+    mapChartSpecParts,
     newChartSeriesId,
     newChartSpecParts,
     newSheetChartSpecParts,
@@ -34,7 +35,7 @@ import {
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../../constants/colors';
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../../sheets';
-import type { ChartSpec, ChartSpecChange, InlineChartData, RangeChartData } from '../../types/chart';
+import type { ChartSpec, ChartSpecChange, InlineChartData, RangeChartData, StoredChartSpec } from '../../types/chart';
 import { CHART_SPEC_PART_KEYS, CHART_SPEC_PARTS, CHART_STACKINGS, CHART_TYPES } from '../../types/chart';
 import { isColorToken } from '../../vector/fill';
 
@@ -505,45 +506,44 @@ describe('series ids', () => {
     });
 });
 
-describe('readChartSpec', () => {
+describe('readChartSpec and parseChartSpec', () => {
+    const partsOf = (raw: Record<string, unknown>) => mapChartSpecParts((part) => JSON.stringify(raw[part]));
+
     test('returns the spec as stored, unknown keys and values in place, beside the view resolved from it', () => {
-        const raw = { ...chart(), legend: { position: 'inside' }, future: { on: true } };
-        const { stored, spec } = readChartSpec(JSON.stringify(raw));
+        const raw = { ...chart(), chart: { ...chart().chart, future: { on: true } }, legend: { position: 'inside' } };
+        const { stored, spec } = readChartSpec(partsOf(raw));
         expect(stored).toEqual(raw);
         expect(spec).toEqual(chart());
     });
 
-    test('a spec that does not resolve keeps what is stored; one that is no JSON object, or past the limit, has none', () => {
-        const scatter = stored({ chart: { type: 'scatter' } });
-        expect(readChartSpec(scatter)).toEqual({ stored: JSON.parse(scatter), spec: null });
-        for (const value of ['{', '[1]', '"x"']) expect(readChartSpec(value)).toEqual({ stored: {}, spec: null });
-        const padded = JSON.stringify({ ...chart(), pad: 'x'.repeat(MAX_CHART_SPEC_BYTES) });
-        expect(readChartSpec(padded)).toEqual({ stored: {}, spec: null });
+    test('a spec that does not resolve keeps what is stored; one string that is no JSON object, or past the limit, reads none', () => {
+        const scatter = { ...chart(), chart: { type: 'scatter' } };
+        expect(readChartSpec(partsOf(scatter))).toEqual({ stored: scatter, spec: null });
+        for (const value of ['{', '[1]', '"x"']) expect(parseChartSpec(value)).toBeNull();
+        expect(parseChartSpec(JSON.stringify({ ...chart(), pad: 'x'.repeat(MAX_CHART_SPEC_BYTES) }))).toBeNull();
     });
 
     // The spec is one level, so a key on it nested `levels` deep reaches 1 + levels.
     const nested = (levels: number, open: string, close: string, base = stored({})) =>
         base.replace(/}$/, `,"future":${open.repeat(levels)}0${close.repeat(levels)}}`);
 
-    test('a spec nested up to the depth limit reads; one level past it has none, in arrays and in records', () => {
+    test('one string nested up to the depth limit reads; one level past it reads none, in arrays and in records', () => {
         for (const [open, close] of [
             ['[', ']'],
             ['{"a":', '}'],
         ]) {
-            const deepest = nested(MAX_CHART_SPEC_DEPTH - 1, open, close);
-            expect(readChartSpec(deepest)).toEqual({ stored: JSON.parse(deepest), spec: chart() });
-            expect(readChartSpec(nested(MAX_CHART_SPEC_DEPTH, open, close))).toEqual({ stored: {}, spec: null });
+            expect(parseChartSpec(nested(MAX_CHART_SPEC_DEPTH - 1, open, close))).toEqual(chart());
+            expect(parseChartSpec(nested(MAX_CHART_SPEC_DEPTH, open, close))).toBeNull();
         }
     });
 
     test('brackets inside a string are no nesting, after an escaped quote too, and an escaped backslash ends it', () => {
         const brackets = '[{'.repeat(MAX_CHART_SPEC_DEPTH);
         for (const pad of [brackets, `"${brackets}`, `\\"${brackets}`]) {
-            const value = stored({ pad });
-            expect(readChartSpec(value)).toEqual({ stored: JSON.parse(value), spec: chart() });
+            expect(parseChartSpec(stored({ pad }))).toEqual(chart());
         }
         const afterBackslash = nested(MAX_CHART_SPEC_DEPTH, '[', ']', stored({ pad: '\\' }));
-        expect(readChartSpec(afterBackslash)).toEqual({ stored: {}, spec: null });
+        expect(parseChartSpec(afterBackslash)).toBeNull();
     });
 });
 
@@ -582,7 +582,9 @@ describe('applyChartSpecChange', () => {
             series: chart().data.series.map((series) => ({ ...series, sizes: [1, 2] })),
         },
     };
-    const apply = (change: ChartSpecChange) => applyChartSpecChange(readChartSpec(JSON.stringify(raw)).stored, change);
+    // The whole spec as JSON.parse makes it, a key beside the parts too.
+    const parsed = (): StoredChartSpec => JSON.parse(JSON.stringify(raw));
+    const apply = (change: ChartSpecChange) => applyChartSpecChange(parsed(), change);
 
     test('unknown keys at every level, and an unknown legend, survive a change elsewhere', () => {
         const next = apply([
@@ -597,7 +599,7 @@ describe('applyChartSpecChange', () => {
     });
 
     test('leaves the stored spec it was given, and the values it sets, as they were', () => {
-        const { stored: before } = readChartSpec(JSON.stringify(raw));
+        const before = parsed();
         const value = { color: '#eb6834' };
         applyChartSpecChange(before, [
             { op: 'set', path: ['axes', 'y', 'scale', 'max'], value: 50 },
@@ -626,7 +628,7 @@ describe('applyChartSpecChange', () => {
         const next = apply([{ op: 'set', path: ['points', 's-1', '3', 'color'], value: '#eb6834' }]);
         expect(next.points).toEqual({ 's-1': { 3: { color: '#eb6834' } } });
         expect(apply([{ op: 'remove', path: ['future'] }]).future).toBeUndefined();
-        expect(apply([{ op: 'remove', path: ['nothing', 'here'] }])).toEqual(readChartSpec(JSON.stringify(raw)).stored);
+        expect(apply([{ op: 'remove', path: ['nothing', 'here'] }])).toEqual(parsed());
     });
 
     test('a move takes the value to its new path, and nothing at from leaves nothing there', () => {
@@ -642,7 +644,7 @@ describe('applyChartSpecChange', () => {
     });
 
     test('an op through __proto__, constructor or prototype changes nothing and leaves Object.prototype alone', () => {
-        const before = readChartSpec(JSON.stringify(raw)).stored;
+        const before = parsed();
         for (const key of ['__proto__', 'constructor', 'prototype']) {
             const change: ChartSpecChange = [
                 { op: 'set', path: [key, 'polluted'], value: true },
@@ -656,7 +658,7 @@ describe('applyChartSpecChange', () => {
     });
 
     test('a stored __proto__ key stays data through a change', () => {
-        const { stored: read } = readChartSpec(stored({ ['__proto__']: { polluted: true } }));
+        const read: StoredChartSpec = JSON.parse(stored({ ['__proto__']: { polluted: true } }));
         const next = applyChartSpecChange(read, [{ op: 'set', path: ['title', 'text'], value: 'New' }]);
         expect(JSON.stringify(next)).toContain('"__proto__":{"polluted":true}');
         expect(Object.hasOwn(Object.prototype, 'polluted')).toBe(false);
@@ -665,7 +667,8 @@ describe('applyChartSpecChange', () => {
 
 describe('holdsUnknownChartData', () => {
     const read = (raw: object) => {
-        const { stored: storedSpec, spec } = readChartSpec(JSON.stringify(raw));
+        const storedSpec: StoredChartSpec = JSON.parse(JSON.stringify(raw));
+        const spec = parseChartSpec(JSON.stringify(raw));
         if (!spec) throw new Error('the spec does not parse');
         return holdsUnknownChartData(storedSpec, spec);
     };

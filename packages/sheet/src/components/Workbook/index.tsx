@@ -1,4 +1,4 @@
-import { isSketchCapped, readChartSpec } from '@workspace/lib/charts';
+import { isSketchCapped, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
@@ -24,7 +24,7 @@ import { v4 as uuidv4 } from 'uuid';
 import type { RefValues, SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
-import { resolveRangeChartData, seriesName } from '../../engine/chart-data';
+import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import type {
@@ -594,8 +594,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (!item) return;
                     e.preventDefault();
                     writeEigenClipboard(e, { version: 1, items: [item] });
-                    const { stored } = readChartSpec(activeChart);
-                    globalCache.current.copiedChart = { inline: item.spec, spec: JSON.stringify(stored) };
+                    globalCache.current.copiedChart = { inline: item.parts, chart: activeChart };
                     if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                     return;
                 }
@@ -707,9 +706,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             const copied = globalCache.current.copiedChart;
                             if (chartItems.length > 0) {
                                 setContextWithProduce((draftCtx) => {
-                                    for (const { spec, width, height, look } of chartItems) {
-                                        const own = copied?.inline === spec ? copied.spec : spec;
-                                        pasteChart(draftCtx, uuidv4(), own, { width, height }, look);
+                                    for (const { parts, width, height, look } of chartItems) {
+                                        const own = copied && isEqual(copied.inline, parts);
+                                        const fields = own
+                                            ? copySheetChartSpec(copied.chart)
+                                            : newSheetChartSpecParts(parts);
+                                        pasteChart(draftCtx, uuidv4(), fields, { width, height }, look);
                                     }
                                 });
                             }

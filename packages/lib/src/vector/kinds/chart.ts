@@ -5,8 +5,7 @@
 // defaults while the module loads.
 import {
     chartSearchText,
-    chartSpecByteCounter,
-    isChartSpecKey,
+    chartSpecTexts,
     mapChartSpecParts,
     newChartSpecParts,
     readChartSpec,
@@ -49,22 +48,12 @@ export const chartKind = defineKind<VectorChartElement>({
     // doc for recovery, and a newer build's part is kept on the element too. Past the byte limit, summed over every
     // part, the read stops: each part reads as '' and no newer part is kept.
     read: (src, base) => {
-        const exceeds = chartSpecByteCounter();
-        let stored = new Map<string, string>();
-        for (const key of src.keys()) {
-            if (!isChartSpecKey(key)) continue;
-            const text = src.get(key);
-            if (exceeds(key, text)) {
-                stored = new Map();
-                break;
-            }
-            if (typeof text === 'string') stored.set(key, text);
-        }
+        const texts = chartSpecTexts(src) ?? {};
         return {
             ...base,
-            ...Object.fromEntries([...stored].filter(([key]) => !PART_KEYS.has(key))),
+            ...Object.fromEntries(Object.entries(texts).filter(([key]) => !PART_KEYS.has(key))),
             type: 'chart',
-            ...mapChartSpecParts((part) => stored.get(CHART_SPEC_PART_KEY[part]) ?? ''),
+            ...mapChartSpecParts((part) => texts[CHART_SPEC_PART_KEY[part]] ?? ''),
             fill: fillField(src.get('fill')),
             color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
         };

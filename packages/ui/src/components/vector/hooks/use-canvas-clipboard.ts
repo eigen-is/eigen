@@ -4,7 +4,7 @@
 // transacts and the placement.
 
 import { onMutationError } from '@workspace/lib/api-error';
-import { mapChartSpecParts, readChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts } from '@workspace/lib/charts';
 import {
     classifyPaste,
     clipboardTextItemHasContent,
@@ -211,20 +211,17 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     if (crossMount) plan.crossMount.push({ index, item });
                     continue;
                 }
-                // A chart keeps its spec as it came, a part per field, its font included, and its look as the
+                // A chart keeps its parts as they came, a newer build's too, its font included, and its look as the
                 // element's own fields.
                 if (item.type === 'chart') {
                     const { width, height } = box;
-                    const { stored } = readChartSpec(item.spec);
                     plan.partials.push({
                         type: 'chart',
                         ...placeAt(width, height),
                         width,
                         height,
                         angle,
-                        ...mapChartSpecParts((part) =>
-                            stored[part] === undefined ? '' : JSON.stringify(stored[part]),
-                        ),
+                        ...newChartSpecParts(item.parts),
                         ...item.look,
                     });
                     continue;

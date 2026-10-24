@@ -23,12 +23,7 @@ import type {
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import type { Box } from '@workspace/lib/vector';
 import { randomSeed } from '@workspace/lib/vector';
-import {
-    inlineChartSpec,
-    renderSheetChartSvg,
-    sheetChartSpecParts,
-    writeSheetChartSpec,
-} from '../../engine/chart-data';
+import { inlineChartSpec, renderSheetChartSvg, writeSheetChartSpec } from '../../engine/chart-data';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { chartRangeChange, currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
 import type { CellMatrix } from '../../engine/types';
@@ -54,17 +49,16 @@ function addChart(ctx: Context, id: string, box: ChartInsertBox, parts: SheetCha
     charts[id] = { id, index: nextFloatingIndex(sheet), ...sheetFloatingBox(box), ...parts, ...look };
 }
 
-// A pasted chart lands on the selected cell at its copied size, its spec and look stored as they came, a part per
-// field, and selected.
+// A pasted chart lands on the selected cell at its copied size, its parts and look stored as they came, and selected.
 export function pasteChart(
     ctx: Context,
     id: string,
-    spec: string,
+    parts: SheetChartSpecParts,
     size: Pick<ChartInsertBox, 'width' | 'height'>,
     look: ChartLook,
 ) {
     if (!editableCurrentSheet(ctx)) return;
-    addChart(ctx, id, { ...selectedCellOrigin(ctx), ...size }, sheetChartSpecParts(spec), look);
+    addChart(ctx, id, { ...selectedCellOrigin(ctx), ...size }, parts, look);
     selectFloatingObject(ctx, { kind: 'chart', id });
 }
 
@@ -133,5 +127,5 @@ export function sheetChartSvg(ctx: Context, chart: SheetChart): string {
 // Download image draws. Null for a chart inlineChartSpec can't inline.
 export function sheetChartClipboardItem(ctx: Context, chart: SheetChart): EigenClipboardChartItem | null {
     const inline = inlineChartSpec(chart, createContextResolver(ctx));
-    return inline ? buildChartClipboardItem({ spec: inline, box: chart, look: readChartLook(chart) }) : null;
+    return inline ? buildChartClipboardItem({ chart: inline, box: chart, look: readChartLook(chart) }) : null;
 }
