@@ -11,6 +11,6 @@ export function ChartContent({ chart, box }: { chart: SheetChart; box: Box }) {
     const stored = sheetFloatingBox(chart);
     const resized = box.width !== stored.width || box.height !== stored.height;
     const svg = sheetChartSvg(context, resized ? { ...chart, width: box.width, height: box.height } : chart);
-    // biome-ignore lint/security/noDangerouslySetInnerHtml: the painter's own svg; parseChartSpec checks every color and label it draws
+    // biome-ignore lint/security/noDangerouslySetInnerHtml: the painter's own svg; readChartSpec checks every color and label it draws
     return <div dangerouslySetInnerHTML={{ __html: svg }} />;
 }

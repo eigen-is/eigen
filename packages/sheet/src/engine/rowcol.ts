@@ -451,7 +451,7 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         count,
         'add',
     );
-    // An insert stops a chart ref at the grid's last row or column: parseChartSpec refuses a ref past
+    // An insert stops a chart ref at the grid's last row or column: readChartSpec refuses a ref past
     // it, which would leave the chart unreadable for good.
     const lastRow = REFERENCE_ROW_COUNT - 1;
     const lastColumn = REFERENCE_COLUMN_COUNT - 1;
