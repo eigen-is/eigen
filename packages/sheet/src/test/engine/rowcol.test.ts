@@ -767,7 +767,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
     describe('points', () => {
         const COLORS = ['#000001', '#000002', '#000003', '#000004', '#000005'];
         // Categories A1:A5, values B1:B5, a slice color on each point beside a key this build doesn't know, and the
-        // same points on a second series. A series id the data doesn't name loses its points on the next write.
+        // same points on a second series and on a series id the data doesn't name.
         const pie = (categories: CellRangeRef | null = ref('S', [0, 4], [0, 0])) => {
             const values = ref('S', [0, 4]);
             const c = chart({ categories, series: [series(values), { ...series(values), id: 'other' }] });
@@ -778,7 +778,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
                 ...newSheetChartSpecParts({
                     ...spec,
                     chart: { ...spec.chart, type: 'pie' },
-                    points: { 's-1': points, other: points },
+                    points: { 's-1': points, other: points, gone: points },
                 }),
             };
         };
@@ -802,6 +802,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
             const kept = { 0: '#000001', 1: '#000002', 2: '#000004', 3: '#000005' };
             expect(sliceColors(s)).toEqual(kept);
             expect(sliceColors(s, 'other')).toEqual(kept);
+            expect(sliceColors(s, 'gone')).toEqual({});
             expect(readChartSpec(s.charts!.c1).spec?.points['s-1'][2]).toEqual({ color: '#000004' });
         });
 
