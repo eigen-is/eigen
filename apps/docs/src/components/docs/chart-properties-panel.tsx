@@ -8,13 +8,12 @@ import {
     CHART_DEFAULT_SIZE,
     chartSpecWrites,
     isInlineSketchCapped,
-    mapChartSpecParts,
     readChartLook,
     readChartSpec,
 } from '@workspace/lib/charts';
 import type { ChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { readChartAttrs } from '@workspace/lib/docs/eigendoc';
-import { CHART_SPEC_PART_KEY } from '@workspace/lib/types/chart';
+import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
     holdCapture,
@@ -37,7 +36,7 @@ function useSelectedChart(editor: Editor) {
         selector: ({ editor: e }) => {
             const attrs = readChartAttrs(e.getAttributes('chart'));
             return {
-                parts: mapChartSpecParts((part) => attrs[CHART_SPEC_PART_KEY[part]] ?? ''),
+                parts: Object.fromEntries(CHART_SPEC_PART_KEYS.map((key) => [key, attrs[key]])),
                 layout: attrs.layout || 'block',
                 alignment: attrs.alignment || 'center',
                 caption: attrs.caption || '',
