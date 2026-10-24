@@ -468,7 +468,7 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
         }, `${mailbox} synced`);
     }
 
-    // Listings index no standard folder, so only a live watcher can raise this count.
+    // The folder's watcher is attached already, so this listing reconciles nothing: only the watcher can raise the count.
     async function counted(mailbox: string): Promise<boolean> {
         return findOrFail(await listMailboxes(token, userId), (box) => box.path === mailbox).total > 0;
     }
