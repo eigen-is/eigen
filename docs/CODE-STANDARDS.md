@@ -96,3 +96,5 @@ Before declaring any task complete, review every changed file against this list:
 ## Standards Gates
 
 The mechanical rules are enforced, not just documented: Biome carries what it can express, and `bun scripts/check-standards.ts` (part of `bun run check`) counts fourteen metrics over `apps/` and `packages/`: nine hard zeros and five ratcheting counts whose allowance in `scripts/standards-baseline.json` can fall but never rise (`bun run standards:update` after a cleanup). What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
+
+Biome also enforces the import and class rules in § Code Style: `style/useImportType` with `separatedType`, and `style/useConsistentMemberAccessibility` with `explicit`.
