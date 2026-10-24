@@ -12,6 +12,7 @@ import {
     extractClipboardSvgMetadata,
     inlineClipboardSvgMedia,
     needsReUpload,
+    pastedChartFields,
     readClipboardBox,
     readEigenClipboardAsync,
     reUploadImage,
@@ -214,6 +215,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                 // A chart keeps its parts as they came, a newer build's too, its font included, and its look as the
                 // element's own fields.
                 if (item.type === 'chart') {
+                    const parts = pastedChartFields(item.parts, newChartSpecParts);
+                    if (!parts) continue;
                     const { width, height } = box;
                     plan.partials.push({
                         type: 'chart',
@@ -221,7 +224,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                         width,
                         height,
                         angle,
-                        ...newChartSpecParts(item.parts),
+                        ...parts,
                         ...item.look,
                     });
                     continue;

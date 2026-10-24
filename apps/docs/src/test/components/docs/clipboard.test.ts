@@ -9,7 +9,7 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 installHappyDom();
 
 const { buildTextClipboardItem, classifyPaste } = await import('@workspace/lib/clipboard');
-const { FLAT_CHART_LOOK } = await import('@workspace/lib/charts');
+const { FLAT_CHART_LOOK, MAX_CHART_SPEC_BYTES } = await import('@workspace/lib/charts');
 const { DOCUMENT_FONT, EIGEN_FONTS } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
@@ -374,6 +374,25 @@ test('a chart item from another app pastes as a chart, capped at the column', as
         { ...parts, width: 400.5, height: 250.25, ...LOOK },
         { ...parts, width: 600, height: 337.5, ...FLAT_CHART_LOOK },
     ]);
+});
+
+// At the limit as the item carries it, past it once the doc adds the specPoints it lacks.
+test('a chart item that would land past the byte limit pastes nothing', async () => {
+    const { specPoints: _, ...lacking } = sampleChartParts('line');
+    const bytes = (texts: Record<string, string>) =>
+        Object.entries(texts).reduce((sum, [key, text]) => sum + new TextEncoder().encode(key + text).length, 0);
+    const padded = (pad: string) => ({
+        ...lacking,
+        specChart: JSON.stringify({ ...JSON.parse(lacking.specChart), pad }),
+    });
+    const parts = padded('x'.repeat(MAX_CHART_SPEC_BYTES - bytes(padded(''))));
+    const items = [{ type: 'chart' as const, parts, width: 400, height: 250, look: LOOK }];
+    const target = await paste({ eigen: { version: 1, items }, html: '', text: '', files: [], imageFiles: [] });
+    const charts: string[] = [];
+    target.state.doc.descendants((node) => {
+        if (node.type.name === 'chart') charts.push(node.type.name);
+    });
+    expect(charts).toEqual([]);
 });
 
 // A copy with no figure, title or upright italic is ProseMirror's own, so it never serializes the selection itself.

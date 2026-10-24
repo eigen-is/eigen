@@ -3,6 +3,7 @@ import { readChartLook } from '../../charts/look';
 import {
     chartSpecByteCounter,
     chartSpecTexts,
+    exceedsChartSpecBytes,
     exceedsChartSpecDepth,
     isChartSpecKey,
     readChartSpec,
@@ -82,8 +83,8 @@ export function buildTextClipboardItem(args: {
 }
 
 // The one test of a chart item's parts, the builder's and the reader's: a text under each key and every key a part's,
-// within the spec's byte and depth limits, counted as a host's read counts them, so no host stores parts another would
-// read as nothing; and inline data that reads.
+// within the spec's byte and depth limits as the item carries them, and inline data that reads. What a host stores can
+// be larger, so a paste counts that again (pastedChartFields).
 function isInlineChartParts(parts: unknown): parts is ChartSpecTexts {
     if (!isRecord(parts)) return false;
     const exceeds = chartSpecByteCounter();
@@ -107,6 +108,17 @@ export function buildChartClipboardItem(args: {
     if (!isInlineChartParts(parts)) return null;
     const look = readChartLook(args.look);
     return { type: 'chart', parts, width: args.box.width, height: args.box.height, look };
+}
+
+// The fields a paste stores for a chart item's parts, as its host makes them, or null past the byte limit: Sheets
+// repeats a series id in each entry's key, and a canvas adds every part the item lacks, so an item within the limit can
+// land past it, as a chart every peer reads as the placeholder.
+export function pastedChartFields<Fields extends Readonly<Record<string, unknown>>>(
+    parts: ChartSpecTexts,
+    make: (parts: ChartSpecTexts) => Fields,
+): Fields | null {
+    const fields = make(parts);
+    return exceedsChartSpecBytes(fields) ? null : fields;
 }
 
 // Read the typed geometry off any item. Consumers size/rotate from this — there is no `meta` sniff

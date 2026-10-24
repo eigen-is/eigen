@@ -8,6 +8,7 @@ import {
     buildImageClipboardItem,
     buildTextClipboardItem,
     clipboardTextItemHasContent,
+    pastedChartFields,
     readClipboardBox,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
@@ -291,9 +292,10 @@ function atomContent(
         return { type: 'figure', attrs: { mediaName, width, caption: item.caption } };
     }
     if (item.type !== 'chart') return null;
-    const scale = Math.min(1, columnWidth / item.width);
     // Its parts as they came, an attribute each; the schema declares no attribute for a newer build's part.
-    const parts = newChartSpecParts(item.parts);
+    const parts = pastedChartFields(item.parts, newChartSpecParts);
+    if (!parts) return null;
+    const scale = Math.min(1, columnWidth / item.width);
     const { look } = item;
     return { type: 'chart', attrs: { ...parts, width: item.width * scale, height: item.height * scale, ...look } };
 }

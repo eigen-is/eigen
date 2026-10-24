@@ -12,7 +12,7 @@ installHappyDom();
 (window.HTMLCanvasElement.prototype as any).getContext = () => ({ font: '', measureText: () => ({ width: 40 }) });
 
 const { createElement } = await import('react');
-const { newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
+const { MAX_CHART_SPEC_BYTES, newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
 const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
 const {
     buildElementsClipboardItem,
@@ -174,6 +174,23 @@ describe("⌘V of another app's items", () => {
         const added = await pasteOnCanvas([{ type: 'chart', parts: carried, width: 600, height: 371, look }]);
         expect(added).toEqual([expect.objectContaining({ ...carried, specPoints: '{}' })]);
         expect(specPoints).toBe('{}');
+    });
+
+    // At the limit as the item carries it, past it once the canvas adds the specPoints it lacks.
+    test("another app's chart that would land past the byte limit pastes nothing", async () => {
+        const { specPoints: _, ...lacking } = parts;
+        const bytes = (texts: Record<string, string>) =>
+            Object.entries(texts).reduce((sum, [key, text]) => sum + new TextEncoder().encode(key + text).length, 0);
+        const padded = (pad: string) => ({
+            ...lacking,
+            specChart: JSON.stringify({ ...JSON.parse(lacking.specChart), pad }),
+        });
+        const atLimit = padded('x'.repeat(MAX_CHART_SPEC_BYTES - bytes(padded(''))));
+        const added = await pasteOnCanvas([
+            { type: 'chart', parts: atLimit, width: 600, height: 371, look },
+            { type: 'chart', parts, width: 600, height: 371, look },
+        ]);
+        expect(added).toEqual([expect.objectContaining(parts)]);
     });
 
     // A 10 pt cell copied from Sheets: the wire's size is pt, so it lands in a drawing as 10 pt at 96 dpi, not as 10 px.

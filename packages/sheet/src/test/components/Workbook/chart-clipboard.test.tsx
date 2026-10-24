@@ -264,6 +264,26 @@ test('a chart item another app wrote pastes as an inline chart at its size', asy
     });
 });
 
+// About 18 KiB as the item carries it, about 140 KiB as Sheets stores it: an entry per point, the id in every key.
+test('a chart item past the byte limit as Sheets stores it pastes nothing', async () => {
+    const id = 's'.repeat(64);
+    const spec = sampleChartSpec('column');
+    const data = { source: 'inline' as const, categories: [], series: [{ id, name: '', values: [] }] };
+    const points = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [i, {}]));
+    const chart = {
+        ...newChartSpecParts({ ...spec, series: {}, points: {}, data }),
+        specPoints: JSON.stringify({ [id]: points }),
+    };
+    const item = buildChartClipboardItem({ chart, box: { width: 320, height: 200 }, look: {} });
+    if (!item) throw new Error('no item');
+    const clipboardData = new DataTransfer();
+    writeEigenClipboard(new ClipboardEvent('copy', { clipboardData }), { version: 1, items: [item] });
+    const { select, charts } = await mount();
+    await select();
+    await shortcut('KeyV', clipboardData);
+    expect(charts().map((c) => c.id)).toEqual(['c1']);
+});
+
 test('⌘C carries the look the chart stores, and a chart storing none copies flat', async () => {
     const rough = await mount({ look: ROUGH });
     await rough.select();

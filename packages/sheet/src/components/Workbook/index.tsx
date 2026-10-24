@@ -4,6 +4,7 @@ import {
     buildTextClipboardItem,
     classifyPaste,
     clipboardTextItemHasContent,
+    pastedChartFields,
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
@@ -710,7 +711,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                         const own = copied && isEqual(copied.inline, parts);
                                         const fields = own
                                             ? copySheetChartSpec(copied.chart)
-                                            : newSheetChartSpecParts(parts);
+                                            : pastedChartFields(parts, newSheetChartSpecParts);
+                                        if (!fields) continue;
                                         pasteChart(draftCtx, uuidv4(), fields, { width, height }, look);
                                     }
                                 });

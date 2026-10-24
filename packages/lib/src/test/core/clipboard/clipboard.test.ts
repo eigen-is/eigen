@@ -6,6 +6,7 @@ import {
     MAX_CHART_SPEC_DEPTH,
     MAX_CHART_SPEC_ENTRIES,
     newChartSpecParts,
+    newSheetChartSpecParts,
     sampleChartSpec,
 } from '../../../charts/spec';
 import {
@@ -19,6 +20,7 @@ import {
     inlineClipboardSvgMedia,
     materializeClipboardSvg,
     needsReUpload,
+    pastedChartFields,
     readClipboardBox,
     readEigenClipboard,
     readSvgClipboardWithItems,
@@ -558,6 +560,39 @@ describe('chart items', () => {
             { ...inline, future: '{}' },
         ];
         for (const parts of refused) expect(readEigenClipboard(raw({ ...good, parts }))?.items).toEqual([]);
+    });
+
+    // One series under a 64-character id with 2000 points carries about 18 KiB, and Sheets stores an entry per point
+    // with the id in its key, about 140 KiB. An item at the limit that lacks specPoints gains it on a canvas.
+    test('a paste refuses a chart its host would store past the byte limit', () => {
+        const id = 's'.repeat(64);
+        const series = { ...sampleChartSpec('column'), series: {}, points: {} };
+        const points = Object.fromEntries(Array.from({ length: 2000 }, (_, i) => [i, {}]));
+        const longIds = {
+            ...newChartSpecParts({
+                ...series,
+                data: { source: 'inline', categories: [], series: [{ id, name: '', values: [] }] },
+            }),
+            specPoints: JSON.stringify({ [id]: points }),
+        };
+        const { specPoints: _, ...lacking } = inline;
+        const bytes = (parts: Record<string, string>) =>
+            Object.entries(parts).reduce((sum, [key, text]) => sum + utf8(key + text), 0);
+        const padded = (pad: string) => ({
+            ...lacking,
+            specChart: JSON.stringify({ ...JSON.parse(lacking.specChart), pad }),
+        });
+        const atLimit = padded('x'.repeat(MAX_CHART_SPEC_BYTES - bytes(padded(''))));
+        const read = (parts: Record<string, string>) => {
+            const [item] = readEigenClipboard(raw({ ...good, parts }))?.items ?? [];
+            if (item?.type !== 'chart') throw new Error('refused');
+            return item.parts;
+        };
+        const wide = read(longIds);
+        expect(pastedChartFields(wide, newChartSpecParts)).toEqual(newChartSpecParts(longIds));
+        expect(pastedChartFields(wide, newSheetChartSpecParts)).toBeNull();
+        expect(pastedChartFields(read(atLimit), newChartSpecParts)).toBeNull();
+        expect(pastedChartFields(read(inline), newSheetChartSpecParts)).toEqual(newSheetChartSpecParts(inline));
     });
 
     // The wire is any page's to write; the canvas reader's validators judge the look, and a missing one reads flat.
