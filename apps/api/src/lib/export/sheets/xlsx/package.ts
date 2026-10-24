@@ -7,6 +7,7 @@ import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
+import { SPREADSHEETML } from '../../../ooxml/spreadsheetml';
 import type { OfficeMedia } from '../../office-image';
 import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import { drawingOf } from './drawing';
@@ -17,8 +18,6 @@ import { filterArea, worksheetPart } from './worksheet';
 // The workbook as a package: the sheets' names, workbook.xml and its relationships, and every part declared before any
 // is written. A part's body is pulled when the zip writer reaches it, so the sheets come first, then the shared strings
 // and the styles they filled.
-
-const SPREADSHEETML = 'application/vnd.openxmlformats-officedocument.spreadsheetml';
 
 export function writeWorkbook(
     sheets: Sheet[],

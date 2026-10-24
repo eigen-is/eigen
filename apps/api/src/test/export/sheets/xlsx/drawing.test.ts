@@ -8,12 +8,12 @@ import type { CountedWarningCode, TransformWarning } from '../../../../lib/docum
 import { toTransferableBuffer, toTransferableText } from '../../../../lib/document/transform/protocol';
 import type { OfficeImages, OfficeMedia } from '../../../../lib/export/office-image';
 import { officeImages } from '../../../../lib/export/office-image';
-import { DRAWING_CONTENT_TYPE, drawingOf } from '../../../../lib/export/sheets/xlsx/drawing';
+import { drawingOf } from '../../../../lib/export/sheets/xlsx/drawing';
 import { readXlsx, xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { A_NS, EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/ooxml/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../../lib/ooxml/ooxml-chart';
 import type { PackagePart } from '../../../../lib/ooxml/opc';
-import { pxToColumnWidth } from '../../../../lib/ooxml/spreadsheetml';
+import { DRAWING_CONTENT_TYPE, pxToColumnWidth } from '../../../../lib/ooxml/spreadsheetml';
 import { MAX_DECOMPRESSED_BYTES, openZip } from '../../../../lib/ooxml/zip';
 import { PIXEL_PNG } from '../../../fixtures/pptx';
 import { exportXlsx, xlsxFixture } from '../../../fixtures/xlsx';

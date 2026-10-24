@@ -11,14 +11,13 @@ import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
 import { writeChart } from '../../../ooxml/ooxml-chart-writer';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
+import { DRAWING_CONTENT_TYPE } from '../../../ooxml/spreadsheetml';
 import type { OfficeImages } from '../../office-image';
 import { sheetsResolver } from '../cell-style';
 
 // A sheet's floating charts and pictures as its drawing part: the path its <drawing> relationship targets, and the parts
 // the drawing adds to the package (itself, its relationships and its charts).
 export type SheetDrawing = { path: string; parts: PackagePart[] };
-
-export const DRAWING_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.drawing+xml';
 
 // The workbook's sheets resolve a chart's ranges, by the names they are written under; `number` names the sheet's
 // drawing and chart parts. Each chart and picture is a two-cell anchor over the cells its box covers, in paint order, so
