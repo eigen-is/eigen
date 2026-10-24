@@ -8,13 +8,12 @@ import {
 } from '@workspace/lib/sheets';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
-import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlTrimmedText } from '../../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlElements, xmlTrimmedText } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import type { Box, DrawingTheme } from '../../ooxml/drawingml';
-import { anchoredBox, DEGREE } from '../../ooxml/drawingml';
+import { anchoredBox, blipEmbeds, DEGREE } from '../../ooxml/drawingml';
 import {
     A_NS,
-    ASVG_NS,
     alternativeFor,
     C_NS,
     EMU_PER_PX,
@@ -158,12 +157,8 @@ function pictureOf(
     tracks: number,
 ): Omit<SheetImage, 'index'> | undefined {
     const fill = xmlChild(picture, XDR_NS, 'blipFill');
-    const blip = fill && xmlChild(fill, A_NS, 'blip');
-    const extensions = blip && xmlChild(blip, A_NS, 'extLst');
-    const svg = extensions && xmlElements(extensions).flatMap((ext) => xmlChildren(ext, ASVG_NS, 'svgBlip'))[0];
-    const part =
-        pictureMediaPart(context.pkg, rels, svg && xmlAttr(svg, R_NS, 'embed'), 'xl/') ??
-        pictureMediaPart(context.pkg, rels, blip && xmlAttr(blip, R_NS, 'embed'), 'xl/');
+    const [svg, raster] = blipEmbeds(fill && xmlChild(fill, A_NS, 'blip'));
+    const part = pictureMediaPart(context.pkg, rels, svg, 'xl/') ?? pictureMediaPart(context.pkg, rels, raster, 'xl/');
     if (!part || !context.spend(tracks + 1)) return undefined;
     const anchored = place();
     const mediaName = anchored && context.mediaName(part);

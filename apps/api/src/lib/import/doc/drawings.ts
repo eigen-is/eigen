@@ -3,9 +3,9 @@ import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE } from '@workspace/lib/charts';
 import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
+import { blipEmbeds } from '../../ooxml/drawingml';
 import {
     A_NS,
-    ASVG_NS,
     C_NS,
     DGM_NS,
     DSP_NS,
@@ -91,13 +91,12 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const figures: JSONContent[] = [];
         for (const picture of pictures) {
             const [blip] = descendants(picture, A_NS, 'blip');
-            const [svg] = blip ? descendants(blip, ASVG_NS, 'svgBlip') : [];
-            const embedded = (element: XmlElement | undefined) => element && xmlAttr(element, R_NS, 'embed');
-            const path = partPath(embedded(svg), context.scope) ?? partPath(embedded(blip), context.scope);
+            const [svg, raster] = blipEmbeds(blip);
+            const path = partPath(svg, context.scope) ?? partPath(raster, context.scope);
             const name = path && mediaName(reader, path);
             if (!name) {
                 // A linked picture lives outside the file; its alt text says what it was.
-                if (blip && !embedded(blip) && xmlAttr(blip, R_NS, 'link') && alt) pushText(reader, alt, {}, context);
+                if (blip && !raster && xmlAttr(blip, R_NS, 'link') && alt) pushText(reader, alt, {}, context);
                 continue;
             }
             const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];

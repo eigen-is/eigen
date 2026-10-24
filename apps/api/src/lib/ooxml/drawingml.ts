@@ -1,8 +1,8 @@
 import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import type { XmlElement } from '../core/xml';
-import { hasXmlName, xmlAttr, xmlChild, xmlElements, xmlText } from '../core/xml';
-import { A_NS } from './ooxml';
+import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../core/xml';
+import { A_NS, ASVG_NS, R_NS } from './ooxml';
 
 // DrawingML, the drawing vocabulary docx, xlsx and pptx share: a theme's colours, a colour element with its
 // transforms, a text body's plain text, and the theme the writers write.
@@ -285,6 +285,17 @@ function fromHsl(hue: number, sat: number, lum: number): [number, number, number
                     ? [x, 0, chroma]
                     : [chroma, 0, x];
     return [r + m, g + m, b + m];
+}
+
+// The parts an a:blip names, best first: its svgBlip extension's, which Office draws in its place, then its own. A
+// reader takes the raster when the SVG's part is none it can show.
+export function blipEmbeds(blip: XmlElement | undefined): [svg: string | undefined, raster: string | undefined] {
+    if (!blip) return [undefined, undefined];
+    const extensions = xmlChild(blip, A_NS, 'extLst');
+    const [svg] = extensions
+        ? xmlChildren(extensions, A_NS, 'ext').flatMap((ext) => xmlChildren(ext, ASVG_NS, 'svgBlip'))
+        : [];
+    return [svg && xmlAttr(svg, R_NS, 'embed'), xmlAttr(blip, R_NS, 'embed')];
 }
 
 // A text body's (c:rich, a:txBody) plain text: a line per paragraph and per break, runs and fields joined.
