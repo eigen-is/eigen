@@ -94,17 +94,27 @@ export const POINTS_PER_UNIT = new Map([
     ['mm', 72 / 25.4],
 ]);
 
-// ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
-// Past 64 characters it is none unread: no coordinate needs more, and a file's 4 MB one would be parsed at each use.
-const MAX_COORDINATE_CHARS = 64;
+// Past 64 characters a length is none unread: no length needs more, and a file's 4 MB one would be parsed at each use.
+const MAX_MEASURE_CHARS = 64;
 
+// ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
 export function emu(value: string | undefined): number | undefined {
-    if (value === undefined || value.length > MAX_COORDINATE_CHARS) return undefined;
+    if (value === undefined || value.length > MAX_MEASURE_CHARS) return undefined;
     const [, number, unit = ''] = value.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
     const points = POINTS_PER_UNIT.get(unit);
     const result =
         unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;
     return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
+}
+
+// A length in a unit `perPoint` to the point, twips or half-points, rounded: a universal measure is converted, anything
+// else read as a number in that unit.
+export function measure(value: string | undefined, perPoint: number): number | undefined {
+    if (value === undefined || value.length > MAX_MEASURE_CHARS) return undefined;
+    const [, number, unit = ''] = value.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]+)$/) ?? [];
+    const points = POINTS_PER_UNIT.get(unit);
+    const result = points === undefined ? Number.parseFloat(value) : Number(number) * points * perPoint;
+    return Number.isFinite(result) ? Math.round(result) : undefined;
 }
 
 // ── Values ──────────────────────────────────────────────────────────────────────────────────────────────────────

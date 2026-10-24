@@ -1,7 +1,7 @@
 import { BAND_ROOTS, type BandRoot, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
 import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
-import { alternativeFor, isOn, POINTS_PER_UNIT, R_NS, W_NS } from '../../ooxml/ooxml';
+import { alternativeFor, isOn, measure, R_NS, W_NS } from '../../ooxml/ooxml';
 import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../ooxml/opc';
 import type { ZipReader } from '../../ooxml/zip';
 import { IMPORT_MESSAGES } from '../messages';
@@ -182,13 +182,6 @@ export function int(value: string | undefined): number | undefined {
     if (value === undefined) return undefined;
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? Math.round(number) : undefined;
-}
-
-// A length in twips or half-points: a bare number is in that unit, a universal measure is converted.
-function measure(value: string | undefined, perPoint: number): number | undefined {
-    const [, number, unit = ''] = value?.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]+)$/) ?? [];
-    const points = POINTS_PER_UNIT.get(unit);
-    return points === undefined ? int(value) : Math.round(Number(number) * points * perPoint);
 }
 
 export function twipsOf(value: string | undefined): number | undefined {
