@@ -379,7 +379,8 @@ describe.skipIf(isWindows)('A folder outside the standard six stays fresh withou
         const user = await createTestUser(email, 'testpassword123', 'No Watcher Test');
         userId = user.id;
         token = user.sessionToken;
-        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+        // The first listing attaches the standard folders' watchers, so the test's listings don't.
+        await listMailboxes(token, userId);
 
         seedMaildirFolder(userId, 'Filed');
         seedMaildirFile(
@@ -444,7 +445,8 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
         const user = await createTestUser(email, 'testpassword123', 'Rewatch Test');
         userId = user.id;
         token = user.sessionToken;
-        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+        // The first listing attaches the standard folders' watchers.
+        await listMailboxes(token, userId);
     });
 
     // Listings index no standard folder, so only a live watcher can raise these counts.

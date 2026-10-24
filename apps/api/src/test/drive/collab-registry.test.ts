@@ -42,7 +42,7 @@ describe('collab documents at Home teardown', () => {
             return closeAllDatabases();
         });
 
-        await home.shutdown();
+        await home.close();
 
         expect(lateOpen).toBeInstanceOf(ApiError);
         expect(home.drive.hasCollabDocument(mountId, docId)).toBe(false);
@@ -61,7 +61,7 @@ describe('collab documents at Home teardown', () => {
         await waitFor(() => failLoad !== undefined);
         const errors = spyOn(console, 'error');
         try {
-            const shutdown = home.shutdown();
+            const shutdown = home.close();
             failLoad!(new ApiError(503, 'Storage unavailable'));
             await shutdown;
             await opening;

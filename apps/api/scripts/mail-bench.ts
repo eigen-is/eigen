@@ -2,7 +2,6 @@
 //
 // Measures cold sync / warm sync / incremental sync / list query / single mutations
 // against a large maildir, WITHOUT touching the repo's data/ dir or the dev server.
-// Measures the list sizes in docs/MAIL.md § The list pages by keyset and patches its own mutations.
 //
 // Run from the repo root (so @workspace/* resolves):
 //   INBOX=50000 ARCHIVE=50000 INCREMENTAL=1000 bun apps/api/scripts/mail-bench.ts
@@ -37,7 +36,7 @@ mkdirSync(HOME_DIR, { recursive: true });
 // ---- minimal fake Home (only what MaildirStore + MailDB touch) ----
 const fakeHome = {
     homeDir: HOME_DIR,
-    destructing: false,
+    closing: false,
     getLocalDatabase<S extends SchemaType>(config: DatabaseConfig<S>, relativePath: string) {
         return openLocalDatabase(config, path.join(HOME_DIR, relativePath));
     },

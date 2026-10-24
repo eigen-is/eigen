@@ -1,4 +1,4 @@
-// Enforce that getHome() appears in lib/ only inside lib/home/ and the allowlist below.
+// Enforce that getHome(), openHome() and loadedHome() appear in lib/ only inside lib/home/ and the allowlist below.
 // Lib code must receive Home as a parameter or use relay pull*/sendToHome functions.
 
 import { Glob } from 'bun';
@@ -28,13 +28,16 @@ for await (const path of glob.scan('apps/api/src/lib')) {
     if (ALLOWED.has(filename)) continue;
 
     const content = await Bun.file(`apps/api/src/lib/${path}`).text();
-    if (content.includes('getHome')) {
+    // Each of these hands out another owner's Home.
+    if (/\b(getHome|openHome|loadedHome|getTeamHome|getUserHome)\b/.test(content)) {
         violations.push(`apps/api/src/lib/${normalized}`);
     }
 }
 
 if (violations.length > 0) {
-    console.error('ERROR: getHome() must not be imported in lib/ (use home-relay or pass Home as parameter)\n');
+    console.error(
+        'ERROR: getHome(), openHome() and loadedHome() must not be imported in lib/ (use home-relay or pass Home as parameter)\n',
+    );
     for (const v of violations) console.error(`  ${v}`);
     console.error('\nSee docs/SCALABILITY.md for the home relay pattern.');
     process.exit(1);

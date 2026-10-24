@@ -1,3 +1,7 @@
+// Mail is the mail part of a user's Home: the inbox, folders, drafts and sending, as the mail routes
+// and the mail app use them. It keeps the messages in a mail store and turns the changes the store
+// discovers, such as new mail arriving, into live updates and notifications for the user.
+
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
@@ -104,14 +108,15 @@ export class Mail {
                 this.readNotificationOnceInboxRead();
             },
         });
-        // Every user Home carries a Mail; with mail off it seeds, watches and cleans nothing.
+        // Every user Home carries a Mail; with mail off it seeds and cleans nothing. The folder watchers wait for
+        // the first listing: a home opened for a notification or a share needs none, and on macOS each costs
+        // the event loop up to a second, more the more the process already watches.
         if (!isMailAppEnabled()) return;
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
             if (welcome) await this.store.append(MAILBOX_INBOX, welcome, { skipReconcile: true, arrival: false });
         }
-        await this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
     }
 

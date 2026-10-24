@@ -1,3 +1,8 @@
+// MaildirStore keeps a user's mail as plain files in the Maildir layout, the same folders the IMAP
+// server reads, so Eigen and other mail apps always see the same mail. Next to the files it keeps an
+// index database for fast lists and search. The mail part of a Home reads, writes and moves
+// messages and drafts through it.
+
 import type { FSWatcher } from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -125,11 +130,6 @@ export class MaildirStore implements MailStore {
         return isNew;
     }
 
-    // The standard six only: a watcher per IMAP folder spends the per-user inotify limit every home shares.
-    async watch(): Promise<void> {
-        await Promise.all(STANDARD_MAILBOXES.map((mailbox) => this.watchMailbox(mailbox)));
-    }
-
     async unwatch(): Promise<void> {
         for (const watcher of this.watchers.values()) watcher.close();
         this.watchers.clear();
@@ -144,7 +144,7 @@ export class MaildirStore implements MailStore {
             // Read before the watch attaches, so a dir replaced in between costs a spare re-attach, never a dead watcher.
             const identity = await this.dirIdentity(dir);
             // A listing still in flight during teardown would re-attach what unwatch() just closed.
-            if (identity === null || this.home.destructing || this.watchers.has(dir)) continue;
+            if (identity === null || this.home.closing || this.watchers.has(dir)) continue;
             try {
                 const watcher = this.storage.watch(dir, () => {
                     this.reconcileMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err));
@@ -208,8 +208,9 @@ export class MaildirStore implements MailStore {
         const mailboxes: MaildirMailbox[] = [];
         const paths = await this.listMailboxPaths();
         for (const name of paths) {
-            // Counts come from the index. A standard folder recreated since load gets its watcher back here;
-            // any other folder has none and reconciles here, in the background.
+            // Counts come from the index. A standard folder gets its watcher here, on the first listing or once
+            // recreated; any other folder has none, since each spends the per-user inotify limit every home
+            // shares, and reconciles here, in the background.
             if (isStandardMailbox(name)) {
                 await this.watchMailbox(name);
             } else if (this.reconcileDue(name)) {
@@ -414,7 +415,7 @@ export class MaildirStore implements MailStore {
 
     private async reconcileMailbox(mailbox: string): Promise<void> {
         // A watcher's fire-and-forget sync started during teardown would query a closed db.
-        if (this.home.destructing) return;
+        if (this.home.closing) return;
         this.lastReconcileStartedAt.set(mailbox, Date.now());
         const running = this.reconcilingMailboxes.get(mailbox);
         if (running) return running;

@@ -8,7 +8,7 @@ The idea underneath is that the mount's paths table is the tree and the backend 
 
 ## A Home is loaded on demand and dropped when idle
 
-`getHome(ownerId)` (`apps/api/src/lib/home/get-home.ts`) builds the Home on first use and caches it. Each domain getter calls `touch()`, and a Home nobody touches for its idle window shuts down and closes its databases. A user home idles out after 5 minutes. A team home gets 30 (`TEAM_HOME_IDLE_MS` overrides it), because no event stream keeps it alive. `evictHome` shuts one down on purpose (user deletion, backup restore), `shutdownAllHomes` all of them at exit.
+`getHome(ownerId)` (`apps/api/src/lib/home/get-home.ts`) builds the Home on first use and caches it. Each domain getter calls `touch()`, and a Home nobody touches for its idle window closes itself and its databases. Background work that may outlast the idle, such as a backup capture, calls `hold()` instead: the idle timer waits until it lets go. A user home idles out after 5 minutes. A team home gets 30 (`TEAM_HOME_IDLE_MS` overrides it), because no event stream keeps it alive. `evictHome` closes one on purpose (user deletion, backup restore), `shutdownAllHomes` all of them at exit.
 
 | Home | Folder | Services |
 |---|---|---|

@@ -393,7 +393,7 @@ describe('Server backup job', () => {
             const kept = await createTestUser(`mid-capture-${Date.now()}@test.eigen.is`, 'testpassword123', 'Kept');
             await getHome(kept.id);
             let refused: unknown = null;
-            // From inside the capture, past getHomeForBackup, and straight into better-auth so only the
+            // From inside the capture, past openHome, and straight into better-auth so only the
             // user.delete.before teardown stands between it and the evict that would close the databases read.
             const { internalAdapter } = await auth.$context;
             spies.push(

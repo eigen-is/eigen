@@ -166,16 +166,9 @@ Start here:
 
 Most subsystems have their own doc in `docs/`.
 
-## Code style (short version)
+## Code style
 
-- English everywhere: code, comments, commits
-- `type` over `interface`
-- No `as any`. Fix the type at the source
-- Theme tokens (`text-muted-foreground`), not hardcoded colors (`text-gray-500`)
-- Data hooks go in `packages/lib/`, not in app components
-- Error handling goes in hooks, not in UI code ([CODE-STANDARDS.md § Key Patterns](CODE-STANDARDS.md#key-patterns))
-
-Full version: [CODE-STANDARDS.md](CODE-STANDARDS.md).
+The rules, and the checklist a change passes before review, are in [CODE-STANDARDS.md](CODE-STANDARDS.md).
 
 ## License
 
