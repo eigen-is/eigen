@@ -54,8 +54,8 @@ export function pasteChart(
     selectFloatingObject(ctx, { kind: 'chart', id });
 }
 
-// Applied onto the chart as the recipe finds it, so neither a panel that rendered before a peer's edit nor a key this
-// build doesn't know is reverted.
+// Applied onto the chart as the recipe finds it, so a key this build doesn't know survives, and so does a peer's edit
+// of a field the change doesn't set.
 export function setChartSpec(ctx: Context, id: string, change: ChartSpecChange) {
     const chart = editableCurrentSheet(ctx)?.charts?.[id];
     if (chart) chart.spec = JSON.stringify(applyChartSpecChange(readChartSpec(chart.spec).stored, change));
