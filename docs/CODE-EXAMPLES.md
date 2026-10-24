@@ -160,7 +160,21 @@ The rules are in [CODE-STANDARDS.md § Code Style](CODE-STANDARDS.md#code-style)
 
 - **English everywhere**: code, comments, docs, commit messages
 - **No JSDoc**: code should be self-documenting. Comments only where logic isn't obvious
-- **Comments are only for high-complexity code, or functions whose use wouldn't be obvious to a maintainer of this repo**, and they explain WHY, never WHAT. Write them in simplified technical English and favor concision over grammar: `// Walk parentId chain to find outermost container` is good, `// Set the variable to true` is noise. Most code needs zero comments, and no comment is better than slop. Reviewers should flag comment slop the same as dead code
+- **Every source file opens with a header comment**, then a blank line, then the imports. It tells a developer who has never seen the file what the code does, why it exists, and where it sits in the bigger picture: who calls it, what it calls, when it runs. Plain words, two to five lines. It names functions and concepts (`getHome`), never file paths or docs, because those move and the IDE finds callers anyway. No history, no TODOs. Test files and generated files have none. A good header:
+
+  ```ts
+  // A Home is everything one owner keeps on this server, such as a user's files, mail and calendar,
+  // or the smaller set a team has. Every request reaches that data through getHome(ownerId), which
+  // builds the Home on first use. It stays loaded while it is used and closes itself, databases
+  // included, after a few idle minutes. This base class owns that lifecycle; each kind of home
+  // decides which parts it has.
+  ```
+
+  A bad one: `// Home class. See STORAGE.md and get-home.ts. Uses allSettled since AUDIT 13.` It names the class instead of the idea, points at files that move, and tells history.
+
+  A header is self-contained: it states what this file owns and stays true whatever other files do. Facts another file owns, such as which kinds exist, which parts they have or who calls this file, appear only as examples ("such as", "for example"), never as a complete list. The test: after someone adds a caller, a subclass or a feature elsewhere, is the header still true? A header that lists "the user, team, org and guest homes" is wrong the day someone adds an admin home.
+- **Beyond the header, comments are only for high-complexity code, or functions whose use wouldn't be obvious to a maintainer of this repo**, and they explain WHY, never WHAT. Write them in plain English that a non-native reader understands on the first read: short sentences, common words, no chains of jargon. `// Walk parentId chain to find outermost container` is good, `// Set the variable to true` is noise. Most code needs zero comments, and no comment is better than slop. Reviewers should flag comment slop the same as dead code
+- **Every class member states its access**: `public`, `private` or `protected`, the narrowest that compiles, so a reader sees at a glance what the rest of the code may use
 - **Backend errors use `ApiError`**: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`. Exception: internal invariants (db not open, missing config) may use `throw new Error()` since an HTTP status code wouldn't be semantically correct
 - **Theme tokens, not colors**: use `text-muted-foreground`, `bg-muted`, not `text-gray-500`, `bg-blue-50`. Use `selection-handle` token for selection UI (resize handles, bounding boxes)
 - **Use `cn()` for class merging**: import from `@workspace/ui/lib/utils`, never use raw `clsx`/`twMerge` or string concatenation for conditional Tailwind classes

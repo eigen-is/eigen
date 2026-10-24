@@ -27,7 +27,7 @@ Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook
 - Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it. The exception is `@workspace/math`, a leaf package with no dependencies, which owns its own ([ARCHITECTURE.md § Dependency direction](ARCHITECTURE.md#dependency-direction))
 - `type` over `interface`, except when methods are needed
 - Infer locally, annotate publicly: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
-- `import type` for type-only imports, separate from value imports
+- `import type` for type-only imports, as a statement of its own next to the value import from the same module (`import type { A } from 'x'` and `import { b } from 'x'`), so each import fits on one line
 - Drizzle `.$inferSelect` for DB row types: never redefine column types by hand
 
 ## Code Style
@@ -36,7 +36,9 @@ Examples per rule: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style)
 
 - English everywhere: code, comments, docs, commit messages
 - No JSDoc: code should be self-documenting
-- Comments only for high-complexity code or functions whose use isn't obvious to a maintainer of this repo, and they explain WHY, never WHAT: simplified technical English, concision over grammar. Most code needs zero comments; no comment beats slop, and reviewers flag comment slop the same as dead code
+- Every source file opens with a header comment and a blank line: a few plain lines on what the file does, why it exists, and where it sits in the bigger picture (who calls it, when it runs). It stays true whatever other files do: what other files own (kinds, parts, callers) appears only as examples, never as a complete list. No file paths or doc links, which go stale. Test files and generated files have none
+- Beyond the header, comments only for high-complexity code or functions whose use isn't obvious to a maintainer of this repo, and they explain WHY, never WHAT. Write plain English that a non-native reader understands on the first read: short sentences, common words. Most code needs zero comments; no comment beats slop, and reviewers flag comment slop the same as dead code
+- Every class member states its access: `public`, `private` or `protected`, the narrowest that compiles
 - Backend errors use `ApiError`: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`; internal invariants (db not open, missing config) may use `throw new Error()`
 - Theme tokens, not colors: `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
 - Use `cn()` for class merging: from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
@@ -86,6 +88,7 @@ Before declaring any task complete, review every changed file against this list:
 - Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen?
 - Do new `useQuery` hooks have `enabled` guards and `staleTime`?
 - Does the new code match the patterns and naming of its neighbors?
+- Does every file you changed open with a header comment that is still true?
 - Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none))
 
 ## Standards Gates

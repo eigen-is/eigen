@@ -58,7 +58,7 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - Layout, lists, Drive's file UI, keyboard, z-index, hover icons: [LAYOUT.md](docs/LAYOUT.md); mobile: [MOBILE.md](docs/MOBILE.md); typography: [TYPOGRAPHY.md](docs/TYPOGRAPHY.md); command palette: [COMMAND-PALETTE.md](docs/COMMAND-PALETTE.md)
 - Testing and browser verification: [TESTING.md](docs/TESTING.md), the [verify-in-browser skill](.claude/skills/verify-in-browser/SKILL.md)
 - Help center: [HELP-CENTER.md](docs/HELP-CENTER.md), [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md)
-- Code standards and their worked examples: [CODE-STANDARDS.md](docs/CODE-STANDARDS.md), [CODE-EXAMPLES.md](docs/CODE-EXAMPLES.md); setting up and contributing: [CONTRIBUTING.md](docs/CONTRIBUTING.md)
+- Code standards and their worked examples: [CODE-STANDARDS.md](docs/CODE-STANDARDS.md), [CODE-EXAMPLES.md](docs/CODE-EXAMPLES.md); cleaning up or writing one source file: the [source-file skill](.claude/skills/source-file/SKILL.md); setting up and contributing: [CONTRIBUTING.md](docs/CONTRIBUTING.md)
 - Backlog: [ROADMAP.md](docs/ROADMAP.md); after 1.0: [ROADMAP-POST-1.md](docs/ROADMAP-POST-1.md); sheets: [SHEETS-TODO.md](docs/SHEETS-TODO.md)
 
 ## Pitfalls

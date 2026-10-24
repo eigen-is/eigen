@@ -1,8 +1,8 @@
-// A Home is everything one owner keeps on this server: a user's drive, mail, contacts, calendar and
-// notifications, or the smaller set a team, an org or a guest has. Every request, SSE stream, collab
-// socket and DAV call reaches its data through getHome(ownerId), which builds the Home on first use.
-// It stays loaded while it is used and closes itself, databases included, after a few idle minutes.
-// This base class owns that lifecycle; the user, team, org and guest homes decide which parts exist.
+// A Home is everything one owner keeps on this server, such as a user's files, mail and calendar,
+// or the smaller set a team has. Every request reaches that data through getHome(ownerId), which
+// builds the Home on first use. It stays loaded while it is used and closes itself, databases
+// included, after a few idle minutes. This base class owns that lifecycle; each kind of home
+// decides which parts it has.
 
 import * as path from 'node:path';
 import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settings';
@@ -28,7 +28,7 @@ export class Home {
     public fs!: LocalFilesystem;
     public settings!: JsonStore<HomeSettings>;
 
-    // Which parts exist depends on the kind of home: an org home has none, a team home only drive and calendar.
+    // Which parts exist depends on the kind of home. A part the home doesn't have stays undefined.
     protected _drive?: Drive;
     protected _contacts?: Contacts;
     protected _mail?: Mail;
@@ -190,8 +190,8 @@ export class Home {
         }
     }
 
-    // Uses the fields, not the getters: a team's calendar getter throws when the calendar is off,
-    // but its files still take up space.
+    // Uses the fields, not the getters: a getter may refuse a part that is switched off, but its
+    // files still take up space.
     public async dataSize(): Promise<number> {
         const [mail, contacts, calendar] = await Promise.all([
             this._mail?.size(),
@@ -202,7 +202,7 @@ export class Home {
     }
 
     public async size(teamIds: string[] = []): Promise<HomeSizeResponse> {
-        // Org homes have no drive: nothing to size.
+        // A home without a drive has nothing to size.
         if (!this._drive) return homeSize();
 
         const [dataUsed, driveUsed] = await Promise.all([this.dataSize(), this._drive.size('default')]);
