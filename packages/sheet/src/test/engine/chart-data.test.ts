@@ -380,4 +380,30 @@ describe('inlineChartSpec', () => {
         expect(moved.data.categories).toEqual(ref([3, 5], [0, 0]));
         expect(moved.data.series[0].x).toEqual(ref([3, 5], [2, 2]));
     });
+
+    test('an unknown key nested past the stack, under the data and a series, neither throws nor stops a move', () => {
+        // A chart holding two of these would pass the spec's size limit, so each place gets its own.
+        let deep: unknown = ref([1, 3], [2, 2]);
+        for (let i = 0; i < 20_000; i += 1) deep = [deep];
+        const down = (ref: CellRangeRef): CellRangeRef => ({ ...ref, row: [ref.row[0] + 2, ref.row[1] + 2] });
+        for (const place of ['data', 'series'] as const) {
+            const raw = JSON.parse(newer().spec);
+            (place === 'data' ? raw.data : raw.data.series[0]).deep = deep;
+            const chart = { ...newer(), spec: JSON.stringify(raw) };
+            const moved = JSON.parse(mapChartRefs(chart, down).spec);
+            expect(moved.data.series[0].values).toEqual(ref([3, 5], [1, 1]));
+            const kept = place === 'data' ? moved.data.deep : moved.data.series[0].deep;
+            expect(JSON.stringify(kept)).toBe(JSON.stringify(deep));
+            const copied = JSON.parse(inlineChartSpec(chart, resolver) ?? '{}');
+            expect(copied.data.series[0].values).toEqual([42, null, null]);
+        }
+    });
+
+    test('a ref with a key of its own moves and keeps the key', () => {
+        const raw = JSON.parse(newer().spec);
+        raw.data.series[0].x = { ...ref([1, 3], [2, 2]), unit: 'px' };
+        const down = (ref: CellRangeRef): CellRangeRef => ({ ...ref, row: [ref.row[0] + 2, ref.row[1] + 2] });
+        const moved = JSON.parse(mapChartRefs({ ...newer(), spec: JSON.stringify(raw) }, down).spec);
+        expect(moved.data.series[0].x).toEqual({ ...ref([3, 5], [2, 2]), unit: 'px' });
+    });
 });

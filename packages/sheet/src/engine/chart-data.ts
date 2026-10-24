@@ -142,10 +142,10 @@ export function cellLabel(cell: Cell | null): string {
 }
 
 // Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or its
-// stored data is not range data. Every ref moves, under any key, so a ref this build doesn't know moves too,
-// even in a chart it can't draw. A null empties a ref, and a name ref leaves the series unnamed. `slices`
-// rewrites the slice colors of a chart this build reads, given the ref the slices run along before the map:
-// the categories, or the first drawn series' values for a chart without them.
+// stored data is not range data. Every ref on the data or a series moves, under any key, so a ref this build
+// doesn't know moves too, even in a chart it can't draw. A null empties a ref, and a name ref leaves the series
+// unnamed. `slices` rewrites the slice colors of a chart this build reads, given the ref the slices run along
+// before the map: the categories, or the first drawn series' values for a chart without them.
 export function mapChartRefs(
     chart: SheetChart,
     map: (ref: CellRangeRef) => CellRangeRef | null,
@@ -168,27 +168,26 @@ export function mapChartRefs(
     return { ...chart, spec: JSON.stringify(applyChartSpecChange(stored, change)) };
 }
 
-// A record shaped as a CellRangeRef, which never grows a field, wherever it sits in the data.
+// A record shaped as a CellRangeRef. A key beside its three is kept, as the reader keeps it.
 function isRef(value: unknown): value is CellRangeRef {
     const bounds = (v: unknown) => Array.isArray(v) && v.length === 2 && v.every(Number.isInteger);
-    return (
-        isRecord(value) &&
-        Object.keys(value).length === 3 &&
-        typeof value['sheetId'] === 'string' &&
-        bounds(value['row']) &&
-        bounds(value['column'])
-    );
+    return isRecord(value) && typeof value['sheetId'] === 'string' && bounds(value['row']) && bounds(value['column']);
 }
 
-// Stored data with every ref passed through `map`, which is told the key it sits under; undefined leaves it out.
-function walkRefs(value: unknown, map: (ref: CellRangeRef, key?: string) => unknown, key?: string): unknown {
-    if (isRef(value)) return map(value, key);
-    if (Array.isArray(value)) return value.map((item) => walkRefs(item, map)).filter((item) => item !== undefined);
-    if (!isRecord(value)) return value;
-    return Object.fromEntries(
-        Object.entries(value).flatMap(([k, v]) => {
-            const next = walkRefs(v, map, k);
-            return next === undefined ? [] : [[k, next]];
-        }),
-    );
+// Stored data with every ref passed through `map`, which is told the key it sits under; undefined leaves it out. A ref
+// sits on the data or on one of its series, so nothing deeper is walked, and a forged spec nested past the stack can't
+// throw out of a row op.
+function walkRefs(data: unknown, map: (ref: CellRangeRef, key: string) => unknown): unknown {
+    const walk = (record: Record<string, unknown>) =>
+        Object.fromEntries(
+            Object.entries(record).flatMap(([key, value]) => {
+                const next = isRef(value) ? map(value, key) : value;
+                return next === undefined ? [] : [[key, next]];
+            }),
+        );
+    if (!isRecord(data)) return data;
+    const walked = walk(data);
+    const series = data['series'];
+    if (Array.isArray(series)) walked['series'] = series.map((item) => (isRecord(item) ? walk(item) : item));
+    return walked;
 }
