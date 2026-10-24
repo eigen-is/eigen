@@ -8,6 +8,7 @@
 
 import { isRecord } from '../core/guards';
 import { cloneSides, parseCellKey } from './borders';
+import { chartsWithinEntryCap } from './floating';
 import type {
     CalcChainEntry,
     Cell,
@@ -128,8 +129,13 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
         const { cells, borderCells, config, images, charts, ...rest } = encoded;
         // Both maps are materialized on every sheet, the way normalizeSheetConfig materializes a
         // config collection: the editor writes each object under its own key, and a patch resolves
-        // against a base that already carries the map. An images array is dropped.
-        const sheet: RuntimeSheet = { ...rest, images: isRecord(images) ? images : {}, charts: charts ?? {} };
+        // against a base that already carries the map. A value that is no map is dropped, and so is a chart past the
+        // entry cap.
+        const sheet: RuntimeSheet = {
+            ...rest,
+            images: isRecord(images) ? images : {},
+            charts: isRecord(charts) ? chartsWithinEntryCap(charts) : {},
+        };
 
         if (cells) {
             const celldata: CellWithRowAndCol[] = [];

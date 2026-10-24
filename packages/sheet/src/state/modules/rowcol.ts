@@ -1,3 +1,4 @@
+import { isRecord } from '@workspace/lib/guards';
 import type { MergeCell, SingleRange } from '@workspace/lib/sheets';
 import { assign, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import {
@@ -426,7 +427,8 @@ function adjustSelectionForInsert(
 // Per sheet and per field, never `ctx.sheets = ...` or a whole sheet: a wholesale reassignment makes immer emit one
 // replace carrying the whole workbook, shipped over collab on every edit (rowcol-patches.test.ts), and a whole sheet's
 // undo would put back its images and charts over a peer's later ones. A moved chart gets only the fields that changed,
-// its spec, so a peer's move or delete of it at once survives; an image never moves.
+// its spec parts, a keyed part an entry at a time, so a peer's move or delete of it, or its edit of another entry, at
+// once survives, and the undo puts back only the entries the op moved; an image never moves.
 function writeBackSheets(ctx: Context, sheets: Sheet[]) {
     sheets.forEach((next, i) => {
         const sheet: Record<string, unknown> = ctx.sheets[i];
@@ -438,10 +440,18 @@ function writeBackSheets(ctx: Context, sheets: Sheet[]) {
             const stored: Record<string, unknown> | undefined = charts?.[chart.id];
             if (!stored || stored === chart) continue;
             for (const [field, value] of Object.entries(chart)) {
-                if (stored[field] !== value) stored[field] = value;
+                const record = stored[field];
+                if (record === value) continue;
+                if (isRecord(record) && isRecord(value)) writeEntries(record, value);
+                else stored[field] = value;
             }
         }
     });
+}
+
+function writeEntries(record: Record<string, unknown>, next: Record<string, unknown>) {
+    for (const [entry, value] of Object.entries(next)) if (record[entry] !== value) record[entry] = value;
+    for (const entry of Object.keys(record)) if (!Object.hasOwn(next, entry)) delete record[entry];
 }
 
 export function insertRowCol(

@@ -3,21 +3,32 @@
 // object's.
 
 import {
-    applyChartSpecChange,
     CHART_DEFAULT_SIZE,
     holdsUnknownChartData,
-    parseChartSpec,
+    newSheetChartSpecParts,
     readChartLook,
     readChartSpec,
+    sheetChartSpecWrites,
 } from '@workspace/lib/charts';
 import { buildChartClipboardItem } from '@workspace/lib/clipboard';
 import type { SheetChart } from '@workspace/lib/sheets';
 import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
-import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
+import type {
+    CellRangeRef,
+    ChartLook,
+    ChartSpec,
+    ChartSpecChange,
+    SheetChartSpecParts,
+} from '@workspace/lib/types/chart';
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import type { Box } from '@workspace/lib/vector';
 import { randomSeed } from '@workspace/lib/vector';
-import { inlineChartSpec, renderSheetChartSvg } from '../../engine/chart-data';
+import {
+    inlineChartSpec,
+    renderSheetChartSvg,
+    sheetChartSpecParts,
+    writeSheetChartSpec,
+} from '../../engine/chart-data';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { chartRangeChange, currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
 import type { CellMatrix } from '../../engine/types';
@@ -32,17 +43,19 @@ export type ChartInsertBox = Omit<Box, 'angle'>;
 
 // Flat, as Google's is, with a seed of its own, so a sketch picked later jitters the same everywhere.
 export function insertChart(ctx: Context, id: string, box: ChartInsertBox, spec: ChartSpec) {
-    addChart(ctx, id, box, JSON.stringify(spec), { seed: randomSeed() });
+    addChart(ctx, id, box, newSheetChartSpecParts(spec), { seed: randomSeed() });
 }
 
-function addChart(ctx: Context, id: string, box: ChartInsertBox, spec: string, look: Partial<ChartLook>) {
+// Every keyed part a record from the start, so a peer's first entry in one is never a write of the record.
+function addChart(ctx: Context, id: string, box: ChartInsertBox, parts: SheetChartSpecParts, look: Partial<ChartLook>) {
     const sheet = editableCurrentSheet(ctx);
     if (!sheet) return;
     const charts = (sheet.charts ??= {});
-    charts[id] = { id, index: nextFloatingIndex(sheet), ...sheetFloatingBox(box), spec, ...look };
+    charts[id] = { id, index: nextFloatingIndex(sheet), ...sheetFloatingBox(box), ...parts, ...look };
 }
 
-// A pasted chart lands on the selected cell at its copied size, its spec and look stored as they came, and selected.
+// A pasted chart lands on the selected cell at its copied size, its spec and look stored as they came, a part per
+// field, and selected.
 export function pasteChart(
     ctx: Context,
     id: string,
@@ -51,15 +64,16 @@ export function pasteChart(
     look: ChartLook,
 ) {
     if (!editableCurrentSheet(ctx)) return;
-    addChart(ctx, id, { ...selectedCellOrigin(ctx), ...size }, spec, look);
+    addChart(ctx, id, { ...selectedCellOrigin(ctx), ...size }, sheetChartSpecParts(spec), look);
     selectFloatingObject(ctx, { kind: 'chart', id });
 }
 
 // Applied onto the chart as the recipe finds it, so a key this build doesn't know survives, and so does a peer's edit
-// of a field the change doesn't set.
+// of a field the change doesn't set. A keyed part is written an entry at a time, never assigned, so its patches name
+// the entries and a peer's edit of another entry stands.
 export function setChartSpec(ctx: Context, id: string, change: ChartSpecChange) {
     const chart = editableCurrentSheet(ctx)?.charts?.[id];
-    if (chart) chart.spec = JSON.stringify(applyChartSpecChange(readChartSpec(chart.spec).stored, change));
+    if (chart) writeSheetChartSpec(chart, sheetChartSpecWrites(readChartSpec(chart).stored, change));
 }
 
 // Writes only the look fields given, each its own op, so a peer's edit of another field merges.
@@ -92,7 +106,7 @@ export function insertChartFromSelection(ctx: Context, id: string): ChartRangeRe
 export function setChartDataRange(ctx: Context, id: string, ref: CellRangeRef) {
     const chart = editableCurrentSheet(ctx)?.charts?.[id];
     if (!chart) return;
-    const { stored, spec } = readChartSpec(chart.spec);
+    const { stored, spec } = readChartSpec(chart);
     if (!spec || holdsUnknownChartData(stored, spec)) return;
     const setup = setUpChartRange(ref, createContextResolver(ctx), spec.data);
     if (typeof setup !== 'string') setChartSpec(ctx, id, chartRangeChange(setup.data));
@@ -107,7 +121,7 @@ export function sheetChartSvg(ctx: Context, chart: SheetChart): string {
     const cellsOf = (sheetId: string) => ctx.sheets.find((sheet) => sheet.id === sheetId)?.data;
     const drawn = drawings.get(chart);
     if (drawn?.sheetIds.every((sheetId, i) => cellsOf(sheetId) === drawn.reads[i])) return drawn.svg;
-    const data = parseChartSpec(chart.spec)?.data;
+    const data = readChartSpec(chart).spec?.data;
     const refs = data?.source === 'range' ? [data.categories, ...data.series.flatMap((s) => [s.name, s.values])] : [];
     const sheetIds = [...new Set(refs.flatMap((ref) => (ref && typeof ref !== 'string' ? [ref.sheetId] : [])))];
     const svg = renderSheetChartSvg(chart, createContextResolver(ctx));

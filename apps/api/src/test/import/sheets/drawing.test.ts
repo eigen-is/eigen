@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CHART_MAX_SIDE, parseChartSpec } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, readChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import {
     floatingItems,
@@ -11,10 +11,13 @@ import {
 } from '@workspace/lib/sheets';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
-import { CHART_SHEET_SIZE } from '../../../lib/import/sheets/drawing';
+import { IMPORT_MESSAGES } from '../../../lib/import/messages';
+import { CHART_SHEET_SIZE, partsText, placeDrawings, readDrawing } from '../../../lib/import/sheets/drawing';
 import { readXlsx } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
+import { drawingTheme } from '../../../lib/ooxml/drawingml';
 import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
+import { openPackage, optional } from '../../../lib/ooxml/opc';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
 import { PIXEL_PNG } from '../../fixtures/pptx';
 import type { FixtureSheet } from '../../fixtures/xlsx';
@@ -159,7 +162,7 @@ describe('a worksheet chart', () => {
                 charts: [column("'MY DATA'")],
             }),
         );
-        const spec = parseChartSpec(chartsOf(sheets[0])[0].spec);
+        const { spec } = readChartSpec(chartsOf(sheets[0])[0]);
         const data = { sheetId: 'sheet-1' };
         expect(spec?.chart.type).toBe('column');
         expect(spec?.data).toMatchObject({
@@ -187,7 +190,7 @@ describe('a worksheet chart', () => {
         expect(first).toMatchObject({ id: 'chart-0', x: 68, y: 40, width: 300, height: 200 });
         expect(second).toMatchObject({ id: 'chart-1', x: 50, y: 60, width: 400, height: 250 });
         expect(first.index < second.index).toBe(true);
-        expect(first.spec).toBe(second.spec);
+        expect(readChartSpec(first).stored).toEqual(readChartSpec(second).stored);
     });
 
     // Excel draws a two-cell anchor between its corners whichever comes first.
@@ -240,7 +243,7 @@ describe('a worksheet chart', () => {
             }),
         );
         expect(sheets.map((sheet) => sheet.name)).toEqual(['Data', 'DATA (2)']);
-        expect(parseChartSpec(chartsOf(sheets[0])[0].spec)?.data).toMatchObject({
+        expect(readChartSpec(chartsOf(sheets[0])[0]).spec?.data).toMatchObject({
             source: 'range',
             categories: { sheetId: 'sheet-0' },
         });
@@ -254,7 +257,7 @@ describe('a worksheet chart', () => {
                 charts: [column('Data', 'Sales')],
             }),
         );
-        expect(parseChartSpec(chartsOf(sheets[0])[0].spec)?.data).toMatchObject({
+        expect(readChartSpec(chartsOf(sheets[0])[0]).spec?.data).toMatchObject({
             source: 'inline',
             categories: ['North', 'South', 'East'],
             series: [{ name: 'Sales', values: [1, 2, 3] }],
@@ -297,7 +300,7 @@ describe('a worksheet chart', () => {
                 ],
             }),
         );
-        const specs = chartsOf(sheets[0]).map((chart) => JSON.parse(chart.spec));
+        const specs = chartsOf(sheets[0]).map((chart) => readChartSpec(chart).stored);
         expect(specs).toMatchObject([
             { chart: { type: 'pie' }, data: { source: 'inline', series: [{ values: [1, 2, 3] }] } },
         ]);
@@ -322,6 +325,41 @@ describe('a worksheet chart', () => {
         const placed = chartsOf(sheets[0]).length;
         expect(placed).toBeGreaterThan(count - 20);
         expect(warnings).toEqual([{ code: 'charts-dropped', count: count - placed }]);
+    });
+
+    // A chart's parts are what the snapshot holds of it, so the output budget counts their text, keys and all.
+    test("each chart placed is charged its parts' text", () => {
+        const pkg = openPackage(
+            workbook({
+                sheets: [{ name: 'Data', data: DATA }],
+                anchors:
+                    twoCell([0, 0, 0, 0], [3, 0, 10, 0], graphicFrame('rId1')) +
+                    twoCell([0, 0, 12, 0], [3, 0, 20, 0], graphicFrame('rId1')),
+                charts: [column('Data')],
+            }),
+            IMPORT_MESSAGES.xlsx,
+        );
+        const drawing = readDrawing(
+            pkg,
+            pkg.part('xl/worksheets/sheet1.xml'),
+            pkg.relationships('xl/worksheets/sheet1.xml'),
+        );
+        if (!drawing) throw new Error('no drawing');
+        const sheet: Sheet = { name: 'Data', id: 'sheet-0' };
+        const charged: number[] = [];
+        placeDrawings([{ sheet, chartSheet: false, ...drawing }], {
+            pkg,
+            theme: drawingTheme(optional(() => pkg.part('xl/theme/theme1.xml'))),
+            sheetIds: new Map([['data', 'sheet-0']]),
+            spend: () => true,
+            charge: (_, text) => charged.push(text),
+            mediaName: () => undefined,
+            lost: () => {},
+        });
+        const charts = chartsOf(sheet);
+        expect(charts).toHaveLength(2);
+        expect(Object.keys(charts[0].specSeries)).not.toEqual([]);
+        expect(charged).toEqual(charts.map(partsText));
     });
 
     // Placing an anchor walks the tracks before its corners, so a far one costs its columns and rows.
@@ -581,10 +619,17 @@ describe('a chart sheet', () => {
                 width: 977,
                 height: 638,
                 angle: 0,
-                spec: expect.any(String),
+                specChart: expect.any(String),
+                specTitle: expect.any(String),
+                specLegend: expect.any(String),
+                specAxes: expect.any(Object),
+                specPlots: expect.any(Object),
+                specSeries: expect.any(Object),
+                specPoints: expect.any(Object),
+                specData: expect.any(String),
             },
         ]);
-        expect(parseChartSpec(chartsOf(sheets[1])[0].spec)?.data).toMatchObject({
+        expect(readChartSpec(chartsOf(sheets[1])[0]).spec?.data).toMatchObject({
             source: 'range',
             categories: { sheetId: 'sheet-0' },
         });
@@ -625,7 +670,7 @@ describe('a chart sheet', () => {
         expect(sheets).toHaveLength(1);
         expect(sheets[0]).toMatchObject({ name: 'Chart1', color: '#FF0000' });
         // The sheet its refs name is none of the workbook's, as an external ref's isn't: its caches come in inline.
-        expect(parseChartSpec(chartsOf(sheets[0])[0].spec)?.data).toMatchObject({
+        expect(readChartSpec(chartsOf(sheets[0])[0]).spec?.data).toMatchObject({
             source: 'inline',
             series: [{ values: [1, 2, 3] }],
         });

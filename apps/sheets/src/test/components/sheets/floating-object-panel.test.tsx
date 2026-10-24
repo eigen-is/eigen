@@ -2,6 +2,7 @@
 // then Arrange. Delete is the menu's and the keyboard's, so the panel has no button for it. A typed field holds the
 // host's gesture, one undo step. A viewer reads the fields and gets nothing that writes.
 import { afterEach, describe, expect, test } from 'bun:test';
+import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart, SheetFloatingItem, SheetImage } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -15,7 +16,7 @@ const { FloatingObjectPanel } = await import('../../../components/sheets/floatin
 
 const BOX = { x: 12.4, y: 30, width: 200, height: 100, angle: 45 };
 const image: SheetImage = { id: 'i1', index: 'a0', mediaName: 'cat.png', ...BOX };
-const chart: SheetChart = { id: 'c1', index: 'a1', spec: '{}', ...BOX };
+const chart: SheetChart = { id: 'c1', index: 'a1', ...newSheetChartSpecParts(sampleChartSpec('column')), ...BOX };
 
 let unmount = async () => {};
 afterEach(() => unmount());

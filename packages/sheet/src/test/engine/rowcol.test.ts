@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet, SheetChart, SheetConfig } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
@@ -661,7 +661,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
 
     function chart(data: Omit<RangeChartData, 'source'>, id = 'c1'): SheetChart {
         const spec: ChartSpec = { ...sampleChartSpec('column'), data: { source: 'range', ...data } };
-        return { id, index: 'a0', x: 0, y: 0, width: 400, height: 300, spec: JSON.stringify(spec) };
+        return { id, index: 'a0', x: 0, y: 0, width: 400, height: 300, ...newSheetChartSpecParts(spec) };
     }
     const series = (values: CellRangeRef | null, name: string | CellRangeRef = 'Points') => ({
         id: 's-1',
@@ -676,7 +676,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
         makeSheet('T', 'T', grid(), { charts: chartsOnT }),
     ];
     const rangeData = (sheet: Sheet, id = 'c1') => {
-        const spec = parseChartSpec(sheet.charts![id].spec);
+        const { spec } = readChartSpec(sheet.charts![id]);
         return spec?.data.source === 'range' ? spec.data : null;
     };
     const valuesRows = (sheet: Sheet) => rangeData(sheet)?.series[0].values?.row;
@@ -759,7 +759,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
     });
 
     test('a malformed spec is kept untouched', () => {
-        const broken = { ...onS(), spec: '{"type":' };
+        const broken = { ...onS(), specData: '{"source":' };
         const [s] = applySheetsInsertRowCol(workbook({ c1: broken }), insertRows(0, 1, 'lefttop'));
         expect(s.charts!.c1).toBe(broken);
     });
@@ -767,21 +767,31 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
     describe('points', () => {
         const COLORS = ['#000001', '#000002', '#000003', '#000004', '#000005'];
         // Categories A1:A5, values B1:B5, a slice color on each point beside a key this build doesn't know, and the
-        // same points on a series id the data doesn't name.
+        // same points on a second series and on a series id the data doesn't name.
         const pie = (categories: CellRangeRef | null = ref('S', [0, 4], [0, 0])) => {
-            const c = chart({ categories, series: [series(ref('S', [0, 4]))] });
-            const spec: ChartSpec = JSON.parse(c.spec);
+            const values = ref('S', [0, 4]);
+            const c = chart({ categories, series: [series(values), { ...series(values), id: 'other' }] });
+            const spec = readChartSpec(c).spec!;
             const points = Object.fromEntries(COLORS.map((color, i) => [i, { color, future: color }]));
-            const stored = { ...spec, chart: { ...spec.chart, type: 'pie' }, points: { 's-1': points, other: points } };
-            return { ...c, spec: JSON.stringify(stored) };
+            return {
+                ...c,
+                ...newSheetChartSpecParts({
+                    ...spec,
+                    chart: { ...spec.chart, type: 'pie' },
+                    points: { 's-1': points, other: points, gone: points },
+                }),
+            };
         };
         // The stored points of a series by index, each its color.
         const sliceColors = (sheet: Sheet, id = 's-1') => {
-            const points: Record<string, { color: string; future: string }> = JSON.parse(sheet.charts!.c1.spec).points[
-                id
-            ];
-            for (const point of Object.values(points)) expect(point.future).toBe(point.color);
-            return Object.fromEntries(Object.entries(points).map(([i, point]) => [i, point.color]));
+            const entries = Object.entries(sheet.charts!.c1.specPoints).filter(([key]) => key.startsWith(`${id}/`));
+            return Object.fromEntries(
+                entries.map(([key, text]) => {
+                    const point: { color: string; future: string } = JSON.parse(text);
+                    expect(point.future).toBe(point.color);
+                    return [key.slice(id.length + 1), point.color];
+                }),
+            );
         };
         const ALL = { 0: '#000001', 1: '#000002', 2: '#000003', 3: '#000004', 4: '#000005' };
         const deleteRows = (start: number, end: number) => ({ type: 'row', start, end, id: 'S' }) as const;
@@ -792,14 +802,14 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
             const kept = { 0: '#000001', 1: '#000002', 2: '#000004', 3: '#000005' };
             expect(sliceColors(s)).toEqual(kept);
             expect(sliceColors(s, 'other')).toEqual(kept);
-            expect(parseChartSpec(s.charts!.c1.spec)?.points['s-1'][2]).toEqual({ color: '#000004' });
+            expect(sliceColors(s, 'gone')).toEqual({});
+            expect(readChartSpec(s.charts!.c1).spec?.points['s-1'][2]).toEqual({ color: '#000004' });
         });
 
         test('a chart this build can’t draw moves its points as a pie does', () => {
-            const stored = JSON.parse(pie().spec);
             const scatter = {
                 ...pie(),
-                spec: JSON.stringify({ ...stored, chart: { ...stored.chart, type: 'scatter' } }),
+                specChart: JSON.stringify({ ...JSON.parse(pie().specChart), type: 'scatter' }),
             };
             const [s] = applySheetsDeleteRowCol(workbook({ c1: scatter }), deleteRows(1, 1));
             expect(sliceColors(s)).toEqual({ 0: '#000001', 1: '#000003', 2: '#000004', 3: '#000005' });
@@ -834,8 +844,8 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
         test('a bar chart’s spec changes only in its refs', () => {
             const bar = chart({ categories: ref('S', [0, 4], [0, 0]), series: [series(ref('S', [0, 4]))] });
             const [s] = applySheetsDeleteRowCol(workbook({ c1: bar }), deleteRows(2, 2));
-            const before: ChartSpec = JSON.parse(bar.spec);
-            expect(JSON.parse(s.charts!.c1.spec)).toEqual({
+            const { stored: before } = readChartSpec(bar);
+            expect(readChartSpec(s.charts!.c1).stored).toEqual({
                 ...before,
                 data: {
                     source: 'range',

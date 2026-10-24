@@ -24,6 +24,7 @@ export {
     sheetTrackAt,
 } from './defaults';
 export {
+    chartsWithinEntryCap,
     floatingItems,
     floatingWriteFilter,
     nextFloatingIndex,

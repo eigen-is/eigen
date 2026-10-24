@@ -4,7 +4,7 @@
 // in lib avoids a workspace cycle and lets the backend import them without pulling
 // in React.
 
-import type { ChartLook } from '../types/chart';
+import type { ChartLook, SheetChartSpecParts } from '../types/chart';
 
 export type CellStyle = {
     bl?: number;
@@ -139,10 +139,10 @@ export type SheetFloatingObject = {
 // render time (docs/MEDIA-REFERENCES.md).
 export type SheetImage = SheetFloatingObject & { mediaName: string };
 
-// `spec` is the stored ChartSpec JSON, read only through parseChartSpec (@workspace/lib/charts); its range refs name
-// sheets by id. The look is a canvas chart's own fields, each written apart and read through readChartLook, flat where
-// unset.
-export type SheetChart = SheetFloatingObject & Partial<ChartLook> & { spec: string };
+// The spec is stored a field per part, a keyed part a record of an entry's JSON per key, read only through readChartSpec
+// (@workspace/lib/charts); its range refs name sheets by id. The look is a canvas chart's own fields, each written apart
+// and read through readChartLook, flat where unset.
+export type SheetChart = SheetFloatingObject & Partial<ChartLook> & SheetChartSpecParts;
 
 // Per-cell data-validation rule, produced by the editor's state layer
 // (state/modules/data-verification.ts) and consumed by the canvas painter

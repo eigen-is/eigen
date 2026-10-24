@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_CHART_POINTS, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { MAX_CHART_POINTS, newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { Cell, Sheet, SheetChart, SheetFloatingObject, SheetImage } from '@workspace/lib/sheets';
 import { floatingItems, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { XmlElement } from '../../../../lib/core/xml';
@@ -29,7 +29,7 @@ const DIGIT = 7;
 const range = (row: [number, number], column: [number, number]) => ({ sheetId: 'sheet-1', row, column });
 
 // Sales by region in My Data: names down A2:A4, numbers in B2:B4 under B1.
-const RANGE_SPEC = JSON.stringify({
+const RANGE_SPEC = newSheetChartSpecParts({
     ...sampleChartSpec('column'),
     title: { text: 'Sales' },
     data: {
@@ -41,7 +41,7 @@ const RANGE_SPEC = JSON.stringify({
 
 const byId = (...charts: SheetChart[]) => Object.fromEntries(charts.map((chart) => [chart.id, chart]));
 
-const RANGED: SheetChart = { id: 'ranged', index: 'a1', x: 50, y: 30, width: 400, height: 300, spec: RANGE_SPEC };
+const RANGED: SheetChart = { id: 'ranged', index: 'a1', x: 50, y: 30, width: 400, height: 300, ...RANGE_SPEC };
 const INLINE: SheetChart = {
     id: 'inline',
     index: 'a0',
@@ -49,7 +49,7 @@ const INLINE: SheetChart = {
     y: 0,
     width: 300,
     height: 200,
-    spec: JSON.stringify(sampleChartSpec('line')),
+    ...newSheetChartSpecParts(sampleChartSpec('line')),
 };
 
 const text = (value: string): Cell => ({ v: value, m: value });
@@ -142,8 +142,8 @@ describe('drawingOf', () => {
         const charts = Object.values(sheets[0].charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
         const written = [INLINE, RANGED];
         expect(charts.map(boxOf)).toEqual(written.map(boxOf));
-        expect(charts.map((chart) => parseChartSpec(chart.spec)).map((spec) => spec && seriesIdsByPlace(spec))).toEqual(
-            written.map((chart) => parseChartSpec(chart.spec)),
+        expect(charts.map((chart) => readChartSpec(chart).spec).map((spec) => spec && seriesIdsByPlace(spec))).toEqual(
+            written.map((chart) => readChartSpec(chart).spec),
         );
     });
 
@@ -181,7 +181,7 @@ describe('drawingOf', () => {
 
     test("a chart whose spec doesn't parse is left out and counted, and a sheet without charts has no drawing", () => {
         const lost: CountedWarningCode[] = [];
-        const broken: Sheet = { ...SUMMARY, charts: byId({ ...INLINE, id: 'bad', spec: '{' }) };
+        const broken: Sheet = { ...SUMMARY, charts: byId({ ...INLINE, id: 'bad', specChart: '{' }) };
         expect(drawingOf(broken, 1, [broken], noPictures(), (code) => lost.push(code))).toBeUndefined();
         expect(lost).toEqual(['charts-dropped']);
         expect(drawingOf(MY_DATA, 2, [MY_DATA], noPictures(), () => {})).toBeUndefined();
@@ -197,7 +197,7 @@ describe('drawingOf', () => {
         ['an area', range([1, 3], [0, 1]), 0],
         ['one point too many', range([0, MAX_CHART_POINTS], [1, 1]), 0],
     ])('a pie over %s writes a slice per point its cells resolve to', (_, values, slices) => {
-        const spec = JSON.stringify({
+        const spec = newSheetChartSpecParts({
             ...sampleChartSpec('pie'),
             data: {
                 source: 'range',
@@ -205,7 +205,7 @@ describe('drawingOf', () => {
                 series: [{ id: 's-1', name: 'Sales', values }],
             },
         });
-        const pie: Sheet = { ...SUMMARY, charts: byId({ ...RANGED, spec }) };
+        const pie: Sheet = { ...SUMMARY, charts: byId({ ...RANGED, ...spec }) };
         const drawing = drawingOf(pie, 1, [pie, MY_DATA], noPictures(), () => {});
         const part = drawing ? xml(drawing.parts[2]) : '';
         expect(part.match(/<c:dPt>/g)?.length ?? 0).toBe(slices);
@@ -215,7 +215,7 @@ describe('drawingOf', () => {
     test("a chart naming a sheet the workbook doesn't hold keeps its other refs", () => {
         const { sheets } = roundTrip([SUMMARY]);
         const ranged = Object.values(sheets[0].charts ?? {}).find((chart) => chart.y === 30);
-        expect(parseChartSpec(ranged?.spec ?? '')?.data).toMatchObject({ source: 'range', categories: null });
+        expect((ranged && readChartSpec(ranged).spec)?.data).toMatchObject({ source: 'range', categories: null });
     });
 });
 
@@ -330,8 +330,8 @@ describe('the workbook', () => {
         const charts = Object.values(read.charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
         expect(charts.map(boxOf)).toEqual([INLINE, turned].map(boxOf));
         expect(charts.map((chart) => chart.angle ?? 0)).toEqual([0, 0]);
-        expect(charts.map((chart) => parseChartSpec(chart.spec)).map((spec) => spec && seriesIdsByPlace(spec))).toEqual(
-            [INLINE, turned].map((chart) => parseChartSpec(chart.spec)),
+        expect(charts.map((chart) => readChartSpec(chart).spec).map((spec) => spec && seriesIdsByPlace(spec))).toEqual(
+            [INLINE, turned].map((chart) => readChartSpec(chart).spec),
         );
     });
 
@@ -342,7 +342,7 @@ describe('the workbook', () => {
         const [read] = xlsxToSheets(exportXlsx([summary, history]));
         const charts = Object.values(read.charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
         expect(charts.map(boxOf)).toEqual([INLINE, RANGED].map(boxOf));
-        expect(parseChartSpec(charts[1].spec)?.data).toMatchObject({
+        expect(readChartSpec(charts[1]).spec?.data).toMatchObject({
             source: 'range',
             categories: { row: [1, 3], column: [0, 0] },
         });

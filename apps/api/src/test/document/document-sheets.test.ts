@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { parseChartSpec } from '@workspace/lib/charts';
+import { defaultChartSpec, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -761,15 +761,14 @@ describe('document/sheets — appendSheetsToYjs', () => {
         row: [0, 2] as [number, number],
         column: [0, 0] as [number, number],
     });
-    const spec = JSON.stringify({
-        chart: { type: 'bar' },
-        title: { text: 'Totals' },
-        data: {
+    const spec = {
+        ...defaultChartSpec('bar', {
             source: 'range',
             categories: range('sheet-0'),
             series: [{ id: 's-1', name: 'Sum', values: range('sheet-1') }],
-        },
-    });
+        }),
+        title: { text: 'Totals' },
+    };
 
     // What a file brings: "Data", whose name the workbook holds, and "Summary", which names it in a formula, a
     // conditional format, a list source, two links and a chart.
@@ -799,7 +798,9 @@ describe('document/sheets — appendSheetsToYjs', () => {
                 '1_0': { linkType: 'sheet', linkAddress: 'Data' },
                 '1_1': { linkType: 'cellrange', linkAddress: 'Data!B2' },
             },
-            charts: { c1: { id: 'c1', index: 'a0', x: 0, y: 0, width: 300, height: 200, spec } },
+            charts: {
+                c1: { id: 'c1', index: 'a0', x: 0, y: 0, width: 300, height: 200, ...newSheetChartSpecParts(spec) },
+            },
         },
     ];
 
@@ -851,7 +852,8 @@ describe('document/sheets — appendSheetsToYjs', () => {
             '1_0': { linkType: 'sheet', linkAddress: 'Data(Copy)' },
             '1_1': { linkType: 'cellrange', linkAddress: "'Data(Copy)'!B2" },
         });
-        const chart = parseChartSpec(summary.charts?.['c1']?.spec ?? '');
+        const stored = summary.charts?.['c1'];
+        const chart = stored ? readChartSpec(stored).spec : null;
         expect(chart?.data.source === 'range' && chart.data.categories?.sheetId).toBe(data.id);
         expect(chart?.data.source === 'range' && chart.data.series[0]?.values?.sheetId).toBe(summary.id);
     });

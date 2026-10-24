@@ -1,6 +1,6 @@
 // Insert → Chart from the selection, and the data range writes the chart panel makes.
 import { expect, test } from 'bun:test';
-import { parseChartSpec } from '@workspace/lib/charts';
+import { newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { produce } from 'immer';
 import type { ChartRangeRefusal } from '../../../engine/chart-range';
@@ -60,7 +60,7 @@ test('charts the selection below itself at Google’s size, selected', () => {
     // A1 is the left edge, the bottom of row 5 the top (visibledatarow is the bottom of each row).
     expect(chart).toMatchObject({ x: 0, y: 100, width: 600, height: 371 });
     expect(next.activeObject).toEqual({ kind: 'chart', id: 'new' });
-    const spec = parseChartSpec(chart?.spec ?? '');
+    const spec = chart && readChartSpec(chart).spec;
     expect(spec).toMatchObject({
         chart: { type: 'column' },
         title: { text: 'North, South and East' },
@@ -79,7 +79,7 @@ test('charts the selection below itself at Google’s size, selected', () => {
 
 test('a single selected cell charts the table around it', () => {
     const { chart } = insert(workbook({ row: [1, 1], column: [2, 2] }));
-    expect(parseChartSpec(chart?.spec ?? '')?.data).toMatchObject({ categories: ref([1, 4], [0, 0]) });
+    expect(chart && readChartSpec(chart).spec?.data).toMatchObject({ categories: ref([1, 4], [0, 0]) });
     expect(chart?.y).toBe(100);
 });
 
@@ -118,14 +118,16 @@ test('more series than a chart holds is refused as too many series', () => {
 test('a typed data range is set up from its cells and keeps each series’ color', () => {
     const { next } = insert(workbook({ row: [0, 4], column: [0, 3] }));
     const recolored = produce(next, (draft: Context) => {
-        const spec = parseChartSpec(draft.sheets[0].charts?.new.spec ?? '');
-        if (spec?.data.source !== 'range') throw new Error('no range chart');
+        const chart = draft.sheets[0].charts?.new;
+        const spec = chart && readChartSpec(chart).spec;
+        if (!chart || spec?.data.source !== 'range') throw new Error('no range chart');
         const { id } = spec.data.series[0];
         spec.series[id] = { ...spec.series[id], color: '#000000' };
-        if (draft.sheets[0].charts) draft.sheets[0].charts.new.spec = JSON.stringify(spec);
+        Object.assign(chart, newSheetChartSpecParts(spec));
     });
     const ranged = produce(recolored, (draft: Context) => setChartDataRange(draft, 'new', ref([0, 4], [0, 1])));
-    const spec = parseChartSpec(ranged.sheets[0].charts?.new.spec ?? '');
+    const chart = ranged.sheets[0].charts?.new;
+    const spec = chart && readChartSpec(chart).spec;
     expect(spec?.title.text).toBe('North, South and East');
     expect(spec?.data).toMatchObject({
         categories: ref([1, 4], [0, 0]),

@@ -7,8 +7,10 @@ import {
     CHART_MAX_SIDE,
     DEFAULT_CHART_SERIES_STYLE,
     FLAT_CHART_LOOK,
-    parseChartSpec,
+    MAX_CHART_SPEC_ENTRIES,
+    newSheetChartSpecParts,
     readChartLook,
+    readChartSpec,
     sampleChartSpec,
 } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
@@ -21,12 +23,19 @@ import {
 import type { CellRangeRef, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import { applyPatches, enablePatches, produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
-import { replaySheetsOps } from '../../../engine';
+import { mapChartRefs, replaySheetsOps } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import { initSheetData } from '../../../state/api/sheet';
 import { addSheet } from '../../../state/api/workbook';
 import type { Context } from '../../../state/context';
-import { insertChart, pasteChart, setChartDataRange, setChartLook, setChartSpec } from '../../../state/modules/chart';
+import {
+    insertChart,
+    pasteChart,
+    setChartDataRange,
+    setChartLook,
+    setChartSpec,
+    sheetChartSvg,
+} from '../../../state/modules/chart';
 import { updateFloatingBox, withoutDeletedFloatingEdits } from '../../../state/modules/floating';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op, Sheet } from '../../../state/types';
@@ -61,7 +70,7 @@ function asLine(spec: ChartSpec): ChartSpec {
 }
 
 function chart(id: string, spec: ChartSpec, index = 'a0'): SheetChart {
-    return { id, index, ...BOX, spec: JSON.stringify(spec) };
+    return { id, index, ...BOX, ...newSheetChartSpecParts(spec) };
 }
 
 const grid = () => Array.from({ length: 10 }, () => Array.from({ length: 4 }, () => null));
@@ -95,7 +104,7 @@ function workbook(): Context {
 
 const charts = (sheets: Sheet[]) => sheets.map((sheet) => sheet.charts);
 const rangeData = (sheets: Sheet[], sheet: number, id: string) => {
-    const spec = parseChartSpec(sheets[sheet].charts![id].spec);
+    const { spec } = readChartSpec(sheets[sheet].charts![id]);
     return spec?.data.source === 'range' ? spec.data : null;
 };
 
@@ -104,7 +113,7 @@ describe('chart writers', () => {
         const { next, ops } = author(workbook(), (ctx) => insertChart(ctx, 'c3', BOX, sampleChartSpec('line')));
         expect(ops).toEqual([{ op: 'add', id: S, path: ['charts', 'c3'], value: next.sheets[0].charts!.c3 }]);
         expect(next.sheets[0].charts!.c3.index > 'a1').toBe(true);
-        expect(parseChartSpec(next.sheets[0].charts!.c3.spec)).toEqual(sampleChartSpec('line'));
+        expect(readChartSpec(next.sheets[0].charts!.c3).spec).toEqual(sampleChartSpec('line'));
     });
 
     // A pasted size past the largest side would stall every peer's painter, and at a trillion px overflow it.
@@ -123,10 +132,12 @@ describe('chart writers', () => {
         expect(pasted.next.sheets[0].charts!.c3).toMatchObject({ x: 0, y: 0, width: CHART_MAX_SIDE, height: 300 });
     });
 
-    test('a spec edit is one replace of the spec string', () => {
-        const spec = asLine(rangeSpec(ref(S, [2, 5])));
+    test('a type edit is one replace of its part', () => {
+        const { chart } = asLine(rangeSpec(ref(S, [2, 5])));
         const { ops } = author(workbook(), (ctx) => setChartSpec(ctx, 'c1', TO_LINE));
-        expect(ops).toEqual([{ op: 'replace', id: S, path: ['charts', 'c1', 'spec'], value: JSON.stringify(spec) }]);
+        expect(ops).toEqual([
+            { op: 'replace', id: S, path: ['charts', 'c1', 'specChart'], value: JSON.stringify(chart) },
+        ]);
     });
 
     // Insert → Chart stays flat, with a seed of its own so a sketch picked later jitters the same everywhere.
@@ -145,6 +156,16 @@ describe('chart writers', () => {
         const look = { ...FLAT_CHART_LOOK, roughness: 2, seed: 77, color: '#334455' };
         const { next } = author(workbook(), (ctx) => pasteChart(ctx, 'c3', SPEC, { width: 400, height: 300 }, look));
         expect(readChartLook(next.sheets[0].charts!.c3)).toEqual(look);
+    });
+
+    // The item carries one string; split into parts, each keyed one a record, it keeps every entry as it came.
+    test('a paste stores the spec as it came, a part per field', () => {
+        const sample = sampleChartSpec('pie');
+        const spec = JSON.stringify({ ...sample, series: { ...sample.series, 's-9': { color: '#00ff00' } } });
+        const { next } = author(workbook(), (ctx) => pasteChart(ctx, 'c3', spec, BOX, FLAT_CHART_LOOK));
+        const pasted = next.sheets[0].charts!.c3;
+        expect(readChartSpec(pasted).stored).toEqual(readChartSpec(spec).stored);
+        expect(pasted.specPoints).toEqual({});
     });
 
     test('a look edit writes only the fields given, each its own op', () => {
@@ -231,45 +252,48 @@ describe('every sheet entry carries a charts map', () => {
 });
 
 describe('a chart edit keeps what this build does not know', () => {
-    // c1 as a newer build stored it: a key of its own, one on an axis, a legend this build doesn't draw, and keys on
-    // its data and its series.
+    // c1 as a newer build stored it: a key on its chart part, one on an axis, a legend this build doesn't draw, and
+    // keys on its data and its series.
     const newer = () =>
         produce(workbook(), (ctx: Context) => {
             const c1 = ctx.sheets[0].charts!.c1;
-            const raw = JSON.parse(c1.spec);
-            const series = raw.data.series.map((s: object) => ({ ...s, dash: 'dot' }));
-            c1.spec = JSON.stringify({
-                ...raw,
-                future: 1,
-                legend: { ...raw.legend, position: 'inside' },
-                axes: { ...raw.axes, y: { ...raw.axes.y, logBase: 10 } },
-                data: { ...raw.data, future: 2, series },
-            });
+            const spec = rangeSpec(ref(S, [2, 5]));
+            const series = spec.data.series.map((s) => ({ ...s, dash: 'dot' }));
+            c1.specChart = JSON.stringify({ ...spec.chart, future: 1 });
+            c1.specLegend = JSON.stringify({ position: 'inside' });
+            c1.specAxes.y = JSON.stringify({ ...spec.axes.y, logBase: 10 });
+            c1.specData = JSON.stringify({ ...spec.data, future: 2, series });
         });
-    const stored = (ctx: Context) => JSON.parse(ctx.sheets[0].charts!.c1.spec);
+    const part = (ctx: Context, key: 'specTitle' | 'specData') => JSON.parse(ctx.sheets[0].charts!.c1[key]);
     const kept = (ctx: Context) => {
-        const raw = stored(ctx);
-        return [raw.future, raw.legend.position, raw.axes.y.logBase, raw.data.future, raw.data.series[0].dash];
+        const { specChart, specLegend, specAxes } = ctx.sheets[0].charts!.c1;
+        const data = part(ctx, 'specData');
+        return [
+            JSON.parse(specChart).future,
+            JSON.parse(specLegend).position,
+            JSON.parse(specAxes.y).logBase,
+            data.future,
+            data.series[0].dash,
+        ];
     };
     const title: ChartSpecChange = [{ op: 'set', path: ['title', 'text'], value: 'Goals' }];
 
     test('a title through setChartSpec', () => {
         const { next } = author(newer(), (ctx) => setChartSpec(ctx, 'c1', title));
-        expect(stored(next).title.text).toBe('Goals');
+        expect(part(next, 'specTitle').text).toBe('Goals');
         expect(kept(next)).toEqual([1, 'inside', 10, 2, 'dot']);
     });
 
     test('a typed range, its first series keeping its id and the keys beside the data', () => {
         const known = produce(newer(), (ctx: Context) => {
-            const c1 = ctx.sheets[0].charts!.c1;
-            c1.spec = JSON.stringify({ ...JSON.parse(c1.spec), data: rangeSpec(ref(S, [2, 5])).data });
+            ctx.sheets[0].charts!.c1.specData = JSON.stringify(rangeSpec(ref(S, [2, 5])).data);
         });
         const { next } = author(known, (ctx) => setChartDataRange(ctx, 'c1', ref(S, [2, 5], [1, 2])));
         expect(rangeData(next.sheets, 0, 'c1')?.series.map((s) => s.values?.column)).toEqual([
             [1, 1],
             [2, 2],
         ]);
-        expect(stored(next).data.series[0].id).toBe('s-1');
+        expect(part(next, 'specData').series[0].id).toBe('s-1');
         expect(kept(next).slice(0, 3)).toEqual([1, 'inside', 10]);
     });
 
@@ -292,7 +316,7 @@ describe('a chart edit keeps what this build does not know', () => {
         const recolor: ChartSpecChange = [{ op: 'set', path: ['series', 's-1', 'color'], value: '#00ff00' }];
         const peer = author(base, (ctx) => setChartSpec(ctx, 'c1', recolor));
         const mine = author(receive(base, peer.ops), (ctx) => setChartSpec(ctx, 'c1', title));
-        expect(parseChartSpec(mine.next.sheets[0].charts!.c1.spec)).toMatchObject({
+        expect(readChartSpec(mine.next.sheets[0].charts!.c1).spec).toMatchObject({
             title: { text: 'Goals' },
             series: { 's-1': { color: '#00ff00' } },
         });
@@ -336,7 +360,7 @@ describe('charts converge over real ops', () => {
             roughness: 2,
             strokeWidth: 4,
             x: 300,
-            spec: JSON.stringify(asLine(rangeSpec(ref(S, [2, 5])))),
+            specChart: JSON.stringify(asLine(rangeSpec(ref(S, [2, 5]))).chart),
         });
     });
 
@@ -350,6 +374,22 @@ describe('charts converge over real ops', () => {
         expect(rangeData(insert.next.sheets, 1, 't1')?.series[0].values?.row).toEqual([4, 7]);
         expect(charts(peer.sheets)).toEqual(charts(insert.next.sheets));
         expect(charts(joiner)).toEqual(charts(insert.next.sheets));
+    });
+
+    // Moving a chart's points writes away those of a series its data doesn't name, so an author ships the removes.
+    test("a row op's removes of an orphan series' points ship, and a peer and a joiner apply them", () => {
+        const base = produce(workbook(), (ctx: Context) => {
+            ctx.sheets[0].charts!.c1 = chart('c1', {
+                ...rangeSpec(ref(S, [2, 5])),
+                points: { 's-1': { 3: { color: '#333333' } }, gone: { 0: { color: '#000000' } } },
+            });
+        });
+        const op = { type: 'row', index: 4, count: 1, direction: 'lefttop', id: S } as const;
+        const insert = author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        expect(insert.ops).toContainEqual({ op: 'remove', id: S, path: ['charts', 'c1', 'specPoints', 'gone/0'] });
+        expect(Object.keys(insert.next.sheets[0].charts!.c1.specPoints)).toEqual(['s-1/4']);
+        expect(charts(receive(base, insert.ops).sheets)).toEqual(charts(insert.next.sheets));
+        expect(charts(join(base, [insert.ops]))).toEqual(charts(insert.next.sheets));
     });
 
     // A row op writes a shifted chart's spec alone, so a peer's move or delete of that chart at once survives.
@@ -483,5 +523,174 @@ describe('charts converge over real ops', () => {
         expect(charts(undone.sheets)).toEqual(charts(base.sheets));
         expect(charts(peer.sheets)).toEqual(charts(base.sheets));
         expect(charts(joiner)).toEqual(charts(base.sheets));
+    });
+});
+
+// Every entry of a keyed part sits under its own key, so two peers editing two entries, or a part and an entry, keep
+// both on every client and a joiner.
+describe('two peers editing one chart keep both edits', () => {
+    const set = (path: string[], value: unknown): ChartSpecChange => [{ op: 'set', path, value }];
+    const title = set(['title', 'text'], 'Goals');
+    const recolor = (index: number, color: string) => set(['points', 's-1', String(index)], { color });
+    const spec = (sheets: Sheet[], id = 'c1') => readChartSpec(sheets[0].charts![id]).spec;
+    const withChart = (id: string, value: ChartSpec) =>
+        produce(workbook(), (ctx: Context) => {
+            ctx.sheets[0].charts![id] = chart(id, value, 'a2');
+        });
+
+    // Both orders on both clients and a joiner end on one state.
+    function converge(base: Context, a: ReturnType<typeof author>, b: ReturnType<typeof author>): Sheet[] {
+        const onA = receive(a.next, b.ops);
+        expect(charts(receive(b.next, a.ops).sheets)).toEqual(charts(onA.sheets));
+        expect(charts(join(base, [a.ops, b.ops]))).toEqual(charts(onA.sheets));
+        expect(charts(join(base, [b.ops, a.ops]))).toEqual(charts(onA.sheets));
+        return onA.sheets;
+    }
+
+    test.each<[string, ChartSpecChange, ChartSpecChange, object]>([
+        [
+            'a title and a series colour',
+            title,
+            set(['series', 's-1', 'color'], '#00ff00'),
+            { title: { text: 'Goals' }, series: { 's-1': { color: '#00ff00' } } },
+        ],
+        [
+            "two series' colours",
+            set(['series', 's-1', 'color'], '#ff0000'),
+            set(['series', 's-2', 'color'], '#00ff00'),
+            { series: { 's-1': { color: '#ff0000' }, 's-2': { color: '#00ff00' } } },
+        ],
+        [
+            "the x axis's title and the y axis's min",
+            set(['axes', 'x', 'title', 'text'], 'Month'),
+            set(['axes', 'y', 'scale', 'min'], 10),
+            { axes: { x: { title: { text: 'Month' } }, y: { scale: { min: 10 } } } },
+        ],
+        ['two slice colours', recolor(0, '#ff0000'), recolor(2, '#00ff00'), { points: { 's-1': { 0: {}, 2: {} } } }],
+    ])('%s', (_, first, second, expected) => {
+        const base = withChart('c3', sampleChartSpec('column'));
+        const a = author(base, (ctx) => setChartSpec(ctx, 'c3', first));
+        const b = author(base, (ctx) => setChartSpec(ctx, 'c3', second));
+        expect(spec(converge(base, a, b), 'c3')).toMatchObject(expected);
+    });
+
+    // A new chart's points are a record from its insert, so each first slice colour ships as its entry alone.
+    test("two peers' first slice colours of a new chart ship an entry each, and a joiner keeps both", () => {
+        const inserted = author(workbook(), (ctx) => insertChart(ctx, 'p', BOX, sampleChartSpec('pie')));
+        const base = inserted.next;
+        const a = author(base, (ctx) => setChartSpec(ctx, 'p', recolor(0, '#ff0000')));
+        const b = author(base, (ctx) => setChartSpec(ctx, 'p', recolor(2, '#00ff00')));
+        expect(a.ops).toEqual([
+            { op: 'add', id: S, path: ['charts', 'p', 'specPoints', 's-1/0'], value: '{"color":"#ff0000"}' },
+        ]);
+        const joiner = join(workbook(), [inserted.ops, a.ops, b.ops]);
+        expect(readChartSpec(joiner[0].charts!.p).spec?.points).toEqual({
+            's-1': { 0: { color: '#ff0000' }, 2: { color: '#00ff00' } },
+        });
+        expect(charts(converge(base, a, b))).toEqual(charts(joiner));
+    });
+
+    // c1's points run along its values, rows 2 to 5: the insert at row 4 moves point 3 to 4, the delete of row 3
+    // removes point 1 and moves 3 to 2. Point 0, which a peer recolours, moves with neither.
+    const slices = (): Context =>
+        withChart('c1', {
+            ...rangeSpec(ref(S, [2, 5])),
+            points: { 's-1': { 1: { color: '#111111' }, 3: { color: '#333333' } } },
+        });
+    const insertOp = { type: 'row', index: 4, count: 1, direction: 'lefttop', id: S } as const;
+    const deleteOp = { type: 'row', start: 3, end: 3, id: S } as const;
+    const ROW_OPS = [
+        {
+            name: 'insert',
+            run: (ctx: Context) => insertRowCol(ctx, insertOp),
+            options: { insertRowColOp: insertOp },
+            points: { 0: { color: '#ff0000' }, 1: { color: '#111111' }, 4: { color: '#333333' } },
+        },
+        {
+            name: 'delete',
+            run: (ctx: Context) => deleteRowCol(ctx, deleteOp),
+            options: { deleteRowColOp: deleteOp },
+            points: { 0: { color: '#ff0000' }, 2: { color: '#333333' } },
+        },
+    ] as const;
+    const PEER_EDITS = [
+        { name: 'title', change: title, kept: { title: { text: 'Goals' } } },
+        {
+            name: 'slice colour',
+            change: recolor(0, '#ff0000'),
+            kept: { points: { 's-1': { 0: { color: '#ff0000' } } } },
+        },
+    ] as const;
+
+    for (const rowOp of ROW_OPS) {
+        for (const edit of PEER_EDITS) {
+            test(`a row ${rowOp.name} and a peer's ${edit.name}, landing before or after it`, () => {
+                const base = slices();
+                const op = author(base, rowOp.run, rowOp.options);
+                const peer = author(base, (ctx) => setChartSpec(ctx, 'c1', [...edit.change]));
+                const sheets = converge(base, op, peer);
+                expect(spec(sheets)).toMatchObject(edit.kept);
+                if (edit.name === 'slice colour') expect(spec(sheets)?.points['s-1']).toEqual(rowOp.points);
+            });
+
+            // Workbook's handleUndo and handleRedo after the peer's edit landed.
+            test(`undoing and redoing a row ${rowOp.name} keeps a peer's ${edit.name}`, () => {
+                const base = slices();
+                const op = author(base, rowOp.run, rowOp.options);
+                const peer = author(base, (ctx) => setChartSpec(ctx, 'c1', [...edit.change]));
+                const afterPeer = receive(op.next, peer.ops);
+                const inverse = withoutDeletedFloatingEdits(afterPeer, op.inverse);
+                const undone = applyPatches(afterPeer, inverse);
+                const undoOptions = { ...inverseRowColOptions(rowOp.options), restoreDeletedCells: true };
+                const undoOps = patchToOp(undone, inverse, undoOptions, true);
+                const patches = withoutDeletedFloatingEdits(undone, op.patches);
+                const redone = applyPatches(undone, patches);
+                const redoOps = patchToOp(redone, patches, rowOp.options);
+                const peerUndone = receive(receive(peer.next, op.ops), undoOps);
+                const joinUndone = join(base, [peer.ops, op.ops, undoOps]);
+                expect(spec(undone.sheets)).toMatchObject(edit.kept);
+                expect(spec(undone.sheets)?.points['s-1']).toMatchObject({
+                    1: { color: '#111111' },
+                    3: { color: '#333333' },
+                });
+                expect(charts(peerUndone.sheets)).toEqual(charts(undone.sheets));
+                expect(charts(joinUndone)).toEqual(charts(undone.sheets));
+                expect(spec(redone.sheets)).toMatchObject(edit.kept);
+                expect(charts(receive(peerUndone, redoOps).sheets)).toEqual(charts(redone.sheets));
+                expect(charts(join(base, [peer.ops, op.ops, undoOps, redoOps]))).toEqual(charts(redone.sheets));
+            });
+        }
+    }
+});
+
+// Every read of a chart, a draw, the panel and a row op among them, goes through readChartSpec, whose byte count stops
+// at the limit; a chart past the entry cap never reaches one, whichever door it came through.
+describe('a forged chart costs a read what fits under the byte limit', () => {
+    const forgedPoints = (count: number) =>
+        Object.fromEntries(Array.from({ length: count }, (_, i) => [`s-1/${i % 2000}-${i}`, '{"color":"#ff0000"}']));
+
+    test('a draw and a row op read entries only up to the limit', () => {
+        let visited = 0;
+        const points = new Proxy(forgedPoints(20_000), {
+            get: (target, key) => {
+                visited += 1;
+                return Reflect.get(target, key);
+            },
+        });
+        const forged = { ...chart('f1', rangeSpec(ref(S, [2, 5]))), specPoints: points };
+        sheetChartSvg(workbook(), forged);
+        expect(mapChartRefs(forged, (r) => ({ ...r, row: [r.row[0] + 1, r.row[1] + 1] }))).toBe(forged);
+        expect(visited).toBeGreaterThan(0);
+        expect(visited).toBeLessThan(2 * 4_000);
+    });
+
+    test('a snapshot or a replay base leaves out a chart past the entry cap', () => {
+        const base = workbook();
+        const forged = { ...chart('f1', rangeSpec(ref(S, [2, 5]))), specPoints: forgedPoints(MAX_CHART_SPEC_ENTRIES) };
+        const sheets = structuredClone(base.sheets);
+        sheets[0].charts!.f1 = forged;
+        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
+        expect(Object.keys(decoded[0].charts!).sort()).toEqual(['c1', 'c2']);
+        expect(Object.keys(replaySheetsOps(sheets, [])[0].charts!).sort()).toEqual(['c1', 'c2']);
     });
 });

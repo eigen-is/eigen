@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chartSeriesStyle, defaultChartSpec } from '@workspace/lib/charts';
+import { chartSeriesStyle, defaultChartSpec, newSheetChartSpecParts } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { ChartSpec } from '@workspace/lib/types/chart';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
@@ -447,7 +447,9 @@ describe('round trip', () => {
         const chart = (spec: ChartSpec): Sheet[] => [
             {
                 name: 'S',
-                charts: { c: { id: 'c', index: 'a0', x: 0, y: 0, width: 10, height: 10, spec: JSON.stringify(spec) } },
+                charts: {
+                    c: { id: 'c', index: 'a0', x: 0, y: 0, width: 10, height: 10, ...newSheetChartSpecParts(spec) },
+                },
             },
         ];
         const classify = (b: ChartSpec) =>

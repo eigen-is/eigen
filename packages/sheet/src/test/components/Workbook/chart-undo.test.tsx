@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { ChartSpecChange } from '@workspace/lib/types/chart';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
@@ -105,7 +105,7 @@ test('writes inside a panel gesture undo and redo as one step, and the next writ
     for (const title of ['S', 'Sc', 'Sco']) await step((w) => w.setChartSpec(id, titled(title)));
     release();
     await step((w) => w.setChartSpec(id, titled('Score')));
-    const title = () => JSON.parse(charts()?.[id]?.spec ?? '{}').title.text;
+    const title = () => readChartSpec(charts()?.[id] ?? {}).spec?.title.text;
 
     await step((w) => w.undo());
     expect(title()).toBe('Sco');
@@ -130,7 +130,7 @@ test('a field typed key by key in a gesture keeps one forward and one inverse wr
         await step((w) => w.setChartSpec(id, [{ op: 'set', path: ['title', 'text'], value: typed.slice(0, i) }]));
     }
     release();
-    const title = () => JSON.parse(charts()?.[id]?.spec ?? '{}').title.text;
+    const title = () => readChartSpec(charts()?.[id] ?? {}).spec?.title.text;
 
     await step((w) => w.undo());
     expect(title()).toBe("Where a star's light goes");
@@ -138,4 +138,21 @@ test('a field typed key by key in a gesture keeps one forward and one inverse wr
     await step((w) => w.redo());
     expect(title()).toBe(typed.slice(0, 40));
     expect(sent.at(-1)).toHaveLength(1);
+});
+
+// A title and a series colour are two parts, so undoing one's write leaves the other's.
+test("undoing a title leaves a peer's later series colour", async () => {
+    const { step, charts } = await mountWorkbook();
+    let id = '';
+    await step((w) => {
+        id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
+    });
+    await step((w) => w.setChartSpec(id, [{ op: 'set', path: ['title', 'text'], value: 'Goals' }]));
+    const style = JSON.parse(charts()?.[id]?.specSeries['s-1'] ?? '{}');
+    const value = JSON.stringify({ ...style, color: '#00ff00' });
+    await step((w) => w.applyOp([{ op: 'replace', id: 's1', path: ['charts', id, 'specSeries', 's-1'], value }]));
+    await step((w) => w.undo());
+    const { spec } = readChartSpec(charts()?.[id] ?? {});
+    expect(spec?.title.text).toBe("Where a star's light goes");
+    expect(spec?.series['s-1'].color).toBe('#00ff00');
 });

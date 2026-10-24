@@ -29,10 +29,10 @@ type ChartPanelSectionsProps = {
 
 // The selected chart's sections in the app's panel: the shared chart and look sections, with Google's Setup (the
 // data range and how it reads) inside the Chart section, where an inline chart has Edit data. A Customise change
-// is one write of the chart's spec, a paint row one write of its look fields. The host's PropertyGestureContext
+// writes the parts and entries it touches, a paint row its look fields. The host's PropertyGestureContext
 // makes a typed field one undo step.
 export function ChartPanelSections({ panel, workbook }: ChartPanelSectionsProps) {
-    const { stored, spec } = readChartSpec(panel.chart.spec);
+    const { stored, spec } = readChartSpec(panel.chart);
     if (!spec) return null;
     const { data } = spec;
     const write = (change: ChartSpecChange) => workbook.current?.setChartSpec(panel.chart.id, change);

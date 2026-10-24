@@ -51,6 +51,9 @@ export const MAX_CHART_SPEC_BYTES = 64 * 1024;
 // Levels of [ and {, far past what Eigen writes: V8's JSON.stringify recurses, and throws at about 8,000 levels in
 // every writer that serializes what is stored.
 export const MAX_CHART_SPEC_DEPTH = 32;
+// Entries one Sheets chart holds, its records' keys summed. The shortest entry a build writes, a one-character id at
+// '{}', is three bytes, so a chart holding more is past the byte limit and reads as nothing anyway.
+export const MAX_CHART_SPEC_ENTRIES = Math.floor(MAX_CHART_SPEC_BYTES / 3);
 export const MAX_CHART_SERIES = 32;
 export const MAX_CHART_POINTS = 2000;
 export const MAX_CHART_LABEL_LENGTH = 200;
@@ -318,6 +321,11 @@ const PARTS = Object.keys(CHART_SPEC_PARTS).filter((part): part is ChartSpecPart
 );
 
 const isKeyedPart = (part: ChartSpecPart): part is ChartSpecKeyedPart => CHART_SPEC_PARTS[part] > 0;
+
+// The fields a Sheets chart holds as a record from its creation on.
+export const SHEET_CHART_KEYED_PART_KEYS: ReadonlySet<string> = new Set(
+    PARTS.filter(isKeyedPart).map((part) => CHART_SPEC_PART_KEY[part]),
+);
 
 // Counted before the parse, which V8's JSON.stringify would recurse through in every writer.
 function storedRecord(text: unknown): StoredRecord | undefined {
