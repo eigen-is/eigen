@@ -2,11 +2,11 @@
 import { expect, test } from 'bun:test';
 import { getSchema } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
-import { sampleChartSpec } from '@workspace/lib/charts';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { readLatex, writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { countWords } from '../../../components/docs/word-count';
+import { sampleChartParts } from '../../fixtures/chart-parts';
 
 // An equation reads its stored MathML with DOMParser.
 installHappyDom();
@@ -69,7 +69,7 @@ test("a figure's caption counts, its alt text and media name do not", () => {
 
 // As Google Docs counts a chart: an image, whose own titles and labels are no words of the doc.
 test('a chart counts as an image does, by its caption alone', () => {
-    const chart = { type: 'chart', attrs: { spec: JSON.stringify(sampleChartSpec('bar')), caption: 'Sales by month' } };
+    const chart = { type: 'chart', attrs: { ...sampleChartParts('bar'), caption: 'Sales by month' } };
     const content = [{ type: 'paragraph', content: [text('See'), chart, text('below')] }];
     expect(counts(content)).toEqual({ words: 5, characters: 22, charactersExcludingSpaces: 20 });
 });

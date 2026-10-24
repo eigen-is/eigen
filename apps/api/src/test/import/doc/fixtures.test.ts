@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
+import { readChartSpec } from '@workspace/lib/charts';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { nodesOfType } from '../../fixtures/golden-docx';
 
@@ -98,8 +99,8 @@ describe('docx fixtures', () => {
         expect(nodesOfType(json, 'table').length).toBeGreaterThan(0);
         expect(images.map((image) => image.contentType)).toContain('image/svg+xml');
         // Its pie chart is a chart, and its header's text watermark goes.
-        const charts = nodesOfType(json, 'chart').map((chart) => JSON.parse(String(chart.attrs?.['spec'])));
-        expect([charts.map((spec) => [spec.type, spec.title]), warnings]).toEqual([
+        const charts = nodesOfType(json, 'chart').map((chart) => readChartSpec(chart.attrs ?? {}).spec);
+        expect([charts.map((spec) => [spec?.chart.type, spec?.title.text]), warnings]).toEqual([
             [['pie', 'A Chart']],
             [{ code: 'band-content-dropped', count: 1 }],
         ]);

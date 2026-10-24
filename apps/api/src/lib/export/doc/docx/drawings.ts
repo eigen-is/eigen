@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { parseChartSpec, readChartLook } from '@workspace/lib/charts';
+import { readChartSpec } from '@workspace/lib/charts';
 import { chartSvg, readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { BODY, boxSide, cssPt, twips } from '../../../document/looks';
@@ -23,15 +23,32 @@ import { TABLE_BORDER_SIDES } from './tables';
 // Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback.
 
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
-// under that src, as it draws a chart under its size, look and spec. A media name holds no `/`, so no two keys meet.
+// under that src, as it draws a chart under its drawing's hash. A media name holds no `/`, so no two keys meet.
 function figureMediaKey(node: JSONContent): string | null {
-    if (node.type === 'chart') {
-        const attrs = node.attrs ?? {};
-        const { spec, width, height } = readChartAttrs(attrs);
-        return `chart/${width}/${height}/${JSON.stringify(readChartLook(attrs))}/${spec}`;
-    }
+    if (node.type === 'chart') return chartDrawing(node)?.name ?? null;
     const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
     return mediaName ?? (src && splitDataUri(src) ? src : null);
+}
+
+// A chart's SVG, named for what it draws, so two charts that draw the same, a chart repeated or two whose ids differ,
+// are one picture. A docx holds each SVG in a file of its own, so every drawing takes one id. Drawn once per node,
+// though the media and the writer both ask; a spec that doesn't parse draws nothing. The alt text is the one its HTML
+// gives its image.
+type ChartDrawing = { name: string; svg: string; alt: string };
+
+const drawings = new WeakMap<JSONContent, ChartDrawing | null>();
+
+function chartDrawing(node: JSONContent): ChartDrawing | null {
+    const known = drawings.get(node);
+    if (known !== undefined) return known;
+    const attrs = node.attrs ?? {};
+    const { spec } = readChartSpec(attrs);
+    const svg = spec && chartSvg(spec, readChartAttrs(attrs), 'chart');
+    const drawing = svg
+        ? { name: `chart/${Bun.CryptoHasher.hash('sha256', svg, 'hex')}`, svg, alt: spec.title.text || 'Chart' }
+        : null;
+    drawings.set(node, drawing);
+    return drawing;
 }
 
 // A chart has no media file either: it draws as the SVG the HTML export inlines, through the sanitizer a pasted SVG
@@ -39,12 +56,8 @@ function figureMediaKey(node: JSONContent): string | null {
 export async function chartFigureMedia(roots: JSONContent[]): Promise<ExportMedia[]> {
     const charts = new Map<string, string>();
     const visit = (node: JSONContent) => {
-        const key = node.type === 'chart' ? figureMediaKey(node) : null;
-        if (key && !charts.has(key)) {
-            const attrs = readChartAttrs(node.attrs ?? {});
-            const spec = parseChartSpec(attrs.spec ?? '');
-            if (spec) charts.set(key, chartSvg(spec, attrs));
-        }
+        const drawing = node.type === 'chart' ? chartDrawing(node) : null;
+        if (drawing) charts.set(drawing.name, drawing.svg);
         for (const child of node.content ?? []) visit(child);
     };
     for (const root of roots) visit(root);
@@ -125,10 +138,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         cx,
         // Observed in Word: a fractional-twip height refits the width (a 1204×4 px divider drew 466.5 pt wide), so the height is whole.
         Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
-        // A chart's is the one its HTML gives its image.
-        node.type === 'chart'
-            ? parseChartSpec(readChartAttrs(node.attrs ?? {}).spec ?? '')?.title.text || 'Chart'
-            : (alt ?? ''),
+        (node.type === 'chart' ? chartDrawing(node)?.alt : alt) ?? '',
         context.pkg,
     );
     if (!side) {

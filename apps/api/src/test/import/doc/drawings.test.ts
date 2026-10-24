@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
@@ -414,8 +414,8 @@ describe('charts', () => {
         const centered = `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${chartRun('rId20')}</w:p>`;
         const { json, warnings } = await imported(centered, [chartSpace(COLUMNS)]);
         const [chart] = charts(json);
-        const spec = JSON.parse(String(chart?.attrs?.['spec']));
-        expect([spec.chart.type, spec.title.text, spec.legend.position, spec.data]).toEqual([
+        const { spec } = readChartSpec(chart?.attrs ?? {});
+        expect([spec?.chart.type, spec?.title.text, spec?.legend.position, spec?.data]).toEqual([
             'column',
             'Sales',
             'bottom',
@@ -428,7 +428,7 @@ describe('charts', () => {
                 ],
             },
         ]);
-        expect(spec.series).toEqual({
+        expect(spec?.series).toEqual({
             'x-0': { ...DEFAULT_CHART_SERIES_STYLE, color: '#c00000' },
             'x-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#00b050' },
         });

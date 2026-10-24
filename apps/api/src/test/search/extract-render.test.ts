@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
 import { MATHML_NAMESPACE, readLatex, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
+import { sampleChartParts } from '../fixtures/chart-parts';
 import {
     buildGoldenDeckScene,
     buildGoldenDocJson,
@@ -104,9 +104,12 @@ describe('extractCollabText', () => {
                         { type: 'figure', attrs: { mediaName: 'a.png', caption: 'Team photo', alt: 'Unindexed' } },
                         {
                             type: 'chart',
-                            attrs: { spec: JSON.stringify(sampleChartSpec('pie')), caption: 'Scores by team' },
+                            attrs: { ...sampleChartParts('pie'), caption: 'Scores by team' },
                         },
-                        { type: 'chart', attrs: { spec: 'not a chart' } },
+                        {
+                            type: 'chart',
+                            attrs: { ...sampleChartParts('pie'), specData: 'not a chart' },
+                        },
                     ],
                 },
             ],

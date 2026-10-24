@@ -1,6 +1,6 @@
 // The Chart panel edits the selected chart's spec and frame through the doc's own undo manager: each change one undo
 // step, a typed title too, and Edit data's Save one write.
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -9,8 +9,9 @@ installHappyDom();
 const Y = await import('yjs');
 const { act, createElement, useState } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
+const { AttrStep } = await import('@tiptap/pm/transform');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
-const { chartSeriesStyle, parseChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
+const { chartSeriesStyle, mapChartSpecParts, readChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
 const { parseFill } = await import('@workspace/lib/vector');
 const { getFontFamily } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
@@ -18,15 +19,18 @@ const { Chart } = await import('../../../components/docs/extensions/chart');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
 const { ChartDataEditor, ChartPropertiesPanel } = await import('../../../components/docs/chart-properties-panel');
 
-let unmount = async () => {};
-afterEach(() => unmount());
+let unmounts: (() => Promise<void>)[] = [];
+afterEach(async () => {
+    for (const unmount of unmounts) await unmount();
+    unmounts = [];
+});
 
 const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
-// A collab editor holding one inserted chart, selected, its panel and its Edit data dialog mounted as the editor
-// mounts them. Every write past the insert would be its own undo step but for a hold, as captureTimeout is 0.
-async function mount() {
-    const doc = new Y.Doc();
+// A collab editor over `doc` holding one chart, selected, its panel and its Edit data dialog mounted as the editor
+// mounts them: the inserted one, or the one a peer's doc already holds. Every write past the insert would be its own
+// undo step but for a hold, as captureTimeout is 0.
+async function mount(doc = new Y.Doc()) {
     const undoManager = createDocUndoManager(doc);
     const editor = new Editor({
         extensions: [
@@ -35,7 +39,8 @@ async function mount() {
             Collaboration.configure({ document: doc, yUndoOptions: { undoManager } }),
         ],
     });
-    editor.commands.insertChart('column');
+    if (editor.state.doc.nodeAt(1)?.type.name === 'chart') editor.commands.setNodeSelection(1);
+    else editor.commands.insertChart('column');
     undoManager.stopCapturing();
     undoManager.captureTimeout = 0;
     function Host() {
@@ -49,20 +54,22 @@ async function mount() {
         );
     }
     const rendered = await renderInDocument(createElement(Host));
-    const page = document.querySelector('[data-document]');
+    const page = rendered.container.querySelector('[data-document]');
     if (page) Object.defineProperty(page, 'clientWidth', { value: 600 });
-    unmount = async () => {
+    unmounts.push(async () => {
         await rendered.unmount();
         editor.destroy();
-    };
-    const stored = () => JSON.parse(editor.state.doc.nodeAt(1)?.attrs.spec ?? '{}');
-    const spec = () => parseChartSpec(editor.state.doc.nodeAt(1)?.attrs.spec ?? '');
-    // Another tab's write of the node's spec, as the panel and the dialog see it arrive.
-    const store = (raw: object) => act(async () => void editor.commands.updateChart({ spec: JSON.stringify(raw) }));
-    return { editor, undoManager, spec, stored, store };
+    });
+    const attrs = () => editor.state.doc.nodeAt(1)?.attrs ?? {};
+    const stored = () => readChartSpec(attrs()).stored;
+    const spec = () => readChartSpec(attrs()).spec;
+    // Another tab's write of the node's parts, as the panel and the dialog see it arrive.
+    const store = (raw: Record<string, unknown>) =>
+        act(async () => void editor.commands.updateChart(mapChartSpecParts((part) => JSON.stringify(raw[part]))));
+    return { doc, editor, undoManager, container: rendered.container, attrs, spec, stored, store };
 }
 
-type Spec = ReturnType<typeof parseChartSpec>;
+type Spec = ReturnType<typeof readChartSpec>['spec'];
 const colorsOf = (spec: Spec) => spec?.data.series.map(({ id }) => chartSeriesStyle(spec, id).color);
 
 const dialog = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
@@ -238,15 +245,25 @@ test('Edit data saves the grid as one undo step', async () => {
     expect(undone?.data.source === 'inline' && undone.data.series[0].values[0]).toBe(13.1);
 });
 
-test("a title typed into the panel keeps what this build doesn't know: a key on the spec, on an axis, a legend", async () => {
+// y-tiptap skips an attribute whose text didn't change, so the writes are read off the editor's own steps.
+test('a title typed into the panel writes only the title part', async () => {
+    const { editor } = await mount();
+    const written = new Set<string>();
+    editor.on('transaction', ({ transaction }) => {
+        for (const step of transaction.steps) if (step instanceof AttrStep) written.add(step.attr);
+    });
+    await type(document.querySelector<HTMLInputElement>('input[placeholder="Chart title"]'), 'Goals');
+    expect([...written]).toEqual(['specTitle']);
+});
+
+test("a title typed into the panel keeps what this build doesn't know: a key on a part, on an axis, a legend", async () => {
     const { stored, store } = await mount();
-    const { axes } = sampleChartSpec('column');
-    const before = stored();
+    const sample = sampleChartSpec('column');
     const raw = {
-        ...before,
+        ...sample,
+        chart: { ...sample.chart, future: 1 },
         legend: { position: 'inside' },
-        future: 1,
-        axes: { ...before.axes, y: { ...axes.y, logBase: 10 } },
+        axes: { ...sample.axes, y: { ...sample.axes.y, logBase: 10 } },
     };
     await store(raw);
     await type(document.querySelector<HTMLInputElement>('input[placeholder="Chart title"]'), 'Goals');
@@ -254,12 +271,12 @@ test("a title typed into the panel keeps what this build doesn't know: a key on 
 });
 
 test("Edit data's Save applies onto the node as it is then, so a peer's colours and title while it was open stay", async () => {
-    const { spec, stored, store } = await mount();
+    const { spec, store } = await mount();
     await click(button(document.body, 'Edit data'));
-    const before = stored();
-    const series = { ...before.series, 's-2': { ...before.series['s-2'], color: '#00ff00' } };
+    const sample = sampleChartSpec('column');
+    const series = { ...sample.series, 's-2': { ...sample.series['s-2'], color: '#00ff00' } };
     const points = { 's-1': { 1: { color: '#000002' } } };
-    await store({ ...before, title: { text: 'Peer title' }, series, points });
+    await store({ ...sample, title: { text: 'Peer title' }, series, points });
     await typeInB2('7');
     await click(button(dialog(), 'Save'));
     const saved = spec();
@@ -267,6 +284,122 @@ test("Edit data's Save applies onto the node as it is then, so a peer's colours 
     expect(saved?.points).toEqual(points);
     expect(colorsOf(saved)).toEqual([null, '#00ff00', null]);
     expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);
+});
+
+describe('two editors on one chart, each through its own panel', () => {
+    const REMOTE = 'remote';
+
+    // Two docs that start in step, each with an editor and its panel over the chart; neither hears the other until
+    // sync, so both edit the chart as it was.
+    const peers = async () => {
+        const a = await mount();
+        const docB = new Y.Doc();
+        Y.applyUpdate(docB, Y.encodeStateAsUpdate(a.doc), REMOTE);
+        const b = await mount(docB);
+        const sync = () =>
+            act(async () => {
+                Y.applyUpdate(docB, Y.encodeStateAsUpdate(a.doc, Y.encodeStateVector(docB)), REMOTE);
+                Y.applyUpdate(a.doc, Y.encodeStateAsUpdate(docB, Y.encodeStateVector(a.doc)), REMOTE);
+            });
+        return { a, b, sync };
+    };
+
+    const setTitle = async (panel: HTMLElement, value: string) => {
+        const input = panel.querySelector<HTMLInputElement>('input[placeholder="Chart title"]');
+        await type(input, value);
+        await act(async () => {
+            input?.dispatchEvent(new Event('focusout', { bubbles: true }));
+        });
+    };
+    // The first palette swatch, which the sample's automatic colour never is.
+    const recolor = async (panel: HTMLElement, series: string) => {
+        const span = [...panel.querySelectorAll('span.w-14')].find((el) => el.textContent?.trim() === series);
+        await click(span?.nextElementSibling?.querySelector('button') ?? document.body);
+        const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
+        if (!swatch) throw new Error('the color popover has no swatch');
+        await click(swatch);
+        return swatch.title;
+    };
+
+    test('a title on one and a series colour on the other: both kept on both', async () => {
+        const { a, b, sync } = await peers();
+        await setTitle(a.container, 'Goals');
+        const color = await recolor(b.container, 'Bulb (incandescent)');
+        await sync();
+        for (const peer of [a, b]) {
+            expect(peer.spec()?.title.text).toBe('Goals');
+            expect(colorsOf(peer.spec())).toEqual([null, color, null]);
+        }
+    });
+
+    // The colour lands after the title, on the node the title is on, so one attribute would hold both and ⌘Z couldn't
+    // take the title back without the colour.
+    test('undo of the title leaves the colour a peer set after it', async () => {
+        const { a, b, sync } = await peers();
+        await setTitle(a.container, 'Goals');
+        await sync();
+        const color = await recolor(b.container, 'Bulb (incandescent)');
+        await sync();
+        await act(async () => void a.undoManager.undo());
+        await sync();
+        for (const peer of [a, b]) {
+            expect(peer.spec()?.title.text).toBe(sampleChartSpec('column').title.text);
+            expect(colorsOf(peer.spec())).toEqual([null, color, null]);
+        }
+    });
+
+    // y-tiptap writes the attributes of a node it edits, and deletes those its schema doesn't declare: an older tab
+    // drops a part this build adds on its next edit of the chart.
+    test('an editor whose schema lacks a part deletes it on its next edit of the chart', async () => {
+        const a = await mount();
+        const docB = new Y.Doc();
+        Y.applyUpdate(docB, Y.encodeStateAsUpdate(a.doc), REMOTE);
+        const Older = Chart.extend({
+            addAttributes() {
+                return Object.fromEntries(
+                    Object.entries(this.parent?.() ?? {}).filter(([name]) => name !== 'specPoints'),
+                );
+            },
+        });
+        const b = new Editor({
+            extensions: [
+                ...getDocExtensions({ exclude: ['chart'] }),
+                Older,
+                Collaboration.configure({ document: docB }),
+            ],
+        });
+        unmounts.push(async () => b.destroy());
+        // The part on the chart's Y element, in its paragraph.
+        const points = () => {
+            const paragraph = a.doc.getXmlFragment('default').get(0);
+            const chart = paragraph instanceof Y.XmlElement ? paragraph.get(0) : undefined;
+            return chart instanceof Y.XmlElement ? chart.getAttribute('specPoints') : undefined;
+        };
+        expect(points()).toBe(a.attrs()['specPoints']);
+
+        b.commands.setNodeSelection(1);
+        b.commands.updateChart({ caption: 'Older' });
+        await act(async () => {
+            Y.applyUpdate(a.doc, Y.encodeStateAsUpdate(docB, Y.encodeStateVector(a.doc)), REMOTE);
+        });
+        expect(a.attrs()['caption']).toBe('Older');
+        expect(points()).toBeUndefined();
+        expect(a.attrs()['specPoints']).toBeNull();
+    });
+
+    test("Edit data's Save on one and a recolour on the other: both kept on both", async () => {
+        const { a, b, sync } = await peers();
+        await click(button(a.container, 'Edit data'));
+        await typeInB2('7');
+        await click(button(dialog(), 'Save'));
+        const color = await recolor(b.container, 'Bulb (incandescent)');
+        await sync();
+        for (const peer of [a, b]) {
+            const spec = peer.spec();
+            expect(spec?.data.source === 'inline' && spec.data.series[0].values[0]).toBe(7);
+            expect(colorsOf(spec)).toEqual([null, color, null]);
+        }
+    });
 });
 
 // A section's row control, beside its label span: the panel has several Style rows.

@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { readOmml, writeMathml } from '@workspace/math';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
@@ -16,6 +15,7 @@ import type { DocxImage } from '../../../lib/import/doc/from-docx';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
+import { sampleChartParts } from '../../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 import { importDocxBody } from '../../fixtures/golden-docx';
 
@@ -158,10 +158,15 @@ describe('the all-features doc', () => {
 
 describe('a chart', () => {
     test('comes back as an image of its SVG, at its width, its title its alt, its caption and layout kept', async () => {
-        const spec = JSON.stringify(sampleChartSpec('column'));
         const chart = {
             type: 'chart',
-            attrs: { spec, width: 480, height: 300, caption: 'Points', layout: 'wrap-left' },
+            attrs: {
+                ...sampleChartParts('column'),
+                width: 480,
+                height: 300,
+                caption: 'Points',
+                layout: 'wrap-left',
+            },
         };
         const source = { type: 'doc', content: [{ type: 'paragraph', content: [chart] }] };
         const media = await withSvgFallbacks(await chartFigureMedia([source]));

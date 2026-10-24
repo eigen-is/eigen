@@ -1,18 +1,19 @@
 // The Docs panel and Edit data for the selected chart node: the shared chart sections over its spec and look, then its
-// layout and caption. Each write is one undo step, and a spec edit is a change applied onto the spec the node stores.
+// layout and caption. Each write is one undo step, and a spec edit is a change applied onto the parts the node stores,
+// written as the part attributes it changed.
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
 import {
-    applyChartSpecChange,
     CHART_DEFAULT_SIZE,
+    chartSpecWrites,
     isInlineSketchCapped,
     readChartLook,
     readChartSpec,
 } from '@workspace/lib/charts';
 import type { ChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { readChartAttrs } from '@workspace/lib/docs/eigendoc';
-import type { ChartSpecChange, StoredChartSpec } from '@workspace/lib/types/chart';
+import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
     holdCapture,
@@ -30,12 +31,12 @@ import { FigureField, FigureLayoutSection } from './figure-properties-panel';
 // The selected chart's attributes. useEditor re-renders on no transaction, and a write that keeps the chart selected
 // fires no selectionUpdate.
 function useSelectedChart(editor: Editor) {
-    const { spec, ...rest } = useEditorState({
+    const { parts, ...rest } = useEditorState({
         editor,
         selector: ({ editor: e }) => {
             const attrs = readChartAttrs(e.getAttributes('chart'));
             return {
-                spec: attrs.spec,
+                parts: Object.fromEntries(CHART_SPEC_PART_KEYS.map((key) => [key, attrs[key]])),
                 layout: attrs.layout || 'block',
                 alignment: attrs.alignment || 'center',
                 caption: attrs.caption || '',
@@ -45,18 +46,13 @@ function useSelectedChart(editor: Editor) {
             };
         },
     });
-    return { ...useMemo(() => readChartSpec(spec ?? ''), [spec]), ...rest };
+    return { ...useMemo(() => readChartSpec(parts), [parts]), ...rest };
 }
 
 // Each write one undo step, sealed from the typing around it; a typed title holds its step until the field is left.
 function writeChart(editor: Editor, undoManager: Y.UndoManager, attributes: ChartAttrs) {
     sealed(undoManager, () => editor.commands.updateChart(attributes));
 }
-
-// Applied onto the spec the node stores as last rendered, so a key this build doesn't know stays.
-const specWrite = (stored: StoredChartSpec, change: ChartSpecChange): ChartAttrs => ({
-    spec: JSON.stringify(applyChartSpecChange(stored, change)),
-});
 
 type ChartPropertiesPanelProps = {
     editor: Editor;
@@ -82,7 +78,7 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                         <ChartSections
                             spec={spec}
                             stored={stored}
-                            onChange={(change) => write(specWrite(stored, change))}
+                            onChange={(change) => write(chartSpecWrites(stored, change))}
                             look={look}
                             onLookChange={write}
                             sketchCapped={isInlineSketchCapped(spec)}
@@ -130,7 +126,7 @@ export function ChartDataEditor({ editor, undoManager, onClose }: ChartDataEdito
         <InlineChartDataDialog
             spec={spec}
             stored={stored}
-            onSave={(change) => writeChart(editor, undoManager, specWrite(stored, change))}
+            onSave={(change) => writeChart(editor, undoManager, chartSpecWrites(stored, change))}
             onClose={onClose}
         />
     );

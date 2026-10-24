@@ -8,16 +8,16 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
-const { sampleChartSpec } = await import('@workspace/lib/charts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Chart } = await import('../../../../components/docs/extensions/chart');
 const { commentAnchorText, nodeCommentCardId } = await import('../../../../components/docs/extensions/comment-mark');
+const { sampleChartParts } = await import('../../../fixtures/chart-parts');
 
 let unmount = async () => {};
 afterEach(() => unmount());
 
-const SPEC = JSON.stringify(sampleChartSpec('column'));
-const chart = (attrs: object = {}) => ({ type: 'chart', attrs: { spec: SPEC, width: 400, height: 250, ...attrs } });
+const PARTS = sampleChartParts('column');
+const chart = (attrs: object = {}) => ({ type: 'chart', attrs: { ...PARTS, width: 400, height: 250, ...attrs } });
 
 // "a" at 1, the chart at 2, on a page whose text column is 600 px.
 async function mount({ attrs = {}, editable = true }: { attrs?: object; editable?: boolean } = {}) {
@@ -63,8 +63,8 @@ test('a chart draws its stored look', async () => {
     expect(box.querySelector('svg')?.innerHTML).toContain('stroke="#336699"');
 });
 
-test('a chart whose spec does not parse draws the placeholder', async () => {
-    const { box } = await mount({ attrs: { spec: '{' } });
+test('a chart whose data does not parse draws the placeholder', async () => {
+    const { box } = await mount({ attrs: { specData: '{' } });
     expect(box.querySelector('svg text')?.textContent).toBe("This chart can't be shown");
 });
 
@@ -136,7 +136,7 @@ test("a double-click selects the chart and opens Edit data, but not a viewer's o
     expect(viewer.edits).toEqual([]);
     await unmount();
 
-    const broken = await mount({ attrs: { spec: '{' } });
+    const broken = await mount({ attrs: { specData: '{' } });
     await dblclick(broken.box);
     expect(broken.edits).toEqual([]);
 });

@@ -15,6 +15,7 @@ const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { insertEigenItems, writeDocsClipboard } = await import('../../../components/docs/clipboard');
 const { cleanPastedHTML } = await import('../../../components/docs/paste');
+const { sampleChartParts } = await import('../../fixtures/chart-parts');
 
 const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
 const text = (t: string, ...marks: object[]) => ({ type: 'text', text: t, ...(marks.length > 0 ? { marks } : {}) });
@@ -320,7 +321,7 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
     const chart = {
         type: 'chart',
         attrs: {
-            spec: JSON.stringify(sampleChartSpec('pie')),
+            ...sampleChartParts('pie'),
             width: 300,
             height: 200,
             caption: 'Share',
@@ -341,7 +342,7 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
     const alone = copy([paragraph(text('a'), chart)]);
     expect(alone.eigen?.items.at(-1)).toEqual({
         type: 'chart',
-        spec: chart.attrs.spec,
+        spec: JSON.stringify(sampleChartSpec('pie')),
         width: 300,
         height: 200,
         look: LOOK,
@@ -352,7 +353,7 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
     expect(beside.eigen?.items.map((item) => item.type)).toEqual(['image', 'chart']);
     expect(chartsIn(await paste(beside))).toEqual([chart.attrs]);
 
-    const placeholder = copy([paragraph(text('a'), { ...chart, attrs: { ...chart.attrs, spec: '{' } })]);
+    const placeholder = copy([paragraph(text('a'), { ...chart, attrs: { ...chart.attrs, specData: '{' } })]);
     expect(placeholder.eigen).toBeUndefined();
 });
 
@@ -360,6 +361,7 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
 // with its shape kept, and its sizes otherwise as they came.
 test('a chart item from another app pastes as a chart, capped at the column', async () => {
     const spec = JSON.stringify(sampleChartSpec('line'));
+    const parts = sampleChartParts('line');
     const items = [
         { type: 'chart' as const, spec, width: 400.5, height: 250.25, look: LOOK },
         { type: 'chart' as const, spec, width: 1200, height: 675, look: FLAT_CHART_LOOK },
@@ -370,8 +372,8 @@ test('a chart item from another app pastes as a chart, capped at the column', as
         if (node.type.name === 'chart') charts.push(node.attrs);
     });
     expect(charts).toMatchObject([
-        { spec, width: 400.5, height: 250.25, ...LOOK },
-        { spec, width: 600, height: 337.5, ...FLAT_CHART_LOOK },
+        { ...parts, width: 400.5, height: 250.25, ...LOOK },
+        { ...parts, width: 600, height: 337.5, ...FLAT_CHART_LOOK },
     ]);
 });
 

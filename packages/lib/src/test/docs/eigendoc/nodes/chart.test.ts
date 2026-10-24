@@ -1,10 +1,19 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { createDocument, Editor, generateHTML, getSchema } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
-import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, FLAT_CHART_LOOK, sampleChartSpec } from '../../../../charts';
+import {
+    CHART_DEFAULT_SIZE,
+    CHART_MAX_SIDE,
+    FLAT_CHART_LOOK,
+    MAX_CHART_SPEC_BYTES,
+    MAX_CHART_SPEC_DEPTH,
+    newChartSpecParts,
+    sampleChartSpec,
+} from '../../../../charts';
 import { chartSvg, getDocExtensions, readChartAttrs } from '../../../../docs/eigendoc';
 import type { ChartLook } from '../../../../types/chart';
+import { CHART_SPEC_PART_KEYS } from '../../../../types/chart';
 import { serializeFill } from '../../../../vector/fill';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -12,7 +21,8 @@ import { installHappyDom } from '../../../happy-dom';
 installHappyDom();
 
 const extensions = getDocExtensions();
-const SPEC = JSON.stringify(sampleChartSpec('column'));
+const PARTS = newChartSpecParts(sampleChartSpec('column'));
+const UNSET_PARTS = Object.fromEntries(CHART_SPEC_PART_KEYS.map((key) => [key, null]));
 const LOOK: ChartLook = {
     fill: serializeFill({ type: 'gradient', from: '#ffeeaa', to: 'transparent', angle: 90, style: 'hachure' }),
     color: '#334455',
@@ -43,12 +53,25 @@ function chartsIn(html: string): Record<string, unknown>[] {
     return charts;
 }
 
+// An older tab deletes every attribute its schema doesn't declare, so the node declares every part from the start.
+test('the node declares an attribute for every part', () => {
+    const attrs = Object.keys(getSchema(extensions).nodes['chart'].spec.attrs ?? {});
+    expect(attrs).toEqual(expect.arrayContaining([...CHART_SPEC_PART_KEYS]));
+    expect(attrs).not.toContain('spec');
+});
+
+// The chart's image for other apps, as the SVG it draws.
+const imageOf = (html: string) =>
+    decodeURIComponent(
+        new DOMParser().parseFromString(html, 'text/html').querySelector('span.chart img')?.getAttribute('src') ?? '',
+    );
+
 describe('chart HTML', () => {
     // The clipboard carries a docs copy as this HTML, so a chart pastes back whole within Docs.
-    test('a chart survives the HTML round-trip with its spec, size, look and frame', () => {
+    test('a chart survives the HTML round-trip with its parts, size, look and frame', () => {
         const attrs = {
             ...LOOK,
-            spec: SPEC,
+            ...PARTS,
             width: 480,
             height: 300,
             layout: 'wrap-right',
@@ -60,8 +83,9 @@ describe('chart HTML', () => {
     });
 
     test('its span holds no figure, and an image of the chart for other apps', () => {
-        const html = generateHTML(chartDoc({ spec: SPEC, width: 480, height: 300 }), extensions);
+        const html = generateHTML(chartDoc({ ...PARTS, width: 480, height: 300 }), extensions);
         const span = new DOMParser().parseFromString(html, 'text/html').querySelector('span.chart');
+        expect(JSON.parse(span?.getAttribute('data-chart') ?? '')).toEqual(PARTS);
         expect(span?.getAttribute('data-width')).toBe('480');
         expect(span?.getAttribute('data-height')).toBe('300');
         const img = span?.querySelector('img');
@@ -75,21 +99,29 @@ describe('chart HTML', () => {
         expect(figures).toBe(0);
     });
 
-    test('a spec that does not parse is kept as stored and renders the placeholder, never throwing', () => {
-        const html = generateHTML(chartDoc({ spec: 'not a chart', width: 200, height: 100 }), extensions);
-        expect(decodeURIComponent(html)).toContain('This chart can&apos;t be shown');
-        expect(chartsIn(html)).toMatchObject([{ spec: 'not a chart', width: 200, height: 100 }]);
+    test('a part that does not parse is kept as stored and renders the placeholder, never throwing', () => {
+        const html = generateHTML(chartDoc({ ...PARTS, specData: 'not a chart', width: 200, height: 100 }), extensions);
+        expect(imageOf(html)).toContain('This chart can&apos;t be shown');
+        expect(chartsIn(html)).toMatchObject([{ ...PARTS, specData: 'not a chart', width: 200, height: 100 }]);
     });
 
-    test('a chart with no spec, size or look renders at the default size, and pastes back flat', () => {
+    test('a chart with no parts, size or look renders at the default size, and pastes back flat', () => {
         const html = generateHTML(chartDoc({}), extensions);
         expect(html).toContain(`width="${CHART_DEFAULT_SIZE.width}"`);
-        expect(chartsIn(html)).toMatchObject([{ spec: null, width: null, height: null, ...FLAT_CHART_LOOK }]);
+        expect(chartsIn(html)).toMatchObject([{ ...UNSET_PARTS, width: null, height: null, ...FLAT_CHART_LOOK }]);
+    });
+
+    // Charts stored as one spec attribute were dropped, not converted: the schema has no such attribute.
+    test('a chart that stores its spec as one attribute draws the placeholder, never throwing', () => {
+        const html = generateHTML(chartDoc({ spec: JSON.stringify(sampleChartSpec('column')) }), extensions);
+        expect(imageOf(html)).toContain('This chart can&apos;t be shown');
+        const pasted = `<p><span class="chart" data-chart='${JSON.stringify(sampleChartSpec('column'))}'></span></p>`;
+        expect(chartsIn(pasted)).toMatchObject([UNSET_PARTS]);
     });
 
     test('a pasted span.chart reads its look through the chart look validators', () => {
         const look = JSON.stringify({ ...LOOK, color: 'url(#x)', roughness: 1e9 });
-        const html = `<p><span class="chart" data-chart='${SPEC}' data-look='${look}'></span></p>`;
+        const html = `<p><span class="chart" data-chart='${JSON.stringify(PARTS)}' data-look='${look}'></span></p>`;
         expect(readChartAttrs(chartsIn(html)[0])).toMatchObject({
             ...LOOK,
             color: FLAT_CHART_LOOK.color,
@@ -99,28 +131,79 @@ describe('chart HTML', () => {
 
     // A peer's write or a pasted span.chart sets any size; the layout runs for seconds at a side of millions.
     test('a chart with an unbounded size renders at the max side', () => {
-        const html = generateHTML(chartDoc({ spec: SPEC, width: 1e8, height: 1e8 }), extensions);
+        const html = generateHTML(chartDoc({ ...PARTS, width: 1e8, height: 1e8 }), extensions);
         const span = new DOMParser().parseFromString(html, 'text/html').querySelector('span.chart');
         expect(span?.getAttribute('data-width')).toBe(String(CHART_MAX_SIDE));
         expect(span?.getAttribute('data-height')).toBe(String(CHART_MAX_SIDE));
     });
 
     test('a pasted span.chart with an unbounded size parses at the max side', () => {
-        const html = `<p><span class="chart" data-chart='${SPEC}' data-width="300" data-height="100000000"></span></p>`;
+        const html = `<p><span class="chart" data-chart='${JSON.stringify(PARTS)}' data-width="300" data-height="100000000"></span></p>`;
         expect(chartsIn(html)).toMatchObject([{ width: 300, height: CHART_MAX_SIDE }]);
     });
 
+    // A forged span.chart costs one bounded read: past the byte or depth limit its attribute isn't parsed, and the
+    // chart stores nothing from it, so nothing big syncs to the peers.
+    describe('a pasted span.chart', () => {
+        const pasted = (attrs: Record<string, string>) => {
+            const span = document.createElement('span');
+            span.className = 'chart';
+            for (const [name, value] of Object.entries(attrs)) span.setAttribute(name, value);
+            return `<p>${span.outerHTML}</p>`;
+        };
+        // The chart it parses as, and how often each attribute's text was parsed.
+        const read = (attrs: Record<string, string>) => {
+            const parse = spyOn(JSON, 'parse');
+            try {
+                const [chart] = chartsIn(pasted(attrs));
+                const parses = Object.values(attrs).map(
+                    (text) => parse.mock.calls.filter(([arg]) => arg === text).length,
+                );
+                return { chart, parses };
+            } finally {
+                parse.mockRestore();
+            }
+        };
+        const UNSET_LOOK = Object.fromEntries(Object.keys(LOOK).map((field) => [field, null]));
+
+        test('parses its parts and its look once each', () => {
+            const { chart, parses } = read({ 'data-chart': JSON.stringify(PARTS), 'data-look': JSON.stringify(LOOK) });
+            expect(chart).toMatchObject({ ...PARTS, ...LOOK });
+            expect(parses).toEqual([1, 1]);
+        });
+
+        test('past the byte limit parses neither, and stores no part and no look', () => {
+            const title = JSON.stringify({ text: 'x'.repeat(MAX_CHART_SPEC_BYTES) });
+            const { chart, parses } = read({
+                'data-chart': JSON.stringify({ ...PARTS, specTitle: title }),
+                'data-look': JSON.stringify({ ...LOOK, color: 'x'.repeat(MAX_CHART_SPEC_BYTES) }),
+            });
+            expect(chart).toMatchObject({ ...UNSET_PARTS, ...UNSET_LOOK });
+            expect(parses).toEqual([0, 0]);
+        });
+
+        test('past the depth limit parses neither, and stores no part and no look', () => {
+            const deep = `${'['.repeat(MAX_CHART_SPEC_DEPTH + 1)}${']'.repeat(MAX_CHART_SPEC_DEPTH + 1)}`;
+            const { chart, parses } = read({
+                'data-chart': `${JSON.stringify(PARTS).slice(0, -1)},"specFuture":${deep}}`,
+                'data-look': `${JSON.stringify(LOOK).slice(0, -1)},"future":${deep}}`,
+            });
+            expect(chart).toMatchObject({ ...UNSET_PARTS, ...UNSET_LOOK });
+            expect(parses).toEqual([0, 0]);
+        });
+    });
+
     test('a caption that is not a string renders none, never throwing', () => {
-        const html = generateHTML(chartDoc({ spec: SPEC, caption: 3 }), extensions);
+        const html = generateHTML(chartDoc({ ...PARTS, caption: 3 }), extensions);
         expect(html).not.toContain('figcaption');
     });
 });
 
 describe('readChartAttrs', () => {
     test('reads the attributes a chart stores', () => {
-        expect(readChartAttrs({ spec: SPEC, width: 480, height: 300, layout: 'wrap-left', ...LOOK })).toEqual({
+        expect(readChartAttrs({ ...PARTS, width: 480, height: 300, layout: 'wrap-left', ...LOOK })).toEqual({
             ...LOOK,
-            spec: SPEC,
+            ...PARTS,
             width: 480,
             height: 300,
             caption: null,
@@ -131,12 +214,12 @@ describe('readChartAttrs', () => {
     });
 
     test('a chart that stores no look reads flat', () => {
-        expect(readChartAttrs({ spec: SPEC })).toMatchObject(FLAT_CHART_LOOK);
+        expect(readChartAttrs(PARTS)).toMatchObject(FLAT_CHART_LOOK);
     });
 
     test('reads a value of the wrong type as unset', () => {
-        expect(readChartAttrs({ spec: 7, width: '480', height: null, caption: 3 })).toMatchObject({
-            spec: null,
+        expect(readChartAttrs({ specTitle: 7, width: '480', height: null, caption: 3 })).toMatchObject({
+            specTitle: null,
             width: null,
             height: null,
             caption: null,
@@ -198,7 +281,7 @@ describe('insertChart', () => {
         expect(selection.from).toBe(2);
         const chart = editor.state.doc.nodeAt(2);
         expect(chart?.type.name).toBe('chart');
-        expect(chart?.attrs).toMatchObject({ spec: JSON.stringify(sampleChartSpec('bar')), ...CHART_DEFAULT_SIZE });
+        expect(chart?.attrs).toMatchObject({ ...newChartSpecParts(sampleChartSpec('bar')), ...CHART_DEFAULT_SIZE });
         expect(editor.getText()).toBe('ab');
         editor.destroy();
     });
@@ -231,10 +314,15 @@ describe('insertChart', () => {
     test('updateChart writes the selected chart and keeps it selected', () => {
         const editor = editorWith('ab');
         editor.commands.insertChart('line');
-        const spec = JSON.stringify(sampleChartSpec('pie'));
-        expect(editor.commands.updateChart({ spec, width: 320 })).toBe(true);
+        const parts = newChartSpecParts(sampleChartSpec('pie'));
+        expect(editor.commands.updateChart({ specChart: parts.specChart, width: 320 })).toBe(true);
         expect(editor.state.selection).toBeInstanceOf(NodeSelection);
-        expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({ spec, width: 320, height: 371 });
+        expect(editor.state.doc.nodeAt(1)?.attrs).toMatchObject({
+            ...newChartSpecParts(sampleChartSpec('line')),
+            specChart: parts.specChart,
+            width: 320,
+            height: 371,
+        });
         editor.destroy();
     });
 });

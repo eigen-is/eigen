@@ -28,7 +28,7 @@ const { LayoutContext } = await import('@workspace/ui/components/layout/app/layo
 const { PreviewProvider } = await import('@workspace/ui/components/preview-provider');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const download = await import('@workspace/lib/download');
-const { sampleChartSpec } = await import('@workspace/lib/charts');
+const { newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
 const fonts = stubCanvasImageFonts();
 
 let doc = new Y.Doc();
@@ -1174,12 +1174,13 @@ test('a right-click on an equation in the band being edited opens its menu, whic
     expect(doc.getXmlFragment('default').toString()).not.toContain('equation');
 });
 
-// A chart's look is attributes of its node beside the spec; its labels draw in the look's color. No size draws it at
-// CHART_DEFAULT_SIZE, 600 × 371.
+// A chart's look is attributes of its node beside the spec's parts; its labels draw in the look's color. No size draws
+// it at CHART_DEFAULT_SIZE, 600 × 371.
 function writeChart() {
     const paragraph = new Y.XmlElement('paragraph');
     const chart = new Y.XmlElement('chart');
-    chart.setAttribute('spec', JSON.stringify({ ...sampleChartSpec('column'), title: { text: 'Light / dark' } }));
+    const parts = newChartSpecParts({ ...sampleChartSpec('column'), title: { text: 'Light / dark' } });
+    for (const [key, text] of Object.entries(parts)) chart.setAttribute(key, text);
     chart.setAttribute('color', '#123456');
     paragraph.insert(0, [chart]);
     doc.getXmlFragment('default').insert(0, [paragraph]);

@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, PAGE_ROOT, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
 import type { MathNode, MathRow } from '@workspace/math';
 import { writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { MATHML_LIMIT } from '../../lib/export/doc/render';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
+import { sampleChartParts } from '../fixtures/chart-parts';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedEigendoc } from '../fixtures/golden-documents';
 
 // The preview body is injected as live DOM by the drive hero and the preview pane, so every
@@ -64,10 +64,12 @@ describe('renderEigendocPreviewBody', () => {
     });
 
     test('a chart draws as inline SVG in the figure box, its labels as text', () => {
-        const spec = JSON.stringify(sampleChartSpec('column'));
+        const parts = sampleChartParts('column');
         const body = previewOf({
             type: 'doc',
-            content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { spec, width: 480, height: 300 } }] }],
+            content: [
+                { type: 'paragraph', content: [{ type: 'chart', attrs: { ...parts, width: 480, height: 300 } }] },
+            ],
         });
         expect(body).toContain('<span class="figure" data-layout="block" data-alignment="center"><svg');
         expect(body).toMatch(/<text[^>]*>300–400<\/text>/);

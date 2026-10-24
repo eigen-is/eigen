@@ -263,7 +263,7 @@ function byteBudget(): (text: string) => boolean {
 }
 
 // Counted on the string, in one pass before the parse; a bracket inside a JSON string is text.
-function exceedsChartSpecDepth(value: string): boolean {
+export function exceedsChartSpecDepth(value: string): boolean {
     let depth = 0;
     let quoted = false;
     let escaped = false;

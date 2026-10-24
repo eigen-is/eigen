@@ -27,6 +27,7 @@ export {
     DEFAULT_CHART_SERIES_STYLE,
     defaultChartSpec,
     exceedsChartSpecBytes,
+    exceedsChartSpecDepth,
     exceedsInlineGridLimits,
     fitsInlineGrid,
     holdsUnknownChartData,

@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { serializeFill } from '@workspace/lib/vector';
 import type { MathRow } from '@workspace/math';
 import { MATH_LIMITS, MATHML_NAMESPACE, readOmml, writeMathml } from '@workspace/math';
 import sharp from 'sharp';
@@ -19,9 +20,10 @@ import { chartFigureMedia } from '../../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/fonts';
 import { withSvgFallbacks } from '../../../../lib/export/office-image';
-import { parseOoxml } from '../../../../lib/ooxml/ooxml';
+import { A_NS, parseOoxml } from '../../../../lib/ooxml/ooxml';
 import type { ZipReader } from '../../../../lib/ooxml/zip';
 import { openZip } from '../../../../lib/ooxml/zip';
+import { sampleChartParts } from '../../../fixtures/chart-parts';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,
@@ -1969,6 +1971,8 @@ function figure(attrs: Record<string, unknown>): JSONContent {
     return { type: 'figure', attrs };
 }
 
+const PARTS_OF_COLUMN = sampleChartParts('column');
+
 function chartNode(attrs: Record<string, unknown>): JSONContent {
     return { type: 'chart', attrs };
 }
@@ -2396,8 +2400,7 @@ describe('docx writer — figures', () => {
 
     test("a chart is a picture of its SVG beside the SVG's PNG, at its width, its caption kept", async () => {
         const sample = sampleChartSpec('column');
-        const spec = JSON.stringify(sample);
-        const json = doc(p(chartNode({ spec, width: 480, height: 300, caption: 'Points' })));
+        const json = doc(p(chartNode({ ...PARTS_OF_COLUMN, width: 480, height: 300, caption: 'Points' })));
         const media = await chartMedia(json);
         expect(await blocksOf(json, media)).toEqual([
             imageParagraph(
@@ -2424,8 +2427,8 @@ describe('docx writer — figures', () => {
     });
 
     test('two charts of one spec and size but different looks draw two pictures, each in its own look', async () => {
-        const spec = JSON.stringify(sampleChartSpec('column'));
-        const json = doc(p(chartNode({ spec }), chartNode({ spec, roughness: 2, seed: 5, strokeColor: '#336699' })));
+        const parts = sampleChartParts('column');
+        const json = doc(p(chartNode(parts), chartNode({ ...parts, roughness: 2, seed: 5, strokeColor: '#336699' })));
         const media = await chartMedia(json);
         const svgs = media.filter((item) => item.contentType === 'image/svg+xml');
         expect(svgs).toHaveLength(2);
@@ -2433,9 +2436,40 @@ describe('docx writer — figures', () => {
         expect(texts.filter((svg) => svg.includes('stroke="#336699"'))).toHaveLength(1);
     });
 
+    // A picture is named by what it draws: series ids and a gradient's id draw nothing of their own.
+    test('two charts that draw the same picture share one, though their stored parts differ', async () => {
+        const sample = sampleChartSpec('column');
+        const { data } = sample;
+        if (data.source !== 'inline') throw new Error('the sample is inline');
+        const renamed = (id: string) => id.replace('s-', 'x-');
+        const other = {
+            ...sample,
+            series: Object.fromEntries(Object.entries(sample.series).map(([id, style]) => [renamed(id), style])),
+            data: { ...data, series: data.series.map((series) => ({ ...series, id: renamed(series.id) })) },
+        };
+        const fill = serializeFill({ type: 'gradient', from: '#ffeeaa', to: '#ffffff', angle: 90, style: 'solid' });
+        const look = { fill };
+        const json = doc(
+            p(chartNode({ ...PARTS_OF_COLUMN, ...look }), chartNode({ ...newChartSpecParts(other), ...look })),
+        );
+        const media = await chartMedia(json);
+        expect(media.filter((item) => item.contentType === 'image/svg+xml')).toHaveLength(1);
+        const zip = await unzip(json, undefined, media);
+        expect(zip.names().filter((name) => name.startsWith('word/media/'))).toEqual([
+            'word/media/image1.png',
+            'word/media/image1.svg',
+        ]);
+        const blips = descendants(await part(zip, 'word/document.xml'), A_NS, 'blip');
+        expect(new Set(blips.map((blip) => xmlAttr(blip, R, 'embed')))).toEqual(new Set(['rId5']));
+    });
+
     test("a chart whose spec doesn't parse keeps its caption alone, as a figure without media does", async () => {
         const charts = doc(
-            p(text('a'), chartNode({ spec: '{', caption: 'Lost', alignment: 'right' }), text('b')),
+            p(
+                text('a'),
+                chartNode({ ...PARTS_OF_COLUMN, specData: '{', caption: 'Lost', alignment: 'right' }),
+                text('b'),
+            ),
             p(chartNode({ caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
         );
         const figures = doc(

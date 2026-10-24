@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import { domOutputSpecToHTMLString, renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import { parseChartSpec } from '@workspace/lib/charts';
+import { readChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { ChartAttrs, FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import {
@@ -109,7 +109,7 @@ function renderFigureNode(
 
 // Inline, so its labels draw in the page's fonts; an <img> of an SVG can't reach the page's @font-face.
 function renderChartNode(attrs: ChartAttrs): string {
-    return renderFigureFrame(attrs, chartSvg(parseChartSpec(attrs.spec ?? ''), attrs));
+    return renderFigureFrame(attrs, chartSvg(readChartSpec(attrs).spec, attrs));
 }
 
 type RenderElement = (props: { content: Node; parent?: Node }) => string | string[];

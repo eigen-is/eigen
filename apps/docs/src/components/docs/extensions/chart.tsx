@@ -1,6 +1,6 @@
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
-import { CHART_DEFAULT_SIZE, parseChartSpec } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
 import { ChartNode, chartSvg, readChartAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { useCallback, useMemo, useRef } from 'react';
@@ -31,7 +31,7 @@ function ChartView(props: NodeViewProps) {
     const { node, selected, editor, extension, getPos } = props;
     const { onEditData }: ChartOptions = extension.options;
     const containerRef = useRef<HTMLSpanElement>(null);
-    const { spec, width, height, layout } = readChartAttrs(node.attrs);
+    const { width, height, layout } = readChartAttrs(node.attrs);
     const isEditable = editor.isEditable;
 
     const getMaxWidth = useCallback(() => figureMaxWidth(containerRef.current, layout ?? null), [layout]);
@@ -52,8 +52,8 @@ function ChartView(props: NodeViewProps) {
         width: width ?? CHART_DEFAULT_SIZE.width,
         height: height ?? CHART_DEFAULT_SIZE.height,
     };
-    const parsed = useMemo(() => parseChartSpec(spec ?? ''), [spec]);
-    // node.attrs is a new object only when an attribute changes, the look's among them.
+    // node.attrs is a new object only when an attribute changes, a part's and the look's among them.
+    const parsed = useMemo(() => readChartSpec(node.attrs).spec, [node.attrs]);
     const svg = useMemo(
         () => chartSvg(parsed, { ...readChartAttrs(node.attrs), ...size }),
         [parsed, node.attrs, size.width, size.height],

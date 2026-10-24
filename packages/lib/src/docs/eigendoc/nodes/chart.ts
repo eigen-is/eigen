@@ -2,21 +2,31 @@ import type { CommandProps } from '@tiptap/core';
 import { Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { nanoid } from 'nanoid';
-import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, parseChartSpec, readChartLook, sampleChartSpec } from '../../../charts';
+import {
+    CHART_DEFAULT_SIZE,
+    CHART_MAX_SIDE,
+    exceedsChartSpecBytes,
+    exceedsChartSpecDepth,
+    newChartSpecParts,
+    readChartLook,
+    readChartSpec,
+    sampleChartSpec,
+} from '../../../charts';
 import { isRecord } from '../../../core/guards';
-import type { ChartLook, ChartSpec, ChartType } from '../../../types/chart';
-import { CHART_LOOK_FIELDS } from '../../../types/chart';
+import type { ChartLook, ChartSpec, ChartSpecPartKey, ChartType } from '../../../types/chart';
+import { CHART_LOOK_FIELDS, CHART_SPEC_PART_KEYS } from '../../../types/chart';
 import { renderChartSpecSvg } from '../../../vector/kinds/chart-render';
 import { randomSeed } from '../../../vector/write-vector';
 import type { FigureFrameAttrs } from './figure-frame';
 import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
 
-// The node's attribute set, as it comes back off a stored document (every attr defaults to null). The spec is the
-// stored string, kept as it is even when it doesn't parse, as a canvas keeps it. The look is a canvas chart's own
-// fields, an attribute each, so a peer's stroke edit merges with another's sketch edit.
+// The node's attribute set, as it comes back off a stored document (every attr defaults to null). The spec is an
+// attribute per part, each the stored string, kept as it is even when it doesn't parse, as a canvas keeps it; the look
+// is a canvas chart's own fields, an attribute each. So two peers' edits of two parts, or of a stroke and a sketch,
+// both stand, and an undo takes back only the attributes its step wrote.
 export type ChartAttrs = FigureFrameAttrs &
-    Partial<ChartLook> & {
-        spec?: string | null;
+    Partial<ChartLook> &
+    Partial<Record<ChartSpecPartKey, string | null>> & {
         width?: number | null;
         height?: number | null;
     };
@@ -33,12 +43,22 @@ declare module '@tiptap/core' {
 
 const side = (value: unknown) => (typeof value === 'number' && value > 0 ? Math.min(CHART_MAX_SIDE, value) : null);
 
+// The spec's parts as the node stores them, a part that isn't a string unset; readChartSpec reads the spec off them.
+function chartParts(attrs: Record<string, unknown>): Partial<Record<ChartSpecPartKey, string | null>> {
+    return Object.fromEntries(
+        CHART_SPEC_PART_KEYS.map((key) => {
+            const text = attrs[key];
+            return [key, typeof text === 'string' ? text : null];
+        }),
+    );
+}
+
 // A chart's attributes off untyped ones: a value of the wrong type reads as unset, and a side past the max as the max.
 // The look reads through the chart look validators, flat where unset.
 export function readChartAttrs(attrs: Record<string, unknown>): ChartAttrs & ChartLook {
-    const { spec, width, height } = attrs;
+    const { width, height } = attrs;
     return {
-        spec: typeof spec === 'string' ? spec : null,
+        ...chartParts(attrs),
         width: side(width),
         height: side(height),
         ...readChartLook(attrs),
@@ -47,10 +67,15 @@ export function readChartAttrs(attrs: Record<string, unknown>): ChartAttrs & Cha
 }
 
 // The chart drawn in its look at its stored size, or the placeholder for a spec that doesn't parse. Its id is new on
-// every draw, so no two charts on a page, or in a copy beside it, share a gradient's id.
-export function chartSvg(spec: ChartSpec | null, { width, height, ...look }: ChartAttrs): string {
+// every draw, so no two charts on a page, or in a copy beside it, share a gradient's id; a drawing in a file of its own
+// names one, so a chart drawn twice is the same SVG.
+export function chartSvg(
+    spec: ChartSpec | null,
+    { width, height, ...look }: ChartAttrs,
+    id = `chart-${nanoid(10)}`,
+): string {
     return renderChartSpecSvg({
-        id: `chart-${nanoid(10)}`,
+        id,
         spec,
         width: width ?? CHART_DEFAULT_SIZE.width,
         height: height ?? CHART_DEFAULT_SIZE.height,
@@ -60,14 +85,26 @@ export function chartSvg(spec: ChartSpec | null, { width, height, ...look }: Cha
 
 const sideOf = (element: HTMLElement, name: string) => side(Number(element.getAttribute(name)));
 
-// A pasted span.chart's look, one JSON attribute for every field, each read through the validators later.
-function lookOf(element: HTMLElement): Record<string, unknown> {
+// A pasted span.chart's parts or look, one JSON attribute for each set, each value read through the validators later.
+// One past the spec's byte or depth limit reads as empty, unparsed, so a forged one stores nothing.
+function recordOf(element: HTMLElement, name: 'data-chart' | 'data-look'): Record<string, unknown> {
+    const text = element.getAttribute(name) ?? '';
+    if (exceedsChartSpecBytes(text) || exceedsChartSpecDepth(text)) return {};
     try {
-        const look: unknown = JSON.parse(element.getAttribute('data-look') ?? '');
-        return isRecord(look) ? look : {};
+        const record: unknown = JSON.parse(text);
+        return isRecord(record) ? record : {};
     } catch {
         return {};
     }
+}
+
+// Every part and look field off one read of each attribute.
+function pastedChartAttrs(element: HTMLElement): Record<string, unknown> {
+    const look = recordOf(element, 'data-look');
+    return {
+        ...chartParts(recordOf(element, 'data-chart')),
+        ...Object.fromEntries(CHART_LOOK_FIELDS.map((field) => [field, look[field] ?? null])),
+    };
 }
 
 // An inline atom like a figure, sharing its frame. A chart has no intrinsic aspect ratio, so it stores both sides.
@@ -82,33 +119,31 @@ export const ChartNode = Node.create({
 
     draggable: true,
 
+    // getAttrs reads the parts and the look, each attribute once, so a foreign attribute of the same name never reaches
+    // the doc.
     addAttributes() {
+        const pasted = { default: null, parseHTML: () => null };
         return {
-            spec: { default: null, parseHTML: (element: HTMLElement) => element.getAttribute('data-chart') || null },
+            ...Object.fromEntries(CHART_SPEC_PART_KEYS.map((key) => [key, pasted])),
             width: { default: null, parseHTML: (element: HTMLElement) => sideOf(element, 'data-width') },
             height: { default: null, parseHTML: (element: HTMLElement) => sideOf(element, 'data-height') },
-            ...Object.fromEntries(
-                CHART_LOOK_FIELDS.map((field) => [
-                    field,
-                    { default: null, parseHTML: (element: HTMLElement) => lookOf(element)[field] ?? null },
-                ]),
-            ),
+            ...Object.fromEntries(CHART_LOOK_FIELDS.map((field) => [field, pasted])),
             ...figureFrameAttributes(),
         };
     },
 
     // Above the figure's span.figure, so the image inside never parses as a figure.
     parseHTML() {
-        return [{ tag: 'span.chart[data-chart]', priority: 70 }];
+        return [{ tag: 'span.chart[data-chart]', priority: 70, getAttrs: pastedChartAttrs }];
     },
 
     // The image is for an app that doesn't know the node; this schema reads the data attributes and skips it.
     renderHTML({ node }) {
         const attrs = readChartAttrs(node.attrs);
-        const spec = parseChartSpec(attrs.spec ?? '');
+        const { spec } = readChartSpec(node.attrs);
         const frame = {
             class: 'chart',
-            'data-chart': attrs.spec ?? '',
+            'data-chart': JSON.stringify(chartParts(node.attrs)),
             'data-width': attrs.width,
             'data-height': attrs.height,
             'data-look': JSON.stringify(readChartLook(node.attrs)),
@@ -131,7 +166,7 @@ export const ChartNode = Node.create({
                     const inserted = commands.insertContent({
                         type: this.name,
                         attrs: {
-                            spec: JSON.stringify(sampleChartSpec(type)),
+                            ...newChartSpecParts(sampleChartSpec(type)),
                             seed: randomSeed(),
                             width: Math.round(CHART_DEFAULT_SIZE.width * scale),
                             height: Math.round(CHART_DEFAULT_SIZE.height * scale),
