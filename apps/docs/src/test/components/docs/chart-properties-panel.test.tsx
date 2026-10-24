@@ -369,13 +369,10 @@ describe('two editors on one chart, each through its own panel', () => {
             ],
         });
         unmounts.push(async () => b.destroy());
-        // The chart's element, in its paragraph.
-        const chartOf = (doc: Y.Doc) => {
-            const paragraph = doc.getXmlFragment('default').get(0);
-            return paragraph instanceof Y.XmlElement ? paragraph.get(0) : undefined;
-        };
+        // The part on the chart's Y element, in its paragraph.
         const points = () => {
-            const chart = chartOf(a.doc);
+            const paragraph = a.doc.getXmlFragment('default').get(0);
+            const chart = paragraph instanceof Y.XmlElement ? paragraph.get(0) : undefined;
             return chart instanceof Y.XmlElement ? chart.getAttribute('specPoints') : undefined;
         };
         expect(points()).toBe(a.attrs()['specPoints']);
