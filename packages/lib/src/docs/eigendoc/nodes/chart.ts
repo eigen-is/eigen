@@ -7,6 +7,7 @@ import {
     CHART_MAX_SIDE,
     exceedsChartSpecBytes,
     exceedsChartSpecDepth,
+    MAX_CHART_SPEC_BYTES,
     newChartSpecParts,
     readChartLook,
     readChartSpec,
@@ -85,11 +86,14 @@ export function chartSvg(
 
 const sideOf = (element: HTMLElement, name: string) => side(Number(element.getAttribute(name)));
 
+// The parts' attribute escapes every quote in their text again, about a fifth more for a real chart, so it is bounded
+// at twice the spec's byte limit before the parse, and the parts it holds at the limit itself after.
+const MAX_PASTED_PARTS_LENGTH = 2 * MAX_CHART_SPEC_BYTES;
+
 // A pasted span.chart's parts or look, one JSON attribute for each set, each value read through the validators later.
-// One past the spec's byte or depth limit reads as empty, unparsed, so a forged one stores nothing.
-function recordOf(element: HTMLElement, name: 'data-chart' | 'data-look'): Record<string, unknown> {
-    const text = element.getAttribute(name) ?? '';
-    if (exceedsChartSpecBytes(text) || exceedsChartSpecDepth(text)) return {};
+// One longer than its bound or past the spec's depth limit reads as empty, unparsed, so a forged one stores nothing.
+function recordOf(text: string, maxLength: number): Record<string, unknown> {
+    if (text.length > maxLength || exceedsChartSpecDepth(text)) return {};
     try {
         const record: unknown = JSON.parse(text);
         return isRecord(record) ? record : {};
@@ -100,9 +104,10 @@ function recordOf(element: HTMLElement, name: 'data-chart' | 'data-look'): Recor
 
 // Every part and look field off one read of each attribute.
 function pastedChartAttrs(element: HTMLElement): Record<string, unknown> {
-    const look = recordOf(element, 'data-look');
+    const parts = chartParts(recordOf(element.getAttribute('data-chart') ?? '', MAX_PASTED_PARTS_LENGTH));
+    const look = recordOf(element.getAttribute('data-look') ?? '', MAX_CHART_SPEC_BYTES);
     return {
-        ...chartParts(recordOf(element, 'data-chart')),
+        ...(exceedsChartSpecBytes(parts) ? chartParts({}) : parts),
         ...Object.fromEntries(CHART_LOOK_FIELDS.map((field) => [field, look[field] ?? null])),
     };
 }

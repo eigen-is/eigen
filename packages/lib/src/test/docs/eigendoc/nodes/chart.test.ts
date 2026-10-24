@@ -173,13 +173,29 @@ describe('chart HTML', () => {
         });
 
         test('past the byte limit parses neither, and stores no part and no look', () => {
-            const title = JSON.stringify({ text: 'x'.repeat(MAX_CHART_SPEC_BYTES) });
+            const title = JSON.stringify({ text: 'x'.repeat(2 * MAX_CHART_SPEC_BYTES) });
             const { chart, parses } = read({
                 'data-chart': JSON.stringify({ ...PARTS, specTitle: title }),
                 'data-look': JSON.stringify({ ...LOOK, color: 'x'.repeat(MAX_CHART_SPEC_BYTES) }),
             });
             expect(chart).toMatchObject({ ...UNSET_PARTS, ...UNSET_LOOK });
             expect(parses).toEqual([0, 0]);
+        });
+
+        // The attribute escapes every quote in the parts' text again, so a real chart near the limit is longer there.
+        test('a chart within the byte limit pastes whole, though its attribute is past it', () => {
+            const title = JSON.stringify({ text: '"'.repeat(MAX_CHART_SPEC_BYTES / 3) });
+            const attribute = JSON.stringify({ ...PARTS, specTitle: title });
+            expect(attribute.length).toBeGreaterThan(MAX_CHART_SPEC_BYTES);
+            const { chart, parses } = read({ 'data-chart': attribute });
+            expect(chart).toMatchObject({ ...PARTS, specTitle: title });
+            expect(parses).toEqual([1]);
+        });
+
+        test('parts past the byte limit, in an attribute within twice it, store no part', () => {
+            const title = JSON.stringify({ text: 'x'.repeat(MAX_CHART_SPEC_BYTES) });
+            const { chart } = read({ 'data-chart': JSON.stringify({ ...PARTS, specTitle: title }) });
+            expect(chart).toMatchObject(UNSET_PARTS);
         });
 
         test('past the depth limit parses neither, and stores no part and no look', () => {
