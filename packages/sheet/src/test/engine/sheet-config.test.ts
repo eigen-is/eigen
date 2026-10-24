@@ -30,6 +30,13 @@ describe('normalizeSheetConfig', () => {
         expect(sheet.charts).toEqual({ c1: chart });
     });
 
+    test('a forged images or charts value that is no map becomes an empty one', () => {
+        const sheet: Sheet = JSON.parse('{"id":"s1","name":"Sheet1","images":"forged","charts":"forged"}');
+        normalizeSheetConfig(sheet);
+        expect(sheet.images).toEqual({});
+        expect(sheet.charts).toEqual({});
+    });
+
     test('a default workbook and every replayed sheet carry the charts map', () => {
         expect(createDefaultSheets()[0].charts).toEqual({});
         const [base, added] = replaySheetsOps(

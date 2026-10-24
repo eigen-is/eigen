@@ -1,3 +1,4 @@
+import { isRecord } from '@workspace/lib/guards';
 import type { Sheet } from '@workspace/lib/sheets';
 import { chartsWithinEntryCap } from '@workspace/lib/sheets';
 import type { ExtendedSheetConfig } from './types';
@@ -42,8 +43,9 @@ export function normalizeSheetConfig(sheet: Sheet) {
     // `Sheet.config` is lib's wire shape; the editor extras ride along on the same object.
     const cfg: ExtendedSheetConfig = (sheet.config ??= {});
     for (const key of SHEET_CONFIG_COLLECTIONS) cfg[key] ??= {};
-    // Images and charts live outside config but are written per key the same way. A chart past the entry cap, which
-    // only a forged sheet holds, is left out, as floatingWriteFilter leaves out a write that brings one.
-    sheet.images ??= {};
-    sheet.charts = chartsWithinEntryCap(sheet.charts ?? {});
+    // Images and charts live outside config but are written per key the same way. A value that is no map, or a chart
+    // past the entry cap, only a forged sheet holds: it is left out, as floatingWriteFilter leaves out a write that
+    // brings one.
+    sheet.images = isRecord(sheet.images) ? sheet.images : {};
+    sheet.charts = isRecord(sheet.charts) ? chartsWithinEntryCap(sheet.charts) : {};
 }

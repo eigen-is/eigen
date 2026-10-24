@@ -272,6 +272,14 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(decodeSheetsSnapshot(encoded)[0].charts).toEqual({});
     });
 
+    test('a charts value that is no map decodes as no charts', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['charts'] = 'forged';
+        envelope.sheets[1]!['charts'] = ['forged'];
+        const decoded = decodeSheetsSnapshot(JSON.stringify(envelope));
+        expect(decoded.map((sheet) => sheet.charts)).toEqual([{}, {}]);
+    });
+
     test("a sheet's default column width and row height round-trip", () => {
         const sheets: Sheet[] = [{ id: 's', name: 'S', defaultColWidth: 64, defaultRowHeight: 17 }];
         const [decoded] = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
