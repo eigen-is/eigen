@@ -15,7 +15,7 @@ const { prosemirrorJSONToYXmlFragment, yUndoPluginKey } = await import('@tiptap/
 const { BAND_EXCLUDED_NODES, DEFAULT_PAGE_SETUP, getDocExtensions, PAGE_ROOT, pagePx, pageRecord } = await import(
     '@workspace/lib/docs/eigendoc'
 );
-const { FLAT_CHART_LOOK, sampleChartSpec } = await import('@workspace/lib/charts');
+const { FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
 const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
 const { docEditorOptions } = await import('../../../components/docs/doc-editor');
 const { createDocUndoManager } = await import('../../../components/docs/page-setup');
@@ -207,7 +207,9 @@ test('a chart item pastes into the body as a chart within the column, and into a
     page.state.doc.descendants((node) => {
         if (node.type.name === 'chart') charts.push(node.attrs);
     });
-    expect(charts).toMatchObject([{ spec, width: column, height: column / 2 }]);
+    expect(charts).toMatchObject([
+        { ...newChartSpecParts(sampleChartSpec('column')), width: column, height: column / 2 },
+    ]);
     expect(doc.getXmlFragment('header').toString()).not.toContain('chart');
 });
 

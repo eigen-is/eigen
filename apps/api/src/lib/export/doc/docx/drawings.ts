@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { parseChartSpec, readChartLook } from '@workspace/lib/charts';
+import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import { chartSvg, readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { BODY, boxSide, cssPt, twips } from '../../../document/looks';
@@ -23,12 +23,13 @@ import { TABLE_BORDER_SIDES } from './tables';
 // Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback.
 
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
-// under that src, as it draws a chart under its size, look and spec. A media name holds no `/`, so no two keys meet.
+// under that src, as it draws a chart under its size, look and parts. A media name holds no `/`, so no two keys meet.
 function figureMediaKey(node: JSONContent): string | null {
     if (node.type === 'chart') {
         const attrs = node.attrs ?? {};
-        const { spec, width, height } = readChartAttrs(attrs);
-        return `chart/${width}/${height}/${JSON.stringify(readChartLook(attrs))}/${spec}`;
+        const { width, height } = readChartAttrs(attrs);
+        const parts = JSON.stringify(readChartSpec(attrs).stored);
+        return `chart/${width}/${height}/${JSON.stringify(readChartLook(attrs))}/${parts}`;
     }
     const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
     return mediaName ?? (src && splitDataUri(src) ? src : null);
@@ -42,7 +43,7 @@ export async function chartFigureMedia(roots: JSONContent[]): Promise<ExportMedi
         const key = node.type === 'chart' ? figureMediaKey(node) : null;
         if (key && !charts.has(key)) {
             const attrs = readChartAttrs(node.attrs ?? {});
-            const spec = parseChartSpec(attrs.spec ?? '');
+            const { spec } = readChartSpec(attrs);
             if (spec) charts.set(key, chartSvg(spec, attrs));
         }
         for (const child of node.content ?? []) visit(child);
@@ -126,9 +127,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         // Observed in Word: a fractional-twip height refits the width (a 1204×4 px divider drew 466.5 pt wide), so the height is whole.
         Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
         // A chart's is the one its HTML gives its image.
-        node.type === 'chart'
-            ? parseChartSpec(readChartAttrs(node.attrs ?? {}).spec ?? '')?.title.text || 'Chart'
-            : (alt ?? ''),
+        node.type === 'chart' ? readChartSpec(node.attrs ?? {}).spec?.title.text || 'Chart' : (alt ?? ''),
         context.pkg,
     );
     if (!side) {

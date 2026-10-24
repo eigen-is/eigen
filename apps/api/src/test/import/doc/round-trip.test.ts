@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { readOmml, writeMathml } from '@workspace/math';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
@@ -158,10 +158,15 @@ describe('the all-features doc', () => {
 
 describe('a chart', () => {
     test('comes back as an image of its SVG, at its width, its title its alt, its caption and layout kept', async () => {
-        const spec = JSON.stringify(sampleChartSpec('column'));
         const chart = {
             type: 'chart',
-            attrs: { spec, width: 480, height: 300, caption: 'Points', layout: 'wrap-left' },
+            attrs: {
+                ...newChartSpecParts(sampleChartSpec('column')),
+                width: 480,
+                height: 300,
+                caption: 'Points',
+                layout: 'wrap-left',
+            },
         };
         const source = { type: 'doc', content: [{ type: 'paragraph', content: [chart] }] };
         const media = await withSvgFallbacks(await chartFigureMedia([source]));

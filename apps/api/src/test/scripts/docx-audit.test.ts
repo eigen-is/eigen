@@ -957,7 +957,7 @@ describe('round trip', () => {
             images: [],
             warnings: [],
         });
-        const chart = { type: 'chart', attrs: { spec: '{}', width: 200, height: 100 } };
+        const chart = { type: 'chart', attrs: { width: 200, height: 100 } };
         const groups = (back: JSONContent) =>
             classifyDocx({
                 a: imported(chart),

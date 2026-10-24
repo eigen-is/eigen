@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, PAGE_ROOT, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
 import type { MathNode, MathRow } from '@workspace/math';
 import { writeMathml } from '@workspace/math';
@@ -64,10 +64,12 @@ describe('renderEigendocPreviewBody', () => {
     });
 
     test('a chart draws as inline SVG in the figure box, its labels as text', () => {
-        const spec = JSON.stringify(sampleChartSpec('column'));
+        const parts = newChartSpecParts(sampleChartSpec('column'));
         const body = previewOf({
             type: 'doc',
-            content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { spec, width: 480, height: 300 } }] }],
+            content: [
+                { type: 'paragraph', content: [{ type: 'chart', attrs: { ...parts, width: 480, height: 300 } }] },
+            ],
         });
         expect(body).toContain('<span class="figure" data-layout="block" data-alignment="center"><svg');
         expect(body).toMatch(/<text[^>]*>300–400<\/text>/);

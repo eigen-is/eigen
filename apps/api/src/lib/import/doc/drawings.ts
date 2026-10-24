@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
-import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
 import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
+import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { blipEmbeds } from '../../ooxml/drawingml';
@@ -110,10 +111,10 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const inBody = context.scope.story === 'body';
         for (const [reference, ext] of chartsIn(frame, extent)) {
             const chart = readDocxChart(reader, reference, context.scope);
-            if (inBody && 'spec' in chart) {
+            if (inBody && 'parts' in chart) {
                 figures.push({
                     type: 'chart',
-                    attrs: { spec: chart.spec, ...chartSize(ext, reader.columnPx), ...layout },
+                    attrs: { ...chart.parts, ...chartSize(ext, reader.columnPx), ...layout },
                 });
                 continue;
             }
@@ -178,9 +179,9 @@ function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
     return lines.filter((line) => line.some((node) => node.type === 'text')).map(paraOf);
 }
 
-// A chart part as the doc holds it: the spec the node stores, or the lines a chart left out leaves in its place; and its
-// title, which a band or a note keeps.
-export type DocxChart = { title: string } & ({ spec: string } | { dropped: string[] });
+// A chart part as the doc holds it: the parts of the spec the node stores, or the lines a chart left out leaves in its
+// place; and its title, which a band or a note keeps.
+export type DocxChart = { title: string } & ({ parts: Record<ChartSpecPartKey, string> } | { dropped: string[] });
 
 const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
 
@@ -213,7 +214,7 @@ function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): Doc
     const chart: DocxChart = !read
         ? NOT_IMPORTED
         : 'spec' in read
-          ? { title: read.spec.title.text, spec: JSON.stringify(read.spec) }
+          ? { title: read.spec.title.text, parts: newChartSpecParts(read.spec) }
           : { title: read.unsupported.title, dropped: droppedChart(read.unsupported) };
     reader.charts.set(root, chart);
     return chart;

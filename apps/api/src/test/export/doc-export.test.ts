@@ -1,6 +1,6 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_PAGE_SETUP, PAGE_NUMBER_TEXT, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
@@ -297,7 +297,7 @@ describe('doc export — fonts', () => {
                             {
                                 type: 'chart',
                                 attrs: {
-                                    spec: JSON.stringify(sampleChartSpec('column', fontFamily)),
+                                    ...newChartSpecParts(sampleChartSpec('column', fontFamily)),
                                     width: 400,
                                     height: 240,
                                 },
@@ -399,10 +399,10 @@ describe('doc export — figures', () => {
 });
 
 describe('doc export — charts', () => {
-    const SPEC = JSON.stringify(sampleChartSpec('column'));
+    const PARTS = newChartSpecParts(sampleChartSpec('column'));
     const chartDoc = (attrs: Record<string, unknown>, spec = sampleChartSpec('column')): JSONContent => ({
         type: 'doc',
-        content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { spec: JSON.stringify(spec), ...attrs } }] }],
+        content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { ...newChartSpecParts(spec), ...attrs } }] }],
     });
 
     // Inline, so WeasyPrint draws the labels in the page's own fonts; an <img> of an SVG can't reach @font-face.
@@ -447,7 +447,7 @@ describe('doc export — charts', () => {
         const gradient = (from: string) =>
             JSON.stringify({ type: 'gradient', from, to: 'transparent', angle: 90, style: 'cross-hatch' });
         const look = { roughness: 2, seed: 5, strokeColor: '#336699', fill: gradient('#ffeeaa') };
-        const chart = (attrs: Record<string, unknown>) => ({ type: 'chart', attrs: { spec: SPEC, ...attrs } });
+        const chart = (attrs: Record<string, unknown>) => ({ type: 'chart', attrs: { ...PARTS, ...attrs } });
         const doc: JSONContent = {
             type: 'doc',
             content: [{ type: 'paragraph', content: [chart(look), chart({ ...look, fill: gradient('#aaeeff') })] }],

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import type { MathRow } from '@workspace/math';
@@ -1969,6 +1969,8 @@ function figure(attrs: Record<string, unknown>): JSONContent {
     return { type: 'figure', attrs };
 }
 
+const PARTS_OF_COLUMN = newChartSpecParts(sampleChartSpec('column'));
+
 function chartNode(attrs: Record<string, unknown>): JSONContent {
     return { type: 'chart', attrs };
 }
@@ -2396,8 +2398,7 @@ describe('docx writer — figures', () => {
 
     test("a chart is a picture of its SVG beside the SVG's PNG, at its width, its caption kept", async () => {
         const sample = sampleChartSpec('column');
-        const spec = JSON.stringify(sample);
-        const json = doc(p(chartNode({ spec, width: 480, height: 300, caption: 'Points' })));
+        const json = doc(p(chartNode({ ...newChartSpecParts(sample), width: 480, height: 300, caption: 'Points' })));
         const media = await chartMedia(json);
         expect(await blocksOf(json, media)).toEqual([
             imageParagraph(
@@ -2424,8 +2425,8 @@ describe('docx writer — figures', () => {
     });
 
     test('two charts of one spec and size but different looks draw two pictures, each in its own look', async () => {
-        const spec = JSON.stringify(sampleChartSpec('column'));
-        const json = doc(p(chartNode({ spec }), chartNode({ spec, roughness: 2, seed: 5, strokeColor: '#336699' })));
+        const parts = newChartSpecParts(sampleChartSpec('column'));
+        const json = doc(p(chartNode(parts), chartNode({ ...parts, roughness: 2, seed: 5, strokeColor: '#336699' })));
         const media = await chartMedia(json);
         const svgs = media.filter((item) => item.contentType === 'image/svg+xml');
         expect(svgs).toHaveLength(2);
@@ -2435,7 +2436,11 @@ describe('docx writer — figures', () => {
 
     test("a chart whose spec doesn't parse keeps its caption alone, as a figure without media does", async () => {
         const charts = doc(
-            p(text('a'), chartNode({ spec: '{', caption: 'Lost', alignment: 'right' }), text('b')),
+            p(
+                text('a'),
+                chartNode({ ...PARTS_OF_COLUMN, specData: '{', caption: 'Lost', alignment: 'right' }),
+                text('b'),
+            ),
             p(chartNode({ caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
         );
         const figures = doc(
