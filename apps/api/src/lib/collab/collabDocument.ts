@@ -67,7 +67,7 @@ class DbProvider {
     private bytesSinceSnapshot = 0;
     private updateHandler: (update: Uint8Array) => void;
 
-    constructor(doc: Y.Doc, label: string, managedDb: ManagedDatabase<typeof schema>) {
+    public constructor(doc: Y.Doc, label: string, managedDb: ManagedDatabase<typeof schema>) {
         this.db = managedDb.db;
         this.doc = doc;
         this.label = label;
@@ -149,7 +149,7 @@ class DbProvider {
         }
     }
 
-    destroy(): void {
+    public destroy(): void {
         this.doc.off('update', this.updateHandler);
         this.createSnapshot();
     }
@@ -198,12 +198,12 @@ export default class CollabDocument {
     private closeLingerMs = CLOSE_LINGER_MS;
     public dataDbPathId: string | null = null;
 
-    constructor(drive: Drive, path: DrivePath) {
+    public constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
         this.path = path;
     }
 
-    static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
+    public static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
         // Atomic provisioning across both managed dbs. If comments.db fails
         // after data.db succeeded, the helper rolls both back so a retry of
         // the outer create() starts from a clean slate.

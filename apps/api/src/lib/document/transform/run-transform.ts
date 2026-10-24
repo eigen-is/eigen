@@ -52,9 +52,9 @@ function repeatsForSameInput(code: TransformError['code']): boolean {
 
 // Every other failure, with whether the same input would fail again, so a caller can stop rerunning it.
 export class TransformFailedError extends Error {
-    readonly repeats: boolean;
+    public readonly repeats: boolean;
 
-    constructor(code: TransformError['code'], message: string) {
+    public constructor(code: TransformError['code'], message: string) {
         super(message);
         this.repeats = repeatsForSameInput(code);
     }

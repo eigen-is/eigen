@@ -30,22 +30,22 @@ export class NotificationCenter {
     private db!: BunSQLiteDatabase<typeof schema>;
     private home: Home;
 
-    constructor(home: Home) {
+    public constructor(home: Home) {
         this.home = home;
     }
 
-    async init(): Promise<void> {
+    public async init(): Promise<void> {
         this.managedDb = await this.home.getLocalDatabase(NOTIFICATION_CENTER_DB_CONFIG, PATHS.NOTIFICATIONS.DB);
         this.db = this.managedDb.db;
     }
 
-    async destruct(): Promise<void> {
+    public async destruct(): Promise<void> {
         if (this.managedDb) {
             await this.managedDb.close();
         }
     }
 
-    persist(input: NotificationPersistInput): Notification {
+    public persist(input: NotificationPersistInput): Notification {
         const id = randomUUID();
         const now = new Date();
         // Select BEFORE the upsert — afterwards the row always exists with createdAt = now.
@@ -89,7 +89,7 @@ export class NotificationCenter {
     }
 
     // The first page also holds every unread row, however old, so chat's unread dots can read this one list.
-    list(limit: number = 50, before?: Date): Notification[] {
+    public list(limit: number = 50, before?: Date): Notification[] {
         const { notifications } = schema;
         const newestFirst = desc(notifications.createdAt);
         const query = this.db.select().from(notifications).orderBy(newestFirst).$dynamic();
@@ -102,7 +102,7 @@ export class NotificationCenter {
             .map(toNotification);
     }
 
-    unreadCount(): number {
+    public unreadCount(): number {
         const result = this.db
             .select({ count: sql<number>`count(*)` })
             .from(schema.notifications)
@@ -111,12 +111,12 @@ export class NotificationCenter {
         return result?.count ?? 0;
     }
 
-    markRead(id: string): void {
+    public markRead(id: string): void {
         this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.id, id)).run();
         this.home.broadcast(buildNotificationChangedEvent());
     }
 
-    markReadByTag(tag: string): void {
+    public markReadByTag(tag: string): void {
         const marked = this.db
             .update(schema.notifications)
             .set({ read: true })
@@ -126,12 +126,12 @@ export class NotificationCenter {
         if (marked.length > 0) this.home.broadcast(buildNotificationChangedEvent());
     }
 
-    markAllRead(): void {
+    public markAllRead(): void {
         this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.read, false)).run();
         this.home.broadcast(buildNotificationChangedEvent());
     }
 
-    dismiss(id: string): void {
+    public dismiss(id: string): void {
         this.db.delete(schema.notifications).where(eq(schema.notifications.id, id)).run();
         this.home.broadcast(buildNotificationChangedEvent());
     }

@@ -31,13 +31,13 @@ export class ChatRoom {
     private db!: BunSQLiteDatabase<typeof schema>;
     private managedDb!: ManagedDatabase<typeof schema>;
 
-    constructor(drive: Drive, home: Home, path: DrivePath) {
+    public constructor(drive: Drive, home: Home, path: DrivePath) {
         this.drive = drive;
         this.home = home;
         this.path = path;
     }
 
-    static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
+    public static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
         // Atomic provision so a transient storage failure can't leave a
         // dead-letter data.db row that would make every subsequent
         // ChatRoom.init throw 503.
@@ -45,7 +45,7 @@ export class ChatRoom {
         await drive.createFolder(mountId, roomId, 'media');
     }
 
-    async init(): Promise<ChatRoom> {
+    public async init(): Promise<ChatRoom> {
         let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
         if (!dataDbPath) {
             // Provision the missing data.db under the container lock and re-check under it:
@@ -75,7 +75,7 @@ export class ChatRoom {
         return this;
     }
 
-    async postMessage(
+    public async postMessage(
         author: User,
         content: string,
         type: ChatMessage['type'] = 'message',
@@ -331,7 +331,7 @@ export class ChatRoom {
         return rows.map((r) => this.toMessage(r)).reverse();
     }
 
-    async getMessagesForUser(userEmail: string, limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
+    public async getMessagesForUser(userEmail: string, limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
         const allMessages = await this.getMessages(limit, beforeId);
         const viewerEmail = userEmail.toLowerCase();
 
@@ -363,7 +363,7 @@ export class ChatRoom {
         });
     }
 
-    async editMessage(messageId: string, content: string, userEmail: string): Promise<ChatMessage> {
+    public async editMessage(messageId: string, content: string, userEmail: string): Promise<ChatMessage> {
         const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
         if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
             throw new ApiError(404, 'Message not found or not owned');
@@ -395,7 +395,7 @@ export class ChatRoom {
         return updated;
     }
 
-    async deleteMessage(messageId: string, userEmail: string): Promise<void> {
+    public async deleteMessage(messageId: string, userEmail: string): Promise<void> {
         const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
         if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
             throw new ApiError(404, 'Message not found or not owned');

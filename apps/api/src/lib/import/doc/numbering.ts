@@ -51,7 +51,7 @@ export class Numbering {
     private readonly counters = new Map<string, (number | undefined)[]>();
     private readonly started = new Set<string>();
 
-    constructor(
+    public constructor(
         definitions: Definitions,
         private readonly styles: Styles,
     ) {
@@ -60,7 +60,7 @@ export class Numbering {
     }
 
     // A story whose lists count on their own, a band's or a note's: the definitions shared, every counter unstarted.
-    restarted(): Numbering {
+    public restarted(): Numbering {
         return new Numbering({ abstracts: this.abstracts, nums: this.nums }, this.styles);
     }
 
@@ -80,12 +80,12 @@ export class Numbering {
     }
 
     // ECMA-376 §17.9.23: a paragraph style's numbering without a level takes the level whose pStyle names the style.
-    styleLevel(numId: string, styleId: string | undefined): number | undefined {
+    public styleLevel(numId: string, styleId: string | undefined): number | undefined {
         for (const [ilvl, level] of this.abstractOf(numId)?.levels ?? []) if (level.style === styleId) return ilvl;
         return undefined;
     }
 
-    next(numId: string, ilvl: number): ListRef | undefined {
+    public next(numId: string, ilvl: number): ListRef | undefined {
         const num = this.nums.get(numId);
         const abstract = this.abstractOf(numId);
         if (!num || !abstract) return undefined;
