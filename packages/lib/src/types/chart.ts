@@ -88,7 +88,54 @@ export type ChartSpec = {
     data: InlineChartData | RangeChartData;
 };
 
-// A stored spec as JSON.parse made it, unvalidated: every key a peer stored, this build's or a newer one's.
+// Each part is stored apart, so two peers who edit two parts both keep their edit, and the set never grows: a later
+// option nests in a part. The number is how far down Sheets stores the part an entry per key, 0 as one string.
+export const CHART_SPEC_PARTS = {
+    chart: 0,
+    title: 0,
+    legend: 0,
+    axes: 1,
+    plots: 1,
+    series: 1,
+    points: 2,
+    data: 0,
+} as const satisfies Record<keyof ChartSpec, number>;
+
+export type ChartSpecPart = keyof typeof CHART_SPEC_PARTS;
+// The parts Sheets stores an entry per key: axes by id, plots by type, series by id, points by series id and index.
+export type ChartSpecKeyedPart = {
+    [P in ChartSpecPart]: (typeof CHART_SPEC_PARTS)[P] extends 0 ? never : P;
+}[ChartSpecPart];
+// A part's key on the record a host stores, an element, a node's attributes or a sheet's chart: specChart … specData.
+export type ChartSpecPartKey<P extends ChartSpecPart = ChartSpecPart> = `spec${Capitalize<P>}`;
+
+// Spelled out, since a capital made at run time types as a string; the type holds each to its part's.
+export const CHART_SPEC_PART_KEY = {
+    chart: 'specChart',
+    title: 'specTitle',
+    legend: 'specLegend',
+    axes: 'specAxes',
+    plots: 'specPlots',
+    series: 'specSeries',
+    points: 'specPoints',
+    data: 'specData',
+} as const satisfies { [P in ChartSpecPart]: ChartSpecPartKey<P> };
+
+export const CHART_SPEC_PART_KEYS = Object.values(CHART_SPEC_PART_KEY);
+
+// A chart's parts on Sheets: a keyed part a record from each entry's path, / -joined, to that entry's JSON, so two
+// peers who edit two entries both keep their edit; the other parts a JSON string each.
+export type SheetChartSpecParts = {
+    [P in ChartSpecPart as ChartSpecPartKey<P>]: P extends ChartSpecKeyedPart ? Record<string, string> : string;
+};
+
+// One write of a Sheets chart: a part set whole, or one entry of a keyed part set or, at null, removed.
+export type SheetChartSpecWrite =
+    | { key: ChartSpecPartKey<Exclude<ChartSpecPart, ChartSpecKeyedPart>>; value: string }
+    | { key: ChartSpecPartKey<ChartSpecKeyedPart>; entry: string; value: string | null };
+
+// A stored spec as JSON.parse made it, whole or a part at a time, unvalidated: every key a peer stored, this build's or
+// a newer one's.
 export type StoredChartSpec = { readonly [key: string]: unknown };
 
 // An edit of a chart, as ops on paths into its stored spec, so what an editor didn't touch stays as stored. An array is
