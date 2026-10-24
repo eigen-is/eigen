@@ -29,6 +29,7 @@ import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from 
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
 import { atHome, getHome, getHomeForBackup, getTeamHome, isHomeOpen } from './get-home';
+import { homeSize } from './home';
 import { TeamHome } from './team-home';
 
 export type HomeMessage =
@@ -224,12 +225,7 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
         teamIds,
     );
 
-    const dataUsed = contacts + mail + calendars;
-    return {
-        homeData: { used: dataUsed, max: quotas.homeDataMax },
-        drive: { default: { used: driveUsed, max: quotas.mountMax } },
-        total: { used: dataUsed + driveUsed, max: quotas.homeDataMax + quotas.mountMax },
-    };
+    return homeSize(contacts + mail + calendars, driveUsed, quotas);
 }
 
 // The idle a home a backup booted is left with: past the 15 s SSE and collab keepalives, so a user

@@ -4,7 +4,8 @@ import { JsonStore, LocalFilesystem, PATHS } from '../core';
 import { Drive } from '../drive';
 import { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
-import { Home, type HomeSettings } from './home';
+import type { HomeSettings } from './home';
+import { Home, homeSize } from './home';
 
 export class GuestHome extends Home {
     constructor(user: User, cleanUp?: () => void) {
@@ -16,16 +17,7 @@ export class GuestHome extends Home {
         this._notifications = new NotificationCenter(this);
     }
 
-    override async init() {
-        await this.settings.load();
-        return super.init(false);
-    }
-
     override async size(): Promise<HomeSizeResponse> {
-        return {
-            homeData: { used: 0, max: 0 },
-            drive: { default: { used: 0, max: 0 } },
-            total: { used: 0, max: 0 },
-        };
+        return homeSize();
     }
 }

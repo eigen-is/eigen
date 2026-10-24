@@ -46,7 +46,7 @@ export class TeamHome extends Home {
         if (this.settings.get().calendar?.enabled === false) {
             throw new ApiError(404, 'Team calendar is disabled');
         }
-        return this._calendar;
+        return this._calendar!;
     }
 
     // A team home has no notification center, so a notification relayed to it goes to these members instead.

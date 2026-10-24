@@ -1,19 +1,20 @@
+// A Home is everything one owner keeps on this server: a user's drive, mail, contacts, calendar and
+// notifications, or the smaller set a team, an org or a guest has. Every request, SSE stream, collab
+// socket and DAV call reaches its data through getHome(ownerId), which builds the Home on first use.
+// It stays loaded while it is used and closes itself, databases included, after a few idle minutes.
+// This base class owns that lifecycle; the user, team, org and guest homes decide which parts exist.
+
 import * as path from 'node:path';
 import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
+import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
 import type { Contacts } from '../contacts/contacts';
-import {
-    type DatabaseConfig,
-    type JsonStore,
-    type LocalFilesystem,
-    type ManagedDatabase,
-    openLocalDatabase,
-    type SchemaType,
-} from '../core';
+import type { DatabaseConfig, JsonStore, LocalFilesystem, ManagedDatabase, SchemaType } from '../core';
+import { openLocalDatabase } from '../core';
 import type { Drive } from '../drive';
 import type { Mail } from '../mail/mail-domain';
 import type { NotificationCenter } from '../notification-center/notification-center';
@@ -25,82 +26,83 @@ export class Home {
     public user: User;
     public homeDir!: string;
     public fs!: LocalFilesystem;
-
     public settings!: JsonStore<HomeSettings>;
 
+    // Which parts exist depends on the kind of home: an org home has none, a team home only drive and calendar.
     protected _drive?: Drive;
-    protected _contacts!: Contacts;
-    protected _mail!: Mail;
-    protected _calendar!: Calendar;
-    protected _notifications!: NotificationCenter;
+    protected _contacts?: Contacts;
+    protected _mail?: Mail;
+    protected _calendar?: Calendar;
+    protected _notifications?: NotificationCenter;
 
-    protected idleMs = 1000 * 60 * 5;
-    // When a request last reached this home through getHome or a keepalive; a backup's own reach and
-    // the getters leave it be, so pullHomeSnapshot can tell whether anybody else opened the home.
+    // The last time a request or a keepalive reached this home. A backup does not update it,
+    // so after a backup we can tell whether someone else opened the home in the meantime.
     public requestedAt = 0;
+    protected idleMs = 1000 * 60 * 5;
 
+    private idleTimer: Timer | undefined;
     private initPromise: Promise<this> | null = null;
-    private timeout: Timer | undefined;
+    private destructPromise: Promise<void> | null = null;
     private _destructing = false;
-    private _destructPromise: Promise<void> | null = null;
+    private readonly cleanUp: (() => void) | undefined;
+    private readonly managedDatabases = new Map<string, () => Promise<ManagedDatabase<SchemaType>>>();
+    private readonly sseListeners = new Set<(event: SSEvent) => void>();
 
-    get destructing(): boolean {
-        return this._destructing;
-    }
-
-    private managedDatabases: Map<string, () => Promise<ManagedDatabase<SchemaType>>> = new Map();
-    private sseListeners: ((event: SSEvent) => void)[] = [];
-    private cleanUp: (() => void) | null = null;
-
-    constructor(user: User, cleanUp?: () => void) {
+    public constructor(user: User, cleanUp?: () => void) {
         this.user = user;
-        this.cleanUp = cleanUp ?? null;
+        this.cleanUp = cleanUp;
     }
 
-    get drive(): Drive {
+    public get drive(): Drive {
         this.touch();
         return this._drive!;
     }
 
-    get contacts(): Contacts {
+    public get contacts(): Contacts {
         this.touch();
-        return this._contacts;
+        return this._contacts!;
     }
 
-    get mail(): Mail {
+    public get mail(): Mail {
         this.touch();
-        return this._mail;
+        return this._mail!;
     }
 
-    get calendar(): Calendar {
+    public get calendar(): Calendar {
         this.touch();
-        return this._calendar;
+        return this._calendar!;
     }
 
-    get notifications(): NotificationCenter {
+    public get notifications(): NotificationCenter {
         this.touch();
-        return this._notifications;
+        return this._notifications!;
     }
 
-    get hasCalendar(): boolean {
+    public get hasCalendar(): boolean {
         return !!this._calendar;
     }
 
-    public init(autoCreateDefaultMount: boolean = false): Promise<this> {
+    public get destructing(): boolean {
+        return this._destructing;
+    }
+
+    public init(autoCreateDefaultMount = false): Promise<this> {
         return (this.initPromise ??= this.runInit(autoCreateDefaultMount));
     }
 
     private async runInit(autoCreateDefaultMount: boolean): Promise<this> {
         try {
-            await time('Home.init.settings', () => this.settings?.load() ?? Promise.resolve());
+            // An org home has no settings.
+            await time('Home.init.settings', async () => this.settings?.load());
 
-            // allSettled, not all: a rejected all returns while its siblings are mid-init, leaking their databases and timers.
+            // allSettled waits for every part. Promise.all would return at the first failure while
+            // the other parts are still opening databases and starting timers, and those would leak.
             const results = await Promise.allSettled([
-                time('Home.init.drive', () => this._drive?.init(autoCreateDefaultMount) ?? Promise.resolve()),
-                time('Home.init.contacts', () => this._contacts?.init() ?? Promise.resolve()),
-                time('Home.init.mail', () => this._mail?.init() ?? Promise.resolve()),
-                time('Home.init.calendar', () => this._calendar?.init() ?? Promise.resolve()),
-                time('Home.init.notifications', () => this._notifications?.init() ?? Promise.resolve()),
+                time('Home.init.drive', async () => this._drive?.init(autoCreateDefaultMount)),
+                time('Home.init.contacts', async () => this._contacts?.init()),
+                time('Home.init.mail', async () => this._mail?.init()),
+                time('Home.init.calendar', async () => this._calendar?.init()),
+                time('Home.init.notifications', async () => this._notifications?.init()),
             ]);
             const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
             if (failed) throw failed.reason;
@@ -108,19 +110,18 @@ export class Home {
             console.log(`[Home] Initialized for ${this.user.id}`);
             return this;
         } catch (err) {
-            // The rethrow makes getHome discard this half-built Home instead of caching one that leaks.
+            // Rethrow, so getHome drops this half-built Home instead of keeping it.
             await this.shutdown();
             throw err;
         }
     }
 
-    // `idleMs` is for the backup that booted a home only to capture it; everything else re-arms the full idle.
-    public touch(idleMs = this.idleMs) {
+    // Every use restarts the idle timer. A backup passes a short idleMs, so a home it woke up
+    // only for the backup closes again soon.
+    public touch(idleMs = this.idleMs): this {
         if (this._destructing) return this;
-        if (this.timeout) {
-            clearTimeout(this.timeout);
-        }
-        this.timeout = setTimeout(() => {
+        clearTimeout(this.idleTimer);
+        this.idleTimer = setTimeout(() => {
             console.log(`[Home] Idle timeout for ${this.user.id}, destructing`);
             this.destruct()
                 .catch((e) => console.error(`[Home] Destruct failed for ${this.user.id}:`, e))
@@ -129,112 +130,97 @@ export class Home {
         return this;
     }
 
-    public async shutdown() {
-        if (this.timeout) clearTimeout(this.timeout);
+    public async shutdown(): Promise<void> {
+        clearTimeout(this.idleTimer);
         await this.destruct();
     }
 
+    // Runs once, even when the idle timer and shutdown() both call it: closing the same database files twice is unsafe.
+    protected destruct(): Promise<void> {
+        this._destructing = true;
+        return (this.destructPromise ??= this.runDestruct());
+    }
+
+    private async runDestruct(): Promise<void> {
+        const logFailure = (part: string) => (err: unknown) =>
+            console.error(`[Home] Failed to close ${part} for ${this.user.id}:`, err);
+
+        // Each part closes its own databases. The second step only closes what is still open.
+        await Promise.all([
+            this._drive?.destruct().catch(logFailure('drive')),
+            this._contacts?.destruct().catch(logFailure('contacts')),
+            this._mail?.destruct().catch(logFailure('mail')),
+            this._calendar?.destruct().catch(logFailure('calendar')),
+            this._notifications?.destruct().catch(logFailure('notifications')),
+        ]);
+        await Promise.all(
+            [...this.managedDatabases].map(([relativePath, open]) =>
+                open()
+                    .then((db) => db.close())
+                    .catch(logFailure(relativePath)),
+            ),
+        );
+        this.managedDatabases.clear();
+    }
+
+    // One shared connection per database file under the home, closed when the home goes idle.
     public async getLocalDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
         relativePath: string,
     ): Promise<ManagedDatabase<S>> {
-        const absolutePath = path.join(this.homeDir, relativePath);
-        return this.getManagedDatabase(relativePath, () => openLocalDatabase(config, absolutePath));
+        let open = this.managedDatabases.get(relativePath);
+        if (!open) {
+            open = createAsyncSingleton(() => openLocalDatabase(config, path.join(this.homeDir, relativePath)));
+            this.managedDatabases.set(relativePath, open);
+        }
+        return open() as Promise<ManagedDatabase<S>>;
     }
 
-    public subscribeSSE(listener: (event: SSEvent) => void) {
-        this.sseListeners.push(listener);
+    public subscribeSSE(listener: (event: SSEvent) => void): void {
+        this.sseListeners.add(listener);
     }
 
-    public unsubscribeSSE(listener: (event: SSEvent) => void) {
-        this.sseListeners = this.sseListeners.filter((l) => l !== listener);
+    public unsubscribeSSE(listener: (event: SSEvent) => void): void {
+        this.sseListeners.delete(listener);
     }
 
-    // Reads the fields, not the getters: a team Home's calendar getter refuses a disabled calendar whose bytes are on disk anyway.
+    public broadcast(event: SSEvent): void {
+        for (const listener of this.sseListeners) {
+            listener(event);
+        }
+    }
+
+    // Uses the fields, not the getters: a team's calendar getter throws when the calendar is off,
+    // but its files still take up space.
     public async dataSize(): Promise<number> {
         const [mail, contacts, calendar] = await Promise.all([
             this._mail?.size(),
             this._contacts?.size(),
             this._calendar?.size(),
         ]);
-        return (mail || 0) + (contacts || 0) + (calendar || 0);
+        return (mail ?? 0) + (contacts ?? 0) + (calendar ?? 0);
     }
 
     public async size(teamIds: string[] = []): Promise<HomeSizeResponse> {
-        // Org homes have no drive — nothing to size, return early before touching subsystems.
-        if (!this._drive) {
-            return {
-                homeData: { used: 0, max: 0 },
-                drive: { default: { used: 0, max: 0 } },
-                total: { used: 0, max: 0 },
-            };
-        }
+        // Org homes have no drive: nothing to size.
+        if (!this._drive) return homeSize();
 
-        const [dataUsed, driveDefault] = await Promise.all([this.dataSize(), this._drive.size('default')]);
+        const [dataUsed, driveUsed] = await Promise.all([this.dataSize(), this._drive.size('default')]);
+        const quotas = await resolveUserQuotas(this._drive.getMountConfig('default'), teamIds);
 
-        const mountConfig = this._drive.getMountConfig('default');
-        const quotas = await resolveUserQuotas(mountConfig, teamIds);
-
-        return {
-            homeData: { used: dataUsed, max: quotas.homeDataMax },
-            drive: { default: { used: driveDefault, max: quotas.mountMax } },
-            total: {
-                used: dataUsed + driveDefault,
-                max: quotas.homeDataMax + quotas.mountMax,
-            },
-        };
+        return homeSize(dataUsed, driveUsed, quotas);
     }
+}
 
-    protected destruct(): Promise<void> {
-        // Idempotent: the idle timer and an explicit shutdown can both fire, and a second pass would checkpoint and journal-unlink the same DB files twice.
-        if (this._destructPromise) return this._destructPromise;
-        this._destructing = true;
-        this._destructPromise = (async () => {
-            // Subsystems close their own ManagedDatabase first, so the loop below is a safety net and not a concurrent second close.
-            const subsystems: [string, Promise<unknown> | undefined][] = [
-                ['drive', this._drive?.destruct()],
-                ['contacts', this._contacts?.destruct()],
-                ['mail', this._mail?.destruct()],
-                ['calendar', this._calendar?.destruct()],
-                ['notifications', this._notifications?.destruct()],
-            ];
-            for (const [i, result] of (await Promise.allSettled(subsystems.map(([, p]) => p))).entries()) {
-                if (result.status === 'rejected') {
-                    console.error(`Failed to destruct ${subsystems[i][0]}:`, result.reason);
-                }
-            }
-
-            const dbs = [...this.managedDatabases.entries()].map(([key, getter]): [string, Promise<unknown>] => [
-                key,
-                (async () => (await getter()).close())(),
-            ]);
-            for (const [i, result] of (await Promise.allSettled(dbs.map(([, p]) => p))).entries()) {
-                if (result.status === 'rejected') {
-                    console.error(`Failed to close managed database ${dbs[i][0]}:`, result.reason);
-                }
-            }
-
-            this.managedDatabases.clear();
-        })();
-        return this._destructPromise;
-    }
-
-    public broadcast(event: SSEvent) {
-        for (const listener of this.sseListeners) {
-            listener(event);
-        }
-    }
-
-    private async getManagedDatabase<S extends SchemaType>(
-        key: string,
-        factory: () => Promise<ManagedDatabase<S>>,
-    ): Promise<ManagedDatabase<S>> {
-        const existing = this.managedDatabases.get(key);
-        if (existing) {
-            return existing() as Promise<ManagedDatabase<S>>;
-        }
-        const singleton = createAsyncSingleton(factory);
-        this.managedDatabases.set(key, singleton);
-        return singleton();
-    }
+// Without arguments it returns all zeros, for a home that has nothing to count.
+export function homeSize(
+    dataUsed = 0,
+    driveUsed = 0,
+    quotas: ResolvedQuotas = { homeDataMax: 0, mountMax: 0 },
+): HomeSizeResponse {
+    return {
+        homeData: { used: dataUsed, max: quotas.homeDataMax },
+        drive: { default: { used: driveUsed, max: quotas.mountMax } },
+        total: { used: dataUsed + driveUsed, max: quotas.homeDataMax + quotas.mountMax },
+    };
 }
