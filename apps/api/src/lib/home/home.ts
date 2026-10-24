@@ -41,6 +41,7 @@ export class Home {
     private holds = 0;
     private initPromise: Promise<this> | null = null;
     private closePromise: Promise<void> | null = null;
+    // Set before the close starts, so code that runs while the parts close already sees it.
     private _closing = false;
     private readonly onClosed: (() => void) | undefined;
     private readonly managedDatabases = new Map<string, () => Promise<ManagedDatabase<SchemaType>>>();
@@ -115,35 +116,6 @@ export class Home {
         }
     }
 
-    // Every use restarts the idle timer.
-    public touch(): this {
-        this.startIdleTimer(this.idleMs);
-        return this;
-    }
-
-    // Keeps the home open, however long the work takes, until the returned release is called.
-    // A holder that opened the home only for itself may ask for a shorter idle when it lets go.
-    public hold(): (idleMs?: number) => void {
-        this.holds++;
-        clearTimeout(this.idleTimer);
-        let released = false;
-        return (idleMs = this.idleMs) => {
-            if (released) return;
-            released = true;
-            this.holds--;
-            this.startIdleTimer(idleMs);
-        };
-    }
-
-    private startIdleTimer(idleMs: number): void {
-        if (this._closing || this.holds > 0) return;
-        clearTimeout(this.idleTimer);
-        this.idleTimer = setTimeout(() => {
-            console.log(`[Home] Idle timeout for ${this.user.id}, closing`);
-            this.close().catch((e) => console.error(`[Home] Close failed for ${this.user.id}:`, e));
-        }, idleMs);
-    }
-
     // Runs once, however often it is called: closing the same database files twice is unsafe.
     public close(): Promise<void> {
         if (!this.closePromise) {
@@ -175,6 +147,32 @@ export class Home {
         );
         this.managedDatabases.clear();
         this.onClosed?.();
+    }
+
+    // Every use restarts the idle timer.
+    public touch(): this {
+        this.startIdleTimer(this.idleMs);
+        return this;
+    }
+
+    // Keeps the home open, however long the work takes, until the returned release is called.
+    // A holder that opened the home only for itself may ask for a shorter idle when it lets go.
+    public hold(): (idleMs?: number) => void {
+        this.holds++;
+        clearTimeout(this.idleTimer);
+        return (idleMs = this.idleMs) => {
+            this.holds--;
+            this.startIdleTimer(idleMs);
+        };
+    }
+
+    private startIdleTimer(idleMs: number): void {
+        if (this._closing || this.holds > 0) return;
+        clearTimeout(this.idleTimer);
+        this.idleTimer = setTimeout(() => {
+            console.log(`[Home] Idle timeout for ${this.user.id}, closing`);
+            this.close().catch((e) => console.error(`[Home] Close failed for ${this.user.id}:`, e));
+        }, idleMs);
     }
 
     // One shared connection per database file under the home, closed when the home goes idle.
@@ -226,7 +224,6 @@ export class Home {
     }
 }
 
-// Without arguments it returns all zeros, for a home that has nothing to count.
 export function homeSize(
     dataUsed = 0,
     driveUsed = 0,

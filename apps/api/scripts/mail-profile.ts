@@ -1,5 +1,5 @@
 // Phase attribution for mail cold sync: fs read vs MIME parse vs sqlite insert.
-// Companion to mail-bench.ts — see docs/MAIL.md § The list pages by keyset and patches its own mutations.
+// It answers where a slow cold sync spends its time; the mail benchmark measures the totals.
 //
 // Run from the repo root (so @workspace/* resolves):
 //   N=10000 bun apps/api/scripts/mail-profile.ts
@@ -64,7 +64,7 @@ const tParse = performance.now() - tp0;
 // sqlite insert phase only
 const fakeHome = {
     homeDir: ROOT,
-    destructing: false,
+    closing: false,
     getLocalDatabase<S extends SchemaType>(config: DatabaseConfig<S>, relativePath: string) {
         return openLocalDatabase(config, path.join(ROOT, relativePath));
     },

@@ -1,7 +1,12 @@
-import { parseOwnerId } from '@workspace/lib/types';
+// An org home is the organisation's own folder on the server. It has no drive, mail or calendar of
+// its own; it exists so that work done per owner, such as a backup, can treat the organisation like
+// any other owner.
+
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { getOrgDataPath } from '../config/paths';
 import { ApiError, JsonStore, PATHS } from '../core';
-import { makeSyntheticUser, type User } from '../user';
+import type { User } from '../user';
+import { makeSyntheticUser } from '../user';
 import type { HomeSettings } from './home';
 import { Home } from './home';
 
@@ -14,12 +19,8 @@ export function getSyntheticOrgUser(ownerId: string): User {
 }
 
 export class OrgHome extends Home {
-    public readonly orgId: string;
-
     public constructor(syntheticUser: User, onClosed?: () => void) {
-        const orgId = parseOwnerId(syntheticUser.id).id;
-        super(syntheticUser, getOrgDataPath(orgId), onClosed);
-        this.orgId = orgId;
+        super(syntheticUser, getOrgDataPath(parseOwnerId(syntheticUser.id).id), onClosed);
         this.settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
     }
 }

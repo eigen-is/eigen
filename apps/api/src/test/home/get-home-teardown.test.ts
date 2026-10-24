@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { auth } from '../../lib/auth/auth';
-import { evictHome, getHome } from '../../lib/home/get-home';
+import { atHome, evictHome, getHome } from '../../lib/home/get-home';
 import { getTestContext } from '../setup';
 
 // getHome must not open a replacement Home on the same database files while the outgoing home is
@@ -75,5 +75,23 @@ describe('getHome teardown race', () => {
         expect(contactsDestructCalls).toBe(1);
 
         await evictHome(userId);
+    });
+
+    test('a home that closes leaves the cache, and the next getHome builds a new one', async () => {
+        const userId = await createHomeUser('closed-leaves-cache@test.eigen.is');
+        const home = await getHome(userId);
+
+        await home.close();
+        expect(atHome(userId)).toBe(false);
+
+        const next = await getHome(userId);
+        expect(next).not.toBe(home);
+        await evictHome(userId);
+    });
+
+    test('an owner whose home fails to build is not left in the cache', async () => {
+        const ownerId = 'abcdefghijklmnopqrstuvwxyz012345';
+        await expect(getHome(ownerId)).rejects.toThrow('User not found');
+        expect(atHome(ownerId)).toBe(false);
     });
 });

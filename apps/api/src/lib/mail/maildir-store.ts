@@ -1,3 +1,8 @@
+// MaildirStore keeps a user's mail as plain files in the Maildir layout, the same folders the IMAP
+// server reads, so Eigen and other mail apps always see the same mail. Next to the files it keeps an
+// index database for fast lists and search. The mail part of a Home reads, writes and moves
+// messages and drafts through it.
+
 import type { FSWatcher } from 'node:fs';
 import * as path from 'node:path';
 import {

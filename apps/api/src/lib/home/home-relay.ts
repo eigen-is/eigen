@@ -16,7 +16,8 @@ import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Semaphore } from '../../utils/semaphore';
-import { captureBytes, type SnapshotProgress, snapshotHome } from '../backup/snapshot-home';
+import type { SnapshotProgress } from '../backup/snapshot-home';
+import { captureBytes, snapshotHome } from '../backup/snapshot-home';
 import { readCalendarTotalSize } from '../calendar/resource-store';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
 import { getAvatarsDir, getDataRoot, getUserHomePath, homeDirUnder } from '../config/paths';
@@ -28,7 +29,7 @@ import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
-import { atHome, getHome, getTeamHome, isHomeOpen, openHome, requestedSince } from './get-home';
+import { getHome, getTeamHome, loadedHome, openHome, requestedSince } from './get-home';
 import { homeSize } from './home';
 import { TeamHome } from './team-home';
 
@@ -63,7 +64,9 @@ export type HomeMessage =
     | { type: 'notification'; notification: NotificationPersistInput };
 
 export async function sendToHome(targetUserId: string, message: HomeMessage): Promise<void> {
-    if (message.type === 'broadcast' && !atHome(targetUserId)) {
+    // A broadcast only reaches tabs that have the home open: it never opens a home or keeps one open.
+    if (message.type === 'broadcast') {
+        loadedHome(targetUserId)?.broadcast(message.event);
         return;
     }
 
@@ -137,9 +140,6 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
             } else {
                 await home.calendar.receiveAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
             }
-            break;
-        case 'broadcast':
-            home.broadcast(message.event);
             break;
         case 'notification':
             if (home instanceof TeamHome) {
@@ -228,21 +228,20 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     return homeSize(contacts + mail + calendars, driveUsed, quotas);
 }
 
-// The idle a home a backup booted is left with: past the 15 s SSE and collab keepalives, so a user
-// who opened it meanwhile re-arms the full idle before it runs out.
+// How long a home the backup opened for itself stays open after its capture. It is longer than the
+// 15 s keepalives, so a user who opened the home in the meantime keeps it open.
 export const BACKUP_RELEASE_MS = 30_000;
 
-// A backup captures a home through here, and boots it only for about as long as the capture: a home
-// it found asleep gets the short release idle once it is written, so a nightly Full does not leave
-// every Home resident until its idle timer. Never an evict, and not even the short idle once a
-// request reached it after the capture started: a user may have opened it meanwhile.
+// A backup captures a home through here. A home that was closed is opened only for the capture,
+// so a nightly backup does not leave every home open. It is never closed by force, because a user
+// may have opened it during the capture.
 export async function pullHomeSnapshot(
     ownerId: string,
     targetDir: string,
     options: { level?: BackupLevel; onProgress?: SnapshotProgress },
 ): Promise<BackupManifest> {
     const startedAt = Date.now();
-    const wasOpen = isHomeOpen(ownerId);
+    const wasOpen = loadedHome(ownerId) !== undefined;
     const home = await openHome(ownerId);
     // A capture can outlast the idle with nobody connected, as one big file at 02:00 does, so the
     // hold keeps the databases it reads open.
@@ -250,7 +249,7 @@ export async function pullHomeSnapshot(
     try {
         return await snapshotHome(home, targetDir, options);
     } finally {
-        release(!wasOpen && !requestedSince(ownerId, startedAt) ? BACKUP_RELEASE_MS : undefined);
+        release(!wasOpen && !requestedSince(home, startedAt) ? BACKUP_RELEASE_MS : undefined);
     }
 }
 

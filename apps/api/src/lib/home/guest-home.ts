@@ -1,3 +1,7 @@
+// A guest home belongs to someone from outside who signs in to see what was shared with them. It has
+// only a drive, for the things shared with the guest, and notifications. It counts no storage,
+// because everything in it belongs to the people who shared it.
+
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { getGuestHomePath } from '../config/paths';
 import { JsonStore, PATHS } from '../core';

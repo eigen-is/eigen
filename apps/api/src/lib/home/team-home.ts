@@ -1,3 +1,7 @@
+// A team home holds what a team shares, such as its drives and its calendar. Nobody signs in as a
+// team: members reach it through their own access, and a notification to the team goes to them.
+// The team's admins add and change its drives here.
+
 import { randomUUID } from 'node:crypto';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -10,7 +14,8 @@ import { Drive } from '../drive';
 import { createMountConfig } from '../mount';
 import { checkS3Connection } from '../storage';
 import { getTeamMembers } from '../team';
-import { makeSyntheticUser, type User } from '../user';
+import type { User } from '../user';
+import { makeSyntheticUser } from '../user';
 import { Home } from './home';
 
 export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
@@ -25,7 +30,7 @@ export class TeamHome extends Home {
     public readonly teamId: string;
     public declare settings: JsonStore<TeamSettings>;
 
-    // Team homes have no SSE keep-alive pin (only an open collab socket's keepalive pins one), so they get a longer idle window.
+    // Nobody signs in as a team, so no open browser tab keeps a team home open. It gets a longer idle instead.
     protected override idleMs = Number(process.env['TEAM_HOME_IDLE_MS']) || 1000 * 60 * 30;
 
     public constructor(syntheticUser: User, onClosed?: () => void) {
