@@ -29,7 +29,7 @@ for await (const path of glob.scan('apps/api/src/lib')) {
 
     const content = await Bun.file(`apps/api/src/lib/${path}`).text();
     // Each of these hands out another owner's Home.
-    if (/\b(getHome|openHome|loadedHome)\b/.test(content)) {
+    if (/\b(getHome|openHome|loadedHome|getTeamHome|getUserHome)\b/.test(content)) {
         violations.push(`apps/api/src/lib/${normalized}`);
     }
 }

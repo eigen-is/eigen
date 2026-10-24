@@ -110,7 +110,7 @@ export class Home {
             console.log(`[Home] Initialized for ${this.user.id}`);
             return this;
         } catch (err) {
-            // Rethrow, so getHome drops this half-built Home instead of keeping it.
+            // A failed init leaves nothing open behind it.
             await this.close();
             throw err;
         }
@@ -160,7 +160,11 @@ export class Home {
     public hold(): (idleMs?: number) => void {
         this.holds++;
         clearTimeout(this.idleTimer);
+        // Releasing twice must not count as two releases.
+        let released = false;
         return (idleMs = this.idleMs) => {
+            if (released) return;
+            released = true;
             this.holds--;
             this.startIdleTimer(idleMs);
         };

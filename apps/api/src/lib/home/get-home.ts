@@ -81,6 +81,8 @@ export async function openHome(ownerId: string): Promise<Home> {
             if (homeFactories.get(ownerId) === factory) homeFactories.delete(ownerId);
             throw err;
         }
+        // Checked again: a restore may have started while the home was being built.
+        if (restoringHomes.has(ownerId)) throw new ApiError(503, 'Restore in progress');
         if (!home.closing) return home.touch();
 
         // Wait until it has closed and dropped out of the cache, so the next round can't open the
@@ -101,6 +103,8 @@ function installFactory(ownerId: string): AsyncSingleton<Home> {
         try {
             await home.init();
         } catch (err) {
+            // Home.init closes itself when one of its parts fails; this also covers what a kind of
+            // home does before that.
             await home.close();
             throw err;
         }
@@ -163,6 +167,7 @@ export async function evictHome(ownerId: string): Promise<void> {
 }
 
 export async function shutdownAllHomes(): Promise<void> {
-    // Each home drops itself from the cache once closed, so a request meanwhile waits for it.
+    // Closes every home that is open now. A request that arrives meanwhile waits for its home to close
+    // before it opens a new one, so the two never share database files.
     await Promise.allSettled([...homeFactories.values()].map(async (factory) => (await factory()).close()));
 }
