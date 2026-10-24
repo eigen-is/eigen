@@ -291,25 +291,36 @@ export function chartSpecChange(base: ChartSpec, next: ChartSpec): ChartSpecChan
 // prototype, and an op whose path names a key a plain object inherits is dropped, so a forged key can't reach
 // Object.prototype.
 export function applyChartSpecChange(stored: StoredChartSpec, change: ChartSpecChange): StoredChartSpec {
+    const made: Made = new WeakMap();
     let next = stored;
     for (const op of change) {
         const paths = op.op === 'move' ? [op.from, op.path] : [op.path];
         if (paths.some((path) => path.length === 0 || path.some((key) => INHERITED_KEYS.has(key)))) continue;
-        if (op.op === 'set') next = setIn(next, op.path, op.value);
-        else if (op.op === 'remove') next = removeIn(next, op.path);
+        if (op.op === 'set') next = setIn(next, op.path, op.value, made);
+        else if (op.op === 'remove') next = removeIn(next, op.path, made);
         else {
             const moved = getIn(next, op.from);
-            next = removeIn(removeIn(next, op.from), op.path);
-            if (moved !== undefined) next = setIn(next, op.path, moved);
+            next = removeIn(removeIn(next, op.from, made), op.path, made);
+            if (moved !== undefined) next = setIn(next, op.path, moved, made);
         }
     }
     return next;
 }
 
 type StoredRecord = { [key: string]: unknown };
+// The records one apply made, each keyed by itself, so a later op of that apply writes into one in place: N moves
+// within a series' points copy its record once, not N times.
+type Made = WeakMap<StoredChartSpec, StoredRecord>;
 
 const own = (target: StoredChartSpec, key: string): unknown => (Object.hasOwn(target, key) ? target[key] : undefined);
-const copyOf = (target: StoredChartSpec): StoredRecord => Object.assign(Object.create(null), target);
+
+function writable(target: StoredChartSpec, made: Made): StoredRecord {
+    const mine = made.get(target);
+    if (mine) return mine;
+    const next: StoredRecord = Object.assign(Object.create(null), target);
+    made.set(next, next);
+    return next;
+}
 
 function getIn(target: StoredChartSpec, [key, ...rest]: string[]): unknown {
     const value = own(target, key);
@@ -317,19 +328,19 @@ function getIn(target: StoredChartSpec, [key, ...rest]: string[]): unknown {
     return isRecord(value) ? getIn(value, rest) : undefined;
 }
 
-function setIn(target: StoredChartSpec, [key, ...rest]: string[], value: unknown): StoredChartSpec {
+function setIn(target: StoredChartSpec, [key, ...rest]: string[], value: unknown, made: Made): StoredChartSpec {
     const before = own(target, key);
-    const next = copyOf(target);
-    if (rest.length > 0) next[key] = setIn(isRecord(before) ? before : Object.create(null), rest, value);
+    const next = writable(target, made);
+    if (rest.length > 0) next[key] = setIn(isRecord(before) ? before : Object.create(null), rest, value, made);
     else next[key] = laidOver(before, value);
     return next;
 }
 
-function removeIn(target: StoredChartSpec, [key, ...rest]: string[]): StoredChartSpec {
+function removeIn(target: StoredChartSpec, [key, ...rest]: string[], made: Made): StoredChartSpec {
     const before = own(target, key);
     if (before === undefined) return target;
-    if (rest.length > 0) return isRecord(before) ? setIn(target, [key], removeIn(before, rest)) : target;
-    const next = copyOf(target);
+    if (rest.length > 0) return isRecord(before) ? setIn(target, [key], removeIn(before, rest, made), made) : target;
+    const next = writable(target, made);
     delete next[key];
     return next;
 }

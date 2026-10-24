@@ -602,10 +602,17 @@ describe('applyChartSpecChange', () => {
         });
     });
 
-    test('leaves the stored spec it was given as it was', () => {
+    test('leaves the stored spec it was given, and the values it sets, as they were', () => {
         const { stored: before } = readChartSpec(JSON.stringify(raw));
-        applyChartSpecChange(before, [{ op: 'set', path: ['axes', 'y', 'scale', 'max'], value: 50 }]);
+        const value = { color: '#eb6834' };
+        applyChartSpecChange(before, [
+            { op: 'set', path: ['axes', 'y', 'scale', 'max'], value: 50 },
+            { op: 'set', path: ['axes', 'y', 'scale', 'min'], value: 0 },
+            { op: 'set', path: ['points', 's-1', '3'], value },
+            { op: 'set', path: ['points', 's-1', '3', 'color'], value: '#2a78d6' },
+        ]);
         expect(before).toEqual(raw);
+        expect(value).toEqual({ color: '#eb6834' });
     });
 
     test('a series list is set whole, each series laid over the stored one with its id, a gone one gone', () => {
@@ -757,6 +764,16 @@ describe('chartPointMoves', () => {
             2: { color: '#000001', future: '1' },
             3: { color: '#000002', future: '2' },
         });
+    });
+
+    // An xlsx pie can store a point on every slice, and each row op moves them all.
+    test('applies a move of every point in linear time', () => {
+        const colors = Object.fromEntries(Array.from({ length: MAX_CHART_POINTS }, (_, i) => [i, '#000000']));
+        const start = performance.now();
+        const after = moved(colors, (i) => (i === 0 ? null : i - 1));
+        expect(performance.now() - start).toBeLessThan(25);
+        expect(Object.keys(after)).toHaveLength(MAX_CHART_POINTS - 1);
+        expect(after[MAX_CHART_POINTS - 2]).toEqual({ color: '#000000', future: String(MAX_CHART_POINTS - 1) });
     });
 
     test('only a stored point moves, and an index that stays writes nothing', () => {
