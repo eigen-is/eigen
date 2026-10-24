@@ -774,7 +774,7 @@ export function boundShape(binding: string, byId: Map<string, VectorElement>): V
 // How near (SCENE units) a dragged endpoint binds: 15 at zoom ≥ 1, growing to 30 when zoomed out so the
 // reach stays a constant on-screen distance (Excalidraw's maxBindingDistance_simple).
 export function bindingDistance(zoom: number): number {
-    const z = zoom < 1 ? zoom : 1;
+    const z = Math.min(zoom, 1);
     return clamp(BASE_BINDING_DISTANCE / (z * 1.5), BASE_BINDING_DISTANCE, BASE_BINDING_DISTANCE * 2);
 }
 

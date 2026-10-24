@@ -20,6 +20,7 @@ const { NEWER_CHART_DATA_NOTICE } = await import('@workspace/ui/components/chart
 type Sheet = import('../../../state').Sheet;
 type ChartPanelState = import('../../../state').ChartPanelState;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
+type RefObject<T> = import('react').RefObject<T>;
 
 const ref = (row: [number, number], column: [number, number], sheetId = 's1'): CellRangeRef => ({
     sheetId,
@@ -63,6 +64,27 @@ const rows = [cell(2, 0, 'PSV'), cell(2, 1, 65), cell(3, 0, 'AZ'), cell(3, 1, 30
 // React reads an input's value off its own tracker, so the native setter is what a keystroke looks like.
 const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
+function Host({ data, workbook }: { data: Sheet[]; workbook: RefObject<WorkbookInstance | null> }) {
+    const [panel, setPanel] = useState<ChartPanelState | null>(null);
+    return createElement(
+        'div',
+        null,
+        createElement(Workbook, {
+            ref: workbook,
+            data,
+            showToolbar: false,
+            showFormulaBar: false,
+            hooks: { onChartPanelChange: setPanel },
+        }),
+        panel &&
+            createElement(
+                PropertyGestureContext.Provider,
+                { value: () => workbook.current?.beginGesture() ?? (() => {}) },
+                createElement(ChartPanelSections, { key: panel.chart.id, panel, workbook }),
+            ),
+    );
+}
+
 let cleanup: (() => Promise<void>) | undefined;
 afterEach(async () => {
     await cleanup?.();
@@ -88,27 +110,7 @@ async function mount(chart: SheetChart) {
         },
         { id: 's2', name: 'Two', order: 1, row: 20, column: 10, celldata: [...table, ...rows], config: {} },
     ];
-    function Host() {
-        const [panel, setPanel] = useState<ChartPanelState | null>(null);
-        return createElement(
-            'div',
-            null,
-            createElement(Workbook, {
-                ref: workbook,
-                data,
-                showToolbar: false,
-                showFormulaBar: false,
-                hooks: { onChartPanelChange: setPanel },
-            }),
-            panel &&
-                createElement(
-                    PropertyGestureContext.Provider,
-                    { value: () => workbook.current?.beginGesture() ?? (() => {}) },
-                    createElement(ChartPanelSections, { key: panel.chart.id, panel, workbook }),
-                ),
-        );
-    }
-    await act(async () => root.render(createElement(Host)));
+    await act(async () => root.render(createElement(Host, { data, workbook })));
     cleanup = async () => {
         await act(async () => root.unmount());
         container.remove();

@@ -116,37 +116,57 @@ describe('Mail-arrival notification read state', () => {
     });
 });
 
-describe('Mail read in another mail app while an Eigen tab is open', () => {
-    test('reads the notification without anyone opening Mail', async () => {
+describe('Mail read in another mail app', () => {
+    async function mailNewUnread(user: TestUser): Promise<boolean> {
+        const rows = await assertJson<Notification[]>(
+            await authedRequest(user.sessionToken, `/notifications/${user.id}`),
+        );
+        return rows.find((n) => n.tag === 'mail:new')?.read === false;
+    }
+
+    // The phone reads everything, the welcome mail included: the IMAP server gives each message the
+    // Seen flag, in cur/ (moving it there from new/).
+    function readOnThePhone(user: TestUser): void {
+        const inbox = boxDir(user.id, MAILBOX_INBOX);
+        for (const dir of ['new', 'cur']) {
+            for (const name of readdirSync(join(inbox, dir))) {
+                const flags = name.split(':2,')[1];
+                if (flags?.includes('S')) continue;
+                renameSync(
+                    join(inbox, dir, name),
+                    join(inbox, 'cur', flags === undefined ? `${name}:2,S` : `${name}S`),
+                );
+            }
+        }
+    }
+
+    test('while an Eigen tab is open reads the notification without anyone opening Mail', async () => {
         const user = await createTestUser(`mail-tab-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Tab');
         // A fresh home whose mail nobody listed; the open tab is only an event stream.
         await evictHome(user.id);
         const tab = await collectSSE(user.id);
         try {
             await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
-            const unread = async () =>
-                (
-                    await assertJson<Notification[]>(
-                        await authedRequest(user.sessionToken, `/notifications/${user.id}`),
-                    )
-                ).find((n) => n.tag === 'mail:new')?.read === false;
-            expect(await unread()).toBe(true);
+            expect(await mailNewUnread(user)).toBe(true);
 
-            // The phone reads everything, the welcome mail included: the IMAP server gives each message the
-            // Seen flag, in cur/ (moving it there from new/).
-            const inbox = boxDir(user.id, MAILBOX_INBOX);
-            for (const dir of ['new', 'cur']) {
-                for (const name of readdirSync(join(inbox, dir))) {
-                    const flags = name.split(':2,')[1];
-                    if (flags?.includes('S')) continue;
-                    renameSync(
-                        join(inbox, dir, name),
-                        join(inbox, 'cur', flags === undefined ? `${name}:2,S` : `${name}S`),
-                    );
-                }
-            }
+            readOnThePhone(user);
+            await eventually(async () => ((await mailNewUnread(user)) ? undefined : true), 'the notification read');
+        } finally {
+            tab.stop();
+        }
+    });
 
-            await eventually(async () => ((await unread()) ? undefined : true), 'the notification read');
+    test('before any Eigen tab is open reads the notification once one opens', async () => {
+        const user = await createTestUser(`mail-notab-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail No Tab');
+        await evictHome(user.id);
+        await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
+        readOnThePhone(user);
+        // Nobody watches the folders yet, so the index has not heard of it.
+        expect(await mailNewUnread(user)).toBe(true);
+
+        const tab = await collectSSE(user.id);
+        try {
+            await eventually(async () => ((await mailNewUnread(user)) ? undefined : true), 'the notification read');
         } finally {
             tab.stop();
         }

@@ -91,6 +91,8 @@ export class MaildirStore implements MailStore {
     private db!: MailDB;
     private events!: MailStoreEvents;
     private reconcilingMailboxes = new Map<string, Promise<void>>();
+    // Mailboxes whose running sync was joined: the joiner's change may land after that pass read the folder.
+    private reconcileAgain = new Set<string>();
     private lastReconcileStartedAt = new Map<string, number>();
     // Whether a delivered id was an arrival, read by whichever sync reaches the file first: this append's or a watcher's.
     private deliveries = new Map<string, boolean>();
@@ -141,18 +143,14 @@ export class MaildirStore implements MailStore {
     // A folder that gets its watcher only now is reconciled once, for what changed while nobody watched it.
     public async watch(): Promise<void> {
         for (const mailbox of STANDARD_MAILBOXES) {
-            if (this.isWatched(mailbox)) continue;
-            await this.watchMailbox(mailbox);
-            if (!this.isWatched(mailbox)) continue;
+            if (!(await this.watchMailbox(mailbox))) continue;
             this.reconcileMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err));
         }
     }
 
-    private isWatched(mailbox: string): boolean {
-        return this.watchers.has(path.join(this.mailboxDir(mailbox), PATHS.MAIL.CUR));
-    }
-
-    private async watchMailbox(mailbox: string): Promise<void> {
+    // True when it attached a watcher: a subdir missing last time is retried, and only the caller that attached reconciles.
+    private async watchMailbox(mailbox: string): Promise<boolean> {
+        let attached = false;
         for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
             const dir = path.join(this.mailboxDir(mailbox), subdir);
             if (this.watchers.has(dir)) continue;
@@ -170,18 +168,18 @@ export class MaildirStore implements MailStore {
                             this.dropWatcher(dir, watcher);
                             if (current === null) return;
                             await this.watchMailbox(mailbox);
-                            // A sync already running may have read the dir before the new watch attached.
-                            await this.reconcilingMailboxes.get(mailbox)?.catch(() => undefined);
                             await this.reconcileMailbox(mailbox);
                         })
                         .catch((err) => console.error('maildir: watcher check failed', err));
                 });
                 watcher.on('error', () => this.dropWatcher(dir, watcher));
                 this.watchers.set(dir, watcher);
+                attached = true;
             } catch {
                 // Removed between the stat and the watch
             }
         }
+        return attached;
     }
 
     private dropWatcher(dir: string, watcher: FSWatcher): void {
@@ -432,15 +430,27 @@ export class MaildirStore implements MailStore {
         if (this.home.closing) return;
         this.lastReconcileStartedAt.set(mailbox, Date.now());
         const running = this.reconcilingMailboxes.get(mailbox);
-        if (running) return running;
-
-        const promise = this.storeLock.run(() => this.doReconcileMailbox(mailbox));
-        this.reconcilingMailboxes.set(mailbox, promise);
-        try {
-            await promise;
-        } finally {
-            this.reconcilingMailboxes.delete(mailbox);
+        if (running) {
+            this.reconcileAgain.add(mailbox);
+            return running;
         }
+
+        // Cleared inside the lock, so a caller that joins a pass still waiting for the lock costs no extra one.
+        const promise = (async () => {
+            try {
+                do {
+                    await this.storeLock.run(() => {
+                        this.reconcileAgain.delete(mailbox);
+                        return this.doReconcileMailbox(mailbox);
+                    });
+                } while (this.reconcileAgain.has(mailbox) && !this.home.closing);
+            } finally {
+                // In the same turn as the last check, so nobody joins a loop that already ended.
+                this.reconcilingMailboxes.delete(mailbox);
+            }
+        })();
+        this.reconcilingMailboxes.set(mailbox, promise);
+        return promise;
     }
 
     private async doReconcileMailbox(mailbox: string): Promise<void> {

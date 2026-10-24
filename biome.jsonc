@@ -61,13 +61,18 @@
         "noExplicitAny": "error"
       },
       "a11y": {
-        "recommended": false
+        "preset": "none"
       }
     }
   },
   // Architectural seams that tsc can't catch: a React import pulled into the
   // backend-shared layers explodes at module-eval, not at typecheck. See AGENTS.md.
   "overrides": [
+    {
+      // The sheet's contenteditable editors read innerText on purpose: it keeps the line breaks the editor draws, textContent drops them.
+      "includes": ["packages/sheet/src/**"],
+      "linter": { "rules": { "performance": { "useDomNodeTextContent": "off" } } }
+    },
     {
       // Vite loads these with Node's native TS loader, which needs full specifiers.
       "includes": ["**/vite.config.ts", "vite.shared.config.ts"],
@@ -181,6 +186,21 @@
     },
     "formatter": {
       "enabled": true
+    }
+  },
+  "markdown": {
+    "parser": {
+      // Help-center articles and blog posts open with YAML front matter.
+      "frontmatter": true
+    },
+    "formatter": {
+      // Off: it pads wide tables to one width and re-nests lists and blockquotes, which changes what they render.
+      "enabled": false
+    }
+  },
+  "yaml": {
+    "formatter": {
+      "indentWidth": 2
     }
   }
 }

@@ -33,7 +33,7 @@ const OPERATORS = new Map<string, (x: number, y: number, z: number) => number>([
     ['max', (x, y) => Math.max(x, y)],
     ['min', (x, y) => Math.min(x, y)],
     ['mod', (x, y, z) => Math.hypot(x, y, z)],
-    ['pin', (x, y, z) => (y < x ? x : y > z ? z : y)],
+    ['pin', (x, y, z) => (y < x ? x : Math.min(y, z))],
     ['sat2', (x, y, z) => x * Math.sin(Math.atan2(z, y))],
     ['sin', (x, y) => x * Math.sin(y * RADIANS_PER_UNIT)],
     ['sqrt', (x) => Math.sqrt(x)],

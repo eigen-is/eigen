@@ -299,12 +299,12 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
             mth = minh + (th - 1) * copyh;
             mtc = minc + (tc - 1) * copyc;
 
-            maxrowCache = minh + th * copyh > rowMaxLength ? rowMaxLength : minh + th * copyh;
+            maxrowCache = Math.min(minh + th * copyh, rowMaxLength);
             if (maxrowCache > maxh + 1) {
                 maxrowCache = maxh + 1;
             }
 
-            maxcellCahe = minc + tc * copyc > cellMaxLength ? cellMaxLength : minc + tc * copyc;
+            maxcellCahe = Math.min(minc + tc * copyc, cellMaxLength);
             if (maxcellCahe > maxc + 1) {
                 maxcellCahe = maxc + 1;
             }
