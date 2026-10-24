@@ -104,14 +104,15 @@ export class Mail {
                 this.readNotificationOnceInboxRead();
             },
         });
-        // Every user Home carries a Mail; with mail off it seeds, watches and cleans nothing.
+        // Every user Home carries a Mail; with mail off it seeds and cleans nothing. The folder watchers wait for
+        // the first listing: a home opened for a notification or a share needs none, and on macOS each costs
+        // the event loop up to a second, more the more the process already watches.
         if (!isMailAppEnabled()) return;
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
             if (welcome) await this.store.append(MAILBOX_INBOX, welcome, { skipReconcile: true, arrival: false });
         }
-        await this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
     }
 

@@ -130,11 +130,6 @@ export class MaildirStore implements MailStore {
         return isNew;
     }
 
-    // The standard six only: a watcher per IMAP folder spends the per-user inotify limit every home shares.
-    async watch(): Promise<void> {
-        await Promise.all(STANDARD_MAILBOXES.map((mailbox) => this.watchMailbox(mailbox)));
-    }
-
     async unwatch(): Promise<void> {
         for (const watcher of this.watchers.values()) watcher.close();
         this.watchers.clear();
@@ -213,8 +208,9 @@ export class MaildirStore implements MailStore {
         const mailboxes: MaildirMailbox[] = [];
         const paths = await this.listMailboxPaths();
         for (const name of paths) {
-            // Counts come from the index. A standard folder recreated since load gets its watcher back here;
-            // any other folder has none and reconciles here, in the background.
+            // Counts come from the index. A standard folder gets its watcher here, on the first listing or once
+            // recreated; any other folder has none, since each spends the per-user inotify limit every home
+            // shares, and reconciles here, in the background.
             if (isStandardMailbox(name)) {
                 await this.watchMailbox(name);
             } else if (this.reconcileDue(name)) {
