@@ -20,7 +20,7 @@ import {
 } from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, chartCost, chartPart, droppedChart, readChart } from '../../ooxml/ooxml-chart';
 import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
-import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../image-types';
+import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS, MIME_ALIASES } from '../image-types';
 import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
 import { descendants, int } from './package';
 import { type Reader, readBlocks, type Scope } from './paragraphs';
@@ -45,10 +45,11 @@ export const UNSHOWN_IMAGE_TYPES = new Set(['image/bmp', 'image/x-wmf', 'image/x
 
 export type DocxImagePart = { name: string; path: string; contentType: string };
 
-// One media file per image part, named in encounter order.
+// One media file per image part, named in encounter order; a part past MAX_MEDIA_PARTS is left out, as a missing one is.
 function mediaName(reader: Reader, path: string): string | undefined {
     const known = reader.imageNames.get(path);
     if (known) return known;
+    if (reader.images.length >= MAX_MEDIA_PARTS) return undefined;
     const contentType = imageType(reader, path);
     const extension = contentType && IMAGE_EXTENSION_BY_MIME.get(contentType);
     if (!contentType || !extension || !reader.pkg.zip.entry(path)) return undefined;
