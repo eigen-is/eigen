@@ -2,18 +2,17 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CHART_MAX_SIDE, readChartSpec } from '@workspace/lib/charts';
-import type { Sheet, SheetChart } from '@workspace/lib/sheets';
+import type { Sheet } from '@workspace/lib/sheets';
 import {
     floatingItems,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_COL_WIDTH,
 } from '@workspace/lib/sheets';
-import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { IMPORT_MESSAGES } from '../../../lib/import/messages';
-import { CHART_SHEET_SIZE, placeDrawings, readDrawing } from '../../../lib/import/sheets/drawing';
+import { CHART_SHEET_SIZE, partsText, placeDrawings, readDrawing } from '../../../lib/import/sheets/drawing';
 import { readXlsx } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
 import { drawingTheme } from '../../../lib/ooxml/drawingml';
@@ -357,12 +356,6 @@ describe('a worksheet chart', () => {
             mediaName: () => undefined,
             lost: () => {},
         });
-        const partsText = (chart: SheetChart) =>
-            CHART_SPEC_PART_KEYS.reduce((sum, key) => {
-                const part = chart[key];
-                if (typeof part === 'string') return sum + part.length;
-                return Object.entries(part).reduce((total, [entry, text]) => total + entry.length + text.length, sum);
-            }, 0);
         const charts = chartsOf(sheet);
         expect(charts).toHaveLength(2);
         expect(Object.keys(charts[0].specSeries)).not.toEqual([]);

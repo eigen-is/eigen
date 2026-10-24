@@ -8,6 +8,7 @@ import {
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
 import type { ChartSpec, SheetChartSpecParts } from '@workspace/lib/types/chart';
+import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlTrimmedText } from '../../core/xml';
@@ -144,9 +145,10 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
 }
 
 // The text a chart's parts spell out in the snapshot: each part's, and each entry's key and text.
-function partsText(parts: SheetChartSpecParts): number {
+export function partsText(parts: SheetChartSpecParts): number {
     let length = 0;
-    for (const part of Object.values(parts)) {
+    for (const key of CHART_SPEC_PART_KEYS) {
+        const part = parts[key];
         if (typeof part === 'string') length += part.length;
         else for (const [entry, text] of Object.entries(part)) length += entry.length + text.length;
     }
