@@ -1,3 +1,7 @@
+// The Workbook's imperative API, what a host app calls through the Workbook's ref: a peer's ops, undo and redo, the
+// floating images and charts, search and replace. Its writes run as recipes on the workbook's context, as the
+// editor's own edits do.
+
 import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';

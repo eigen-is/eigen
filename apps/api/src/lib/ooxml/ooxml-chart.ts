@@ -1,3 +1,6 @@
+// Reads a DrawingML chart part, the same in a docx, an xlsx and a pptx, into a ChartSpec. Each format's importer
+// calls it for the charts its drawings name, and the chart writer shares its tables of OOXML names.
+
 import {
     chartColor,
     chartLabel,

@@ -1,3 +1,6 @@
+// The chart spec every chart host stores, such as a canvas element, a Docs node or a sheet's chart, and the change an
+// editor hands its host. Shared by every package that reads, edits, draws or converts a chart.
+
 import type {
     FillStyle,
     StrokeStyle,

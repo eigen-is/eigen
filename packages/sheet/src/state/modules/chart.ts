@@ -1,3 +1,7 @@
+// A chart's own writers, each on one chart of the current sheet: insert, paste, its spec, its look and its data
+// range, and the drawing and clipboard item made from it. The box, its order and its deletion are every floating
+// object's.
+
 import {
     applyChartSpecChange,
     CHART_DEFAULT_SIZE,
@@ -22,9 +26,6 @@ import { clipToUsedExtent } from '../utils';
 import { editableCurrentSheet, selectFloatingObject } from './floating';
 import { createContextResolver } from './formula-cache';
 import { selectedCellOrigin } from './image';
-
-// A chart's own writers, each on one chart of the current sheet: the box, its order and its deletion are every
-// floating object's (floating.ts).
 
 // Where a chart is inserted: upright, as nothing inserts one turned.
 export type ChartInsertBox = Omit<Box, 'angle'>;

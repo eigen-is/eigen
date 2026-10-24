@@ -1,3 +1,6 @@
+// Google's Setup of a range chart: a block of cells derived to the refs the spec stores, and read back from them.
+// The sheet's chart writers, such as Insert → Chart and the panel's Setup rows, set a chart up through it.
+
 import {
     DEFAULT_CHART_SERIES_STYLE,
     defaultChartPresentation,
