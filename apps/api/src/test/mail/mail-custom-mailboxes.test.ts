@@ -10,6 +10,7 @@ import {
 } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
+import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { boxDir, maildirOf, makeEml, seedMaildirFile, seedMaildirFolder } from '../mail-test-helpers';
@@ -458,38 +459,45 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
         await listMailboxes(token, userId);
     });
 
-    // Listings index no standard folder, so only a live watcher can raise these counts.
+    // A watcher attaches on its own thread and, on macOS, misses a file dropped before it does: each try files a fresh one.
+    function fileUntilSynced(mailbox: string, synced: () => Promise<boolean>): Promise<boolean> {
+        return eventually(async () => {
+            const eml = makeEml(`Filed into ${mailbox}`, { to: email });
+            seedMaildirFile(userId, mailbox, `${Date.now()}.filed`, eml, { dir: 'new' });
+            return (await synced()) || undefined;
+        }, `${mailbox} synced`);
+    }
+
+    // Listings index no standard folder, so only a live watcher can raise this count.
+    async function counted(mailbox: string): Promise<boolean> {
+        return findOrFail(await listMailboxes(token, userId), (box) => box.path === mailbox).total > 0;
+    }
+
+    function received(events: SSEvent[], mailbox: string): boolean {
+        return events.some((event) => event.type === SSEventType.MAIL_RECEIVED && event.mail.mailbox === mailbox);
+    }
+
     test('a folder deleted and recreated is watched again once listed', async () => {
         rmSync(boxDir(userId, MAILBOX_JUNK), { recursive: true });
         // An IMAP client's DELETE and the CREATE that follows are separate round trips.
         await Bun.sleep(100);
         seedMaildirFolder(userId, MAILBOX_JUNK);
         await listMailboxes(token, userId);
-        // The watcher attaches on its own thread; a file dropped in the same instant is missed on macOS.
-        await Bun.sleep(200);
 
-        seedMaildirFile(userId, MAILBOX_JUNK, `${Date.now()}.junk`, makeEml('Filed into the new Junk', { to: email }), {
-            dir: 'new',
-        });
-        expect((await mailboxWhenCounting(token, userId, MAILBOX_JUNK, 1)).total).toBe(1);
+        await fileUntilSynced(MAILBOX_JUNK, () => counted(MAILBOX_JUNK));
     });
 
     test('a folder recreated before the watcher notices is watched again without a listing', async () => {
         const sse = await collectSSE(userId);
-        const synced = (): boolean =>
-            sse.events.some(
-                (event) => event.type === SSEventType.MAIL_RECEIVED && event.mail.mailbox === MAILBOX_TRASH,
-            );
         rmSync(boxDir(userId, MAILBOX_TRASH), { recursive: true });
         seedMaildirFolder(userId, MAILBOX_TRASH);
-        // The syncs the removal itself kicks have landed, so only a live watcher can index what follows.
-        await Bun.sleep(200);
-        const eml = makeEml('Filed into the new Trash', { to: email });
-        seedMaildirFile(userId, MAILBOX_TRASH, `${Date.now()}.trashed`, eml, { dir: 'new' });
-
-        for (let attempt = 0; attempt < 100 && !synced(); attempt++) await Bun.sleep(20);
-        sse.stop();
-        expect(synced()).toBe(true);
+        try {
+            // Opening waits out the syncs the removal itself kicked, so only a live watcher can index what follows.
+            expect((await authedRequest(token, `/mail/${userId}/mailbox/${MAILBOX_TRASH}`)).status).toBe(200);
+            await fileUntilSynced(MAILBOX_TRASH, async () => received(sse.events, MAILBOX_TRASH));
+        } finally {
+            sse.stop();
+        }
     });
 
     test('a folder missing when the home loads is watched once it exists and is listed', async () => {
@@ -499,17 +507,8 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
 
         seedMaildirFolder(userId, MAILBOX_ARCHIVE);
         await listMailboxes(token, userId);
-        // The watcher attaches on its own thread; a file dropped in the same instant is missed on macOS.
-        await Bun.sleep(200);
 
-        seedMaildirFile(
-            userId,
-            MAILBOX_ARCHIVE,
-            `${Date.now()}.archived`,
-            makeEml('Filed into the late Archive', { to: email }),
-            { dir: 'new' },
-        );
-        expect((await mailboxWhenCounting(token, userId, MAILBOX_ARCHIVE, 1)).total).toBe(1);
+        await fileUntilSynced(MAILBOX_ARCHIVE, () => counted(MAILBOX_ARCHIVE));
     });
 
     test("a folder's new/ missing when the watchers start is watched once it exists", async () => {
@@ -520,19 +519,10 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
         mkdirSync(join(boxDir(userId, MAILBOX_INBOX), 'new'));
         await home.mail.watchFolders();
 
-        // Listings index no standard folder, so only a watcher on new/ can sync what lands there.
+        // Only a watcher on new/, or the sync its attach runs, can index what lands there.
         const sse = await collectSSE(userId);
         try {
-            await eventually(async () => {
-                seedMaildirFile(userId, MAILBOX_INBOX, `${Date.now()}.late`, makeEml('Into the late new/'), {
-                    dir: 'new',
-                });
-                return (
-                    sse.events.some(
-                        (event) => event.type === SSEventType.MAIL_RECEIVED && event.mail.mailbox === MAILBOX_INBOX,
-                    ) || undefined
-                );
-            }, 'the inbox synced');
+            await fileUntilSynced(MAILBOX_INBOX, async () => received(sse.events, MAILBOX_INBOX));
         } finally {
             sse.stop();
         }
