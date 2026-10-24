@@ -910,6 +910,16 @@ describe('the stored parts', () => {
         expect(sheetChartSpecWrites(readChartSpec(sheet()).stored, same)).toEqual([]);
     });
 
+    test('a Sheets write is never an entry key the reader ignores', () => {
+        const { stored } = readChartSpec(sheet());
+        expect(
+            sheetChartSpecWrites(stored, [
+                { op: 'set', path: ['points', 's-1', '03', 'color'], value: '#000000' },
+                { op: 'set', path: ['points', 's-1', '1e3', 'color'], value: '#000000' },
+            ]),
+        ).toEqual([]);
+    });
+
     test("a series delete writes the data alone, and the next write of series or points drops the gone series' entries", () => {
         const [first, second] = styled.data.series;
         const deleteSecond: ChartSpecChange = [{ op: 'set', path: ['data', 'series'], value: [first] }];

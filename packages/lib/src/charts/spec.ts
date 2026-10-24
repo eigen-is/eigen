@@ -337,7 +337,7 @@ function keyedPart(raw: unknown, depth: number): StoredRecord {
 }
 
 // An entry's key is its path below its part: an id, and for a point its index after the last /, since an id holds
-// none. Any other key is ignored, so a forged one costs that entry.
+// none. Any other key is ignored, so a forged one costs that entry, and is never written.
 function entryPath(key: string, depth: number): string[] | null {
     if (depth === 1) return isChartSeriesId(key) ? [key] : null;
     const at = key.lastIndexOf('/');
@@ -485,8 +485,9 @@ function entryWrites(
 ): void {
     if (before === after) return;
     if (depth === 0) {
+        const key = path.join('/');
         const text = entryText(after);
-        if (text !== entryText(before)) write(path.join('/'), text);
+        if (entryPath(key, path.length) && text !== entryText(before)) write(key, text);
         return;
     }
     const from = isRecord(before) ? before : {};
