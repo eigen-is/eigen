@@ -247,7 +247,7 @@ export function ChartDataDialog({ spec, stored, open, onOpenChange, onSave }: Ch
                     <DialogTitle>Edit data</DialogTitle>
                     <DialogDescription>
                         {unknown
-                            ? 'This chart holds data this version of Eigen can’t edit, so it opens read-only.'
+                            ? 'This chart was made in a newer version of Eigen. Reload to edit its data.'
                             : readOnly
                               ? 'This chart has more data than the editor holds, so it opens read-only.'
                               : 'Categories go down column A and series across row 1. Type in an empty row or column to add one, and paste cells from a spreadsheet to fill several at once.'}
