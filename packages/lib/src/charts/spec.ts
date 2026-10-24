@@ -225,8 +225,8 @@ export function isChartSpecKey(key: string): boolean {
 
 const ENCODER = new TextEncoder();
 
-// A stored string, or on a host's record every prefixed key's summed, known or not, a Sheets entry's key and text
-// both. The count stops at the limit, so a forged record of a million entries costs what fits under it.
+// A stored string, or on a host's record every prefixed key's name and text summed, known or not, a Sheets entry's key
+// and text both. The count stops at the limit, so a forged record of a million keys or entries costs what fits under it.
 export function exceedsChartSpecBytes(value: string | object): boolean {
     let left = MAX_CHART_SPEC_BYTES;
     // Every UTF-16 unit is a UTF-8 byte or more, so a string longer than what is left is past it unencoded.
@@ -236,7 +236,9 @@ export function exceedsChartSpecBytes(value: string | object): boolean {
     };
     if (typeof value === 'string') return spend(value);
     return Object.keys(value).some((key) => {
-        const part = isChartSpecKey(key) ? prop(value, key) : undefined;
+        if (!isChartSpecKey(key)) return false;
+        const part = prop(value, key);
+        if (spend(key)) return true;
         if (typeof part === 'string') return spend(part);
         return (
             isRecord(part) &&

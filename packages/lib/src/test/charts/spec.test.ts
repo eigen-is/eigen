@@ -990,8 +990,8 @@ describe('the stored parts', () => {
                         : bytes(Object.entries(text ?? {}).flat())),
                 0,
             );
-        const left = MAX_CHART_SPEC_BYTES - bytes(Object.values(parts()));
-        const half = Math.ceil((MAX_CHART_SPEC_BYTES - bytes(Object.values(sheet()))) / 2);
+        const left = MAX_CHART_SPEC_BYTES - bytes(Object.entries(parts({ specFuture: '' })).flat());
+        const half = Math.ceil((MAX_CHART_SPEC_BYTES - bytes(Object.entries(sheet()).flat())) / 2);
         const parse = spyOn(JSON, 'parse');
         try {
             for (const over of [
@@ -1005,6 +1005,7 @@ describe('the stored parts', () => {
         } finally {
             parse.mockRestore();
         }
+        expect(readChartSpec(parts({ specFuture: 'x'.repeat(left) })).spec).toEqual(styled);
         expect(readChartSpec(parts({ future: 'x'.repeat(MAX_CHART_SPEC_BYTES) })).spec).toEqual(styled);
     });
 
@@ -1020,5 +1021,21 @@ describe('the stored parts', () => {
         expect(readChartSpec(sheet({ specPoints }))).toEqual({ stored: {}, spec: null });
         expect(reads).toBeGreaterThan(1000);
         expect(reads).toBeLessThan(10_000);
+    });
+
+    test("every prefixed key's name counts, so a million forged empty keys measure a few thousand", () => {
+        const target = {
+            ...sheet(),
+            ...Object.fromEntries(Array.from({ length: 1_000_000 }, (_, i) => [`specF${i}`, ''])),
+        };
+        let reads = 0;
+        const forged = new Proxy(target, {
+            get: (entries, key, receiver) => {
+                reads += 1;
+                return Reflect.get(entries, key, receiver);
+            },
+        });
+        expect(readChartSpec(forged)).toEqual({ stored: {}, spec: null });
+        expect(reads).toBeLessThan(15_000);
     });
 });
