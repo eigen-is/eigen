@@ -4,7 +4,6 @@ import { FLAT_CHART_LOOK } from '../../../charts';
 import {
     MAX_CHART_SPEC_BYTES,
     MAX_CHART_SPEC_DEPTH,
-    MAX_CHART_SPEC_ENTRIES,
     newChartSpecParts,
     newSheetChartSpecParts,
     sampleChartSpec,
@@ -542,20 +541,19 @@ describe('chart items', () => {
         expect(readEigenClipboard(raw({ ...good, height: Number.NaN }))?.items).toEqual([]);
     });
 
-    // The limits a host's read applies, so no host stores what another would read as nothing.
-    test('the reader refuses an item past the byte, depth or entry limit, or holding anything but part texts', () => {
+    // The limits a host's read applies. An item's parts are texts, so it holds no entries, and many short keys are past
+    // the byte limit.
+    test('the reader refuses parts past the byte limit, many keys too, or the depth limit, or not texts', () => {
         const used = Object.entries(inline).reduce((sum, [key, text]) => sum + utf8(key + text), 0);
         const room = MAX_CHART_SPEC_BYTES - used - 'specFuture'.length;
         const padded = (bytes: number) => ({ ...inline, specFuture: 'x'.repeat(bytes) });
         expect(readEigenClipboard(raw({ ...good, parts: padded(room) }))?.items).toHaveLength(1);
         const deep = `${'['.repeat(MAX_CHART_SPEC_DEPTH + 1)}${']'.repeat(MAX_CHART_SPEC_DEPTH + 1)}`;
-        const entries = Object.fromEntries(
-            Array.from({ length: MAX_CHART_SPEC_ENTRIES + 1 }, (_, i) => [`specX${i}`, '']),
-        );
+        const keys = Object.fromEntries(Array.from({ length: MAX_CHART_SPEC_BYTES / 5 }, (_, i) => [`specX${i}`, '']));
         const refused = [
             padded(room + 1),
             { ...inline, specFuture: deep },
-            { ...inline, ...entries },
+            { ...inline, ...keys },
             { ...inline, specFuture: { 'a/1': '{}' } },
             { ...inline, future: '{}' },
         ];
