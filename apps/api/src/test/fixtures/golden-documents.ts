@@ -267,8 +267,8 @@ export function corpusEquations(): { row: MathRow; display: boolean }[] {
     });
 }
 
-// Every node and mark the docx writer maps, with each variant it special-cases. doc-docx.test.ts holds its type set
-// to the schema's, so a new node fails there until it is added here.
+// Every node and mark the docx writer maps, with each variant it special-cases. doc/docx/to-docx.test.ts holds its type
+// set to the schema's, so a new node fails there until it is added here.
 export function buildAllFeaturesDocJson(): JSONContent {
     const link = { type: 'link', attrs: { href: 'https://example.com/a b', title: 'Example' } };
     const cell = (type: string, attrs: Record<string, unknown>, ...content: JSONContent[]): JSONContent => ({

@@ -970,7 +970,7 @@ describe('doc export — caps', () => {
     });
 });
 
-// The docx writer's rule (doc-docx.test.ts), so a link to another Eigen file works in every format.
+// The docx writer's rule (doc/docx/to-docx.test.ts), so a link to another Eigen file works in every format.
 describe('doc export — links', () => {
     async function hrefsOf(format: 'html' | 'pdf-html', publicOrigin?: string): Promise<string[]> {
         const linked = (href: string) => ({ type: 'text', text: href, marks: [{ type: 'link', attrs: { href } }] });

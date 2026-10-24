@@ -10,18 +10,26 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
 import sharp from 'sharp';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
-import type { EigendocBands } from '../../lib/document/doc';
-import { docSchema } from '../../lib/document/doc-schema';
-import { cssPt, QUOTE_LOOK, twips } from '../../lib/document/looks';
-import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
-import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
-import { chartFigureMedia } from '../../lib/export/doc/docx/drawings';
-import { writeDocx } from '../../lib/export/doc/docx/to-docx';
-import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
-import { withSvgFallbacks } from '../../lib/export/office-image';
-import { parseOoxml } from '../../lib/ooxml/ooxml';
-import { openZip, type ZipReader } from '../../lib/ooxml/zip';
+import {
+    parseXml,
+    type XmlElement,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+} from '../../../../lib/core/xml';
+import type { EigendocBands } from '../../../../lib/document/doc';
+import { docSchema } from '../../../../lib/document/doc-schema';
+import { cssPt, QUOTE_LOOK, twips } from '../../../../lib/document/looks';
+import { proseValue, proseValueIfSet } from '../../../../lib/document/prose-css';
+import { type ExportMedia, toTransferableText } from '../../../../lib/document/transform/protocol';
+import { chartFigureMedia } from '../../../../lib/export/doc/docx/drawings';
+import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
+import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/fonts';
+import { withSvgFallbacks } from '../../../../lib/export/office-image';
+import { parseOoxml } from '../../../../lib/ooxml/ooxml';
+import { openZip, type ZipReader } from '../../../../lib/ooxml/zip';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,
@@ -29,7 +37,7 @@ import {
     equation,
     GOLDEN_FRACTION,
     GOLDEN_SUM,
-} from '../fixtures/golden-documents';
+} from '../../../fixtures/golden-documents';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';

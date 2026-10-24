@@ -17,13 +17,13 @@ import {
     type VectorScene,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../lib/core/xml';
-import { toTransferableText } from '../../lib/document/transform/protocol';
-import type { OfficeMedia } from '../../lib/export/office-image';
-import { sanitizeSceneHtml } from '../../lib/export/sanitize';
-import { writePptx } from '../../lib/export/slides/pptx/to-pptx';
-import { parseOoxml } from '../../lib/ooxml/ooxml';
-import { openZip, type ZipReader } from '../../lib/ooxml/zip';
+import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../../../lib/core/xml';
+import { toTransferableText } from '../../../../lib/document/transform/protocol';
+import type { OfficeMedia } from '../../../../lib/export/office-image';
+import { sanitizeSceneHtml } from '../../../../lib/export/sanitize';
+import { writePptx } from '../../../../lib/export/slides/pptx/to-pptx';
+import { parseOoxml } from '../../../../lib/ooxml/ooxml';
+import { openZip, type ZipReader } from '../../../../lib/ooxml/zip';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
