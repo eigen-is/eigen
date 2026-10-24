@@ -204,7 +204,7 @@ An image inserted from an upload carries a `pending:` name until the upload sett
 
 ## A chart is a floating record whose refs name sheets by id
 
-A chart's `spec` is the stored chart JSON that only `parseChartSpec` (`packages/lib/src/charts/`) reads. A range ref in the spec names its sheet by id, so renaming a sheet moves nothing. Copying a sheet points its charts' refs to the copied sheet at the copy, as Excel and Google do. An xlsx import brings a chart Excel anchors on a worksheet in as one of these records over the same cells, and a chart sheet as a sheet holding its chart ([EXPORT.md](EXPORT.md#an-xlsx-chart-comes-in-over-the-cells-excel-draws-it-over)). The import reads an anchor's box only, so an imported chart stores angle 0.
+A chart's `spec` is the stored chart JSON that only `readChartSpec` (`packages/lib/src/charts/`) reads, and a write applies a change onto it as stored ([CHARTS.md](CHARTS.md#an-edit-is-a-change-applied-onto-the-spec-as-stored)). A range ref in the spec names its sheet by id, so renaming a sheet moves nothing. Copying a sheet points its charts' refs to the copied sheet at the copy, as Excel and Google do. An xlsx import brings a chart Excel anchors on a worksheet in as one of these records over the same cells, and a chart sheet as a sheet holding its chart ([EXPORT.md](EXPORT.md#an-xlsx-chart-comes-in-over-the-cells-excel-draws-it-over)). The import reads an anchor's box only, so an imported chart stores angle 0.
 
 ## Chart refs shift with rows and columns, and an undone delete ships them
 

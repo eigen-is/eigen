@@ -1,14 +1,20 @@
-import { CHART_DEFAULT_SIZE, parseChartSpec, readChartLook } from '@workspace/lib/charts';
+import {
+    applyChartSpecChange,
+    CHART_DEFAULT_SIZE,
+    parseChartSpec,
+    readChartLook,
+    readChartSpec,
+} from '@workspace/lib/charts';
 import { buildChartClipboardItem } from '@workspace/lib/clipboard';
 import type { SheetChart } from '@workspace/lib/sheets';
 import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
-import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
 import type { Box } from '@workspace/lib/vector';
 import { randomSeed } from '@workspace/lib/vector';
 import { inlineChartSpec, renderSheetChartSvg } from '../../engine/chart-data';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
-import { currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
+import { chartRangeChange, currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { clipToUsedExtent } from '../utils';
@@ -47,9 +53,11 @@ export function pasteChart(
     selectFloatingObject(ctx, { kind: 'chart', id });
 }
 
-export function setChartSpec(ctx: Context, id: string, spec: ChartSpec) {
+// Applied onto the chart as the recipe finds it, so neither a panel that rendered before a peer's edit nor a key this
+// build doesn't know is reverted.
+export function setChartSpec(ctx: Context, id: string, change: ChartSpecChange) {
     const chart = editableCurrentSheet(ctx)?.charts?.[id];
-    if (chart) chart.spec = JSON.stringify(spec);
+    if (chart) chart.spec = JSON.stringify(applyChartSpecChange(readChartSpec(chart.spec).stored, change));
 }
 
 // Writes only the look fields given, each its own op, so a peer's edit of another field merges.
@@ -83,7 +91,7 @@ export function setChartDataRange(ctx: Context, id: string, ref: CellRangeRef) {
     const spec = chart ? parseChartSpec(chart.spec) : null;
     if (!spec) return;
     const setup = setUpChartRange(ref, createContextResolver(ctx), spec.data);
-    if (typeof setup !== 'string') setChartSpec(ctx, id, { ...spec, data: setup.data });
+    if (typeof setup !== 'string') setChartSpec(ctx, id, chartRangeChange(setup.data));
 }
 
 // One drawing per chart record and the cell matrices its ranges read. immer replaces the matrix of a

@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    applyChartSpecChange,
     chartColor,
     chartSearchText,
+    chartSpecChange,
     defaultChartPresentation,
     exceedsInlineGridLimits,
     fitsInlineGrid,
+    holdsUnknownChartData,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     MAX_CHART_LABEL_LENGTH,
@@ -13,12 +16,13 @@ import {
     MAX_CHART_SPEC_BYTES,
     newChartSeriesId,
     parseChartSpec,
+    readChartSpec,
     sampleChartSpec,
 } from '../../charts';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../../constants/colors';
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../../sheets';
-import type { ChartSpec, InlineChartData, RangeChartData } from '../../types/chart';
+import type { ChartSpec, ChartSpecChange, InlineChartData, RangeChartData } from '../../types/chart';
 import { CHART_STACKINGS, CHART_TYPES } from '../../types/chart';
 import { isColorToken } from '../../vector/fill';
 
@@ -330,7 +334,7 @@ describe('parseChartSpec', () => {
         expect(parseChartSpec(padded)).toBeNull();
     });
 
-    test('unknown keys are dropped at every level', () => {
+    test('the resolved view drops unknown keys at every level', () => {
         const spec = chart();
         const raw = {
             ...spec,
@@ -408,6 +412,153 @@ describe('series ids', () => {
         expect(newChartSeriesId()).not.toBe(newChartSeriesId());
         expect(sampleChartSpec('column').data.series.map((s) => s.id)).toEqual(['s-1', 's-2', 's-3']);
         expect(sampleChartSpec('pie').data.series.map((s) => s.id)).toEqual(['s-1']);
+    });
+});
+
+describe('readChartSpec', () => {
+    test('returns the spec as stored, unknown keys and values in place, beside the view resolved from it', () => {
+        const raw = { ...chart(), legend: 'inside', future: { on: true } };
+        const { stored, spec } = readChartSpec(JSON.stringify(raw));
+        expect(stored).toEqual(raw);
+        expect(spec).toEqual(chart());
+    });
+
+    test('a spec that does not resolve keeps what is stored; one that is no JSON object, or past the limit, has none', () => {
+        expect(readChartSpec(stored({ type: 'scatter' }))).toEqual({
+            stored: JSON.parse(stored({ type: 'scatter' })),
+            spec: null,
+        });
+        for (const value of ['{', '[1]', '"x"']) expect(readChartSpec(value)).toEqual({ stored: {}, spec: null });
+        const padded = JSON.stringify({ ...chart(), pad: 'x'.repeat(MAX_CHART_SPEC_BYTES) });
+        expect(readChartSpec(padded)).toEqual({ stored: {}, spec: null });
+    });
+});
+
+describe('chartSpecChange', () => {
+    test('is the leaves that differ; records are walked and arrays set whole', () => {
+        const base = chart();
+        const next = {
+            ...base,
+            title: 'New',
+            valueAxis: { ...base.valueAxis, max: 50 },
+            sliceColors: ['#eb6834'],
+        };
+        expect(chartSpecChange(base, next)).toEqual([
+            { op: 'set', path: ['title'], value: 'New' },
+            { op: 'set', path: ['valueAxis', 'max'], value: 50 },
+            { op: 'set', path: ['sliceColors'], value: ['#eb6834'] },
+        ]);
+    });
+
+    test('a spread that reorders the keys changes nothing', () => {
+        const base = chart();
+        const { title, data, ...rest } = base;
+        expect(chartSpecChange(base, { data, ...rest, title })).toEqual([]);
+    });
+});
+
+describe('applyChartSpecChange', () => {
+    const raw = {
+        ...chart(),
+        future: 1,
+        legend: 'inside',
+        valueAxis: { ...chart().valueAxis, logBase: 10 },
+        data: {
+            ...chart().data,
+            future: 3,
+            series: chart().data.series.map((series) => ({ ...series, sizes: [1, 2] })),
+        },
+    };
+    const apply = (change: ChartSpecChange) => applyChartSpecChange(readChartSpec(JSON.stringify(raw)).stored, change);
+
+    test('unknown keys at every level, and an unknown legend, survive a change elsewhere', () => {
+        const next = apply([
+            { op: 'set', path: ['title'], value: 'New' },
+            { op: 'set', path: ['valueAxis', 'max'], value: 50 },
+        ]);
+        expect(JSON.parse(JSON.stringify(next))).toEqual({
+            ...raw,
+            title: 'New',
+            valueAxis: { ...raw.valueAxis, max: 50 },
+        });
+    });
+
+    test('leaves the stored spec it was given as it was', () => {
+        const { stored: before } = readChartSpec(JSON.stringify(raw));
+        applyChartSpecChange(before, [{ op: 'set', path: ['valueAxis', 'max'], value: 50 }]);
+        expect(before).toEqual(raw);
+    });
+
+    test('a series list is set whole, each series laid over the stored one with its id, a gone one gone', () => {
+        const [, second, third] = chart().data.series;
+        const next = apply([{ op: 'set', path: ['data', 'series'], value: [{ ...third, name: 'Hot' }, second] }]);
+        expect(JSON.parse(JSON.stringify(next)).data.series).toEqual([
+            { ...third, name: 'Hot', sizes: [1, 2] },
+            { ...second, sizes: [1, 2] },
+        ]);
+        const fresh = { ...third, id: 's-new' };
+        expect(
+            JSON.parse(JSON.stringify(apply([{ op: 'set', path: ['data', 'series'], value: [fresh] }]))).data.series,
+        ).toEqual([fresh]);
+    });
+
+    test('a set makes the records along its path; a remove of what is not there changes nothing', () => {
+        const next = apply([{ op: 'set', path: ['plots', 'column', 'stacking'], value: 'stacked' }]);
+        expect(next.plots).toEqual({ column: { stacking: 'stacked' } });
+        expect(apply([{ op: 'remove', path: ['future'] }]).future).toBeUndefined();
+        expect(apply([{ op: 'remove', path: ['nothing', 'here'] }])).toEqual(readChartSpec(JSON.stringify(raw)).stored);
+    });
+
+    test('a move takes the value to its new path, and nothing at from leaves nothing there', () => {
+        const next = apply([{ op: 'move', from: ['future'], path: ['past'] }]);
+        expect([next.future, next.past]).toEqual([undefined, 1]);
+        expect(apply([{ op: 'move', from: ['nothing'], path: ['future'] }]).future).toBeUndefined();
+    });
+
+    test('the records it makes and copies have no prototype', () => {
+        const next = apply([{ op: 'set', path: ['plots', 'column', 'stacking'], value: 'stacked' }]);
+        expect(Object.getPrototypeOf(next)).toBeNull();
+        expect(Object.getPrototypeOf(next.plots)).toBeNull();
+    });
+
+    test('an op through __proto__, constructor or prototype changes nothing and leaves Object.prototype alone', () => {
+        const before = readChartSpec(JSON.stringify(raw)).stored;
+        for (const key of ['__proto__', 'constructor', 'prototype']) {
+            const change: ChartSpecChange = [
+                { op: 'set', path: [key, 'polluted'], value: true },
+                { op: 'set', path: ['valueAxis', key], value: { polluted: true } },
+                { op: 'remove', path: [key] },
+                { op: 'move', from: ['future'], path: [key] },
+            ];
+            expect(applyChartSpecChange(before, change)).toBe(before);
+        }
+        expect(Object.hasOwn(Object.prototype, 'polluted')).toBe(false);
+    });
+
+    test('a stored __proto__ key stays data through a change', () => {
+        const { stored: read } = readChartSpec(stored({ ['__proto__']: { polluted: true } }));
+        const next = applyChartSpecChange(read, [{ op: 'set', path: ['title'], value: 'New' }]);
+        expect(JSON.stringify(next)).toContain('"__proto__":{"polluted":true}');
+        expect(Object.hasOwn(Object.prototype, 'polluted')).toBe(false);
+    });
+});
+
+describe('holdsUnknownChartData', () => {
+    const read = (raw: object) => {
+        const { stored: storedSpec, spec } = readChartSpec(JSON.stringify(raw));
+        if (!spec) throw new Error('the spec does not parse');
+        return holdsUnknownChartData(storedSpec, spec);
+    };
+
+    test('says whether the data or a series holds a key this build does not read', () => {
+        const spec = chart();
+        expect(read(spec)).toBe(false);
+        expect(read({ ...spec, future: 1, valueAxis: { ...spec.valueAxis, logBase: 10 } })).toBe(false);
+        expect(read({ ...spec, data: { ...spec.data, future: 1 } })).toBe(true);
+        const sizes = spec.data.series.map((series, i) => (i === 1 ? { ...series, sizes: [1] } : series));
+        expect(read({ ...spec, data: { ...spec.data, series: sizes } })).toBe(true);
+        const inherited = spec.data.series.map((series) => ({ ...series, toString: 'x' }));
+        expect(read({ ...spec, data: { ...spec.data, series: inherited } })).toBe(true);
     });
 });
 

@@ -1,7 +1,10 @@
 // The stored-chart codec. A chart is one JSON string wherever it lives (a canvas element field, a docs
-// node attribute, a SheetChart), and parseChartSpec is the one reader every surface and importer runs.
-// Malformed structure or a hard limit reads as null, never a throw; a presentation field reads its default.
+// node attribute, a SheetChart), and readChartSpec is the one reader every surface and importer runs: the spec as
+// stored, and the view resolved from it. Malformed structure or a hard limit resolves as null, never a throw; a
+// presentation field reads its default. An edit is a change applied onto what is stored, so the keys and values
+// this build doesn't know survive it.
 
+import { isEqual } from 'es-toolkit';
 import { nanoid } from 'nanoid';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../constants/colors';
 import { DOCUMENT_FONT } from '../constants/fonts';
@@ -13,11 +16,14 @@ import type {
     CellRangeRef,
     ChartSeriesStyle,
     ChartSpec,
+    ChartSpecChange,
+    ChartSpecOp,
     ChartType,
     InlineChartData,
     InlineChartSeries,
     RangeChartData,
     RangeChartSeries,
+    StoredChartSpec,
 } from '../types/chart';
 import { CHART_BLANKS, CHART_STACKINGS, CHART_TYPES, LEGEND_POSITIONS } from '../types/chart';
 import { bool, color, fontFamily, oneOf, str } from '../vector/kinds/read-fields';
@@ -139,15 +145,109 @@ export function chartSearchText(spec: ChartSpec | null): string {
         .join('\n');
 }
 
-// Takes the stored string, like the fill and points codecs, so the size limit is measured on what peers store.
-export function parseChartSpec(value: string): ChartSpec | null {
-    if (exceedsChartSpecBytes(value)) return null;
+// Takes the stored string, like the fill and points codecs, so the size limit is measured on what peers store. stored
+// is what a writer applies a change onto and a copy carries; past the limit, or when it isn't a JSON object, it is
+// empty.
+export function readChartSpec(value: string): { stored: StoredChartSpec; spec: ChartSpec | null } {
+    if (exceedsChartSpecBytes(value)) return { stored: {}, spec: null };
+    let stored: StoredChartSpec = {};
     // One catch for malformed JSON and every field reader's invalid(), so the readers stay straight-line.
     try {
-        return chartSpec(JSON.parse(value));
+        const parsed: unknown = JSON.parse(value);
+        if (isRecord(parsed)) stored = parsed;
+        return { stored, spec: chartSpec(parsed) };
     } catch {
-        return null;
+        return { stored, spec: null };
     }
+}
+
+export function parseChartSpec(value: string): ChartSpec | null {
+    return readChartSpec(value).spec;
+}
+
+// Edit data rebuilds the data from the keys this build reads, so a key it doesn't (a newer build's array beside a
+// series' values) would fall out of step with them: such a chart's data is shown, not edited.
+export function holdsUnknownChartData(stored: StoredChartSpec, spec: ChartSpec): boolean {
+    const known = (item: unknown, read: object) =>
+        isRecord(item) && Object.keys(item).every((key) => Object.hasOwn(read, key));
+    const data = isRecord(stored['data']) ? stored['data'] : {};
+    const series = Array.isArray(data['series']) ? data['series'] : [];
+    return !known(data, spec.data) || series.some((item, i) => !known(item, spec.data.series[i]));
+}
+
+// Edit data's Save, the one editor that diffs: the leaves the dialog changed from the spec it opened with, so a peer's
+// edit meanwhile stands. Records are walked, arrays compared whole.
+export function chartSpecChange(base: ChartSpec, next: ChartSpec): ChartSpecChange {
+    const leaves = (before: unknown, after: unknown, path: string[]): ChartSpecOp[] => {
+        if (isEqual(before, after)) return [];
+        if (!isRecord(before) || !isRecord(after)) return [{ op: 'set', path, value: after }];
+        const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+        return [...keys].flatMap((key): ChartSpecOp[] =>
+            Object.hasOwn(after, key)
+                ? leaves(before[key], after[key], [...path, key])
+                : [{ op: 'remove', path: [...path, key] }],
+        );
+    };
+    return leaves(base, next, []);
+}
+
+// The stored spec with a change applied, sharing what it didn't touch. Every record it makes or copies has no
+// prototype, and an op whose path names a key a plain object inherits is dropped, so a forged key can't reach
+// Object.prototype.
+export function applyChartSpecChange(stored: StoredChartSpec, change: ChartSpecChange): StoredChartSpec {
+    let next = stored;
+    for (const op of change) {
+        const paths = op.op === 'move' ? [op.from, op.path] : [op.path];
+        if (paths.some((path) => path.length === 0 || path.some((key) => INHERITED_KEYS.has(key)))) continue;
+        if (op.op === 'set') next = setIn(next, op.path, op.value);
+        else if (op.op === 'remove') next = removeIn(next, op.path);
+        else {
+            const moved = getIn(next, op.from);
+            next = removeIn(removeIn(next, op.from), op.path);
+            if (moved !== undefined) next = setIn(next, op.path, moved);
+        }
+    }
+    return next;
+}
+
+type StoredRecord = { [key: string]: unknown };
+
+const own = (target: StoredChartSpec, key: string): unknown => (Object.hasOwn(target, key) ? target[key] : undefined);
+const copyOf = (target: StoredChartSpec): StoredRecord => Object.assign(Object.create(null), target);
+
+function getIn(target: StoredChartSpec, [key, ...rest]: string[]): unknown {
+    const value = own(target, key);
+    if (rest.length === 0) return value;
+    return isRecord(value) ? getIn(value, rest) : undefined;
+}
+
+function setIn(target: StoredChartSpec, [key, ...rest]: string[], value: unknown): StoredChartSpec {
+    const before = own(target, key);
+    const next = copyOf(target);
+    if (rest.length > 0) next[key] = setIn(isRecord(before) ? before : Object.create(null), rest, value);
+    else next[key] = laidOver(before, value);
+    return next;
+}
+
+function removeIn(target: StoredChartSpec, [key, ...rest]: string[]): StoredChartSpec {
+    const before = own(target, key);
+    if (before === undefined) return target;
+    if (rest.length > 0) return isRecord(before) ? setIn(target, [key], removeIn(before, rest)) : target;
+    const next = copyOf(target);
+    delete next[key];
+    return next;
+}
+
+// A list of records with ids (data.series) is set whole, each item laid over the stored item with its id, so the keys
+// a newer build stored on a series survive this one's edit.
+function laidOver(before: unknown, value: unknown): unknown {
+    if (!Array.isArray(before) || !Array.isArray(value)) return value;
+    const idOf = (item: unknown) => (isRecord(item) ? own(item, 'id') : undefined);
+    const stored = new Map(before.flatMap((item) => (typeof idOf(item) === 'string' ? [[idOf(item), item]] : [])));
+    return value.map((item) => {
+        const previous = typeof idOf(item) === 'string' ? stored.get(idOf(item)) : undefined;
+        return previous ? Object.assign(Object.create(null), previous, item) : item;
+    });
 }
 
 const INVALID = new Error('invalid chart spec');

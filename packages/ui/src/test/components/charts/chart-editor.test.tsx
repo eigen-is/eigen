@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { chartColor, sampleChartSpec } from '@workspace/lib/charts';
+import { applyChartSpecChange, chartColor, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import { EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
-import type { ChartSpec, ChartType } from '@workspace/lib/types/chart';
+import type { ChartSpec, ChartSpecChange, ChartType, StoredChartSpec } from '@workspace/lib/types/chart';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -20,8 +20,9 @@ afterEach(async () => {
     cleanups = [];
 });
 
-// Mounts the editor over `spec`, feeding every change back in as the new spec, as a host does; `host` is what
-// a sheet passes for a range chart, or the Docs app's own Edit data.
+// Mounts the editor over `spec`, applying every change onto what the host stores and feeding the spec that reads back
+// in, as a host does; `host` is what a sheet passes for a range chart, or the Docs app's own Edit data. `changes`
+// holds the specs read back.
 async function mount(
     spec: ChartSpec,
     beginGesture?: () => () => void,
@@ -33,11 +34,16 @@ async function mount(
     document.body.append(container);
     const root = createRoot(container);
     let current = spec;
+    let stored: StoredChartSpec = readChartSpec(JSON.stringify(spec)).stored;
     const draw = async () => {
         const editor = createElement(ChartEditor, {
             spec: current,
+            stored,
             ...host,
-            onChange: (next: ChartSpec) => {
+            onChange: (change: ChartSpecChange) => {
+                stored = applyChartSpecChange(stored, change);
+                const next = readChartSpec(JSON.stringify(stored)).spec;
+                if (!next) throw new Error('the change made a spec that does not read');
                 changes.push(next);
                 current = next;
                 void draw();

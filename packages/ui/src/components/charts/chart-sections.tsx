@@ -1,9 +1,9 @@
 // A selected chart's own panel sections: the chart editor's rows over its spec, then the look's paint rows. The
 // host that edits one chart record (a doc's chart node, a sheet's chart) wraps them in its own panel, in the order
 // the canvas panel gives a chart: its geometry before, its arrangement after. Each row hands back what the host
-// writes: the next spec, or the look fields it changed.
+// writes: a change of the spec, or the look fields it changed.
 
-import type { ChartLook, ChartSpec } from '@workspace/lib/types/chart';
+import type { ChartLook, ChartSpec, ChartSpecChange, StoredChartSpec } from '@workspace/lib/types/chart';
 import { parseFill, serializeFill } from '@workspace/lib/vector';
 import { PaintSections } from '@workspace/ui/components/properties-panel';
 import type { ReactNode } from 'react';
@@ -11,7 +11,8 @@ import { ChartEditor } from './chart-editor';
 
 type ChartSectionsProps = {
     spec: ChartSpec;
-    onChange: (spec: ChartSpec) => void;
+    stored: StoredChartSpec;
+    onChange: (change: ChartSpecChange) => void;
     look: ChartLook;
     onLookChange: (patch: Partial<ChartLook>) => void;
     // The chart's data has more points than the sketch draws.
@@ -25,6 +26,7 @@ type ChartSectionsProps = {
 
 export function ChartSections({
     spec,
+    stored,
     onChange,
     look,
     onLookChange,
@@ -38,6 +40,7 @@ export function ChartSections({
         <>
             <ChartEditor
                 spec={spec}
+                stored={stored}
                 onChange={onChange}
                 categories={categories}
                 seriesNames={seriesNames}

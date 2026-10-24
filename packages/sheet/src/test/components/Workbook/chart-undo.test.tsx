@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
+import type { ChartSpecChange } from '@workspace/lib/types/chart';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -96,7 +97,7 @@ test('writes inside a panel gesture undo and redo as one step, and the next writ
     await step((w) => {
         id = w.insertChart(BOX, sampleChartSpec('column')) ?? '';
     });
-    const titled = (title: string) => ({ ...sampleChartSpec('column'), title });
+    const titled = (title: string): ChartSpecChange => [{ op: 'set', path: ['title'], value: title }];
     let release = () => {};
     await step((w) => {
         release = w.beginGesture();
@@ -126,7 +127,7 @@ test('a field typed key by key in a gesture keeps one forward and one inverse wr
         release = w.beginGesture();
     });
     for (let i = 1; i <= 40; i += 1) {
-        await step((w) => w.setChartSpec(id, { ...sampleChartSpec('column'), title: typed.slice(0, i) }));
+        await step((w) => w.setChartSpec(id, [{ op: 'set', path: ['title'], value: typed.slice(0, i) }]));
     }
     release();
     const title = () => JSON.parse(charts()?.[id]?.spec ?? '{}').title;

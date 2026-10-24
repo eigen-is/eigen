@@ -10,7 +10,7 @@ const Y = await import('yjs');
 const { act, createElement, useState } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
-const { parseChartSpec } = await import('@workspace/lib/charts');
+const { parseChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
 const { parseFill } = await import('@workspace/lib/vector');
 const { getFontFamily } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
@@ -55,8 +55,11 @@ async function mount() {
         await rendered.unmount();
         editor.destroy();
     };
+    const stored = () => JSON.parse(editor.state.doc.nodeAt(1)?.attrs.spec ?? '{}');
     const spec = () => parseChartSpec(editor.state.doc.nodeAt(1)?.attrs.spec ?? '');
-    return { editor, undoManager, spec };
+    // Another tab's write of the node's spec, as the panel and the dialog see it arrive.
+    const store = (raw: object) => act(async () => void editor.commands.updateChart({ spec: JSON.stringify(raw) }));
+    return { editor, undoManager, spec, stored, store };
 }
 
 const dialog = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
@@ -230,6 +233,30 @@ test('Edit data saves the grid as one undo step', async () => {
     undoManager.undo();
     const undone = spec();
     expect(undone?.data.source === 'inline' && undone.data.series[0].values[0]).toBe(13.1);
+});
+
+test("a title typed into the panel keeps what this build doesn't know: a key on the spec, on an axis, a legend", async () => {
+    const { stored, store } = await mount();
+    const spec = sampleChartSpec('column');
+    const raw = { ...stored(), legend: 'inside', future: 1, valueAxis: { ...spec.valueAxis, logBase: 10 } };
+    await store(raw);
+    await type(document.querySelector<HTMLInputElement>('input[placeholder="Chart title"]'), 'Goals');
+    expect(stored()).toEqual({ ...raw, title: 'Goals' });
+});
+
+test("Edit data's Save applies onto the node as it is then, so a peer's colours and title while it was open stay", async () => {
+    const { spec, stored, store } = await mount();
+    await click(button(document.body, 'Edit data'));
+    const before = stored();
+    const series = before.data.series.map((s: object, i: number) => (i === 1 ? { ...s, color: '#00ff00' } : s));
+    await store({ ...before, title: 'Peer title', sliceColors: [null, '#000002'], data: { ...before.data, series } });
+    await typeInB2('7');
+    await click(button(dialog(), 'Save'));
+    const saved = spec();
+    expect(saved?.title).toBe('Peer title');
+    expect(saved?.sliceColors).toEqual([null, '#000002']);
+    expect(saved?.data.series.map((s) => s.color)).toEqual([null, '#00ff00', null]);
+    expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);
 });
 
 // A section's row control, beside its label span: the panel has several Style rows.

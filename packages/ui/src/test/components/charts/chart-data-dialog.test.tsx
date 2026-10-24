@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
+    applyChartSpecChange,
     chartColor,
     DEFAULT_CHART_SERIES_STYLE,
     defaultChartPresentation,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     MAX_CHART_LABEL_LENGTH,
+    parseChartSpec,
+    readChartSpec,
 } from '@workspace/lib/charts';
-import type { ChartSpec, InlineChartData } from '@workspace/lib/types/chart';
+import type { ChartSpec, ChartSpecChange, InlineChartData, StoredChartSpec } from '@workspace/lib/types/chart';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -65,26 +68,37 @@ afterEach(async () => {
     cleanups = [];
 });
 
-async function open(spec: InlineSpec) {
+// The dialog over a host that stores `raw`, the spec itself unless a test stores what the type forbids. Save applies
+// its change onto what the host stores then, as every host does, and keeps the spec that reads back.
+async function open(spec: InlineSpec, raw: object = spec) {
     const saved: ChartSpec[] = [];
+    const changes: ChartSpecChange[] = [];
     const openChanges: boolean[] = [];
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
+    let stored: StoredChartSpec = readChartSpec(JSON.stringify(raw)).stored;
     // A rerender is the host's spec changing under the open dialog, a peer's edit.
-    const rerender = async (next: InlineSpec) => {
+    const rerender = async (next: InlineSpec, nextRaw: object = next) => {
+        stored = readChartSpec(JSON.stringify(nextRaw)).stored;
         await act(async () => {
             root.render(
                 createElement(ChartDataDialog, {
                     spec: next,
+                    stored,
                     open: true,
                     onOpenChange: (change: boolean) => openChanges.push(change),
-                    onSave: (change: ChartSpec) => saved.push(change),
+                    onSave: (change: ChartSpecChange) => {
+                        changes.push(change);
+                        stored = applyChartSpecChange(stored, change);
+                        const read = parseChartSpec(JSON.stringify(stored));
+                        if (read) saved.push(read);
+                    },
                 }),
             );
         });
     };
-    await rerender(spec);
+    await rerender(spec, raw);
     cleanups.push(async () => {
         await act(async () => root.unmount());
         container.remove();
@@ -199,6 +213,8 @@ async function open(spec: InlineSpec) {
     };
     return {
         saved,
+        changes,
+        stored: () => JSON.parse(JSON.stringify(stored)),
         openChanges,
         rerender,
         dialog,
@@ -314,6 +330,76 @@ describe('ChartDataDialog: the grid', () => {
         expect([...dialog.dialog().querySelectorAll('button')].map((el) => el.textContent?.trim())).not.toContain(
             'Save',
         );
+    });
+});
+
+describe('ChartDataDialog: Save is a change', () => {
+    test('Save writes only what the grid changed, so what the chart stores beside it stays', async () => {
+        const spec = scores();
+        const dialog = await open(spec, { ...spec, future: 1, legend: 'inside' });
+        await dialog.select(1, 1);
+        await dialog.type('7');
+        await dialog.key('Enter');
+        await dialog.click(dialog.button('Save'));
+        expect(dialog.changes).toEqual([
+            [
+                {
+                    op: 'set',
+                    path: ['data', 'series'],
+                    value: [{ ...spec.data.series[0], values: [7, 65, 38, 80] }, spec.data.series[1]],
+                },
+            ],
+        ]);
+        expect(dialog.stored()).toMatchObject({ future: 1, legend: 'inside' });
+    });
+
+    test('deleting series 1 keeps series 2 under its id, with its colour', async () => {
+        const [first, second] = scores().data.series;
+        const dialog = await open({
+            ...scores(),
+            data: { ...scores().data, series: [first, { ...second, color: '#00ff00' }] },
+        });
+        await dialog.mouseDown(dialog.columnHeader('B'));
+        await dialog.key('Delete');
+        expect((await dialog.save()).data.series).toEqual([{ ...second, color: '#00ff00' }]);
+    });
+
+    test('a stored key on the data or on a series this build does not read opens the grid read-only', async () => {
+        const spec = scores();
+        const sizes = spec.data.series.map((s, i) => (i === 1 ? { ...s, sizes: [1, 2, 3, 4] } : s));
+        for (const raw of [
+            { ...spec, data: { ...spec.data, series: sizes } },
+            { ...spec, data: { ...spec.data, future: 1 } },
+        ]) {
+            const dialog = await open(spec, raw);
+            expect(dialog.dialog().querySelectorAll('input')).toHaveLength(0);
+            expect(dialog.dialog().textContent).toContain('can’t edit, so it opens read-only');
+            expect(dialog.dialog().textContent).toContain('Period 2');
+        }
+        const plain = await open(spec, { ...spec, future: 1, valueAxis: { ...spec.valueAxis, logBase: 10 } });
+        expect(plain.dialog().querySelectorAll('input')).toHaveLength(1);
+    });
+
+    test("a peer's series colour, slice colour and title while the dialog is open survive Save", async () => {
+        const dialog = await open(scores());
+        const [first, second] = scores().data.series;
+        const peer: InlineSpec = {
+            ...scores(),
+            title: 'Peer title',
+            sliceColors: [null, '#000002'],
+            data: { ...scores().data, series: [first, { ...second, color: '#00ff00' }] },
+        };
+        await dialog.rerender(peer);
+        await dialog.select(1, 1);
+        await dialog.type('7');
+        await dialog.key('Enter');
+        const spec = await dialog.save();
+        expect(spec.title).toBe('Peer title');
+        expect(spec.sliceColors).toEqual([null, '#000002']);
+        expect(spec.data.series.map((s) => [s.color, s.values[0]])).toEqual([
+            [null, 7],
+            ['#00ff00', 58],
+        ]);
     });
 });
 

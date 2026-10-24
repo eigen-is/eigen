@@ -10,17 +10,20 @@ export {
 } from './layout';
 export { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from './look';
 export {
+    applyChartSpecChange,
     CHART_DEFAULT_SIZE,
     CHART_MAX_SIDE,
     chartColor,
     chartLabel,
     chartSearchText,
+    chartSpecChange,
     DEFAULT_CHART_FONT,
     DEFAULT_CHART_SERIES_STYLE,
     defaultChartPresentation,
     exceedsChartSpecBytes,
     exceedsInlineGridLimits,
     fitsInlineGrid,
+    holdsUnknownChartData,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     isChartSeriesId,
@@ -30,6 +33,7 @@ export {
     MAX_CHART_SPEC_BYTES,
     newChartSeriesId,
     parseChartSpec,
+    readChartSpec,
     sampleChartSpec,
 } from './spec';
 export { formatTickValue } from './ticks';

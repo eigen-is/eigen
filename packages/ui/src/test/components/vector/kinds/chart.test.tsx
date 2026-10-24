@@ -162,6 +162,15 @@ describe('ChartPanelSection', () => {
         expect(typeof written === 'string' && parseChartSpec(written)?.title).toBe('Goals');
     });
 
+    test("a title edit keeps what this build doesn't know: a key on the spec, on an axis and an unknown legend", async () => {
+        const spec = sampleChartSpec('column');
+        const raw = { ...spec, legend: 'inside', future: 1, valueAxis: { ...spec.valueAxis, logBase: 10 } };
+        const { container, writes } = await section([{ ...chart('c1'), chart: JSON.stringify(raw) }]);
+        await type(container.querySelector('input[placeholder="Chart title"]'), 'Goals');
+        const written = writes[0].chart;
+        expect(typeof written === 'string' && JSON.parse(written)).toEqual({ ...raw, title: 'Goals' });
+    });
+
     test('Edit data saves the grid as one write; Cancel writes nothing', async () => {
         const { container, writes } = await section([chart('c1')]);
         await click(buttonIn(container, 'Edit data'));
@@ -209,6 +218,40 @@ describe('ChartEditDialog', () => {
         await click(buttonIn(dialog(), 'Cancel'));
         expect(writes).toEqual([]);
         expect(closed()).toBe(1);
+    });
+
+    test("Save applies onto the element as it is then, so a peer's colours and title while it was open stay", async () => {
+        const writes: Record<string, unknown>[] = [];
+        const container = document.createElement('div');
+        document.body.append(container);
+        const root = createRoot(container);
+        cleanups.push(async () => {
+            await act(async () => root.unmount());
+            container.remove();
+        });
+        const show = (element: VectorChartElement) =>
+            act(async () =>
+                root.render(
+                    createElement(ChartEditDialog, {
+                        element,
+                        onChange: (fields: Record<string, unknown>) => writes.push(fields),
+                        onClose: () => {},
+                    }),
+                ),
+            );
+        await show(chart('c1'));
+        const spec = sampleChartSpec('column');
+        const series = spec.data.series.map((s, i) => (i === 1 ? { ...s, color: '#00ff00' } : s));
+        const peer = { ...spec, title: 'Peer title', sliceColors: [null, '#000002'], data: { ...spec.data, series } };
+        await show({ ...chart('c1'), chart: JSON.stringify(peer) });
+        await typeInB2('7');
+        await click(buttonIn(dialog(), 'Save'));
+        const written = writes[0]?.chart;
+        const saved = typeof written === 'string' ? parseChartSpec(written) : null;
+        expect(saved?.title).toBe('Peer title');
+        expect(saved?.sliceColors).toEqual([null, '#000002']);
+        expect(saved?.data.series.map((s) => s.color)).toEqual([null, '#00ff00', null]);
+        expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);
     });
 });
 

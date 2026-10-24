@@ -1,10 +1,17 @@
 // The chart editor every host's panel shows: Google's Customise rows over one ChartSpec. It knows nothing of
-// where the chart lives (a canvas element, a docs node, a sheet): it reads a spec and hands back the next
-// one, and the host writes it. A typed field writes as the user goes inside the host's gesture
-// (PropertyGestureContext), so a typed title is one undo step.
+// where the chart lives (a canvas element, a docs node, a sheet): it reads a spec and hands back a change of
+// the fields a row edits, which the host applies onto the spec it stores. A typed field writes as the user goes
+// inside the host's gesture (PropertyGestureContext), so a typed title is one undo step.
 
 import { chartColor, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';
-import type { ChartSpec, ChartStacking, LegendPosition } from '@workspace/lib/types/chart';
+import type {
+    ChartSpec,
+    ChartSpecChange,
+    ChartSpecOp,
+    ChartStacking,
+    LegendPosition,
+    StoredChartSpec,
+} from '@workspace/lib/types/chart';
 import { LEGEND_POSITIONS } from '@workspace/lib/types/chart';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -39,9 +46,13 @@ const STACKING_OPTIONS: { value: ChartStacking; label: string }[] = [
     { value: 'percent', label: '100%' },
 ];
 
+const set = (path: string[], value: unknown): ChartSpecOp => ({ op: 'set', path, value });
+
 type ChartEditorProps = {
     spec: ChartSpec;
-    onChange: (spec: ChartSpec) => void;
+    // As stored, which Edit data reads for keys this build doesn't know.
+    stored: StoredChartSpec;
+    onChange: (change: ChartSpecChange) => void;
     // A sheet's resolved categories, which name a range chart's pie slices, and its series names, one per
     // series in the spec.
     categories?: string[];
@@ -52,7 +63,15 @@ type ChartEditorProps = {
     children?: ReactNode;
 };
 
-export function ChartEditor({ spec, onChange, categories, seriesNames, onEditData, children }: ChartEditorProps) {
+export function ChartEditor({
+    spec,
+    stored,
+    onChange,
+    categories,
+    seriesNames,
+    onEditData,
+    children,
+}: ChartEditorProps) {
     const [dataOpen, setDataOpen] = useState(false);
     const { type, data, valueAxis, categoryAxis } = spec;
     const pie = type === 'pie';
@@ -76,23 +95,25 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, onEditDat
         const next = { ...valueAxis, ...patch };
         // The reader drops a min at or past the max, so it would not stick.
         if (next.min !== null && next.max !== null && next.min >= next.max) return;
-        onChange({ ...spec, valueAxis: next });
+        onChange(Object.entries(patch).map(([key, value]) => set(['valueAxis', key], value)));
     };
 
     const setSliceColor = (index: number, color: string | null) =>
-        onChange({ ...spec, sliceColors: sliceColors.map((c, i) => (i === index ? color : c)) });
+        onChange([
+            set(
+                ['sliceColors'],
+                sliceColors.map((c, i) => (i === index ? color : c)),
+            ),
+        ]);
 
-    const setSeriesColor = (index: number, color: string | null) => {
-        const recolor = <S extends { color: string | null }>(series: S[]) =>
-            series.map((s, i) => (i === index ? { ...s, color } : s));
-        onChange({
-            ...spec,
-            data:
-                data.source === 'inline'
-                    ? { ...data, series: recolor(data.series) }
-                    : { ...data, series: recolor(data.series) },
-        });
-    };
+    // The list lands on the stored series by id, so what a newer build keeps on a series stays.
+    const setSeriesColor = (index: number, color: string | null) =>
+        onChange([
+            set(
+                ['data', 'series'],
+                data.series.map((s, i) => (i === index ? { ...s, color } : s)),
+            ),
+        ]);
 
     // An axis's rows take their section's name, since a bar chart swaps which section holds which axis.
     type AxisName = 'Horizontal axis' | 'Vertical axis';
@@ -105,7 +126,7 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, onEditDat
         />
     );
     const setCategoryAxis = (patch: Partial<ChartSpec['categoryAxis']>) =>
-        onChange({ ...spec, categoryAxis: { ...categoryAxis, ...patch } });
+        onChange(Object.entries(patch).map(([key, value]) => set(['categoryAxis', key], value)));
 
     const categoryRows = (axis: AxisName) => (
         <>
@@ -175,8 +196,8 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, onEditDat
                             // column chart right to left.
                             onChange(
                                 (next === 'bar') === (type === 'bar')
-                                    ? { ...spec, type: next }
-                                    : { ...spec, type: next, categoryAxis: { ...categoryAxis, reversed: false } },
+                                    ? [set(['type'], next)]
+                                    : [set(['type'], next), set(['categoryAxis', 'reversed'], false)],
                             )
                         }
                     />
@@ -190,8 +211,12 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, onEditDat
                                 // Shares and raw values don't carry over: a raw max of 100 would be 10,000%.
                                 onChange(
                                     (stacking === 'percent') === (spec.stacking === 'percent')
-                                        ? { ...spec, stacking }
-                                        : { ...spec, stacking, valueAxis: { ...valueAxis, min: null, max: null } },
+                                        ? [set(['stacking'], stacking)]
+                                        : [
+                                              set(['stacking'], stacking),
+                                              set(['valueAxis', 'min'], null),
+                                              set(['valueAxis', 'max'], null),
+                                          ],
                                 )
                             }
                         />
@@ -202,17 +227,20 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, onEditDat
                         value={spec.title}
                         placeholder="Chart title"
                         maxLength={MAX_CHART_LABEL_LENGTH}
-                        onChange={(title) => onChange({ ...spec, title })}
+                        onChange={(title) => onChange([set(['title'], title)])}
                     />
                 </PropertyRow>
                 <PropertyRow label="Legend">
                     <MergedSelect
                         value={spec.legend}
                         options={LEGEND_OPTIONS}
-                        onChange={(legend) => onChange({ ...spec, legend })}
+                        onChange={(legend) => onChange([set(['legend'], legend)])}
                     />
                 </PropertyRow>
-                <FontRow value={spec.fontFamily} onChange={(fontFamily) => onChange({ ...spec, fontFamily })} />
+                <FontRow
+                    value={spec.fontFamily}
+                    onChange={(fontFamily) => onChange([set(['fontFamily'], fontFamily)])}
+                />
                 {data.source === 'inline' && (
                     <>
                         <Button
@@ -226,6 +254,7 @@ export function ChartEditor({ spec, onChange, categories, seriesNames, onEditDat
                         {!onEditData && (
                             <ChartDataDialog
                                 spec={{ ...spec, data }}
+                                stored={stored}
                                 open={dataOpen}
                                 onOpenChange={setDataOpen}
                                 onSave={onChange}

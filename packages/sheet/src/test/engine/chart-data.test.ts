@@ -12,7 +12,7 @@ import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
 import { serializeFill } from '@workspace/lib/vector';
 import { createArrayResolver } from '../../engine/cell-resolver';
-import { inlineChartSpec, renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
+import { inlineChartSpec, mapChartRefs, renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
 import type { Cell } from '../../engine/types';
 
 const STYLE = { color: '#2a78d6', markers: false, smooth: false };
@@ -332,5 +332,52 @@ describe('inlineChartSpec', () => {
             data: data(ref([0, rows - 1], [0, 0]), series(ref([0, rows - 1], [1, 1]))),
         });
         expect(inlineChartSpec(chart, long)).toBeNull();
+    });
+
+    // A newer build's chart: a ref under a series key this build doesn't know, and keys beside it.
+    const newer = () => {
+        const spec = {
+            ...sampleChartSpec('line'),
+            future: 1,
+            data: data(ref([1, 3], [0, 0]), series(ref([1, 3], [1, 1]))),
+        };
+        return sheetChart({
+            ...spec,
+            data: {
+                ...spec.data,
+                future: 2,
+                series: spec.data.series.map((s) => ({ ...s, x: ref([1, 3], [2, 2]), dash: 'dot' })),
+            },
+        });
+    };
+
+    test("a ref this build doesn't know is left out of the copy, the other keys kept", () => {
+        const copied = JSON.parse(inlineChartSpec(newer(), resolver) ?? '{}');
+        expect(copied.future).toBe(1);
+        expect(copied.data).toMatchObject({ source: 'inline', future: 2, categories: ['Ajax', 'PSV', ''] });
+        expect(copied.data.series).toEqual([
+            { ...STYLE, id: 's-0', name: 'Points', values: [42, null, null], dash: 'dot' },
+        ]);
+    });
+
+    test("a row op moves a ref this build doesn't know, the other keys kept", () => {
+        const down = (ref: CellRangeRef): CellRangeRef => ({ ...ref, row: [ref.row[0] + 2, ref.row[1] + 2] });
+        const moved = JSON.parse(mapChartRefs(newer(), down).spec);
+        expect(moved.future).toBe(1);
+        expect(moved.data.future).toBe(2);
+        expect(moved.data.series[0]).toMatchObject({
+            x: ref([3, 5], [2, 2]),
+            values: ref([3, 5], [1, 1]),
+            dash: 'dot',
+        });
+    });
+
+    test("a chart this build can't draw still moves its refs", () => {
+        const unknown = { ...newer(), spec: JSON.stringify({ ...JSON.parse(newer().spec), type: 'scatter' }) };
+        const down = (ref: CellRangeRef): CellRangeRef => ({ ...ref, row: [ref.row[0] + 2, ref.row[1] + 2] });
+        const moved = JSON.parse(mapChartRefs(unknown, down).spec);
+        expect(moved.type).toBe('scatter');
+        expect(moved.data.categories).toEqual(ref([3, 5], [0, 0]));
+        expect(moved.data.series[0].x).toEqual(ref([3, 5], [2, 2]));
     });
 });

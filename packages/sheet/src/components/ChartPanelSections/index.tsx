@@ -1,6 +1,9 @@
-import { parseChartSpec, readChartLook } from '@workspace/lib/charts';
+// The selected sheet chart's panel sections, with Google's Setup inside the Chart section: what the app's properties
+// panel shows for a chart. Every spec edit is a change the workbook applies onto the chart as it then stores it.
+
+import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
-import type { ChartLook, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
+import type { ChartLook, ChartSpecChange, RangeChartData } from '@workspace/lib/types/chart';
 import { ChartSections } from '@workspace/ui/components/charts';
 import { Input } from '@workspace/ui/components/input';
 import { PropertyCheckbox, PropertyRow } from '@workspace/ui/components/properties-panel';
@@ -10,6 +13,7 @@ import { rowIndexToLabel } from '../../engine/a1-notation';
 import type { ChartRange } from '../../engine/chart-range';
 import {
     CHART_RANGE_REFUSALS,
+    chartRangeChange,
     chartRangeData,
     chartRangeOf,
     chartRangeText,
@@ -28,14 +32,15 @@ type ChartPanelSectionsProps = {
 // is one write of the chart's spec, a paint row one write of its look fields. The host's PropertyGestureContext
 // makes a typed field one undo step.
 export function ChartPanelSections({ panel, workbook }: ChartPanelSectionsProps) {
-    const spec = parseChartSpec(panel.chart.spec);
+    const { stored, spec } = readChartSpec(panel.chart.spec);
     if (!spec) return null;
     const { data } = spec;
-    const write = (next: ChartSpec) => workbook.current?.setChartSpec(panel.chart.id, next);
+    const write = (change: ChartSpecChange) => workbook.current?.setChartSpec(panel.chart.id, change);
     const writeLook = (patch: Partial<ChartLook>) => workbook.current?.setChartLook(panel.chart.id, patch);
     return (
         <ChartSections
             spec={spec}
+            stored={stored}
             onChange={write}
             look={readChartLook(panel.chart)}
             onLookChange={writeLook}
@@ -44,19 +49,18 @@ export function ChartPanelSections({ panel, workbook }: ChartPanelSectionsProps)
             seriesNames={panel.seriesNames}
         >
             {data.source === 'range' && (
-                <DataRangeRows panel={panel} spec={spec} data={data} workbook={workbook} onChange={write} />
+                <DataRangeRows panel={panel} data={data} workbook={workbook} onChange={write} />
             )}
         </ChartSections>
     );
 }
 
 type DataRangeRowsProps = ChartPanelSectionsProps & {
-    spec: ChartSpec;
     data: RangeChartData;
-    onChange: (spec: ChartSpec) => void;
+    onChange: (change: ChartSpecChange) => void;
 };
 
-function DataRangeRows({ panel, spec, data, workbook, onChange }: DataRangeRowsProps) {
+function DataRangeRows({ panel, data, workbook, onChange }: DataRangeRowsProps) {
     const { chart, sheets, sheetId } = panel;
     const range = chartRangeOf(data);
     const text = range ? chartRangeText(range.ref, sheets, sheetId) : '';
@@ -72,11 +76,11 @@ function DataRangeRows({ panel, spec, data, workbook, onChange }: DataRangeRowsP
         setError(refusal ? CHART_RANGE_REFUSALS[refusal] : null);
     };
 
-    // The three toggles re-derive the refs from the same block, each series keeping its style.
+    // The three toggles re-derive the refs from the same block, each series keeping its id and style.
     const setup = (patch: Partial<ChartRange>) => {
         if (!range) return;
         const next = chartRangeData({ ...range, ...patch }, data);
-        if (next) onChange({ ...spec, data: next });
+        if (next) onChange(chartRangeChange(next));
     };
 
     const firstRow = range ? rowIndexToLabel(range.ref.row[0]) : '1';

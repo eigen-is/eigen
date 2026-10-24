@@ -1,11 +1,17 @@
+// A sheet chart's range data: reading its cells, drawing it, inlining it for a copy, and moving its refs through a row
+// op or a copied sheet. The writers apply a change onto the spec as stored, so a key this build doesn't know survives.
+
 import {
+    applyChartSpecChange,
     chartColor,
     chartLabel,
     exceedsChartSpecBytes,
     MAX_CHART_POINTS,
     parseChartSpec,
     readChartLook,
+    readChartSpec,
 } from '@workspace/lib/charts';
+import { isRecord } from '@workspace/lib/guards';
 import type { SheetChart } from '@workspace/lib/sheets';
 import { sheetFloatingBox } from '@workspace/lib/sheets';
 import type {
@@ -13,6 +19,7 @@ import type {
     ChartData,
     ChartDataError,
     ChartSpec,
+    ChartSpecChange,
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
@@ -99,25 +106,29 @@ function valueFormat(spec: ChartSpec, resolver: CellResolver): string | undefine
 
 // The chart as a copy carries it to a host with no cells: its ranges read into inline data, and the source
 // cells' tick format written on the axis. An automatic color stays automatic unless a deleted series before
-// it would shift its index, and an inline chart is its stored string. Null for a chart that draws #REF!, too
-// much data or nothing, or whose numbers pass the spec's size limit.
+// it would shift its index, and an inline chart is its stored string. A ref this build doesn't know is left out,
+// as it would name cells the host doesn't have. Null for a chart that draws #REF!, too much data or nothing, or
+// whose numbers pass the spec's size limit.
 export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): string | null {
-    const spec = parseChartSpec(chart.spec);
+    const { stored, spec } = readChartSpec(chart.spec);
     if (spec?.data.source !== 'range') return spec ? chart.spec : null;
     const resolved = resolveRangeChartData(spec.data, resolver);
     if (typeof resolved === 'string') return null;
     const kept = spec.data.series.flatMap(({ values, color }, i) => (values ? [{ color, i }] : []));
-    const inline = JSON.stringify({
-        ...spec,
-        valueAxis: { ...spec.valueAxis, format: valueFormat(spec, resolver) ?? null },
-        data: {
-            source: 'inline',
-            categories: resolved.categories,
-            series: resolved.series.map((s, j) =>
+    const change: ChartSpecChange = [
+        { op: 'set', path: ['data'], value: walkRefs(stored['data'], () => undefined) },
+        { op: 'set', path: ['data', 'source'], value: 'inline' },
+        { op: 'set', path: ['data', 'categories'], value: resolved.categories },
+        {
+            op: 'set',
+            path: ['data', 'series'],
+            value: resolved.series.map((s, j) =>
                 kept[j].color === null && kept[j].i === j ? { ...s, color: null } : s,
             ),
         },
-    });
+        { op: 'set', path: ['valueAxis', 'format'], value: valueFormat(spec, resolver) ?? null },
+    ];
+    const inline = JSON.stringify(applyChartSpecChange(stored, change));
     return exceedsChartSpecBytes(inline) ? null : inline;
 }
 
@@ -130,34 +141,54 @@ export function cellLabel(cell: Cell | null): string {
     return chartLabel(String(cellDisplay(cell) ?? ''));
 }
 
-// Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or
-// its spec is not a readable range chart. A null empties a values or categories ref, and a name ref
-// leaves the series unnamed. `slices` rewrites the slice colors, given the ref the slices run along
-// before the map: the categories, or the first drawn series' values for a chart without them.
+// Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or its
+// stored data is not range data. Every ref moves, under any key, so a ref this build doesn't know moves too,
+// even in a chart it can't draw. A null empties a ref, and a name ref leaves the series unnamed. `slices`
+// rewrites the slice colors of a chart this build reads, given the ref the slices run along before the map:
+// the categories, or the first drawn series' values for a chart without them.
 export function mapChartRefs(
     chart: SheetChart,
     map: (ref: CellRangeRef) => CellRangeRef | null,
     slices?: (colors: ChartSpec['sliceColors'], ref: CellRangeRef) => ChartSpec['sliceColors'],
 ): SheetChart {
-    const spec = parseChartSpec(chart.spec);
-    if (spec?.data.source !== 'range') return chart;
+    const { stored, spec } = readChartSpec(chart.spec);
+    if (!isRecord(stored['data']) || stored['data']['source'] !== 'range') return chart;
     let moved = false;
-    const move = (ref: CellRangeRef) => {
+    const data = walkRefs(stored['data'], (ref, key) => {
         const next = map(ref);
         if (next !== ref) moved = true;
-        return next;
-    };
-    const { categories, series } = spec.data;
-    const data = {
-        ...spec.data,
-        categories: categories && move(categories),
-        series: series.map((s) => ({
-            ...s,
-            name: typeof s.name === 'string' ? s.name : (move(s.name) ?? ''),
-            values: s.values && move(s.values),
-        })),
-    };
-    const along = categories ?? series.find((s) => s.values)?.values;
-    const sliceColors = slices && along ? slices(spec.sliceColors, along) : spec.sliceColors;
-    return moved ? { ...chart, spec: JSON.stringify({ ...spec, sliceColors, data }) } : chart;
+        return next ?? (key === 'name' ? '' : null);
+    });
+    if (!moved) return chart;
+    const change: ChartSpecChange = [{ op: 'set', path: ['data'], value: data }];
+    const range = spec?.data.source === 'range' ? spec.data : null;
+    const along = range && (range.categories ?? range.series.find((s) => s.values)?.values);
+    if (spec && slices && along)
+        change.push({ op: 'set', path: ['sliceColors'], value: slices(spec.sliceColors, along) });
+    return { ...chart, spec: JSON.stringify(applyChartSpecChange(stored, change)) };
+}
+
+// A record shaped as a CellRangeRef, which never grows a field, wherever it sits in the data.
+function isRef(value: unknown): value is CellRangeRef {
+    const bounds = (v: unknown) => Array.isArray(v) && v.length === 2 && v.every(Number.isInteger);
+    return (
+        isRecord(value) &&
+        Object.keys(value).length === 3 &&
+        typeof value['sheetId'] === 'string' &&
+        bounds(value['row']) &&
+        bounds(value['column'])
+    );
+}
+
+// Stored data with every ref passed through `map`, which is told the key it sits under; undefined leaves it out.
+function walkRefs(value: unknown, map: (ref: CellRangeRef, key?: string) => unknown, key?: string): unknown {
+    if (isRef(value)) return map(value, key);
+    if (Array.isArray(value)) return value.map((item) => walkRefs(item, map)).filter((item) => item !== undefined);
+    if (!isRecord(value)) return value;
+    return Object.fromEntries(
+        Object.entries(value).flatMap(([k, v]) => {
+            const next = walkRefs(v, map, k);
+            return next === undefined ? [] : [[k, next]];
+        }),
+    );
 }

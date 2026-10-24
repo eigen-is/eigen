@@ -6,7 +6,13 @@ import {
     newChartSeriesId,
 } from '@workspace/lib/charts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import type { CellRangeRef, ChartSpec, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
+import type {
+    CellRangeRef,
+    ChartSpec,
+    ChartSpecChange,
+    RangeChartData,
+    RangeChartSeries,
+} from '@workspace/lib/types/chart';
 import { parseA1Range, rangeToA1, sheetRefName } from './a1-notation';
 import { cellLabel, resolveRangeChartData } from './chart-data';
 import type { Cell, CellResolver } from './types';
@@ -85,6 +91,15 @@ export function chartRangeData(
           ? { sheetId, row: [top, row[1]], column: [column[0], column[0]] }
           : null;
     return { source: 'range', categories, series };
+}
+
+// What Setup and a typed range write: the refs alone, each series landing on the stored one with its id, so the rest of
+// the data and what a newer build keeps on a series stay.
+export function chartRangeChange({ categories, series }: RangeChartData): ChartSpecChange {
+    return [
+        { op: 'set', path: ['data', 'categories'], value: categories },
+        { op: 'set', path: ['data', 'series'], value: series },
+    ];
 }
 
 // The fewest values a block charts, its first row and column both names. Past what a chart draws, the block

@@ -171,7 +171,7 @@ async function mount(chart: SheetChart) {
             item.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         });
     };
-    return { container, spec, field, type, toggle, undo, stored, drawn, choose };
+    return { container, workbook, spec, field, type, toggle, undo, stored, drawn, choose };
 }
 
 test('a selected chart shows the shared sections, its data range rows inside the Chart section', async () => {
@@ -251,6 +251,19 @@ test('Switch rows/columns re-derives the refs from the block, one undo step', as
     expect(spec()).toEqual(before);
 });
 
+test("a Setup toggle keeps what this build doesn't know: a key on the spec, the data and a series, and a legend", async () => {
+    const chart = rangeChart();
+    const raw = JSON.parse(chart.spec);
+    const series = raw.data.series.map((s: object) => ({ ...s, dash: 'dot' }));
+    const newer = { ...raw, future: 1, legend: 'inside', data: { ...raw.data, future: 2, series } };
+    const { stored, toggle } = await mount({ ...chart, spec: JSON.stringify(newer) });
+    await act(async () => toggle('Switch rows/columns')?.click());
+    const written = JSON.parse(stored()?.spec ?? '{}');
+    expect(written.data.categories).toEqual(ref([0, 0], [1, 1]));
+    expect([written.future, written.legend, written.data.future]).toEqual([1, 'inside', 2]);
+    expect(written.data.series[0]).toMatchObject({ id: 's-1', dash: 'dot', color: '#000000' });
+});
+
 test('a title typed letter by letter is one undo step', async () => {
     const { spec, field, undo } = await mount(rangeChart());
     const title = field('input[placeholder="Chart title"]');
@@ -276,6 +289,38 @@ test('an inline chart edits its data in the grid dialog instead of a data range'
     expect([...container.querySelectorAll('button')].some((button) => button.textContent?.includes('Edit data'))).toBe(
         true,
     );
+});
+
+test("Edit data's Save keeps a peer's colours and title written while it was open", async () => {
+    const { container, workbook, spec } = await mount(inlineChart());
+    const click = (target: Element | undefined) =>
+        act(async () => target?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const buttonIn = (scope: ParentNode | undefined, label: string) =>
+        [...(scope?.querySelectorAll('button') ?? [])].find((el) => el.textContent?.trim() === label);
+    await click(buttonIn(container, 'Edit data'));
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].at(-1);
+    const series = sampleChartSpec('column').data.series.map((s, i) => (i === 1 ? { ...s, color: '#00ff00' } : s));
+    await act(async () =>
+        workbook.current?.setChartSpec('c1', [
+            { op: 'set', path: ['title'], value: 'Peer title' },
+            { op: 'set', path: ['sliceColors'], value: [null, '#000002'] },
+            { op: 'set', path: ['data', 'series'], value: series },
+        ]),
+    );
+    const b2 = dialog?.querySelector('[role="row"][aria-rowindex="3"] > [aria-colindex="3"]');
+    await act(async () => b2?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })));
+    const input = dialog?.querySelector<HTMLInputElement>('input[data-cell-editor]');
+    await act(async () => {
+        if (!input) throw new Error('no cell editor');
+        setValue?.call(input, '7');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click(buttonIn(dialog, 'Save'));
+    const saved = spec();
+    expect(saved?.title).toBe('Peer title');
+    expect(saved?.sliceColors).toEqual([null, '#000002']);
+    expect(saved?.data.series.map((s) => s.color)).toEqual([null, '#00ff00', null]);
+    expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);
 });
 
 test("the paint rows write the chart's own look fields, each one undo step, and the chart draws them", async () => {

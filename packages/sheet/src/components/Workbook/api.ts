@@ -1,4 +1,4 @@
-import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';
 import type { Patch } from 'immer';
@@ -212,7 +212,8 @@ export function generateAPIs(
             return id;
         },
 
-        setChartSpec: (id: string, spec: ChartSpec) => setContext((draftCtx) => setChartSpec(draftCtx, id, spec)),
+        setChartSpec: (id: string, change: ChartSpecChange) =>
+            setContext((draftCtx) => setChartSpec(draftCtx, id, change)),
 
         setChartLook: (id: string, look: Partial<ChartLook>) =>
             setContext((draftCtx) => setChartLook(draftCtx, id, look)),

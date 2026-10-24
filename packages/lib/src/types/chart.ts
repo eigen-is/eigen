@@ -68,6 +68,17 @@ export type ChartSpec = {
     data: InlineChartData | RangeChartData;
 };
 
+// A stored spec as JSON.parse made it, unvalidated: every key a peer stored, this build's or a newer one's.
+export type StoredChartSpec = { readonly [key: string]: unknown };
+
+// An edit of a chart, as ops on paths into its stored spec, so what an editor didn't touch stays as stored. An array is
+// a leaf, set whole. move takes what is at from to path; nothing at from leaves nothing at path.
+export type ChartSpecOp =
+    | { op: 'set'; path: string[]; value: unknown }
+    | { op: 'remove'; path: string[] }
+    | { op: 'move'; from: string[]; path: string[] };
+export type ChartSpecChange = ChartSpecOp[];
+
 // A chart's data with its ranges resolved: inline data as stored, or the values a sheet reads from its ranges.
 export type ChartData = { categories: string[]; series: InlineChartSeries[] };
 // Why a sheet's range chart has no data. 'ref': every series was deleted, or a ref names a missing sheet or

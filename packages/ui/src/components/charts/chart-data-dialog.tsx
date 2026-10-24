@@ -1,14 +1,16 @@
 // Edit data: a chart's inline data as a small sheet, categories down column A and series across row 1, with
 // Eigen Sheets' look and keys. Google links a Sheet instead; this is the grid PowerPoint and Keynote offer,
 // empty rows and columns to grow into as far as the inline limits go. The grid edits a draft, so Save is one
-// change of the spec and Cancel leaves it as it was. A chart past the grid's limits (an imported one) shows
-// its data read-only rather than as thousands of cells.
+// change of the spec, what the grid changed since it opened, and Cancel leaves it as it was. A chart past the
+// grid's limits (an imported one), or whose data holds what this build can't edit, shows its data read-only.
 
 import {
     chartLabel,
+    chartSpecChange,
     DEFAULT_CHART_SERIES_STYLE,
     exceedsInlineGridLimits,
     fitsInlineGrid,
+    holdsUnknownChartData,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     MAX_CHART_POINTS,
@@ -23,7 +25,13 @@ import {
     SHEET_DEFAULT_ROW_HEIGHT,
     SHEET_ROW_HEADER_WIDTH,
 } from '@workspace/lib/sheets';
-import type { ChartSeriesStyle, ChartSpec, InlineChartData } from '@workspace/lib/types/chart';
+import type {
+    ChartSeriesStyle,
+    ChartSpec,
+    ChartSpecChange,
+    InlineChartData,
+    StoredChartSpec,
+} from '@workspace/lib/types/chart';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -70,6 +78,24 @@ function gridOf({ data, sliceColors, categoryAxis }: InlineChartSpec): Grid {
             color: sliceColors[i] ?? null,
             cells: data.series.map((series) => String(series.values[i] ?? '')),
         })),
+    };
+}
+
+// The spec a grid writes. A series' style isn't the grid's, so it is the chart's as it is now, and a peer's recolour
+// while the dialog was open stands.
+function specOf({ corner, columns, rows }: Grid, spec: InlineChartSpec): ChartSpec {
+    return {
+        ...spec,
+        categoryAxis: { ...spec.categoryAxis, title: corner },
+        sliceColors: rows.map((row) => row.color),
+        data: {
+            source: 'inline',
+            categories: rows.map((row) => row.category),
+            series: columns.map(({ id, name, style }, j) => {
+                const { color, markers, smooth } = spec.data.series.find((series) => series.id === id) ?? style;
+                return { color, markers, smooth, id, name, values: rows.map((row) => numberOf(row.cells[j])) };
+            }),
+        },
     };
 }
 
@@ -195,13 +221,15 @@ const plural = (n: number, noun: string) => `${n.toLocaleString('en')} ${noun}${
 
 type ChartDataDialogProps = {
     spec: InlineChartSpec;
+    stored: StoredChartSpec;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onSave: (spec: ChartSpec) => void;
+    onSave: (change: ChartSpecChange) => void;
 };
 
-export function ChartDataDialog({ spec, open, onOpenChange, onSave }: ChartDataDialogProps) {
-    const readOnly = exceedsInlineGridLimits(spec.data);
+export function ChartDataDialog({ spec, stored, open, onOpenChange, onSave }: ChartDataDialogProps) {
+    const unknown = holdsUnknownChartData(stored, spec);
+    const readOnly = unknown || exceedsInlineGridLimits(spec.data);
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -218,9 +246,11 @@ export function ChartDataDialog({ spec, open, onOpenChange, onSave }: ChartDataD
                 <DialogHeader>
                     <DialogTitle>Edit data</DialogTitle>
                     <DialogDescription>
-                        {readOnly
-                            ? 'This chart has more data than the editor holds, so it opens read-only.'
-                            : 'Categories go down column A and series across row 1. Type in an empty row or column to add one, and paste cells from a spreadsheet to fill several at once.'}
+                        {unknown
+                            ? 'This chart holds data this version of Eigen can’t edit, so it opens read-only.'
+                            : readOnly
+                              ? 'This chart has more data than the editor holds, so it opens read-only.'
+                              : 'Categories go down column A and series across row 1. Type in an empty row or column to add one, and paste cells from a spreadsheet to fill several at once.'}
                     </DialogDescription>
                 </DialogHeader>
                 {readOnly ? (
@@ -242,13 +272,14 @@ export function ChartDataDialog({ spec, open, onOpenChange, onSave }: ChartDataD
 
 type InlineChartDataDialogProps = {
     spec: ChartSpec | null;
-    onSave: (spec: ChartSpec) => void;
+    stored: StoredChartSpec;
+    onSave: (change: ChartSpecChange) => void;
     onClose: () => void;
 };
 
 // Edit data opened by a double-click: open at once, closed on Cancel or Save. A chart that can't be drawn, or
 // that a collaborator deleted or broke meanwhile, has no grid to show, so it closes itself.
-export function InlineChartDataDialog({ spec, onSave, onClose }: InlineChartDataDialogProps) {
+export function InlineChartDataDialog({ spec, stored, onSave, onClose }: InlineChartDataDialogProps) {
     const data = spec?.data.source === 'inline' ? spec.data : null;
     const editable = data !== null;
     useEffect(() => {
@@ -258,6 +289,7 @@ export function InlineChartDataDialog({ spec, onSave, onClose }: InlineChartData
     return (
         <ChartDataDialog
             spec={{ ...spec, data }}
+            stored={stored}
             open
             onOpenChange={(open) => {
                 if (!open) onClose();
@@ -294,9 +326,9 @@ function EditableGrid({
 }: {
     spec: InlineChartSpec;
     onCancel: () => void;
-    onSave: (spec: ChartSpec) => void;
+    onSave: (change: ChartSpecChange) => void;
 }) {
-    // As the chart was when the dialog opened, so Save keeps a peer's axis title its corner didn't change.
+    // As the chart was when the dialog opened, so Save writes only what the grid changed since.
     const [opened] = useState(() => gridOf(spec));
     const [grid, setGrid] = useState(opened);
     const [selection, setSelection] = useState<GridSelection>({
@@ -484,22 +516,7 @@ function EditableGrid({
             setEditing(null);
             return;
         }
-        onSave({
-            ...spec,
-            categoryAxis:
-                final.corner === opened.corner ? spec.categoryAxis : { ...spec.categoryAxis, title: final.corner },
-            sliceColors: final.rows.map((row) => row.color),
-            data: {
-                source: 'inline',
-                categories: final.rows.map((row) => row.category),
-                series: final.columns.map(({ id, name, style }, j) => ({
-                    ...style,
-                    id,
-                    name,
-                    values: final.rows.map((row) => numberOf(row.cells[j])),
-                })),
-            },
-        });
+        onSave(chartSpecChange(specOf(opened, spec), specOf(final, spec)));
     };
 
     const activeText = cellText(grid, active);

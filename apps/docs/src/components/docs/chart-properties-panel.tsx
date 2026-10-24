@@ -1,8 +1,18 @@
+// The Docs panel and Edit data for the selected chart node: the shared chart sections over its spec and look, then its
+// layout and caption. Each write is one undo step, and a spec edit is a change applied onto the spec the node stores.
+
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
-import { CHART_DEFAULT_SIZE, isInlineSketchCapped, parseChartSpec, readChartLook } from '@workspace/lib/charts';
+import {
+    applyChartSpecChange,
+    CHART_DEFAULT_SIZE,
+    isInlineSketchCapped,
+    readChartLook,
+    readChartSpec,
+} from '@workspace/lib/charts';
 import type { ChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { readChartAttrs } from '@workspace/lib/docs/eigendoc';
+import type { ChartSpecChange, StoredChartSpec } from '@workspace/lib/types/chart';
 import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
     holdCapture,
@@ -35,13 +45,18 @@ function useSelectedChart(editor: Editor) {
             };
         },
     });
-    return { spec: useMemo(() => parseChartSpec(spec ?? ''), [spec]), ...rest };
+    return { ...useMemo(() => readChartSpec(spec ?? ''), [spec]), ...rest };
 }
 
 // Each write one undo step, sealed from the typing around it; a typed title holds its step until the field is left.
 function writeChart(editor: Editor, undoManager: Y.UndoManager, attributes: ChartAttrs) {
     sealed(undoManager, () => editor.commands.updateChart(attributes));
 }
+
+// Applied onto the spec the node stores as last rendered, so a key this build doesn't know stays.
+const specWrite = (stored: StoredChartSpec, change: ChartSpecChange): ChartAttrs => ({
+    spec: JSON.stringify(applyChartSpecChange(stored, change)),
+});
 
 type ChartPropertiesPanelProps = {
     editor: Editor;
@@ -50,7 +65,7 @@ type ChartPropertiesPanelProps = {
 };
 
 export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartPropertiesPanelProps) {
-    const { spec, layout, alignment, caption, width, height, look } = useSelectedChart(editor);
+    const { stored, spec, layout, alignment, caption, width, height, look } = useSelectedChart(editor);
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
     // A field that writes as the user types keeps the caret out of the editor's keymap, so it hands ⌘Z to the doc.
     const history = useMemo(
@@ -66,7 +81,8 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                     {spec && (
                         <ChartSections
                             spec={spec}
-                            onChange={(next) => write({ spec: JSON.stringify(next) })}
+                            stored={stored}
+                            onChange={(change) => write(specWrite(stored, change))}
                             look={look}
                             onLookChange={write}
                             sketchCapped={isInlineSketchCapped(spec)}
@@ -106,13 +122,15 @@ type ChartDataEditorProps = {
 };
 
 // Edit data for the selected chart, which the panel's button and a double-click on the chart open; mounted only while
-// open, as it reads the selection on every transaction. Save is one write.
+// open, as it reads the selection on every transaction, so Save applies onto the node as it is then. Save is one
+// write.
 export function ChartDataEditor({ editor, undoManager, onClose }: ChartDataEditorProps) {
-    const { spec } = useSelectedChart(editor);
+    const { stored, spec } = useSelectedChart(editor);
     return (
         <InlineChartDataDialog
             spec={spec}
-            onSave={(next) => writeChart(editor, undoManager, { spec: JSON.stringify(next) })}
+            stored={stored}
+            onSave={(change) => writeChart(editor, undoManager, specWrite(stored, change))}
             onClose={onClose}
         />
     );

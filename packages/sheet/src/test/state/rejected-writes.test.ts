@@ -13,7 +13,6 @@
 // convention; this is a gate.
 
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
 import { setCellFormat } from '../../state/api/cell';
 import { setColumnWidth, setRowHeight, showRowOrColumn } from '../../state/api/rowcol';
 import { initSheetData } from '../../state/api/sheet';
@@ -95,7 +94,10 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
         ],
         [`deleting a ${kind} that is not there`, (ctx) => deleteFloatingObject(ctx, { kind, id: 'gone' })],
     ]),
-    ['setting the spec of a chart that is not there', (ctx) => setChartSpec(ctx, 'gone', sampleChartSpec('line'))],
+    [
+        'setting the spec of a chart that is not there',
+        (ctx) => setChartSpec(ctx, 'gone', [{ op: 'set', path: ['type'], value: 'line' }]),
+    ],
     ['setting the look of a chart that is not there', (ctx) => setChartLook(ctx, 'gone', { roughness: 1 })],
     ['renaming the media of no image', (ctx) => replaceImageMediaName(ctx, 'pending:gone', 'photo.png')],
     ['removing the media of no image', (ctx) => removeImageByMediaName(ctx, 'pending:gone')],
