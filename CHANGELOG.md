@@ -249,7 +249,7 @@ Self-hosting release. Eigen now installs from prebuilt images with one line, and
 
 ## [0.2.0] - 2026-09-02
 
-Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector>, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are now stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor shares one way to load and save, copy and paste, show live cursors and draw.
+Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector>, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor shares one way to load and save, copy and paste, show live cursors and draw.
 
 ### Added
 
@@ -300,567 +300,308 @@ Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vect
 
 ## [0.1.1] - 2026-08-13
 
-Mobile & reliability release. Every app now works properly on a phone — column navigation with
-back arrows, touch context menus, collapsing toolbars, and comment & activity panels on small
-screens. Under the hood, every preview, export, and import moved into sandboxed background
-workers with hard deadlines, spreadsheet exports got an order-of-magnitude speedup, and
-slow-loading documents no longer spiral into reconnect loops.
+Mobile and reliability release. Every app works on a phone, with column navigation and back arrows, touch context menus, collapsing toolbars, and comment and activity panels on small screens. Under the hood, every preview, export, and import moved into sandboxed background workers with hard deadlines, spreadsheet exports got an order-of-magnitude speedup, and slow-loading documents no longer spiral into reconnect loops.
 
 ### Added
 
-- **Mobile** — Eigen is now phone-friendly end to end: navigation is column-based with a back
-  arrow in every app, toolbars collapse their controls into a kebab menu (sharing, calendar
-  views, drive sort and view, the mail shortcuts cheat-sheet), dropdown submenus become
-  drill-in pages, and calendar event and stickies card dialogs fit phone widths
-- **Touch** — long-press opens the context menu everywhere right-click does (drive rows and
-  grid tiles, chat messages, stickies cards, slide thumbnails); hover-only action icons rest
-  visible on touch screens; drive rows get a per-file kebab and the details pane gains
-  Move/Copy/Duplicate; and Move to trash asks for confirmation on touch devices
-- **Comments & activity on mobile** — Docs, Sheets, and Slides show their comments and
-  activity panels on small screens (taking over the editor area on phones, and available from
-  tablet width instead of only on wide desktops); Docs adds Comment to the mobile Insert menu
-- **Drive quick look** — press `Space` to open and close a preview of the selected file, and
-  step through the list with the arrow keys while it is open
-- **Slides** — presentation mode shows a transient exit button, so a presentation can be left
-  by touch
+- **Mobile** — Eigen works on a phone end to end. Navigation is column-based, with a back arrow in every app. Toolbars fold their controls into a ⋮ menu (sharing, calendar views, drive sort and view, the mail shortcuts cheat sheet). Submenus open as pages of their own, and calendar event and stickies card dialogs fit a phone's width
+- **Touch** — long-press opens the context menu everywhere right-click does (drive rows and grid tiles, chat messages, stickies cards, slide thumbnails). Action icons that appear on hover stay visible on touch screens. Drive rows get a ⋮ menu per file, and the details pane gets Move, Copy and Duplicate. Move to trash asks for confirmation on touch devices
+- **Comments and activity on mobile** — Docs, Sheets and Slides show their comments and activity panels on small screens. On a phone the panel takes over the editor, and from tablet width up it sits beside it. Docs adds Comment to the mobile Insert menu
+- **Drive quick look** — press `Space` to open and close a preview of the selected file, and step through the list with the arrow keys while it is open
+- **Slides** — presentation mode briefly shows an exit button, so you can leave a presentation by touch
 
 ### Changed
 
-- **Reliability** — every document preview, HTML/PDF/XLSX/DOCX export, XLSX/DOCX import, and
-  background search extraction now runs in an isolated worker with a hard deadline: one huge
-  or degenerate file can no longer stall the server for everyone, and a stuck job is killed
-  and reported instead of hanging forever
-- **Sheets** — exporting a large spreadsheet to HTML or PDF is an order of magnitude faster
-  and the output a fraction of the size (styles are shared instead of repeated per cell);
-  previews and search indexing read stored values instead of recomputing every formula, so a
-  formula-heavy sheet can no longer time out its own preview; sheets are saved in a leaner
-  snapshot format that opens faster over a remote connection; and large-sheet editing
-  operations (inserting rows and columns, filtering, copying) got a hot-path performance pass
-- **Opening documents** — a document that takes long to load (a huge spreadsheet on a cold
-  server) shows progress instead of spiraling into a connect/disconnect loop, and a
-  just-closed document stays warm on the server for a minute so reopening is instant
-- **Drive** — converting an `.xlsx` or `.docx` into an Eigen document shows a progress
-  dialog, and the conversion finishes on the server even if you navigate away
+- **Reliability** — every document preview, export (HTML, PDF, XLSX, DOCX), import (XLSX, DOCX) and search indexing job runs in a separate worker with a time limit. One huge or broken file can no longer stall the server for everyone, and a stuck job is stopped and reported instead of hanging forever
+- **Sheets** — exporting a large spreadsheet to HTML or PDF is about ten times faster, and the file a fraction of the size. Previews and search read stored values instead of recalculating every formula, so a sheet full of formulas can no longer time out its own preview. Sheets are saved in a smaller format that opens faster over a slow connection. Inserting rows and columns, filtering and copying are faster in large sheets
+- **Opening documents** — a document that takes long to load (a huge spreadsheet on a cold server) shows progress instead of connecting and disconnecting over and over. A document you just closed stays loaded on the server for a minute, so reopening it is instant
+- **Drive** — converting an `.xlsx` or `.docx` into an Eigen document shows a progress dialog, and the conversion finishes on the server even if you navigate away
 - **App icon** — a redesigned, bolder app icon, including the Safari pinned-tab icon
 
 ### Fixed
 
-- **Dark mode** — paper stays paper: the document page, the slides canvas, and the sheets
-  formula bar always render light, so content reads the way it prints
-- **Printing** — printed documents no longer show collaborator cursors, selections, search
-  highlights, or comment markers
-- **Mail** — wide HTML emails scale to fit on a phone instead of overflowing; message bodies
-  render in the app's font; calendar invitations are summarized on the server and show a real
-  error state instead of failing quietly; batch actions report exactly what succeeded; and
-  the message list no longer steals keyboard focus while the composer is open
-- **Calendar** — moving an event to another calendar is atomic on the server, and asks for
-  confirmation first when the move would lose data; the edit dialog's recurrence options no
-  longer shift the start date by a day in some timezones; all-day date fields stay legible on
-  narrow screens
-- **Sheets** — read-only viewers really are read-only (menus, shortcuts, and edit paths are
-  disabled) and they see rows and columns that others insert or delete without a reload; menu
-  color pickers are proper submenus and no longer leak keystrokes into the grid; the grid
-  re-measures itself when a side panel opens; and headers, sheet tabs, and pickers work by
-  keyboard and touch
-- **Slides** — editing shortcuts no longer reach the deck while presenting, and slide
-  thumbnails on mobile are view-only
-- **Chat** — mouse users get the hover action icons back on messages (touch users keep the
-  long-press menu), and guests no longer see a storage-usage bar
-- **Drive** — Cancel in the inline text editor asks before discarding unsaved changes, and
-  deleting a selection that spans your drive and a team drive moves every item to trash
-- **Dialogs** — confirmation dialogs wait for their action to finish and surface failures
-  instead of closing early, across delete, move, and save flows
+- **Dark mode** — the document page, the slides canvas and the sheets formula bar always stay light, so content reads the way it prints
+- **Printing** — printed documents no longer show collaborator cursors, selections, search highlights, or comment markers
+- **Mail** — wide HTML emails scale to fit on a phone instead of overflowing. Message bodies use the app's font. A calendar invitation that fails to load says so instead of failing quietly. Actions on several messages report exactly what succeeded. The message list no longer takes keyboard focus while the composer is open
+- **Calendar** — moving an event to another calendar happens in one step on the server, and asks first when the move would lose data. The edit dialog's repeat options no longer shift the start date by a day in some timezones. All-day date fields stay readable on narrow screens
+- **Sheets** — viewers can't edit through menus or shortcuts, and they see rows and columns that others insert or delete without a reload. Color pickers in menus are submenus and no longer send keystrokes to the grid. The grid resizes when a side panel opens. Headers, sheet tabs and pickers work by keyboard and touch
+- **Slides** — editing shortcuts no longer reach the deck while presenting, and slide thumbnails on mobile are view-only
+- **Chat** — with a mouse, messages show their action icons on hover again (on touch, long-press keeps its menu), and guests no longer see a storage bar
+- **Drive** — Cancel in the inline text editor asks before discarding unsaved changes, and deleting a selection that spans your drive and a team drive moves every item to trash
+- **Dialogs** — confirmation dialogs for delete, move and save wait for their action to finish, and show a failure instead of closing early
 - **Imports** — importing a `.docx` a second time updates its images instead of failing
-- **Accessibility** — comment color and assignee pickers work by keyboard, and chat, contact,
-  and slide-object actions are reachable by touch
-- **Landing page** — a rejected waitlist signup no longer locks the join form, and
-  social-media link previews use the server's real domain
-- **Installed app** — navigation between apps works when Eigen is installed to the home
-  screen or dock as a web app
+- **Accessibility** — comment color and assignee pickers work by keyboard, and chat, contact, and slide-object actions are reachable by touch
+- **Landing page** — a rejected waitlist signup no longer locks the join form, and social-media link previews use the server's real domain
+- **Installed app** — navigation between apps works when Eigen is installed to the home screen or dock as a web app
 
 ### Security
 
-- **Imports** — `.docx` files are capped by decompressed size before parsing (zip-bomb
-  protection), and write permission is re-checked at the moment an import commits, not just
-  when it starts
+- **Imports** — a `.docx` file is refused when it unpacks to more than a set size (zip-bomb protection), and write permission is checked again when an import finishes, not only when it starts
 
 ## [0.1.0] - 2026-07-19
 
-Search, mail & collaboration release. Find & replace inside every editor and full-content search
-across Drive, a much faster Mail with Gmail-style keyboard shortcuts, comment assignment with live
-activity panels in the editors, a Drive grid view, a guided new-chat wizard, team avatars, a public
-demo, a monochrome dark theme, and the fixes from two security audits.
+Search, mail and collaboration release. Find and replace inside every editor, and search through the content of files in Drive, a much faster Mail with Gmail-style keyboard shortcuts, comment assignment with live activity panels in the editors, a Drive grid view, a guided new-chat wizard, team avatars, a public demo, a monochrome dark theme, and the fixes from two security audits.
 
 ### Added
 
-- **Find & replace** — press `Mod+F` in Docs, Sheets, Slides, and Stickies for an in-document find
-  bar with highlighted matches and next/previous; `Mod+Alt+F` opens replace and replace-all
-  (case-preserving). The command palette gains a `doc:` scope that reveals matches inside the open
-  document — including its comment threads — and opening a search result highlights and scrolls to
-  the match, in documents and mail alike; the inline text editor in Drive gets the same find bar
-- **Search** — Drive search now looks inside files, not just at names: documents, sheets, slides,
-  boards, chats, and plain-text files are content-indexed in the background, with name matches
-  ranked above content-only matches
-- **Mail** — Gmail-style keyboard shortcuts: navigate and select with the keyboard, archive,
-  delete, and reply with auto-advance, undo the last action with `z`, and send with `Mod+Enter`;
-  press `?` for the full list, and turn shortcuts or auto-advance off in settings; flagged messages
-  show a star in the list
-- **Comment assignment** — assign a comment card to a person in Docs, Slides, Sheets, and Stickies
-  (in Sheets straight from the cell comment menu); assignees are notified and shown on the card,
-  and comments can be filtered by assignee, color, and status — per panel, and board-wide in
-  Stickies
-- **Activity in editors** — the Recent Activity timeline from Drive is now available inside Docs,
-  Sheets, Slides, and Stickies through an Activity toggle next to sharing; it updates live while
-  the document is open, and every row links to what it describes
-- **New-chat wizard** — starting a chat is now a two-step dialog: pick the people (anyone you can
-  share with, or a whole team), then name the chat and choose where it lives; if a chat with
-  exactly those members already exists it opens instead of creating a duplicate, with a "Create new
-  chat" escape hatch. Team chats are filed in a chats folder on the team drive, members with an
-  account are no longer emailed about the share (invitees without one still are), and the wizard
-  opens from the chat sidebar, Drive's + New menu, and a new Start chat action on contacts and team
-  members
-- **Drive views** — a list/grid toggle with a thumbnail grid view, a sort menu (name, modified,
-  size), and remembered per-user view and sort preferences; grid tiles support keyboard
-  navigation, drag-to-move onto folders, and unread badges, and Trash gains the same views,
-  sorting, and multi-select
-- **Team drives everywhere** — the per-type views (Documents, Sheets, and so on), search, the
-  Watched view, and the chat sidebar now include your team drives alongside your personal drive
-- **Sheets** — live collaborator cursors: everyone editing a shared sheet sees the others'
-  selections in their color, with the same name labels as Docs
-- **Sheets** — while editing a formula, `F4` cycles the reference under the caret through absolute
-  and relative forms
+- **Find and replace** — press `Mod+F` in Docs, Sheets, Slides and Stickies for a find bar that highlights matches and steps through them. `Mod+Alt+F` opens replace and replace all, which keeps each match's capitals. The command palette gets a `doc:` scope that finds matches in the open document, its comment threads included. Opening a search result highlights the match and scrolls to it, in documents and mail alike. The text editor in Drive gets the same find bar
+- **Search** — Drive search looks inside files, not only at their names. Documents, sheets, slides, boards, chats and plain-text files are indexed in the background, and a match on the name ranks above a match in the content
+- **Mail** — Gmail-style keyboard shortcuts. Move through and select messages, archive, delete and reply, with auto-advance to the next message. Undo the last action with `z` and send with `Mod+Enter`. Press `?` for the full list, and turn shortcuts or auto-advance off in settings. Flagged messages show a star in the list
+- **Comment assignment** — assign a comment card to a person in Docs, Slides, Sheets, and Stickies (in Sheets from the cell's comment menu). The assignee is notified and shown on the card. Filter comments by assignee, color and status, per panel, or for the whole board in Stickies
+- **Activity in editors** — the Recent Activity timeline from Drive opens inside Docs, Sheets, Slides and Stickies from an Activity button next to sharing. It updates live while the document is open, and every row links to what it describes
+- **New-chat wizard** — starting a chat is a two-step dialog. Pick the people (anyone you can share with, or a whole team), then name the chat and choose where it lives. If a chat with exactly those members exists, it opens instead of a duplicate, and "Create new chat" still makes a new one. Team chats go in a chats folder on the team drive. Members with an account no longer get an email about the share (invitees without one still do). The wizard opens from the chat sidebar, Drive's + New menu, and a new Start chat action on contacts and team members
+- **Drive views** — switch between a list and a grid of thumbnails, and sort by name, modified or size. Drive remembers your choice. Grid tiles work with the keyboard, can be dragged onto folders and show unread badges. Trash gets the same views, sorting and multi-select
+- **Team drives everywhere** — the per-type views (Documents, Sheets, and so on), search, the Watched view and the chat sidebar include your team drives next to your personal drive
+- **Sheets** — live cursors. Everyone editing a shared sheet sees the others' selections in their color, with name labels as in Docs
+- **Sheets** — while editing a formula, `F4` cycles the reference under the cursor through absolute and relative forms
 - **Mail** — paste files or images from the clipboard straight into the composer as attachments
-- **Teams** — team avatars: upload an image for a team from its Admin page and it shows wherever
-  the team appears; profile, contact, and team pictures share one avatar editor
-- **Demo mode** — a server can run as a public, self-resetting demo: visitors press a single
-  "Enter demo" button and land in a seeded festival workspace as one of its members, with a
-  warning banner, outgoing mail disabled, and periodic resets — live at demo.eigen.is
-- **Landing page** — admins can add their own link buttons (a title and a URL) to the landing page
-  from Server Settings
-- **Marketing site** — a `/changelog` page generated from this file, linked from the site footer
-  and the app's About dialog
+- **Teams** — team avatars. Upload an image for a team on its Admin page and it shows wherever the team appears. Profile, contact and team pictures use the same avatar editor
+- **Demo mode** — a server can run as a public demo that resets itself. Visitors press "Enter demo" and land in a sample festival workspace as one of its members, with a warning banner and outgoing mail turned off. It runs at demo.eigen.is
+- **Landing page** — admins can add their own link buttons (a title and a URL) to the landing page from Server Settings
+- **Marketing site** — a `/changelog` page generated from this file, linked from the site footer and the app's About dialog
 - **Chat** — new `/whoami` and `/hide` slash commands
 
 ### Changed
 
-- **Dark mode** — a monochrome dark theme with layered surfaces: cards, popovers, and dialogs sit
-  visibly above the background, native scrollbars follow the theme, and note cards match the mail
-  list's dark treatment; the spreadsheet canvas deliberately stays white so sheets read as sheets.
-  The app-colored topbar option is gone
-- **Mail** — big-mailbox performance: the message list is virtualized and loads in pages, actions
-  (move, read, flag, delete) apply instantly and sync in the background, mailbox sync no longer
-  blocks the list, and search runs on the server; unread rows are marked with a dot instead of a
-  border
-- **Notifications** — rebuilt on one activity-row design shared with Recent Activity:
-  notifications name who did what to what, chat notifications preview the message, and each row
-  deep-links to the exact card, comment, or email; notification links open in the same tab
-- **People** — users are shown by display name with a hover card consistently — chat authors,
-  @-mentions and their suggestions, "Created by" lines, and activity rows
-- **Sheets** — editing recalculates only the cells that depend on the change instead of the whole
-  workbook, keeping large sheets responsive while typing
-- **Uploads** — uploads stream to disk in constant memory, so a large upload no longer holds its
-  full size in server RAM
-- **Drive** — empty folders and views explain what belongs there and how to add it; files you have
-  already viewed revalidate with ETags instead of re-downloading
+- **Dark mode** — a monochrome dark theme. Cards, popovers and dialogs stand out from the background, scrollbars follow the theme, and note cards match the mail list. The spreadsheet grid stays white, so sheets read as sheets. The app-colored topbar option is gone
+- **Mail** — large mailboxes are fast. The message list loads in pages, and moving, reading, flagging and deleting apply at once and sync in the background. Syncing a mailbox no longer blocks the list, and search runs on the server. Unread rows show a dot instead of a border
+- **Notifications** — look like the rows in Recent Activity. Each one says who did what to what, a chat notification previews the message, and every row links to the exact card, comment or email. Notification links open in the same tab
+- **People** — every place that shows a user shows their display name, with a card on hover: chat authors, @-mentions and their suggestions, "Created by" lines and activity rows
+- **Sheets** — editing recalculates only the cells that depend on the change instead of the whole workbook, keeping large sheets responsive while typing
+- **Uploads** — an upload streams straight to disk, so a large one no longer takes its full size in server memory
+- **Drive** — empty folders and views explain what belongs there and how to add it. A file you already viewed isn't downloaded again unless it changed
 
 ### Fixed
 
-- **Docs, Slides & Sheets** — images inserted into a document no longer vanish right after upload
-  (the finished upload was misread as failed and the editors removed the image)
-- **Sheets** — imported spreadsheets that were never opened now compute their formulas on the
-  server, so previews and exports show values instead of blanks; imported `m`/`M` date formats
-  resolve to months or minutes correctly
-- **Sheets** — the selection stats read a cell's real value, so formatted cells sum and count
-  correctly; drag-fill keeps the number format in every direction; `=` and `<>` compare
-  case-insensitively like Google Sheets; sorting uses English collation; overlays and header
-  highlights clip correctly at frozen panes; and collaborator cursors survive switching sheets
-- **Mail** — a moved or deleted message shows up in its target mailbox without a reload; the list
-  scrolls back to the top when you change mailbox or search (and search gains a clear button); an
-  inbox opened from a notification can no longer get stuck empty; and a sync race no longer drops
-  just-moved messages from the list
-- **Calendar** — events no longer disappear from the 25-hour day when DST falls back, and
-  ambiguous local times resolve per RFC 5545; the calendar link in invitation emails opens the
-  right month instead of the year 57479
-- **CalDAV** — deleted occurrences are advertised as EXDATE so a client edit can't resurrect them,
-  older stored events serve correctly instead of erroring, and several recurrence-exception edge
-  cases (timezones, floating times) were fixed for clients like Thunderbird
-- **Chat** — very tall new messages scroll into view; with no personal chats, the first team chat
-  opens automatically
-- **Drive** — `.txt` previews render as readable paragraphs like `.md`; file names are normalized
-  (NFC) so accented names no longer appear twice; files on a team drive open correctly from the
-  per-type views and sidebar links
-- **Contacts** — the contact and team-member detail views behave the same, and Edit/Delete are
-  hidden when they don't apply instead of shown disabled
-- **Admin** — deleting a user now removes everything tied to the account on every deletion path;
-  previously some paths could leave orphaned team memberships behind
-- **Self-hosting** — the bundled Caddy revalidates the app shell on every load and reloads its
-  config after an update, so a new version is picked up immediately instead of serving a stale
-  page
-- **Reliability** — continued storage hardening: interrupted uploads to S3-compatible storage that
-  timed out mid-write are detected and repaired, corrupt staged copies are refused, same-name
-  create races are closed with a unique index, and database open/close races that could bite under
-  load were serialized
+- **Docs, Slides and Sheets** — an image you insert no longer vanishes right after it uploads
+- **Sheets** — imported spreadsheets that were never opened compute their formulas on the server, so previews and exports show values instead of blanks. Imported `m` and `M` date formats read as months or minutes correctly
+- **Sheets** — the selection's sum and count read each cell's real value, so formatted cells add up correctly. Drag-fill keeps the number format in every direction. `=` and `<>` ignore case, as in Google Sheets. Sorting follows English alphabetical order. Highlights stop correctly at frozen rows and columns. Collaborators' cursors stay after you switch sheets
+- **Mail** — a moved or deleted message shows up in its new mailbox without a reload. The list scrolls back to the top when you change mailbox or search, and search gets a clear button. An inbox opened from a notification no longer gets stuck empty. A message you just moved no longer drops out of the list during a sync
+- **Calendar** — events no longer disappear from the 25-hour day when daylight saving time ends, and a local time that occurs twice resolves as RFC 5545 says. The calendar link in invitation emails opens the right month instead of the year 57479
+- **CalDAV** — a deleted occurrence is sent as an EXDATE, so an edit in a calendar app can't bring it back. Older stored events load instead of failing. Several edge cases in edited occurrences (time zones, floating times) are fixed for apps like Thunderbird
+- **Chat** — a very tall new message scrolls into view. With no personal chats, the first team chat opens
+- **Drive** — a `.txt` preview shows readable paragraphs, as `.md` does. A file name with accents no longer appears twice. Files on a team drive open from the per-type views and sidebar links
+- **Contacts** — the contact and team-member detail views behave the same, and Edit/Delete are hidden when they don't apply instead of shown disabled
+- **Admin** — deleting a user removes everything tied to the account, whichever way you delete it. Some ways left team memberships behind
+- **Self-hosting** — the bundled Caddy revalidates the app shell on every load and reloads its config after an update, so a new version is picked up immediately instead of serving a stale page
+- **Reliability** — more storage hardening. An upload to S3-compatible storage that timed out halfway is found and repaired. A damaged copy waiting to upload is refused. Two files created with the same name at the same moment can no longer both exist. Opening and closing databases under load no longer races
 
 ### Security
 
-- **Admin** — a privilege-escalation hole is closed: a signed-in user could create their own
-  organization and pass the server's admin check; admin rights are now scoped to the server's
-  organization and self-created organizations are disabled
-- **Protocol sign-in** — accounts with 2FA can no longer be accessed over IMAP, CalDAV, or WebDAV
-  with just email and password (use an app password); protocol sign-in attempts are rate-limited,
-  and a valid app password is never blocked by that limiter
-- **Exports** — slides and sheets HTML exports escape untrusted styling (a stored-XSS vector), and
-  PDF export can no longer be steered into fetching internal URLs
-- **Calendar** — events are verified to belong to their calendar on update and delete; incoming
-  invitation mail (iMIP) is bound to the envelope sender, validates timezone ids, ignores replayed
-  cancellations, and scopes replies to the right occurrence; recurrence expansion is bounded
-- **Server** — internal API endpoints are unreachable through the reverse proxy, clients can no
-  longer spoof their rate-limit identity via forwarded headers, API documentation and timing
-  headers are disabled in production, and websocket message size is capped
-- **Sheets** — crafted `.xlsx` files with forged headers or oversized contents are rejected with
-  hard caps on decompressed size and cell count
-- **Mail** — the mail parser is hardened against hostile input (boundary and text-extraction caps)
-  and pinned by a deterministic fuzz-test suite
+- **Admin** — a signed-in user could create their own organization and pass the server's admin check. Admin rights now belong to the server's organization only, and users can't create organizations
+- **Protocol sign-in** — an account with 2FA can no longer be reached over IMAP, CalDAV or WebDAV with only its email and password: use an app password. Sign-in attempts over these protocols are rate-limited, and a valid app password is never blocked by that limit
+- **Exports** — slides and sheets HTML exports escape untrusted styling (a stored-XSS vector), and PDF export can no longer be steered into fetching internal URLs
+- **Calendar** — an update or delete checks that the event belongs to its calendar. Incoming invitation mail (iMIP) must match its envelope sender, checks time zone ids, ignores replayed cancellations and applies replies to the right occurrence. A repeating event can only expand so far
+- **Server** — internal API endpoints can't be reached through the reverse proxy. A client can no longer fake its address with forwarded headers to dodge rate limits. API documentation and timing headers are off in production, and WebSocket messages have a size limit
+- **Sheets** — a crafted `.xlsx` file with forged headers or oversized contents is refused, with hard limits on unpacked size and cell count
+- **Mail** — the mail parser is hardened against hostile input, with limits on parts and extracted text, and tested with generated hostile mail
 - **Chat** — deleting a chat attachment is confined to that chat's own media folder
 
 ## [0.0.6] - 2026-06-25
 
-Activity & history release. A per-file activity timeline with file and folder watching,
-copy/move/duplicate across drives, attachments on comment cards, a big spreadsheet import-fidelity
-pass, a filled-out help center, and a visual refresh, plus data-loss hardening for remote storage.
+Activity and history release. A timeline per file with file and folder watching, copy, move and duplicate across drives, attachments on comment cards, a big spreadsheet import-fidelity pass, a filled-out help center, and a visual refresh, plus data-loss hardening for remote storage.
 
 ### Added
 
-- **File activity & history** — every file in Drive now keeps a timeline of what happened to it
-  (created, uploaded, edited, renamed, moved, copied, commented) and who did it, shown in a Recent
-  Activity panel on the file's details; collaborative-document edits and comments are attributed to
-  the people who made them
-- **File & folder watching** — watch any file or folder to be notified when it changes; watching a
-  folder cascades to everything inside it, a new Watched view lists everything you are watching, and
-  bursts of changes are coalesced into a single notification
-- **Copy, move & duplicate** — right-click a file or folder (or a multi-selection) in Drive to
-  Move to…, Copy to…, or Duplicate; copy works anywhere, including across mounts and into team
-  drives, while move stays within a drive; folders copy recursively and collaborative documents
-  copy as independent, fully working documents
-- **Comment attachments** — attach files to comment cards in Docs, Slides, Sheets, and Stickies, and
-  to chat; paste or drag-and-drop files straight into the card form or the chat input
-- **Sheets** — XLSX import now preserves much more: hyperlinks, data-validation rules, conditional
-  formatting, autofilters, hidden rows and columns, and frozen panes; these survive a round-trip
-  back out to XLSX export
-- **Sheets** — a formatting toolbar with font family, size, bold, and italic; number formatting
-  gains Google-style custom-format dialogs for dates, numbers, and currency, and the Format → Number
-  menu matches Google's structure
-- **Sheets** — the column filter menu can now filter by condition (text contains, greater than, and
-  so on), not just by selecting values
+- **File activity and history** — every file in Drive keeps a timeline of what happened to it (created, uploaded, edited, renamed, moved, copied, commented) and who did it. It shows in a Recent Activity panel in the file's details. Edits and comments in a shared document are credited to the people who made them
+- **File and folder watching** — watch a file or folder to be notified when it changes. Watching a folder covers everything inside it. A new Watched view lists everything you watch, and a burst of changes becomes one notification
+- **Copy, move and duplicate** — right-click a file, a folder or a selection in Drive for Move to…, Copy to… or Duplicate. Copy works anywhere, also across storage locations and into team drives. Move stays within a drive. A folder copies with everything in it, and a document copies as a separate document that works on its own
+- **Comment attachments** — attach files to comment cards in Docs, Slides, Sheets and Stickies, and to chat. Paste or drop files into the card form or the chat input
+- **Sheets** — an XLSX import keeps much more: hyperlinks, data-validation rules, conditional formatting, filters, hidden rows and columns, and frozen panes. They survive an XLSX export too
+- **Sheets** — a formatting toolbar with font, size, bold and italic. Number formatting gets Google-style custom format dialogs for dates, numbers and currency, and the Format → Number menu matches Google Sheets
+- **Sheets** — the column filter menu can filter by condition (text contains, greater than, and so on), not only by picking values
 - **Stickies** — resolve a card, and reopen it later; resolved cards show a check
 - **Slides** — right-click a slide object for a context menu of its actions
-- **Help center** — the Eigen Support help center now has 120 articles, searchable from the command
-  palette through a new Help scope as well as on the site
-- **Drive** — files are served with HTTP range support, so video and audio scrub instantly in the
-  preview and interrupted downloads can resume
+- **Help center** — Eigen Support has 120 articles. Search them on the site, or from the command palette with the new Help scope
+- **Drive** — video and audio scrub instantly in the preview, and an interrupted download can resume
 - **Marketing site** — a new `/licenses` page lists the open-source software Eigen is built on
 
 ### Changed
 
-- **Visual refresh** — a redesigned app switcher (a grid of large, app-colored icons with names), a
-  lighter font-weight scale across the apps, Drive file icons tinted by app, an animated
-  `eigen|app>` wordmark on the landing page and Space home, and a topbar that can switch between
-  app-colored and neutral chrome; toolbar titles are lighter, toolbar borders fade in on scroll,
-  and the Drive, Trash, and Calendar layouts were tidied up
-- **Landing page** — the marketing landing page is prerendered, so it paints instantly and is
-  friendlier to search engines; signed-in visitors are sent straight into the app
-- **Sheets** — inserting or deleting rows and columns no longer ships the whole sheet, keeping large
-  sheets responsive
+- **Visual refresh** — a new app switcher, a grid of large app-colored icons with names. Lighter font weights across the apps, Drive file icons tinted by app, an animated `eigen|app>` wordmark on the landing page and Space home, and a topbar that can be app-colored or neutral. Toolbar titles are lighter, toolbar borders fade in as you scroll, and the Drive, Trash and Calendar layouts are tidier
+- **Landing page** — the landing page is prerendered, so it shows instantly and search engines read it better. Signed-in visitors go straight into the app
+- **Sheets** — inserting or deleting rows and columns no longer sends the whole sheet, so large sheets stay responsive
 
 ### Fixed
 
-- **Mail** — deleting a Trash email from the detail toolbar now asks for confirmation and then
-  permanently deletes, instead of silently doing nothing
-- **Mail** — HTML emails authored for a light background render on a light canvas in dark mode so
-  they stay readable; unread senders are bolder; and a failed mailbox load shows an error state
-  instead of an empty "no emails" message
-- **Drive** — the preview's next/previous arrows work again for files opened from the Shared and
-  file-type views
-- **Slides** — on medium-width screens the editing controls (undo/redo and add slide/text/image)
-  stay reachable through an Edit menu instead of disappearing
-- **Sheets** — imported dates render through their number format, an unknown filter condition
-  matches every row instead of hiding them all, and cell focus returns when a context menu closes
-- **Accessibility** — icon-only buttons now have accessible names and keyboard paths, and tall
-  popovers and menus clamp to the viewport and scroll instead of clipping
-- **Reliability** — uploads to S3-compatible storage are now write-behind, so a slow or failing
-  storage backend becomes background retry instead of a hung or failed request, with no loss of
-  durability; crash-recovered databases are re-synced and a stored document is never overwritten
-  with an empty or invalid working copy (continuing the storage-incident hardening from 0.0.5)
+- **Mail** — deleting an email in Trash from the message toolbar asks for confirmation and deletes it for good, instead of doing nothing
+- **Mail** — an HTML email made for a light background stays on a light background in dark mode, so it stays readable. Unread senders are bolder. A mailbox that fails to load says so instead of showing "no emails"
+- **Drive** — the preview's next/previous arrows work again for files opened from the Shared and file-type views
+- **Slides** — on medium-width screens the editing controls (undo/redo and add slide/text/image) stay reachable through an Edit menu instead of disappearing
+- **Sheets** — imported dates render through their number format, an unknown filter condition matches every row instead of hiding them all, and cell focus returns when a context menu closes
+- **Accessibility** — buttons with only an icon have names for screen readers and work by keyboard. Tall popovers and menus fit the window and scroll instead of being cut off
+- **Reliability** — uploads to S3-compatible storage finish in the background, so slow or failing storage means a retry later instead of a hung or failed request, without losing data. Databases recovered after a crash are synced again, and a stored document is never overwritten with an empty or broken copy. This continues the storage hardening of 0.0.5
 
 ### Security
 
 - **Drive** — a team's mount list is no longer readable by non-members
-- **Drive** — files served inline carry `nosniff` and a sandbox CSP, closing a stored-XSS vector for
-  uploaded HTML and SVG
-- **Auth** — guest one-time codes are consumed atomically so one code cannot create two sessions;
-  sign-in and 2FA are rate-limited to 10 per minute per IP
-- **Abuse** — rate limiting is keyed on the real client IP behind the reverse proxy (with avatar
-  fetches exempt), fixing a server-wide lockout
-- **Calendar** — canceled events are excluded from free/busy, and replayed iMIP invitations (a
-  stale sequence number) are ignored
-- **Sheets** — hyperlink navigation is hardened with an allowed-scheme list, `noopener`, and
-  ReDoS-safe parsing
+- **Drive** — files shown in the browser carry `nosniff` and a sandbox CSP, so an uploaded HTML or SVG file can't run scripts
+- **Auth** — a guest's one-time code can't be used twice to create two sessions. Sign-in and 2FA allow 10 tries per minute per IP
+- **Abuse** — rate limits count per real client IP behind the reverse proxy (avatars don't count), which fixes a lockout of the whole server
+- **Calendar** — canceled events don't count as busy, and a replayed iMIP invitation (an old sequence number) is ignored
+- **Sheets** — a link in a cell opens only for allowed schemes, with `noopener`, and a crafted link can't stall the parser
 
 ## [0.0.5] - 2026-06-04
 
-Version history release. Automatic, restorable version snapshots for every collaborative app
-and chat, new slide-editing tools (rotate, Alt-drag duplicate, align & distribute), a
-spreadsheet visual refresh, and storage, preview, and kanban-board performance work.
+Version history release. Automatic versions you can restore in every collaborative app and in chat, new slide tools (rotate, Alt-drag to duplicate, align and distribute), a fresh look for spreadsheets, and faster storage, previews and boards.
 
 ### Added
 
-- **Version history** — Docs, Sheets, Slides, Stickies, and Chat now keep automatic version
-  snapshots. A "Version history" entry in the File menu lets you browse earlier versions and
-  restore any of them. For collaborative documents the restore applies live — everyone with the
-  document open converges to the restored content immediately, with no reload. Retention follows
-  an hourly/daily/weekly/monthly model, keeping fine-grained recent history while thinning older
-  snapshots
-- **Slides** — rotate objects with a dedicated rotate handle (hold Shift to snap to common
-  angles, with a live angle readout); resizing is now rotation-aware
+- **Version history** — Docs, Sheets, Slides, Stickies and Chat keep versions automatically. **Version history** in the File menu lets you browse earlier versions and restore any of them. A restore applies live: everyone with the document open sees the restored content at once, without a reload. Eigen keeps hourly, daily, weekly and monthly versions, so recent history is detailed and older history thins out
+- **Slides** — rotate objects with a rotate handle. Hold Shift to snap to common angles, and watch the angle as you turn. Resizing follows the rotation
 - **Slides** — hold Alt and drag an object to drop a duplicate
-- **Slides** — a new Arrange section in the properties sidebar aligns and distributes the
-  selected objects
-- **Admin** — when a configured S3 bucket has object versioning disabled or suspended, the
-  storage settings (setup wizard, server settings, and per-team mount create/edit) show a
-  warning recommending you enable versioning and a noncurrent-version lifecycle policy
+- **Slides** — an Arrange section in the properties sidebar aligns and distributes the selected objects
+- **Admin** — when a configured S3 bucket has object versioning disabled or suspended, the storage settings (setup wizard, server settings, and a team's storage locations) warn you and recommend turning on versioning with a lifecycle rule for old versions
 
 ### Changed
 
-- **Drive** — folders and document containers now report their real size instead of always
-  showing 0; sizes are computed on demand, cached, and invalidated up the tree on writes
-- **Sheets** — visual refresh of the formula bar, column/row headers, the area around the grid,
-  and the bottom bar: theme colors throughout, an accent-tinted header highlight, and a single
-  compact bar combining the sheet tabs with the Count/Sum/Average selection stats. The all-sheets
-  switcher now shows a clear color dot for color-tagged sheets
-- **Slides, Stickies, Sheets** — canvas and toolbar styling aligned with Docs (rounded canvas
-  corners, consistent toolbar height)
-- **Stickies** — large boards stay smooth: cards are memoized and reused across updates, so
-  editing one card no longer re-renders the whole board
-- **Previews** — document, sheet, and slide previews appear instantly from the last cached
-  version and refresh in the background, instead of blocking on regeneration the first time you
-  view them after an edit
-- **Storage** — collaborative-document snapshots and updates are zstd-compressed on disk,
-  reducing the on-disk growth of Yjs documents
+- **Drive** — folders and documents show their real size instead of 0. Eigen works a size out when you need it and keeps it until something inside changes
+- **Sheets** — a new look for the formula bar, the column and row headers, the area around the grid and the bottom bar. Theme colors throughout, an accent color on highlighted headers, and one compact bar with the sheet tabs and the selection's Count, Sum and Average. The all-sheets list shows a color dot for sheets with a color
+- **Slides, Stickies, Sheets** — canvas and toolbar look like Docs, with rounded canvas corners and the same toolbar height
+- **Stickies** — large boards stay smooth: editing one card no longer redraws the whole board
+- **Previews** — document, sheet and slide previews show the last saved preview at once and refresh in the background, instead of making you wait the first time you look after an edit
+- **Storage** — collaborative documents are compressed on disk, so they grow more slowly
 
 ### Fixed
 
-- **Sheets** — a formula referencing a cell in another sheet now refreshes correctly even when
-  that row has not been loaded into the grid yet
+- **Sheets** — a formula that reads a cell on another sheet refreshes, even when that row hasn't loaded yet
 - **Calendar** — attendee email addresses are validated when added to an event
-- **Reliability** — hardened collab- and chat-document storage (atomic backing-file creation;
-  sync failures are no longer silent) to reduce the risk of data loss, following a storage
-  incident investigation
+- **Reliability** — after a storage incident, storage of documents and chats is hardened against data loss: files are created in one step, and a failed sync no longer goes unnoticed
 
 ## [0.0.4] - 2026-05-28
 
-Search release. A Mod+K command palette with full-text search across Drive and mail, native
-spreadsheet scrolling, a big spreadsheet-open speedup, compact file previews, and rich-text
-sticky cards.
+Search release. A Mod+K command palette that searches Drive and mail, native scrolling in spreadsheets, much faster opening of large spreadsheets, compact file previews, and rich text on sticky cards.
 
 ### Added
 
-- **Command palette** — press `Mod+K` (or the topbar search pill) anywhere to search files,
-  mail, and contacts, jump between apps, create documents, and act on the current selection
-  (open, share, rename, download, mail to…); smart suggestions turn a typed email/URL or a
-  matched contact name into a one-press "Send mail to…" action
-- **Search** — full-text search across Drive files and mail, scoped per kind (`file:`, `mail:`,
-  or the Tab scope chip); mail search filters by mailbox and by `from:`/`to:`, excluding
-  trash and spam by default
-- **Stickies** — card descriptions are now rich text with checkable task lists; toggling a
-  checkbox on a board card or in the card dialog persists, and cards show a task-progress strip
-- **Support** — new searchable Eigen Support help center on the marketing site, including a
-  WebDAV drive-mount guide
+- **Command palette** — press `Mod+K` (or the topbar search pill) anywhere to search files, mail, and contacts, jump between apps, create documents, and act on the current selection (open, share, rename, download, mail to…). Type an email address, a URL or a contact's name and it offers "Send mail to…" in one press
+- **Search** — search the text of Drive files and mail, one kind at a time with `file:`, `mail:` or the scope chip that Tab switches. Mail search filters by mailbox and by `from:` and `to:`, and leaves out trash and spam unless you ask
+- **Stickies** — card descriptions are rich text with task lists. Ticking a box on the board or in the card dialog is saved, and cards show how many tasks are done
+- **Support** — a searchable Eigen Support help center on the website, with a guide to mounting your drive over WebDAV
 - **Drive** — "Mail to…" in the item context menu opens a mail composer with the file attached
 
 ### Changed
 
-- **Sheets** — spreadsheet scrolling is now native: wheel, trackpad, keyboard, touch, and the
-  browser scrollbar all work directly, replacing the old wheel-hijack and thin custom scrollbars;
-  overscroll bounce is suppressed so the grid no longer tears at the edges
-- **Sheets** — opening a large imported spreadsheet is dramatically faster (a 16-sheet xlsx that
-  took ~60s now paints in a couple of seconds); the collab snapshot is also compressed on the
-  wire, so opening big sheets over a remote connection is much quicker
-- **Previews** — in-app quick-look previews are capped for large files (sheets show the first
-  sheet, slides the first 8, documents the first 20 blocks) with an "open to see everything"
-  marker; downloads and exports stay complete. Text previews cache longer and stale preview
-  files are pruned
+- **Sheets** — scrolling is native: wheel, trackpad, keyboard, touch and the browser's scrollbar all work directly, in place of the old custom scrolling and thin scrollbars. The grid no longer bounces and tears at its edges
+- **Sheets** — a large imported spreadsheet opens much faster: a 16-sheet xlsx that took about 60 seconds shows in a couple of seconds. The sheet is compressed on its way to the browser, so big sheets open much faster over a slow connection
+- **Previews** — quick look shows part of a large file (the first sheet, the first 8 slides, the first 20 blocks of a document) with a note to open it for the rest. Downloads and exports stay complete. Text previews are kept longer, and old preview files are cleaned up
 
 ### Fixed
 
-- **Sheets (XLSX import)** — files with rich-text hyperlink cells (e.g. Google Sheets exports)
-  no longer fail to import with a spurious "not a valid xlsx file" error
-- **Sheets** — a bare reference to an empty cell (e.g. `='Sheet'!B13`) now evaluates to `0`
-  instead of `true`
-- **Calendar & UI** — month and weekday names render in English instead of leaking the
-  browser's locale (e.g. Dutch) in the otherwise English-only UI
+- **Sheets (XLSX import)** — a file with formatted link cells, such as a Google Sheets export, no longer fails with "not a valid xlsx file"
+- **Sheets** — a formula that is only a reference to an empty cell, such as `='Sheet'!B13`, gives `0` instead of `true`
+- **Calendar and UI** — month and weekday names are in English, like the rest of Eigen, instead of in the browser's language (Dutch, for example)
 - **Space** — the 2FA setup QR code renders again instead of crashing the setup step
-- **Setup** — the first-run wizard is re-runnable after a partial failure instead of getting
-  stuck on "user already exists"
+- **Setup** — you can run the first-run wizard again after a partial failure, instead of getting stuck on "user already exists"
 - **Admin** — team and member action errors show the real message instead of `[object Object]`
-- **Sidebar** — long chat and folder names truncate with an ellipsis instead of forcing a
-  horizontal scrollbar
+- **Sidebar** — long chat and folder names truncate with an ellipsis instead of forcing a horizontal scrollbar
 
 ## [0.0.3] - 2026-05-18
 
-Quality release. Video thumbnails, optimistic image insert across collab apps, unified comments
-model, redesigned drive properties panel, shared sidebar across drive + eigendoc apps, and a
-deep refactor of the sheets engine.
+Quality release. Video thumbnails, images that show the moment you insert them, one kind of comment card everywhere, a new Drive properties panel, one sidebar across Drive and the document apps, and a cleanup of the spreadsheet engine.
 
 ### Added
 
-- **Drive** — server-side video thumbnail generation: uploaded `video/*` files get a 512px WebP
-  still (1s fast-seek, fallback 0s) and `duration` on `path.details`. ffmpeg ships in the docker
-  image; absence is graceful (no thumbnail, no errors)
-- **Docs, Slides, Sheets** — optimistic image placeholders: dropped/pasted images render
-  instantly from a local blob URL and swap to the server URL once upload settles; zombie
-  pending cleanup on tab crash
-- **Slides** — direction-based marquee selection (contain when dragged right, intersect when
-  dragged left), matching standard design-tool behavior
-- **Slides** — hold Alt to scale objects from center; Shift to constrain aspect ratio during
-  resize
-- **Slides** — unified `BackgroundFill` type covers solid colors and gradients for slide and
-  text-block backgrounds; shared `BackgroundFillBlock` properties panel with brand-color default,
-  color carry-over between fill modes, and tabbed segmented control
-- **Slides** — gradient backgrounds in server-side PDF export (oklab interpolation; plain-color
-  fallback under WeasyPrint)
-- **Comments** — unified model across Docs, Slides, Sheets, Stickies via a shared `CommentCard`
-  Y.Doc card (`createdBy`, `createdAt`, `color`); drive-attachment flow on the paperclip button
-- **Drive** — redesigned properties panel: tabbed segmented control, unified item context menu
-  across list and preview rows, shared `DriveItemMenuItems`
-- **Drive + EigenDoc apps** — unified `AppSidebar` with per-app accent colors, uppercase section
-  labels, and cross-app navigation
-- **Toolbars** — shared `DocumentShareCluster` sharing badge and shared `UndoRedoButtons` /
-  `useYjsUndoState` used in Slides and Stickies
-- **Stickies** — newly added cards scroll into view; board cards have a minimum height matching
-  the production look
-- **Admin** — alphabetical letter dividers in members, guests, and orphans lists via shared
-  `AlphabeticalList`
+- **Drive** — video thumbnails. An uploaded video gets a still from one second in, and its details show its length. ffmpeg ships in the Docker image. Without it, a video gets no thumbnail and no error
+- **Docs, Slides, Sheets** — a dropped or pasted image shows at once, while it uploads. An upload left behind by a crashed tab is cleaned up
+- **Slides** — box selection by direction, as in design tools: drag right to select what's fully inside, drag left to select what the box touches
+- **Slides** — hold Alt to resize objects from their center, and Shift to keep their proportions
+- **Slides** — solid colors and gradients for slide and text box backgrounds, in one panel. It starts with the brand color and keeps your color when you switch between solid and gradient
+- **Slides** — gradient backgrounds in PDF downloads
+- **Comments** — Docs, Slides, Sheets and Stickies use the same comment card, with its author, date and color. The paperclip button attaches a file from Drive
+- **Drive** — a new properties panel with tabs, and the same item menu in the list and in the preview
+- **Drive and the document apps** — one sidebar, with each app's accent color, uppercase section labels, and links to the other apps
+- **Toolbars** — Slides and Stickies get the shared sharing badge and undo and redo buttons
+- **Stickies** — a new card scrolls into view, and board cards have a minimum height
+- **Admin** — letter dividers in the members, guests and orphans lists
 
 ### Changed
 
-- **Sheets** — engine renamed from `fortune-sheet` to `sheet`; internal field names migrated
-  from `luckysheet_*` snake_case to camelCase (`ctx.sheets`, `filterRange`, `setEditingCell`,
-  etc.); jQuery snippets and upstream port stubs removed
-- **Sheets** — comments sidebar is now a flex sibling of the canvas, not a z-index overlay
-- **Drive** — frontend URLs are runtime-resolved via a split `EIGEN_STATIC_BIND` variable,
-  fixing deployments where the API and static frontend share an origin
-- **Drive previews** — document and slide thumbnails scale by intrinsic width; plaintext/code
-  thumbnails render on the A4 page layout
-- **Mail** — settings split into a dedicated section in the App settings sidebar
-- **Performance** — images decode off the main thread for smoother rendering across apps
-- **Slides** — drag-snapping skips `setState` when the snapped rect is unchanged
+- **Sheets** — the comments sidebar sits next to the grid instead of on top of it
+- **Drive** — app links come from a separate `EIGEN_STATIC_BIND` setting while the server runs, which fixes installs where the API and the apps share one address
+- **Drive previews** — document and slide thumbnails scale to their real width, and thumbnails of text and code files show an A4 page
+- **Mail** — mail settings get their own section in the App settings sidebar
+- **Performance** — images load without blocking the page, so every app scrolls and draws more smoothly
+- **Slides** — dragging with snapping does less work, so it stays smooth
 
 ### Fixed
 
-- **Drive** — pending blob URLs no longer swap out before the server URL preloads, eliminating
-  a flash of broken image
-- **Drive** — missing collab documents throw `ApiError(404)` instead of returning silently
-- **Drive** — internal metadata fields no longer leak into the details display
-- **Mail** — email-address validation rejects malformed addresses inside angle brackets
-  (e.g. `<foo@>`)
-- **Comments** — `CardDialog` no longer auto-opens after comment creation in Docs, Slides,
-  and Sheets
-- **Comments** — restored `h-[50vh]` on `CommentThread`; "View comment" actions consistently
-  use the `MessageSquare` icon; URL re-navigation and pre-sync card visibility fixed in Docs
-- **Comments** — `CHAT_COMMENT_INDEX_UPDATED` broadcast when a comment row is seeded, so
-  other clients see new comments without reload
-- **Slides** — `isSameFill` treats `null` and `undefined` as equivalent, preventing spurious
-  dirty-state on background fills
-- **Slides** — "Apply to" select and "Apply" button align in height in the background
-  properties panel
+- **Drive** — a new image no longer flashes as broken when its upload finishes
+- **Drive** — a missing document says it's not found instead of failing silently
+- **Drive** — internal fields no longer show in a file's details
+- **Mail** — a broken address inside angle brackets, such as `<foo@>`, is refused
+- **Comments** — the card dialog no longer opens by itself after you add a comment in Docs, Slides and Sheets
+- **Comments** — a comment thread is half the window tall again, and "View comment" always has the same icon. In Docs, opening a comment's link again works, and a comment card shows correctly before the document has synced
+- **Comments** — other people see a new comment without a reload
+- **Slides** — a background fill no longer counts as changed when it isn't
+- **Slides** — in the background panel, the "Apply to" list and the "Apply" button have the same height
 - **Admin** — Shift+Arrow extends selection in the members list
-- **Chat** — edit and delete throw `ApiError` on failure instead of returning a success flag
-- **Home** — two-phase destruct avoids a double-close race on sheet teardown
+- **Chat** — a failed edit or delete shows an error
+- **Sheets** — closing a sheet on the server can no longer close it twice
 
 ## [0.0.2] - 2026-05-11
 
-Maintenance release. Email-notification flows, guest-access controls, XLSX import, security
-hardening, and a major spreadsheet quality pass.
+Maintenance release. Email notifications, guest access settings, XLSX import, security hardening, and many spreadsheet fixes.
 
 ### Added
 
-- **Sheets** — XLSX import: open an `.xlsx` file in Drive to convert it into an Eigen sheet,
-  preserving cell values, number formats, formulas, merged cells, borders, fonts, and column/
-  row sizes
-- **Mail** — autolink bare `http(s)://` URLs in received message bodies
-- **Admin → Email notifications** — four toggles controlling outbound mail: calendar invitations
-  to attendees, file ACL additions, file access requests, and shared-file collaborators
-- **Admin → Guest access** — open-signup toggle and inactivity-days threshold (defaults:
-  open-signup on, cleanup after 7 days of inactivity)
-- **Drive** — email shared-file collaborators via a composer pre-populated with the user's
-  email signature (uses the same LightEditor that powers chat)
-- **Drive** — outbound notifications on access requests, ACL additions, and shares (gated by
-  the new admin toggles)
-- **Calendar** — email Eigen-user attendees on invite, gated by the calendar-invite toggle
-- **User** — owner-info popover on user and team avatars
+- **Sheets** — XLSX import. Open an `.xlsx` file in Drive to convert it into an Eigen sheet, with its values, number formats, formulas, merged cells, borders, fonts, and column and row sizes
+- **Mail** — plain `http://` and `https://` addresses in received mail become links
+- **Admin → Email notifications** — four switches for outgoing mail: calendar invitations to guests, mail when someone gets access to a file, file access requests, and mail to a shared file's collaborators
+- **Admin → Guest access** — a switch for open signup and the number of inactive days before a guest is removed (by default open signup is on, and guests go after 7 inactive days)
+- **Drive** — email the collaborators on a shared file, from a composer that starts with your email signature
+- **Drive** — mail goes out for access requests, new access and shares, if the admin switches allow it
+- **Calendar** — guests with an Eigen account get an invitation by email, if the calendar invitation switch is on
+- **User** — a user or team avatar shows who it is in a popover
 
 ### Changed
 
-- **Spreadsheet edits made before auto-flush** survive page reload. The backend replays pending
-  ops on read (and on XLSX export), so a freshly typed cell value is preserved if you reload
-  before the next auto-flush
-- **Calendar wire format** — server timestamps travel as native `Date` end-to-end via Eden
-  Treaty's reviver (previously Unix-second integers)
-- **Mail** — share, access-request, attachment, and collaborator emails share a single HTML
-  shell with unified chip styling across mail, chat, and drive
-- **Mail** — duplicate new-mail notifications are deduped via a stable tag
-- **UI popovers** — edge-collision padding and dynamic max-height so they no longer clip at the
-  viewport edge
+- **Spreadsheet edits** — a value you just typed survives a reload before the next automatic save, and is in an XLSX export too
+- **Mail** — share, access request, attachment and collaborator emails share one layout, and file chips look the same in mail, chat and Drive
+- **Mail** — a new mail no longer notifies twice
+- **Popovers** — no longer cut off at the edge of the window
 
 ### Fixed
 
-- **Spreadsheet paste** — slash-direction border paste across multi-tile copies no longer crashes
-- **Spreadsheet row/col ops** — read-only ranges and malformed ops surface clear errors instead
-  of corrupting sheet state
-- **Dialogs** — pointer events that start inside a dialog and end outside no longer dismiss it
-  (e.g. selecting text that overshoots the edge)
-- **LightEditor** — trims trailing empty paragraphs before save (chat, mail, drive composers)
-- **Welcome/invite email headers** — encode UTF-8 correctly (RFC 2047)
-- **Shared-document emails** — plain-text fallback now includes the document URL
-- **Postfix** — DKIM signs mail relayed from the docker bridge network interface
-- **Postfix** — per-recipient delivery limit set to 1 for the Eigen pipe
-- **Guest cleanup** — skips when initial setup is incomplete; reconciles on every login to repair
-  session/user drift; OTP request race fixed
-- **About dialog** — `builtAt` renders in a localized format
+- **Spreadsheet paste** — pasting diagonal borders over a copy of several ranges no longer crashes
+- **Spreadsheet rows and columns** — an insert or delete on a read-only range, or a broken one, shows a clear error instead of damaging the sheet
+- **Dialogs** — a click that starts inside a dialog and ends outside no longer closes it, for example when you select text past its edge
+- **Composers** — chat, mail and Drive composers drop empty lines at the end before they save
+- **Welcome and invite emails** — headers with non-English characters show correctly (RFC 2047)
+- **Shared-document emails** — the plain-text version includes the document's link
+- **Postfix** — DKIM-signs mail relayed from the Docker bridge network
+- **Postfix** — delivers to Eigen one recipient at a time
+- **Guest cleanup** — waits until setup is done, and repairs a guest's account at every sign-in. Two code requests at once no longer clash
+- **About dialog** — shows the build date in a readable format
 
 ### Security
 
-- **Mail templates** — user-provided tokens in welcome/invite emails are HTML-escaped
-- **Guest OTP requests** — rate-limited (3 per email per hour, 10 per IP per hour) via an
-  in-memory limiter
+- **Mail templates** — text a user typed is escaped in welcome and invite emails
+- **Guest sign-in codes** — at most 3 requests per email and 10 per IP an hour
 - **Mail body links** — open in a new tab with `rel="noopener noreferrer"`
 
 ## [0.0.1] - 2026-05-03
 
-First public release. Self-hostable workspace with email, file storage, documents, spreadsheets,
-presentations, kanban boards, calendar, contacts, and real-time chat — all sharing one API, one auth
-system, and one UI.
+First public release. A workspace you host yourself, with email, file storage, documents, spreadsheets, presentations, kanban boards, calendar, contacts and real-time chat. They all share one API, one sign-in and one UI.
 
 ### Apps
 
-- **Mail** — webmail with full mailbox management; Maildir++ on disk, IMAP via Dovecot
-- **Drive** — files with folders, sharing, ACL, thumbnails, previews; local, flat-key, and S3 backends
+- **Mail** — webmail with full mailbox management. Mail is stored as Maildir++ on disk, with IMAP through Dovecot
+- **Drive** — files and folders with sharing, permissions, thumbnails and previews, stored on local disk (as named files or flat keys) or on S3
 - **Docs** — collaborative document editor (Tiptap + Yjs); export to DOCX, PDF, and HTML
-- **Sheets** — collaborative spreadsheets with op-level Yjs sync (forked fortune-sheet engine)
+- **Sheets** — collaborative spreadsheets, on an engine forked from fortune-sheet
 - **Slides** — collaborative presentations on a 1920×1080 pixel canvas with presentation mode
 - **Stickies** — collaborative kanban boards with per-card embedded chat threads
 - **Calendar** — recurring events (RFC 5545 RRULE), invitations with RSVP, shared and team calendars
 - **Contacts** — contact management with avatars
-- **Chat** — real-time chat with 80+ slash commands; rooms live inside Drive (inheriting ACL) and embed
-  inside docs and kanban cards as comment threads
+- **Chat** — real-time chat with over 100 slash commands, most of them emotes. A chat lives in Drive and is shared like a file, and docs and kanban cards use chats as comment threads
 - **Space** — personal account settings, profile, and preferences
-- **Admin** — organization, team, member, role, quota, and server-wide settings administration; first-run
-  setup wizard
+- **Admin** — manage the organization, teams, members, roles, quotas and server settings, with a setup wizard for the first run
 
 ### Protocols
 
 - **IMAP** via Dovecot (Maildir++ co-existing with the web UI on the same filesystem)
-- **CalDAV** server with discovery, sync-collection, RRULE — tested with Thunderbird
+- **CalDAV** server with discovery, sync and repeating events, tested with Thunderbird
 - **WebDAV** server (RFC 4918 Class 1+2) for Drive mounts
 - **SMTP** submission on ports 587/465 with DKIM signing; Postfix handles inbound and outbound
 
@@ -873,9 +614,8 @@ system, and one UI.
 
 ### Deployment
 
-- Docker Compose stack with optional `edge` (Caddy) and `mail` (Postfix/Dovecot/Unbound) profiles —
-  opt out of either when the host already runs its own webserver or mail server
-- `bun run setup` — interactive 4-question setup writing `.env.production`
+- Docker Compose stack with optional `edge` (Caddy) and `mail` (Postfix, Dovecot, Unbound) profiles. Leave either out when the host already runs its own web server or mail server
+- `bun run setup` — an interactive setup of four questions that writes `.env.production`
 - Automatic HTTPS via Caddy, automatic DKIM key generation
 - Backup script and auto-migrating update script
-- Mail-domain split: address suffix (`MAIL_DOMAIN`) decoupled from web hostname (`DOMAIN`)
+- Mail addresses can use another domain (`MAIL_DOMAIN`) than the web address (`DOMAIN`)
