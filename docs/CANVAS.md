@@ -20,7 +20,7 @@ The sections cover the stored fields, the reader, the writer, kinds, layers, arr
 
 ## Every stored field is a scalar
 
-An element is a flat Yjs map of scalars and strings (`packages/lib/src/vector/types.ts`). Lists and objects ride JSON strings: `points`, `pressures`, `commentCardIds`, `fill`, the bindings, and a chart's spec as one string per part, `specChart` to `specData`, so two peers who edit two parts of a chart both keep their edit. So reading an element is a set of primitive reads, and the write whitelist `ELEMENT_FIELDS` is a list of key names. The chart kind's defaults name every part from `CHART_SPEC_PART_KEYS`, so the whitelist holds them all.
+An element is a flat Yjs map of scalars and strings (`packages/lib/src/vector/types.ts`). Lists and objects ride JSON strings: `points`, `pressures`, `commentCardIds`, `fill`, the bindings, and a chart's spec as one string per part, `specChart` to `specData`, so two peers who edit two parts of a chart both keep their edit. So reading an element is a set of primitive reads, and the write whitelist `ELEMENT_FIELDS` is a list of key names. A kind's fields are the keys of its defaults, and the chart kind's defaults write every part (`newChartSpecParts`), so the whitelist holds them all.
 
 `fill` is paint and hatch style in one scalar (`fill.ts`). Colors are hex or the `transparent` token only, so no `url(...)` paint server reaches an export. Anything malformed reads as `TRANSPARENT_FILL`, so a corrupt peer write never throws on a render path.
 
