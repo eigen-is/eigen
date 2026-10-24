@@ -2,7 +2,7 @@
 // then Arrange. Delete is the menu's and the keyboard's, so the panel has no button for it. A typed field holds the
 // host's gesture, one undo step. A viewer reads the fields and gets nothing that writes.
 import { afterEach, describe, expect, test } from 'bun:test';
-import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart, SheetFloatingItem, SheetImage } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -39,6 +39,7 @@ async function render(item: SheetFloatingItem, canWrite = true) {
                     heard.push('hold');
                     return () => heard.push('release');
                 },
+                history: { undo: () => heard.push('undo'), redo: () => heard.push('redo') },
             },
             // The host's chart sections, as the app passes the sheet's for a chart.
             item.kind === 'chart' && createElement(PropertySection, { title: 'Chart', children: 'rows' }),
@@ -94,4 +95,88 @@ describe.each([
         expect(buttons()).toEqual([]);
         expect(headings()).toEqual(['Transform']);
     });
+});
+
+// Over a mounted workbook, wired as the editor wires it: the caret stays in a typed field, outside the workbook's
+// keydown, so the panel hands ⌘Z to the workbook rather than leave the browser's field undo to write each step.
+test('⌘Z in a typed chart title takes the whole title back in one step, and ⇧⌘Z brings it back', async () => {
+    const { Workbook, ChartPanelSections } = await import('@workspace/sheet');
+    const { createRef, useState } = await import('react');
+    type WorkbookInstance = import('@workspace/sheet').WorkbookInstance;
+    type ChartPanelState = import('@workspace/sheet').ChartPanelState;
+    const workbook = createRef<WorkbookInstance>();
+    const history = { undo: () => workbook.current?.undo(), redo: () => workbook.current?.redo() };
+    function Host() {
+        const [panel, setPanel] = useState<ChartPanelState | null>(null);
+        return createElement(
+            'div',
+            null,
+            createElement(Workbook, {
+                ref: workbook,
+                data: [
+                    {
+                        id: 's1',
+                        name: 'One',
+                        order: 0,
+                        status: 1,
+                        row: 20,
+                        column: 10,
+                        celldata: [],
+                        config: {},
+                        charts: { c1: chart },
+                    },
+                ],
+                showToolbar: false,
+                showFormulaBar: false,
+                hooks: { onChartPanelChange: setPanel },
+            }),
+            panel &&
+                createElement(
+                    FloatingObjectPanel,
+                    {
+                        item: { kind: 'chart', object: panel.chart },
+                        canWrite: true,
+                        aspectLocked: false,
+                        onAspectLockChange: () => {},
+                        onChange: () => {},
+                        onArrange: () => {},
+                        beginGesture: () => workbook.current?.beginGesture() ?? (() => {}),
+                        history,
+                    },
+                    createElement(ChartPanelSections, { key: panel.chart.id, panel, workbook }),
+                ),
+        );
+    }
+    let container: HTMLElement;
+    ({ container, unmount } = await renderInDocument(createElement(Host)));
+    const box = container.querySelector('[data-floating-id="c1"] > *');
+    await act(async () => box?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })));
+    await act(async () => document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 })));
+    const stored = () => readChartSpec(workbook.current?.getAllSheets()[0].charts?.c1 ?? {}).spec?.title.text;
+    const before = sampleChartSpec('column').title.text;
+    const title = container.querySelector<HTMLInputElement>('input[placeholder="Chart title"]');
+    if (!title) throw new Error('no title field');
+    await act(async () => {
+        title.focus();
+        title.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    });
+    for (const text of ['U', 'Un', 'Und', 'Undo']) {
+        await act(async () => {
+            nativeValueSetter?.call(title, text);
+            title.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    }
+    const press = (shiftKey: boolean) =>
+        act(async () => {
+            title.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', metaKey: true, shiftKey, bubbles: true }),
+            );
+        });
+
+    await press(false);
+    expect(stored()).toBe(before);
+    expect(title.value).toBe(before);
+    await press(true);
+    expect(stored()).toBe('Undo');
+    expect(title.value).toBe('Undo');
 });

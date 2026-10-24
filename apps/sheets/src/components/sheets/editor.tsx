@@ -313,6 +313,10 @@ function SheetEditorInner({
         [activeObject],
     );
     const beginObjectGesture = useCallback(() => workbookRef.current?.beginGesture() ?? (() => {}), []);
+    const objectHistory = useMemo(
+        () => ({ undo: () => workbookRef.current?.undo(), redo: () => workbookRef.current?.redo() }),
+        [],
+    );
 
     const leftItems = useMemo(
         () => <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} />,
@@ -500,6 +504,7 @@ function SheetEditorInner({
                                 )
                             }
                             beginGesture={beginObjectGesture}
+                            history={objectHistory}
                         >
                             {chartPanel && (
                                 <ChartPanelSections

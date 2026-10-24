@@ -1,9 +1,10 @@
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
-import type { BeginGesture, TransformFields } from '@workspace/ui/components/properties-panel';
+import type { BeginGesture, PropertyHistory, TransformFields } from '@workspace/ui/components/properties-panel';
 import {
     PropertiesPanel,
     PropertyGestureContext,
+    PropertyHistoryContext,
     PropertySection,
     TransformSection,
     ZOrderButtons,
@@ -19,6 +20,8 @@ type FloatingObjectPanelProps = {
     onArrange: (op: ZOp) => void;
     // The workbook's undo gesture, so a typed field is one undo step.
     beginGesture: BeginGesture;
+    // The workbook's undo and redo: a typed field keeps the caret outside the workbook's keydown, so it hands ⌘Z over.
+    history: PropertyHistory;
     // A chart's own sections, between its Transform and Arrange.
     children?: ReactNode;
 };
@@ -34,31 +37,34 @@ export function FloatingObjectPanel({
     onChange,
     onArrange,
     beginGesture,
+    history,
     children,
 }: FloatingObjectPanelProps) {
     return (
         <PropertyGestureContext.Provider value={beginGesture}>
-            <PropertiesPanel title={kind === 'image' ? 'Image' : 'Chart'}>
-                <TransformSection
-                    x={Math.round(object.x)}
-                    y={Math.round(object.y)}
-                    width={Math.round(object.width)}
-                    height={Math.round(object.height)}
-                    angle={object.angle ?? 0}
-                    onChange={onChange}
-                    disabled={!canWrite}
-                    aspectLocked={aspectLocked}
-                    onAspectLockChange={canWrite ? onAspectLockChange : undefined}
-                />
-                {canWrite && (
-                    <>
-                        {children}
-                        <PropertySection title="Arrange">
-                            <ZOrderButtons onApply={onArrange} />
-                        </PropertySection>
-                    </>
-                )}
-            </PropertiesPanel>
+            <PropertyHistoryContext.Provider value={history}>
+                <PropertiesPanel title={kind === 'image' ? 'Image' : 'Chart'}>
+                    <TransformSection
+                        x={Math.round(object.x)}
+                        y={Math.round(object.y)}
+                        width={Math.round(object.width)}
+                        height={Math.round(object.height)}
+                        angle={object.angle ?? 0}
+                        onChange={onChange}
+                        disabled={!canWrite}
+                        aspectLocked={aspectLocked}
+                        onAspectLockChange={canWrite ? onAspectLockChange : undefined}
+                    />
+                    {canWrite && (
+                        <>
+                            {children}
+                            <PropertySection title="Arrange">
+                                <ZOrderButtons onApply={onArrange} />
+                            </PropertySection>
+                        </>
+                    )}
+                </PropertiesPanel>
+            </PropertyHistoryContext.Provider>
         </PropertyGestureContext.Provider>
     );
 }
