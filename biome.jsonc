@@ -61,7 +61,7 @@
         "noExplicitAny": "error"
       },
       "a11y": {
-        "recommended": false
+        "preset": "none"
       }
     }
   },
@@ -181,6 +181,21 @@
     },
     "formatter": {
       "enabled": true
+    }
+  },
+  "markdown": {
+    "parser": {
+      // Help-center articles and blog posts open with YAML front matter.
+      "frontmatter": true
+    },
+    "formatter": {
+      // Off: it pads wide tables to one width and re-nests lists and blockquotes, which changes what they render.
+      "enabled": false
+    }
+  },
+  "yaml": {
+    "formatter": {
+      "indentWidth": 2
     }
   }
 }
