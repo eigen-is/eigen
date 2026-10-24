@@ -21,7 +21,7 @@ import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../lib/export/office-image';
 import { sanitizeSceneHtml } from '../../lib/export/sanitize';
-import { eigenslidesToPptx } from '../../lib/export/slides/to-pptx';
+import { eigenslidesToPptx } from '../../lib/export/slides/pptx/to-pptx';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
 import { openZip, type ZipReader } from '../../lib/ooxml/zip';
 

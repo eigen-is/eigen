@@ -14,7 +14,7 @@ import {
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
-import { eigenslidesToPptx } from '../../lib/export/slides/to-pptx';
+import { eigenslidesToPptx } from '../../lib/export/slides/pptx/to-pptx';
 import { classifyPptx, runRoundtrip } from '../../scripts/pptx-audit';
 import { PIXEL_PNG } from '../fixtures/pptx';
 
@@ -23,7 +23,7 @@ import { PIXEL_PNG } from '../fixtures/pptx';
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'pptx-audit-'));
 afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
-const WRITER = fileURLToPath(new URL('../../lib/export/slides/to-pptx.ts', import.meta.url));
+const WRITER = fileURLToPath(new URL('../../lib/export/slides/pptx/to-pptx.ts', import.meta.url));
 const SCRIPT = fileURLToPath(new URL('../../scripts/pptx-audit.ts', import.meta.url));
 
 const ELEMENTS: NewVectorElement[] = [

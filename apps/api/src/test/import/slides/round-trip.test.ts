@@ -17,7 +17,7 @@ import {
 import * as Y from 'yjs';
 import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { sanitizeSceneHtml } from '../../../lib/export/sanitize';
-import { eigenslidesToPptx } from '../../../lib/export/slides/to-pptx';
+import { eigenslidesToPptx } from '../../../lib/export/slides/pptx/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { box, buildPptx, PIXEL_PNG, solid as solidFill, sp } from '../../fixtures/pptx';
 

@@ -19,7 +19,7 @@ import {
     type VectorFrame,
     type VectorScene,
 } from '@workspace/lib/vector';
-import type { eigenslidesToPptx } from '../lib/export/slides/to-pptx';
+import type { eigenslidesToPptx } from '../lib/export/slides/pptx/to-pptx';
 import type { ImportedMedia } from '../lib/import/image-types';
 import { EMU_PER_POINT } from '../lib/ooxml/ooxml';
 import {
@@ -354,7 +354,7 @@ async function picturesOf(media: ImportedMedia[]): Promise<Map<string, Picture>>
 }
 
 const PRESENTATION = /\.p[po]t[xm](?![a-z0-9])/i;
-const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/slides/to-pptx.ts');
+const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/slides/pptx/to-pptx.ts');
 
 function isWriter(value: unknown): value is typeof eigenslidesToPptx {
     return typeof value === 'function';
