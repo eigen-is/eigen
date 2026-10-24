@@ -23,7 +23,7 @@ Write it last, once you understand the file. It answers, in plain words:
 
 A header is self-contained: it states what this file owns and stays true whatever other files do. Facts another file owns, such as which kinds exist, which parts they have or who calls this file, appear only as examples ("such as", "for example"), never as a complete list. The test: after someone adds a caller, a subclass or a feature elsewhere, is the header still true?
 
-It names functions and concepts (`getHome`), never file paths, docs or line numbers: those move, and the IDE finds callers anyway. No history, no TODOs, no "now uses X". The reader may not be a native English speaker: short sentences, common words, no chains of jargon. Test files and generated files get no header.
+It names functions and concepts (`getHome`), never file paths, docs or line numbers: those move, and the IDE finds callers anyway. No history, no TODOs, no "now uses X". The reader may not be a native English speaker: short sentences, common words, no chains of jargon. Every `.ts`/`.tsx` source file gets one, `scripts/` and the `packages/sheet` fork included. Test files, generated files and config files get none.
 
 ```ts
 // A Home is everything one owner keeps on this server, such as a user's files, mail and calendar,
