@@ -8,16 +8,8 @@ import type { Notification } from '@workspace/lib/types/notification';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { boxDir, mailRootOf, makeEml, seedMaildirFile, seedMaildirFolder } from '../mail-test-helpers';
-import {
-    app,
-    assertJson,
-    authedRequest,
-    collectSSE,
-    createTestUser,
-    ensureServer,
-    findOrFail,
-    type TestUser,
-} from '../setup';
+import type { TestUser } from '../setup';
+import { app, assertJson, authedRequest, collectSSE, createTestUser, ensureServer, findOrFail } from '../setup';
 
 // createTestUser hits the auth DB directly, so the setup wizard (which creates the auth schema and
 // configures the org) must have run first. Under --parallel each file boots its own server; gate on it.

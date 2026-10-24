@@ -1,5 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
-import { type Context, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getSheetConfig } from '../context';
 import type { RangeOrWholeAxis, Rect } from '../types';
 import { seletedHighlistByindex } from '.';
 import { getRangetxt, mergeMoveMain } from './cell';

@@ -1,9 +1,5 @@
-import {
-    type ConditionalFormatRule,
-    columnIndexToLabel,
-    type DefaultConditionalFormatRule,
-    type SingleRange,
-} from '@workspace/lib/sheets';
+import type { ConditionalFormatRule, DefaultConditionalFormatRule, SingleRange } from '@workspace/lib/sheets';
+import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { X } from 'lucide-react';

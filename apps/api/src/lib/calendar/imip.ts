@@ -1,7 +1,8 @@
 import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';
-import { type AddressObject, type Attachment, type CalendarInvite, isCalendarPart } from '@workspace/lib/types/mail';
+import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/types/mail';
+import { isCalendarPart } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../core/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';

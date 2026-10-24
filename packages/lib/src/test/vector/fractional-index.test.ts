@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { ZOp } from '../../vector/fractional-index';
 import {
     generateKeyBetween,
     generateNKeysBetween,
@@ -7,7 +8,6 @@ import {
     orderByFractionalIndex,
     syncInvalidIndices,
     validateOrderKey,
-    type ZOp,
     zOrderKeys,
 } from '../../vector/fractional-index';
 

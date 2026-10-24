@@ -8,20 +8,17 @@ import { isRecord } from '../core/guards';
 import { stripNonXmlChars } from '../core/xml';
 import { MAX_PAPER_MM, mmToPx } from '../docs/eigendoc/page';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../sheets/defaults';
-import {
-    type CellRangeRef,
-    CHART_BLANKS,
-    CHART_STACKINGS,
-    CHART_TYPES,
-    type ChartSeriesStyle,
-    type ChartSpec,
-    type ChartType,
-    type InlineChartData,
-    type InlineChartSeries,
-    LEGEND_POSITIONS,
-    type RangeChartData,
-    type RangeChartSeries,
+import type {
+    CellRangeRef,
+    ChartSeriesStyle,
+    ChartSpec,
+    ChartType,
+    InlineChartData,
+    InlineChartSeries,
+    RangeChartData,
+    RangeChartSeries,
 } from '../types/chart';
+import { CHART_BLANKS, CHART_STACKINGS, CHART_TYPES, LEGEND_POSITIONS } from '../types/chart';
 import { bool, color, fontFamily, oneOf, str } from '../vector/kinds/read-fields';
 import { prop } from '../vector/types';
 

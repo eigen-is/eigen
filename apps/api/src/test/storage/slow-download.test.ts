@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { consumeStream, type DatabaseConfig } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
+import { consumeStream } from '../../lib/core';
 import { getHome } from '../../lib/home';
 import { CONTENT_REINDEX_CAP_SECONDS } from '../../lib/mount/content-reindex-queue';
 import type { Mount } from '../../lib/mount/mount';
@@ -289,7 +290,7 @@ describe('A stalled GET and the Home', () => {
         const open = home.drive.getCollabDocument(homeMount.id, doc.id);
         open.catch(() => {});
         await waitFor(() => fake.heldCount > 0);
-        const shutdown = home.shutdown();
+        const shutdown = home.close();
         const next = getHome(ownerId);
         next.catch(() => {});
         try {

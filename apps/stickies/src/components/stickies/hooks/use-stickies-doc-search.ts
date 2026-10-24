@@ -1,7 +1,8 @@
 import { buildSearchRegex } from '@workspace/lib/doc-search';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DocSearchController } from '@workspace/lib/types/doc-search';
-import { type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { searchBoard } from '../search-board';
 import type { BoardData } from '../types';
 

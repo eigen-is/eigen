@@ -4,14 +4,8 @@
 // generic Stroke row; this section is the text itself.
 
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
-import {
-    RICH_TEXT_CLASS,
-    richTextCssText,
-    round,
-    slidePtToPx,
-    slidePxToPt,
-    type VectorRichTextElement,
-} from '@workspace/lib/vector';
+import type { VectorRichTextElement } from '@workspace/lib/vector';
+import { RICH_TEXT_CLASS, richTextCssText, round, slidePtToPx, slidePxToPt } from '@workspace/lib/vector';
 import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import {
     AlignmentPicker,

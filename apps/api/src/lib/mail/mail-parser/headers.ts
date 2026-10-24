@@ -2,7 +2,8 @@ import { extname } from 'node:path';
 import { domainToUnicode } from 'node:url';
 import type { AddressObject, EmailAddress, ParsedMail } from '@workspace/lib/types/mail';
 import libmime from 'libmime';
-import addressparser, { type Address } from 'nodemailer/lib/addressparser';
+import type { Address } from 'nodemailer/lib/addressparser';
+import addressparser from 'nodemailer/lib/addressparser';
 
 export type StructuredValue = { value: string; params: Record<string, string> };
 

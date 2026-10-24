@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { teamApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import { type MountStorageType, type S3Config, teamOwnerId } from '@workspace/lib/types';
+import type { MountStorageType, S3Config } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateTeamMounts, teamKeys } from './keys';
 

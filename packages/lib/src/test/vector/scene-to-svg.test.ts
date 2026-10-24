@@ -2,14 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { solidFill } from '../../vector/fill';
 import { eigenMediaHref } from '../../vector/media-refs';
 import { elementToSvg, sceneToSvg } from '../../vector/scene-to-svg';
-import {
-    DEFAULT_ELEMENT_PROPS,
-    type VectorElement,
-    type VectorImageElement,
-    type VectorLinearElement,
-    type VectorRectangleElement,
-    type VectorScene,
+import type {
+    VectorElement,
+    VectorImageElement,
+    VectorLinearElement,
+    VectorRectangleElement,
+    VectorScene,
 } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS } from '../../vector/types';
 import { richtext, scene, shape } from './element-factories';
 
 // Freedraw/line/arrow rows carry the paint + roughjs fields the shared defaults no longer hold.

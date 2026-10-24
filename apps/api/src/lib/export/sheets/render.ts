@@ -1,32 +1,31 @@
 import { escapeHtml } from '@workspace/lib/html';
+import type {
+    Cell,
+    CellBorderSides,
+    CellWithRowAndCol,
+    ConditionalFormatRule,
+    MergeCell,
+    Sheet,
+    SheetConfig,
+} from '@workspace/lib/sheets';
 import {
     borderInfoExtent,
     borderSidesToCss,
-    type Cell,
-    type CellBorderSides,
-    type CellWithRowAndCol,
-    type ConditionalFormatRule,
     cellFontName,
     floatingItems,
-    type MergeCell,
     mergedBorderSides,
     SHEET_DEFAULT_FONT_SIZE,
-    type Sheet,
-    type SheetConfig,
     sheetColumnsWidth,
     sheetFloatingBox,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { getElementBounds } from '@workspace/lib/vector';
+import type { CellFormatStyle, CellResolver, ComputeMap, DataBar } from '@workspace/sheet/engine';
 import {
     booleanDisplay,
-    type CellFormatStyle,
-    type CellResolver,
-    type ComputeMap,
     cellWrapsText,
     createCfFormulaEvaluator,
-    type DataBar,
     evaluateConditionalFormat,
     FormulaEngine,
     generalAlign,
@@ -42,7 +41,7 @@ import { MAX_PDF_PAGE_PX } from '../weasyprint';
 import { HORIZONTAL_ALIGN, isNumericRotation, sheetsResolver, VERTICAL_ALIGN } from './cell-style';
 
 // Sheet[] -> HTML: the full-workbook export document, the budgeted preview body and
-// the fixed-size PDF document. Runs inside the transform Worker (worker.ts owns
+// the fixed-size PDF document. Runs inside the transform process (child.ts owns
 // execution; the main-thread orchestration lives in export-document.ts). This
 // module must not reach the Mount or the main-thread transform seam - the Worker
 // imports it.

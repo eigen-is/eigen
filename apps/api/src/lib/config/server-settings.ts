@@ -1,5 +1,6 @@
 import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
-import { EMPTY_S3, type S3Config } from '@workspace/lib/types/mount';
+import type { S3Config } from '@workspace/lib/types/mount';
+import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';

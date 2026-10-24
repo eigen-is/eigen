@@ -2,18 +2,16 @@
 // (write-vector.ts). Plain functions over the doc, the way the tools modules are plain functions over
 // the scene, so the hook stays the thin React surface.
 
+import type { NewVectorElement, StyleDefaults, ZOp } from '@workspace/lib/vector';
 import {
     ELEMENT_FIELDS,
     generateNKeysBetween,
     isValidFractionalIndex,
-    type NewVectorElement,
     newElementId,
     randomSeed,
     remapBinding,
-    type StyleDefaults,
     topmostIndex,
     writeElementInDoc,
-    type ZOp,
     zOrderKeys,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';

@@ -1,5 +1,6 @@
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
-import { type ExportMedia, toTransferableBuffer } from '../document/transform/protocol';
+import type { ExportMedia } from '../document/transform/protocol';
+import { toTransferableBuffer } from '../document/transform/protocol';
 import { ASVG_NS } from '../ooxml/ooxml';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../shared/thumbnail-timeout';
 import type { ImageResult, WorkerInput } from '../shared/thumbnail-worker';

@@ -1,9 +1,11 @@
 import type { DrivePath } from '@workspace/lib/types';
 import type React from 'react';
-import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../hooks/use-list-drag';
-import { type UseListSelectionReturn, useListSelection } from '../../hooks/use-list-selection';
+import type { UseListSelectionReturn } from '../../hooks/use-list-selection';
+import { useListSelection } from '../../hooks/use-list-selection';
 import { useSelectableContextMenu } from '../../hooks/use-selectable-context-menu';
 
 export type UseDriveItemControllerOptions = {

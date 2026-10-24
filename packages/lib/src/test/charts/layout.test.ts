@@ -9,17 +9,8 @@ import {
     MAX_SKETCH_POINTS,
     sampleChartSpec,
 } from '../../charts';
-import {
-    CHART_STACKINGS,
-    CHART_TYPES,
-    type ChartData,
-    type ChartLabel,
-    type ChartLayout,
-    type ChartPaint,
-    type ChartSpec,
-    type ChartType,
-    LEGEND_POSITIONS,
-} from '../../types/chart';
+import type { ChartData, ChartLabel, ChartLayout, ChartPaint, ChartSpec, ChartType } from '../../types/chart';
+import { CHART_STACKINGS, CHART_TYPES, LEGEND_POSITIONS } from '../../types/chart';
 import { parseFill, serializeFill, solidFill, TRANSPARENT_FILL } from '../../vector/fill';
 import { getLineHeightPx } from '../../vector/font-metrics';
 import { parsePoints } from '../../vector/geometry';

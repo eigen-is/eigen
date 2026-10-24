@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { SLIDE_SIZES, serializeBackgroundFill, type VectorFrame } from '@workspace/lib/vector';
+import type { VectorFrame } from '@workspace/lib/vector';
+import { SLIDE_SIZES, serializeBackgroundFill } from '@workspace/lib/vector';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { canvasSurfaceClass, FramePage } from '../../../components/vector/paper';
 

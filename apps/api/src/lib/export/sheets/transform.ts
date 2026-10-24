@@ -1,17 +1,11 @@
 import type * as Y from 'yjs';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { readSheetsFromDoc } from '../../document/sheets';
-import {
-    type ExportMediaLoader,
-    htmlExportMode,
-    type SheetExportFormat,
-    type TransformWarning,
-    toTransferableBuffer,
-    toTransferableText,
-} from '../../document/transform/protocol';
+import type { ExportMediaLoader, SheetExportFormat, TransformWarning } from '../../document/transform/protocol';
+import { htmlExportMode, toTransferableBuffer, toTransferableText } from '../../document/transform/protocol';
 import { withSvgFallbacks } from '../office-image';
 
-// Materialized doc → export bytes. Runs inside the transform Worker (worker.ts owns
+// Materialized doc → export bytes. Runs inside the transform process (child.ts owns
 // execution; the format logic stays here in export/, pure over Sheet[] + title).
 // Per-format renderers load lazily so an HTML export never evaluates the xlsx writer.
 // Recalc failure serves replayed values with a warning — an export must never fail
@@ -41,9 +35,9 @@ export async function renderEigensheetsExport(
             return { data: toTransferableText(html), warnings };
         }
         case 'xlsx': {
-            const { sheetsToXlsx } = await import('./to-xlsx');
+            const { writeXlsx } = await import('./xlsx/to-xlsx');
             const media = await withSvgFallbacks(await loadMedia(mediaNamesIn(sheets.map((sheet) => sheet.images))));
-            return { data: toTransferableBuffer(sheetsToXlsx(sheets, { title, warnings, media })), warnings };
+            return { data: toTransferableBuffer(writeXlsx(sheets, { title, media, warnings })), warnings };
         }
     }
 }

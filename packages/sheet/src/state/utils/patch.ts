@@ -2,7 +2,8 @@ import type { MergeCell, SheetConfig } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { every, isEqual, isNil, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import type { Op, Sheet } from '../types';
 import { getSheetIndex } from '.';
 

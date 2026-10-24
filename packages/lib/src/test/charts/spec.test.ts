@@ -17,13 +17,8 @@ import {
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../../constants/colors';
 import { EIGEN_FONT_NAMES } from '../../constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../../sheets';
-import {
-    CHART_STACKINGS,
-    CHART_TYPES,
-    type ChartSpec,
-    type InlineChartData,
-    type RangeChartData,
-} from '../../types/chart';
+import type { ChartSpec, InlineChartData, RangeChartData } from '../../types/chart';
+import { CHART_STACKINGS, CHART_TYPES } from '../../types/chart';
 import { isColorToken } from '../../vector/fill';
 
 const style = { color: '#2a78d6', markers: false, smooth: false };

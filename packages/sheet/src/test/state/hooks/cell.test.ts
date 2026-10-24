@@ -24,17 +24,17 @@ g.document = {
 
 // Mock DOM classes
 g.MouseEvent = class MouseEvent {
-    type: string;
-    button: number = 0;
-    pageX: number = 0;
-    pageY: number = 0;
+    public type: string;
+    public button: number = 0;
+    public pageX: number = 0;
+    public pageY: number = 0;
 
-    constructor(type: string, options: Record<string, unknown> = {}) {
+    public constructor(type: string, options: Record<string, unknown> = {}) {
         this.type = type;
         Object.assign(this, options);
     }
 
-    preventDefault: () => void = () => {};
+    public preventDefault: () => void = () => {};
 };
 
 describe('sheet/core/hooks/cell', () => {

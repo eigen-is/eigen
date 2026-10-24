@@ -4,11 +4,12 @@ import type { ChartLook, ChartSpec, RangeChartData } from '@workspace/lib/types/
 import { ChartSections } from '@workspace/ui/components/charts';
 import { Input } from '@workspace/ui/components/input';
 import { PropertyCheckbox, PropertyRow } from '@workspace/ui/components/properties-panel';
-import { type RefObject, useState } from 'react';
+import type { RefObject } from 'react';
+import { useState } from 'react';
 import { rowIndexToLabel } from '../../engine/a1-notation';
+import type { ChartRange } from '../../engine/chart-range';
 import {
     CHART_RANGE_REFUSALS,
-    type ChartRange,
     chartRangeData,
     chartRangeOf,
     chartRangeText,

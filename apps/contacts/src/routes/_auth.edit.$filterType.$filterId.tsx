@@ -5,7 +5,8 @@ import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
 import { useEffect, useState } from 'react';
 import { z } from 'zod';
-import { ContactEdit, ContactEditToolbar, type ContactFormValues } from '../components/contacts/contact-edit';
+import type { ContactFormValues } from '../components/contacts/contact-edit';
+import { ContactEdit, ContactEditToolbar } from '../components/contacts/contact-edit';
 
 const searchSchema = z.object({
     contactId: z.string().optional(),

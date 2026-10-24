@@ -1,7 +1,8 @@
 import { forEach, isNumber, isPlainObject } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules';
-import { type CommonOptions, getSheet } from './common';
+import type { CommonOptions } from './common';
+import { getSheet } from './common';
 import { invalidParams } from './errors';
 
 export function freeze(

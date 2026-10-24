@@ -1,5 +1,6 @@
 import { LARGE_OPERATOR_NAMES, PRIME } from './notation';
-import { CASES, type MathEnclosure, type MathSpace, type MathVariant } from './tree';
+import type { MathEnclosure, MathSpace, MathVariant } from './tree';
+import { CASES } from './tree';
 
 const SYMBOL_CLASSES = ['letter', 'operator', 'relation', 'arrow', 'delimiter', 'misc'] as const;
 

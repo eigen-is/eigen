@@ -1,5 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { authedRequest, type TestUser } from './setup';
+import type { TestUser } from './setup';
+import { authedRequest } from './setup';
 
 // The two whole-file import requests every domain answers, spelled once: the file's own bytes under its
 // media type, and the JSON body naming a Drive file the user may read. `domain` is the route's first

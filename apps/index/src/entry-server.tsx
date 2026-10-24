@@ -1,7 +1,8 @@
 import { createMemoryHistory } from '@tanstack/react-router';
 import { attachRouterServerSsrUtils, RouterServer } from '@tanstack/react-router/ssr/server';
 import { renderToString } from 'react-dom/server';
-import { type PageArticle, setPrerenderBody } from './content/manifest';
+import type { PageArticle } from './content/manifest';
+import { setPrerenderBody } from './content/manifest';
 import { createAppRouter } from './router';
 
 // SSR entry — renders one route to HTML and produces TanStack Router's

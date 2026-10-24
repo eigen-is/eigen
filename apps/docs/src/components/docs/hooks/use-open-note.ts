@@ -1,17 +1,13 @@
 import type { Editor } from '@tiptap/core';
 import { Fragment } from '@tiptap/pm/model';
-import { TextSelection, type Transaction } from '@tiptap/pm/state';
-import { type Decoration, DecorationSet } from '@tiptap/pm/view';
+import type { Transaction } from '@tiptap/pm/state';
+import { TextSelection } from '@tiptap/pm/state';
+import type { Decoration } from '@tiptap/pm/view';
+import { DecorationSet } from '@tiptap/pm/view';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import {
-    findNote,
-    NOTE_EDIT,
-    NOTE_PULL,
-    type NoteAnchor,
-    noteAnchor,
-    noteDecorationsKey,
-} from '../extensions/footnote';
+import type { NoteAnchor } from '../extensions/footnote';
+import { findNote, NOTE_EDIT, NOTE_PULL, noteAnchor, noteDecorationsKey } from '../extensions/footnote';
 
 // How a note opens: with the caret where a press landed or at its end, or with a find bar's match selected and the
 // focus left in the bar.

@@ -1,22 +1,23 @@
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { escapeHtml, LIGHT_EDITOR_HREF } from '@workspace/lib/html';
+import type { TextAlign, VectorRichTextElement, VerticalAlign } from '@workspace/lib/vector';
 import {
     DEFAULT_RICHTEXT_PROPS,
     MAX_HTML_BYTES,
     SLIDES_STYLE_DEFAULTS,
     snapSlideFontSize,
-    type TextAlign,
     TRANSPARENT_COLOR,
-    type VectorRichTextElement,
-    type VerticalAlign,
 } from '@workspace/lib/vector';
-import { type XmlElement, xmlAttr, xmlElements, xmlText } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { xmlAttr, xmlElements, xmlText } from '../../core/xml';
 import { percent } from '../../ooxml/drawingml';
 import { A_NS, EMU_PER_POINT, emu, isAlternateContent, isOn, R_NS } from '../../ooxml/ooxml';
 import type { Relationship } from '../../ooxml/opc';
-import { colorOf, fillIn, paintOf, type ShapeProperties, type SlideTheme } from './inherit';
+import type { ShapeProperties, SlideTheme } from './inherit';
+import { colorOf, fillIn, paintOf } from './inherit';
 import { charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
-import { alternative, type DeckWalk, type Lost } from './package';
+import type { DeckWalk, Lost } from './package';
+import { alternative } from './package';
 
 // A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
 // font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and

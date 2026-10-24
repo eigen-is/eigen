@@ -3,6 +3,7 @@ import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, inArray } from 'drizzle-orm';
 import ICAL from 'ical.js';
+import type { PutResourceResult } from '../core';
 import {
     ApiError,
     countVEvents,
@@ -10,7 +11,6 @@ import {
     ICS_IMPORT_MAX_EVENTS,
     NOT_A_CALENDAR_FILE,
     NOT_UTF8_FILE,
-    type PutResourceResult,
 } from '../core';
 import { newVCalendar, PRODID, serializeResource, spliceBlocks } from '../ical';
 import { bareName, calAddress, uidOf } from '../ical/ical-parse';

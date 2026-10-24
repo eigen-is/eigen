@@ -1,25 +1,17 @@
+import type { Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import {
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
-    type Sheet,
-    type SheetChart,
-    type SheetImage,
     sheetColumnsWidth,
     sheetFloatingBox,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
-import {
-    hasXmlName,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlTrimmedText,
-} from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlTrimmedText } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
-import { anchoredBox, type Box, DEGREE, type DrawingTheme } from '../../ooxml/drawingml';
+import type { Box, DrawingTheme } from '../../ooxml/drawingml';
+import { anchoredBox, DEGREE } from '../../ooxml/drawingml';
 import {
     A_NS,
     ASVG_NS,
@@ -33,8 +25,10 @@ import {
     XDR_NS,
 } from '../../ooxml/ooxml';
 import { chartCost, chartPart, readChart } from '../../ooxml/ooxml-chart';
-import { type OoxmlPackage, optional, type Relationship, relTarget } from '../../ooxml/opc';
-import { type MediaPart, pictureMediaPart } from '../image-types';
+import type { OoxmlPackage, Relationship } from '../../ooxml/opc';
+import { optional, relTarget } from '../../ooxml/opc';
+import type { MediaPart } from '../image-types';
+import { pictureMediaPart } from '../image-types';
 
 // A worksheet's or a chart sheet's drawing: the anchors that place its charts and pictures over the grid, each read into
 // a SheetChart or a SheetImage. Shapes are not read. A chart's refs may name any sheet, so the drawings are placed once

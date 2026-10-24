@@ -2,10 +2,12 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
-import { type SQL, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
 import { ApiError } from '../core';
-import { LocalStorage, S3Storage, type StorageBackend } from '../storage';
+import type { StorageBackend } from '../storage';
+import { LocalStorage, S3Storage } from '../storage';
 
 // Subquery: ids of every eigendoc container (every EIGEN_DOC_TYPES row) and
 // every path descended from one. Embedded as `parentId NOT IN (…)` to filter out

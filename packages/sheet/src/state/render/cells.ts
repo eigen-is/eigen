@@ -8,8 +8,8 @@ import { INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
 import { cellIndicatorRect } from '../modules/cell-glyph';
 import { checkCF } from '../modules/condition-format';
+import type { CellGlyphRect } from '../modules/data-verification';
 import {
-    type CellGlyphRect,
     CHECKBOX_LABEL_GAP,
     cellTextBox,
     checkboxAlign,

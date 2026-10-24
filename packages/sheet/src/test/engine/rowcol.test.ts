@@ -1,12 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import {
-    REFERENCE_COLUMN_COUNT,
-    REFERENCE_ROW_COUNT,
-    type Sheet,
-    type SheetChart,
-    type SheetConfig,
-} from '@workspace/lib/sheets';
+import type { Sheet, SheetChart, SheetConfig } from '@workspace/lib/sheets';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec, RangeChartData } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
@@ -14,7 +9,8 @@ import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaul
 import { FormulaEngine } from '../../engine/formula-engine';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../../engine/rowcol';
 import type { EditorSheetConfigExtras, SingleRange } from '../../engine/types';
-import { expectedDelete, expectedInsert, SPANS, type Span } from './range-oracle';
+import type { Span } from './range-oracle';
+import { expectedDelete, expectedInsert, SPANS } from './range-oracle';
 
 // Sheet shape with the editor-runtime extras the engine passes through but lib's
 // canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards, the

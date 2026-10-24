@@ -1,6 +1,7 @@
 import { cn } from '@workspace/ui/lib/utils';
 import { ArrowLeft } from 'lucide-react';
-import { createContext, type ReactNode, useCallback, useContext, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { useLayout } from './layout-context';
 

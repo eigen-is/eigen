@@ -8,7 +8,8 @@ import type { VCardPreview } from '@workspace/lib/types/preview';
 import { cn } from '../../lib/utils';
 import { EmptyState } from '../layout/app/empty-state';
 import { ContactDetailCard } from '../user/contact-detail-card';
-import { PREVIEW_BODY_CLASS, PreviewCounts, PreviewPane, type PreviewStatus } from './preview-pane';
+import type { PreviewStatus } from './preview-pane';
+import { PREVIEW_BODY_CLASS, PreviewCounts, PreviewPane } from './preview-pane';
 
 // The served cards, whichever route served them. Drive and mail each have their own component, so exactly
 // one query hook runs per render and the overlay picks by the subject it holds.

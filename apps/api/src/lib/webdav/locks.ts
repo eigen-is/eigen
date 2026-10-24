@@ -1,6 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
-import { parseXmlRoot, serializeXmlChildren, type XmlElement, xmlChild } from '../core/xml';
+import type { XmlElement } from '../core/xml';
+import { parseXmlRoot, serializeXmlChildren, xmlChild } from '../core/xml';
 import { DAV_NAMESPACES, XML_CONTENT_TYPE, XML_DECLARATION } from '../dav/xml';
 import { getSharedDrive } from '../drive/get-drive';
 import type { Lock, LockManager } from '../drive/lock-manager';

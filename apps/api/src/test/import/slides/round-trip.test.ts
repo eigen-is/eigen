@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { BackgroundFill } from '@workspace/lib/types/background';
+import type { NewVectorElement, VectorElement } from '@workspace/lib/vector';
 import {
     generateNKeysBetween,
-    type NewVectorElement,
     normalizeAngle,
     parseFill,
     readVectorFromDoc,
@@ -10,14 +10,13 @@ import {
     serializeBackgroundFill,
     serializeFill,
     TRANSPARENT_FILL,
-    type VectorElement,
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { sanitizeSceneHtml } from '../../../lib/export/sanitize';
-import { eigenslidesToPptx } from '../../../lib/export/slides/to-pptx';
+import { writePptx } from '../../../lib/export/slides/pptx/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { box, buildPptx, PIXEL_PNG, solid as solidFill, sp } from '../../fixtures/pptx';
 
@@ -121,7 +120,7 @@ function roundTrip(elements = ELEMENTS, name = '') {
         writeElementInDoc(doc, { ...element, frameId: 'f1' }, keys[i], SLIDES_STYLE_DEFAULTS, `el-${i}`);
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
     const media = [{ name: 'pic.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG.slice()) }];
-    const bytes = eigenslidesToPptx(scene, media, 'Round trip.eigenslides');
+    const bytes = writePptx(scene, { title: 'Round trip.eigenslides', media });
     return { sent: scene.elements, deck: readPptx(bytes, { deck: scene.meta, maxMediaBytes: 1024 * 1024 }) };
 }
 

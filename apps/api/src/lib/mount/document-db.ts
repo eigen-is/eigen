@@ -1,15 +1,8 @@
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { settlesWithin } from '../../utils/timing';
-import {
-    ApiError,
-    type DatabaseConfig,
-    ManagedDatabase,
-    type SchemaType,
-    type SyncCallbacks,
-    storageGone,
-    storageUnavailable,
-} from '../core';
+import type { DatabaseConfig, SchemaType, SyncCallbacks } from '../core';
+import { ApiError, ManagedDatabase, storageGone, storageUnavailable } from '../core';
 import { errnoOf } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
 import { isViableRecoveryTemp } from './helpers';

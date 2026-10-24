@@ -40,6 +40,7 @@ import {
     settlesWithin,
     unregisterFaultMount,
 } from '../fault-storage-helpers';
+import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
@@ -50,7 +51,6 @@ import {
     openMountMetadata,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
-    type TestUser,
 } from '../setup';
 
 const MOUNT_ID = 'safety-s3';

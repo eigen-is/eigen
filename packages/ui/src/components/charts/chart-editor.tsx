@@ -4,7 +4,8 @@
 // (PropertyGestureContext), so a typed title is one undo step.
 
 import { chartColor, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';
-import { type ChartSpec, type ChartStacking, LEGEND_POSITIONS, type LegendPosition } from '@workspace/lib/types/chart';
+import type { ChartSpec, ChartStacking, LegendPosition } from '@workspace/lib/types/chart';
+import { LEGEND_POSITIONS } from '@workspace/lib/types/chart';
 import { Button } from '@workspace/ui/components/button';
 import {
     ColorRow,
@@ -17,7 +18,8 @@ import {
     PropertyTextInput,
 } from '@workspace/ui/components/properties-panel';
 import { Table } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { ChartDataDialog } from './chart-data-dialog';
 import { CHART_TYPE_OPTIONS } from './chart-types';
 import { fromPercent } from './percent';

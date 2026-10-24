@@ -25,7 +25,8 @@ import {
     TOP10_CONDITION,
     withFuturePrefixes,
 } from '../../../ooxml/spreadsheetml';
-import { argbOf, type StyleRegistry } from './styles';
+import type { StyleRegistry } from './styles';
+import { argbOf } from './styles';
 
 // The reader's mirror (import/sheets/rules.ts): each rule in the 2007 schema's form, which the reader reads as the
 // rule it was. What Excel can't hold is dropped and counted.

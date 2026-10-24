@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { MAX_SKETCH_POINTS, sampleChartSpec } from '@workspace/lib/charts';
+import type {
+    VectorChartElement,
+    VectorElement,
+    VectorPathElement,
+    VectorRichTextElement,
+} from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
     SLIDES_STYLE_DEFAULTS,
     solidFill,
     VECTOR_STYLE_DEFAULTS,
-    type VectorChartElement,
-    type VectorElement,
-    type VectorPathElement,
-    type VectorRichTextElement,
 } from '@workspace/lib/vector';
 import { installHappyDom } from '../../happy-dom';
 

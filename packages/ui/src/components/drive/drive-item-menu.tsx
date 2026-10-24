@@ -2,13 +2,8 @@ import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspa
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { useIsSharedWithMe } from '@workspace/lib/drive';
 import { useMailEnabled } from '@workspace/lib/public';
-import {
-    type DrivePath,
-    EXPORT_FORMAT_LABELS,
-    type ExportFormat,
-    exportFormatsFor,
-    isOpenable,
-} from '@workspace/lib/types';
+import type { DrivePath, ExportFormat } from '@workspace/lib/types';
+import { EXPORT_FORMAT_LABELS, exportFormatsFor, isOpenable } from '@workspace/lib/types';
 import {
     DropdownMenuItem,
     DropdownMenuSub,

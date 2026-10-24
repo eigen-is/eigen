@@ -8,7 +8,8 @@ import {
     shiftRangeForDelete,
     shiftRangeForInsert,
 } from '../../engine/rowcol';
-import { type Context, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getSheetConfig } from '../context';
 import type { FilterEntry, FormulaCell, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
 

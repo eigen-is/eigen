@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
+import type { StyleDefaults, VectorElement } from '@workspace/lib/vector';
 import {
     buildElementsClipboardItem,
     DEFAULT_ELEMENT_PROPS,
@@ -8,9 +9,7 @@ import {
     readElementsClipboardItem,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
-    type StyleDefaults,
     VECTOR_STYLE_DEFAULTS,
-    type VectorElement,
     writeElementInDoc,
 } from '@workspace/lib/vector';
 import { Window } from 'happy-dom';

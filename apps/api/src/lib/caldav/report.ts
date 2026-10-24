@@ -5,12 +5,14 @@ import type { CalendarCollection } from '../calendar/resource-store';
 import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { UnsupportedFilterError } from '../dav/report-request';
-import { type DataBudget, multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
+import type { DataBudget } from '../dav/report-row';
+import { multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
 import { handleSyncCollection } from '../dav/sync-collection';
 import { davError, multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
 import { calendarDataProp } from './xml-builder';
-import { parseReport, type ReportRequest } from './xml-parser';
+import type { ReportRequest } from './xml-parser';
+import { parseReport } from './xml-parser';
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
 export async function handleReport(

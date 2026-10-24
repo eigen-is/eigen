@@ -2,7 +2,8 @@ import { useContactSuggestions } from '@workspace/lib/contacts';
 import type { ContactSuggestion } from '@workspace/lib/types/contact';
 import { Input } from '@workspace/ui/components/input';
 import { cn } from '@workspace/ui/lib/utils';
-import { type KeyboardEvent, useCallback, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ContactSuggestList } from './contact-suggest-list';
 import type { ContactAutosuggestProps } from './types';
 

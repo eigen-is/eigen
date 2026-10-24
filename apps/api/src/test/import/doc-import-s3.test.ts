@@ -5,7 +5,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { readEigendocFromDoc } from '../../lib/document/doc';
 import { getHome } from '../../lib/home';
-import { createFakeS3Mount, type FakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
+import type { FakeS3Mount } from '../fault-storage-helpers';
+import { createFakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
 import { assertJson, authedRequest, collectSSE, getTestContext, TEST_PNG_BYTES } from '../setup';
 

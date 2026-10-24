@@ -9,20 +9,22 @@ import { downloadBlob } from '@workspace/lib/download';
 import { bytesToBase64 } from '@workspace/lib/format';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
+import type {
+    MeasuredDisc,
+    MeasuredRichText,
+    MeasuredRule,
+    MeasuredText,
+    VectorElement,
+    VectorRichTextElement,
+} from '@workspace/lib/vector';
 import {
     canvasImageFaces,
     canvasImageScene,
     eigenMediaHref,
     layerInnerHtml,
-    type MeasuredDisc,
-    type MeasuredRichText,
-    type MeasuredRule,
-    type MeasuredText,
     richTextCssText,
     richTextSvg,
     sceneToSvg,
-    type VectorElement,
-    type VectorRichTextElement,
 } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
 import { bundledFontUrl } from './bundled-font-url';

@@ -3,16 +3,8 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
 import { sendToHome } from '../../lib/home/home-relay';
-import {
-    addMember,
-    assertJson,
-    authedRequest,
-    createTeam,
-    createTestUser,
-    getTestContext,
-    type TestContext,
-    type TestUser,
-} from '../setup';
+import type { TestContext, TestUser } from '../setup';
+import { addMember, assertJson, authedRequest, createTeam, createTestUser, getTestContext } from '../setup';
 
 // Past the relay's delivery budget, so the fan-out has to queue.
 const MEMBER_COUNT = 20;

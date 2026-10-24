@@ -1,47 +1,34 @@
 import type { JSONContent } from '@tiptap/core';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
+import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
-    type BandRoot,
     DOC_PROSE_CLASS,
     FOOTNOTE_PARAGRAPH,
     footnotesInOrder,
     mmToPt,
-    type NormalStyle,
     normalStyleProperties,
     PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
-    type PageSetup,
     pageStylesheet,
     pxToPt,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
-import {
-    type EigendocBands,
-    readEigendocBands,
-    readEigendocFromDoc,
-    readEigendocPage,
-    readEigendocStyle,
-} from '../../document/doc';
+import type { EigendocBands } from '../../document/doc';
+import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
-import {
-    type EigendocExportFormat,
-    type ExportMediaLoader,
-    htmlExportMode,
-    type TransformWarning,
-    toTransferableBuffer,
-    toTransferableText,
-} from '../../document/transform/protocol';
+import type { EigendocExportFormat, ExportMediaLoader, TransformWarning } from '../../document/transform/protocol';
+import { htmlExportMode, toTransferableBuffer, toTransferableText } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_SVG_EQUATIONS, mathmlToSvg, SVG_LIMIT } from '../math-svg';
 import { withSvgFallbacks } from '../office-image';
+import type { EquationDrawing } from './render';
 import {
-    type EquationDrawing,
     equationBudget,
     equationDrawing,
     equationKey,
@@ -57,7 +44,7 @@ import {
 //
 // HTML and PDF render the same document by design: WeasyPrint consumes what the HTML download
 // serves, but for the small caps the PDF fakes and the equations it draws as SVG (render.ts). The
-// docx is written from the JSON by to-docx.ts, which loads lazily so an HTML export never evaluates
+// docx is written from the JSON by docx/to-docx.ts, which loads lazily so an HTML export never evaluates
 // it, its styles or its fonts.
 export async function renderEigendocExport(
     doc: Y.Doc,
@@ -72,12 +59,15 @@ export async function renderEigendocExport(
     const bands = readEigendocBands(doc);
     const media = await loadMedia(mediaNamesIn([json, bands]));
     if (format === 'docx') {
-        const { chartFigureMedia, eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
+        const { writeDocx } = await import('./docx/to-docx');
+        const { chartFigureMedia, pastedFigureMedia } = await import('./docx/drawings');
         const roots = [json, ...Object.values(bands)];
         const drawn = [...(await pastedFigureMedia(roots)), ...(await chartFigureMedia(roots))];
         const docxMedia = await withSvgFallbacks([...media, ...drawn]);
         return {
-            data: toTransferableBuffer(await eigendocToDocx(json, bands, page, style, docxMedia, title, publicOrigin)),
+            data: toTransferableBuffer(
+                writeDocx({ json, bands, page, style }, { title, media: docxMedia, publicOrigin }),
+            ),
             warnings: [],
         };
     }

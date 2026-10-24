@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { isMixed, type MergedValue } from './merged-value';
+import type { MergedValue } from './merged-value';
+import { isMixed } from './merged-value';
 
 type MergedSelectProps<T extends string> = {
     value: MergedValue<T>;

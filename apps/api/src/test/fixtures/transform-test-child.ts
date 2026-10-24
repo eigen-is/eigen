@@ -4,13 +4,13 @@
 // memory-limit behavior without heavy document jobs.
 
 import { readFileSync } from 'node:fs';
-import {
-    type ChildRequestEnvelope,
-    type ChildResponseEnvelope,
-    type ExportMedia,
-    type ParentMediaReply,
-    toTransformError,
+import type {
+    ChildRequestEnvelope,
+    ChildResponseEnvelope,
+    ExportMedia,
+    ParentMediaReply,
 } from '../../lib/document/transform/protocol';
+import { toTransformError } from '../../lib/document/transform/protocol';
 
 type TestDirective = {
     behavior?:

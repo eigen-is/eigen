@@ -1,13 +1,6 @@
 import { isTransparentFill, parseFill } from '../fill';
-import {
-    type Bounds,
-    boxCenter,
-    distanceToPolyline,
-    LINEAR_HIT_SCREEN_FACTOR,
-    type Point,
-    pointsBounds,
-    rotatePoint,
-} from '../geometry';
+import type { Bounds, Point } from '../geometry';
+import { boxCenter, distanceToPolyline, LINEAR_HIT_SCREEN_FACTOR, pointsBounds, rotatePoint } from '../geometry';
 import { clamp, nearestPoint, polylineOutline, scaledPathCommands } from '../outline';
 import type { VectorPathElement } from '../types';
 import { boxAnchorPoints, defineKind } from './kind';

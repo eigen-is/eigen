@@ -1,5 +1,6 @@
 import { getBackgroundStyle } from '@workspace/lib/background';
-import { frameClipRadius, type MediaResolver, parseBackgroundFill, type VectorFrame } from '@workspace/lib/vector';
+import type { MediaResolver, VectorFrame } from '@workspace/lib/vector';
+import { frameClipRadius, parseBackgroundFill } from '@workspace/lib/vector';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
 

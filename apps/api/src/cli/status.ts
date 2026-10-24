@@ -6,7 +6,8 @@ import { parseServerArchiveNames } from '@workspace/lib/validation';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
 import { VERSION, VERSION_PATTERN } from './install';
-import { createUi, type Glyph, glyphLine } from './ui';
+import type { Glyph } from './ui';
+import { createUi, glyphLine } from './ui';
 
 type Row = { level: Glyph; label: string; value: string };
 type Service = { service: string; state: string; health: string };

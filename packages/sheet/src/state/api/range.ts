@@ -1,11 +1,13 @@
 import { cloneDeep, isPlainObject } from 'es-toolkit/compat';
 import type { Cell } from '../../engine/types';
-import { getdatabyselection, getFlowdata, getRangetxt, type Selection } from '..';
+import type { Selection } from '..';
+import { getdatabyselection, getFlowdata, getRangetxt } from '..';
 import type { Context } from '../context';
 import { normalizeSelection, rangeValueToClipboard } from '../modules';
 import type { Range, SingleRange } from '../types';
 import { setCellFormat, setCellValue } from './cell';
-import { type CommonOptions, getSheet } from './common';
+import type { CommonOptions } from './common';
+import { getSheet } from './common';
 import { invalidParams } from './errors';
 
 export function getSelection(ctx: Context) {

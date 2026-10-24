@@ -1,7 +1,8 @@
 import type { CommandProps } from '@tiptap/core';
 import { Table } from '@tiptap/extension-table';
 import type { Node as PMNode } from '@tiptap/pm/model';
-import { Plugin, type Transaction } from '@tiptap/pm/state';
+import type { Transaction } from '@tiptap/pm/state';
+import { Plugin } from '@tiptap/pm/state';
 import {
     cellAround,
     columnResizingPluginKey,

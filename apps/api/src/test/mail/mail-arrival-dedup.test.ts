@@ -1,11 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { renameSync } from 'node:fs';
+import { readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
+import { evictHome } from '../../lib/home/get-home';
 import { boxDir } from '../mail-test-helpers';
-import { assertJson, authedRequest, createTestUser, eventually, getTestContext, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { assertJson, authedRequest, collectSSE, createTestUser, eventually, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 let ctx: TestCtx;
@@ -110,6 +112,43 @@ describe('Mail-arrival notification read state', () => {
 
             expect((await remove(mail!.id)).status).toBe(200);
             expect(await mailNewIsRead()).toBe(true);
+        }
+    });
+});
+
+describe('Mail read in another mail app while an Eigen tab is open', () => {
+    test('reads the notification without anyone opening Mail', async () => {
+        const user = await createTestUser(`mail-tab-${Date.now()}@test.eigen.is`, 'testpassword123', 'Mail Tab');
+        // A fresh home whose mail nobody listed; the open tab is only an event stream.
+        await evictHome(user.id);
+        const tab = await collectSSE(user.id);
+        try {
+            await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
+            const unread = async () =>
+                (
+                    await assertJson<Notification[]>(
+                        await authedRequest(user.sessionToken, `/notifications/${user.id}`),
+                    )
+                ).find((n) => n.tag === 'mail:new')?.read === false;
+            expect(await unread()).toBe(true);
+
+            // The phone reads everything, the welcome mail included: the IMAP server gives each message the
+            // Seen flag, in cur/ (moving it there from new/).
+            const inbox = boxDir(user.id, MAILBOX_INBOX);
+            for (const dir of ['new', 'cur']) {
+                for (const name of readdirSync(join(inbox, dir))) {
+                    const flags = name.split(':2,')[1];
+                    if (flags?.includes('S')) continue;
+                    renameSync(
+                        join(inbox, dir, name),
+                        join(inbox, 'cur', flags === undefined ? `${name}:2,S` : `${name}S`),
+                    );
+                }
+            }
+
+            await eventually(async () => ((await unread()) ? undefined : true), 'the notification read');
+        } finally {
+            tab.stop();
         }
     });
 });

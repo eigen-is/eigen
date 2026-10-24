@@ -10,7 +10,8 @@ import {
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // `g`-jump chords go through useHotkeySequence (plain letters, no single-key conflict). The `*`-select
 // chords do NOT — a '*' press emits a Shift keydown first, which the sequence matcher trips over, so

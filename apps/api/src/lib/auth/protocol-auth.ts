@@ -1,6 +1,7 @@
 import { clientIpKey, requireNonGuest } from '../core/access';
 import { ApiError } from '../core/errors';
-import { getUserByEmail, type User } from '../user';
+import type { User } from '../user';
+import { getUserByEmail } from '../user';
 import { APP_PASSWORD_LENGTH, auth } from './auth';
 import { checkProtocolAuthLimit, clearProtocolAuthFailures, recordProtocolAuthFailure } from './protocol-rate-limit';
 

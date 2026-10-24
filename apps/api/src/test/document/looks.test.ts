@@ -12,7 +12,8 @@ import {
     ITALIC_HEADING_LEVELS,
     normalStyleProperties,
 } from '@workspace/lib/docs/eigendoc';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
+import type { XmlElement } from '../../lib/core/xml';
+import { parseXml, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
 import {
     BODY,
     CAPTION_LOOK,
@@ -30,21 +31,16 @@ import {
     TITLE_LOOKS,
 } from '../../lib/document/looks';
 import { PROSE_CSS, proseValue } from '../../lib/document/prose-css';
-import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { W_NS } from '../../lib/ooxml/ooxml';
 import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../lib/ooxml/wordml';
 import { openZip } from '../../lib/ooxml/zip';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 
 const zip = openZip(
-    await eigendocToDocx(
-        buildAllFeaturesDocJson(),
-        {},
-        DEFAULT_PAGE_SETUP,
-        DEFAULT_NORMAL_STYLE,
-        buildAllFeaturesDocMedia(),
-        'Report.eigendoc',
-        undefined,
+    writeDocx(
+        { json: buildAllFeaturesDocJson(), bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+        { title: 'Report.eigendoc', media: buildAllFeaturesDocMedia() },
     ),
 );
 

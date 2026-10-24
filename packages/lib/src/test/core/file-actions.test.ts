@@ -5,7 +5,8 @@ import { EML_MAX_BYTES } from '../../constants/mail';
 import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '../../constants/mime';
 import { fileActionsFor } from '../../core/file-actions';
 import { subjectFromMailAttachment, subjectFromPath } from '../../core/file-subject';
-import { type DrivePath, type DrivePathType, EML_MIME, ICS_MIME } from '../../types/drive';
+import type { DrivePath, DrivePathType } from '../../types/drive';
+import { EML_MIME, ICS_MIME } from '../../types/drive';
 import type { FileActionId, FileSubject } from '../../types/file-subject';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {

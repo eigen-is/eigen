@@ -1,23 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_CHART_POINTS, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import {
-    type Cell,
-    floatingItems,
-    REFERENCE_ROW_COUNT,
-    type Sheet,
-    type SheetChart,
-    type SheetFloatingObject,
-    type SheetImage,
-} from '@workspace/lib/sheets';
-import { hasXmlName, type XmlElement, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
-import {
-    type CountedWarningCode,
-    type TransformWarning,
-    toTransferableBuffer,
-    toTransferableText,
-} from '../../../../lib/document/transform/protocol';
+import type { Cell, Sheet, SheetChart, SheetFloatingObject, SheetImage } from '@workspace/lib/sheets';
+import { floatingItems, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import type { XmlElement } from '../../../../lib/core/xml';
+import { hasXmlName, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
+import type { CountedWarningCode, TransformWarning } from '../../../../lib/document/transform/protocol';
+import { toTransferableBuffer, toTransferableText } from '../../../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../../../lib/export/office-image';
-import { DRAWING_CONTENT_TYPE, drawingOf, type WorkbookPictures } from '../../../../lib/export/sheets/xlsx/drawing';
+import type { WorkbookPictures } from '../../../../lib/export/sheets/xlsx/drawing';
+import { DRAWING_CONTENT_TYPE, drawingOf } from '../../../../lib/export/sheets/xlsx/drawing';
 import { readXlsx, xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { A_NS, EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/ooxml/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../../lib/ooxml/ooxml-chart';

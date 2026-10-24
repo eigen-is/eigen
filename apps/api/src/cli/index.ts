@@ -1,4 +1,5 @@
-import { type ParseArgsConfig, parseArgs } from 'node:util';
+import type { ParseArgsConfig } from 'node:util';
+import { parseArgs } from 'node:util';
 import { BACKUP_OPTIONS, BACKUP_USAGE, backup } from './backup';
 import { BOOTSTRAP_OPTIONS, BOOTSTRAP_USAGE, bootstrap } from './bootstrap';
 import { CONFIGURE_OPTIONS, CONFIGURE_USAGE, configure } from './configure';

@@ -2,10 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
-import type { TransformWarning } from '../../../lib/document/transform/protocol';
-import { xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
-import { openZip } from '../../../lib/ooxml/zip';
-import { exportXlsx } from '../../fixtures/xlsx';
+import type { TransformWarning } from '../../../../lib/document/transform/protocol';
+import { xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
+import { openZip } from '../../../../lib/ooxml/zip';
+import { exportXlsx } from '../../../fixtures/xlsx';
 
 function entry(bytes: Uint8Array, path: string): string {
     const data = openZip(bytes).read(path);

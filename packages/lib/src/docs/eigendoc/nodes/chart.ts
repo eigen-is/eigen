@@ -1,18 +1,15 @@
-import { type CommandProps, Node } from '@tiptap/core';
+import type { CommandProps } from '@tiptap/core';
+import { Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
 import { nanoid } from 'nanoid';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, parseChartSpec, readChartLook, sampleChartSpec } from '../../../charts';
 import { isRecord } from '../../../core/guards';
-import { CHART_LOOK_FIELDS, type ChartLook, type ChartSpec, type ChartType } from '../../../types/chart';
+import type { ChartLook, ChartSpec, ChartType } from '../../../types/chart';
+import { CHART_LOOK_FIELDS } from '../../../types/chart';
 import { renderChartSpecSvg } from '../../../vector/kinds/chart-render';
 import { randomSeed } from '../../../vector/write-vector';
-import {
-    type FigureFrameAttrs,
-    figureFrameAttributes,
-    figureFrameHTML,
-    readFigureFrameAttrs,
-    updateFigureNodes,
-} from './figure-frame';
+import type { FigureFrameAttrs } from './figure-frame';
+import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null). The spec is the
 // stored string, kept as it is even when it doesn't parse, as a canvas keeps it. The look is a canvas chart's own

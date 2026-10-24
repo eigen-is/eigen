@@ -1,8 +1,8 @@
 import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
+import type { MediaResolver } from '@workspace/lib/vector';
 import {
     DEFAULT_FRAME_BACKGROUND,
     FRAME_WIDTH,
-    type MediaResolver,
     orderByFractionalIndex,
     parseBackgroundFill,
     readVectorFromDoc,
@@ -16,7 +16,7 @@ import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-m
 import { capPreviewElements } from './preview-scene';
 
 // Materialized doc → the deck's first slides as compositor pages, the same HTML the PDF export
-// prints. Runs inside the transform Worker (worker.ts owns execution; the main-thread orchestration
+// prints. Runs inside the transform process (child.ts owns execution; the main-thread orchestration
 // lives in preview-document.ts). This module must not reach the Mount or the transform seam. Media
 // resolves through the URL map the main thread prepared (the Worker has no Mount).
 //

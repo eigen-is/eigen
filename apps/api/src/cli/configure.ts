@@ -9,7 +9,8 @@ import { SERVER_DIR, SERVER_FILES } from '../lib/config/paths';
 import { PIN_KEYS } from '../lib/config/release';
 import { readEnvFile, writeEnvFile } from './env-file';
 import { DATA, ENV_PATH, installOwner, ownAs, ROOT } from './install';
-import { createUi, type Ui } from './ui';
+import type { Ui } from './ui';
+import { createUi } from './ui';
 
 export type ConfigureAnswers = {
     domain: string;

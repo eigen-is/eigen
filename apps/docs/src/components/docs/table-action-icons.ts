@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import {
     BetweenHorizontalEnd,
     BetweenHorizontalStart,
@@ -6,7 +7,6 @@ import {
     Columns3,
     GripHorizontal,
     GripVertical,
-    type LucideIcon,
     TableCellsMerge,
     TableCellsSplit,
     ToggleLeft,

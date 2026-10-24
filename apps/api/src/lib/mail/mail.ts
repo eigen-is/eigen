@@ -1,6 +1,7 @@
 import { MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { type DraftAttachmentUpload, type Email, mailAttachmentName } from '@workspace/lib/types/mail';
+import type { DraftAttachmentUpload, Email } from '@workspace/lib/types/mail';
+import { mailAttachmentName } from '@workspace/lib/types/mail';
 import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
 import { isRoleAddress } from '../config/server-config';
 import { ApiError } from '../core/errors';
@@ -8,7 +9,8 @@ import { getSharedDrive } from '../drive';
 import { getHome } from '../home';
 import type { User } from '../user';
 import { getOrgAdmins, getUserByEmail } from '../user/';
-import { attachmentTooLarge, type Mail } from './mail-domain';
+import type { Mail } from './mail-domain';
+import { attachmentTooLarge } from './mail-domain';
 
 export async function getMailClient(user: User): Promise<Mail> {
     const home = await getHome(user.id);

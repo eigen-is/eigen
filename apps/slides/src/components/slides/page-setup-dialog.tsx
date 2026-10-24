@@ -1,4 +1,5 @@
-import { oneOf, SLIDE_SIZE_KEYS, type SlideSize } from '@workspace/lib/vector';
+import type { SlideSize } from '@workspace/lib/vector';
+import { oneOf, SLIDE_SIZE_KEYS } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { FieldLegend, FieldSet } from '@workspace/ui/components/field';

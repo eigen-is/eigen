@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { gradientStops } from '@workspace/lib/background';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { BackgroundFill } from '@workspace/lib/types/background';
+import type { SlideSize, VectorElementType, VectorScene } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
     convertToShapes,
@@ -9,21 +10,20 @@ import {
     FRAME_FIELDS,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
-    type SlideSize,
     serializeBackgroundFill,
     serializeFill,
     slidePtToPx,
-    type VectorElementType,
-    type VectorScene,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../lib/core/xml';
-import { toTransferableText } from '../../lib/document/transform/protocol';
-import type { OfficeMedia } from '../../lib/export/office-image';
-import { sanitizeSceneHtml } from '../../lib/export/sanitize';
-import { eigenslidesToPptx } from '../../lib/export/slides/to-pptx';
-import { parseOoxml } from '../../lib/ooxml/ooxml';
-import { openZip, type ZipReader } from '../../lib/ooxml/zip';
+import type { XmlElement } from '../../../../lib/core/xml';
+import { xmlAttr, xmlChild, xmlElements, xmlText } from '../../../../lib/core/xml';
+import { toTransferableText } from '../../../../lib/document/transform/protocol';
+import type { OfficeMedia } from '../../../../lib/export/office-image';
+import { sanitizeSceneHtml } from '../../../../lib/export/sanitize';
+import { writePptx } from '../../../../lib/export/slides/pptx/to-pptx';
+import { parseOoxml } from '../../../../lib/ooxml/ooxml';
+import type { ZipReader } from '../../../../lib/ooxml/zip';
+import { openZip } from '../../../../lib/ooxml/zip';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
@@ -94,7 +94,7 @@ function sceneOf(
 }
 
 function pptx(scene: VectorScene, media: OfficeMedia[] = []): ZipReader {
-    return openZip(eigenslidesToPptx(scene, media, 'Deck & <co>.eigenslides'));
+    return openZip(writePptx(scene, { title: 'Deck & <co>.eigenslides', media }));
 }
 
 function part(zip: ZipReader, path: string): XmlElement {
@@ -259,11 +259,13 @@ describe('pptx package', () => {
             element('richtext', { html: '<p>Hello <a href="https://example.com">there</a></p>' }),
             element('image', { index: 'a1', mediaName: 'wide.png', objectFit: 'cover' }),
         ]);
-        expect(eigenslidesToPptx(scene, [PNG_MEDIA], 'Deck')).toEqual(eigenslidesToPptx(scene, [PNG_MEDIA], 'Deck'));
+        expect(writePptx(scene, { title: 'Deck', media: [PNG_MEDIA] })).toEqual(
+            writePptx(scene, { title: 'Deck', media: [PNG_MEDIA] }),
+        );
     });
 
     test('a deck with no frames is the empty deck', () => {
-        expect(() => eigenslidesToPptx(sceneOf([], []), [], 'Deck')).toThrow('The deck is empty');
+        expect(() => writePptx(sceneOf([], []), { title: 'Deck', media: [] })).toThrow('The deck is empty');
     });
 
     test("the slide size is the deck's: its shape and its own width", () => {

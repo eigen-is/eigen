@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs';
 import type { Corners } from '@workspace/lib/vector';
-import { parseXml, type XmlElement, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { parseXml, xmlElements } from '../../core/xml';
 import { A_NS } from '../../ooxml/ooxml';
-import { type CustomGeometry, customGeometry } from './custom-geometry';
-import { type GuideList, guideListOf } from './guides';
+import type { CustomGeometry } from './custom-geometry';
+import { customGeometry } from './custom-geometry';
+import type { GuideList } from './guides';
+import { guideListOf } from './guides';
 import { cachedBy, childOf } from './lookup';
 
 // A shape's a:prstGeom: one of the few presets a canvas kind draws, else the paths ECMA-376's preset definitions draw.

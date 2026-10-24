@@ -42,7 +42,7 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
             const listed = await home.drive.listMounts();
             expect(listed.find((m) => m.id === mount.id)?.name).toBe('Shared (Big)');
         } finally {
-            await home.shutdown();
+            await home.close();
         }
     });
 
@@ -57,7 +57,7 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
             const listed = await home.drive.listMounts();
             expect(listed.map((m) => m.id).sort()).toEqual([first.id, second.id].sort());
         } finally {
-            await home.shutdown();
+            await home.close();
         }
     });
 
@@ -85,7 +85,7 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
             const listed = await home.drive.listMounts();
             expect(listed.find((m) => m.id === mount.id)?.name).toBe('Repointed');
         } finally {
-            await home.shutdown();
+            await home.close();
         }
     });
 
@@ -117,7 +117,7 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
             expect(home.settings.get().mounts?.[mount.id]?.s3Config).toEqual(s3Config);
         } finally {
             spy.mockRestore();
-            await home.shutdown();
+            await home.close();
         }
     });
 
@@ -133,7 +133,7 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
             const listed = await home.drive.listMounts();
             expect(listed.find((m) => m.id === mount.id)).toBeUndefined();
         } finally {
-            await home.shutdown();
+            await home.close();
         }
     });
 });

@@ -1,7 +1,9 @@
 import { combineTransactionSteps, getChangedRanges } from '@tiptap/core';
-import Link, { isAllowedUri, type LinkOptions } from '@tiptap/extension-link';
+import type { LinkOptions } from '@tiptap/extension-link';
+import Link, { isAllowedUri } from '@tiptap/extension-link';
 import type { MarkType, Node } from '@tiptap/pm/model';
-import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
+import type { Transaction } from '@tiptap/pm/state';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { tokenize } from 'linkifyjs';
 
 const TRAILING_WORD = /(\S+)\s*$/;

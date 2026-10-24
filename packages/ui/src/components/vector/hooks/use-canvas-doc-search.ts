@@ -1,12 +1,7 @@
 import { buildSearchRegex } from '@workspace/lib/doc-search';
 import type { DocSearchController } from '@workspace/lib/types/doc-search';
-import {
-    searchScene,
-    type VectorElement,
-    type VectorFrame,
-    type VectorMeta,
-    type VectorScene,
-} from '@workspace/lib/vector';
+import type { VectorElement, VectorFrame, VectorMeta, VectorScene } from '@workspace/lib/vector';
+import { searchScene } from '@workspace/lib/vector';
 import { useMemo, useState } from 'react';
 
 type CanvasDocSearchArgs = {

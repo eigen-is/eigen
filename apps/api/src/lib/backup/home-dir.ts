@@ -2,7 +2,8 @@ import { parseOwnerId } from '@workspace/lib/types/owner';
 import { getDataRoot, homeDirUnder } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { getUserById } from '../user/user';
-import { type BackableOwner, requireBackableOwner } from './paths';
+import type { BackableOwner } from './paths';
+import { requireBackableOwner } from './paths';
 
 // The owner an ownerId names, once it is one a backup can be of. The guest refusal needs the user
 // row, which is why this is the async half of requireBackableOwner; the routes and the folder

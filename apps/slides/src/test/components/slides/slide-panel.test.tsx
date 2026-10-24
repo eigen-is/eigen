@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { SLIDE_SIZES, type SlideSize, type VectorFrame } from '@workspace/lib/vector';
+import type { SlideSize, VectorFrame } from '@workspace/lib/vector';
+import { SLIDE_SIZES } from '@workspace/lib/vector';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();

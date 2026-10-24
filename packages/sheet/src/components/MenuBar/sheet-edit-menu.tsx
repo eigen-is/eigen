@@ -6,7 +6,8 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { useOptionalDocSearchBar } from '@workspace/ui/components/search/doc-search-provider';
-import { type RefObject, useContext } from 'react';
+import type { RefObject } from 'react';
+import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import {

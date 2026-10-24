@@ -1,11 +1,6 @@
 import { useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
-import {
-    CONVERT_SOURCES,
-    type ConvertTarget,
-    type DrivePath,
-    type ImportMode,
-    isConvertSource,
-} from '@workspace/lib/types/drive';
+import type { ConvertTarget, DrivePath, ImportMode } from '@workspace/lib/types/drive';
+import { CONVERT_SOURCES, isConvertSource } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,

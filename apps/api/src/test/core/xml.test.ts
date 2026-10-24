@@ -1,11 +1,11 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { XML } from 'bun';
+import type { XmlElement } from '../../lib/core';
 import {
     ApiError,
     parseXml,
     serializeXmlChildren,
     trimXmlSpace,
-    type XmlElement,
     XmlError,
     xmlAttr,
     xmlChild,

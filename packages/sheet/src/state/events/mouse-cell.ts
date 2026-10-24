@@ -1,5 +1,6 @@
 import { isNil, last } from 'es-toolkit/compat';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import {
     cellFocus,
     cellTextBox,
@@ -16,7 +17,8 @@ import {
     rangeSetValue,
 } from '../modules';
 import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, setEditingCell, updateCell } from '../modules/cell';
-import { type CellGlyph, cellGlyphAt } from '../modules/cell-glyph';
+import type { CellGlyph } from '../modules/cell-glyph';
+import { cellGlyphAt } from '../modules/cell-glyph';
 import { FILTER_BUTTON_HEIGHT, getFilterButtonAtPosition } from '../modules/filter';
 import { showLinkCard } from '../modules/hyperlink';
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';

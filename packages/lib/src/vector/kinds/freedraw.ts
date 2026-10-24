@@ -2,20 +2,21 @@ import { getStroke } from 'perfect-freehand';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { escapeXml } from '../../core/xml';
 import { isTransparentFill, parseFill } from '../fill';
+import type { Point } from '../geometry';
 import {
     FREEDRAW_SIZE_FACTOR,
     hitTestLinear,
     isClosedLinear,
     isClosedPath,
     linearLocalToScene,
-    type Point,
     parsePoints,
     parsePressures,
     serializePoints,
     serializePressures,
 } from '../geometry';
 import { polylineOutline } from '../outline';
-import { DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS, type VectorLinearElement } from '../types';
+import type { VectorLinearElement } from '../types';
+import { DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS } from '../types';
 import { defineKind } from './kind';
 import { bool, clampCoord, fillField, oneOf, str } from './read-fields';
 import { drawableToSvg, fillDefs, getSvgPathFromStroke, linearRoughOptions, loopPath } from './render-utils';

@@ -3,7 +3,8 @@
 
 import { cellDisplay, cellValue } from '../../engine/format';
 import type { Cell } from '../../engine/types';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import { normalizedCellAttr } from '../modules/cell';
 import { getCellTextInfo } from '../modules/text';
 import type { Sheet } from '../types';

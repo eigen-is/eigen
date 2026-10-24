@@ -33,15 +33,8 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
-import {
-    type ClipboardEvent,
-    type KeyboardEvent,
-    type MouseEvent,
-    useEffect,
-    useLayoutEffect,
-    useRef,
-    useState,
-} from 'react';
+import type { ClipboardEvent, KeyboardEvent, MouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fromPercent } from './percent';
 
 type InlineChartSpec = ChartSpec & { data: InlineChartData };

@@ -1,14 +1,11 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
-import {
-    type DriveAccessCheckResult,
-    type DrivePath,
-    type ImportResult,
-    isConvertTarget,
-} from '@workspace/lib/types/drive';
+import type { DriveAccessCheckResult, DrivePath, ImportResult } from '@workspace/lib/types/drive';
+import { isConvertTarget } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
-import { Elysia, type ElysiaCustomStatusResponse, t } from 'elysia';
+import type { ElysiaCustomStatusResponse } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';

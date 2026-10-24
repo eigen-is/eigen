@@ -1,8 +1,9 @@
 import { CELL_INDICATOR_SIZE } from '@workspace/lib/constants/comment-indicator';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import { getRealCellValue, isForcedStringNumber, mergeBorder } from './cell';
+import type { CellGlyphRect } from './data-verification';
 import {
-    type CellGlyphRect,
     cellTextBox,
     getCellDataVerification,
     isCheckboxClick,

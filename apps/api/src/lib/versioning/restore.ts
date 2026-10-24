@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { isCurrentSheetsSnapshot } from '@workspace/lib/sheets';
-import { DRIVE_TYPE_SHEETS, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_SHEETS, isCollabType } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
 import { readSheetsSnapshotJson } from '../document/sheets';
 import type Drive from '../drive/drive';
 import type { Mount } from '../mount/mount';
-import { DEFAULT_RETENTION, type RetentionPolicy } from './retention';
+import type { RetentionPolicy } from './retention';
+import { DEFAULT_RETENTION } from './retention';
 import { VERSIONS_FOLDER_NAME } from './versions-folder';
 
 export async function restoreContainer(

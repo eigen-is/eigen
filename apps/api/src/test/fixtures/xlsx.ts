@@ -1,6 +1,6 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
+import { writeXlsx } from '../../lib/export/sheets/xlsx/to-xlsx';
 import { writeZip } from '../../lib/ooxml/zip';
 
 // An xlsx built from raw SpreadsheetML on writeZip, so a test states exactly the XML a reader meets.
@@ -210,6 +210,6 @@ export function xlsxFixture(workbook: FixtureWorkbook): Uint8Array {
 }
 
 // The xlsx export as the transform calls it: untitled, without media, its warnings kept where a test passes them.
-export function exportXlsx(sheets: Sheet[], options: Partial<Parameters<typeof sheetsToXlsx>[1]> = {}): Uint8Array {
-    return sheetsToXlsx(sheets, { title: '', warnings: [], media: [], ...options });
+export function exportXlsx(sheets: Sheet[], options: Partial<Parameters<typeof writeXlsx>[1]> = {}): Uint8Array {
+    return writeXlsx(sheets, { title: '', media: [], warnings: [], ...options });
 }

@@ -8,7 +8,8 @@ import { generateAPIs } from '../../../components/Workbook/api';
 import { replaySheetsOps } from '../../../engine';
 import type { Context } from '../../../state/context';
 import type { Op } from '../../../state/types';
-import { filterPatch, opToPatch, type PatchOptions, patchToOp } from '../../../state/utils/patch';
+import type { PatchOptions } from '../../../state/utils/patch';
+import { filterPatch, opToPatch, patchToOp } from '../../../state/utils/patch';
 
 enablePatches();
 

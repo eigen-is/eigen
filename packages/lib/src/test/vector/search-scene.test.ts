@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { SLIDE_SIZES, type VectorFrame } from '../../vector/frames';
+import type { VectorFrame } from '../../vector/frames';
+import { SLIDE_SIZES } from '../../vector/frames';
 import { searchScene } from '../../vector/search-scene';
 import type { VectorScene } from '../../vector/types';
 import { arrow, richtext, scene, shape } from './element-factories';

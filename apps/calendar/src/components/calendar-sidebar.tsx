@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
+import type { ViewMode } from '@workspace/lib/calendar';
 import {
     getMonthRange,
     getWeekRange,
@@ -11,7 +12,6 @@ import {
     useSharedCalendars,
     useUpdateCalendar,
     useUpdateSharedCalendar,
-    type ViewMode,
 } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
@@ -24,7 +24,8 @@ import { StorageUsage } from '@workspace/ui/components/home';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { cn } from '@workspace/ui/lib/utils';
 import { CalendarDays, CalendarPlus, CalendarRange, Check, Download, Pencil, Plus, Upload } from 'lucide-react';
-import { type MouseEvent, useMemo, useState } from 'react';
+import type { MouseEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { CalendarConfigDialog } from './calendar-config-dialog';
 import { CreateEventDialog } from './create-event-dialog';
 import { SharedCalendarConfigDialog } from './shared-calendar-config-dialog';

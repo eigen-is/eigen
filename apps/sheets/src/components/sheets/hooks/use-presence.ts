@@ -1,6 +1,7 @@
 import type { AuthUser } from '@workspace/lib/auth';
 import { userColor } from '@workspace/lib/constants/colors';
-import { type PeerPresence, presencesFromPeers, type WorkbookInstance } from '@workspace/sheet';
+import type { PeerPresence, WorkbookInstance } from '@workspace/sheet';
+import { presencesFromPeers } from '@workspace/sheet';
 import { useAwarenessPeers } from '@workspace/ui/components/collab';
 import { useCallback, useEffect, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';

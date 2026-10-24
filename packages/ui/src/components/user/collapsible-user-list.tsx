@@ -1,7 +1,8 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@workspace/ui/components/collapsible';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { InfoBlock } from '../info-block';
 
 type CollapsibleUserListProps = {

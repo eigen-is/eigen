@@ -1,5 +1,6 @@
 import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
-import { defaultVariant, MATH_ENCLOSURES, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
+import type { MathNode, MathRow } from '../tree';
+import { defaultVariant, MATH_ENCLOSURES, MATH_SPACES, MATH_VARIANTS } from '../tree';
 import { canonicalIssue } from './canonical';
 
 // Seeded canonical trees for the round-trip contracts: every node kind and field, text that needs escaping, characters

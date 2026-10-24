@@ -4,19 +4,8 @@ import { TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
-import {
-    box,
-    buildPptx,
-    graphicFrame,
-    groupXfrm,
-    grp,
-    NS,
-    type PptxFixture,
-    PX,
-    para,
-    rel,
-    sp,
-} from '../../fixtures/pptx';
+import type { PptxFixture } from '../../fixtures/pptx';
+import { box, buildPptx, graphicFrame, groupXfrm, grp, NS, PX, para, rel, sp } from '../../fixtures/pptx';
 
 // A graphic frame's chart: its part read through the core chart reader into a chart element, or the box saying what
 // was there.

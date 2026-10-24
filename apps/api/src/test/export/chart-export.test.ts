@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
+import type { StyleDefaults, VectorChartElement, VectorScene } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
     DEFAULT_SCENE_META,
@@ -9,10 +10,7 @@ import {
     layerInnerHtml,
     SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
-    type StyleDefaults,
     VECTOR_STYLE_DEFAULTS,
-    type VectorChartElement,
-    type VectorScene,
 } from '@workspace/lib/vector';
 import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';

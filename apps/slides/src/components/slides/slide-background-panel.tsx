@@ -6,13 +6,15 @@
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
-import { serializeBackgroundFill, type VectorFrame } from '@workspace/lib/vector';
+import type { VectorFrame } from '@workspace/lib/vector';
+import { serializeBackgroundFill } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { BackgroundFillBlock, PropertySection } from '@workspace/ui/components/properties-panel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useCallback, useState } from 'react';
-import { type ApplyTo, targetFrameIds } from './apply-to';
+import type { ApplyTo } from './apply-to';
+import { targetFrameIds } from './apply-to';
 
 type SlideBackgroundPanelProps = {
     frames: VectorFrame[];

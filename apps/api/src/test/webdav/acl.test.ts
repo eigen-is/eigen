@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { getTestContext, type TestContext } from '../setup';
+import type { TestContext } from '../setup';
+import { getTestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV ACL', () => {

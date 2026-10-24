@@ -1,6 +1,7 @@
 import { cellDisplay } from '../../engine/format';
 import type { Freezen } from '..';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import { deselectFloatingObject, israngeseleciton } from '../modules';
 import { colLocation, rowLocation } from '../modules/location';
 import { getFontSet } from '../modules/text';

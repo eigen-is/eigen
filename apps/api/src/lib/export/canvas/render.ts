@@ -1,20 +1,18 @@
 import { backgroundCss } from '@workspace/lib/background';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
+import type { Layer, MediaResolver, VectorScene } from '@workspace/lib/vector';
 import {
     DEFAULT_PADDING,
     isTransparentColor,
-    type Layer,
     layerBoxCss,
     layerInnerHtml,
     layerPrintCss,
-    type MediaResolver,
     orderByFractionalIndex,
     parseBackgroundFill,
     round,
     sceneBounds,
     sceneLayers,
-    type VectorScene,
 } from '@workspace/lib/vector';
 import { mediaNamesIn } from '../../document/media';
 

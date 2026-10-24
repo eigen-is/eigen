@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { SLIDE_SIZES, type VectorFrame } from '@workspace/lib/vector';
+import type { VectorFrame } from '@workspace/lib/vector';
+import { SLIDE_SIZES } from '@workspace/lib/vector';
 import { targetFrameIds } from '../../../components/slides/apply-to';
 
 function frames(...ids: string[]): VectorFrame[] {

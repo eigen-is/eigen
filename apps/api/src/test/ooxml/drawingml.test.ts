@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { xmlAttr, xmlChild, xmlElements } from '../../lib/core/xml';
+import type { DrawingTheme } from '../../lib/ooxml/drawingml';
 import {
-    type DrawingTheme,
     drawingColor,
     drawingLines,
     IDENTITY_COLOR_MAP,

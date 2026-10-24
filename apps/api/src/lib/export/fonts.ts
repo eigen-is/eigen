@@ -1,11 +1,6 @@
 import * as fs from 'node:fs';
-import {
-    type BundledFontFace,
-    FONT_FACES,
-    type FontFaceFile,
-    fontFaceCss,
-    fontFacesOf,
-} from '@workspace/lib/constants/fonts';
+import type { BundledFontFace, FontFaceFile } from '@workspace/lib/constants/fonts';
+import { FONT_FACES, fontFaceCss, fontFacesOf } from '@workspace/lib/constants/fonts';
 import docxExcalifontRegular from '@workspace/ui/assets/fonts/excalifont/Excalifont-Regular.ttf' with { type: 'file' };
 import fontExcalifont from '@workspace/ui/assets/fonts/excalifont/Excalifont-Regular.woff2' with { type: 'file' };
 import docxInterBold from '@workspace/ui/assets/fonts/inter/Inter-Bold-renamed.ttf' with { type: 'file' };

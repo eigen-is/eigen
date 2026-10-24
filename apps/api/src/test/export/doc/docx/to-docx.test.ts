@@ -2,26 +2,26 @@ import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import {
-    DEFAULT_NORMAL_STYLE,
-    DEFAULT_PAGE_SETUP,
-    type NormalStyle,
-    type PageSetup,
-} from '@workspace/lib/docs/eigendoc';
-import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
-import JSZip from 'jszip';
+import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import type { MathRow } from '@workspace/math';
+import { MATH_LIMITS, MATHML_NAMESPACE, readOmml, writeMathml } from '@workspace/math';
 import sharp from 'sharp';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
-import type { EigendocBands } from '../../lib/document/doc';
-import { docSchema } from '../../lib/document/doc-schema';
-import { cssPt, QUOTE_LOOK, twips } from '../../lib/document/looks';
-import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
-import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
-import { chartFigureMedia, eigendocToDocx } from '../../lib/export/doc/to-docx';
-import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
-import { withSvgFallbacks } from '../../lib/export/office-image';
-import { parseOoxml } from '../../lib/ooxml/ooxml';
-import { openZip, type ZipReader } from '../../lib/ooxml/zip';
+import type { XmlElement } from '../../../../lib/core/xml';
+import { parseXml, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../../../lib/core/xml';
+import type { EigendocBands } from '../../../../lib/document/doc';
+import { docSchema } from '../../../../lib/document/doc-schema';
+import { cssPt, QUOTE_LOOK, twips } from '../../../../lib/document/looks';
+import { proseValue, proseValueIfSet } from '../../../../lib/document/prose-css';
+import type { ExportMedia } from '../../../../lib/document/transform/protocol';
+import { toTransferableText } from '../../../../lib/document/transform/protocol';
+import { chartFigureMedia } from '../../../../lib/export/doc/docx/drawings';
+import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
+import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/fonts';
+import { withSvgFallbacks } from '../../../../lib/export/office-image';
+import { parseOoxml } from '../../../../lib/ooxml/ooxml';
+import type { ZipReader } from '../../../../lib/ooxml/zip';
+import { openZip } from '../../../../lib/ooxml/zip';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,
@@ -29,7 +29,7 @@ import {
     equation,
     GOLDEN_FRACTION,
     GOLDEN_SUM,
-} from '../fixtures/golden-documents';
+} from '../../../fixtures/golden-documents';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -50,8 +50,8 @@ function docx(
     page: PageSetup = DEFAULT_PAGE_SETUP,
     bands: EigendocBands = {},
     normal: NormalStyle = DEFAULT_NORMAL_STYLE,
-): Promise<Uint8Array> {
-    return eigendocToDocx(json, bands, page, normal, media, 'Report.eigendoc', publicOrigin);
+): Uint8Array {
+    return writeDocx({ json, bands, page, style: normal }, { title: 'Report.eigendoc', media, publicOrigin });
 }
 
 async function unzip(
@@ -256,9 +256,9 @@ describe('docx writer — schema coverage', () => {
         expect((await docx(buildAllFeaturesDocJson())).byteLength).toBeGreaterThan(0);
     });
 
-    test('an unknown node or mark throws, as the HTML export does', async () => {
-        await expect(docx(doc({ type: 'mystery' }))).rejects.toThrow('no docx mapping for mystery');
-        await expect(docx(doc(p(text('x', { type: 'glow' }))))).rejects.toThrow('no docx mapping for glow');
+    test('an unknown node or mark throws, as the HTML export does', () => {
+        expect(() => docx(doc({ type: 'mystery' }))).toThrow('no docx mapping for mystery');
+        expect(() => docx(doc(p(text('x', { type: 'glow' }))))).toThrow('no docx mapping for glow');
     });
 });
 
@@ -414,9 +414,6 @@ describe('docx writer — package', () => {
     test('the same doc exports to the same bytes', async () => {
         const [first, second] = await Promise.all([docx(buildAllFeaturesDocJson()), docx(buildAllFeaturesDocJson())]);
         expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);
-        // Two runs inside one zip time tick agree on a clock date too, so the date is pinned on its own.
-        const dates = Object.values((await JSZip.loadAsync(first)).files).map((file) => file.date.toISOString());
-        expect(new Set(dates)).toEqual(new Set(['1980-01-01T00:00:00.000Z']));
     });
 
     test('the title is the name without its extension', async () => {

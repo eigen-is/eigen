@@ -18,21 +18,21 @@ import { installHappyDom } from '../../../happy-dom';
 type Listener = (...args: never[]) => void;
 
 class FakeProvider {
-    static instances: FakeProvider[] = [];
-    wsconnected = false;
-    synced = false;
-    destroyed = false;
-    messageHandlers: ((encoder: unknown, decoder: decoding.Decoder) => void)[] = [];
-    params: Record<string, string> = {};
-    bcChannel: string;
-    disableBc = true;
-    bcConnects = 0;
-    connectBc() {
+    public static instances: FakeProvider[] = [];
+    public wsconnected = false;
+    public synced = false;
+    public destroyed = false;
+    public messageHandlers: ((encoder: unknown, decoder: decoding.Decoder) => void)[] = [];
+    public params: Record<string, string> = {};
+    public bcChannel: string;
+    public disableBc = true;
+    public bcConnects = 0;
+    public connectBc() {
         this.bcConnects++;
     }
     private listeners = new Map<string, Set<Listener>>();
 
-    constructor(
+    public constructor(
         public url: string,
         _room: string,
         public doc: Y.Doc,
@@ -41,16 +41,16 @@ class FakeProvider {
         FakeProvider.instances.push(this);
     }
 
-    on(name: string, fn: Listener) {
+    public on(name: string, fn: Listener) {
         if (!this.listeners.has(name)) this.listeners.set(name, new Set());
         this.listeners.get(name)?.add(fn);
     }
 
-    off(name: string, fn: Listener) {
+    public off(name: string, fn: Listener) {
         this.listeners.get(name)?.delete(fn);
     }
 
-    listenerCount(name: string) {
+    public listenerCount(name: string) {
         return this.listeners.get(name)?.size ?? 0;
     }
 
@@ -58,32 +58,32 @@ class FakeProvider {
         for (const fn of this.listeners.get(name) ?? []) (fn as (...a: unknown[]) => void)(...args);
     }
 
-    destroy() {
+    public destroy() {
         this.destroyed = true;
     }
 
     // The hook drives these on a storage-unavailable close; the fake stays closed either way.
-    disconnected = false;
-    connects = 0;
-    disconnect() {
+    public disconnected = false;
+    public connects = 0;
+    public disconnect() {
         this.disconnected = true;
     }
-    connect() {
+    public connect() {
         this.connects++;
         this.disconnected = false;
     }
 
-    open() {
+    public open() {
         this.wsconnected = true;
         this.emit('status', [{ status: 'connected' }]);
     }
 
-    finishSync() {
+    public finishSync() {
         this.synced = true;
         this.emit('sync', [true]);
     }
 
-    close(code?: number) {
+    public close(code?: number) {
         this.emit('connection-close', [code === undefined ? null : { code }]);
         this.wsconnected = false;
         this.synced = false;

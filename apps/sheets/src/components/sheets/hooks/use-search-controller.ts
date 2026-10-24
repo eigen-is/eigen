@@ -1,6 +1,7 @@
 import type { DocSearchController, DocSearchMatch } from '@workspace/lib/types/doc-search';
 import type { SearchResult, WorkbookInstance } from '@workspace/sheet';
-import { type RefObject, useMemo } from 'react';
+import type { RefObject } from 'react';
+import { useMemo } from 'react';
 
 function idOf(m: SearchResult): string {
     return `${m.sheetId}:${m.r}:${m.c}`;

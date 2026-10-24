@@ -12,7 +12,8 @@ import {
 import { ICS_MAX_BYTES } from '../constants/calendar';
 import { VCARD_MAX_BYTES } from '../constants/contact';
 import { EML_MAX_BYTES } from '../constants/mail';
-import { type ConvertTarget, isConvertSource, isEmlFile, isFolderType, isIcsFile, isVCardFile } from '../types/drive';
+import type { ConvertTarget } from '../types/drive';
+import { isConvertSource, isEmlFile, isFolderType, isIcsFile, isVCardFile } from '../types/drive';
 import type { FileAction, FileActionId, FileSubject, SubjectInfo } from '../types/file-subject';
 import { subjectInfo } from './file-subject';
 

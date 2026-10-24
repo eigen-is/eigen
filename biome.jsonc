@@ -32,6 +32,8 @@
       "style": {
         "noNonNullAssertion": "off",
         "noDescendingSpecificity": "off",
+        "useImportType": { "level": "error", "options": { "style": "separatedType" } },
+        "useConsistentMemberAccessibility": { "level": "error", "options": { "accessibility": "explicit" } },
         // The package exports maps are the module resolver; extension-suffixed workspace
         // specifiers don't resolve through them. See CODE-STANDARDS.md § Imports.
         "noRestrictedImports": {

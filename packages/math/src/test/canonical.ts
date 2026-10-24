@@ -1,5 +1,6 @@
 import { ACCENTS, COMBINING_ACCENTS, fromAlphanumeric, naryLimits, SCRIPT_CHARS, SPACES } from '../notation';
-import { MATH_ENCLOSURES, MATH_LIMITS, type MathNode, type MathRow, type MathToken } from '../tree';
+import type { MathNode, MathRow, MathToken } from '../tree';
+import { MATH_ENCLOSURES, MATH_LIMITS } from '../tree';
 
 // The canonical tree as a check: the first rule a row breaks, or undefined. Every reader's output and every generated
 // tree must pass it. It restates the readers' character classes rather than importing them, so a wrong class in a

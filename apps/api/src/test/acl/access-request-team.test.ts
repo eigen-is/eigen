@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../../lib/config/server-config';
+import type { TestContext, TestUser } from '../setup';
 import {
     addMember,
     addTeamMount,
@@ -13,8 +14,6 @@ import {
     eventually,
     firstMountId,
     getTestContext,
-    type TestContext,
-    type TestUser,
 } from '../setup';
 
 let ctx: TestContext;

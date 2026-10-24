@@ -8,10 +8,24 @@ import {
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { ChartType } from '@workspace/lib/types/chart';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
+import type {
+    Box,
+    ImageSize,
+    MarqueeMode,
+    NewVectorElement,
+    Point,
+    SnapLine,
+    SnapTargets,
+    StyleDefaults,
+    VectorArrowElement,
+    VectorElement,
+    VectorElementPatch,
+    ZOp,
+} from '@workspace/lib/vector';
 import {
     arrowRoute,
-    type Box,
     boxCenter,
     canvasImageName,
     computeSnapTargets,
@@ -22,15 +36,11 @@ import {
     fitImageSize,
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
-    type ImageSize,
     isLinearElement,
     isTransparentColor,
-    type MarqueeMode,
     marqueeMode,
     NEW_TEXT_BOX_SIZE,
-    type NewVectorElement,
     orderByFractionalIndex,
-    type Point,
     paintsNothing,
     parseIdList,
     parsePoints,
@@ -39,32 +49,26 @@ import {
     resizeLinear,
     rotatePoint,
     SNAP_SCREEN_THRESHOLD,
-    type SnapLine,
-    type SnapTargets,
-    type StyleDefaults,
     SVG_NS,
     sceneBounds,
     snapBoxToTargets,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorElementPatch,
-    type ZOp,
 } from '@workspace/lib/vector';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { sealed } from '@workspace/ui/components/properties-panel';
 import { cn } from '@workspace/ui/lib/utils';
 import { ImageIcon } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useDialogOpen } from '../../hooks/use-dialog-open';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
+import type { MenuSectionsProps } from '../context-menu';
 import {
     ClipboardMenuItems,
     ContextMenuAnchor,
     MenuSections,
-    type MenuSectionsProps,
     ObjectContextMenu,
     useContextMenu,
 } from '../context-menu';
@@ -85,7 +89,8 @@ import {
 import { dropOutsideTextSelection, useCanvasClipboard } from './hooks/use-canvas-clipboard';
 import type { CanvasDoc } from './hooks/use-canvas-doc';
 import { useCanvasKeyboard } from './hooks/use-canvas-keyboard';
-import { type CanvasPeerState, type PublishCursor, peerOnFrame } from './hooks/use-canvas-presence';
+import type { CanvasPeerState, PublishCursor } from './hooks/use-canvas-presence';
+import { peerOnFrame } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import { useSpaceHeld } from './hooks/use-space-held';
 import type { VectorTool } from './hooks/use-tool';
@@ -93,12 +98,14 @@ import { useViewport } from './hooks/use-viewport';
 import { ELEMENT_KIND_UI } from './kinds';
 import { newChartElement } from './kinds/chart';
 import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
-import { arrowLabelEditing, type EditingState } from './text-editing';
+import type { EditingState } from './text-editing';
+import { arrowLabelEditing } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
 import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
 import { boundsToBox, boxToBounds, elementBox } from './tools/boxes';
-import { type CreatingState, creatingElement, isBoxTool, newShapeBox, normalizeRect } from './tools/create-shape';
+import type { CreatingState } from './tools/create-shape';
+import { creatingElement, isBoxTool, newShapeBox, normalizeRect } from './tools/create-shape';
 import { SnapGuides } from './tools/snap-guides';
 import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';

@@ -2,7 +2,8 @@ import { clone, findIndex } from 'es-toolkit/compat';
 import numeral from 'numeral';
 import { cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
-import { type Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
+import type { Context } from '..';
+import { diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
 import { createContextResolver, execfunction, functionCopy, numberDisplay } from '.';
 import { jfrefreshgrid } from './refresh';
 

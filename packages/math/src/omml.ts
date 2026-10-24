@@ -1,4 +1,5 @@
 import { COMBINING_ACCENTS, MINUS, naryLimits, SPACES } from './notation';
+import type { MathBudget, MathEnclosure, MathNode, MathRow, MathVariant, RowSlot } from './tree';
 import {
     bound,
     casesOf,
@@ -6,18 +7,13 @@ import {
     equationCells,
     hexColor,
     MATH_ENCLOSURES,
-    type MathBudget,
-    type MathEnclosure,
-    type MathNode,
-    type MathRow,
-    type MathVariant,
     mark,
     optional,
     RowBuilder,
-    type RowSlot,
     toColor,
 } from './tree';
-import { attribute, checkedXml, elementsOf, escapeXml, type MathXmlElement, textOf } from './xml';
+import type { MathXmlElement } from './xml';
+import { attribute, checkedXml, elementsOf, escapeXml, textOf } from './xml';
 
 export const OMML_NAMESPACE = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
 export const WORDML_NAMESPACE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';

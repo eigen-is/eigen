@@ -8,18 +8,8 @@
 // always knows whether its segment is pinned. Self-contained: owns its drag lifecycle under an
 // AbortController; reports the live geometry patch via onPreview and commits it on release.
 
-import {
-    type Box,
-    type FixedSegment,
-    materializeFirstPin,
-    moveSegment,
-    type PinPatch,
-    type PinRoutingContext,
-    type Point,
-    parseFixedSegments,
-    unpinSegment,
-    type VectorArrowElement,
-} from '@workspace/lib/vector';
+import type { Box, FixedSegment, PinPatch, PinRoutingContext, Point, VectorArrowElement } from '@workspace/lib/vector';
+import { materializeFirstPin, moveSegment, parseFixedSegments, unpinSegment } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
 import { useHandleDrag } from './use-handle-drag';
 

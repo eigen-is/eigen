@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
+import type { VectorElement } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
     readVectorFromDoc,
     VECTOR_STYLE_DEFAULTS,
-    type VectorElement,
     writeElementInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';

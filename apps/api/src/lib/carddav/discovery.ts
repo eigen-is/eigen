@@ -1,7 +1,8 @@
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import type { CardBook, CardRow } from '../contacts/dav-store';
 import { addressbookHomeHref, encodePathSegment } from '../dav/href';
-import { type PropfindRequest, selectProps } from '../dav/propfind';
+import type { PropfindRequest } from '../dav/propfind';
+import { selectProps } from '../dav/propfind';
 import { memberRowProps, multistatusResponse, response } from '../dav/xml';
 import { addressbookCollectionProps, addressbookHomeProps } from './xml-builder';
 

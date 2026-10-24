@@ -4,15 +4,15 @@ export class Semaphore {
     private active = 0;
     private waiters: (() => void)[] = [];
 
-    constructor(private readonly max: number) {}
+    public constructor(private readonly max: number) {}
 
     // The callers queued behind the running ones.
-    get waiting(): number {
+    public get waiting(): number {
         return this.waiters.length;
     }
 
     // A waiter whose signal aborts leaves the queue and rejects with the signal's reason, so nothing it holds waits on.
-    async run<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    public async run<T>(fn: () => Promise<T>, signal?: AbortSignal): Promise<T> {
         await this.acquire(signal);
         try {
             return await fn();

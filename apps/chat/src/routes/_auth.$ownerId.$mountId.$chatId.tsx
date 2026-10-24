@@ -12,7 +12,8 @@ import {
     RequestAccessView,
     ToolbarTitle,
 } from '@workspace/ui';
-import { ChatMessageInput, type ChatMessageInputHandle, ChatMessageList } from '@workspace/ui/components/chat';
+import type { ChatMessageInputHandle } from '@workspace/ui/components/chat';
+import { ChatMessageInput, ChatMessageList } from '@workspace/ui/components/chat';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { DriveRenameItem } from '@workspace/ui/components/drive/drive-rename-item';

@@ -2,13 +2,8 @@
 // the properties panel's Arrange row and the clipboard's cut. Each is one sealed undo step over the
 // doc writers the host passes in, the way element-writes.ts is plain functions over the doc itself.
 
-import {
-    convertToShapes,
-    DUPLICATE_OFFSET,
-    type NewVectorElement,
-    type VectorElement,
-    type ZOp,
-} from '@workspace/lib/vector';
+import type { NewVectorElement, VectorElement, ZOp } from '@workspace/lib/vector';
+import { convertToShapes, DUPLICATE_OFFSET } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
 import type * as Y from 'yjs';
 

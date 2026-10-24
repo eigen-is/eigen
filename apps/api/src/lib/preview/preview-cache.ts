@@ -5,7 +5,8 @@ import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
-import { type DrivePath, isCollabType, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isCollabType, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
 import { NOT_A_CALENDAR_FILE, NOT_A_VCARD_FILE, NOT_AN_EMAIL_FILE } from '../core/transfer';
@@ -56,7 +57,7 @@ export const TEXT_FORMAT = 'f8';
 // does not answer for them.) A cached body is JSON this process wrote from a value it built, so the read
 // back is a typed assignment nothing else checks: change one of the payload types and bump its format
 // here, or a restored previewsDir serves the old shape. The payloads are built inside the transform
-// Worker (worker.ts owns execution, this module the main-thread orchestration), which is why no builder
+// process (child.ts owns execution, this module the main-thread orchestration), which is why no builder
 // may reach the Mount or the transform seam.
 export const VCARD_FORMAT = 'vcard-f1';
 

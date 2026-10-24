@@ -18,13 +18,9 @@ import * as mountHelpers from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
-import {
-    createHomeFaultMount,
-    type FaultStorage,
-    provisionDoc,
-    registerFaultMount,
-    unregisterFaultMount,
-} from '../fault-storage-helpers';
+import type { FaultStorage } from '../fault-storage-helpers';
+import { createHomeFaultMount, provisionDoc, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
+import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
@@ -34,7 +30,6 @@ import {
     getTestContext,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
-    type TestUser,
 } from '../setup';
 import { MARKER_DB_CONFIG, MARKER_SCHEMA, readMarkers, snapshotInto } from './backup-test-helpers';
 

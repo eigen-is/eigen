@@ -1,15 +1,9 @@
 import { ApiError } from '../../core/errors';
-import { hasXmlName, type XmlElement, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { isOn, parseOoxml, R_NS, SML_NS } from '../../ooxml/ooxml';
-import {
-    MAX_PACKAGE_XML_BYTES,
-    MAX_PACKAGE_XML_TAGS,
-    type OoxmlPackage,
-    openPackage,
-    optional,
-    relOfType,
-    tagsIn,
-} from '../../ooxml/opc';
+import type { OoxmlPackage } from '../../ooxml/opc';
+import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS, openPackage, optional, relOfType, tagsIn } from '../../ooxml/opc';
 import { IMPORT_MESSAGES } from '../messages';
 
 // The xlsx package: the workbook part, its sheets and the parts every sheet shares, and a part's children read a batch

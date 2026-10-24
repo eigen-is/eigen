@@ -8,7 +8,8 @@ import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
 import { CURRENCIES, handleNumberFormat } from '../../state';
-import { buildCurrencyPattern, CURRENCY_VARIANTS, type CurrencyVariantId } from './format-pattern';
+import type { CurrencyVariantId } from './format-pattern';
+import { buildCurrencyPattern, CURRENCY_VARIANTS } from './format-pattern';
 
 export function CustomCurrencies() {
     const { setContext, refs, settings } = useContext(WorkbookContext);

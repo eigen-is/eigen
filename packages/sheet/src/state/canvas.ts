@@ -3,7 +3,8 @@
 // merges -> borders -> edge clear -> filter UI); freeze regions invoke it once
 // per region with their own offsets.
 
-import { type Context, getFlowdata } from './context';
+import type { Context } from './context';
+import { getFlowdata } from './context';
 import { getComputeMap } from './modules/condition-format';
 import { clearMeasureTextCache, defaultFont } from './modules/text';
 import { drawCellBorders } from './render/borders';
@@ -25,7 +26,7 @@ export class Canvas {
 
     private sheetCtx: Context;
 
-    constructor(canvasElement: HTMLCanvasElement, ctx: Context) {
+    public constructor(canvasElement: HTMLCanvasElement, ctx: Context) {
         this.canvasElement = canvasElement;
         this.sheetCtx = ctx;
     }

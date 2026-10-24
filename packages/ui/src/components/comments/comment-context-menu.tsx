@@ -1,5 +1,6 @@
 import type { useCommentLifecycle } from '@workspace/lib/comments';
-import { ContextMenuAnchor, type useContextMenu } from '../context-menu';
+import type { useContextMenu } from '../context-menu';
+import { ContextMenuAnchor } from '../context-menu';
 import { CommentLifecycleMenuItems } from './comment-lifecycle-menu-items';
 import type { CommentContextMenuItem } from './comment-menu-items';
 

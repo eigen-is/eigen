@@ -4,7 +4,8 @@ import { serializePoints } from '../../../vector/geometry';
 import { svgId } from '../../../vector/kinds/render-utils';
 import { diamondOutline, ellipseOutline, outlinePath, rectOutline, scaleNormalizedPath } from '../../../vector/outline';
 import { elementToSvg } from '../../../vector/scene-to-svg';
-import { FILL_STYLES, type FillStyle, type VectorElement } from '../../../vector/types';
+import type { FillStyle, VectorElement } from '../../../vector/types';
+import { FILL_STYLES } from '../../../vector/types';
 import { ellipse, linear, path, pie, richtext, shape } from '../element-factories';
 
 const FILL = '#ff0000';

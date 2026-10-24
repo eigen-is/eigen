@@ -11,7 +11,8 @@ import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
 import { hashFile, isMissingObjectCause, writeTempWithHash } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
-import { type RetentionPolicy, selectSnapshotsToPrune } from './retention';
+import type { RetentionPolicy } from './retention';
+import { selectSnapshotsToPrune } from './retention';
 import { formatSnapshotTimestamp } from './timestamp';
 import { VERSIONS_FOLDER_NAME } from './versions-folder';
 

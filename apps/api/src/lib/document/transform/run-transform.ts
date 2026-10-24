@@ -21,7 +21,8 @@ import type {
     TransformResultFor,
     TransformWarning,
 } from './protocol';
-import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type TransformPriority } from './runner';
+import type { RunOptions, TransformPriority } from './runner';
+import { documentTransformRunner, TRANSFORM_LIMITS } from './runner';
 
 // The one main-thread path every document transform takes: admit the job, surface
 // warnings, map failures — plus, for document-sourced jobs, the capture of the
@@ -51,9 +52,9 @@ function repeatsForSameInput(code: TransformError['code']): boolean {
 
 // Every other failure, with whether the same input would fail again, so a caller can stop rerunning it.
 export class TransformFailedError extends Error {
-    readonly repeats: boolean;
+    public readonly repeats: boolean;
 
-    constructor(code: TransformError['code'], message: string) {
+    public constructor(code: TransformError['code'], message: string) {
         super(message);
         this.repeats = repeatsForSameInput(code);
     }

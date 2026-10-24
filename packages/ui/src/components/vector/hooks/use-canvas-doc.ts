@@ -1,4 +1,15 @@
 import { useCollabDoc } from '@workspace/lib/collab';
+import type {
+    NewVectorElement,
+    StyleDefaults,
+    VectorArrowElement,
+    VectorElement,
+    VectorElementPatch,
+    VectorFrame,
+    VectorMeta,
+    VectorScene,
+    ZOp,
+} from '@workspace/lib/vector';
 import {
     arrowsBoundTo,
     DEFAULT_SCENE_META,
@@ -7,20 +18,11 @@ import {
     followBindings,
     generateNKeysBetween,
     isVectorElementType,
-    type NewVectorElement,
     parseBinding,
     readElementFromFields,
     readVectorFromDoc,
-    type StyleDefaults,
     topmostIndex,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorElementPatch,
-    type VectorFrame,
-    type VectorMeta,
-    type VectorScene,
     writeElementInDoc,
-    type ZOp,
 } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
 import { useCallback, useRef, useState } from 'react';

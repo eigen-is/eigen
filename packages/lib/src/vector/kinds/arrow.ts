@@ -1,32 +1,30 @@
 import type { Drawable } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { validateElbowPoints } from '../elbow-pins';
+import type { Bounds, Point } from '../geometry';
 import {
     arrowLabelBox,
-    type Bounds,
     distanceToPolyline,
     getElementBounds,
     LINEAR_HIT_SCREEN_FACTOR,
     linearLocalToScene,
     linearSceneToLocal,
-    type Point,
     parsePoints,
     pointsBounds,
     serializePoints,
     unionBounds,
 } from '../geometry';
 import { polylineOutline } from '../outline';
+import type { FixedSegment, VectorArrowElement } from '../types';
 import {
     ARROWHEADS,
     DEFAULT_ARROW_PROPS,
     DEFAULT_LINEAR_ROUNDNESS,
-    type FixedSegment,
     parseBinding,
     parseFixedSegments,
     ROUNDNESS,
     serializeBinding,
     serializeFixedSegments,
-    type VectorArrowElement,
 } from '../types';
 import { elbowRoundedShaftPath, labelMask, maskShaft, renderArrowhead, renderArrowLabel } from './arrow-render';
 import { defineKind } from './kind';

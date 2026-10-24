@@ -3,7 +3,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import * as decoding from 'lib0/decoding';
 import { evictHome } from '../../lib/home/get-home';
 import { waitFor } from '../fault-storage-helpers';
-import { createTestUser, driveGet, drivePost, getTestContext, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { createTestUser, driveGet, drivePost, getTestContext } from '../setup';
 
 // A socket the Home's teardown closes reaches the route's close handler after the document has dropped
 // every connection. Needs a real listening server.

@@ -2,13 +2,8 @@
 // text-match semantics a CardDAV client's REPORT leans on. Parsing the XML into these types is covered by
 // the carddav integration suite.
 import { describe, expect, test } from 'bun:test';
-import {
-    matchCard,
-    type ParamFilter,
-    type PropFilter,
-    type QueryFilter,
-    type TextMatch,
-} from '../../lib/carddav/query-filter';
+import type { ParamFilter, PropFilter, QueryFilter, TextMatch } from '../../lib/carddav/query-filter';
+import { matchCard } from '../../lib/carddav/query-filter';
 import { parseVCardLines } from '../../lib/vcard';
 
 // A vCard is CRLF-joined and CRLF-terminated; fixtures are written as physical lines so folding is literal.

@@ -1,5 +1,7 @@
-import { type Extensions, getSchema, type JSONContent } from '@tiptap/core';
-import { type Node, Schema } from '@tiptap/pm/model';
+import type { Extensions, JSONContent } from '@tiptap/core';
+import { getSchema } from '@tiptap/core';
+import type { Node } from '@tiptap/pm/model';
+import { Schema } from '@tiptap/pm/model';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { lowlight } from './lowlight';
 

@@ -11,6 +11,7 @@ import { Toggle } from '@workspace/ui/components/toggle';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { undoChord } from '@workspace/ui/lib/undoChord';
 import { cn } from '@workspace/ui/lib/utils';
+import type { LucideIcon } from 'lucide-react';
 import {
     ALargeSmall,
     ArrowDown,
@@ -18,7 +19,6 @@ import {
     CaseSensitive,
     ChevronDown,
     ChevronRight,
-    type LucideIcon,
     Regex,
     WholeWord,
     X,

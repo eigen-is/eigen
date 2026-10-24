@@ -4,8 +4,10 @@
 
 import { describe, expect, test } from 'bun:test';
 import { CHART_MAX_SIDE, sampleChartSpec } from '@workspace/lib/charts';
-import { floatingItems, type SheetChart, type SheetImage } from '@workspace/lib/sheets';
-import { applyPatches, type Patch, produce } from 'immer';
+import type { SheetChart, SheetImage } from '@workspace/lib/sheets';
+import { floatingItems } from '@workspace/lib/sheets';
+import type { Patch } from 'immer';
+import { applyPatches, produce } from 'immer';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
@@ -26,7 +28,8 @@ import {
 } from '../../../state/modules/image';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Sheet } from '../../../state/types';
-import { inverseRowColOptions, type PatchOptions, patchToOp } from '../../../state/utils/patch';
+import type { PatchOptions } from '../../../state/utils/patch';
+import { inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 

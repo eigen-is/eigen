@@ -999,6 +999,16 @@ describe('values', () => {
         expect(marksOfType(json, 'highlight').map((mark) => mark.attrs['color'])).toEqual(['#00ff00', '#ffe4b5']);
     });
 
+    test('a length past 64 characters is none, before it is parsed: no length needs more', async () => {
+        const sizes = async (value: string) =>
+            marksOfType(await imported(paragraph(run('Text', `<w:sz w:val="${value}"/>`))), 'textStyle').map(
+                (mark) => mark.attrs['fontSize'],
+            );
+        expect(await sizes(`${'0'.repeat(60)}24pt`)).toEqual([24]);
+        expect(await sizes(`${'0'.repeat(61)}24pt`)).toEqual([]);
+        expect(await sizes(`24.${'0'.repeat(4_000_000)}pt`)).toEqual([]);
+    });
+
     test('a font that is no Eigen name gives no font', async () => {
         const json = await imported(paragraph(run('Text', '<w:rFonts w:ascii="Inter;x" w:hAnsi="Inter;x"/>')));
         expect(marksOfType(json, 'textStyle')).toEqual([]);

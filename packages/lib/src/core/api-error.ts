@@ -36,11 +36,11 @@ function messageFromBody(value: unknown, status: number): string {
 }
 
 export class AppError extends Error {
-    status: number;
+    public status: number;
 
     // error.status is `unknown`, not `number`: the untyped-error GET routes (/p/config, /settings/server,
     // /settings/s3config) declare no response schema, so Eden can't enumerate their codes. Coerced below.
-    constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
+    public constructor(response: { error: { status: unknown; value: unknown } | null; status: number }) {
         const errorStatus = response.error?.status;
         const status = typeof errorStatus === 'number' ? errorStatus : response.status;
         super(messageFromBody(response.error?.value, status));

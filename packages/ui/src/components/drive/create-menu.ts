@@ -1,6 +1,8 @@
 import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
-import { EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
-import { FolderPlus, type LucideIcon, UploadIcon } from 'lucide-react';
+import type { EigenDocType } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import type { LucideIcon } from 'lucide-react';
+import { FolderPlus, UploadIcon } from 'lucide-react';
 
 export type CreateCallbacks = {
     onCreateFolder?: () => void;

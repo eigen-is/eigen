@@ -8,7 +8,7 @@ import type { StorageBackend } from './types';
 export class LocalStorage implements StorageBackend {
     private dataDir: string;
 
-    constructor(baseDir: string) {
+    public constructor(baseDir: string) {
         this.dataDir = path.resolve(baseDir, 'data');
         if (!fs.existsSync(this.dataDir)) {
             fs.mkdirSync(this.dataDir, { recursive: true });
@@ -19,15 +19,15 @@ export class LocalStorage implements StorageBackend {
         return resolveWithinBase(this.dataDir, key);
     }
 
-    read(key: string): BunFile {
+    public read(key: string): BunFile {
         return Bun.file(this.resolve(key));
     }
 
-    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    public async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         return await Bun.write(this.resolve(key), data, { createPath: true });
     }
 
-    async delete(key: string): Promise<boolean> {
+    public async delete(key: string): Promise<boolean> {
         try {
             await fsPromises.rm(this.resolve(key), { force: true });
             return true;
@@ -37,11 +37,11 @@ export class LocalStorage implements StorageBackend {
         }
     }
 
-    async exists(key: string): Promise<boolean> {
+    public async exists(key: string): Promise<boolean> {
         return await this.read(key).exists();
     }
 
-    async size(key: string): Promise<number | null> {
+    public async size(key: string): Promise<number | null> {
         const file = this.read(key);
         if (await file.exists()) {
             return file.size;
@@ -49,18 +49,18 @@ export class LocalStorage implements StorageBackend {
         return null;
     }
 
-    getPath(key: string): string {
+    public getPath(key: string): string {
         return this.resolve(key);
     }
 
-    async mkdir(key: string): Promise<void> {
+    public async mkdir(key: string): Promise<void> {
         const dirPath = this.resolve(key);
         if (!fs.existsSync(dirPath)) {
             await fsPromises.mkdir(dirPath, { recursive: true });
         }
     }
 
-    async rename(oldKey: string, newKey: string): Promise<void> {
+    public async rename(oldKey: string, newKey: string): Promise<void> {
         const oldPath = this.resolve(oldKey);
         if (!fs.existsSync(oldPath)) {
             throw new ApiError(404, `Cannot rename: source path not found`);
@@ -73,7 +73,7 @@ export class LocalStorage implements StorageBackend {
         await fsPromises.rename(oldPath, newPath);
     }
 
-    async deleteDir(key: string): Promise<boolean> {
+    public async deleteDir(key: string): Promise<boolean> {
         try {
             await fsPromises.rm(this.resolve(key), { recursive: true, force: true });
             return true;

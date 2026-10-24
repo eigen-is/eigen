@@ -3,7 +3,8 @@ import type { FormulaArg, FormulaOutput } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
 import { toGrid } from '../helper/array';
 import { toNumber } from '../helper/number';
-import { type FunctionArg, OMITTED } from '../omitted';
+import type { FunctionArg } from '../omitted';
+import { OMITTED } from '../omitted';
 
 // A cell holds at most this many characters; a longer result is #VALUE!.
 const MAX_TEXT_LENGTH = 32_767;

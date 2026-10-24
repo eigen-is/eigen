@@ -4,7 +4,8 @@
 
 import { DropdownMenuItem, DropdownMenuShortcut } from '../dropdown-menu';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
-import { VECTOR_TOOLS, type VectorTool, type VectorToolEntry } from './hooks/use-tool';
+import type { VectorTool, VectorToolEntry } from './hooks/use-tool';
+import { VECTOR_TOOLS } from './hooks/use-tool';
 
 export function ToolMenuItems({ tools, setTool }: { tools: VectorToolEntry[]; setTool: (tool: VectorTool) => void }) {
     return (

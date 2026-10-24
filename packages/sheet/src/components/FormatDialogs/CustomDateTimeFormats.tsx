@@ -16,10 +16,10 @@ import { WorkbookContext } from '../../context';
 import { is_date } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
 import { DATE_FORMAT_PRESETS, handleNumberFormat } from '../../state';
+import type { FormatSegment } from './format-pattern';
 import {
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
-    type FormatSegment,
     getDateToken,
     previewPattern,
     serializeSegments,

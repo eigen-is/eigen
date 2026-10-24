@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
-import { DEFAULT_SCENE_META, type VectorScene } from '@workspace/lib/vector';
+import type { VectorScene } from '@workspace/lib/vector';
+import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
 import {

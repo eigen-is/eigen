@@ -7,7 +7,8 @@ import type { DatabaseConfig } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { setShutdownDrainDeadline } from '../../lib/sync';
-import { countRowsInFile, createFaultMount, createGetLocalDatabase, type FaultStorage } from '../fault-storage-helpers';
+import type { FaultStorage } from '../fault-storage-helpers';
+import { countRowsInFile, createFaultMount, createGetLocalDatabase } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 // Regression net for AUDIT_MOUNT § P1 (finding 2a + siblings): a cached document DB syncs to a

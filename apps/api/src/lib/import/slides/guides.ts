@@ -1,4 +1,5 @@
-import { type XmlElement, xmlAttr } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { xmlAttr } from '../../core/xml';
 import { DEGREE } from '../../ooxml/drawingml';
 import { A_NS, emu } from '../../ooxml/ooxml';
 import { cachedBy, charge, childrenOf } from './lookup';

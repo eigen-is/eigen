@@ -1,7 +1,8 @@
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { hitTestLinear, isClosedLinear, linearLocalToScene, parsePoints, serializePoints } from '../geometry';
 import { polylineOutline } from '../outline';
-import { DEFAULT_LINE_ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS, type VectorLinearElement } from '../types';
+import type { VectorLinearElement } from '../types';
+import { DEFAULT_LINE_ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS, ROUNDNESS } from '../types';
 import { defineKind } from './kind';
 import { clampCoord, fillField, oneOf, str } from './read-fields';
 import { drawableToSvg, fillDefs, linearRoughOptions, loopPath } from './render-utils';

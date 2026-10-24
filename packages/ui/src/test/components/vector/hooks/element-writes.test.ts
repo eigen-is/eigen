@@ -1,12 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import {
-    convertToShapes,
-    readVectorFromDoc,
-    serializeBinding,
-    VECTOR_STYLE_DEFAULTS,
-    type VectorElement,
-} from '@workspace/lib/vector';
+import type { VectorElement } from '@workspace/lib/vector';
+import { convertToShapes, readVectorFromDoc, serializeBinding, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { sealed } from '../../../../components/properties-panel/property-gesture';
 import {

@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { and, desc, eq, isNotNull, isNull, type SQL, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';

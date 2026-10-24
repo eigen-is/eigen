@@ -8,7 +8,8 @@ import {
     useMovePath,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
-import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { DriveAccessDialog } from './drive-access-dialog';

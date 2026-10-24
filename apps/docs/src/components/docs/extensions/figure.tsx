@@ -8,14 +8,8 @@ import type { Box } from '@workspace/lib/vector';
 import { ImagePlaceholder } from '@workspace/ui/components/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-    clampFigureWidth,
-    FigureFrame,
-    type FigureFrameOptions,
-    figureFramePlugins,
-    figureMaxWidth,
-    useFigureResize,
-} from './figure-frame';
+import type { FigureFrameOptions } from './figure-frame';
+import { clampFigureWidth, FigureFrame, figureFramePlugins, figureMaxWidth, useFigureResize } from './figure-frame';
 
 // The width a figure draws at when neither it nor its page gives one (px).
 const FIGURE_DEFAULT_WIDTH = 400;

@@ -1,17 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type {
+    Tap,
+    TouchGestures,
+    TouchGesturesParams,
+    TouchPointerEvent,
+    TouchXY,
+} from '../../../../components/vector/tools/touch-gestures';
 import {
     isDoubleTap,
     isFreedrawSpike,
     pinchFrame,
     SPIKE_MAX_POINTS,
     swipeFrameDelta,
-    type Tap,
-    type TouchGestures,
-    type TouchGesturesParams,
-    type TouchPointerEvent,
-    type TouchXY,
     touchAllowedInPenMode,
     touchIgnoredDuringPen,
     useTouchGestures,

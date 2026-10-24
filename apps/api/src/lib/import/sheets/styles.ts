@@ -9,7 +9,8 @@ import type {
 import { BORDER_STYLES } from '@workspace/lib/sheets';
 import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
 import { readColorScheme, SCHEME_SLOTS } from '../../ooxml/drawingml';
 import { isOn, SML_NS } from '../../ooxml/ooxml';
 import { BUILTIN_NUMBER_FORMATS, MAX_NUMBER_FORMAT_LENGTH, maxDigitWidth } from '../../ooxml/spreadsheetml';

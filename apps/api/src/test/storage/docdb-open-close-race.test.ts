@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, rmSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { ApiError, type DatabaseConfig, ManagedDatabase } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
+import { ApiError, ManagedDatabase } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
@@ -59,14 +60,14 @@ class GatedLocalStorage extends LocalStorage {
     private renameGate: { parked: () => void; released: Promise<void> } | null = null;
     private readGate: { parked: () => void; released: Promise<void> } | null = null;
 
-    armWrite(): Gate & { fail: (err: Error) => void } {
+    public armWrite(): Gate & { fail: (err: Error) => void } {
         const parked = deferred();
         const released = Promise.withResolvers<void>();
         this.writeGate = { parked: parked.resolve, released: released.promise };
         return { parked: parked.promise, release: released.resolve, fail: released.reject };
     }
 
-    armRename(): Gate {
+    public armRename(): Gate {
         const parked = deferred();
         const released = deferred();
         this.renameGate = { parked: parked.resolve, released: released.promise };
@@ -74,14 +75,14 @@ class GatedLocalStorage extends LocalStorage {
     }
 
     // Parks the next download before its first byte, holding the open mid-load like a stalled GET.
-    armRead(): Gate & { fail: (err: Error) => void } {
+    public armRead(): Gate & { fail: (err: Error) => void } {
         const parked = deferred();
         const released = Promise.withResolvers<void>();
         this.readGate = { parked: parked.resolve, released: released.promise };
         return { parked: parked.promise, release: released.resolve, fail: released.reject };
     }
 
-    override async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    public override async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const gate = this.writeGate;
         if (gate) {
             this.writeGate = null;
@@ -91,7 +92,7 @@ class GatedLocalStorage extends LocalStorage {
         return super.write(key, data);
     }
 
-    override async rename(oldKey: string, newKey: string): Promise<void> {
+    public override async rename(oldKey: string, newKey: string): Promise<void> {
         const gate = this.renameGate;
         if (gate) {
             this.renameGate = null;
@@ -102,7 +103,7 @@ class GatedLocalStorage extends LocalStorage {
     }
 
     // Gated at stream() rather than read(): exists() and size() read the same handle.
-    override read(key: string): BunFile {
+    public override read(key: string): BunFile {
         const file = super.read(key);
         const stream = file.stream.bind(file);
         return Object.assign(file, {

@@ -10,7 +10,8 @@ import { evictHome, getHome } from '../../lib/home/get-home';
 import { pullHomeSize, sendToHome } from '../../lib/home/home-relay';
 import { makeCalendar } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
-import { app, assertJson, authedRequest, createTestUser, findOrFail, getTestContext, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { app, assertJson, authedRequest, createTestUser, findOrFail, getTestContext } from '../setup';
 
 // The calendar's VCALENDAR bytes are metered against the Home's one data budget, the same budget mail and
 // contacts share. Every test here owns its own Home, because the ceiling is a server-wide setting and the

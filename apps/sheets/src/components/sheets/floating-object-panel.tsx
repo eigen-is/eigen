@@ -1,11 +1,10 @@
 import type { SheetFloatingItem } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
+import type { BeginGesture, TransformFields } from '@workspace/ui/components/properties-panel';
 import {
-    type BeginGesture,
     PropertiesPanel,
     PropertyGestureContext,
     PropertySection,
-    type TransformFields,
     TransformSection,
     ZOrderButtons,
 } from '@workspace/ui/components/properties-panel';

@@ -1,19 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { serializeFill, solidFill } from '../../../vector/fill';
+import type { Point } from '../../../vector/geometry';
 import {
     bindingAnchor,
     bindingGap,
     boundEndpoint,
     elementBounds,
-    type Point,
     rotatePoint,
     serializePoints,
 } from '../../../vector/geometry';
 import { capabilitiesOf, ELEMENT_FIELDS, ELEMENT_KINDS, isBindable, storedFields } from '../../../vector/kinds';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parseNormalizedPath } from '../../../vector/kinds/read-fields';
+import type { OutlineShape } from '../../../vector/outline';
 import {
-    type OutlineShape,
     outlineContains,
     outlineDistance,
     scaledPathCommands,
@@ -22,7 +22,8 @@ import {
 } from '../../../vector/outline';
 import { readVectorFromDoc } from '../../../vector/read-vector';
 import { sceneToSvg } from '../../../vector/scene-to-svg';
-import { serializeBinding, type VectorPathElement } from '../../../vector/types';
+import type { VectorPathElement } from '../../../vector/types';
+import { serializeBinding } from '../../../vector/types';
 import { arrow, byIdOf, path, scene } from '../element-factories';
 
 const SQUARE = 'M 0 0 L 1 0 L 1 1 L 0 1 Z';

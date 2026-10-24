@@ -1,54 +1,56 @@
 import { escapeHtml } from '@workspace/lib/html';
+import type {
+    Arrowhead,
+    NewVectorElement,
+    StrokeStyle,
+    StyleDefaults,
+    VectorElementPatch,
+} from '@workspace/lib/vector';
 import {
-    type Arrowhead,
     isBordered,
     isTransparentColor,
-    type NewVectorElement,
     normalizeAngle,
     parseFill,
     SLIDES_STYLE_DEFAULTS,
-    type StrokeStyle,
-    type StyleDefaults,
     serializeFill,
     snapSlideFontSize,
     TRANSPARENT_COLOR,
-    type VectorElementPatch,
 } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
-import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import { DEGREE, drawingLines, isSideways } from '../../ooxml/drawingml';
 import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
 import { IMPORT_MESSAGES } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
-import { type CustomGeometry, closedPath, customGeometry } from './custom-geometry';
-import { evaluateGuides, type Guides, guideListOf } from './guides';
+import type { CustomGeometry } from './custom-geometry';
+import { closedPath, customGeometry } from './custom-geometry';
+import type { Guides } from './guides';
+import { evaluateGuides, guideListOf } from './guides';
+import type { GroupFill, PlaceholderKey, ShapeProperties, SlideInheritance, Xfrm } from './inherit';
 import {
     decorationsOf,
     elementGradientAngle,
     fillIn,
-    type GroupFill,
     inheritedPlaceholders,
     listStyleOf,
     mutedColor,
     nonVisualOf,
-    type PlaceholderKey,
     paintOf,
     placeholderKind,
     placeholderOf,
     propertiesOf,
     readXfrm,
-    type ShapeProperties,
-    type SlideInheritance,
     spTreeOf,
     styleFill,
     styleLine,
     textColorOf,
-    type Xfrm,
 } from './inherit';
 import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
-import { alternative, blipMedia, type DeckWalk, type Lost, type Part } from './package';
+import type { DeckWalk, Lost, Part } from './package';
+import { alternative, blipMedia } from './package';
 import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
 

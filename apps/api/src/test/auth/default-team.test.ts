@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { type DrivePath, teamOwnerId } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
 import { and, eq } from 'drizzle-orm';
 import { member as memberSchema, teamMember as teamMemberSchema, team as teamSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';

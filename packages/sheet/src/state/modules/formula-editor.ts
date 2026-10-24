@@ -13,7 +13,8 @@ import {
     setRangeIndexes,
 } from './formula-cache';
 import { createRangeHightlight, setCaretPosition } from './formula-range';
-import { type FormulaFunctionEntry, FUNCTION_LIST } from './function-list';
+import type { FormulaFunctionEntry } from './function-list';
+import { FUNCTION_LIST } from './function-list';
 
 function functionHTML(txt: string) {
     if (txt[0] === '=') {

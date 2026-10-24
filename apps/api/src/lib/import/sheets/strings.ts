@@ -1,9 +1,12 @@
 import type { InlineStringSegment } from '@workspace/lib/sheets';
-import { hasXmlName, type XmlElement, xmlChild, xmlElements, xmlText } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlChild, xmlElements, xmlText } from '../../core/xml';
 import { SML_NS } from '../../ooxml/ooxml';
 import { decodeEscapes } from '../../ooxml/spreadsheetml';
-import { type ReadBudget, readInBatches } from './package';
-import { fontLook, type ThemePalette } from './styles';
+import type { ReadBudget } from './package';
+import { readInBatches } from './package';
+import type { ThemePalette } from './styles';
+import { fontLook } from './styles';
 
 // Shared and inline strings. A rich string keeps its runs beside the text a cell shows: a run with properties in its own
 // font, and one without, or text beside the runs, as a plain string, in its cell's.

@@ -1,4 +1,5 @@
-import { type RefCallback, type RefObject, useCallback, useState } from 'react';
+import type { RefCallback, RefObject } from 'react';
+import { useCallback, useState } from 'react';
 
 type ElementSize = { width: number; height: number };
 

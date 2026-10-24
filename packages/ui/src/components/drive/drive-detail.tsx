@@ -1,13 +1,15 @@
 import { formatDateTime } from '@workspace/lib/date';
 import { subjectFromPath, subjectInfo } from '@workspace/lib/file-subject';
 import { formatFileSize } from '@workspace/lib/format';
-import { type DrivePath, isDocumentType, isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isDocumentType, isOpenable, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
 import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch-toggle-button';
 import { Download, UserRoundPlus, X } from 'lucide-react';
-import { type ReactNode, useMemo } from 'react';
+import type { ReactNode } from 'react';
+import { useMemo } from 'react';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { useLayout } from '../layout/app/layout-context';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';

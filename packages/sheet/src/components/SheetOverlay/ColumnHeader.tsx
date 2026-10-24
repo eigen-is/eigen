@@ -3,12 +3,12 @@ import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import type { Freezen } from '../../state';
 import {
     autoFitColumnWidth,
     colLocation,
     colLocationByIndex,
     computeColumnHeaderRegions,
-    type Freezen,
     fixPositionOnFrozenCells,
     getFlowdata,
     getSheetIndex,

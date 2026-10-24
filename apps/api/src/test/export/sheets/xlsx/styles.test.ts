@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { type Cell, SHEET_DEFAULT_DIGIT_WIDTH } from '@workspace/lib/sheets';
+import type { Cell } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_DIGIT_WIDTH } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
 import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
 import { defaultFontDigitWidth, readDxfs, readLooks } from '../../../../lib/import/sheets/styles';

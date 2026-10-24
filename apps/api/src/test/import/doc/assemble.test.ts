@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { QUOTE_LOOK } from '../../../lib/document/looks';
-import { build, type Item, type Para } from '../../../lib/import/doc/assemble';
+import type { Item, Para } from '../../../lib/import/doc/assemble';
+import { build } from '../../../lib/import/doc/assemble';
 
 // Items in, blocks out: the assembly rules without XML.
 

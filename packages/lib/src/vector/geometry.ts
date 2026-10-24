@@ -12,15 +12,8 @@ import { getLineHeightPx } from './font-metrics';
 // pins both entry orders).
 import { ELEMENT_KINDS, isBindable } from './kinds';
 import { clamp, distanceToSegment, nearestPoint, outlineHits, pointInPolygon, segSegIntersect } from './outline';
-import {
-    type Arrowhead,
-    parseBinding,
-    serializeBinding,
-    type VectorArrowElement,
-    type VectorBindableElement,
-    type VectorElement,
-    type VectorLinearElement,
-} from './types';
+import type { Arrowhead, VectorArrowElement, VectorBindableElement, VectorElement, VectorLinearElement } from './types';
+import { parseBinding, serializeBinding } from './types';
 
 export type Point = { x: number; y: number };
 

@@ -1,7 +1,8 @@
 import type { AuthUser } from '@workspace/lib/auth';
 import { useEffect } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
-import { type CursorPeerState, useAwarenessIdentity, useThrottledAwarenessField } from '../../collab';
+import type { CursorPeerState } from '../../collab';
+import { useAwarenessIdentity, useThrottledAwarenessField } from '../../collab';
 
 // The canvas awareness shape: the shared cursor-layer fields plus the frame the peer is on. Engine-
 // private — frameId never enters the shared CursorPeerState.

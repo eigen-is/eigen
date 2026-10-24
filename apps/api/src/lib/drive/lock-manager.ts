@@ -37,7 +37,7 @@ export class LockManager {
         }
     }
 
-    acquire(args: {
+    public acquire(args: {
         pathId: string;
         depth: 0 | 'infinity';
         scope: LockScope;
@@ -86,14 +86,14 @@ export class LockManager {
         return lock;
     }
 
-    refresh(token: string, ttlMs = LOCK_DEFAULT_TTL_MS): Lock | null {
+    public refresh(token: string, ttlMs = LOCK_DEFAULT_TTL_MS): Lock | null {
         const lock = this.locks.get(token);
         if (!lock || lock.expiresAt <= Date.now()) return null;
         lock.expiresAt = Date.now() + ttlMs;
         return lock;
     }
 
-    release(token: string): boolean {
+    public release(token: string): boolean {
         const lock = this.locks.get(token);
         if (!lock) return false;
         this.locks.delete(token);
@@ -103,14 +103,14 @@ export class LockManager {
 
     // Drop every lock on a path (used when DELETE/MOVE/COPY remove or replace the
     // resource). Without this, lock state lingers until TTL — bounded but wasteful.
-    releaseAllForPath(pathId: string): void {
+    public releaseAllForPath(pathId: string): void {
         const tokens = this.byPath.get(pathId);
         if (!tokens) return;
         for (const token of tokens) this.locks.delete(token);
         this.byPath.delete(pathId);
     }
 
-    listForPath(pathId: string): Lock[] {
+    public listForPath(pathId: string): Lock[] {
         this.gc();
         const tokens = this.byPath.get(pathId);
         if (!tokens) return [];
@@ -126,20 +126,25 @@ export class LockManager {
     // an ancestor. Caller supplies the ancestor list (root-first) — usually from
     // Drive.breadCrumb minus the path itself. RFC 4918 §6.2 says depth-infinity locks
     // on a collection apply to every member.
-    coveringLocks(pathId: string, ancestorPathIds: string[] = []): Lock[] {
+    private coveringLocks(pathId: string, ancestorPathIds: string[] = []): Lock[] {
         const own = this.listForPath(pathId);
         const ancestor = ancestorPathIds.flatMap((id) => this.listForPath(id).filter((l) => l.depth === 'infinity'));
         return [...own, ...ancestor];
     }
 
-    isWriteAllowed(pathId: string, ifHeader: string | null, userId: string, ancestorPathIds: string[] = []): boolean {
+    public isWriteAllowed(
+        pathId: string,
+        ifHeader: string | null,
+        userId: string,
+        ancestorPathIds: string[] = [],
+    ): boolean {
         const active = this.coveringLocks(pathId, ancestorPathIds);
         if (active.length === 0) return true;
         const tokens = parseIfHeaderTokens(ifHeader);
         return active.every((lock) => lock.userId === userId && tokens.includes(lock.token));
     }
 
-    clear(): void {
+    public clear(): void {
         this.locks.clear();
         this.byPath.clear();
     }

@@ -1,12 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAggregateMimeContent, usePathInfo } from '@workspace/lib/drive';
-import {
-    type DrivePath,
-    type DriveSearchParams,
-    type EigenDocType,
-    getEigenDocInfoByMime,
-} from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSearchParams, EigenDocType } from '@workspace/lib/types/drive';
+import { getEigenDocInfoByMime } from '@workspace/lib/types/drive';
 import { EmptyState, FILTER_LABELS } from '@workspace/ui';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';

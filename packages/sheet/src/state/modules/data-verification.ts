@@ -2,11 +2,9 @@ import { isNil } from 'es-toolkit/compat';
 import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell } from '../../engine/types';
+import type { CellMatrix, Context, DataVerificationRule, SingleRange } from '..';
 import {
-    type CellMatrix,
-    type Context,
     colLocationByIndex,
-    type DataVerificationRule,
     diff,
     getCellValue,
     getcellrange,
@@ -23,7 +21,6 @@ import {
     normalizedAttr,
     normalizedCellAttr,
     rowLocationByIndex,
-    type SingleRange,
     setCellValue,
 } from '..';
 import type { Rect } from '../types';

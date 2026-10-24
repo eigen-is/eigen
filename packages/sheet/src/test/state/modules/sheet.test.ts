@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { setSelection } from '../../../state/api/range';
 import { hideSheet } from '../../../state/api/sheet';
-import { type Context, firstVisibleSheetId, initSheetIndex } from '../../../state/context';
+import type { Context } from '../../../state/context';
+import { firstVisibleSheetId, initSheetIndex } from '../../../state/context';
 import { changeSheet, deleteSheet, settleCurrentSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
 

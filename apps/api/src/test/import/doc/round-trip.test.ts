@@ -9,9 +9,11 @@ import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
 import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
-import { chartFigureMedia, eigendocToDocx } from '../../../lib/export/doc/to-docx';
+import { chartFigureMedia } from '../../../lib/export/doc/docx/drawings';
+import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
 import { withSvgFallbacks } from '../../../lib/export/office-image';
-import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
+import type { DocxImage } from '../../../lib/import/doc/from-docx';
+import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
@@ -144,14 +146,9 @@ const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(jso
 describe('the all-features doc', () => {
     test('comes back as it was written, but for the named differences', async () => {
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
-        const docx = await eigendocToDocx(
-            buildAllFeaturesDocJson(),
-            {},
-            DEFAULT_PAGE_SETUP,
-            DEFAULT_NORMAL_STYLE,
-            buildAllFeaturesDocMedia(),
-            'All features',
-            ORIGIN,
+        const docx = writeDocx(
+            { json: buildAllFeaturesDocJson(), bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+            { title: 'All features', media: buildAllFeaturesDocMedia(), publicOrigin: ORIGIN },
         );
         const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
         const imported = withSourceNames(json, sourceNames(images));
@@ -168,7 +165,10 @@ describe('a chart', () => {
         };
         const source = { type: 'doc', content: [{ type: 'paragraph', content: [chart] }] };
         const media = await withSvgFallbacks(await chartFigureMedia([source]));
-        const docx = await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, media, 'Chart', ORIGIN);
+        const docx = writeDocx(
+            { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+            { title: 'Chart', media, publicOrigin: ORIGIN },
+        );
         const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
         expect(json.content?.[0]?.content).toEqual([
             {
@@ -201,7 +201,12 @@ describe('the page', () => {
         };
         const source = buildAllFeaturesDocJson();
         const { page: read } = docxToPmJson(
-            Buffer.from(await eigendocToDocx(source, {}, page, DEFAULT_NORMAL_STYLE, [], 'Letter', undefined)),
+            Buffer.from(
+                writeDocx(
+                    { json: source, bands: {}, page, style: DEFAULT_NORMAL_STYLE },
+                    { title: 'Letter', media: [] },
+                ),
+            ),
         );
         expect(read.width).toBe(279.4);
         expect(read.height).toBe(215.9);
@@ -237,14 +242,14 @@ describe('the page', () => {
             },
             headerFirst: { type: 'doc', content: [p('Letterhead')] },
         };
-        const docx = await eigendocToDocx(
-            { type: 'doc', content: [p('Body')] },
-            bands,
-            { ...DEFAULT_PAGE_SETUP, differentFirstPage: true },
-            DEFAULT_NORMAL_STYLE,
-            [],
-            'Bands',
-            undefined,
+        const docx = writeDocx(
+            {
+                json: { type: 'doc', content: [p('Body')] },
+                bands,
+                page: { ...DEFAULT_PAGE_SETUP, differentFirstPage: true },
+                style: DEFAULT_NORMAL_STYLE,
+            },
+            { title: 'Bands', media: [] },
         );
         const { bands: read, page } = docxToPmJson(Buffer.from(docx));
         expect(page.differentFirstPage).toBe(true);
@@ -270,7 +275,10 @@ describe('the page', () => {
                 },
             ],
         };
-        const docx = await eigendocToDocx(body, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Body', undefined);
+        const docx = writeDocx(
+            { json: body, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+            { title: 'Body', media: [] },
+        );
         const { json } = docxToPmJson(Buffer.from(docx));
         expect(stored(json)).toEqual(stored(docSchema().nodeFromJSON(body).toJSON()));
     });
@@ -308,7 +316,12 @@ describe('the Normal', () => {
         // A header is a part of its own over the same styles.xml, so its text draws in the Normal with no marks either.
         const header = { type: 'doc', content: [{ type: 'paragraph', content: [text('Acme')] }] };
         const { json, bands, style } = docxToPmJson(
-            Buffer.from(await eigendocToDocx(source, { header }, DEFAULT_PAGE_SETUP, normal, [], 'Word', undefined)),
+            Buffer.from(
+                writeDocx(
+                    { json: source, bands: { header }, page: DEFAULT_PAGE_SETUP, style: normal },
+                    { title: 'Word', media: [] },
+                ),
+            ),
         );
         expect(style).toEqual(normal);
         expect(stored(json)).toEqual(stored(source));
@@ -319,7 +332,10 @@ describe('the Normal', () => {
         const source = buildAllFeaturesDocJson();
         const { style } = docxToPmJson(
             Buffer.from(
-                await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Eigen', undefined),
+                writeDocx(
+                    { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+                    { title: 'Eigen', media: [] },
+                ),
             ),
         );
         expect(style).toEqual(DEFAULT_NORMAL_STYLE);
@@ -342,7 +358,10 @@ describe("the math package's corpus equations", () => {
             )
             .join('');
         const { json } = await importDocxBody(input);
-        const docx = await eigendocToDocx(json, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Equations', ORIGIN);
+        const docx = writeDocx(
+            { json, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+            { title: 'Equations', media: [], publicOrigin: ORIGIN },
+        );
         const document = parseOoxml(openZip(new Uint8Array(docx)).read('word/document.xml') ?? '');
         const body = document && xmlChild(document, W_NS, 'body');
         if (!body) throw new Error('no w:body');
@@ -397,7 +416,10 @@ async function roundTrip(content: JSONContent[]): Promise<{ source: JSONContent;
     const source = docSchema().nodeFromJSON({ type: 'doc', content }).toJSON();
     const { json } = docxToPmJson(
         Buffer.from(
-            await eigendocToDocx(source, {}, DEFAULT_PAGE_SETUP, DEFAULT_NORMAL_STYLE, [], 'Nested', undefined),
+            writeDocx(
+                { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+                { title: 'Nested', media: [] },
+            ),
         ),
     );
     return { source, json };
@@ -805,7 +827,10 @@ test('no space before under a table, beside a Normal with one, comes back as set
         table,
         { type: 'paragraph', attrs: { spaceBefore: 0 }, content: [{ type: 'text', text: 'After' }] },
     ];
-    const docx = await eigendocToDocx({ type: 'doc', content }, {}, DEFAULT_PAGE_SETUP, style, [], 'Spaced', undefined);
+    const docx = writeDocx(
+        { json: { type: 'doc', content }, bands: {}, page: DEFAULT_PAGE_SETUP, style },
+        { title: 'Spaced', media: [] },
+    );
     const { json } = docxToPmJson(Buffer.from(docx));
     expect(json.content?.at(-1)?.attrs?.['spaceBefore']).toBe(0);
 });
@@ -833,14 +858,9 @@ describe('a line under a Normal in another family', () => {
         let content: JSONContent[] = [{ type: 'paragraph', attrs: { lineSpacing: 2 }, content: runs }];
         let style = { ...DEFAULT_NORMAL_STYLE, font: 'Source Serif 4' };
         for (let trip = 0; trip < 3; trip++) {
-            const docx = await eigendocToDocx(
-                { type: 'doc', content },
-                {},
-                DEFAULT_PAGE_SETUP,
-                style,
-                [],
-                'Line',
-                undefined,
+            const docx = writeDocx(
+                { json: { type: 'doc', content }, bands: {}, page: DEFAULT_PAGE_SETUP, style },
+                { title: 'Line', media: [] },
             );
             const imported = docxToPmJson(Buffer.from(docx));
             content = imported.json.content ?? [];

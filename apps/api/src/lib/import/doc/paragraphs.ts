@@ -1,10 +1,9 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
 import { DOCUMENT_FONT, EIGEN_FONT_NAMES, fontLineHeight, readFontSize } from '@workspace/lib/constants/fonts';
+import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     flattenNestedFootnotes,
-    type NormalStyle,
-    type PageSetup,
     PROSE_TEXTBLOCKS,
     pagePx,
     pageTwips,
@@ -15,32 +14,28 @@ import {
     twipsToPt,
 } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
-import { hasXmlName, type XmlElement, xmlElements, xmlText } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
-import { type DrawingTheme, drawingTheme } from '../../ooxml/drawingml';
+import type { DrawingTheme } from '../../ooxml/drawingml';
+import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES } from '../../ooxml/wordml';
 import { mediaNamer } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
-import { build, type Item, isFigureOnly, isWhitespace, type Para } from './assemble';
-import { byFace, type FontTable, fontMark, isMonospaceFont, readFontTable, readTheme, type Theme } from './docx-fonts';
+import type { Item, Para } from './assemble';
+import { build, isFigureOnly, isWhitespace } from './assemble';
+import type { FontTable, Theme } from './docx-fonts';
+import { byFace, fontMark, isMonospaceFont, readFontTable, readTheme } from './docx-fonts';
 import type { DocxChart, DocxImagePart } from './drawings';
-import { type Numbering, readNumbering } from './numbering';
-import { alternative, type DocxPackage, descendants, type Part, twipsOf, w, wChild } from './package';
-import { type Field, type Piece, type RunContext, walkInline } from './runs';
-import {
-    type DocxRunProps,
-    isFill,
-    isLightNeutral,
-    markColor,
-    mergePara,
-    mergeRun,
-    type ParaProps,
-    type Role,
-    readParaProps,
-    readRunProps,
-    Styles,
-} from './styles';
+import type { Numbering } from './numbering';
+import { readNumbering } from './numbering';
+import type { DocxPackage, Part } from './package';
+import { alternative, descendants, twipsOf, w, wChild } from './package';
+import type { Field, Piece, RunContext } from './runs';
+import { walkInline } from './runs';
+import type { DocxRunProps, ParaProps, Role } from './styles';
+import { isFill, isLightNeutral, markColor, mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
 import { readTable } from './tables';
 
 // The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,

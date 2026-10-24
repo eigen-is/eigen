@@ -1,6 +1,7 @@
 import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '@workspace/lib/constants/mime';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
-import { type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPE_INFO, isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { getPublicOrigin } from '../config/server-config';
 import { ApiError } from '../core/errors';
 import type {

@@ -28,7 +28,8 @@ import {
     pullEventsInRange,
     updateEventAt,
 } from '../lib/home/home-relay';
-import { getMemberships, type User } from '../lib/user';
+import type { User } from '../lib/user';
+import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 

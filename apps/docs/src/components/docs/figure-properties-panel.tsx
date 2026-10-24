@@ -1,4 +1,5 @@
-import { type Editor, useEditorState } from '@tiptap/react';
+import type { Editor } from '@tiptap/react';
+import { useEditorState } from '@tiptap/react';
 import type { FigureAlignment, FigureFrameAttrs, FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { cmText, mmToPx, pxToMm, readCm, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';

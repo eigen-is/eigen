@@ -1,7 +1,8 @@
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
 import { subjectFromPath } from '@workspace/lib/file-subject';
-import { type DrivePath, isDocumentType, isFolderType, isInlineEditable } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isDocumentType, isFolderType, isInlineEditable } from '@workspace/lib/types/drive';
 import { useLayout } from '../layout/app/layout-context';
 import { usePreview } from '../preview-provider';
 import type { DriveCapabilities } from './drive-capabilities';

@@ -35,7 +35,8 @@ import { composeOtpEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
 import { getTeamExists } from '../team';
-import { getOrgRole, type User } from '../user';
+import type { User } from '../user';
+import { getOrgRole } from '../user';
 
 const publicOrigin = getPublicOrigin();
 export const trustedOrigins = [

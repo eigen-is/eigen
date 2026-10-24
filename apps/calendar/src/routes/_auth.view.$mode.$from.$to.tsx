@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
+import type { ViewMode } from '@workspace/lib/calendar';
 import {
     getMonthRange,
     getWeekRange,
@@ -7,7 +8,6 @@ import {
     useCalendars,
     useEvents,
     useSharedCalendars,
-    type ViewMode,
 } from '@workspace/lib/calendar';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
 import { useCallback, useMemo, useState } from 'react';

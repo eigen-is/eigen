@@ -4,12 +4,12 @@
 
 import { describe, expect, test } from 'bun:test';
 import { CHART_MAX_SIDE, FLAT_CHART_LOOK, parseChartSpec, readChartLook, sampleChartSpec } from '@workspace/lib/charts';
+import type { SheetChart } from '@workspace/lib/sheets';
 import {
     decodeSheetsSnapshot,
     encodeSheetsSnapshot,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_ROW_HEIGHT,
-    type SheetChart,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { applyPatches, enablePatches, produce } from 'immer';

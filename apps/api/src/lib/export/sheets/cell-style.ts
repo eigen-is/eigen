@@ -1,10 +1,10 @@
 import type { Cell, Sheet } from '@workspace/lib/sheets';
-import { type CellResolver, createArrayResolver } from '@workspace/sheet/engine';
+import type { CellResolver } from '@workspace/sheet/engine';
+import { createArrayResolver } from '@workspace/sheet/engine';
 
-// What both Sheet[] emitters read: the HTML/PDF renderer (render.ts) and the
-// XLSX writer (to-xlsx.ts). It lives here rather than in either emitter because to-xlsx
-// must not import render.ts — that would pull DOMPurify/jsdom (via sanitize) into the
-// xlsx path, which transform.ts deliberately loads separately.
+// What both Sheet[] emitters read: the HTML/PDF renderer (render.ts) and the xlsx writer (xlsx/). It lives here, as
+// the xlsx writer must not import render.ts, which would pull DOMPurify and jsdom (through sanitize) into the xlsx path
+// that transform.ts loads apart.
 
 // The sheets' cells as the export reads them: the dense data every sheet carries once materialized.
 export function sheetsResolver(sheets: Sheet[]): CellResolver {

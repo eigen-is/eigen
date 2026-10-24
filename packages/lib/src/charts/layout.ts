@@ -15,7 +15,8 @@ import type {
 } from '../types/chart';
 import { isTransparentFill, parseFill, serializeFill, TRANSPARENT_COLOR, TRANSPARENT_FILL } from '../vector/fill';
 import { getLineHeightPx } from '../vector/font-metrics';
-import { type Box, DEG_TO_RAD, type Point, pointsBounds, serializePoints } from '../vector/geometry';
+import type { Box, Point } from '../vector/geometry';
+import { DEG_TO_RAD, pointsBounds, serializePoints } from '../vector/geometry';
 import { normalizeAngle } from '../vector/outline';
 import { measureLabel } from '../vector/text-width';
 import type {

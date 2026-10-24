@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
-import { type DrivePath, EML_MIME } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { EML_MIME } from '@workspace/lib/types/drive';
 import type { Email, EmailSummary, ImportMailResult } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
@@ -13,6 +14,7 @@ import { getMailDomain } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
 import { restoreEnvAfterEach } from '../env-test-helpers';
+import type { TestUser } from '../setup';
 import {
     app,
     assertJson,
@@ -24,7 +26,6 @@ import {
     findOrFail,
     firstMountId,
     getTestContext,
-    type TestUser,
 } from '../setup';
 
 const PASSWORD = 'testpassword123';

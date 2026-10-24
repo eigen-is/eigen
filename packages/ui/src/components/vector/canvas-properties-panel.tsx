@@ -13,23 +13,25 @@
 
 import { isInlineSketchCapped, parseChartSpec } from '@workspace/lib/charts';
 import type { Fill } from '@workspace/lib/types/background';
+import type {
+    ArrangeOp,
+    Box,
+    Corners,
+    NewVectorElement,
+    VectorArrowElement,
+    VectorElement,
+    VectorElementPatch,
+    VectorLinearElement,
+    ZOp,
+} from '@workspace/lib/vector';
 import {
-    type ArrangeOp,
-    type Box,
-    type Corners,
     capabilitiesOf,
     computeArrange,
     EDGES_OPTIONS,
     isLinearElement,
-    type NewVectorElement,
     parseFill,
     resizeLinear,
     serializeFill,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorElementPatch,
-    type VectorLinearElement,
-    type ZOp,
 } from '@workspace/lib/vector';
 import {
     AlignSection,
@@ -46,7 +48,8 @@ import {
     TransformSection,
     ZOrderButtons,
 } from '@workspace/ui/components/properties-panel';
-import { type ReactNode, useCallback } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback } from 'react';
 import type * as Y from 'yjs';
 import { applyZOrder, convertElementToShapes } from './hooks/selection-ops';
 import { ELEMENT_KIND_UI } from './kinds';

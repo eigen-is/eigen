@@ -3,7 +3,8 @@ import type { CellBorderSides, CellStyle, Cell as FortuneCell, InlineStringSegme
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { booleanDisplay, functionCopy, numberDisplay, update } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import { isOn, SML_NS } from '../../ooxml/ooxml';
 import {
     DATE_FORMAT,
@@ -14,9 +15,12 @@ import {
     withoutFuturePrefixes,
 } from '../../ooxml/spreadsheetml';
 import { IMPORT_MESSAGES, TOO_MANY_CELLS } from '../messages';
-import { type SharedString, stringOf, textOf } from './strings';
-import { type Look, NO_LOOK, type ThemePalette } from './styles';
-import { cellKey, type PlacedCell } from './worksheet';
+import type { SharedString } from './strings';
+import { stringOf, textOf } from './strings';
+import type { Look, ThemePalette } from './styles';
+import { NO_LOOK } from './styles';
+import type { PlacedCell } from './worksheet';
+import { cellKey } from './worksheet';
 
 // A worksheet's grid, read a batch of rows at a time: each cell's value, display, type, formula, look and rich text,
 // the borders, the row heights and the hidden rows. Only what the file holds is walked, never the row or column numbers.

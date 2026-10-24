@@ -3,7 +3,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_NORMAL_STYLE, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
+import type { Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
@@ -11,7 +13,6 @@ import {
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SHEETS,
     DRIVE_TYPE_SLIDES,
-    type DrivePath,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
@@ -34,22 +35,22 @@ import { docSchema } from '../../lib/document/doc-schema';
 import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc, SERVER_RECALC_BUDGET } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
-import {
-    type DocumentTransformRequest,
-    type DocumentTransformResponse,
-    type TransformError,
-    toTransferableBuffer,
-    toTransferableText,
+import type {
+    DocumentTransformRequest,
+    DocumentTransformResponse,
+    TransformError,
 } from '../../lib/document/transform/protocol';
+import { toTransferableBuffer, toTransferableText } from '../../lib/document/transform/protocol';
 import { runTransformToBytes, runTransformToExtractedText } from '../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import type { Drive } from '../../lib/drive';
-import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
 import { collectExportMedia } from '../../lib/export/media';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
-import { type DocxImage, docxToPmJson } from '../../lib/import/doc/from-docx';
+import type { DocxImage } from '../../lib/import/doc/from-docx';
+import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
 import { IMPORT_MESSAGES } from '../../lib/import/messages';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
@@ -1320,14 +1321,14 @@ describe('document transform (eigendoc)', () => {
         const docx = Buffer.from(exportBytes(response));
         const persisted = await readPersistedDoc(mount, path);
         const media = await collectExportMedia(mount, path, 'docx', [GOLDEN_MEDIA_NAME], new AbortController().signal);
-        const direct = await eigendocToDocx(
-            readEigendocFromDoc(persisted),
-            readEigendocBands(persisted),
-            readEigendocPage(persisted),
-            readEigendocStyle(persisted),
-            media,
-            path.name,
-            undefined,
+        const direct = writeDocx(
+            {
+                json: readEigendocFromDoc(persisted),
+                bands: readEigendocBands(persisted),
+                page: readEigendocPage(persisted),
+                style: readEigendocStyle(persisted),
+            },
+            { title: path.name, media },
         );
         persisted.destroy();
         expect(docx.equals(Buffer.from(direct))).toBe(true);

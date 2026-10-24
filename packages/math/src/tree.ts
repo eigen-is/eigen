@@ -196,16 +196,16 @@ export class RowBuilder {
     // Characters and marks since the last flush, those dropped too.
     #waiting = 0;
 
-    constructor(
-        readonly budget: MathBudget,
-        readonly depth: number,
-        readonly slot: RowSlot = 'required',
+    public constructor(
+        public readonly budget: MathBudget,
+        private readonly depth: number,
+        private readonly slot: RowSlot = 'required',
     ) {
         bound(budget, depth, slot === 'optional' ? 0 : 1);
     }
 
     // Without `letters`, each letter takes its default.
-    chars(text: string, letters: MathVariant | undefined, others: MathVariant, color: string | undefined): void {
+    public chars(text: string, letters: MathVariant | undefined, others: MathVariant, color: string | undefined): void {
         for (const char of checkedXml(text)) {
             // Every two kept characters or marks make at least one part (two quads are one qquad), and a dropped one
             // counts as kept: bound them as they come.
@@ -226,7 +226,7 @@ export class RowBuilder {
         }
     }
 
-    text(raw: string, color: string | undefined): void {
+    public text(raw: string, color: string | undefined): void {
         const text = mathText(raw);
         if (text === '') return;
         this.#flush();
@@ -239,12 +239,12 @@ export class RowBuilder {
         this.#push(color ? { kind: 'text', text, color } : { kind: 'text', text }, text.length);
     }
 
-    node(node: MathNode): void {
+    public node(node: MathNode): void {
         this.#flush();
         this.#push(node, 0);
     }
 
-    done(): MathRow {
+    public done(): MathRow {
         this.#flush();
         if (this.slot === 'optional' && this.#row.length > 0) bound(this.budget, this.depth, 1);
         for (const node of this.#row) {

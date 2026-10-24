@@ -78,14 +78,14 @@ describe('pullHomeSnapshot', () => {
         await pullHomeSnapshot(ownerId, targetDir(), {});
         expect(opened).toBeDefined();
         expect(atHome(ownerId)).toBe(true);
-        expect(opened!.destructing).toBe(false);
+        expect(opened!.closing).toBe(false);
 
         // The keepalive re-arms the full idle, not the release one.
         jest.advanceTimersByTime(15_000);
         touchHomeIfLoaded(ownerId);
         jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
         expect(atHome(ownerId)).toBe(true);
-        expect(opened!.destructing).toBe(false);
+        expect(opened!.closing).toBe(false);
         expect(await getHome(ownerId)).toBe(opened!);
     });
 
@@ -99,14 +99,14 @@ describe('pullHomeSnapshot', () => {
 
         jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
         expect(atHome(ownerId)).toBe(true);
-        expect(opened!.destructing).toBe(false);
+        expect(opened!.closing).toBe(false);
         jest.advanceTimersByTime(USER_IDLE_MS);
         await waitForEviction();
         expect(atHome(ownerId)).toBe(false);
     });
 
     test('a home that was tearing down when the capture started counts as asleep: its successor goes after the release idle', async () => {
-        const going = (await getHome(ownerId)).shutdown();
+        const going = (await getHome(ownerId)).close();
         captureThenFakeTimers();
         await pullHomeSnapshot(ownerId, targetDir(), {});
         await going;
@@ -124,21 +124,21 @@ describe('pullHomeSnapshot', () => {
 
         jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
         expect(atHome(ownerId)).toBe(true);
-        expect(open.destructing).toBe(false);
+        expect(open.closing).toBe(false);
     });
 
     test('a capture that outlasts the idle, with no file to tick on, keeps the home it reads', async () => {
         await getHome(ownerId);
         jest.useFakeTimers();
-        let destructing: boolean | undefined;
+        let closing: boolean | undefined;
         spies.push(
             spyOn(snapshotModule, 'snapshotHome').mockImplementation(async (home, dir, options) => {
                 jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
-                destructing = home.destructing;
+                closing = home.closing;
                 return snapshotHome(home, dir, options);
             }),
         );
         await pullHomeSnapshot(ownerId, targetDir(), {});
-        expect(destructing).toBe(false);
+        expect(closing).toBe(false);
     });
 });

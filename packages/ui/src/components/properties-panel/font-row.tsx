@@ -1,6 +1,7 @@
 import { DEFAULT_FONT_FAMILY } from '@workspace/lib/vector';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
-import { isMixed, type MergedValue } from './merged-value';
+import type { MergedValue } from './merged-value';
+import { isMixed } from './merged-value';
 import { PropertyRow } from './properties-panel';
 
 type FontRowProps = {

@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { inflateSync } from 'node:zlib';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { type MathRow, writeMathml } from '@workspace/math';
+import type { MathRow } from '@workspace/math';
+import { writeMathml } from '@workspace/math';
 import { EXPORT_CSP } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';

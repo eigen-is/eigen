@@ -1,4 +1,5 @@
-import { type AuthUser, useAuth } from '@workspace/lib/auth';
+import type { AuthUser } from '@workspace/lib/auth';
+import { useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
 import { useExportContacts } from '@workspace/lib/contacts';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
@@ -13,7 +14,8 @@ import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { LabelAssignSubMenu } from '@workspace/ui/components/labels';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import { Download, Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 
 // One "is this card me?" test for every contact surface: a card is you if it carries your
 // X-EIGEN-ID self-link (eigenId) or shares your account email.

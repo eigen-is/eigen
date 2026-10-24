@@ -1,13 +1,8 @@
 import { Extension } from '@tiptap/core';
 import type { ResolvedPos } from '@tiptap/pm/model';
 import { pxToPt } from '../page';
-import {
-    FORMAT,
-    ownsSpacing,
-    PARAGRAPH_FORMAT_KEYS,
-    type ParagraphFormatKey,
-    readParagraphFormat,
-} from '../paragraph-format';
+import type { ParagraphFormatKey } from '../paragraph-format';
+import { FORMAT, ownsSpacing, PARAGRAPH_FORMAT_KEYS, readParagraphFormat } from '../paragraph-format';
 
 // Google Docs' Increase and Decrease indent step, 1.27 cm.
 const INDENT_STEP = 36;

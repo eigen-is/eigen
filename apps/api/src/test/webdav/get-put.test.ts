@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getHome } from '../../lib/home';
-import { driveGet, driveUpload, getTestContext, setMaxUploadSizeMB, TEST_PNG_BYTES, type TestContext } from '../setup';
+import type { TestContext } from '../setup';
+import { driveGet, driveUpload, getTestContext, setMaxUploadSizeMB, TEST_PNG_BYTES } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV GET/HEAD', () => {

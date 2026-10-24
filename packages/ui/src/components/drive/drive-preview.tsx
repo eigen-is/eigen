@@ -1,29 +1,27 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { formatEventWhen, viewerTimeZone } from '@workspace/lib/calendar';
-import {
-    CANVAS_PREVIEW_HEIGHT,
-    CANVAS_PREVIEW_WIDTH,
-    getTextPreviewMode,
-    type TextPreviewMode,
-} from '@workspace/lib/constants';
+import type { TextPreviewMode } from '@workspace/lib/constants';
+import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH, getTextPreviewMode } from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { formatDateTime } from '@workspace/lib/date';
+import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     DEFAULT_PAGE_SETUP,
     DOC_PROSE_CLASS,
     normalStyleProperties,
-    type PageSetup,
     pageBoxStyle,
     pagePx,
 } from '@workspace/lib/docs/eigendoc';
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
 import { NO_SUBJECT } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
-import { type DrivePath, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '../../lib/utils';
 import { UserAvatar } from '../user/user-avatar';

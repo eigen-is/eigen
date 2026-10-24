@@ -12,9 +12,11 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type ConfigureAnswers, chooseSubnet, configureEntries, type DockerNetwork } from '../../cli/configure';
+import type { ConfigureAnswers, DockerNetwork } from '../../cli/configure';
+import { chooseSubnet, configureEntries } from '../../cli/configure';
 import { readEnvFile } from '../../cli/env-file';
-import { type CliEnv, runCli, runCliInTerminal } from '../cli-test-helpers';
+import type { CliEnv } from '../cli-test-helpers';
+import { runCli, runCliInTerminal } from '../cli-test-helpers';
 
 const NETWORKS: DockerNetwork[] = [
     { Name: 'bridge', Labels: {}, IPAM: { Config: [{ Subnet: '172.17.0.0/16' }] } },

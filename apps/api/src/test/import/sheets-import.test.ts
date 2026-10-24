@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
-import { DRIVE_MIME_SHEETS, type DrivePath, type ImportResult } from '@workspace/lib/types/drive';
+import type { Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
+import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
 import { update } from '@workspace/sheet/engine';
 import JSZip from 'jszip';
@@ -18,7 +20,7 @@ import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { readLooks } from '../../lib/import/sheets/styles';
 import { importXlsxToSheetsSnapshot } from '../../lib/import/sheets/transform';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
-import { MAX_DECOMPRESSED_BYTES, openZip } from '../../lib/ooxml/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../lib/ooxml/zip';
 import { getUserById } from '../../lib/user';
 import { PIXEL_PNG } from '../fixtures/pptx';
 import { build, deflated } from '../fixtures/raw-zip';
@@ -1908,24 +1910,23 @@ describe('Sheets xlsx conversion fidelity', () => {
             const smlns = sml ? `xmlns:${sml.slice(0, -1)}` : 'xmlns';
             const prns = pr ? `xmlns:${pr.slice(0, -1)}` : 'xmlns';
             const worksheet = `${ns.relationships}/worksheet`;
-            const zip = new JSZip();
             // The decoy's `r:id` binds `r` to another namespace, so it names no relationship.
-            zip.file(
-                'xl/workbook.xml',
-                `<${sml}workbook ${smlns}="${ns.spreadsheetml}" xmlns:${r}="${ns.relationships}"><${sml}sheets><${sml}sheet name="Q1 &#x2013; &quot;A&quot; &amp; B" sheetId="1" ${r}:id="rId1"/><${sml}sheet xmlns:r="urn:decoy" name="Decoy" sheetId="2" r:id="rId2"/></${sml}sheets></${sml}workbook>`,
-            );
-            zip.file(
-                'xl/_rels/workbook.xml.rels',
-                `<${pr}Relationships ${prns}="${PACKAGE_RELATIONSHIPS}"><${pr}Relationship Id="rId1" Type="${worksheet}" Target="worksheets/sheet1.xml"/><${pr}Relationship Id="rId2" Type="${worksheet}" Target="worksheets/sheet2.xml"/></${pr}Relationships>`,
-            );
-            for (const path of ['xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml']) {
-                zip.file(
-                    path,
-                    `<${sml}worksheet ${smlns}="${ns.spreadsheetml}"><${sml}sheetData/><${sml}hyperlinks><${sml}hyperlink ref="B2:C3" location="Other!A1"/></${sml}hyperlinks></${sml}worksheet>`,
-                );
-            }
+            const files = [
+                {
+                    name: 'xl/workbook.xml',
+                    data: `<${sml}workbook ${smlns}="${ns.spreadsheetml}" xmlns:${r}="${ns.relationships}"><${sml}sheets><${sml}sheet name="Q1 &#x2013; &quot;A&quot; &amp; B" sheetId="1" ${r}:id="rId1"/><${sml}sheet xmlns:r="urn:decoy" name="Decoy" sheetId="2" r:id="rId2"/></${sml}sheets></${sml}workbook>`,
+                },
+                {
+                    name: 'xl/_rels/workbook.xml.rels',
+                    data: `<${pr}Relationships ${prns}="${PACKAGE_RELATIONSHIPS}"><${pr}Relationship Id="rId1" Type="${worksheet}" Target="worksheets/sheet1.xml"/><${pr}Relationship Id="rId2" Type="${worksheet}" Target="worksheets/sheet2.xml"/></${pr}Relationships>`,
+                },
+                ...['xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml'].map((name) => ({
+                    name,
+                    data: `<${sml}worksheet ${smlns}="${ns.spreadsheetml}"><${sml}sheetData/><${sml}hyperlinks><${sml}hyperlink ref="B2:C3" location="Other!A1"/></${sml}hyperlinks></${sml}worksheet>`,
+                })),
+            ];
 
-            const sheets = xlsxToSheets(await zip.generateAsync({ type: 'uint8array' }));
+            const sheets = xlsxToSheets(writeZip(files));
             expect(sheets.map(({ name, hyperlink }) => ({ name, hyperlink }))).toEqual([
                 { name: 'Q1 – "A" & B', hyperlink: { '1_1': { linkType: 'cellrange', linkAddress: 'Other!A1' } } },
             ]);

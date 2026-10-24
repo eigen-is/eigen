@@ -1,6 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
-import { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
+import type { CommentContextMenuItem } from './comment-menu-items';
+import { CommentMenuItems } from './comment-menu-items';
 
 // Binds the shared comment rows to the lifecycle bundle so every host — the stickies/docs/vector
 // context menu, slides' object menu, sheets' cell menu — offers the same actions from one wiring,

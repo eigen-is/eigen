@@ -1,6 +1,7 @@
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { MemberCommandList, PinnedAssigneeRows } from './member-command-list';
 
 type AssigneePickerProps = {

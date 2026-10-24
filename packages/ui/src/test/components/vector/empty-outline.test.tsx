@@ -1,13 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    type Box,
-    DEFAULT_ELEMENT_PROPS,
-    ELEMENT_KINDS,
-    solidFill,
-    VECTOR_STYLE_DEFAULTS,
-    type VectorRichTextElement,
-    type VectorShapeElement,
-} from '@workspace/lib/vector';
+import type { Box, VectorRichTextElement, VectorShapeElement } from '@workspace/lib/vector';
+import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, solidFill, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { EmptyOutlines } from '../../../components/vector/empty-outline';
 

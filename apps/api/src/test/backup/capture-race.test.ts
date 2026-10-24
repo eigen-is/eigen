@@ -10,6 +10,7 @@ import { verifyFolder } from '../../lib/backup/verify';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { paths } from '../../lib/mount/schema';
+import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
@@ -22,7 +23,6 @@ import {
     drivePut,
     driveUpload,
     findOrFail,
-    type TestUser,
 } from '../setup';
 import { snapshotInto, waitForJob } from './backup-test-helpers';
 

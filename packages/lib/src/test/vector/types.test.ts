@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { VectorArrowElement } from '../../vector/types';
 import {
     arrowShapeFields,
     arrowShapeOf,
@@ -6,7 +7,6 @@ import {
     DEFAULT_ELEMENT_PROPS,
     parseFixedSegments,
     serializeFixedSegments,
-    type VectorArrowElement,
 } from '../../vector/types';
 
 const arrow = (over: Partial<VectorArrowElement>): VectorArrowElement => ({

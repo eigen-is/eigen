@@ -5,12 +5,8 @@ import { prosemirrorToYDoc, prosemirrorToYXmlFragment } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
-import {
-    type DocImportWorkerResult,
-    type TransformWarning,
-    toTransferableBuffer,
-    toTransferableMedia,
-} from '../../document/transform/protocol';
+import type { DocImportWorkerResult, TransformWarning } from '../../document/transform/protocol';
+import { toTransferableBuffer, toTransferableMedia } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { readDocx } from './from-docx';
 
