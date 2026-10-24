@@ -59,7 +59,7 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - Testing and browser verification: [TESTING.md](docs/TESTING.md), the [verify-in-browser skill](.claude/skills/verify-in-browser/SKILL.md)
 - Help center: [HELP-CENTER.md](docs/HELP-CENTER.md), [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md)
 - Code standards and their worked examples: [CODE-STANDARDS.md](docs/CODE-STANDARDS.md), [CODE-EXAMPLES.md](docs/CODE-EXAMPLES.md); setting up and contributing: [CONTRIBUTING.md](docs/CONTRIBUTING.md)
-- Backlog: [ROADMAP.md](docs/ROADMAP.md); after 1.0: [ROADMAP-POST-1.md](docs/ROADMAP-POST-1.md); sheets: [SHEETS-TODO.md](docs/SHEETS-TODO.md)
+- Backlog: [ROADMAP.md](docs/ROADMAP.md); after 1.0: [ROADMAP-POST-1.md](docs/ROADMAP-POST-1.md); sheets: [SHEETS-TODO.md](docs/SHEETS-TODO.md); chart kinds: [CHARTS-TODO.md](docs/CHARTS-TODO.md)
 
 ## Pitfalls
 

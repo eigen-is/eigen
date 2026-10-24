@@ -149,6 +149,7 @@ An automatic color is written as the palette color at its place, so Excel and Go
 
 ## See also
 
+- [CHARTS-TODO.md](CHARTS-TODO.md): the chart kinds and features Office files hold that Eigen can't draw yet, in the order to add them
 - [CANVAS.md](CANVAS.md): kinds, the reader, layers, and the pie kind a chart's slices are
 - [EXPORT.md](EXPORT.md): the compositor and WeasyPrint's rules for a layer's SVG
 - [SHEETS.md](SHEETS.md): a sheet's charts, their refs, the overlay and the chart panel
