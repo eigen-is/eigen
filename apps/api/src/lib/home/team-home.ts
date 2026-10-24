@@ -8,7 +8,7 @@ import { getServerSettings, mapStorageType } from '../config/server-settings';
 import { ApiError, JsonStore, PATHS } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig } from '../mount';
-import { checkS3Connection } from '../storage/s3-storage';
+import { checkS3Connection } from '../storage';
 import { getTeamMembers } from '../team';
 import { makeSyntheticUser, type User } from '../user';
 import { Home } from './home';

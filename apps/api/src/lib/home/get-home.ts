@@ -1,9 +1,9 @@
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { type AsyncSingleton, createAsyncSingleton } from '../../utils/singleton';
 import { ApiError } from '../core';
-import { getOrgExists } from '../org/org';
-import { getTeam } from '../team/team';
-import { getUserById } from '../user/user';
+import { getOrgExists } from '../org';
+import { getTeam } from '../team';
+import { getUserById } from '../user';
 import { GuestHome } from './guest-home';
 import type { Home } from './home';
 import { getSyntheticOrgUser, OrgHome } from './org-home';
