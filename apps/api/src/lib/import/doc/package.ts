@@ -44,8 +44,7 @@ export type DocxPackage = {
     contentTypeOf: OoxmlPackage['contentTypeOf'];
     // A part a drawing names, read when met; a damaged one is no part.
     part(path: string): XmlElement | undefined;
-    // An image's bytes; a damaged entry is none, and costs only its picture.
-    readMedia(path: string): Uint8Array | undefined;
+    readMedia: OoxmlPackage['readMedia'];
     // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own, as has
     // each node of a note's copy past its first.
     chargePiece(count?: number): void;
@@ -117,7 +116,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         damagedBands,
         contentTypeOf: pkg.contentTypeOf,
         part: (path) => optional(() => pkg.part(path)),
-        readMedia: (path) => optional(() => pkg.zip.read(path)),
+        readMedia: pkg.readMedia,
         chargePiece: (count = 1) => {
             pieces -= count;
             if (pieces < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);

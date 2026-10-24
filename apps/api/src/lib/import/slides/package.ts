@@ -5,7 +5,7 @@ import type { CountedWarningCode } from '../../document/transform/protocol';
 import { THEME_TYPE } from '../../ooxml/drawingml';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../ooxml/ooxml';
 import { chartPart } from '../../ooxml/ooxml-chart';
-import type { Part } from '../../ooxml/opc';
+import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType, relTarget } from '../../ooxml/opc';
 import { PML, PRESENTATION_TYPE } from '../../ooxml/presentationml';
 import type { MediaPart } from '../image-types';
@@ -45,7 +45,7 @@ export type PptxPackage = {
     chart(from: Part, id: string | undefined): XmlElement | undefined;
     // The picture an r:embed names, when it is one the deck can show.
     media(from: Part, id: string | undefined): MediaPart | undefined;
-    readMedia(path: string): Uint8Array | undefined;
+    readMedia: OoxmlPackage['readMedia'];
 };
 
 export type Frame = { width: number; height: number };
@@ -123,7 +123,7 @@ export function readPackage(bytes: Uint8Array): PptxPackage {
         slide: (path) => read(path, 'slide'),
         chart: (from, id) => chartPart(pkg, from.rels, id, 'ppt/charts/'),
         media: (from, id) => pictureMediaPart(pkg, from.rels, id, 'ppt/'),
-        readMedia: (path) => optional(() => pkg.zip.read(path)),
+        readMedia: pkg.readMedia,
     };
 }
 

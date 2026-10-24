@@ -91,6 +91,8 @@ export type OoxmlPackage = {
     // '' for the package's own.
     relationships(partPath: string): Map<string, Relationship>;
     contentTypeOf(path: string): string | undefined;
+    // An image's bytes; a damaged entry is none, and costs only its picture.
+    readMedia(path: string): Uint8Array | undefined;
 };
 
 // One budget for the parts a package parses whole, together, [Content_Types].xml and the relationships parts too, the
@@ -161,6 +163,7 @@ export function openPackage(bytes: Uint8Array, messages: PackageMessages): Ooxml
         relationships: (partPath) => relationshipsOf(part(relsPathOf(partPath)), partPath),
         contentTypeOf: (path) =>
             overrides.get(path) ?? defaults.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase()),
+        readMedia: (path) => optional(() => zip.read(path)),
     };
 }
 

@@ -168,7 +168,7 @@ export function readXlsx(
         }
         // An import replaces the document's sheets: none read is a file it can't read, never an empty spreadsheet.
         if (sheets.length === 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
-        const files = importMedia('xlsx', (path) => optional(() => book.pkg.zip.read(path)), options.maxMediaBytes);
+        const files = importMedia('xlsx', book.pkg.readMedia, options.maxMediaBytes);
         const losses = new Map<CountedWarningCode, number>();
         placeDrawings(drawings, {
             pkg: book.pkg,
