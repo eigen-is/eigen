@@ -91,6 +91,8 @@ export class MaildirStore implements MailStore {
     private db!: MailDB;
     private events!: MailStoreEvents;
     private reconcilingMailboxes = new Map<string, Promise<void>>();
+    // Mailboxes whose running sync was joined: the joiner's change may land after that pass read the folder.
+    private reconcileAgain = new Set<string>();
     private lastReconcileStartedAt = new Map<string, number>();
     // Whether a delivered id was an arrival, read by whichever sync reaches the file first: this append's or a watcher's.
     private deliveries = new Map<string, boolean>();
@@ -170,8 +172,6 @@ export class MaildirStore implements MailStore {
                             this.dropWatcher(dir, watcher);
                             if (current === null) return;
                             await this.watchMailbox(mailbox);
-                            // A sync already running may have read the dir before the new watch attached.
-                            await this.reconcilingMailboxes.get(mailbox)?.catch(() => undefined);
                             await this.reconcileMailbox(mailbox);
                         })
                         .catch((err) => console.error('maildir: watcher check failed', err));
@@ -432,9 +432,20 @@ export class MaildirStore implements MailStore {
         if (this.home.closing) return;
         this.lastReconcileStartedAt.set(mailbox, Date.now());
         const running = this.reconcilingMailboxes.get(mailbox);
-        if (running) return running;
+        if (running) {
+            this.reconcileAgain.add(mailbox);
+            return running;
+        }
 
-        const promise = this.storeLock.run(() => this.doReconcileMailbox(mailbox));
+        // Cleared inside the lock, so a caller that joins a pass still waiting for the lock costs no extra one.
+        const promise = (async () => {
+            do {
+                await this.storeLock.run(() => {
+                    this.reconcileAgain.delete(mailbox);
+                    return this.doReconcileMailbox(mailbox);
+                });
+            } while (this.reconcileAgain.has(mailbox) && !this.home.closing);
+        })();
         this.reconcilingMailboxes.set(mailbox, promise);
         try {
             await promise;
