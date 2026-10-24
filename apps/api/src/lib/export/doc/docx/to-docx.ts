@@ -7,7 +7,7 @@ import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
 import { NOTE_SEPARATORS } from '../../../ooxml/wordml';
 import type { OfficeMedia } from '../../office-image';
-import { OFFICE_IMAGE_CONTENT_TYPES } from '../../office-image';
+import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import type { FontSlot } from './fonts';
 import { embeddedFonts, fontTableXml } from './fonts';
 import { numberingXml } from './numbering';
@@ -37,9 +37,7 @@ export function writeDocx(
         bullets: new Map(),
         checkboxes: false,
         languages: new Set(),
-        media: new Map(media.map((item) => [item.name, item])),
-        imageFiles: new Map(),
-        files: [],
+        images: officeImages(media, 'word/media'),
         drawings: 0,
         footnotes: [],
         // A Spacer's and a figure's mark draw in the Normal's Regular.
@@ -122,9 +120,6 @@ export function writeDocx(
             ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
             ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
         ],
-        files: [
-            ...fonts.files.map(([name, data]) => ({ name, data })),
-            ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
-        ],
+        files: [...fonts.files.map(([name, data]) => ({ name, data })), ...pkg.images.files],
     });
 }

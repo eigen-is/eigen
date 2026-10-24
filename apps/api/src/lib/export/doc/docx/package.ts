@@ -4,8 +4,7 @@ import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../../o
 import type { PartRelationships } from '../../../ooxml/opc';
 import type { NOTE_SEPARATORS, StyleId } from '../../../ooxml/wordml';
 import { WORD_SETTINGS_URI } from '../../../ooxml/wordml';
-import type { OfficeMedia } from '../../office-image';
-import type { ImageFile } from './drawings';
+import type { OfficeImages } from '../../office-image';
 import type { FontSlot } from './fonts';
 import type { List } from './numbering';
 import type { Block, NumberingRef } from './paragraphs';
@@ -41,9 +40,7 @@ export type Package = {
     bullets: Map<number, number>;
     checkboxes: boolean;
     languages: Set<string>;
-    media: Map<string, OfficeMedia>;
-    imageFiles: Map<string, ImageFile>;
-    files: [path: string, data: ArrayBuffer][];
+    images: OfficeImages;
     drawings: number;
     faces: Map<string, Set<FontSlot>>;
     // The notes the body references, note n at index n - 1.

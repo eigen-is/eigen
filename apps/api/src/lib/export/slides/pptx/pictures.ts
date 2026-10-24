@@ -2,26 +2,14 @@ import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { VectorFrame, VectorImageElement } from '@workspace/lib/vector';
 import { isBordered } from '@workspace/lib/vector';
 import { blipXml } from '../../../ooxml/drawingml';
-import { officeImageParts } from '../../office-image';
+import type { OfficeImage } from '../../office-image';
 import { lineXml } from './lines';
-import type { Deck, Image, Slide } from './package';
+import type { Slide } from './package';
 import { boxGeometry, fillXml, presetXml, share, spXml, xfrmXml } from './shapes';
 
 // Pictures and backgrounds.
 
-// The first element to show a media name adds its parts; a type Office can't embed, or an SVG without its PNG, adds none.
-function imageOf(name: string, deck: Deck): Image | undefined {
-    const known = deck.images.get(name);
-    if (known) return known;
-    const media = deck.media.get(name);
-    const parts = media && officeImageParts(media, deck.images.size + 1);
-    if (!media || !parts) return undefined;
-    const image: Image = { ...parts, media };
-    deck.images.set(name, image);
-    return image;
-}
-
-function slideBlipXml(image: Image, slide: Slide, opacity: number): string {
+function slideBlipXml(image: OfficeImage, slide: Slide, opacity: number): string {
     const rId = slide.part.relate('image', `../media/${image.part}`);
     const svgRId = image.svgPart && slide.part.relate('image', `../media/${image.svgPart}`);
     return blipXml(rId, svgRId, opacity < 1 ? `<a:alphaModFix amt="${share(opacity)}"/>` : '');
@@ -29,7 +17,7 @@ function slideBlipXml(image: Image, slide: Slide, opacity: number): string {
 
 // How much of each side cover cuts off the picture, or contain leaves empty in the box: one share of the whole, on the
 // axis where the picture overshoots the box. Without the picture's size, nothing is cut and the picture stretches.
-function fitOf(image: Image, width: number, height: number): { wide: boolean; cut: number } | null {
+function fitOf(image: OfficeImage, width: number, height: number): { wide: boolean; cut: number } | null {
     const { media } = image;
     if (!media.width || !media.height || width <= 0 || height <= 0) return null;
     const picture = media.width / media.height;
@@ -41,7 +29,7 @@ function fitOf(image: Image, width: number, height: number): { wide: boolean; cu
 // Contain draws the picture in the box it fits, unrounded: Eigen's corner clip misses a fitted picture's corners. Its
 // border keeps the element's box, as a shape of its own.
 export function pictureXml(el: VectorImageElement, slide: Slide, opacity: number): string {
-    const image = imageOf(el.mediaName, slide.deck);
+    const image = slide.deck.images.image(el.mediaName);
     const border = isBordered(el)
         ? spXml(slide, 'Border', el, boxGeometry(el), '<a:noFill/>', lineXml(slide, el, opacity))
         : '';
@@ -76,7 +64,7 @@ export function pictureXml(el: VectorImageElement, slide: Slide, opacity: number
 export function backgroundXml(background: BackgroundFill | null, frame: VectorFrame, slide: Slide): string {
     if (!background) return '';
     if (background.type !== 'image') return `<p:bg><p:bgPr>${fillXml(background, 1)}<a:effectLst/></p:bgPr></p:bg>`;
-    const image = imageOf(background.mediaName, slide.deck);
+    const image = slide.deck.images.image(background.mediaName);
     if (!image) return '';
     const fit = fitOf(image, frame.width, frame.height);
     let insets = '';

@@ -9,7 +9,7 @@ import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, writePackage } from '../../../ooxml/opc';
 import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../../ooxml/presentationml';
 import type { OfficeMedia } from '../../office-image';
-import { OFFICE_IMAGE_CONTENT_TYPES } from '../../office-image';
+import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import type { Deck } from './package';
 import { LAYOUT_XML, MASTER_XML, NAMESPACES, slideXml } from './package';
 
@@ -25,8 +25,7 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
     const deck: Deck = {
         scale: slidePxToPt(1, slideWidth) * EMU_PER_POINT,
         slideWidth,
-        media: new Map(media.map((item) => [item.name, item])),
-        images: new Map(),
+        images: officeImages(media, 'ppt/media'),
         byId: new Map(scene.elements.map((el) => [el.id, el])),
     };
     const slides = scene.frames.map((frame) => slideXml(frame, elementsInFrame(scene.elements, frame.id), deck));
@@ -75,9 +74,6 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
                 [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
             ]),
         ],
-        files: [...deck.images.values()].flatMap(({ part, svgPart, raster, media }) => [
-            { name: `ppt/media/${part}`, data: new Uint8Array(raster), store: true },
-            ...(svgPart ? [{ name: `ppt/media/${svgPart}`, data: new Uint8Array(media.data), store: true }] : []),
-        ]),
+        files: deck.images.files,
     });
 }

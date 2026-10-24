@@ -7,10 +7,8 @@ import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
-import type { ZipWriteEntry } from '../../../ooxml/zip';
 import type { OfficeMedia } from '../../office-image';
-import { OFFICE_IMAGE_CONTENT_TYPES } from '../../office-image';
-import type { WorkbookPictures } from './drawing';
+import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import { drawingOf } from './drawing';
 import { sharedStringTable } from './strings';
 import { styleRegistry } from './styles';
@@ -39,8 +37,7 @@ export function writeWorkbook(
     const styles = styleRegistry(lost);
     const strings = sharedStringTable(lost);
     const parts: PackagePart[] = [];
-    const files: ZipWriteEntry[] = [];
-    const pictures: WorkbookPictures = { media: new Map(media.map((item) => [item.name, item])), parts: new Map() };
+    const pictures = officeImages(media, 'xl/media');
     for (const [index, sheet] of sheets.entries()) {
         const path = `xl/worksheets/sheet${index + 1}.xml`;
         const drawing = drawingOf(named[index], index + 1, named, pictures, lost);
@@ -56,10 +53,7 @@ export function writeWorkbook(
         });
         parts.push([path, part.xml, `${SPREADSHEETML}.worksheet+xml`]);
         if (part.relationships.length > 0) parts.push([relsPathOf(path), relationshipsXml(part.relationships)]);
-        if (drawing) {
-            parts.push(...drawing.parts);
-            files.push(...drawing.files);
-        }
+        if (drawing) parts.push(...drawing.parts);
     }
     const workbook = partRelationships();
     const ids = sheets.map((_, index) => workbook.relate('worksheet', `worksheets/sheet${index + 1}.xml`));
@@ -68,7 +62,7 @@ export function writeWorkbook(
     return writePackage({
         main: 'xl/workbook.xml',
         title,
-        defaults: files.length > 0 ? OFFICE_IMAGE_CONTENT_TYPES : {},
+        defaults: pictures.files.length > 0 ? OFFICE_IMAGE_CONTENT_TYPES : {},
         parts: [
             ['xl/workbook.xml', workbookXml(sheets, names, ids, active), `${SPREADSHEETML}.sheet.main+xml`],
             ['xl/_rels/workbook.xml.rels', relationshipsXml(workbook.relationships)],
@@ -77,7 +71,7 @@ export function writeWorkbook(
             ['xl/styles.xml', () => [styles.xml()], `${SPREADSHEETML}.styles+xml`],
             ['xl/theme/theme1.xml', themeXml(SHEET_DEFAULT_FONT.name), THEME_TYPE],
         ],
-        files,
+        files: pictures.files,
     });
 }
 

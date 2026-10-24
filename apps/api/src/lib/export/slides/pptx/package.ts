@@ -12,7 +12,7 @@ import { escapeXml } from '@workspace/lib/xml';
 import { A_NS, P_NS, R_NS } from '../../../ooxml/ooxml';
 import type { PartRelationships, Relationship } from '../../../ooxml/opc';
 import { partRelationships } from '../../../ooxml/opc';
-import type { OfficeImageParts, OfficeMedia } from '../../office-image';
+import type { OfficeImages } from '../../office-image';
 import { backgroundXml } from './pictures';
 import { elementXml } from './shapes';
 
@@ -33,14 +33,10 @@ export type Deck = {
     // EMU per px, and the deck's width in pt, which its text sizes convert at.
     scale: number;
     slideWidth: number;
-    media: Map<string, OfficeMedia>;
-    images: Map<string, Image>;
+    images: OfficeImages;
     // The elbow router reads the shapes an arrow is bound to.
     byId: Map<string, VectorElement>;
 };
-
-// An SVG's raster is its PNG, its own data the svgPart beside it.
-export type Image = OfficeImageParts & { media: OfficeMedia };
 
 export type Slide = {
     deck: Deck;

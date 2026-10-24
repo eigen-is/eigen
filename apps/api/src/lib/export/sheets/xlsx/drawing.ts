@@ -11,20 +11,14 @@ import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
 import { writeChart } from '../../../ooxml/ooxml-chart-writer';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
-import type { ZipWriteEntry } from '../../../ooxml/zip';
-import type { OfficeImageParts, OfficeMedia } from '../../office-image';
-import { officeImageParts } from '../../office-image';
+import type { OfficeImages } from '../../office-image';
 import { sheetsResolver } from '../cell-style';
 
-// A sheet's floating charts and pictures as its drawing part: the path its <drawing> relationship targets, the parts the
-// drawing adds to the package (itself, its relationships and its charts) and its media files.
-export type SheetDrawing = { path: string; parts: PackagePart[]; files: ZipWriteEntry[] };
+// A sheet's floating charts and pictures as its drawing part: the path its <drawing> relationship targets, and the parts
+// the drawing adds to the package (itself, its relationships and its charts).
+export type SheetDrawing = { path: string; parts: PackagePart[] };
 
 export const DRAWING_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.drawing+xml';
-
-// The workbook's pictures: each media item the transform prepared, by name, and the parts of each one a sheet shows,
-// added to the package by the first drawing to show it.
-export type WorkbookPictures = { media: ReadonlyMap<string, OfficeMedia>; parts: Map<string, OfficeImageParts> };
 
 // The workbook's sheets resolve a chart's ranges, by the names they are written under; `number` names the sheet's
 // drawing and chart parts. Each chart and picture is a two-cell anchor over the cells its box covers, in paint order, so
@@ -37,7 +31,7 @@ export function drawingOf(
     sheet: Sheet,
     number: number,
     sheets: Sheet[],
-    pictures: WorkbookPictures,
+    pictures: OfficeImages,
     lost: (code: CountedWarningCode) => void,
 ): SheetDrawing | undefined {
     const names = new Map<string, string>();
@@ -47,19 +41,18 @@ export function drawingOf(
     const anchors: string[] = [];
     const { relationships, relate } = partRelationships();
     const charts: PackagePart[] = [];
-    const files: ZipWriteEntry[] = [];
     for (const item of floatingItems(sheet)) {
         // Excel numbers a drawing's shapes from 2.
         const id = anchors.length + 2;
         if (item.kind === 'image') {
             const { mediaName } = item.object;
-            const parts = pictureParts(mediaName, pictures, files);
-            if (!parts) {
+            const image = pictures.image(mediaName);
+            if (!image) {
                 lost('images-dropped');
                 continue;
             }
-            const svg = parts.svgPart && relate('image', `../media/${parts.svgPart}`);
-            const blip = blipXml(relate('image', `../media/${parts.part}`), svg);
+            const svg = image.svgPart && relate('image', `../media/${image.svgPart}`);
+            const blip = blipXml(relate('image', `../media/${image.part}`), svg);
             const placed = placedBox(item.object);
             anchors.push(anchorXml(sheet, placed, pictureXml(placed, id, blip)));
             continue;
@@ -91,22 +84,7 @@ export function drawingOf(
     return {
         path,
         parts: [[path, drawing, DRAWING_CONTENT_TYPE], [relsPathOf(path), relationshipsXml(relationships)], ...charts],
-        files,
     };
-}
-
-// The first drawing to show a media name adds its files under xl/media; a type Excel can't embed, or an SVG without its
-// PNG, adds none.
-function pictureParts(name: string, pictures: WorkbookPictures, files: ZipWriteEntry[]): OfficeImageParts | undefined {
-    const known = pictures.parts.get(name);
-    if (known) return known;
-    const media = pictures.media.get(name);
-    const parts = media && officeImageParts(media, pictures.parts.size + 1);
-    if (!media || !parts) return undefined;
-    files.push({ name: `xl/media/${parts.part}`, data: new Uint8Array(parts.raster), store: true });
-    if (parts.svgPart) files.push({ name: `xl/media/${parts.svgPart}`, data: new Uint8Array(media.data), store: true });
-    pictures.parts.set(name, parts);
-    return parts;
 }
 
 type Placed = { x: number; y: number; width: number; height: number; angle: number };

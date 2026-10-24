@@ -1,8 +1,12 @@
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ExportMedia } from '../document/transform/protocol';
 import { toTransferableBuffer } from '../document/transform/protocol';
+import type { ZipWriteEntry } from '../ooxml/zip';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../shared/thumbnail-timeout';
 import type { ImageResult, WorkerInput } from '../shared/thumbnail-worker';
+
+// The images the docx, pptx and xlsx writers embed: the PNG or JPEG a source becomes, the PNG an SVG falls back to, and
+// the media parts of one package.
 
 // An image in a docx, pptx or xlsx: the media item, and for an SVG the PNG a reader without SVG draws. The PNG is drawn and
 // read inside the transform process, so it never crosses the boundary on ExportMedia.
@@ -106,13 +110,43 @@ function cssSize(svg: Buffer, width: number, height: number): { width: number; h
 }
 
 // An Office image's parts, named by its place among the package's images: the raster every reader draws, and an SVG's
-// own file beside its PNG. A type Office can't embed, or an SVG without its PNG, has none.
-export type OfficeImageParts = { part: string; svgPart?: string; raster: ArrayBuffer };
+// own file beside its PNG.
+export type OfficeImage = { part: string; svgPart?: string; media: OfficeMedia };
 
-export function officeImageParts(media: OfficeMedia, n: number): OfficeImageParts | undefined {
-    const svg = media.contentType === 'image/svg+xml';
-    const raster = svg ? media.png : media.data;
-    const extension = svg ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
-    if (!raster || !extension) return undefined;
-    return { part: `image${n}.${extension}`, ...(svg && { svgPart: `image${n}.svg` }), raster };
+// The images one package embeds, by media name. The first use of a name adds its files under `folder`, numbered in that
+// order; a type Office can't embed, or an SVG without its PNG, has none.
+export type OfficeImages = {
+    media: ReadonlyMap<string, OfficeMedia>;
+    image(name: string): OfficeImage | undefined;
+    files: ZipWriteEntry[];
+};
+
+export function officeImages(media: OfficeMedia[], folder: string): OfficeImages {
+    const byName = new Map(media.map((item) => [item.name, item]));
+    const images = new Map<string, OfficeImage>();
+    const files: ZipWriteEntry[] = [];
+    return {
+        media: byName,
+        files,
+        image: (name) => {
+            const known = images.get(name);
+            if (known) return known;
+            const item = byName.get(name);
+            const svg = item?.contentType === 'image/svg+xml';
+            const raster = svg ? item.png : item?.data;
+            const extension = svg ? 'png' : item && RASTER_EXTENSIONS.get(item.contentType);
+            if (!item || !raster || !extension) return undefined;
+            const n = images.size + 1;
+            const image: OfficeImage = {
+                part: `image${n}.${extension}`,
+                ...(svg && { svgPart: `image${n}.svg` }),
+                media: item,
+            };
+            files.push({ name: `${folder}/${image.part}`, data: new Uint8Array(raster), store: true });
+            if (image.svgPart)
+                files.push({ name: `${folder}/${image.svgPart}`, data: new Uint8Array(item.data), store: true });
+            images.set(name, image);
+            return image;
+        },
+    };
 }
