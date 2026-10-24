@@ -31,15 +31,15 @@ import { styleDefinitions, stylesXml } from './styles';
 
 // ProseMirror JSON -> hand-written WordprocessingML, in the transform process, so it never reaches the Mount or the
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
-export async function eigendocToDocx(
-    json: JSONContent,
-    bands: EigendocBands,
-    setup: PageSetup,
-    normal: NormalStyle,
-    media: OfficeMedia[],
-    title: string,
-    publicOrigin: string | undefined,
-): Promise<Uint8Array> {
+export function writeDocx(
+    {
+        json,
+        bands,
+        page: setup,
+        style: normal,
+    }: { json: JSONContent; bands: EigendocBands; page: PageSetup; style: NormalStyle },
+    { title, media, publicOrigin }: { title: string; media: OfficeMedia[]; publicOrigin?: string },
+): Uint8Array {
     const document: PartRelationships = {
         relationships: ['styles', 'numbering', 'settings', 'fontTable'].map((type) => ({
             type: `${R_NS}/${type}`,

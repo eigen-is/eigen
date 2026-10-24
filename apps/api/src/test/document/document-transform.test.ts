@@ -44,7 +44,7 @@ import {
 import { runTransformToBytes, runTransformToExtractedText } from '../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import type { Drive } from '../../lib/drive';
-import { eigendocToDocx } from '../../lib/export/doc/docx/to-docx';
+import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
 import { collectExportMedia } from '../../lib/export/media';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
@@ -1320,14 +1320,14 @@ describe('document transform (eigendoc)', () => {
         const docx = Buffer.from(exportBytes(response));
         const persisted = await readPersistedDoc(mount, path);
         const media = await collectExportMedia(mount, path, 'docx', [GOLDEN_MEDIA_NAME], new AbortController().signal);
-        const direct = await eigendocToDocx(
-            readEigendocFromDoc(persisted),
-            readEigendocBands(persisted),
-            readEigendocPage(persisted),
-            readEigendocStyle(persisted),
-            media,
-            path.name,
-            undefined,
+        const direct = writeDocx(
+            {
+                json: readEigendocFromDoc(persisted),
+                bands: readEigendocBands(persisted),
+                page: readEigendocPage(persisted),
+                style: readEigendocStyle(persisted),
+            },
+            { title: path.name, media },
         );
         persisted.destroy();
         expect(docx.equals(Buffer.from(direct))).toBe(true);

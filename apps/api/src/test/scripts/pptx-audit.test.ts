@@ -14,7 +14,7 @@ import {
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
-import { eigenslidesToPptx } from '../../lib/export/slides/pptx/to-pptx';
+import { writePptx } from '../../lib/export/slides/pptx/to-pptx';
 import { classifyPptx, runRoundtrip } from '../../scripts/pptx-audit';
 import { PIXEL_PNG } from '../fixtures/pptx';
 
@@ -61,7 +61,7 @@ function deck(): Uint8Array {
     for (const [i, element] of ELEMENTS.entries())
         writeElementInDoc(doc, { ...element, frameId: 'f1' }, keys[i], SLIDES_STYLE_DEFAULTS, `el-${i}`);
     const media = [{ name: 'pixel.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG.slice()) }];
-    return eigenslidesToPptx(readVectorFromDoc(doc), media, 'Round trip');
+    return writePptx(readVectorFromDoc(doc), { title: 'Round trip', media });
 }
 
 async function corpus(name: string, files: Record<string, Uint8Array | string>): Promise<string> {
@@ -110,8 +110,8 @@ describe('round trip', () => {
         const dir = await corpus('mutated', { 'deck.pptx': deck() });
         const planted = await writer(
             'planted',
-            `import { eigenslidesToPptx as write } from ${JSON.stringify(WRITER)};
-            export function eigenslidesToPptx(scene, ...rest) {
+            `import { writePptx as write } from ${JSON.stringify(WRITER)};
+            export function writePptx(scene, options) {
                 const elements = scene.elements
                     .filter((element) => element.type !== 'image')
                     .map((element) =>
@@ -121,7 +121,7 @@ describe('round trip', () => {
                               ? { ...element, html: element.html.replace('Plain', 'Changed') }
                               : element,
                     );
-                return write({ ...scene, elements }, ...rest);
+                return write({ ...scene, elements }, options);
             }`,
         );
         const out = path.join(scratch, 'out-mutated');
@@ -140,10 +140,7 @@ describe('round trip', () => {
 
     test('a writer that throws is a crash, at its stage', async () => {
         const dir = await corpus('throws', { 'deck.pptx': deck() });
-        const planted = await writer(
-            'throws',
-            'export function eigenslidesToPptx() { throw new Error("writer broke"); }',
-        );
+        const planted = await writer('throws', 'export function writePptx() { throw new Error("writer broke"); }');
         const out = path.join(scratch, 'out-throws');
         const meta = await runRoundtrip({ corpora: [dir], out, writer: planted, timeoutMs: 30_000 });
         expect([meta.pass, meta.outcomes.crash]).toEqual([false, 1]);

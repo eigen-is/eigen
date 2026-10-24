@@ -1,5 +1,5 @@
 // Audits the pptx writer on a corpus. roundtrip is its gate (office-audit.ts): each file the reader imports becomes a
-// deck as an import makes one, is written by the writer (`--writer`, to-pptx.ts's signature) with its pictures prepared
+// deck as an import makes one, is written by the writer (`--writer`, writePptx's signature) with its pictures prepared
 // as an export prepares them, and imported again; the two decks are compared slide by slide and element by element in
 // z-order, each length in the EMU the writer writes it in, a picture by its type and pixel size.
 //
@@ -19,7 +19,7 @@ import {
     type VectorFrame,
     type VectorScene,
 } from '@workspace/lib/vector';
-import type { eigenslidesToPptx } from '../lib/export/slides/pptx/to-pptx';
+import type { writePptx } from '../lib/export/slides/pptx/to-pptx';
 import type { ImportedMedia } from '../lib/import/image-types';
 import { EMU_PER_POINT } from '../lib/ooxml/ooxml';
 import {
@@ -49,7 +49,7 @@ export type PptxRoundtripContext = { a: Deck; b: Deck; prepared: ReadonlyMap<str
 // takes from the order itself, and the roughjs seed an import draws afresh.
 const UNCOMPARED = new Set(['id', 'index', 'frameId', 'seed', 'commentCardIds']);
 
-// The writer's units (to-pptx.ts): lengths in EMU at the deck's scale, text sizes in 100ths of a point, angles in
+// The writer's units (export/slides/pptx/): lengths in EMU at the deck's scale, text sizes in 100ths of a point, angles in
 // 60,000ths of a degree, shares in 1000ths of a percent.
 const LENGTHS = new Set(['x', 'y', 'width', 'height', 'strokeWidth', 'padding']);
 const TEXT_SIZES = new Set(['fontSize', 'letterSpacing']);
@@ -356,7 +356,7 @@ async function picturesOf(media: ImportedMedia[]): Promise<Map<string, Picture>>
 const PRESENTATION = /\.p[po]t[xm](?![a-z0-9])/i;
 const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/slides/pptx/to-pptx.ts');
 
-function isWriter(value: unknown): value is typeof eigenslidesToPptx {
+function isWriter(value: unknown): value is typeof writePptx {
     return typeof value === 'function';
 }
 
@@ -381,9 +381,8 @@ async function pptxRoundtripChild(
     const { sanitizeSceneHtml } = await import('../lib/export/sanitize');
     const { MAX_DECOMPRESSED_BYTES } = await import('../lib/ooxml/zip');
     const module: unknown = await import(options.writer);
-    const write =
-        typeof module === 'object' && module !== null && 'eigenslidesToPptx' in module && module.eigenslidesToPptx;
-    if (!isWriter(write)) throw new Error(`${options.writer} exports no eigenslidesToPptx`);
+    const write = typeof module === 'object' && module !== null && 'writePptx' in module && module.writePptx;
+    if (!isWriter(write)) throw new Error(`${options.writer} exports no writePptx`);
     const read = async (data: ArrayBuffer): Promise<Deck> => {
         const { update, images } = importPptxToSlidesUpdate(data, { maxMediaBytes: MAX_DECOMPRESSED_BYTES });
         const doc = new Y.Doc();
@@ -397,7 +396,7 @@ async function pptxRoundtripChild(
         let media: Awaited<ReturnType<typeof officeMedia>> = [];
         const bytes = await step('export', async () => {
             media = await officeMedia(a.media);
-            return write(sanitizeSceneHtml(a.scene), media, path.basename(file));
+            return write(sanitizeSceneHtml(a.scene), { title: path.basename(file), media });
         });
         const b = await step('reimport', () => read(new Uint8Array(bytes).slice().buffer));
         const groups = await step('compare', async () =>

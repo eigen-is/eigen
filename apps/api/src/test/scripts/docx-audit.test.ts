@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
-import { eigendocToDocx } from '../../lib/export/doc/docx/to-docx';
+import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { writeZip } from '../../lib/ooxml/zip';
 import {
@@ -616,14 +616,9 @@ describe('both sides', () => {
     // so the text after it is one more; and a page number is its field's cached 1.
     test("the writer's docx holds what its doc holds", async () => {
         const json = buildAllFeaturesDocJson();
-        const docx = await eigendocToDocx(
-            json,
-            {},
-            DEFAULT_PAGE_SETUP,
-            DEFAULT_NORMAL_STYLE,
-            buildAllFeaturesDocMedia(),
-            'Report.eigendoc',
-            undefined,
+        const docx = writeDocx(
+            { json, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+            { title: 'Report.eigendoc', media: buildAllFeaturesDocMedia() },
         );
         const written = auditSource(docx);
         const cached = (node: JSONContent): JSONContent =>
@@ -871,14 +866,20 @@ describe('round trip', () => {
     };
     const docx = async () =>
         new Uint8Array(
-            await eigendocToDocx(
-                DOC,
-                {},
-                DEFAULT_PAGE_SETUP,
-                DEFAULT_NORMAL_STYLE,
-                [{ name: 'pixel.png', contentType: 'image/png', data: PIXEL_PNG.slice().buffer, width: 1, height: 1 }],
-                'Round trip',
-                undefined,
+            writeDocx(
+                { json: DOC, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+                {
+                    title: 'Round trip',
+                    media: [
+                        {
+                            name: 'pixel.png',
+                            contentType: 'image/png',
+                            data: PIXEL_PNG.slice().buffer,
+                            width: 1,
+                            height: 1,
+                        },
+                    ],
+                },
             ),
         );
     const corpus = async (name: string, files: Record<string, Uint8Array | string>) => {
@@ -909,15 +910,15 @@ describe('round trip', () => {
         const dir = await corpus('mutated', { 'doc.docx': await docx() });
         const planted = await writer(
             'planted',
-            `import { eigendocToDocx as write } from ${JSON.stringify(WRITER)};
-            export function eigendocToDocx(json, ...rest) {
-                const copy = structuredClone(json);
+            `import { writeDocx as write } from ${JSON.stringify(WRITER)};
+            export function writeDocx(doc, options) {
+                const copy = structuredClone(doc.json);
                 const [heading, paragraph] = copy.content;
                 heading.attrs.level = 2;
                 paragraph.content[0].text = 'Changed, ';
                 for (const block of copy.content)
                     block.content = block.content?.filter((node) => node.type !== 'figure');
-                return write(copy, ...rest);
+                return write({ ...doc, json: copy }, options);
             }`,
         );
         const out = path.join(scratch, 'out-mutated');
@@ -936,7 +937,7 @@ describe('round trip', () => {
 
     test('a writer that throws is a crash, at its stage', async () => {
         const dir = await corpus('throws', { 'doc.docx': await docx() });
-        const planted = await writer('throws', 'export function eigendocToDocx() { throw new Error("writer broke"); }');
+        const planted = await writer('throws', 'export function writeDocx() { throw new Error("writer broke"); }');
         const out = path.join(scratch, 'out-throws');
         const meta = await runRoundtrip({ corpora: [dir], out, writer: planted, timeoutMs: 30_000 });
         expect([meta.pass, meta.outcomes.crash]).toEqual([false, 1]);

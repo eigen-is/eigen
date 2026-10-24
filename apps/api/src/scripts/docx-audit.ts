@@ -11,7 +11,7 @@
 // The per-file JSON samples the words that differ, so an out dir of a private corpus stays out of the repo.
 //
 // roundtrip is the docx writer's gate (office-audit.ts): each file the reader imports is written by the writer
-// (`--writer`, to-docx.ts's signature) and imported again, and the two eigendoc JSON documents, their bands, page and
+// (`--writer`, writeDocx's signature) and imported again, and the two eigendoc JSON documents, their bands, page and
 // Normal compared node by node, a picture by its type and pixel size.
 import * as fs from 'node:fs';
 import path from 'node:path';
@@ -40,7 +40,7 @@ import { cssColorToHex } from '../lib/document/colors';
 import { docSchema } from '../lib/document/doc-schema';
 import { readStoredEquation } from '../lib/document/equation';
 import { nodeLook } from '../lib/document/looks';
-import type { eigendocToDocx } from '../lib/export/doc/docx/to-docx';
+import type { writeDocx } from '../lib/export/doc/docx/to-docx';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
@@ -2069,7 +2069,7 @@ function joined(nodes: JSONContent[]): JSONContent[] {
     return out;
 }
 
-// The first import as the writer lays it out (blocksOf and figureOf in to-docx.ts), each change a difference of its own:
+// The first import as the writer lays it out (blocksOf and figureOf in export/doc/docx/), each change a difference of its own:
 // a textblock's block figures each stand in a paragraph of their own and a display equation in a piece of its own, the
 // pieces sharing the textblock's margins, the first the one above, the last the one below, none at a split; a wrapped
 // figure floats before the piece that holds it, which the reader reads back at its start; a figure the export has no
@@ -2261,7 +2261,7 @@ async function picturesOf(media: { name: string; contentType: string; data: Arra
 const DOCUMENT = /\.do[ct][xm](?![a-z0-9])/i;
 const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/doc/docx/to-docx.ts');
 
-function isWriter(value: unknown): value is typeof eigendocToDocx {
+function isWriter(value: unknown): value is typeof writeDocx {
     return typeof value === 'function';
 }
 
@@ -2283,8 +2283,8 @@ async function docxRoundtripChild(
     const { docxToPmJson: read } = await import('../lib/import/doc/from-docx');
     const { chartFigureMedia, pastedFigureMedia } = await import('../lib/export/doc/docx/drawings');
     const module: unknown = await import(options.writer);
-    const write = typeof module === 'object' && module !== null && 'eigendocToDocx' in module && module.eigendocToDocx;
-    if (!isWriter(write)) throw new Error(`${options.writer} exports no eigendocToDocx`);
+    const write = typeof module === 'object' && module !== null && 'writeDocx' in module && module.writeDocx;
+    if (!isWriter(write)) throw new Error(`${options.writer} exports no writeDocx`);
     await roundtripChild(options, async (step) => {
         const data = Buffer.from(await Bun.file(file).arrayBuffer());
         const a = await step('import', () => read(data));
@@ -2293,7 +2293,7 @@ async function docxRoundtripChild(
             const roots = [a.json, ...Object.values(a.bands)];
             const drawn = [...(await pastedFigureMedia(roots)), ...(await chartFigureMedia(roots))];
             media = await officeMedia(a.images, drawn);
-            return write(a.json, a.bands, a.page, a.style, media, path.basename(file), undefined);
+            return write(a, { title: path.basename(file), media });
         });
         const b = await step('reimport', () => read(Buffer.from(bytes)));
         const groups = await step('compare', async () =>

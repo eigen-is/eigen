@@ -23,8 +23,8 @@ export async function renderEigenslidesExport(
     loadMedia: ExportMediaLoader,
 ): Promise<ExportWorkerResult & { warnings: TransformWarning[] }> {
     if (format !== 'pptx') return renderEigenslidesHtml(doc, format, title, loadMedia);
-    const { eigenslidesToPptx } = await import('./pptx/to-pptx');
+    const { writePptx } = await import('./pptx/to-pptx');
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
-    const pptx = eigenslidesToPptx(scene, await withSvgFallbacks(await loadMedia(sceneMediaNames(scene))), title);
+    const pptx = writePptx(scene, { title, media: await withSvgFallbacks(await loadMedia(sceneMediaNames(scene))) });
     return { data: toTransferableBuffer(pptx), warnings: [] };
 }

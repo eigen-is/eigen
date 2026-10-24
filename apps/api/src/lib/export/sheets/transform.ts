@@ -41,9 +41,9 @@ export async function renderEigensheetsExport(
             return { data: toTransferableText(html), warnings };
         }
         case 'xlsx': {
-            const { sheetsToXlsx } = await import('./to-xlsx');
+            const { writeXlsx } = await import('./xlsx/to-xlsx');
             const media = await withSvgFallbacks(await loadMedia(mediaNamesIn(sheets.map((sheet) => sheet.images))));
-            return { data: toTransferableBuffer(sheetsToXlsx(sheets, { title, warnings, media })), warnings };
+            return { data: toTransferableBuffer(writeXlsx(sheets, { title, media, warnings })), warnings };
         }
     }
 }

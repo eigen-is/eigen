@@ -14,7 +14,7 @@
 // path inside it. The fingerprints go to a gzipped file per file, and the text of each sheet's top-left corner to its
 // result, so compare can show what differs; a run of a private corpus stays out of the repo.
 //
-// roundtrip is the xlsx writer's gate: each file the reader imports is written by the writer (`--writer`, to-xlsx.ts's
+// roundtrip is the xlsx writer's gate: each file the reader imports is written by the writer (`--writer`, writeXlsx's
 // signature) and imported again, and the two imports are compared key by key. A difference is listed when LISTED
 // explains it, else unlisted; the run passes with no crash, no cut and no unlisted difference. A file the first import
 // refuses is skipped, so a reader that newly refuses one passes here: `compare` of two corpus runs catches that.
@@ -35,8 +35,8 @@ import { peakRss } from '../lib/core/peak-rss';
 import type { TransformWarning } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/office-image';
-import type { sheetsToXlsx } from '../lib/export/sheets/to-xlsx';
 import { sheetNames } from '../lib/export/sheets/xlsx/package';
+import type { writeXlsx } from '../lib/export/sheets/xlsx/to-xlsx';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS } from '../lib/ooxml/ooxml';
 import { uriReference } from '../lib/ooxml/opc';
@@ -406,7 +406,7 @@ const DEFAULT_IMPORTER = path.join(import.meta.dir, '../lib/import/sheets/from-x
 const DEFAULT_TIMEOUT_MS = TRANSFORM_LIMITS.import.deadlineMs;
 const OUTCOMES: Outcome[] = ['ok', 'refused', 'crash', 'timeout', 'memory'];
 
-const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/sheets/to-xlsx.ts');
+const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/sheets/xlsx/to-xlsx.ts');
 
 // Another importer may answer synchronously.
 type Importer = (...args: Parameters<typeof xlsxToSheets>) => Sheet[] | Promise<Sheet[]>;
@@ -415,7 +415,7 @@ function isImporter(value: unknown): value is Importer {
     return typeof value === 'function';
 }
 
-function isWriter(value: unknown): value is typeof sheetsToXlsx {
+function isWriter(value: unknown): value is typeof writeXlsx {
     return typeof value === 'function';
 }
 
@@ -1187,9 +1187,8 @@ async function xlsxRoundtripChild(
 ): Promise<void> {
     const { readXlsx } = await import('../lib/import/sheets/from-xlsx');
     const module: unknown = await import(options.writer);
-    const sheetsToXlsx =
-        typeof module === 'object' && module !== null && 'sheetsToXlsx' in module && module.sheetsToXlsx;
-    if (!isWriter(sheetsToXlsx)) throw new Error(`${options.writer} exports no sheetsToXlsx`);
+    const write = typeof module === 'object' && module !== null && 'writeXlsx' in module && module.writeXlsx;
+    if (!isWriter(write)) throw new Error(`${options.writer} exports no writeXlsx`);
     const limits = { maxMediaBytes: MAX_DECOMPRESSED_BYTES };
     await roundtripChild(options, async (step) => {
         const data = new Uint8Array(await Bun.file(file).arrayBuffer());
@@ -1198,7 +1197,7 @@ async function xlsxRoundtripChild(
         let prepared: OfficeMedia[] = [];
         const bytes = await step('export', async () => {
             prepared = await officeMedia(a.media);
-            return sheetsToXlsx(a.sheets, { title: '', warnings: exported, media: prepared });
+            return write(a.sheets, { title: '', media: prepared, warnings: exported });
         });
         const b = await step('reimport', () => readXlsx(bytes, limits, []));
         const warnings = new Map(exported.map((warning) => [warning.code, 'count' in warning ? warning.count : 1]));

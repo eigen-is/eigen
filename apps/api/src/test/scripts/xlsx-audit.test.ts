@@ -24,7 +24,7 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'xlsx-audit-'));
 afterAll(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
 const READER = fileURLToPath(new URL('../../lib/import/sheets/from-xlsx.ts', import.meta.url));
-const WRITER = fileURLToPath(new URL('../../lib/export/sheets/to-xlsx.ts', import.meta.url));
+const WRITER = fileURLToPath(new URL('../../lib/export/sheets/xlsx/to-xlsx.ts', import.meta.url));
 
 // Every feature the source side counts, once or a known number of times.
 const DATA = [
@@ -329,8 +329,8 @@ describe('round trip', () => {
         const dir = await corpus('mutated', { 'book.xlsx': workbook() });
         const planted = await importer(
             'writer',
-            `import { sheetsToXlsx as write } from ${JSON.stringify(WRITER)};
-            export function sheetsToXlsx(sheets, options) {
+            `import { writeXlsx as write } from ${JSON.stringify(WRITER)};
+            export function writeXlsx(sheets, options) {
                 const copy = structuredClone(sheets);
                 const [data] = copy;
                 data.config.columnlen[1] += 1;
@@ -360,7 +360,7 @@ describe('round trip', () => {
 
     test('a writer that throws is a crash, at its stage', async () => {
         const dir = await corpus('throws', { 'book.xlsx': workbook() });
-        const planted = await importer('throws', 'export function sheetsToXlsx() { throw new Error("writer broke"); }');
+        const planted = await importer('throws', 'export function writeXlsx() { throw new Error("writer broke"); }');
         const out = path.join(scratch, 'out-throws');
         const meta = await runRoundtrip({ corpora: [dir], out, writer: planted, timeoutMs: 30_000 });
         expect([meta.pass, meta.outcomes.crash]).toEqual([false, 1]);

@@ -11,7 +11,7 @@ import { type Deck, LAYOUT_XML, MASTER_XML, NAMESPACES, slideXml } from './packa
 
 // A deck → hand-written PresentationML, one slide per frame, each element as the DrawingML shape that draws it. Takes
 // the scene sanitizeSceneHtml returns, and media by name as the Office media prep hands it over (an SVG beside its PNG).
-export function eigenslidesToPptx(scene: VectorScene, media: OfficeMedia[], title: string): Uint8Array {
+export function writePptx(scene: VectorScene, { title, media }: { title: string; media: OfficeMedia[] }): Uint8Array {
     if (scene.frames.length === 0) throw new ApiError(400, 'The deck is empty');
     // The deck's own physical size: its width, and its slide size's height at the deck's pt per px.
     const { slideSize, slideWidth } = scene.meta;

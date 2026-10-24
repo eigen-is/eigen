@@ -17,7 +17,7 @@ import { cssPt, QUOTE_LOOK, twips } from '../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../lib/document/prose-css';
 import { type ExportMedia, toTransferableText } from '../../lib/document/transform/protocol';
 import { chartFigureMedia } from '../../lib/export/doc/docx/drawings';
-import { eigendocToDocx } from '../../lib/export/doc/docx/to-docx';
+import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/fonts';
 import { withSvgFallbacks } from '../../lib/export/office-image';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
@@ -50,8 +50,8 @@ function docx(
     page: PageSetup = DEFAULT_PAGE_SETUP,
     bands: EigendocBands = {},
     normal: NormalStyle = DEFAULT_NORMAL_STYLE,
-): Promise<Uint8Array> {
-    return eigendocToDocx(json, bands, page, normal, media, 'Report.eigendoc', publicOrigin);
+): Uint8Array {
+    return writeDocx({ json, bands, page, style: normal }, { title: 'Report.eigendoc', media, publicOrigin });
 }
 
 async function unzip(
@@ -256,9 +256,9 @@ describe('docx writer — schema coverage', () => {
         expect((await docx(buildAllFeaturesDocJson())).byteLength).toBeGreaterThan(0);
     });
 
-    test('an unknown node or mark throws, as the HTML export does', async () => {
-        await expect(docx(doc({ type: 'mystery' }))).rejects.toThrow('no docx mapping for mystery');
-        await expect(docx(doc(p(text('x', { type: 'glow' }))))).rejects.toThrow('no docx mapping for glow');
+    test('an unknown node or mark throws, as the HTML export does', () => {
+        expect(() => docx(doc({ type: 'mystery' }))).toThrow('no docx mapping for mystery');
+        expect(() => docx(doc(p(text('x', { type: 'glow' }))))).toThrow('no docx mapping for glow');
     });
 });
 
