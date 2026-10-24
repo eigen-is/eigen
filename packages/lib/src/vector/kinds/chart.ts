@@ -1,6 +1,18 @@
+// The chart kind: one chart's spec stored on the element as a JSON string per part, drawn as the canvas's own shapes
+// plus SVG text. Its look is the element's paint fields; the panel section and Edit data are the ui kind's.
+
 // spec, not the barrel: the barrel's layout reaches this kind through geometry, and defineKind calls
 // defaults while the module loads.
-import { chartSearchText, exceedsChartSpecBytes, parseChartSpec, sampleChartSpec } from '../../charts/spec';
+import {
+    chartSearchText,
+    exceedsChartSpecBytes,
+    isChartSpecKey,
+    mapChartSpecParts,
+    newChartSpecParts,
+    readChartSpec,
+    sampleChartSpec,
+} from '../../charts/spec';
+import { CHART_SPEC_PART_KEY, CHART_SPEC_PART_KEYS } from '../../types/chart';
 import { hitTestBox } from '../geometry';
 import { rectOutline } from '../outline';
 import type { VectorChartElement } from '../types';
@@ -9,6 +21,8 @@ import { chartToElements } from './chart-convert';
 import { chartLayout, renderChartSvg } from './chart-render';
 import { defineKind } from './kind';
 import { color, fillField, str } from './read-fields';
+
+const PART_KEYS: ReadonlySet<string> = new Set(CHART_SPEC_PART_KEYS);
 
 export const chartKind = defineKind<VectorChartElement>({
     type: 'chart',
@@ -27,18 +41,25 @@ export const chartKind = defineKind<VectorChartElement>({
     },
     // The host's font goes into the spec, which every label reads it from.
     defaults: (style) => ({
-        chart: JSON.stringify(sampleChartSpec('column', style.fontFamily)),
+        ...newChartSpecParts(sampleChartSpec('column', style.fontFamily)),
         fill: style.fill,
         color: style.color,
     }),
-    // The spec is kept as stored, never re-serialized: one that doesn't parse draws a placeholder and
-    // stays in the doc for recovery. Only one past the byte limit reads as ''.
+    // Each part is kept as stored, never re-serialized: one that doesn't parse draws a placeholder and stays in the
+    // doc for recovery, and a newer build's part rides along so a copy can carry it. Past the byte limit, summed over
+    // every part, each reads as '' and no newer part is kept.
     read: (src, base) => {
-        const chart = str(src.get('chart'), '');
+        const stored: Record<string, unknown> = {};
+        for (const key of src.keys()) if (isChartSpecKey(key)) stored[key] = src.get(key);
+        const blank = exceedsChartSpecBytes(stored);
+        const newer = Object.entries(stored).filter(
+            ([key, text]) => !blank && !PART_KEYS.has(key) && typeof text === 'string',
+        );
         return {
             ...base,
+            ...Object.fromEntries(newer),
             type: 'chart',
-            chart: exceedsChartSpecBytes(chart) ? '' : chart,
+            ...mapChartSpecParts((part) => (blank ? '' : str(stored[CHART_SPEC_PART_KEY[part]], ''))),
             fill: fillField(src.get('fill')),
             color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
         };
@@ -46,7 +67,7 @@ export const chartKind = defineKind<VectorChartElement>({
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) => rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, 0, inflate),
     render: (el) => ({ svg: renderChartSvg(el) }),
-    searchText: (el) => chartSearchText(parseChartSpec(el.chart)),
+    searchText: (el) => chartSearchText(readChartSpec(el).spec),
     // The font its labels draw in; the placeholder adds none.
     fontFamilies: (el) => chartLayout(el)?.labels.map((label) => label.fontFamily) ?? [],
     toShapes: chartToElements,

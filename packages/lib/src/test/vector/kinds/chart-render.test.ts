@@ -6,6 +6,7 @@ import {
     FLAT_CHART_LOOK,
     formatTickValue,
     layoutChart,
+    newChartSpecParts,
     sampleChartSpec,
 } from '../../../charts';
 import { getFontFamily } from '../../../constants/fonts';
@@ -195,7 +196,7 @@ describe('renderChartSpecSvg', () => {
             frameId: '',
             commentCardIds: '',
             opacity: 100,
-            chart: JSON.stringify(spec),
+            ...newChartSpecParts(spec),
             ...look,
         });
         expect(svg).toContain(canvas);

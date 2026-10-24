@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
-import type { VectorElement } from '@workspace/lib/vector';
+import type { VectorChartElement, VectorElement } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
@@ -14,12 +13,12 @@ import { convertElementToShapes, selectionShapes } from '../../../../components/
 
 const BASE = { ...DEFAULT_ELEMENT_PROPS, x: 0, y: 0, width: 640, height: 400, angle: 0, index: 'a0', seed: 3 };
 
-const chart = (id: string, spec = JSON.stringify(sampleChartSpec('column'))): VectorElement => ({
+const chart = (id: string, over: Partial<VectorChartElement> = {}): VectorElement => ({
     ...BASE,
     ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
     id,
     type: 'chart',
-    chart: spec,
+    ...over,
 });
 
 const rectangle: VectorElement = {
@@ -37,7 +36,7 @@ describe('selectionShapes', () => {
     });
 
     test('offers nothing for a chart that draws its placeholder, another kind, or more than one element', () => {
-        expect(selectionShapes(['c1'], byId([chart('c1', '{"type":')]))).toEqual([]);
+        expect(selectionShapes(['c1'], byId([chart('c1', { specData: '{"source":' })]))).toEqual([]);
         expect(selectionShapes(['r1'], byId([rectangle]))).toEqual([]);
         expect(selectionShapes(['c1', 'c2'], byId([chart('c1'), chart('c2')]))).toEqual([]);
         expect(selectionShapes(['c1', 'r1'], byId([chart('c1'), rectangle]))).toEqual([]);

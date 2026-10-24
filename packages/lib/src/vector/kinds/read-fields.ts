@@ -50,10 +50,18 @@ export const MAX_ARROW_LABEL_LINES = 64;
 export const MAX_PATH_BYTES = 16 * 1024;
 export const MAX_PATH_COMMANDS = 512;
 
-export type YMapLike = { get(key: string): unknown };
+// A stored record as a Y.Map or a Map holds it; keys lists them for a kind that keeps fields it doesn't know.
+export type YMapLike = { get(key: string): unknown; keys(): Iterable<string> };
 
 export function isYMapLike(value: unknown): value is YMapLike {
-    return typeof value === 'object' && value !== null && 'get' in value && typeof value.get === 'function';
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'get' in value &&
+        typeof value.get === 'function' &&
+        'keys' in value &&
+        typeof value.keys === 'function'
+    );
 }
 
 export function num(v: unknown, fallback: number): number {

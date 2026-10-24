@@ -2,7 +2,7 @@
 // drawn on, which faces the file embeds and what it is called. packages/ui's canvas image writer does the layout and
 // the fetches.
 
-import { parseChartSpec } from '../charts/spec';
+import { newChartSpecParts, readChartSpec } from '../charts/spec';
 import type { BundledFontFace } from '../constants/fonts';
 import { fontFacesFor, getFontName } from '../constants/fonts';
 import type { EigenClipboardChartItem } from '../types/clipboard';
@@ -26,8 +26,10 @@ export function canvasImageScene(
     if (Array.isArray(content)) elements = content;
     else {
         const { spec, width, height, look } = content;
-        const record: Record<string, unknown> = { ...look, id: 'chart', type: 'chart', chart: spec, width, height };
-        const el = readElementFromFields({ get: (key: string) => record[key] });
+        const resolved = readChartSpec(spec).spec;
+        const parts = resolved ? newChartSpecParts(resolved) : {};
+        const record = { ...look, ...parts, id: 'chart', type: 'chart', width, height };
+        const el = readElementFromFields(new Map(Object.entries(record)));
         if (el) elements = [el];
     }
     const background =
@@ -38,8 +40,8 @@ export function canvasImageScene(
 
 // A chart's file is named for its title, less what a file name can't hold; one without a title is "Chart". Anything
 // else is a selection of the file.
-export function chartImageName(spec: string): string {
-    const title = parseChartSpec(spec)?.title.text ?? '';
+export function chartImageName(chart: string | Readonly<Record<string, unknown>>): string {
+    const title = readChartSpec(chart).spec?.title.text ?? '';
     return (
         title
             .replace(/[\\/:*?"<>|\p{Cc}]/gu, ' ')
@@ -50,7 +52,7 @@ export function chartImageName(spec: string): string {
 
 export function canvasImageName(elements: VectorElement[], fileName: string): string {
     const [first] = elements;
-    return elements.length === 1 && first.type === 'chart' ? chartImageName(first.chart) : `${fileName} – selection`;
+    return elements.length === 1 && first.type === 'chart' ? chartImageName(first) : `${fileName} – selection`;
 }
 
 // The faces the file draws in: a measured box's runs, each in the face its computed family list starts with, and

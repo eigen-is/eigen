@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { parseChartSpec } from '@workspace/lib/charts';
+import { readChartSpec } from '@workspace/lib/charts';
+import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
@@ -77,7 +78,7 @@ function chartOf(part: string, fixture: Partial<PptxFixture> = {}) {
     const deck = deckWith(part, fixture);
     const [element] = deck.slides[0].elements;
     if (element?.type !== 'chart') throw new Error(`not a chart: ${JSON.stringify(element)}`);
-    return { element, spec: parseChartSpec(element.chart ?? ''), deck };
+    return { element, spec: readChartSpec(element).spec, deck };
 }
 
 describe('a chart', () => {
@@ -172,7 +173,7 @@ describe('a chart', () => {
             OPTIONS,
         );
         const colors = deck.slides.map(({ elements: [found] }) =>
-            found?.type === 'chart' ? parseChartSpec(found.chart ?? '')?.series['x-0']?.color : undefined,
+            found?.type === 'chart' ? readChartSpec(found).spec?.series['x-0']?.color : undefined,
         );
         expect(colors).toEqual([ACCENT[1], ACCENT[1], ACCENT[3]]);
     });
@@ -286,7 +287,7 @@ describe('bounds', () => {
 
     test("every copy of a chart weighs its spec: one part on enough slides passes the output's cap", () => {
         const one = readPptx(many(1, HEAVY), OPTIONS).slides[0].elements[0];
-        const weight = 1 + Math.floor((one?.chart?.length ?? 0) / 512);
+        const weight = CHART_SPEC_PART_KEYS.reduce((sum, key) => sum + Math.floor((one?.[key]?.length ?? 0) / 512), 1);
         expect(one?.type).toBe('chart');
         expect(weight).toBeGreaterThan(100);
         const fits = Math.floor(MAX_PPTX_WEIGHT / (weight + 1));

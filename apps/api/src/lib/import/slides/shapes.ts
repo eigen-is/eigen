@@ -606,8 +606,10 @@ function readGraphicFrame(walk: Walk, shape: XmlElement, box: Box): void {
     const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
     const chart =
         kind === 'chart' && data ? frameChart(walk.deck, walk.part, data, walk.inheritance.theme.colors) : undefined;
-    if (chart && 'chart' in chart) push(walk, { type: 'chart', ...box, ...CHART_PAINT, ...chart });
-    else placeholderBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
+    if (chart && 'parts' in chart) {
+        const { parts, ...colors } = chart;
+        push(walk, { type: 'chart', ...box, ...CHART_PAINT, ...parts, ...colors });
+    } else placeholderBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
 }
 
 // Q5: a loss the user can see on the slide, saying what was there.

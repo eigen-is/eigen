@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { CLIPBOARD_SVG_MAX_ELEMENTS, extractClipboardSvgMetadata } from '@workspace/lib/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { VectorElement, VectorMeta } from '@workspace/lib/vector';
+import type { VectorChartElement, VectorElement, VectorMeta } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SCENE_META,
@@ -66,7 +66,7 @@ const richtext = (id: string, index: string, html = '<p>hello</p>'): VectorEleme
     color: '#e03131',
 });
 
-const chart = (id: string, index: string, spec = JSON.stringify(sampleChartSpec('column'))): VectorElement => ({
+const chart = (id: string, index: string, over: Partial<VectorChartElement> = {}): VectorElement => ({
     ...BASE,
     ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
     id,
@@ -74,7 +74,7 @@ const chart = (id: string, index: string, spec = JSON.stringify(sampleChartSpec(
     index,
     width: 640.5,
     height: 400,
-    chart: spec,
+    ...over,
 });
 
 const elbowArrow = (id: string, index: string): VectorElement => ({
@@ -233,7 +233,7 @@ describe('buildSelectionData', () => {
         if (el.type !== 'chart') throw new Error('expected a chart');
         expect(data.items[1]).toEqual({
             type: 'chart',
-            spec: el.chart,
+            spec: expect.any(String),
             width: 640.5,
             height: 400,
             look: {
@@ -246,6 +246,8 @@ describe('buildSelectionData', () => {
                 seed: el.seed,
             },
         });
+        const item = data.items[1];
+        expect(item.type === 'chart' && JSON.parse(item.spec)).toEqual(sampleChartSpec('column', 'Excalifont'));
         expect(readElementsClipboardItem(data.items)?.elements).toEqual([el]);
     });
 
@@ -270,7 +272,7 @@ describe('buildSelectionData', () => {
             () => undefined,
         );
         expect(data.svg?.startsWith('<svg')).toBe(true);
-        const broken = buildSelectionData([chart('c1', 'a0', '{')], ['c1'], meta, '', () => undefined);
+        const broken = buildSelectionData([chart('c1', 'a0', { specData: '{' })], ['c1'], meta, '', () => undefined);
         expect(broken.data.items.map((i) => i.type)).toEqual(['elements']);
     });
 

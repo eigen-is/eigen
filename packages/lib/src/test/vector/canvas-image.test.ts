@@ -1,7 +1,7 @@
 // The pure half of Download image: the elements it draws, what they are drawn on, which faces the file embeds and
 // what the file is called. The browser half (layout, fetches) is packages/ui's canvas image writer.
 import { describe, expect, test } from 'bun:test';
-import { FLAT_CHART_LOOK, sampleChartSpec } from '../../charts';
+import { FLAT_CHART_LOOK, readChartSpec, sampleChartSpec } from '../../charts';
 import { buildChartClipboardItem } from '../../core/clipboard/clipboard';
 import { canvasImageFaces, canvasImageName, canvasImageScene, chartImageName } from '../../vector/canvas-image';
 import { solidFill } from '../../vector/fill';
@@ -46,9 +46,8 @@ describe('canvasImageScene', () => {
     });
 
     test('a chart another app copies draws as the one chart element a paste makes of it, at the origin', () => {
-        const spec = JSON.stringify(sampleChartSpec('column'));
         const item = buildChartClipboardItem({
-            spec,
+            spec: JSON.stringify(sampleChartSpec('column')),
             box: { width: 480, height: 300 },
             look: { ...FLAT_CHART_LOOK, fill: solidFill('#ff0000'), strokeColor: '#00ff00', roughness: 2, seed: 7 },
         });
@@ -58,7 +57,6 @@ describe('canvasImageScene', () => {
         expect(rest).toEqual([]);
         expect(el).toMatchObject({
             type: 'chart',
-            chart: spec,
             x: 0,
             y: 0,
             width: 480,
@@ -69,6 +67,7 @@ describe('canvasImageScene', () => {
             roughness: 2,
             seed: 7,
         });
+        expect(readChartSpec(el).spec).toEqual(sampleChartSpec('column'));
     });
 
     test('a selection draws on nothing, whatever the drawing is on', () => {
@@ -97,8 +96,7 @@ describe('canvasImageScene', () => {
 });
 
 describe('canvasImageName', () => {
-    const titled = (title: string) =>
-        chart({ id: 'c', chart: JSON.stringify({ ...sampleChartSpec('bar'), title: { text: title } }) });
+    const titled = (title: string) => chart({ id: 'c' }, { ...sampleChartSpec('bar'), title: { text: title } });
 
     test("a chart is named for its title, without the characters a file name can't hold", () => {
         expect(canvasImageName([titled('Q3: sales / costs?')], 'Plan')).toBe('Q3 sales costs');

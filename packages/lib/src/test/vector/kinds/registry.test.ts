@@ -150,7 +150,7 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_FIELDS).toContain('startAngle');
         expect(ELEMENT_FIELDS).toContain('sweepAngle');
         expect(ELEMENT_KINDS.chart.capabilities.creation).toBe('none');
-        expect(ELEMENT_FIELDS).toContain('chart');
+        expect(ELEMENT_FIELDS).toContain('specChart');
     });
 
     test('the dock anchors are the right/bottom/left/top points, whatever the kind derives them from', () => {

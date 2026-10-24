@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { MAX_SKETCH_POINTS, sampleChartSpec } from '@workspace/lib/charts';
+import { MAX_SKETCH_POINTS, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type {
     VectorChartElement,
     VectorElement,
@@ -254,8 +254,8 @@ describe('the panel for a chart', () => {
         const spec = sampleChartSpec('pie');
         const categories = Array.from({ length: MAX_SKETCH_POINTS + 1 }, (_, i) => `C${i}`);
         const values = categories.map(() => 1);
-        const data = { source: 'inline', categories, series: [{ id: 's-1', name: 'S', values }] };
-        const { container } = await renderPanel(chart({ chart: JSON.stringify({ ...spec, data }) }));
+        const data = { source: 'inline' as const, categories, series: [{ id: 's-1', name: 'S', values }] };
+        const { container } = await renderPanel(chart(newChartSpecParts({ ...spec, data })));
         expect(container.textContent).toContain(`${MAX_SKETCH_POINTS} points`);
     });
 });

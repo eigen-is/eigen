@@ -427,18 +427,23 @@ export function sheetChartSpecWrites(stored: StoredChartSpec, change: ChartSpecC
     return writes;
 }
 
+// Every part's key with its text, as a host that stores each part as one string holds them.
+export function mapChartSpecParts(text: (part: ChartSpecPart) => string): Record<ChartSpecPartKey, string> {
+    return {
+        specChart: text('chart'),
+        specTitle: text('title'),
+        specLegend: text('legend'),
+        specAxes: text('axes'),
+        specPlots: text('plots'),
+        specSeries: text('series'),
+        specPoints: text('points'),
+        specData: text('data'),
+    };
+}
+
 // A chart made from nothing, by an insert, an import or a test: every part, a keyed one {} when it has no entries.
 export function newChartSpecParts(spec: ChartSpec): Record<ChartSpecPartKey, string> {
-    return {
-        specChart: JSON.stringify(spec.chart),
-        specTitle: JSON.stringify(spec.title),
-        specLegend: JSON.stringify(spec.legend),
-        specAxes: JSON.stringify(spec.axes),
-        specPlots: JSON.stringify(spec.plots),
-        specSeries: JSON.stringify(spec.series),
-        specPoints: JSON.stringify(spec.points),
-        specData: JSON.stringify(spec.data),
-    };
+    return mapChartSpecParts((part) => JSON.stringify(spec[part]));
 }
 
 // The same on Sheets, where every keyed part is a record from the start: a recipe that made one and set an entry in it

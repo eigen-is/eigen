@@ -3,6 +3,7 @@
 // what Eigen's Yjs CRDT needs: no tombstones, no version/versionNonce, no groupIds. Every
 // stored field is a scalar or a string — arrays (points, comment cards, fills) ride JSON scalars.
 
+import type { ChartSpecPartKey } from '../types/chart';
 import type { SlideSize, VectorFrame } from './frames';
 
 export type VectorElementType =
@@ -157,13 +158,13 @@ export type TextLine = {
     rotate: number;
 };
 
-// A chart: `chart` is the stored ChartSpec JSON (charts/spec.ts), inline data only on a canvas. `fill` is
-// its background and the hatch style of its bars and slices; the stroke draws its axes and gridlines.
-// `color` is its labels' color; their font is the spec's.
+// A chart: its ChartSpec as a JSON string per part, `specChart` … `specData` (charts/spec.ts), so two peers who edit
+// two parts both keep their edit; inline data only on a canvas. `fill` is its background and the hatch style of its
+// bars and slices; the stroke draws its axes and gridlines. `color` is its labels' color; their font is the spec's.
 export type VectorChartElement = VectorElementBase &
-    Fillable & {
+    Fillable &
+    Record<ChartSpecPartKey, string> & {
         type: 'chart';
-        chart: string;
         color: string;
     };
 

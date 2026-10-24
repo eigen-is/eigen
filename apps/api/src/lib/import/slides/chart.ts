@@ -1,4 +1,5 @@
-import { FLAT_CHART_LOOK } from '@workspace/lib/charts';
+import { FLAT_CHART_LOOK, newChartSpecParts } from '@workspace/lib/charts';
+import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { VectorElementPatch } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import type { DrawingTheme } from '../../ooxml/drawingml';
@@ -13,10 +14,10 @@ import type { DeckWalk } from './package';
 // A graphic frame's chart: its c:chartSpace part through the core chart reader, from the caches, which hold every
 // value, so none of the part's own relationships (workbook, user shapes, colours, style) is followed.
 
-// The spec as the chart kind stores it with the colours its text and axes take, or what the reader names a chart it
-// can't draw as the file does.
+// The spec's parts as the chart kind stores them with the colours its text and axes take, or what the reader names a
+// chart it can't draw as the file does.
 export type FrameChart =
-    | { chart: string; color: string; strokeColor: string }
+    | { parts: Record<ChartSpecPartKey, string>; color: string; strokeColor: string }
     | Extract<ChartRead, { unsupported: unknown }>;
 
 // Painted as a document's and a sheet's charts are, unfilled as PowerPoint's plot area; the font is the spec's.
@@ -48,7 +49,7 @@ export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors:
             const answer = readChart(root, { theme: colors, data: 'cache' });
             if (!('spec' in answer)) return answer;
             const color = textColorIn(root, colors);
-            return { chart: JSON.stringify(answer.spec), color, strokeColor: mutedColor(color) };
+            return { parts: newChartSpecParts(answer.spec), color, strokeColor: mutedColor(color) };
         })
     );
 }

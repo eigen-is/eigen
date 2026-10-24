@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { gradientStops } from '@workspace/lib/background';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { SlideSize, VectorElementType, VectorScene } from '@workspace/lib/vector';
 import {
@@ -463,11 +463,12 @@ describe('pptx shapes', () => {
         expect(geometry(full)).toBe('ellipse');
 
         const spec = sampleChartSpec('pie');
+        if (spec.data.source !== 'inline') throw new Error('expected inline data');
         const series = spec.data.series.map((s) => ({ ...s, values: [1.4e9, 3, 65, 80] }));
         const chart = element('chart', {
             width: 640,
             height: 400,
-            chart: JSON.stringify({ ...spec, data: { ...spec.data, series } }),
+            ...newChartSpecParts({ ...spec, data: { ...spec.data, series } }),
         });
         const scene = sceneOf([chart]);
         const all = shapes(pptx(scene));
@@ -786,7 +787,7 @@ describe('pptx shapes', () => {
         const chart = element('chart', {
             width: 640,
             height: 400,
-            chart: JSON.stringify(sampleChartSpec('pie')),
+            ...newChartSpecParts(sampleChartSpec('pie')),
         });
         const scene = sceneOf([chart]);
         const expected = convertToShapes(scene.elements[0]);

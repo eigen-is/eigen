@@ -62,7 +62,7 @@ export function readElementsClipboardItem(
         // host's paste handler, after its preventDefault, and swallow the paste silently.
         if (!record || typeof record !== 'object') continue;
         // The document reader IS the trust boundary: enums, clamps and color tokens all apply.
-        const el = readElementFromFields({ get: (key: string) => record[key] });
+        const el = readElementFromFields(new Map(Object.entries(record)));
         if (el) elements.push(el);
     }
     return { elements, sourceFrameId: typeof item.sourceFrameId === 'string' ? item.sourceFrameId : '' };
