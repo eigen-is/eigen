@@ -15,6 +15,7 @@ import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../sheets/defaults'
 import type {
     CellRangeRef,
     ChartAxis,
+    ChartAxisId,
     ChartPoint,
     ChartSeriesStyle,
     ChartSpec,
@@ -124,7 +125,7 @@ export function newChartSeriesId(): string {
 // position.
 export const DEFAULT_CHART_SERIES_STYLE: ChartSeriesStyle = {
     plot: null,
-    yAxis: 'y',
+    yAxis: 'y' satisfies ChartAxisId,
     color: null,
     line: { smooth: false },
     marker: { visible: false },
