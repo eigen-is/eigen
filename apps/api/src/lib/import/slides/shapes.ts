@@ -20,9 +20,10 @@ import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
-import { DEGREE, drawingLines, isSideways } from '../../ooxml/drawingml';
+import { ARROWHEAD_BY_LINE_END, DEGREE, drawingLines, isSideways, strokeStyleOf } from '../../ooxml/drawingml';
 import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
+import type { Part } from '../../ooxml/opc';
 import { IMPORT_MESSAGES } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
 import type { CustomGeometry } from './custom-geometry';
@@ -49,7 +50,7 @@ import {
     textColorOf,
 } from './inherit';
 import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
-import type { DeckWalk, Lost, Part } from './package';
+import type { DeckWalk, Lost } from './package';
 import { alternative, blipMedia } from './package';
 import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
@@ -89,15 +90,6 @@ const GRAPHIC_KINDS = new Map<string, Dropped>([
     [C_NS, 'chart'],
     [DGM_NS, 'diagram'],
     [OLE_NS, 'ole'],
-]);
-
-// A head or tail end of a:ln as the arrowhead that draws closest.
-const ARROWHEAD_BY_END = new Map<string, Arrowhead>([
-    ['triangle', 'triangle'],
-    ['stealth', 'triangle'],
-    ['arrow', 'arrow'],
-    ['oval', 'circle'],
-    ['diamond', 'circle'],
 ]);
 
 // PowerPoint's line when a:ln states no width: 0.75 pt.
@@ -518,7 +510,7 @@ function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     return {
         strokeColor: color,
         strokeWidth: Math.max(0, width ?? DEFAULT_LINE_EMU) * walk.deck.scale,
-        strokeStyle: !dash || dash === 'solid' ? 'solid' : dash === 'dot' || dash === 'sysDot' ? 'dotted' : 'dashed',
+        strokeStyle: strokeStyleOf(dash),
     };
 }
 
@@ -550,7 +542,7 @@ const pieGuides = cachedBy<string, Guides | undefined>();
 // An a:ln's headEnd or tailEnd, the nearest that states one, as the arrowhead that draws closest.
 function arrowheadOf(lns: XmlElement[], local: 'headEnd' | 'tailEnd'): Arrowhead {
     const decoration = lns.map((ln) => childOf(ln, A_NS, local)).find((found) => found !== undefined);
-    return ARROWHEAD_BY_END.get((decoration && xmlAttr(decoration, '', 'type')) ?? 'none') ?? 'none';
+    return ARROWHEAD_BY_LINE_END.get((decoration && xmlAttr(decoration, '', 'type')) ?? 'none') ?? 'none';
 }
 
 function lineOf(placed: Placed, stroke: Stroke, lns: XmlElement[]): NewVectorElement {

@@ -3,17 +3,16 @@ import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { FIRST_PAGE_BAND, flattenNestedFootnotes, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EigendocBands } from '../../../document/doc';
-import { R_NS } from '../../../ooxml/ooxml';
 import type { PackagePart } from '../../../ooxml/opc';
-import { relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
-import { NOTE_SEPARATORS } from '../../../ooxml/wordml';
+import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
+import { NOTE_SEPARATORS, WML } from '../../../ooxml/wordml';
 import type { OfficeMedia } from '../../office-image';
-import { OFFICE_IMAGE_CONTENT_TYPES } from '../../office-image';
+import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import type { FontSlot } from './fonts';
 import { embeddedFonts, fontTableXml } from './fonts';
 import { numberingXml } from './numbering';
-import type { Context, Package, PartRelationships } from './package';
-import { BAND_TAGS, DOCUMENT_NAMESPACES, numbered, sectionXml, separatorXml, settingsXml, WML } from './package';
+import type { Context, Package } from './package';
+import { BAND_TAGS, DOCUMENT_NAMESPACES, numbered, sectionXml, separatorXml, settingsXml } from './package';
 import { blocksOf, blocksXml, withoutAfter } from './paragraphs';
 import { styleDefinitions, stylesXml } from './styles';
 
@@ -28,14 +27,8 @@ export function writeDocx(
     }: { json: JSONContent; bands: EigendocBands; page: PageSetup; style: NormalStyle },
     { title, media, publicOrigin }: { title: string; media: OfficeMedia[]; publicOrigin?: string },
 ): Uint8Array {
-    const document: PartRelationships = {
-        relationships: ['styles', 'numbering', 'settings', 'fontTable'].map((type) => ({
-            type: `${R_NS}/${type}`,
-            target: `${type}.xml`,
-        })),
-        hyperlinks: new Map(),
-        images: new Map(),
-    };
+    const document = partRelationships();
+    for (const type of ['styles', 'numbering', 'settings', 'fontTable']) document.relate(type, `${type}.xml`);
     const pkg: Package = {
         part: document,
         publicOrigin,
@@ -44,9 +37,7 @@ export function writeDocx(
         bullets: new Map(),
         checkboxes: false,
         languages: new Set(),
-        media: new Map(media.map((item) => [item.name, item])),
-        imageFiles: new Map(),
-        files: [],
+        images: officeImages(media, 'word/media'),
         drawings: 0,
         footnotes: [],
         // A Spacer's and a figure's mark draw in the Normal's Regular.
@@ -63,7 +54,7 @@ export function writeDocx(
     // the part's own relationships, as a band is. A nested note is its text.
     const noteParts: PackagePart[] = [];
     if (pkg.footnotes.length > 0) {
-        pkg.part = { relationships: [], hyperlinks: new Map(), images: new Map() };
+        pkg.part = partRelationships();
         const note: Context = { ...flow, style: 'FootnoteText' };
         const notes = pkg.footnotes.map((node, index) => {
             const blocks = blocksOf(flattenNestedFootnotes(node).content ?? [], {}, note, false);
@@ -76,7 +67,7 @@ export function writeDocx(
         ]);
         if (pkg.part.relationships.length > 0)
             noteParts.push([relsPathOf('word/footnotes.xml'), relationshipsXml(pkg.part.relationships)]);
-        document.relationships.push({ type: `${R_NS}/footnotes`, target: 'footnotes.xml' });
+        document.relate('footnotes', 'footnotes.xml');
     }
 
     // Each band is a part of its own, in the body's column, its images and links related through its own rels. With page 1
@@ -89,7 +80,7 @@ export function writeDocx(
         const written: [type: 'default' | 'first', band: JSONContent | undefined][] = own ? [['default', own]] : [];
         if (setup.differentFirstPage && (own || pageOne)) written.push(['first', pageOne]);
         for (const [index, [type, band]] of written.entries()) {
-            pkg.part = { relationships: [], hyperlinks: new Map(), images: new Map() };
+            pkg.part = partRelationships();
             const path = `word/${edge}${index + 1}.xml`;
             const content = band
                 ? blocksXml(withoutAfter(blocksOf(band.content ?? [], {}, flow, false)), pkg.styles)
@@ -101,8 +92,8 @@ export function writeDocx(
             ]);
             if (pkg.part.relationships.length > 0)
                 bandParts.push([relsPathOf(path), relationshipsXml(pkg.part.relationships)]);
-            const rId = document.relationships.push({ type: `${R_NS}/${edge}`, target: path.slice('word/'.length) });
-            references.push(`<w:${edge}Reference w:type="${type}" r:id="rId${rId}"/>`);
+            const rId = document.relate(edge, path.slice('word/'.length));
+            references.push(`<w:${edge}Reference w:type="${type}" r:id="${rId}"/>`);
         }
     }
     const fonts = embeddedFonts(pkg.faces);
@@ -129,9 +120,6 @@ export function writeDocx(
             ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
             ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
         ],
-        files: [
-            ...fonts.files.map(([name, data]) => ({ name, data })),
-            ...pkg.files.map(([name, data]) => ({ name, data: new Uint8Array(data), store: true })),
-        ],
+        files: [...fonts.files.map(([name, data]) => ({ name, data })), ...pkg.images.files],
     });
 }

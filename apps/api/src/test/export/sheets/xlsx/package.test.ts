@@ -66,7 +66,7 @@ describe('the workbook part', () => {
     });
 
     test('lists its sheets, the hidden ones hidden, and a filter database name per filtered sheet', () => {
-        const xml = workbookXml(sheets, ['Hidden', 'Shown', 'Later'], 1);
+        const xml = workbookXml(sheets, ['Hidden', 'Shown', 'Later'], ['rId1', 'rId2', 'rId3'], 1);
         expect(xml).toContain('<bookViews><workbookView activeTab="1"/></bookViews>');
         expect(xml).toContain(
             [

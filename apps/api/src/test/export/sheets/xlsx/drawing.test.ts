@@ -6,14 +6,14 @@ import type { XmlElement } from '../../../../lib/core/xml';
 import { hasXmlName, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
 import type { CountedWarningCode, TransformWarning } from '../../../../lib/document/transform/protocol';
 import { toTransferableBuffer, toTransferableText } from '../../../../lib/document/transform/protocol';
-import type { OfficeMedia } from '../../../../lib/export/office-image';
-import type { WorkbookPictures } from '../../../../lib/export/sheets/xlsx/drawing';
-import { DRAWING_CONTENT_TYPE, drawingOf } from '../../../../lib/export/sheets/xlsx/drawing';
+import type { OfficeImages, OfficeMedia } from '../../../../lib/export/office-image';
+import { officeImages } from '../../../../lib/export/office-image';
+import { drawingOf } from '../../../../lib/export/sheets/xlsx/drawing';
 import { readXlsx, xlsxToSheets } from '../../../../lib/import/sheets/from-xlsx';
 import { A_NS, EMU_PER_PX, parseOoxml, XDR_NS } from '../../../../lib/ooxml/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../../lib/ooxml/ooxml-chart';
 import type { PackagePart } from '../../../../lib/ooxml/opc';
-import { pxToColumnWidth } from '../../../../lib/ooxml/spreadsheetml';
+import { DRAWING_CONTENT_TYPE, pxToColumnWidth } from '../../../../lib/ooxml/spreadsheetml';
 import { MAX_DECOMPRESSED_BYTES, openZip } from '../../../../lib/ooxml/zip';
 import { seriesIdsByPlace } from '../../../fixtures/chart-spec';
 import { PIXEL_PNG } from '../../../fixtures/pptx';
@@ -109,12 +109,8 @@ function roundTrip(sheets: Sheet[]): { sheets: Sheet[]; warnings: TransformWarni
 
 const boxOf = ({ x, y, width, height }: SheetFloatingObject) => ({ x, y, width, height });
 
-function noPictures(): WorkbookPictures {
-    return picturesOf([]);
-}
-
-function picturesOf(media: OfficeMedia[]): WorkbookPictures {
-    return { media: new Map(media.map((item) => [item.name, item])), parts: new Map() };
+function noPictures(): OfficeImages {
+    return officeImages([], 'xl/media');
 }
 
 const PNG: OfficeMedia = {
@@ -179,7 +175,6 @@ describe('drawingOf', () => {
             ['xl/charts/chart3_1.xml', CHART_CONTENT_TYPE],
             ['xl/charts/chart3_2.xml', CHART_CONTENT_TYPE],
         ]);
-        expect(drawing?.files).toEqual([]);
         expect(drawing?.parts.map(xml)).toEqual(write()?.parts.map(xml));
         expect(drawing && xml(drawing.parts[1])).toContain('Target="../charts/chart3_1.xml"');
     });
@@ -229,7 +224,8 @@ describe('a picture', () => {
         const lost: CountedWarningCode[] = [];
         const gone: SheetImage = { ...BELOW, id: 'gone', index: 'a3', mediaName: 'gone.png' };
         const sheet: Sheet = { ...SUMMARY, images: { below: BELOW, above: ABOVE, gone } };
-        const drawing = drawingOf(sheet, 1, [sheet, MY_DATA], picturesOf([PNG]), (code) => lost.push(code));
+        const pictures = officeImages([PNG], 'xl/media');
+        const drawing = drawingOf(sheet, 1, [sheet, MY_DATA], pictures, (code) => lost.push(code));
         const root = drawing && parseOoxml(xml(drawing.parts[0]));
         if (!root) throw new Error('no drawing');
         expect(lost).toEqual(['images-dropped']);
@@ -246,7 +242,7 @@ describe('a picture', () => {
             [0, 20, 0, 10],
             [0, 80, 1, 20],
         ]);
-        expect(drawing.files.map(({ name }) => name)).toEqual(['xl/media/image1.png']);
+        expect(pictures.files.map(({ name }) => name)).toEqual(['xl/media/image1.png']);
         const rels = xml(drawing.parts[1]);
         expect(rels).toContain(`Id="rId2" Type="${R}/image" Target="../media/image1.png"`);
     });
@@ -256,10 +252,10 @@ describe('a picture', () => {
         const drawn: SheetImage = { ...BELOW, mediaName: 'drawing.svg' };
         const webp: SheetImage = { ...BELOW, id: 'webp', index: 'a1', mediaName: 'still.webp' };
         const sheet: Sheet = { name: 'Pictures', images: { below: drawn, webp } };
-        const pictures = picturesOf([SVG, { ...PNG, name: 'still.webp', contentType: 'image/webp' }]);
+        const pictures = officeImages([SVG, { ...PNG, name: 'still.webp', contentType: 'image/webp' }], 'xl/media');
         const drawing = drawingOf(sheet, 2, [sheet], pictures, (code) => lost.push(code));
         expect(lost).toEqual(['images-dropped']);
-        expect(drawing?.files.map(({ name }) => name)).toEqual(['xl/media/image1.png', 'xl/media/image1.svg']);
+        expect(pictures.files.map(({ name }) => name)).toEqual(['xl/media/image1.png', 'xl/media/image1.svg']);
         const part = drawing ? xml(drawing.parts[0]) : '';
         expect(part).toContain('<a:blip r:embed="rId2"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}">');
         expect(part).toContain('r:embed="rId1"/>');
@@ -269,7 +265,7 @@ describe('a picture', () => {
         const upright: SheetImage = { ...BELOW, x: 100, y: 100, width: 200, height: 50, angle: 0 };
         const placed = (angle: number) => {
             const sheet: Sheet = { name: 'Pictures', images: { below: { ...upright, angle } } };
-            const drawing = drawingOf(sheet, 1, [sheet], picturesOf([PNG]), () => {});
+            const drawing = drawingOf(sheet, 1, [sheet], officeImages([PNG], 'xl/media'), () => {});
             const root = drawing && parseOoxml(xml(drawing.parts[0]));
             if (!root) throw new Error('no drawing');
             const [anchor] = xmlElements(root);
@@ -299,7 +295,7 @@ describe('a picture', () => {
 
     test('a sheet of pictures only has a drawing, and one whose media is all missing none', () => {
         const sheet: Sheet = { name: 'Pictures', images: { below: BELOW } };
-        expect(drawingOf(sheet, 1, [sheet], picturesOf([PNG]), () => {})?.parts).toHaveLength(2);
+        expect(drawingOf(sheet, 1, [sheet], officeImages([PNG], 'xl/media'), () => {})?.parts).toHaveLength(2);
         expect(drawingOf(sheet, 1, [sheet], noPictures(), () => {})).toBeUndefined();
     });
 });

@@ -1,6 +1,6 @@
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { escapeHtml, LIGHT_EDITOR_HREF } from '@workspace/lib/html';
-import type { TextAlign, VectorRichTextElement, VerticalAlign } from '@workspace/lib/vector';
+import type { VectorRichTextElement } from '@workspace/lib/vector';
 import {
     DEFAULT_RICHTEXT_PROPS,
     MAX_HTML_BYTES,
@@ -9,9 +9,9 @@ import {
     TRANSPARENT_COLOR,
 } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
-import { xmlAttr, xmlElements, xmlText } from '../../core/xml';
-import { percent } from '../../ooxml/drawingml';
-import { A_NS, EMU_PER_POINT, emu, isAlternateContent, isOn, R_NS } from '../../ooxml/ooxml';
+import { xmlAttr, xmlText } from '../../core/xml';
+import { ALIGN_BY_ALGN, ALIGN_BY_ANCHOR, percent } from '../../ooxml/drawingml';
+import { A_NS, EMU_PER_POINT, emu, isOn, ooxmlElements, R_NS } from '../../ooxml/ooxml';
 import type { Relationship } from '../../ooxml/opc';
 import type { ShapeProperties, SlideTheme } from './inherit';
 import { colorOf, fillIn, paintOf } from './inherit';
@@ -60,20 +60,6 @@ const DEFAULT_SIDE_INSET = 91_440;
 // PowerPoint's single line spacing, as a CSS line height.
 const SINGLE_LINE = DEFAULT_RICHTEXT_PROPS.lineHeight;
 
-const ALIGNS = new Map<string, TextAlign>([
-    ['l', 'left'],
-    ['ctr', 'center'],
-    ['r', 'right'],
-    ['just', 'justify'],
-    ['justLow', 'justify'],
-    ['dist', 'justify'],
-    ['thaiDist', 'justify'],
-]);
-const ANCHORS = new Map<string, VerticalAlign>([
-    ['t', 'top'],
-    ['ctr', 'center'],
-    ['b', 'bottom'],
-]);
 const BULLETS = new Map<string, 'ul' | 'ol' | undefined>([
     ['buNone', undefined],
     ['buChar', 'ul'],
@@ -139,9 +125,7 @@ export function richTextOf(
         const bullet = firstOf(chain, (entry) => firstChildOf(entry, isBullet));
         const runs: Run[] = [];
         let text = false;
-        const children = xmlElements(paragraph).flatMap((child) =>
-            isAlternateContent(child) ? alternative(child) : [child],
-        );
+        const children = ooxmlElements(paragraph, alternative);
         charge(1 + children.length);
         for (const child of children) {
             if (child.ns !== A_NS) continue;
@@ -197,8 +181,8 @@ export function richTextOf(
         fontWeight: marks.bold ? 'bold' : 'normal',
         fontStyle: marks.italic ? 'italic' : 'normal',
         textDecoration: marks.underline ? 'underline' : marks.strike ? 'line-through' : 'none',
-        textAlign: ALIGNS.get(firstOf(first, (pPr) => xmlAttr(pPr, '', 'algn')) ?? '') ?? 'left',
-        verticalAlign: ANCHORS.get(bodyAttr('anchor') ?? '') ?? 'top',
+        textAlign: ALIGN_BY_ALGN.get(firstOf(first, (pPr) => xmlAttr(pPr, '', 'algn')) ?? '') ?? 'left',
+        verticalAlign: ALIGN_BY_ANCHOR.get(bodyAttr('anchor') ?? '') ?? 'top',
         color: box.color,
         letterSpacing: box.letterSpacing,
         // lnSpcReduction comes off a percentage; a spacing in points is the file's own.

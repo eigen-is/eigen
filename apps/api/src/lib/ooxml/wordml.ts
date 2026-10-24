@@ -5,6 +5,9 @@ import { ptToTwips, pxToPt } from '@workspace/lib/docs/eigendoc';
 // Word's vocabulary, which the docx writer writes and the docx reader recognises, one source both ways: style names,
 // list formats, units and Word's spelling of a number. The OOXML every format shares is ooxml/ooxml.ts.
 
+// The prefix of WordprocessingML's content types.
+export const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
+
 // Not a namespace: the uri of Word's compatibility settings.
 export const WORD_SETTINGS_URI = 'http://schemas.microsoft.com/office/word';
 
@@ -133,6 +136,34 @@ export const CHECKBOX_GLYPHS = { checked: '☒', unchecked: '☐' } as const;
 
 // A highlight without a color: the UA's yellow <mark>, and Word's yellow highlight.
 export const DEFAULT_HIGHLIGHT = 'FFFF00';
+
+// A paragraph's w:jc for each of the editor's text alignments.
+export const JUSTIFICATION = new Map([
+    ['left', 'left'],
+    ['center', 'center'],
+    ['right', 'right'],
+    ['justify', 'both'],
+]);
+
+// A w:jc as the editor's text alignment. Left is the default, so no attribute (Google Docs writes it on every
+// paragraph); start and end follow the direction.
+export function textAlignOf(jc: string | undefined, bidi: boolean | undefined): string | null {
+    switch (jc) {
+        case 'center':
+            return 'center';
+        case 'right':
+            return 'right';
+        case 'start':
+            return bidi ? 'right' : null;
+        case 'end':
+            return bidi ? null : 'right';
+        case 'both':
+        case 'distribute':
+            return 'justify';
+        default:
+            return null;
+    }
+}
 
 // Section types that start a new page; continuous and nextColumn don't, and a missing type is nextPage.
 export const PAGE_SECTION_TYPES = new Set(['nextPage', 'oddPage', 'evenPage']);

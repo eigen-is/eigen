@@ -3,7 +3,7 @@
 
 import { MARKUP_COMPATIBILITY_NAMESPACE, OMML_NAMESPACE, WORDML_NAMESPACE } from '@workspace/math';
 import type { XmlElement } from '../core/xml';
-import { hasXmlName, parseXml, xmlElements } from '../core/xml';
+import { hasXmlName, parseXml, xmlAttr, xmlElements } from '../core/xml';
 
 // ── Namespaces ──────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -82,6 +82,11 @@ export function alternativeFor(understood: ReadonlySet<string>): (element: XmlEl
     };
 }
 
+// An element's children, an mc:AlternateContent read as the branch the format's reader understands (alternativeFor).
+export function ooxmlElements(element: XmlElement, alternative: (element: XmlElement) => XmlElement[]): XmlElement[] {
+    return xmlElements(element).flatMap((item) => (isAlternateContent(item) ? alternative(item) : [item]));
+}
+
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export const EMU_PER_PX = 9525;
@@ -128,4 +133,9 @@ export function isOn(value: string | undefined): boolean | undefined {
     if (trimmed === undefined) return undefined;
     if (['1', 'true', 'on'].includes(trimmed)) return true;
     return ['0', 'false', 'off'].includes(trimmed) ? false : undefined;
+}
+
+// CT_OnOff and CT_Boolean: a bare element is on; no element is no answer. WordprocessingML puts its val in its namespace.
+export function isOnElement(element: XmlElement | undefined, ns = ''): boolean | undefined {
+    return element ? (isOn(xmlAttr(element, ns, 'val')) ?? true) : undefined;
 }

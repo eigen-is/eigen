@@ -12,6 +12,9 @@ import { openZip, writeZip, ZipError } from './zip';
 // Read, an internal target is the part name it resolves to; written, it is the target as the source part names it.
 export type Relationship = { type: string; target: string; external?: boolean };
 
+// A part a reader parsed, with the relationships it resolves its r:ids through.
+export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
+
 // '' is the package itself, whose relationships are _rels/.rels.
 export function relsPathOf(partPath: string): string {
     const slash = partPath.lastIndexOf('/');
@@ -88,6 +91,8 @@ export type OoxmlPackage = {
     // '' for the package's own.
     relationships(partPath: string): Map<string, Relationship>;
     contentTypeOf(path: string): string | undefined;
+    // An image's bytes; a damaged entry is none, and costs only its picture.
+    readMedia(path: string): Uint8Array | undefined;
 };
 
 // One budget for the parts a package parses whole, together, [Content_Types].xml and the relationships parts too, the
@@ -158,6 +163,7 @@ export function openPackage(bytes: Uint8Array, messages: PackageMessages): Ooxml
         relationships: (partPath) => relationshipsOf(part(relsPathOf(partPath)), partPath),
         contentTypeOf: (path) =>
             overrides.get(path) ?? defaults.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase()),
+        readMedia: (path) => optional(() => zip.read(path)),
     };
 }
 
@@ -187,6 +193,31 @@ export function relationshipsXml(relationships: Relationship[]): string {
             `<Relationship Id="rId${index + 1}" Type="${type}" Target="${escapeXml(target)}"${external ? ' TargetMode="External"' : ''}/>`,
     );
     return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
+}
+
+// The relationships of a part being written: relate gives a type and target the next id the first time, and that id
+// after, so a picture or link the part shows twice relates once.
+export type PartRelationships = {
+    relationships: Relationship[];
+    relate(type: string, target: string, external?: true): string;
+};
+
+// A type is the last segment of an R_NS relationship type; an id is rId and its place, as relationshipsXml writes it.
+export function partRelationships(): PartRelationships {
+    const relationships: Relationship[] = [];
+    const ids = new Map<string, string>();
+    return {
+        relationships,
+        relate: (type, target, external) => {
+            const key = `${type} ${target}`;
+            let id = ids.get(key);
+            if (!id) {
+                id = `rId${relationships.push({ type: `${R_NS}/${type}`, target, external })}`;
+                ids.set(key, id);
+            }
+            return id;
+        },
+    };
 }
 
 // A format's XML part: its path, its XML whole or as chunks (ooxml/zip) and, unless an extension's Default covers it, its

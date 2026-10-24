@@ -7,10 +7,12 @@ import { sanitizeMedia } from '../../../document/media';
 import { proseValue } from '../../../document/prose-css';
 import type { ExportMedia } from '../../../document/transform/protocol';
 import { toTransferableBuffer, toTransferableText } from '../../../document/transform/protocol';
-import { EMU_PER_PX, PIC_NS, R_NS } from '../../../ooxml/ooxml';
+import { blipXml } from '../../../ooxml/drawingml';
+import { EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
 import { BORDER_SIDES, EMU_PER_TWIP, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { splitDataUri } from '../../../shared/data-uri';
-import { blipXml, encodeOfficeImage, officeImageParts } from '../../office-image';
+import type { OfficeImage } from '../../office-image';
+import { encodeOfficeImage } from '../../office-image';
 import { useFace } from './fonts';
 import type { Context, Package } from './package';
 import type { Block, Inset, Paragraph } from './paragraphs';
@@ -85,9 +87,7 @@ export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMed
 
 // One image file per media name, and one relationship per part that shows it; an SVG's PNG is its blip, the SVG its
 // extension.
-export type ImageFile = { part: string; svgPart?: string; width: number; height: number };
-
-export type Image = ImageFile & { rId: string; svgRId?: string };
+type Image = OfficeImage & { width: number; height: number; rId: string; svgRId?: string };
 
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 export function figureOf(node: JSONContent, context: Context): Block[] {
@@ -189,25 +189,18 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
 // The first figure to show a media name adds its files, and the first in each part that part's relationships; no
 // positive size, an SVG without PNG or another type adds none.
 function imageOf(name: string, pkg: Package): Image | undefined {
-    const known = pkg.part.images.get(name);
-    if (known) return known;
-    let file = pkg.imageFiles.get(name);
-    if (!file) {
-        const media = pkg.media.get(name);
-        const { width, height } = media ?? {};
-        if (!media || !isPositive(width) || !isPositive(height)) return undefined;
-        const parts = officeImageParts(media, pkg.imageFiles.size + 1);
-        if (!parts) return undefined;
-        file = { part: parts.part, ...(parts.svgPart && { svgPart: parts.svgPart }), width, height };
-        pkg.files.push([`word/media/${parts.part}`, parts.raster]);
-        if (parts.svgPart) pkg.files.push([`word/media/${parts.svgPart}`, media.data]);
-        pkg.imageFiles.set(name, file);
-    }
-    const relate = (target: string) =>
-        `rId${pkg.part.relationships.push({ type: `${R_NS}/image`, target: `media/${target}` })}`;
-    const image: Image = { ...file, rId: relate(file.part), ...(file.svgPart && { svgRId: relate(file.svgPart) }) };
-    pkg.part.images.set(name, image);
-    return image;
+    const { width, height } = pkg.images.media.get(name) ?? {};
+    if (!isPositive(width) || !isPositive(height)) return undefined;
+    const image = pkg.images.image(name);
+    if (!image) return undefined;
+    const relate = (target: string) => pkg.part.relate('image', `media/${target}`);
+    return {
+        ...image,
+        width,
+        height,
+        rId: relate(image.part),
+        ...(image.svgPart && { svgRId: relate(image.svgPart) }),
+    };
 }
 
 function isPositive(value: number | undefined): value is number {

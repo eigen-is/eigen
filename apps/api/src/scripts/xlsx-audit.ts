@@ -35,7 +35,7 @@ import type { writeXlsx } from '../lib/export/sheets/xlsx/to-xlsx';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS } from '../lib/ooxml/ooxml';
 import { uriReference } from '../lib/ooxml/opc';
-import { MAX_FORMULA_STRING_LENGTH } from '../lib/ooxml/spreadsheetml';
+import { MAX_FORMULA_STRING_LENGTH, SPREADSHEETML } from '../lib/ooxml/spreadsheetml';
 import type { ZipWriteEntry } from '../lib/ooxml/zip';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../lib/ooxml/zip';
 import type {
@@ -350,8 +350,6 @@ export function tallySource(bytes: Uint8Array): Map<Feature, number> {
 
 // ── Running an importer ─────────────────────────────────────────────────────────────────────────────────────────
 
-const SPREADSHEET_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml';
-
 // A package of the given sheets, each body what its <worksheet> holds, a stylesheet of one bold differential format, and
 // any more parts.
 export function xlsxPackage(
@@ -364,7 +362,7 @@ export function xlsxPackage(
     return writeZip([
         {
             name: '[Content_Types].xml',
-            data: `<Types xmlns="${CONTENT_TYPES_NS}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${SPREADSHEET_TYPE}.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="${SPREADSHEET_TYPE}.styles+xml"/>${numbered.map(({ n }) => `<Override PartName="/xl/worksheets/sheet${n}.xml" ContentType="${SPREADSHEET_TYPE}.worksheet+xml"/>`).join('')}</Types>`,
+            data: `<Types xmlns="${CONTENT_TYPES_NS}"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${SPREADSHEETML}.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="${SPREADSHEETML}.styles+xml"/>${numbered.map(({ n }) => `<Override PartName="/xl/worksheets/sheet${n}.xml" ContentType="${SPREADSHEETML}.worksheet+xml"/>`).join('')}</Types>`,
         },
         {
             name: '_rels/.rels',

@@ -16,7 +16,7 @@ import {
 import { lowlight } from '../../../document/lowlight';
 import { proseValueIfSet } from '../../../document/prose-css';
 import type { StyleId } from '../../../ooxml/wordml';
-import { BORDER_SIDES, codeBlockStyle, LIST_FORMATS, LIST_LEVELS } from '../../../ooxml/wordml';
+import { BORDER_SIDES, codeBlockStyle, JUSTIFICATION, LIST_FORMATS, LIST_LEVELS } from '../../../ooxml/wordml';
 import type { HastNode } from '../render';
 import { highlightCode } from '../render';
 import { figureOf } from './drawings';
@@ -545,13 +545,6 @@ function codeLines(tree: HastNode, pkg: Package): string[] {
     walk(tree, {});
     return lines;
 }
-
-export const JUSTIFICATION = new Map([
-    ['left', 'left'],
-    ['center', 'center'],
-    ['right', 'right'],
-    ['justify', 'both'],
-]);
 
 function justification(node: JSONContent): string | undefined {
     const textAlign = node.attrs?.['textAlign'];

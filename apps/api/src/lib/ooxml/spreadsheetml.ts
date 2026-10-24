@@ -11,6 +11,10 @@ import {
 // Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
 // format shares is ooxml/ooxml.ts.
 
+// The prefix of SpreadsheetML's content types, and a sheet's drawing part's, which DrawingML's prefix names.
+export const SPREADSHEETML = 'application/vnd.openxmlformats-officedocument.spreadsheetml';
+export const DRAWING_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.drawing+xml';
+
 // The format a date shows in when its own draws no date: Excel's for a bare serial in the US locale.
 export const DATE_FORMAT = 'm/d/yyyy';
 

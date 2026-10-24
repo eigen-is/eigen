@@ -31,7 +31,7 @@ import type { XmlElement } from '../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText, xmlTrimmedText } from '../core/xml';
 import type { DrawingTheme } from './drawingml';
 import { drawingColor, drawingLines, readColorMap } from './drawingml';
-import { A_NS, alternativeFor, C_NS, C16_NS, isAlternateContent, isOn } from './ooxml';
+import { A_NS, alternativeFor, C_NS, C16_NS, isOn, isOnElement, ooxmlElements } from './ooxml';
 import type { OoxmlPackage, Relationship } from './opc';
 import { optional, relTarget } from './opc';
 
@@ -187,7 +187,7 @@ function chartSpec(
     const reversed = (type === 'bar') !== (orientation(categoryAxis) === 'maxMin');
     // A deleted axis, or one whose tick labels are none, shows no labels.
     const visible = (axis: XmlElement | undefined) =>
-        flag(child(axis, 'delete')) !== true && val(child(axis, 'tickLblPos')) !== 'none';
+        isOnElement(child(axis, 'delete')) !== true && val(child(axis, 'tickLblPos')) !== 'none';
 
     const all = children(group, 'ser');
     if (all.length > MAX_CHART_SERIES) unsupported();
@@ -205,7 +205,7 @@ function chartSpec(
         drawingColor(shape && xmlChild(shape, A_NS, 'solidFill'), colors);
     // Eigen's writer writes an automatic colour as the palette's at its place, so that colour reads back automatic.
     const automatic = (color: string, index: number) => (color === chartColor(index) ? null : color);
-    const markers = type === 'line' && flag(child(group, 'marker')) !== false;
+    const markers = type === 'line' && isOnElement(child(group, 'marker')) !== false;
     const seriesColor = (ser: XmlElement) => {
         const shape = child(ser, 'spPr');
         const fill = type === 'line' ? shape && xmlChild(shape, A_NS, 'ln') : shape;
@@ -214,7 +214,7 @@ function chartSpec(
     const style = (ser: XmlElement, index: number): ChartSeriesStyle => ({
         ...DEFAULT_CHART_SERIES_STYLE,
         color: automatic(seriesColor(ser), index),
-        line: { smooth: type === 'line' && flag(child(ser, 'smooth')) === true },
+        line: { smooth: type === 'line' && isOnElement(child(ser, 'smooth')) === true },
         marker: { visible: markers && val(child(child(ser, 'marker'), 'symbol')) !== 'none' },
     });
 
@@ -277,7 +277,7 @@ function chartSpec(
             const color = fillColor(child(point, 'spPr'));
             if (index !== undefined && color) points.set(index, color);
         }
-        const vary = flag(child(group, 'varyColors')) !== false;
+        const vary = isOnElement(child(group, 'varyColors')) !== false;
         const own = seriesColor(first);
         const colored = Array.from({ length: total }, (_, i): [number, ChartPoint][] => {
             const color = automatic(points.get(i) ?? (vary ? accent(i) : own), i);
@@ -398,7 +398,11 @@ function chartName(groups: XmlElement[]): string {
             if (depth && option('grouping') === 'standard') return `3-D ${direction}`;
             return words(depth, grouping ?? 'Clustered', direction);
         case 'lineChart':
-            return words(grouping, 'Line', flag(child(group, 'marker')) !== false && markers(true) && 'with Markers');
+            return words(
+                grouping,
+                'Line',
+                isOnElement(child(group, 'marker')) !== false && markers(true) && 'with Markers',
+            );
         case 'line3DChart':
             return '3-D Line';
         case 'areaChart':
@@ -419,12 +423,12 @@ function chartName(groups: XmlElement[]): string {
             const line = shape && xmlChild(shape, A_NS, 'ln');
             const lines = line ? !xmlChild(line, A_NS, 'noFill') : style !== 'marker' && style !== 'none';
             if (!lines) return 'Scatter';
-            const smooth = flag(child(first, 'smooth')) ?? style.startsWith('smooth');
+            const smooth = isOnElement(child(first, 'smooth')) ?? style.startsWith('smooth');
             const marked = markers(style === 'lineMarker' || style === 'smoothMarker');
             return words('Scatter with', smooth ? 'Smooth' : 'Straight', 'Lines', marked && 'and Markers');
         }
         case 'bubbleChart':
-            return flag(child(group, 'bubble3D')) ? '3-D Bubble' : 'Bubble';
+            return isOnElement(child(group, 'bubble3D')) ? '3-D Bubble' : 'Bubble';
         case 'radarChart':
             if (option('radarStyle') === 'filled') return 'Filled Radar';
             return words('Radar', markers(option('radarStyle') === 'marker') && 'with Markers');
@@ -432,7 +436,7 @@ function chartName(groups: XmlElement[]): string {
             return stock(group);
         case 'surfaceChart':
         case 'surface3DChart':
-            return words(flag(child(group, 'wireframe')) && 'Wireframe', depth ? '3-D Surface' : 'Contour');
+            return words(isOnElement(child(group, 'wireframe')) && 'Wireframe', depth ? '3-D Surface' : 'Contour');
         default:
             return '';
     }
@@ -444,7 +448,7 @@ function chartTitle(chart: XmlElement | undefined, groups: XmlElement[]): string
     const title = child(chart, 'title');
     const text = cachedText(child(title, 'tx'));
     if (text !== undefined) return chartLabel(text);
-    if (!title && flag(child(chart, 'autoTitleDeleted')) !== false) return '';
+    if (!title && isOnElement(child(chart, 'autoTitleDeleted')) !== false) return '';
     const series = groups.flatMap((group) => children(group, 'ser'));
     if (series.length === 1) return chartLabel(cachedText(child(series[0], 'tx')) ?? '');
     return title ? 'Chart Title' : '';
@@ -524,7 +528,6 @@ function cellRange(formula: string, sheetId: (sheetName: string) => string | und
     return { sheetId: id, row: rows, column: columns };
 }
 
-// An element's children in the chart namespace, an mc:AlternateContent read as the choice this reader understands.
 // The chart-wide text properties' Latin typeface, as a bundled font; a theme font (+mn-lt) or an unbundled one is the default.
 function chartFont(root: XmlElement): string {
     let latin = child(root, 'txPr');
@@ -533,9 +536,9 @@ function chartFont(root: XmlElement): string {
     return (typeface && bundledFont(typeface)) ?? DEFAULT_CHART_FONT;
 }
 
+// An element's children, an mc:AlternateContent read as the choice this reader understands.
 function elements(element: XmlElement | undefined): XmlElement[] {
-    if (!element) return [];
-    return xmlElements(element).flatMap((item) => (isAlternateContent(item) ? alternative(item) : [item]));
+    return element ? ooxmlElements(element, alternative) : [];
 }
 
 function children(element: XmlElement | undefined, local: string): XmlElement[] {
@@ -548,11 +551,6 @@ function child(element: XmlElement | undefined, local: string): XmlElement | und
 
 function val(element: XmlElement | undefined): string | undefined {
     return element && xmlAttr(element, '', 'val');
-}
-
-// CT_Boolean: present without a val is true.
-function flag(element: XmlElement | undefined): boolean | undefined {
-    return element ? (isOn(xmlAttr(element, '', 'val')) ?? true) : undefined;
 }
 
 function count(value: string | undefined): number | undefined {

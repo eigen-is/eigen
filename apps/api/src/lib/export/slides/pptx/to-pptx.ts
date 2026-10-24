@@ -5,11 +5,11 @@ import { elementsInFrame, SLIDE_SIZES, slidePxToPt } from '@workspace/lib/vector
 import { ApiError } from '../../../core/errors';
 import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import { A_NS, EMU_PER_POINT, R_NS } from '../../../ooxml/ooxml';
-import type { PackagePart, Relationship } from '../../../ooxml/opc';
-import { relationshipsXml, writePackage } from '../../../ooxml/opc';
+import type { PackagePart } from '../../../ooxml/opc';
+import { partRelationships, relationshipsXml, writePackage } from '../../../ooxml/opc';
 import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../../ooxml/presentationml';
 import type { OfficeMedia } from '../../office-image';
-import { OFFICE_IMAGE_CONTENT_TYPES } from '../../office-image';
+import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import type { Deck } from './package';
 import { LAYOUT_XML, MASTER_XML, NAMESPACES, slideXml } from './package';
 
@@ -25,21 +25,18 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
     const deck: Deck = {
         scale: slidePxToPt(1, slideWidth) * EMU_PER_POINT,
         slideWidth,
-        media: new Map(media.map((item) => [item.name, item])),
-        images: new Map(),
+        images: officeImages(media, 'ppt/media'),
         byId: new Map(scene.elements.map((el) => [el.id, el])),
     };
     const slides = scene.frames.map((frame) => slideXml(frame, elementsInFrame(scene.elements, frame.id), deck));
 
-    const presentationRelationships: Relationship[] = [
-        { type: `${R_NS}/slideMaster`, target: 'slideMasters/slideMaster1.xml' },
-        ...slides.map((_, i) => ({ type: `${R_NS}/slide`, target: `slides/slide${i + 1}.xml` })),
-        { type: `${R_NS}/theme`, target: 'theme/theme1.xml' },
-        { type: `${R_NS}/presProps`, target: 'presProps.xml' },
-        { type: `${R_NS}/viewProps`, target: 'viewProps.xml' },
-        { type: `${R_NS}/tableStyles`, target: 'tableStyles.xml' },
-    ];
-    const slideIds = slides.map((_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join('');
+    const presentation = partRelationships();
+    const master = presentation.relate('slideMaster', 'slideMasters/slideMaster1.xml');
+    const slideIds = slides
+        .map((_, i) => `<p:sldId id="${256 + i}" r:id="${presentation.relate('slide', `slides/slide${i + 1}.xml`)}"/>`)
+        .join('');
+    presentation.relate('theme', 'theme/theme1.xml');
+    for (const type of ['presProps', 'viewProps', 'tableStyles']) presentation.relate(type, `${type}.xml`);
     return writePackage({
         main: 'ppt/presentation.xml',
         title: stripEigenExtension(title),
@@ -47,10 +44,10 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
         parts: [
             [
                 'ppt/presentation.xml',
-                `<p:presentation ${NAMESPACES} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${cx}" cy="${cy}"${type}/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+                `<p:presentation ${NAMESPACES} saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="${master}"/></p:sldMasterIdLst><p:sldIdLst>${slideIds}</p:sldIdLst><p:sldSz cx="${cx}" cy="${cy}"${type}/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
                 PRESENTATION_TYPE,
             ],
-            ['ppt/_rels/presentation.xml.rels', relationshipsXml(presentationRelationships)],
+            ['ppt/_rels/presentation.xml.rels', relationshipsXml(presentation.relationships)],
             ['ppt/presProps.xml', `<p:presentationPr ${NAMESPACES}/>`, `${PML}.presProps+xml`],
             ['ppt/viewProps.xml', `<p:viewPr ${NAMESPACES}/>`, `${PML}.viewProps+xml`],
             [
@@ -77,9 +74,6 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
                 [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
             ]),
         ],
-        files: [...deck.images.values()].flatMap(({ part, svgPart, raster, media }) => [
-            { name: `ppt/media/${part}`, data: new Uint8Array(raster), store: true },
-            ...(svgPart ? [{ name: `ppt/media/${svgPart}`, data: new Uint8Array(media.data), store: true }] : []),
-        ]),
+        files: deck.images.files,
     });
 }

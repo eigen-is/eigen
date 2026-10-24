@@ -3,8 +3,8 @@ import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspa
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
-import { alternativeFor, isOn, measure, R_NS, W_NS } from '../../ooxml/ooxml';
-import type { OoxmlPackage, Relationship } from '../../ooxml/opc';
+import { alternativeFor, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
+import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType } from '../../ooxml/opc';
 import type { ZipReader } from '../../ooxml/zip';
 import { IMPORT_MESSAGES } from '../messages';
@@ -25,8 +25,6 @@ export const MAX_DOCX_CHART_WORK = 1_000_000;
 // A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
 export const CHARS_PER_UNIT = 512;
 
-export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
-
 export type DocxPackage = {
     zip: ZipReader;
     document: Part;
@@ -46,8 +44,7 @@ export type DocxPackage = {
     contentTypeOf: OoxmlPackage['contentTypeOf'];
     // A part a drawing names, read when met; a damaged one is no part.
     part(path: string): XmlElement | undefined;
-    // An image's bytes; a damaged entry is none, and costs only its picture.
-    readMedia(path: string): Uint8Array | undefined;
+    readMedia: OoxmlPackage['readMedia'];
     // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own, as has
     // each node of a note's copy past its first.
     chargePiece(count?: number): void;
@@ -119,7 +116,7 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         damagedBands,
         contentTypeOf: pkg.contentTypeOf,
         part: (path) => optional(() => pkg.part(path)),
-        readMedia: (path) => optional(() => pkg.zip.read(path)),
+        readMedia: pkg.readMedia,
         chargePiece: (count = 1) => {
             pieces -= count;
             if (pieces < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
@@ -175,10 +172,8 @@ export function wChild(element: XmlElement | undefined, local: string): XmlEleme
     return element && xmlChild(element, W_NS, local);
 }
 
-// A bare element is on.
 export function onOff(element: XmlElement | undefined): boolean | undefined {
-    if (!element) return undefined;
-    return isOn(w(element, 'val')) ?? true;
+    return isOnElement(element, W_NS);
 }
 
 export function int(value: string | undefined): number | undefined {
