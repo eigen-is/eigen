@@ -9,6 +9,7 @@ installHappyDom();
 const Y = await import('yjs');
 const { act, createElement, useState } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
+const { AttrStep } = await import('@tiptap/pm/transform');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
 const { chartSeriesStyle, mapChartSpecParts, readChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
 const { parseFill } = await import('@workspace/lib/vector');
@@ -244,6 +245,17 @@ test('Edit data saves the grid as one undo step', async () => {
     expect(undone?.data.source === 'inline' && undone.data.series[0].values[0]).toBe(13.1);
 });
 
+// y-tiptap skips an attribute whose text didn't change, so the writes are read off the editor's own steps.
+test('a title typed into the panel writes only the title part', async () => {
+    const { editor } = await mount();
+    const written = new Set<string>();
+    editor.on('transaction', ({ transaction }) => {
+        for (const step of transaction.steps) if (step instanceof AttrStep) written.add(step.attr);
+    });
+    await type(document.querySelector<HTMLInputElement>('input[placeholder="Chart title"]'), 'Goals');
+    expect([...written]).toEqual(['specTitle']);
+});
+
 test("a title typed into the panel keeps what this build doesn't know: a key on a part, on an axis, a legend", async () => {
     const { stored, store } = await mount();
     const sample = sampleChartSpec('column');
@@ -334,6 +346,48 @@ describe('two editors on one chart, each through its own panel', () => {
             expect(peer.spec()?.title.text).toBe(sampleChartSpec('column').title.text);
             expect(colorsOf(peer.spec())).toEqual([null, color, null]);
         }
+    });
+
+    // y-tiptap writes the attributes of a node it edits, and deletes those its schema doesn't declare: an older tab
+    // drops a part this build adds on its next edit of the chart.
+    test('an editor whose schema lacks a part deletes it on its next edit of the chart', async () => {
+        const a = await mount();
+        const docB = new Y.Doc();
+        Y.applyUpdate(docB, Y.encodeStateAsUpdate(a.doc), REMOTE);
+        const Older = Chart.extend({
+            addAttributes() {
+                return Object.fromEntries(
+                    Object.entries(this.parent?.() ?? {}).filter(([name]) => name !== 'specPoints'),
+                );
+            },
+        });
+        const b = new Editor({
+            extensions: [
+                ...getDocExtensions({ exclude: ['chart'] }),
+                Older,
+                Collaboration.configure({ document: docB }),
+            ],
+        });
+        unmounts.push(async () => b.destroy());
+        // The chart's element, in its paragraph.
+        const chartOf = (doc: Y.Doc) => {
+            const paragraph = doc.getXmlFragment('default').get(0);
+            return paragraph instanceof Y.XmlElement ? paragraph.get(0) : undefined;
+        };
+        const points = () => {
+            const chart = chartOf(a.doc);
+            return chart instanceof Y.XmlElement ? chart.getAttribute('specPoints') : undefined;
+        };
+        expect(points()).toBe(a.attrs()['specPoints']);
+
+        b.commands.setNodeSelection(1);
+        b.commands.updateChart({ caption: 'Older' });
+        await act(async () => {
+            Y.applyUpdate(a.doc, Y.encodeStateAsUpdate(docB, Y.encodeStateVector(a.doc)), REMOTE);
+        });
+        expect(a.attrs()['caption']).toBe('Older');
+        expect(points()).toBeUndefined();
+        expect(a.attrs()['specPoints']).toBeNull();
     });
 
     test("Edit data's Save on one and a recolour on the other: both kept on both", async () => {
