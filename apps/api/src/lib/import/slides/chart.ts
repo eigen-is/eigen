@@ -5,9 +5,10 @@ import type { DrawingTheme } from '../../ooxml/drawingml';
 import { A_NS, C_NS, R_NS } from '../../ooxml/ooxml';
 import type { ChartRead } from '../../ooxml/ooxml-chart';
 import { chartColors, chartCost, readChart } from '../../ooxml/ooxml-chart';
+import type { Part } from '../../ooxml/opc';
 import { colorOf, mutedColor, textColorOf } from './inherit';
 import { affords, cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
-import type { DeckWalk, Part } from './package';
+import type { DeckWalk } from './package';
 
 // A graphic frame's chart: its c:chartSpace part through the core chart reader, from the caches, which hold every
 // value, so none of the part's own relationships (workbook, user shapes, colours, style) is followed.

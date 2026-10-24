@@ -23,6 +23,7 @@ import type { CountedWarningCode } from '../../document/transform/protocol';
 import { DEGREE, drawingLines, isSideways } from '../../ooxml/drawingml';
 import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
+import type { Part } from '../../ooxml/opc';
 import { IMPORT_MESSAGES } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
 import type { CustomGeometry } from './custom-geometry';
@@ -49,7 +50,7 @@ import {
     textColorOf,
 } from './inherit';
 import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
-import type { DeckWalk, Lost, Part } from './package';
+import type { DeckWalk, Lost } from './package';
 import { alternative, blipMedia } from './package';
 import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';

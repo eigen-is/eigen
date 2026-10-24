@@ -5,7 +5,7 @@ import type { CountedWarningCode } from '../../document/transform/protocol';
 import { THEME_TYPE } from '../../ooxml/drawingml';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../ooxml/ooxml';
 import { chartPart } from '../../ooxml/ooxml-chart';
-import type { Relationship } from '../../ooxml/opc';
+import type { Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType, relTarget } from '../../ooxml/opc';
 import { PML, PRESENTATION_TYPE } from '../../ooxml/presentationml';
 import type { MediaPart } from '../image-types';
@@ -33,8 +33,6 @@ const PART_TYPES = {
     theme: THEME_TYPE,
 };
 export type PartKind = keyof typeof PART_TYPES;
-
-export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
 
 export type PptxPackage = {
     presentation: Part;

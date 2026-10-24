@@ -12,6 +12,9 @@ import { openZip, writeZip, ZipError } from './zip';
 // Read, an internal target is the part name it resolves to; written, it is the target as the source part names it.
 export type Relationship = { type: string; target: string; external?: boolean };
 
+// A part a reader parsed, with the relationships it resolves its r:ids through.
+export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
+
 // '' is the package itself, whose relationships are _rels/.rels.
 export function relsPathOf(partPath: string): string {
     const slash = partPath.lastIndexOf('/');

@@ -20,6 +20,7 @@ import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } f
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
+import type { Part } from '../../ooxml/opc';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES } from '../../ooxml/wordml';
 import { mediaNamer } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
@@ -30,7 +31,7 @@ import { byFace, fontMark, isMonospaceFont, readFontTable, readTheme } from './d
 import type { DocxChart, DocxImagePart } from './drawings';
 import type { Numbering } from './numbering';
 import { readNumbering } from './numbering';
-import type { DocxPackage, Part } from './package';
+import type { DocxPackage } from './package';
 import { alternative, descendants, twipsOf, w, wChild } from './package';
 import type { Field, Piece, RunContext } from './runs';
 import { walkInline } from './runs';

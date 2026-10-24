@@ -4,7 +4,7 @@ import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { alternativeFor, isOn, measure, R_NS, W_NS } from '../../ooxml/ooxml';
-import type { OoxmlPackage, Relationship } from '../../ooxml/opc';
+import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType } from '../../ooxml/opc';
 import type { ZipReader } from '../../ooxml/zip';
 import { IMPORT_MESSAGES } from '../messages';
@@ -24,8 +24,6 @@ export const MAX_DOCX_CHART_WORK = 1_000_000;
 
 // A string attribute is spelled out in the update for every node or mark that carries it: about 3.5 bytes a character.
 export const CHARS_PER_UNIT = 512;
-
-export type Part = { path: string; root: XmlElement; rels: Map<string, Relationship> };
 
 export type DocxPackage = {
     zip: ZipReader;
