@@ -164,6 +164,16 @@ describe('chart placeholder', () => {
         expect(svg).not.toContain('Sales');
     });
 
+    test('an element with only the one-string chart field draws the placeholder', () => {
+        const el = readChart({ chart: JSON.stringify(specOf()) });
+        expect(CHART_SPEC_PART_KEYS.map((key) => el[key])).toEqual(CHART_SPEC_PART_KEYS.map(() => ''));
+        expect('chart' in el).toBe(false);
+        const svg = svgOf(el);
+        expect(svg).toContain('This chart can&apos;t be shown');
+        expect(textCount(svg)).toBe(1);
+        expect(ELEMENT_KINDS.chart.searchText(el)).toBe('');
+    });
+
     test('the message fits the box or is left out', () => {
         const narrow = svgOf(chart({ id: 'c1', specData: '', width: 90, height: 60 }));
         expect(narrow).toContain('…');
