@@ -82,11 +82,11 @@ export function ChartEditor({
     // A bar chart lies on its side, so its value axis is the horizontal one.
     const valueHorizontal = type === 'bar';
 
-    // A pie draws its first series with values, whose points are its slices. Range data names no categories until a
-    // sheet resolves it; without them its slices go by number, as far as a slice has a color.
-    const pieSeries = data.series.find((series) => series.values !== null);
-    const pieId = pieSeries?.id ?? '';
-    const colored = Object.hasOwn(spec.points, pieId) ? Object.keys(spec.points[pieId]).map(Number) : [];
+    // A pie draws its first series with values, whose points are its slices, so a range pie whose values were all
+    // deleted has none. Range data names no categories until a sheet resolves it; without them its slices go by
+    // number, as far as a slice has a color.
+    const pieId = data.series.find((series) => series.values !== null)?.id;
+    const colored = pieId && Object.hasOwn(spec.points, pieId) ? Object.keys(spec.points[pieId]).map(Number) : [];
     const sliceLabels = (
         data.source === 'inline'
             ? data.categories
@@ -107,8 +107,8 @@ export function ChartEditor({
         onChange(Object.entries(bounds).map(([key, value]) => set(['axes', 'y', 'scale', key], value)));
     };
 
-    const setSliceColor = (index: number, color: string | null) =>
-        onChange([set(['points', pieId, String(index), 'color'], color)]);
+    const setSliceColor = (id: string, index: number, color: string | null) =>
+        onChange([set(['points', id, String(index), 'color'], color)]);
 
     const setSeriesColor = (id: string, color: string | null) => onChange([set(['series', id, 'color'], color)]);
 
@@ -273,18 +273,19 @@ export function ChartEditor({
 
             {pie ? (
                 <PropertySection title="Slices">
-                    {sliceLabels.map((label, i) => {
-                        const color = chartPointColor(spec, pieId, i);
-                        return (
-                            <ColorRow
-                                key={i}
-                                label={label}
-                                value={color ?? chartColor(i)}
-                                onChange={(picked) => setSliceColor(i, picked)}
-                                automatic={{ active: color === null, onReset: () => setSliceColor(i, null) }}
-                            />
-                        );
-                    })}
+                    {pieId &&
+                        sliceLabels.map((label, i) => {
+                            const color = chartPointColor(spec, pieId, i);
+                            return (
+                                <ColorRow
+                                    key={i}
+                                    label={label}
+                                    value={color ?? chartColor(i)}
+                                    onChange={(picked) => setSliceColor(pieId, i, picked)}
+                                    automatic={{ active: color === null, onReset: () => setSliceColor(pieId, i, null) }}
+                                />
+                            );
+                        })}
                 </PropertySection>
             ) : (
                 <PropertySection title="Series">

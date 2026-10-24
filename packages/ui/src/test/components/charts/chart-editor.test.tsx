@@ -482,6 +482,14 @@ describe('ChartEditor', () => {
         expect(editor.rowLabels()).toEqual(expect.arrayContaining(['Ajax', 'PSV', 'Slice 3']));
     });
 
+    test('a range pie whose values were all deleted has no slice rows', async () => {
+        const series = { id: 's-1', name: 'Points', values: null };
+        const range: ChartSpec = { ...sample('pie'), data: { source: 'range', categories: null, series: [series] } };
+        const editor = await mount(range, undefined, { categories: ['Ajax', 'PSV'] });
+        expect(editor.sectionTitles()).toEqual(['Chart', 'Slices']);
+        expect(editor.rowLabels()).not.toContain('Ajax');
+    });
+
     test('a series color row is named for its series and writes that series alone', async () => {
         const editor = await mount(sample('column'));
         expect(editor.rowLabels()).toEqual(expect.arrayContaining(['Sun', 'Bulb (incandescent)', 'Hot star']));
