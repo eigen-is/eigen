@@ -1,12 +1,14 @@
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
-import { DRIVE_TYPE_CHAT, type DrivePath, stripEigenExtension, withEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_CHAT, stripEigenExtension, withEigenExtension } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { MAX_EMAIL_LENGTH, validateEmailTarget } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { findChatsByMembers } from '../lib/chat/find-by-members';
 import { requireNonGuest, requireSelf, requireTeamAccess } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
-import { type Drive, getDrive, getSharedDrive } from '../lib/drive';
+import type { Drive } from '../lib/drive';
+import { getDrive, getSharedDrive } from '../lib/drive';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { getTeamHome } from '../lib/home';
 import { betterAuth } from './auth';

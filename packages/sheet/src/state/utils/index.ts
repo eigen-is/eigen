@@ -1,6 +1,7 @@
 import { parseCellKey } from '@workspace/lib/sheets';
 import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import { checkCellIsLocked } from '../modules';
 import type { Selection, Sheet } from '../types';
 

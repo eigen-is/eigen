@@ -1,16 +1,8 @@
 import type React from 'react';
 import { memo, useCallback, useContext, useEffect, useRef } from 'react';
 import { WorkbookContext } from '../../context';
-import {
-    Canvas,
-    type Context,
-    type Freezen,
-    type FreezenAxisData,
-    initFreeze,
-    type Sheet as SheetType,
-    updateContextWithCanvas,
-    updateContextWithSheetData,
-} from '../../state';
+import type { Context, Freezen, FreezenAxisData, Sheet as SheetType } from '../../state';
+import { Canvas, initFreeze, updateContextWithCanvas, updateContextWithSheetData } from '../../state';
 import { SheetOverlay } from '../SheetOverlay';
 
 // ---------------------------------------------------------------------------

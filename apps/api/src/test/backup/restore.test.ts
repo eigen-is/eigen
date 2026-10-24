@@ -37,6 +37,7 @@ import { getEigenDb } from '../../lib/share/db';
 import { shareRegistry } from '../../lib/share/schema';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { createHomeFaultMount, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
+import type { TestUser } from '../setup';
 import {
     addMember,
     addTeamMount,
@@ -52,7 +53,6 @@ import {
     openMountMetadata,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
-    type TestUser,
 } from '../setup';
 import { expectRealShape, expectRealShapeServed, realShapeHome, waitForJob } from './backup-test-helpers';
 

@@ -1,6 +1,7 @@
 import { ToolbarMenu } from '@workspace/ui/components/layout/toolbar';
 import { useFindBarRefocus } from '@workspace/ui/components/search/find-in-document-button';
-import { type ReactNode, useContext } from 'react';
+import type { ReactNode } from 'react';
+import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { DataMenu } from './data-menu';
 import { FormatMenu } from './format-menu';

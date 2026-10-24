@@ -1,5 +1,6 @@
 import { undoChord } from '@workspace/ui/lib/undoChord';
-import { createContext, type KeyboardEvent, useCallback, useContext, useEffect, useRef } from 'react';
+import type { KeyboardEvent } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import type * as Y from 'yjs';
 
 // Opens one undo step and returns its release. Every control in the panel writes on every change — a

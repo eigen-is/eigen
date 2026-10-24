@@ -1,12 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import type { DrivePath, MountInfo, OrgTeam } from '@workspace/lib/types';
 import {
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SHEETS,
     DRIVE_TYPE_SLIDES,
     DRIVE_TYPE_STICKIES,
-    type DrivePath,
-    type MountInfo,
-    type OrgTeam,
     teamOwnerId,
 } from '@workspace/lib/types';
 import { COMMENT_INDEX_DB_CONFIG } from '../../lib/chat/comment-db-config';

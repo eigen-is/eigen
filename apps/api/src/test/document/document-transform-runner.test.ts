@@ -2,12 +2,12 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { ApiError } from '../../lib/core/errors';
-import {
-    type DocumentTransformRequest,
-    type DocumentTransformResponse,
-    type ExportMedia,
-    toTransferableBuffer,
+import type {
+    DocumentTransformRequest,
+    DocumentTransformResponse,
+    ExportMedia,
 } from '../../lib/document/transform/protocol';
+import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { DocumentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import { exportBytes, importSnapshot, previewBody } from '../fixtures/transform-results';
 

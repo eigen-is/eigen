@@ -1,4 +1,5 @@
-import { DRIVE_TYPE_FOLDER, type DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive';
 
 // Snapshot history lives in <container>/versions/ — see STORAGE.md § Version snapshots live inside the container.
 export const VERSIONS_FOLDER_NAME = 'versions';

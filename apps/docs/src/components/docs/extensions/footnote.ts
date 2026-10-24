@@ -1,9 +1,14 @@
-import { combineTransactionSteps, type Editor, Extension, getChangedRanges } from '@tiptap/core';
+import type { Editor } from '@tiptap/core';
+import { combineTransactionSteps, Extension, getChangedRanges } from '@tiptap/core';
 import type { Fragment, Node as PMNode } from '@tiptap/pm/model';
-import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
-import { type MapResult, ReplaceAroundStep, ReplaceStep } from '@tiptap/pm/transform';
-import { Decoration, DecorationSet, type DecorationSource, type NodeView } from '@tiptap/pm/view';
-import { type ProsemirrorBinding, relativePositionToAbsolutePosition, ySyncPluginKey } from '@tiptap/y-tiptap';
+import type { Transaction } from '@tiptap/pm/state';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import type { MapResult } from '@tiptap/pm/transform';
+import { ReplaceAroundStep, ReplaceStep } from '@tiptap/pm/transform';
+import type { DecorationSource, NodeView } from '@tiptap/pm/view';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import type { ProsemirrorBinding } from '@tiptap/y-tiptap';
+import { relativePositionToAbsolutePosition, ySyncPluginKey } from '@tiptap/y-tiptap';
 import { FootnoteNode, footnoteNumbers, insertFootnote } from '@workspace/lib/docs/eigendoc';
 import * as Y from 'yjs';
 
@@ -92,11 +97,11 @@ export const footnotesInDoc = (editor: Editor): readonly NumberedNote[] =>
 // The reference: a superscript number, its note no DOM of the body's. It keeps the body's decorations inside the note,
 // the find bar's matches, for the note's editor.
 class FootnoteView implements NodeView {
-    dom: HTMLElement;
+    public dom: HTMLElement;
 
-    constructor(
+    public constructor(
         public node: PMNode,
-        readonly getPos: () => number | undefined,
+        public readonly getPos: () => number | undefined,
         decorations: readonly Decoration[],
         public innerDecorations: DecorationSource,
         views: WeakMap<globalThis.Node, FootnoteView>,
@@ -114,7 +119,7 @@ class FootnoteView implements NodeView {
         views.set(this.dom, this);
     }
 
-    update(node: PMNode, decorations: readonly Decoration[], innerDecorations: DecorationSource) {
+    public update(node: PMNode, decorations: readonly Decoration[], innerDecorations: DecorationSource) {
         if (node.type !== this.node.type) return false;
         this.node = node;
         this.innerDecorations = innerDecorations;
@@ -128,7 +133,7 @@ class FootnoteView implements NodeView {
         this.dom.textContent = number === undefined ? '' : String(number);
     }
 
-    ignoreMutation() {
+    public ignoreMutation() {
         return true;
     }
 }

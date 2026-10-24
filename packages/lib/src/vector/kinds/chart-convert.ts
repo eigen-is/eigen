@@ -8,14 +8,8 @@ import { getFontMetrics, getLineHeightPx } from '../font-metrics';
 import { boxCenter, rotatePoint } from '../geometry';
 import { normalizeAngle } from '../outline';
 import { measureLabel } from '../text-width';
-import {
-    DEFAULT_CORNERS,
-    DEFAULT_RICHTEXT_PROPS,
-    type TextAlign,
-    type VectorChartElement,
-    type VectorElement,
-    type VectorRichTextElement,
-} from '../types';
+import type { TextAlign, VectorChartElement, VectorElement, VectorRichTextElement } from '../types';
+import { DEFAULT_CORNERS, DEFAULT_RICHTEXT_PROPS } from '../types';
 import { chartLayout } from './chart-render';
 
 // measureLabel ignores kerning and guesses outside Latin-1, so a box cut to it exactly could wrap its line.

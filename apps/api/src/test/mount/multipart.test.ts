@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    MaxFileSizeExceededError,
-    type MultipartEvent,
-    MultipartParseError,
-    parseMultipartRequest,
-} from '../../lib/multipart';
+import type { MultipartEvent } from '../../lib/multipart';
+import { MaxFileSizeExceededError, MultipartParseError, parseMultipartRequest } from '../../lib/multipart';
 
 const BOUNDARY = 'test-boundary-7MA4YWxkTrZu0gW';
 const enc = new TextEncoder();

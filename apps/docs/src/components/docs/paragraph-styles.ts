@@ -1,16 +1,7 @@
 import type { Node, Schema } from '@tiptap/pm/model';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
-import {
-    Heading,
-    Heading1,
-    Heading2,
-    Heading3,
-    Heading4,
-    Heading5,
-    Heading6,
-    LetterText,
-    type LucideIcon,
-} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Heading, Heading1, Heading2, Heading3, Heading4, Heading5, Heading6, LetterText } from 'lucide-react';
 
 type ParagraphStyle = {
     name: string;

@@ -22,6 +22,7 @@ import { avatarNameOf } from '../../lib/contacts/card-store';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
+import type { TestUser } from '../setup';
 import {
     addMember,
     addTeamMount,
@@ -37,7 +38,6 @@ import {
     getTestContext,
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
-    type TestUser,
 } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;

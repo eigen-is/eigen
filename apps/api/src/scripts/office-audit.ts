@@ -5,7 +5,8 @@
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { peakRss } from '../lib/core/peak-rss';
-import { type ExportMedia, toTransferableBuffer } from '../lib/document/transform/protocol';
+import type { ExportMedia } from '../lib/document/transform/protocol';
+import { toTransferableBuffer } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/office-image';
 import type { ImportedMedia } from '../lib/import/image-types';

@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { like, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, withAutoFinalize } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
+import { ManagedDatabase, withAutoFinalize } from '../../lib/core';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-managed-db-${Date.now()}`);

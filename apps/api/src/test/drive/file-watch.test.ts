@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
-import { CARD_TITLE_MAX_LENGTH, type FileEvent, type PathWatchStatus } from '@workspace/lib/types/file-history';
+import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import type { SSEventNotificationCreated } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';

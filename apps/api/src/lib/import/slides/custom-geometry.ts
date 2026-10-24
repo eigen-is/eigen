@@ -6,10 +6,12 @@ import {
     PATH_COORD_MIN,
     round4,
 } from '@workspace/lib/vector';
-import { type XmlElement, xmlAttr, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { xmlAttr, xmlElements } from '../../core/xml';
 import { DEGREE } from '../../ooxml/drawingml';
 import { A_NS, emu, isOn } from '../../ooxml/ooxml';
-import { evaluateGuides, type GuideList, type Guides, guideListOf, guideValue, RADIANS_PER_UNIT } from './guides';
+import type { GuideList, Guides } from './guides';
+import { evaluateGuides, guideListOf, guideValue, RADIANS_PER_UNIT } from './guides';
 import { affords, charge, childOf, spend } from './lookup';
 
 // A shape's a:custGeom → what a canvas path element stores: absolute M/L/C/Q/Z in the shape's unit box, nonzero.

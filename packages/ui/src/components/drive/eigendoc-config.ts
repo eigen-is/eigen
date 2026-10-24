@@ -6,7 +6,8 @@ import {
     getVectorAppUrl,
 } from '@workspace/lib/api';
 import { EIGEN_DOC_ICONS } from '@workspace/lib/eigendoc-icons';
-import { type DriveSearchParams, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
+import type { DriveSearchParams, EigenDocType } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 
 export type EigenDocAppConfig = {

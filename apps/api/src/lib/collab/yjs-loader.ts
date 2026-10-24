@@ -1,6 +1,7 @@
 import { Database as BunDatabase } from 'bun:sqlite';
 import { asc, desc, gt } from 'drizzle-orm';
-import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
 import * as Y from 'yjs';
 import { ApiError, isOutOfMemory } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';

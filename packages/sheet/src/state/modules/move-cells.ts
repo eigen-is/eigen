@@ -1,8 +1,8 @@
 import { cloneDeep, set } from 'es-toolkit/compat';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import type { Cell, SingleRange } from '../../engine/types';
-
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { carrySides, clearSides, getBorderInfoCompute } from './border';

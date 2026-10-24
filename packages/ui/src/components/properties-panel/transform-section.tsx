@@ -11,7 +11,8 @@
 import { normalizeAngle } from '@workspace/lib/vector';
 import { useRef } from 'react';
 import { MergedNumberInput } from './merged-number-input';
-import { isMixed, type MergedValue } from './merged-value';
+import type { MergedValue } from './merged-value';
+import { isMixed } from './merged-value';
 import { PropertyRow, PropertySection } from './properties-panel';
 import { PropertyCheckbox } from './property-checkbox';
 

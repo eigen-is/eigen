@@ -27,7 +27,8 @@ import { S3Storage } from '../../lib/storage/s3-storage';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { FakeS3Server } from '../fake-s3-server';
 import { CLEARED_S3, DUMMY_S3, waitFor } from '../fault-storage-helpers';
-import { findOrFail, getTestContext, type TestContext } from '../setup';
+import type { TestContext } from '../setup';
+import { findOrFail, getTestContext } from '../setup';
 import { TEST_DATA_DIR } from '../test-env';
 import {
     alertTitlesTo,

@@ -1,5 +1,6 @@
 import type { AuthUser } from '@workspace/lib/auth';
-import { type CursorPeerState, useAwarenessIdentity, useAwarenessPeers } from '@workspace/ui/components/collab';
+import type { CursorPeerState } from '@workspace/ui/components/collab';
+import { useAwarenessIdentity, useAwarenessPeers } from '@workspace/ui/components/collab';
 import { useEffect, useMemo, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 

@@ -1,15 +1,10 @@
-import { type CommandProps, Node } from '@tiptap/core';
+import type { CommandProps } from '@tiptap/core';
+import { Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
-import {
-    fromDom,
-    MATH_LIMITS,
-    MATHML_NAMESPACE,
-    type MathXmlElement,
-    readLatex,
-    writeMathml,
-    writeText,
-} from '@workspace/math';
-import { type Equation, type MathRead, readMath, unlessRefused } from './equation-paste';
+import type { MathXmlElement } from '@workspace/math';
+import { fromDom, MATH_LIMITS, MATHML_NAMESPACE, readLatex, writeMathml, writeText } from '@workspace/math';
+import type { Equation, MathRead } from './equation-paste';
+import { readMath, unlessRefused } from './equation-paste';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {

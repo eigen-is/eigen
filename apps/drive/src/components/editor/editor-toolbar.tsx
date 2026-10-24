@@ -1,5 +1,6 @@
 import { useBreadcrumb } from '@workspace/lib/drive';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Toolbar, TooltipButton } from '@workspace/ui';
 import {
     Breadcrumb,

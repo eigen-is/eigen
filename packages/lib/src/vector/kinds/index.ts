@@ -1,16 +1,14 @@
 // The registry. TypeScript forces every member of VectorElementType to have an entry, so a new kind
 // cannot be half-added.
 
-import {
-    BASE_ELEMENT_FIELDS,
-    DEFAULT_ELEMENT_PROPS,
-    type ElementOfType,
-    prop,
-    type VectorBindableElement,
-    type VectorElement,
-    type VectorElementBase,
-    type VectorElementType,
+import type {
+    ElementOfType,
+    VectorBindableElement,
+    VectorElement,
+    VectorElementBase,
+    VectorElementType,
 } from '../types';
+import { BASE_ELEMENT_FIELDS, DEFAULT_ELEMENT_PROPS, prop } from '../types';
 import { arrowKind } from './arrow';
 import { chartKind } from './chart';
 import { diamondKind } from './diamond';

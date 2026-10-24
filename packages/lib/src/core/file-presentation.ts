@@ -1,3 +1,4 @@
+import type { LucideIcon } from 'lucide-react';
 import {
     File,
     FileArchive,
@@ -10,19 +11,11 @@ import {
     FileType,
     FileVideo,
     Folder,
-    type LucideIcon,
     Presentation,
 } from 'lucide-react';
 import { DOCX_MIME, PPTX_MIME, XLSX_MIME } from '../constants/mime';
-import {
-    DRIVE_TYPE_FOLDER,
-    type DrivePathType,
-    getEigenDocInfoByMime,
-    isEmlFile,
-    isIcsFile,
-    isImageMime,
-    isVCardFile,
-} from '../types';
+import type { DrivePathType } from '../types';
+import { DRIVE_TYPE_FOLDER, getEigenDocInfoByMime, isEmlFile, isIcsFile, isImageMime, isVCardFile } from '../types';
 import { apps } from './apps';
 import { EIGEN_DOC_ICONS } from './eigendoc-icons';
 

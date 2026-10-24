@@ -1,13 +1,9 @@
-import { type JSONContent, Node } from '@tiptap/core';
-import {
-    DOMSerializer,
-    Fragment,
-    DOMParser as PMDOMParser,
-    type Node as PMNode,
-    type ResolvedPos,
-    type Schema,
-} from '@tiptap/pm/model';
-import { TextSelection, type Transaction } from '@tiptap/pm/state';
+import type { JSONContent } from '@tiptap/core';
+import { Node } from '@tiptap/core';
+import type { Node as PMNode, ResolvedPos, Schema } from '@tiptap/pm/model';
+import { DOMSerializer, Fragment, DOMParser as PMDOMParser } from '@tiptap/pm/model';
+import type { Transaction } from '@tiptap/pm/state';
+import { TextSelection } from '@tiptap/pm/state';
 
 const NAME = 'footnote';
 

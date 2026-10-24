@@ -3,21 +3,20 @@
 
 import { serializePoints } from '../../vector/geometry';
 import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
-import {
-    DEFAULT_ELEMENT_PROPS,
-    DEFAULT_SCENE_META,
-    type VectorArrowElement,
-    type VectorChartElement,
-    type VectorElement,
-    type VectorEllipseElement,
-    type VectorImageElement,
-    type VectorLinearElement,
-    type VectorPathElement,
-    type VectorPieElement,
-    type VectorRectangleElement,
-    type VectorRichTextElement,
-    type VectorScene,
+import type {
+    VectorArrowElement,
+    VectorChartElement,
+    VectorElement,
+    VectorEllipseElement,
+    VectorImageElement,
+    VectorLinearElement,
+    VectorPathElement,
+    VectorPieElement,
+    VectorRectangleElement,
+    VectorRichTextElement,
+    VectorScene,
 } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META } from '../../vector/types';
 
 // A fixed seed and the host's roughness, since the shared table's are the reader's fallbacks (0/0).
 const BASE = {

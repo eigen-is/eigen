@@ -6,15 +6,10 @@ import * as zlib from 'node:zlib';
 import JSZip from 'jszip';
 import { ApiError } from '../../lib/core';
 import { peakRss } from '../../lib/core/peak-rss';
-import {
-    MAX_DECOMPRESSED_BYTES,
-    MAX_ZIP_ENTRIES,
-    openZip,
-    writeZip,
-    ZipError,
-    type ZipErrorCode,
-} from '../../lib/ooxml/zip';
-import { build, deflated, deflatedZeros, type RawPart, stored } from '../fixtures/raw-zip';
+import type { ZipErrorCode } from '../../lib/ooxml/zip';
+import { MAX_DECOMPRESSED_BYTES, MAX_ZIP_ENTRIES, openZip, writeZip, ZipError } from '../../lib/ooxml/zip';
+import type { RawPart } from '../fixtures/raw-zip';
+import { build, deflated, deflatedZeros, stored } from '../fixtures/raw-zip';
 
 const GiB = 2 ** 30;
 const MiB = 2 ** 20;

@@ -2,7 +2,8 @@ import { Button } from '@workspace/ui/components/button';
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import type React from 'react';
 import { useCallback, useContext } from 'react';
-import { ModalContext, type ModalOptions } from '../context/modal';
+import type { ModalOptions } from '../context/modal';
+import { ModalContext } from '../context/modal';
 
 export function useDialog() {
     const { showModal, hideModal } = useContext(ModalContext);

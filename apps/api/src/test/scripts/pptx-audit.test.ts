@@ -3,9 +3,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { NewVectorElement } from '@workspace/lib/vector';
 import {
     generateNKeysBetween,
-    type NewVectorElement,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
     serializeFill,

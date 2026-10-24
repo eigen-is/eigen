@@ -19,11 +19,14 @@ const COMMENT_SEARCH_LIMIT = 8;
 export class CommentIndex {
     private db: BunSQLiteDatabase<typeof commentSchema>;
 
-    constructor(db: BunSQLiteDatabase<typeof commentSchema>) {
+    public constructor(db: BunSQLiteDatabase<typeof commentSchema>) {
         this.db = db;
     }
 
-    async ensureComment(chatName: string, seed?: { createdBy?: string | null; createdAt?: Date }): Promise<void> {
+    public async ensureComment(
+        chatName: string,
+        seed?: { createdBy?: string | null; createdAt?: Date },
+    ): Promise<void> {
         const values: typeof commentSchema.comments.$inferInsert = {
             chatName,
             createdAt: seed?.createdAt ?? new Date(),
@@ -42,7 +45,12 @@ export class CommentIndex {
             });
     }
 
-    async updateActivity(chatName: string, authorEmail: string, snippet: string, incrementCount = true): Promise<void> {
+    public async updateActivity(
+        chatName: string,
+        authorEmail: string,
+        snippet: string,
+        incrementCount = true,
+    ): Promise<void> {
         await this.db
             .update(commentSchema.comments)
             .set({
@@ -54,67 +62,67 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    async setRecentText(chatName: string, recentText: string | null): Promise<void> {
+    public async setRecentText(chatName: string, recentText: string | null): Promise<void> {
         await this.db
             .update(commentSchema.comments)
             .set({ recentText })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    async addMention(chatName: string, email: string): Promise<void> {
+    public async addMention(chatName: string, email: string): Promise<void> {
         await this.db
             .insert(commentSchema.commentMentions)
             .values({ chatName, email: email.toLowerCase() })
             .onConflictDoNothing();
     }
 
-    async resolve(chatName: string, email: string): Promise<void> {
+    public async resolve(chatName: string, email: string): Promise<void> {
         await this.db
             .update(commentSchema.comments)
             .set({ status: 'resolved', resolvedBy: email, resolvedAt: new Date() })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    async reopen(chatName: string): Promise<void> {
+    public async reopen(chatName: string): Promise<void> {
         await this.db
             .update(commentSchema.comments)
             .set({ status: 'open', resolvedBy: null, resolvedAt: null })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    async assign(chatName: string, email: string | null): Promise<void> {
+    public async assign(chatName: string, email: string | null): Promise<void> {
         await this.db
             .update(commentSchema.comments)
             .set({ assignee: email })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    async setTitle(chatName: string, title: string): Promise<void> {
+    public async setTitle(chatName: string, title: string): Promise<void> {
         await this.db
             .update(commentSchema.comments)
             .set({ title })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    async decrementCount(chatName: string): Promise<void> {
+    public async decrementCount(chatName: string): Promise<void> {
         await this.db
             .update(commentSchema.comments)
             .set({ messageCount: sql`MAX(0, messageCount - 1)` })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    async get(chatName: string): Promise<typeof commentSchema.comments.$inferSelect | undefined> {
+    public async get(chatName: string): Promise<typeof commentSchema.comments.$inferSelect | undefined> {
         return this.db.select().from(commentSchema.comments).where(eq(commentSchema.comments.chatName, chatName)).get();
     }
 
     // The panel's fields only: recentText (~8 KB a thread) is for search, createdBy for no client.
-    async list(): Promise<CommentEntry[]> {
+    public async list(): Promise<CommentEntry[]> {
         const { comments } = commentSchema;
         const { recentText: _text, createdBy: _by, ...columns } = getTableColumns(comments);
         return this.db.select(columns).from(comments).orderBy(comments.createdAt).all();
     }
 
-    async searchComments(query: string): Promise<DocCommentMatch[]> {
+    public async searchComments(query: string): Promise<DocCommentMatch[]> {
         const match = sanitizeFtsQuery(query);
         if (!match) return [];
 

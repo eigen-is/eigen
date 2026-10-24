@@ -1,7 +1,8 @@
 import { escapeXml } from '../../core/xml';
 import { hitTestBox, round } from '../geometry';
 import { cornerRadius, outlinePath, rectOutline } from '../outline';
-import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS, type VectorImageElement } from '../types';
+import type { VectorImageElement } from '../types';
+import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS } from '../types';
 import { defineKind } from './kind';
 import { oneOf, str } from './read-fields';
 import { isBordered, PLACEHOLDER_STROKE, renderRoughShape, svgId } from './render-utils';

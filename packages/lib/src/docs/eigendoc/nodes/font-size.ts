@@ -3,7 +3,8 @@ import type { Mark, Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { nextFontSize, readCssFontSize, readFontSize, SMALL_FONT_SIZE } from '../../../constants/fonts';
-import { DEFAULT_NORMAL_STYLE, type NormalStyle } from '../normal-style';
+import type { NormalStyle } from '../normal-style';
+import { DEFAULT_NORMAL_STYLE } from '../normal-style';
 import { pxToPt } from '../page';
 
 declare module '@tiptap/core' {

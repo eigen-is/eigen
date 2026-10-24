@@ -7,11 +7,10 @@ import type { DatabaseConfig } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
 import { UPLOAD_PUT_TIMEOUT_MS } from '../../lib/mount/upload-queue';
 import { setShutdownDrainDeadline } from '../../lib/sync';
+import type { FaultStorage, ParkedWrite } from '../fault-storage-helpers';
 import {
     countBackingRows,
     createFaultMount,
-    type FaultStorage,
-    type ParkedWrite,
     provisionDoc,
     SETTLE_BOUND_MS,
     STALL_BOUND_MS,

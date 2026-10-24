@@ -4,7 +4,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/component
 import { CHECKERBOARD_STYLE, cn } from '@workspace/ui/lib/utils';
 import { Ban } from 'lucide-react';
 import { useState } from 'react';
-import { isMixed, type MergedValue } from './merged-value';
+import type { MergedValue } from './merged-value';
+import { isMixed } from './merged-value';
 import { PropertyRow } from './properties-panel';
 
 type ColorButtonProps = {

@@ -2,13 +2,8 @@
 // rectangle/diamond/ellipse/rich-text box is being dragged out. Pulled out of canvas-editor.tsx (the canvas only
 // dispatches) alongside the other gesture modules (line.ts, freedraw.ts, eraser.ts).
 
-import {
-    type Box,
-    baseDefaultsFor,
-    ELEMENT_KINDS,
-    type StyleDefaults,
-    type VectorElement,
-} from '@workspace/lib/vector';
+import type { Box, StyleDefaults, VectorElement } from '@workspace/lib/vector';
+import { baseDefaultsFor, ELEMENT_KINDS } from '@workspace/lib/vector';
 import type { VectorTool } from '../hooks/use-tool';
 
 const CREATING_ID = '__creating__';

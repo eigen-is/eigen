@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { type ArticleBody, type ArticleCollection, fetchArticleBody, getInlinedBody } from './manifest';
+import type { ArticleBody, ArticleCollection } from './manifest';
+import { fetchArticleBody, getInlinedBody } from './manifest';
 
 // Resolve an article body for a route component. The body of the page the visitor
 // landed on is inlined by the prerender and resolves synchronously, so the server

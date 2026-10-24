@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { BunFile } from 'bun';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType, storageUnavailable } from '../lib/core';
+import type { DatabaseConfig, SchemaType } from '../lib/core';
+import { ManagedDatabase, storageUnavailable } from '../lib/core';
 import type Drive from '../lib/drive/drive';
 import type { Home } from '../lib/home';
 import { Mount } from '../lib/mount/mount';
@@ -28,40 +29,40 @@ export type ParkedWrite = {
 };
 
 export class FaultStorage implements StorageBackend {
-    failNextWrites = 0;
-    failNextExists = 0;
-    writeDelayMs = 0;
-    writeCount = 0;
+    public failNextWrites = 0;
+    public failNextExists = 0;
+    public writeDelayMs = 0;
+    public writeCount = 0;
     // Park every write until releaseHungWrites() — models a TCP-black-holed PUT that never
     // resolves, so only the queue's client-side timeout can end the wait.
-    hangWrites = false;
+    public hangWrites = false;
     // Park each write individually: the body is captured up-front (as a real PUT streams its
     // request body) and reaches the inner store only when the test lands it — so completions can
     // be reordered exactly like orphaned requests landing late server-side.
-    parkWrites = false;
+    public parkWrites = false;
     // Objects whose GET fails: read() throws for these keys the 503 a real failed GET reaches its caller as.
     // Targets ONE object (e.g. a container's comments.db) where a fail-next counter would hit whichever
     // request happens to come first.
-    readonly failReadKeys = new Set<string>();
-    readonly parked: ParkedWrite[] = [];
+    public readonly failReadKeys = new Set<string>();
+    private readonly parked: ParkedWrite[] = [];
     private hungResolvers: Array<() => void> = [];
     private parkWaiters: Array<() => void> = [];
 
-    constructor(readonly inner: StorageBackend) {}
+    public constructor(public readonly inner: StorageBackend) {}
 
     // Let any parked writes proceed so a hung PUT promise doesn't linger past the test.
-    releaseHungWrites(): void {
+    public releaseHungWrites(): void {
         this.hangWrites = false;
         for (const resolve of this.hungResolvers.splice(0)) resolve();
     }
 
-    get parkedCount(): number {
+    public get parkedCount(): number {
         return this.parked.filter((p) => !p.landed).length;
     }
 
     // Complete the oldest parked write: its captured bytes land on the backing store NOW — after
     // whatever else the test let happen in between — and its (long-forgotten) promise resolves.
-    async releaseOldestParked(): Promise<void> {
+    public async releaseOldestParked(): Promise<void> {
         const oldest = this.parked.find((p) => !p.landed);
         if (!oldest) throw new Error('no parked write to release');
         await oldest.land();
@@ -69,7 +70,7 @@ export class FaultStorage implements StorageBackend {
 
     // Resolve when a parked PUT matching the predicate exists (event-driven, so the test can land a
     // PUT within the queue's shrunk client-side timeout).
-    async waitForParked(
+    public async waitForParked(
         match: (p: ParkedWrite) => boolean | Promise<boolean>,
         timeoutMs = 3_000,
     ): Promise<ParkedWrite> {
@@ -86,17 +87,17 @@ export class FaultStorage implements StorageBackend {
         }
     }
 
-    async landAllRemaining(): Promise<void> {
+    public async landAllRemaining(): Promise<void> {
         for (const p of this.parked) {
             if (!p.landed) await p.land();
         }
     }
 
-    read(key: string): StorageFile {
+    public read(key: string): StorageFile {
         if (this.failReadKeys.has(key)) throw storageUnavailable(new Error(`injected read failure for ${key}`));
         return this.inner.read(key);
     }
-    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    public async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         this.writeCount++;
         // Read the body up-front, like an S3 PUT streaming the request body — so a concurrent
         // unlink of the staging file can't abort an already-started upload. This is what makes
@@ -128,17 +129,17 @@ export class FaultStorage implements StorageBackend {
             for (const w of this.parkWaiters.splice(0)) w();
         });
     }
-    async delete(key: string): Promise<boolean> {
+    public async delete(key: string): Promise<boolean> {
         return this.inner.delete(key);
     }
-    async exists(key: string): Promise<boolean> {
+    public async exists(key: string): Promise<boolean> {
         if (this.failNextExists > 0) {
             this.failNextExists--;
             throw new Error('injected exists failure (503)');
         }
         return this.inner.exists(key);
     }
-    async size(key: string): Promise<number | null> {
+    public async size(key: string): Promise<number | null> {
         return this.inner.size(key);
     }
 }
@@ -184,7 +185,7 @@ export function createGetLocalDatabase(baseDir: string) {
 // init builds the queue; a restart under an outage can still arm one jittered retry from init's own
 // reconcile drain, which merely fails again on the same queue.
 export class FaultMount extends Mount {
-    override async init(opts?: { passive?: boolean }): Promise<void> {
+    public override async init(opts?: { passive?: boolean }): Promise<void> {
         await super.init(opts);
         holdRetries(this);
     }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createDocument, Editor, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
+import { createDocument, Editor, generateHTML, getSchema } from '@tiptap/core';
 import {
     BAND_EXCLUDED_NODES,
     DEFAULT_NORMAL_STYLE,

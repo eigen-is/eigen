@@ -7,7 +7,8 @@ import {
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
-import { SHEET_DEFAULT_FONT_SIZE, type SheetFloatingItem } from '@workspace/lib/sheets';
+import type { SheetFloatingItem } from '@workspace/lib/sheets';
+import { SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -16,28 +17,35 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
-import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } from 'immer';
+import type { Patch } from 'immer';
+import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
+import type { RefValues, SetContextOptions } from '../../context';
+import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
 import { resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
+import type {
+    CellWithRowAndCol,
+    ChartPanelState,
+    Context,
+    GlobalCache,
+    Op,
+    Settings,
+    Sheet as SheetType,
+} from '../../state';
 import {
     api,
     applySheetView,
-    type CellWithRowAndCol,
-    type ChartPanelState,
     COPY_ACTION_TABLE_MARKER,
-    type Context,
     createContextResolver,
     defaultContext,
     defaultSettings,
     deleteActiveObject,
     ensureSheetIndex,
     filterPatch,
-    type GlobalCache,
     getFlowdata,
     getSheetIndex,
     groupValuesRefresh,
@@ -46,11 +54,8 @@ import {
     initSheetIndex,
     insertRowCol,
     inverseRowColOptions,
-    type Op,
     pasteChart,
     patchToOp,
-    type Settings,
-    type Sheet as SheetType,
     settleCurrentSheet,
     sheetChartClipboardItem,
     warmFormulaCellInfoMap,

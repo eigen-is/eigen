@@ -5,20 +5,15 @@
 import { MAX_SKETCH_POINTS } from '@workspace/lib/charts';
 import type { Fill, FillPaint } from '@workspace/lib/types/background';
 import type { ChartLook } from '@workspace/lib/types/chart';
-import {
-    type FillStyle,
-    isTransparentFill,
-    parseFill,
-    round,
-    type StrokeStyle,
-    TRANSPARENT_FILL,
-} from '@workspace/lib/vector';
+import type { FillStyle, StrokeStyle } from '@workspace/lib/vector';
+import { isTransparentFill, parseFill, round, TRANSPARENT_FILL } from '@workspace/lib/vector';
 import type { ReactNode } from 'react';
 import { BackgroundFillBlock } from './background-fill-block';
 import { ColorRow } from './color-row';
 import { MergedNumberInput } from './merged-number-input';
 import { MergedSelect, numToStr } from './merged-select';
-import { isMixed, type MergedValue } from './merged-value';
+import type { MergedValue } from './merged-value';
+import { isMixed } from './merged-value';
 import { PropertyRow, PropertySection } from './properties-panel';
 
 // Discrete presets, the Excalidraw constants: roughness 0/1/2.

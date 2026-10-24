@@ -7,14 +7,8 @@
 
 import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
-import {
-    elementsInFrame,
-    type MediaResolver,
-    orderByFractionalIndex,
-    parseBackgroundFill,
-    type VectorElement,
-    type VectorFrame,
-} from '@workspace/lib/vector';
+import type { MediaResolver, VectorElement, VectorFrame } from '@workspace/lib/vector';
+import { elementsInFrame, orderByFractionalIndex, parseBackgroundFill } from '@workspace/lib/vector';
 import { useElementSize } from '@workspace/ui/hooks/use-element-size';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useId, useMemo, useRef } from 'react';

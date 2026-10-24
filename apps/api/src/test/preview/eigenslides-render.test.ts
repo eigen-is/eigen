@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
-import { DEFAULT_SCENE_META, FRAME_WIDTH, type VectorMeta, type VectorScene } from '@workspace/lib/vector';
+import type { VectorMeta, VectorScene } from '@workspace/lib/vector';
+import { DEFAULT_SCENE_META, FRAME_WIDTH } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';
 import { buildGoldenDeckScene, GOLDEN_BEYOND_CAP, GOLDEN_MEDIA_NAME, seedDeckDoc } from '../fixtures/golden-documents';

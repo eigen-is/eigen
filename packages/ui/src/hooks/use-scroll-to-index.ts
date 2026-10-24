@@ -1,4 +1,5 @@
-import { type RefObject, useEffect } from 'react';
+import type { RefObject } from 'react';
+import { useEffect } from 'react';
 
 export function useScrollToIndex(containerRef: RefObject<HTMLElement | null>, index: number) {
     useEffect(() => {

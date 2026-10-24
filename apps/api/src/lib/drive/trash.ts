@@ -1,4 +1,5 @@
-import { type DrivePath, isCollabType, isContainerType } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
 import type { User } from '../user';

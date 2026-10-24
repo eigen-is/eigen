@@ -19,7 +19,8 @@ import type {
     FormulaCellInfoMap,
     FormulaDependency,
 } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
 import { getSheetIndex } from '../utils';
 import { setCellValue } from './cell';

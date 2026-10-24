@@ -1,5 +1,6 @@
 import type { EigenDocType } from '@workspace/lib/types/drive';
-import { Diamond, FileText, type LucideIcon, MessageSquare, Presentation, Sheet, SquareKanban } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Diamond, FileText, MessageSquare, Presentation, Sheet, SquareKanban } from 'lucide-react';
 
 // Sibling-of-EIGEN_DOC_TYPE_INFO icon registry. Kept out of types/drive.ts so that
 // file stays type-only on the BE side (the API server only `import type`s from there).

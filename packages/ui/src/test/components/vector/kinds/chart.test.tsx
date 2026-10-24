@@ -1,14 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { ChartType } from '@workspace/lib/types/chart';
+import type { StyleDefaults, VectorChartElement, VectorElement } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
-    type StyleDefaults,
     VECTOR_STYLE_DEFAULTS,
-    type VectorChartElement,
-    type VectorElement,
     writeElementInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';

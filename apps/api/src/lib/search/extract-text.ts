@@ -1,16 +1,12 @@
 import { isSearchableTextFile } from '@workspace/lib/constants';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
-import {
-    DRIVE_MIME_CHAT,
-    DRIVE_MIME_STICKIES,
-    type DrivePath,
-    isDocumentType,
-    isVCardFile,
-} from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_CHAT, DRIVE_MIME_STICKIES, isDocumentType, isVCardFile } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { readChatContent } from '../document/chat';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
-import { readStickiesContent, type StickiesContent } from '../document/stickies';
+import type { StickiesContent } from '../document/stickies';
+import { readStickiesContent } from '../document/stickies';
 import { runFileTransformToText, runTransformToExtractedText } from '../document/transform/run-transform';
 import type { Mount } from '../mount';
 import { parseVCardPreview } from '../preview/vcard-preview';

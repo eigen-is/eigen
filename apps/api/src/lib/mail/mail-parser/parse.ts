@@ -1,10 +1,13 @@
 import { escapeHtml } from '@workspace/lib/html';
 import { IMIP_METHODS } from '@workspace/lib/types/calendar';
-import { type AddressObject, type Attachment, isCalendarPart, type ParsedMail } from '@workspace/lib/types/mail';
+import type { AddressObject, Attachment, ParsedMail } from '@workspace/lib/types/mail';
+import { isCalendarPart } from '@workspace/lib/types/mail';
 import libmime from 'libmime';
 import { decodeText, decodeTransfer } from './decode';
-import { addressesHtml, type CidImage, htmlToText, inlineCidImages, textToHtml } from './html';
-import { type MimePart, splitMime } from './split';
+import type { CidImage } from './html';
+import { addressesHtml, htmlToText, inlineCidImages, textToHtml } from './html';
+import type { MimePart } from './split';
+import { splitMime } from './split';
 
 // Parts rendered into the message body when inline; everything else is an attachment.
 const TEXT_TYPES = new Set(['text/plain', 'text/html', 'message/delivery-status']);

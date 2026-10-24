@@ -1,37 +1,34 @@
 import { randomUUID } from 'node:crypto';
+import type { MountConfig, MountInfo } from '@workspace/lib/types';
 import {
     CHATS_FOLDER_NAME,
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
-    type MountConfig,
-    type MountInfo,
     mountStorageIdentity,
     parseOwnerId,
 } from '@workspace/lib/types';
-import {
-    type DriveACL,
-    type DriveACLDelta,
-    type DriveAccessCheckResult,
-    type DriveAccessRecipient,
-    type DriveContainerType,
-    type DrivePath,
-    type DrivePathDetails,
-    type DriveVisibility,
-    type EffectiveMember,
-    type EigenDocType,
-    type InviteResult,
-    isContainerType,
-    withEigenExtension,
+import type {
+    DriveACL,
+    DriveACLDelta,
+    DriveAccessCheckResult,
+    DriveAccessRecipient,
+    DriveContainerType,
+    DrivePath,
+    DrivePathDetails,
+    DriveVisibility,
+    EffectiveMember,
+    EigenDocType,
+    InviteResult,
 } from '@workspace/lib/types/drive';
-import {
-    CARD_TITLE_MAX_LENGTH,
-    type ClientFileEventRecord,
-    type FileEvent,
-    type FileEventRecord,
-    isClientFileEventType,
-    type PathWatchStatus,
+import { isContainerType, withEigenExtension } from '@workspace/lib/types/drive';
+import type {
+    ClientFileEventRecord,
+    FileEvent,
+    FileEventRecord,
+    PathWatchStatus,
 } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH, isClientFileEventType } from '@workspace/lib/types/file-history';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -41,7 +38,8 @@ import { ChatRoom } from '../chat';
 import { assertCommentChatExists, getCommentIndex, openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
 import { getServerSettings } from '../config/server-settings';
-import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
+import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
+import { ApiError } from '../core';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
@@ -49,9 +47,11 @@ import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
-import { type StorageFile, writeTempWithHash } from '../storage';
+import type { StorageFile } from '../storage';
+import { writeTempWithHash } from '../storage';
 import type { User } from '../user';
-import { getMemberships, getUserByEmail, type Memberships } from '../user/';
+import type { Memberships } from '../user/';
+import { getMemberships, getUserByEmail } from '../user/';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
@@ -65,8 +65,8 @@ import {
     mergeACLDelta,
     normalizeACL,
 } from './acl';
+import type { ACLPropagationOptions } from './acl-propagation';
 import {
-    type ACLPropagationOptions,
     addEffectiveMember,
     diffACLPrincipals,
     propagateSharedPathChange,
@@ -108,13 +108,13 @@ export default class Drive {
     // Per-Drive WebDAV LockManager. Locks evict when this Drive's Home unloads via destruct().
     public readonly lockManager = new LockManager();
 
-    constructor(home: Home) {
+    public constructor(home: Home) {
         this.home = home;
         this.owner = home.user;
         this.documents = new CollabRegistry(this.owner.id);
     }
 
-    async init(autoCreateDefaultMount: boolean = false): Promise<void> {
+    public async init(autoCreateDefaultMount: boolean = false): Promise<void> {
         const mountSettings = this.home.settings.get().mounts ?? {};
 
         for (const [id, ms] of Object.entries(mountSettings)) {
@@ -135,14 +135,14 @@ export default class Drive {
         this.sharedDb = await getSharedDatabase(this.home);
     }
 
-    getMountConfig(mountId: string): MountConfig {
+    public getMountConfig(mountId: string): MountConfig {
         const mount = this.getMount(mountId);
         return mount.config;
     }
 
     // Called by: Drive.init() bootstrap and TeamHome.addMount() (the latter is routed via
     // POST /team/:ownerId/mount). Not directly route-callable on the drive surface.
-    async addMount(config: MountConfig): Promise<void> {
+    public async addMount(config: MountConfig): Promise<void> {
         // Inject the body extractor so the mount's own reindex queue can drain itself — keeps the
         // document-loader stack out of mount.ts (see ContentReindexQueue).
         const mount = new Mount(
@@ -163,7 +163,7 @@ export default class Drive {
     // persisted mount-settings change onto the live mount so a new quota/name/enabled/storage
     // config takes effect on this Home without waiting for an evict + reload. Not route-callable
     // directly.
-    async updateMount(config: MountConfig, enabled: boolean): Promise<void> {
+    public async updateMount(config: MountConfig, enabled: boolean): Promise<void> {
         const live = this.mounts.get(config.id);
         if (!enabled) {
             if (live) await this.removeMount(config.id);
@@ -198,11 +198,11 @@ export default class Drive {
 
     // Called by: lib/backup/snapshot-home.ts — a whole-home snapshot walks every live mount's paths
     // table. Not route-callable; routes address one mount by id through getSharedDrive.
-    getMounts(): Mount[] {
+    public getMounts(): Mount[] {
         return [...this.mounts.values()];
     }
 
-    async listMounts(): Promise<MountInfo[]> {
+    public async listMounts(): Promise<MountInfo[]> {
         const infos: MountInfo[] = [];
         for (const [id, mount] of this.mounts) {
             infos.push({
@@ -219,26 +219,26 @@ export default class Drive {
 
     // Called by: Home.size() (the aggregate surface routed via /home/.../size) and
     // config/enforcement (quota checks during uploads). Not directly route-callable.
-    async size(mountId: string): Promise<number> {
+    public async size(mountId: string): Promise<number> {
         const mount = this.getMount(mountId);
         return mount.getTotalSize();
     }
 
-    async getRootFolder(mountId: string): Promise<DrivePath | null> {
+    public async getRootFolder(mountId: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
         return mount.getRootFolder();
     }
 
-    async getPath(mountId: string, pathId: string): Promise<DrivePath | null> {
+    public async getPath(mountId: string, pathId: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
         return mount.getPath(pathId);
     }
 
-    async resolvePath(mountId: string, pathStr: string): Promise<DrivePath | null> {
+    public async resolvePath(mountId: string, pathStr: string): Promise<DrivePath | null> {
         return this.getMount(mountId).resolvePath(pathStr);
     }
 
-    async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
+    public async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         const folder = await mount.getActivePath(pathId);
         if (!isContainerType(folder.type)) {
@@ -248,7 +248,7 @@ export default class Drive {
         return mount.listFolder(pathId);
     }
 
-    async createFolder(
+    public async createFolder(
         mountId: string,
         parentId: string,
         folderName: string,
@@ -269,7 +269,13 @@ export default class Drive {
         return folder;
     }
 
-    async create(mountId: string, parentId: string, name: string, type: EigenDocType, user?: User): Promise<DrivePath> {
+    public async create(
+        mountId: string,
+        parentId: string,
+        name: string,
+        type: EigenDocType,
+        user?: User,
+    ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
         if (!isContainerType(parent.type)) {
@@ -322,7 +328,7 @@ export default class Drive {
         await index.ensureComment(chatPath.name, { createdBy });
     }
 
-    async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
+    public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(chatId);
         if (!path || path.type !== DRIVE_TYPE_CHAT) {
@@ -338,7 +344,7 @@ export default class Drive {
     // the direct 'assigned' notification.
     // Returns whether the assignee changed — re-selecting the current member is a no-op (no new row,
     // no re-notify); the route gates its notification on the result.
-    async assignComment(
+    public async assignComment(
         mountId: string,
         pathId: string,
         chatName: string,
@@ -371,7 +377,7 @@ export default class Drive {
         return true;
     }
 
-    async setCommentStatus(
+    public async setCommentStatus(
         mountId: string,
         pathId: string,
         chatName: string,
@@ -394,7 +400,7 @@ export default class Drive {
         }
     }
 
-    async uploadFiles(
+    public async uploadFiles(
         mountId: string,
         parentId: string,
         request: Request,
@@ -448,7 +454,7 @@ export default class Drive {
         return uploaded;
     }
 
-    async createFileFromData(
+    public async createFileFromData(
         mountId: string,
         parentId: string,
         name: string,
@@ -485,33 +491,33 @@ export default class Drive {
         }
     }
 
-    async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
+    public async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
         if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
         await deletePath(this, mount, item, user);
     }
 
-    async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
+    public async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
         await restorePath(this, mount, pathId, user);
     }
 
-    async listTrash(mountId: string): Promise<DrivePath[]> {
+    public async listTrash(mountId: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         return mount.listTrash();
     }
 
-    async permanentlyDelete(mountId: string, pathId: string, user?: User): Promise<void> {
+    public async permanentlyDelete(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
         await permanentlyDelete(this, mount, item, user);
     }
 
-    async emptyTrash(mountId: string, user?: User): Promise<void> {
+    public async emptyTrash(mountId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const items = await mount.listTrash();
         for (const item of items) {
@@ -519,7 +525,7 @@ export default class Drive {
         }
     }
 
-    async movePath(mountId: string, pathId: string, targetParentId: string, user?: User): Promise<DrivePath> {
+    public async movePath(mountId: string, pathId: string, targetParentId: string, user?: User): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
 
@@ -564,7 +570,7 @@ export default class Drive {
         return movedPath;
     }
 
-    async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
+    public async renamePath(mountId: string, pathId: string, newName: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
         const oldName = item.name;
@@ -579,18 +585,18 @@ export default class Drive {
         }
     }
 
-    async downloadFile(mountId: string, pathId: string): Promise<StorageFile | null> {
+    public async downloadFile(mountId: string, pathId: string): Promise<StorageFile | null> {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId);
         return mount.readFile(pathId);
     }
 
     // Flushes a container's live data.db before a copy.
-    async flushContainerDb(mountId: string, containerId: string): Promise<void> {
+    public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
         await this.getMount(mountId).flushContainerDb(containerId);
     }
 
-    async copyPath(
+    public async copyPath(
         mountId: string,
         srcPathId: string,
         destParentId: string,
@@ -628,13 +634,13 @@ export default class Drive {
         return copied;
     }
 
-    async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
+    public async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId);
         return mount.readRange(pathId, start, end);
     }
 
-    async writeFileContent(
+    public async writeFileContent(
         mountId: string,
         pathId: string,
         data: Buffer | StorageFile | ReadableStream<Uint8Array>,
@@ -697,13 +703,13 @@ export default class Drive {
         return updated;
     }
 
-    async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
+    public async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
         return { mount, path };
     }
 
-    async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
+    public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
         const allResults: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
             const mountResults = await mount.getPathsByMimeType(mimeType);
@@ -715,13 +721,13 @@ export default class Drive {
         return [...allResults, ...sharedResults.filter((r) => !seen.has(r.id))];
     }
 
-    async getMountMimeTypeContents(mountId: string, mimeType: string): Promise<DrivePath[]> {
+    public async getMountMimeTypeContents(mountId: string, mimeType: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         return mount.getPathsByMimeType(mimeType);
     }
 
     // Called by: GET /search/:ownerId — owner-only (route gates with requireSelf), no SharedDrive wrapper.
-    search(opts: { q: string; limit: number }): DrivePath[] {
+    public search(opts: { q: string; limit: number }): DrivePath[] {
         const merged: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
             merged.push(...mount.searchPaths({ q: opts.q, limit: opts.limit }));
@@ -733,13 +739,13 @@ export default class Drive {
 
     // Force-drain every mount's content reindex queue and await completion. The queues otherwise
     // self-drive (on dirty-mark + cap timer); this exists for tests and ad-hoc ops, not routes.
-    async flushContentReindex(): Promise<void> {
+    public async flushContentReindex(): Promise<void> {
         for (const mount of this.mounts.values()) {
             await mount.flushContentReindex();
         }
     }
 
-    async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
+    public async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         return mount.getBreadcrumb(pathId);
     }
@@ -751,7 +757,7 @@ export default class Drive {
 
     // The route-facing ACL mutation: merges what changed onto the CURRENT ACL server-side,
     // then delegates to updateACL for validation, persistence, and propagation.
-    async updateACLDelta(
+    public async updateACLDelta(
         mountId: string,
         pathId: string,
         delta: DriveACLDelta,
@@ -792,7 +798,7 @@ export default class Drive {
 
     // Called by: updateACLDelta (after its server-side merge). Not route-callable —
     // the ACL route accepts only deltas, so full-array replaces can't originate from clients.
-    async updateACL(
+    public async updateACL(
         mountId: string,
         pathId: string,
         acl: DriveACL[] | null,
@@ -853,7 +859,7 @@ export default class Drive {
 
     // Returns all individual users who have effective access to a path,
     // walking the ancestor chain and expanding team entries to members.
-    async getEffectiveMembers(mountId: string, pathId: string): Promise<EffectiveMember[]> {
+    public async getEffectiveMembers(mountId: string, pathId: string): Promise<EffectiveMember[]> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) throw new ApiError(404, 'Path not found');
@@ -890,7 +896,11 @@ export default class Drive {
     // Per-email access probe for the mail-a-link share dialog: for each recipient, does it already
     // have read access to this path, and would it need admin admission to become a guest? Raw Drive
     // is the owner, so canShare is always true — the SharedDrive wrapper narrows it for shared callers.
-    async checkAccessForEmails(mountId: string, pathId: string, emails: string[]): Promise<DriveAccessCheckResult> {
+    public async checkAccessForEmails(
+        mountId: string,
+        pathId: string,
+        emails: string[],
+    ): Promise<DriveAccessCheckResult> {
         // One breadcrumb walk feeds both membership and visibility (an empty chain means the path is gone).
         const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
         if (crumbs.length === 0) throw new ApiError(404, 'Path not found');
@@ -923,7 +933,7 @@ export default class Drive {
         return { canShare: true, recipients };
     }
 
-    async emailCollaborators(
+    public async emailCollaborators(
         mountId: string,
         pathId: string,
         subject: string | null,
@@ -950,13 +960,13 @@ export default class Drive {
 
     // Called by: SharedDrive.inviteToChat (delegates here after permission checks),
     // and Drive internals. Kept on Drive only — no SharedDrive duplicate needed.
-    async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
+    public async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
         const ancestors = await mount.getBreadcrumb(pathId);
         return findContainerFromAncestors(ancestors);
     }
 
-    async inviteToChat(
+    public async inviteToChat(
         mountId: string,
         chatId: string,
         email: string,
@@ -991,7 +1001,7 @@ export default class Drive {
         return { alreadyHasAccess: false, targetPathId: targetPath.id };
     }
 
-    async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
+    public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
         const mount = this.getMount(mountId);
         const ancestors = await mount.getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
@@ -999,7 +1009,7 @@ export default class Drive {
         return canReadFromAncestors(ancestors, user, resolved);
     }
 
-    async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
+    public async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
         const mount = this.getMount(mountId);
         const ancestors = await mount.getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
@@ -1009,28 +1019,37 @@ export default class Drive {
 
     // Called by: versioning/restore (to decide whether a restore opened the doc
     // itself, and so must close it). Not route-callable.
-    hasCollabDocument(mountId: string, pathId: string): boolean {
+    public hasCollabDocument(mountId: string, pathId: string): boolean {
         return this.documents.has(mountId, pathId);
     }
 
-    async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
+    public async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
         return this.documents.get(this, this.getMount(mountId), pathId);
     }
 
     // Called by: collab/collabDocument cleanup, versioning/restore. Not route-callable.
-    async closeCollabDocument(mountId: string, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
+    public async closeCollabDocument(
+        mountId: string,
+        pathId: string,
+        opts?: { skipFinalSnapshot?: boolean },
+    ): Promise<void> {
         return this.documents.close(this.getMount(mountId), pathId, opts);
     }
 
-    async saveVersion(mountId: string, containerId: string): Promise<Snapshot> {
+    public async saveVersion(mountId: string, containerId: string): Promise<Snapshot> {
         return saveVersion(this.getMount(mountId), containerId);
     }
 
-    async listVersions(mountId: string, containerId: string): Promise<Snapshot[]> {
+    public async listVersions(mountId: string, containerId: string): Promise<Snapshot[]> {
         return listVersions(this.getMount(mountId), containerId);
     }
 
-    async restoreContainer(mountId: string, containerId: string, snapshotName: string, user?: User): Promise<void> {
+    public async restoreContainer(
+        mountId: string,
+        containerId: string,
+        snapshotName: string,
+        user?: User,
+    ): Promise<void> {
         const mount = this.getMount(mountId);
         const container = await mount.getPath(containerId);
         if (!container) throw new ApiError(404, `Container ${containerId} not found`);
@@ -1043,7 +1062,7 @@ export default class Drive {
         }
     }
 
-    async getFileHistory(mountId: string, pathId: string, opts?: { limit?: number }): Promise<FileEvent[]> {
+    public async getFileHistory(mountId: string, pathId: string, opts?: { limit?: number }): Promise<FileEvent[]> {
         return this.getMount(mountId).history.list(pathId, opts);
     }
 
@@ -1053,7 +1072,7 @@ export default class Drive {
     // Drive.recordClientFileEvent below. Not route-callable — no SharedDrive wrapper.
     // Mutations that rewrite the parent chain (trash/move/permanent-delete) or recurse
     // through mounts (copy) keep their own inline record + fan-out instead.
-    async recordFileEvent(
+    public async recordFileEvent(
         mountId: string,
         pathId: string,
         actor: User,
@@ -1081,7 +1100,7 @@ export default class Drive {
             .catch(() => {});
     }
 
-    async recordClientFileEvent(
+    public async recordClientFileEvent(
         mountId: string,
         pathId: string,
         user: User,
@@ -1094,26 +1113,26 @@ export default class Drive {
         await this.recordFileEvent(mountId, pathId, user, event, { dedupeWindowMs: 30_000 });
     }
 
-    async watchPath(mountId: string, pathId: string, user: User): Promise<void> {
+    public async watchPath(mountId: string, pathId: string, user: User): Promise<void> {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId); // 404 on missing/trashed
         mount.history.addWatcher(pathId, user.id);
     }
 
-    async unwatchPath(mountId: string, pathId: string, user: User): Promise<void> {
+    public async unwatchPath(mountId: string, pathId: string, user: User): Promise<void> {
         this.getMount(mountId).history.removeWatcher(pathId, user.id);
     }
 
-    async getWatchStatus(mountId: string, pathId: string, user: User): Promise<PathWatchStatus> {
+    public async getWatchStatus(mountId: string, pathId: string, user: User): Promise<PathWatchStatus> {
         return this.getMount(mountId).history.getWatchStatus(pathId, user.id);
     }
 
-    async getWatches(user: User): Promise<DrivePath[]> {
+    public async getWatches(user: User): Promise<DrivePath[]> {
         return (await this.getWatchedBreadcrumbs(user)).flatMap((crumbs) => crumbs.slice(-1));
     }
 
     // The breadcrumb of every watched path (the path itself last, [] for a vanished row), one query per mount.
-    async getWatchedBreadcrumbs(user: User): Promise<DrivePath[][]> {
+    public async getWatchedBreadcrumbs(user: User): Promise<DrivePath[][]> {
         const crumbs: DrivePath[][] = [];
         for (const mount of this.mounts.values()) {
             crumbs.push(...(await mount.getBreadcrumbs(mount.history.listWatchedPathIds(user.id))));
@@ -1121,7 +1140,7 @@ export default class Drive {
         return crumbs;
     }
 
-    async openDatabase<S extends SchemaType>(
+    public async openDatabase<S extends SchemaType>(
         mountId: string,
         config: DatabaseConfig<S>,
         pathId: string,
@@ -1138,7 +1157,7 @@ export default class Drive {
     // (not Drive.deletePath, which trashes via mount.trashPath and runs
     // ACL/SSE side effects that don't apply to a never-opened brand-new
     // metadata row).
-    async provisionManagedDbs(
+    public async provisionManagedDbs(
         mountId: string,
         parentId: string,
         dbs: ReadonlyArray<{ name: string; config: DatabaseConfig<SchemaType> }>,
@@ -1162,7 +1181,7 @@ export default class Drive {
         }
     }
 
-    async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
+    public async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
         return mount.getChildByName(parentId, name);
     }
@@ -1171,7 +1190,7 @@ export default class Drive {
     // check). Resolves the default chat parent by name on every call so the folder stays freely
     // renameable/movable/deletable; a legacy `Chats` is renamed in place, a non-folder squatter
     // falls back to the root.
-    async ensureChatsFolder(mountId: string): Promise<string> {
+    public async ensureChatsFolder(mountId: string): Promise<string> {
         const mount = this.getMount(mountId);
         const root = await mount.getRootFolder();
         if (!root) throw new Error(`Mount '${mountId}' has no root folder`);
@@ -1199,22 +1218,22 @@ export default class Drive {
 
     // Called by: ChatRoom.init — serializes the lazy data.db auto-create across the fresh ChatRoom
     // Drive.getChat builds per request. Not route-callable.
-    async withPathLock<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
+    public async withPathLock<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
         return this.getMount(mountId).withPathLock(pathId, fn);
     }
 
     // Called by: collab/collabDocument lifecycle (touches mtime on edit). Not route-callable.
-    async touchUpdatedAt(mountId: string, pathId: string, updatedAt: Date): Promise<void> {
+    public async touchUpdatedAt(mountId: string, pathId: string, updatedAt: Date): Promise<void> {
         const mount = this.getMount(mountId);
         await mount.updatePath(pathId, { updatedAt });
     }
 
-    async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
+    public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
         await this.getMount(mountId).updatePath(pathId, { details });
     }
 
     // Called by: chat/chat.ts and collab/collabDocument (create DB-backing files). Not route-callable.
-    async touchFile(mountId: string, parentId: string, name: string, mimeType: string): Promise<string> {
+    public async touchFile(mountId: string, parentId: string, name: string, mimeType: string): Promise<string> {
         const mount = this.getMount(mountId);
         return mount.touchFile(parentId, name, mimeType);
     }
@@ -1223,17 +1242,17 @@ export default class Drive {
     // requireSelf(...) + getDrive(user). No SharedDrive wrapper by design: the listing
     // IS the user's own state (paths shared with them), so cross-owner access has no
     // meaning. See class doc above.
-    async getSharedPathsWithMe(): Promise<DrivePath[]> {
+    public async getSharedPathsWithMe(): Promise<DrivePath[]> {
         return listSharedWithMe(this.sharedDb);
     }
 
     // Called by: GET /drive/:ownerId/watches?all=1 — escape-hatch aggregate (requireSelf +
     // getDrive). Owners that shared into this home, so the watches fan-out can pull each.
-    async getSharedOwnerIds(): Promise<string[]> {
+    public async getSharedOwnerIds(): Promise<string[]> {
         return listSharedOwnerIds(this.sharedDb);
     }
 
-    async getSharedWith(user: User): Promise<DrivePath[]> {
+    public async getSharedWith(user: User): Promise<DrivePath[]> {
         const allShared = await this.getSharedPathsByMe();
         const memberships = await getMemberships(user.id);
         const results: DrivePath[] = [];
@@ -1248,7 +1267,7 @@ export default class Drive {
     // Called by: GET /drive/:ownerId/shared/by-me (escape-hatch route, requireSelf gated)
     // and Drive.getSharedWith (own-drive filtering). No SharedDrive wrapper by design:
     // an owner's "things I shared" registry is owner-scoped — see class doc above.
-    async getSharedPathsByMe(): Promise<DrivePath[]> {
+    public async getSharedPathsByMe(): Promise<DrivePath[]> {
         const allResults: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
             allResults.push(...(await mount.getPathsWithACL()));
@@ -1258,7 +1277,7 @@ export default class Drive {
 
     // Called by: home-relay (cross-home ACL propagation receiver) and share/reconciliation.
     // Not route-callable — inbound side of the sharding seam.
-    async receiveSharedPathChange(
+    public async receiveSharedPathChange(
         path: DrivePath,
         newACL: DriveACL[] | null,
         actorEmail?: string,
@@ -1267,7 +1286,7 @@ export default class Drive {
         return receiveSharedPathChange(this.sharedDb, this.home, path, newACL, actorEmail, actorName);
     }
 
-    async destruct(): Promise<void> {
+    public async destruct(): Promise<void> {
         // Order matters: Yjs documents must be destructed before their underlying mount
         // databases are closed. Yjs may flush pending changes during destruct(), which
         // requires the database to still be open. This mirrors closeCollabDocument() which
@@ -1297,7 +1316,7 @@ export default class Drive {
 
     // Called by: the extracted Drive body modules (upload.ts, trash.ts). Not route-callable —
     // no SharedDrive wrapper, so the union keeps it off the route surface.
-    emit(type: SSEventDrive['type'], path: DrivePath, oldParentId?: string): void {
+    public emit(type: SSEventDrive['type'], path: DrivePath, oldParentId?: string): void {
         this.home.broadcast(buildDriveEvent(type, path, oldParentId));
     }
 }

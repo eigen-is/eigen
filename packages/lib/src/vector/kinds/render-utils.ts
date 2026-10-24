@@ -8,7 +8,8 @@ import { getFontFamily } from '../../constants/fonts';
 import { escapeXml } from '../../core/xml';
 import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { getLineHeightPx, getVerticalOffset } from '../font-metrics';
-import { arrowCurveBeziers, type Box, DEG_TO_RAD, isClosedPath, type Point, round } from '../geometry';
+import type { Box, Point } from '../geometry';
+import { arrowCurveBeziers, DEG_TO_RAD, isClosedPath, round } from '../geometry';
 import {
     cornerRadius,
     diamondOutline,
@@ -18,19 +19,19 @@ import {
     scaleNormalizedPath,
     sharpDiamondOffset,
 } from '../outline';
-import {
-    type FillStyle,
-    isLinearElement,
-    type TextLine,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorImageElement,
-    type VectorLinearElement,
-    type VectorPathElement,
-    type VectorPieElement,
-    type VectorRichTextElement,
-    type VectorShapeElement,
+import type {
+    FillStyle,
+    TextLine,
+    VectorArrowElement,
+    VectorElement,
+    VectorImageElement,
+    VectorLinearElement,
+    VectorPathElement,
+    VectorPieElement,
+    VectorRichTextElement,
+    VectorShapeElement,
 } from '../types';
+import { isLinearElement } from '../types';
 
 // The SVG namespace, one spelling for every surface that writes it: the viewports scene-layers emits,
 // the documents scene-to-svg serializes, a standalone chart and the live <svg> nodes the canvas mounts.

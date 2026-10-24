@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
-import { type XmlElement, xmlAttr } from '../../../lib/core/xml';
+import type { XmlElement } from '../../../lib/core/xml';
+import { xmlAttr } from '../../../lib/core/xml';
 import {
     affords,
     charge,

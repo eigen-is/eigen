@@ -1,3 +1,4 @@
+import type { VectorScene } from '@workspace/lib/vector';
 import {
     frameKeysAfter,
     generateNKeysBetween,
@@ -7,7 +8,6 @@ import {
     remapBinding,
     SLIDES_STYLE_DEFAULTS,
     topmostIndex,
-    type VectorScene,
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';

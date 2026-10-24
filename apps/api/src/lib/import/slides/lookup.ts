@@ -1,5 +1,6 @@
 import { ApiError } from '../../core/errors';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
 import { IMPORT_MESSAGES } from '../messages';
 
 // Every lookup the reader makes into an element goes through here. An element of a layout, master, theme or the

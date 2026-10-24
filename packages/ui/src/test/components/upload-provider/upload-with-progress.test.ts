@@ -13,20 +13,22 @@ type Scenario =
 let scenario: Scenario;
 
 class FakeXHR {
-    withCredentials = false;
-    status = 0;
-    statusText = '';
-    response = '';
-    responseText = '';
-    upload: { onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null } = {
+    public withCredentials = false;
+    public status = 0;
+    public statusText = '';
+    public response = '';
+    public responseText = '';
+    public upload: {
+        onprogress: ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null;
+    } = {
         onprogress: null,
     };
-    onload: (() => void) | null = null;
-    onerror: (() => void) | null = null;
+    public onload: (() => void) | null = null;
+    public onerror: (() => void) | null = null;
 
-    open(_method: string, _url: string) {}
+    public open(_method: string, _url: string) {}
 
-    send(_body: unknown) {
+    public send(_body: unknown) {
         queueMicrotask(() => {
             if (scenario.kind === 'network-error') {
                 this.onerror?.();

@@ -1,5 +1,6 @@
 import { PartialDeleteError, useDeletePaths, useIsEffectiveOwnerOf, useIsSharedWithMe } from '@workspace/lib/drive';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { useEffect, useState } from 'react';
 

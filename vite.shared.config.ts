@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig, mergeConfig, type Plugin, type UserConfig } from 'vite';
+import type { Plugin, UserConfig } from 'vite';
+import { defineConfig, mergeConfig } from 'vite';
 import { APP_URLS } from './packages/lib/src/constants/app-urls.ts';
 import { buildSecurityMetaTags, THEME_FLASH_SCRIPT } from './vite.security-headers.ts';
 

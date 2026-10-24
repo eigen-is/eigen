@@ -23,7 +23,8 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { DOMParser as PmDOMParser, type Schema } from '@tiptap/pm/model';
+import type { Schema } from '@tiptap/pm/model';
+import { DOMParser as PmDOMParser } from '@tiptap/pm/model';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
@@ -35,19 +36,16 @@ import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
-import {
-    DRIVE_MIME_FOLDER,
-    DRIVE_TYPE_FOLDER,
-    type DrivePath,
-    stripEigenExtension,
-    VCARD_MIMES,
-} from '@workspace/lib/types/drive';
-import { type AttachmentReference, toAttachmentReference } from '@workspace/lib/types/drive-reference';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, stripEigenExtension, VCARD_MIMES } from '@workspace/lib/types/drive';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import { toAttachmentReference } from '@workspace/lib/types/drive-reference';
 import { JSDOM } from 'jsdom';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import * as Y from 'yjs';
 import type { Drive } from '../lib/drive';
 import type { User } from '../lib/user';
+import type { LeadRole, MailAttachment, SeededMail, VCardSpec } from './demo/content';
 import {
     ADMIN_AVATAR,
     ADMIN_LOCALPART,
@@ -59,9 +57,7 @@ import {
     DOCS,
     EVENTS,
     KANBAN,
-    type LeadRole,
     MAILS,
-    type MailAttachment,
     NOTES,
     ORG_NAME,
     PERSONAL_SHARES,
@@ -69,14 +65,12 @@ import {
     PHOTOS,
     personaByKey,
     personaByRole,
-    type SeededMail,
     SITE_PLAN,
     SPONSOR_DECK,
     TEAM_FOLDERS,
     TEAM_MOUNT_NAME,
     TEAM_NAME,
     VCARD_FILES,
-    type VCardSpec,
 } from './demo/content';
 import { buildDeckDoc } from './demo/deck-build';
 import { buildVectorDoc } from './demo/vector-build';

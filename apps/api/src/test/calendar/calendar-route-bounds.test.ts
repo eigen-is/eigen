@@ -4,7 +4,8 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { davRequest } from '../dav-test-helpers';
 import { vcal } from '../ics-test-helpers';
-import { assertJson, authedRequest, createTestUser, findOrFail, getTestContext, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { assertJson, authedRequest, createTestUser, findOrFail, getTestContext } from '../setup';
 
 // A legal RRULE nothing bounds: an ordinal BYDAY list for a yearly rule runs past 500 characters.
 const LONG_RRULE = `FREQ=YEARLY;BYDAY=${Array.from({ length: 53 }, (_, i) => `${i + 1}MO,${i + 1}TU`).join(',')}`;

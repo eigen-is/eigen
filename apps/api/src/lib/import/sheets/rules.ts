@@ -9,7 +9,8 @@ import type {
 } from '@workspace/lib/sheets';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { iscelldata, parseA1Range, toA1 } from '@workspace/sheet/engine';
-import { type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
 import { isOn, SML_NS, X14_NS, XM_NS } from '../../ooxml/ooxml';
 import {
     CF_CELL_IS_CONDITION,
@@ -25,7 +26,8 @@ import {
     TOP10_CONDITION,
     withoutFuturePrefixes,
 } from '../../ooxml/spreadsheetml';
-import { colorOf, type DxfLook, dxfLook, resolveColor, type ThemePalette } from './styles';
+import type { DxfLook, ThemePalette } from './styles';
+import { colorOf, dxfLook, resolveColor } from './styles';
 import { cellKey } from './worksheet';
 
 // A worksheet's conditional formats and data validations, read from the part beside its grid. Excel 2010 writes what

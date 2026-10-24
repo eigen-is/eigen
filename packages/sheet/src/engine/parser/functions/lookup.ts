@@ -2,7 +2,8 @@ import type { FormulaArg, FormulaOutput, FormulaValue } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_REF, ERROR_VALUE } from '../error';
 import { toGrid } from '../helper/array';
 import { dateToSerial, toNumber } from '../helper/number';
-import { type FunctionArg, OMITTED, supplied } from '../omitted';
+import type { FunctionArg } from '../omitted';
+import { OMITTED, supplied } from '../omitted';
 
 const MATCH_MODES = new Set([0, -1, 1, 2]);
 const SEARCH_MODES = new Set([1, -1, 2, -2]);

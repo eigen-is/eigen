@@ -1,4 +1,5 @@
-import { createInterface, type Interface } from 'node:readline';
+import type { Interface } from 'node:readline';
+import { createInterface } from 'node:readline';
 import { styleText } from 'node:util';
 
 type Validate = (value: string) => string | undefined;

@@ -4,8 +4,10 @@
 // (inset, font, size, leading, tracking) and a width resize therefore all re-fit through one path
 // instead of one write seam per feature, and a peer's change re-fits on every client that renders it.
 
-import { richTextFitHeight, type VectorElement } from '@workspace/lib/vector';
-import { type RefObject, useLayoutEffect } from 'react';
+import type { VectorElement } from '@workspace/lib/vector';
+import { richTextFitHeight } from '@workspace/lib/vector';
+import type { RefObject } from 'react';
+import { useLayoutEffect } from 'react';
 
 // The text body's natural extent: the span from its first block child's top to its last one's bottom.
 // Not the body's own height — that is pinned to the box (height:100%), so it could never report a

@@ -1,7 +1,8 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE } from '@workspace/lib/charts';
 import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
-import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import {
     A_NS,
     ASVG_NS,
@@ -21,10 +22,13 @@ import {
 import { CHART_NOT_IMPORTED, chartCost, chartPart, droppedChart, readChart } from '../../ooxml/ooxml-chart';
 import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
 import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS, MIME_ALIASES } from '../image-types';
-import { type Item, inlineText, isCaptionLike, isFigureOnly, type Para, paraOf } from './assemble';
+import type { Item, Para } from './assemble';
+import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
 import { descendants, int } from './package';
-import { type Reader, readBlocks, type Scope } from './paragraphs';
-import { pushText, type RunContext } from './runs';
+import type { Reader, Scope } from './paragraphs';
+import { readBlocks } from './paragraphs';
+import type { RunContext } from './runs';
+import { pushText } from './runs';
 
 // A part the package gives no type takes its extension's, and a misspelt type its alias; both only through the
 // allowlist, so a part declared as anything else is still never stored. A WMF or EMF figure shows its alt text in a

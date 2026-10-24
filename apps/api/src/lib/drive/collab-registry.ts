@@ -14,17 +14,17 @@ export class CollabRegistry {
     // teardown that follows would close its db under it.
     private destructed = false;
 
-    constructor(private ownerId: string) {}
+    public constructor(private ownerId: string) {}
 
     private key(mountId: string, pathId: string): string {
         return `${this.ownerId}.${mountId}.${pathId}`;
     }
 
-    has(mountId: string, pathId: string): boolean {
+    public has(mountId: string, pathId: string): boolean {
         return this.documents.has(this.key(mountId, pathId));
     }
 
-    async get(drive: Drive, mount: Mount, pathId: string): Promise<CollabDocument> {
+    public async get(drive: Drive, mount: Mount, pathId: string): Promise<CollabDocument> {
         if (this.destructed) throw new ApiError(503, 'Drive is shutting down');
         const key = this.key(mount.id, pathId);
         let getter = this.documents.get(key);
@@ -48,7 +48,7 @@ export class CollabRegistry {
         return getter();
     }
 
-    async close(mount: Mount, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
+    public async close(mount: Mount, pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
         const key = this.key(mount.id, pathId);
         const documentFn = this.documents.get(key);
         if (!documentFn) return;
@@ -69,7 +69,7 @@ export class CollabRegistry {
     // closeCollabDocumentsRecursively walk). Re-checking canRead per connection — not
     // diffing removed ACL entries — is what makes revoking a *folder* share cascade to
     // docs nested inside it, since read is inherited from the whole ancestor chain.
-    async enforceReadAccessBelow(mount: Mount, pathId: string): Promise<void> {
+    public async enforceReadAccessBelow(mount: Mount, pathId: string): Promise<void> {
         const path = await mount.getPath(pathId);
         if (!path) return;
 
@@ -93,7 +93,7 @@ export class CollabRegistry {
 
     // Destruct every open Yjs doc; the caller closes the mount databases afterwards
     // (Yjs may flush pending changes during destruct(), which needs the db still open).
-    async destructAll(): Promise<void> {
+    public async destructAll(): Promise<void> {
         this.destructed = true;
         for (const [key, getter] of this.documents) {
             // A load this teardown aborted, or one that failed, opened nothing; its caller has the error.

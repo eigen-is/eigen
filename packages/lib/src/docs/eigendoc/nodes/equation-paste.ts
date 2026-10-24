@@ -1,9 +1,8 @@
+import type { MathRow, MathXmlElement } from '@workspace/math';
 import {
     fromDom,
     MATH_LIMITS,
     MathError,
-    type MathRow,
-    type MathXmlElement,
     mathText,
     readMathml,
     readMathmlLatex,

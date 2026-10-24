@@ -1,6 +1,7 @@
 // The image's own row: how the picture fills its box (preserveAspectRatio none / meet / slice).
 
-import { OBJECT_FITS, type ObjectFit, type VectorImageElement } from '@workspace/lib/vector';
+import type { ObjectFit, VectorImageElement } from '@workspace/lib/vector';
+import { OBJECT_FITS } from '@workspace/lib/vector';
 import { getMergedValue, MergedSelect, PropertyRow, PropertySection } from '@workspace/ui/components/properties-panel';
 import type { KindPanelSectionProps } from './index';
 

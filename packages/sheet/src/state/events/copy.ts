@@ -1,6 +1,7 @@
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cancelPaintModel, checkCF, getComputeMap, getSheetIndex } from '..';
-import { type Context, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getSheetConfig } from '../context';
 import { copy, selectIsOverlap } from '../modules/selection';
 import { hasPartMC } from '../modules/validation';
 

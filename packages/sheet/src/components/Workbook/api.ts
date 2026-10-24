@@ -1,35 +1,42 @@
 import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';
-import { applyPatches, current, type Patch, produce } from 'immer';
+import type { Patch } from 'immer';
+import { applyPatches, current, produce } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import type { SetContextOptions } from '../../context';
-import { type ChartRangeRefusal, setUpChartRange } from '../../engine/chart-range';
+import type { ChartRangeRefusal } from '../../engine/chart-range';
+import { setUpChartRange } from '../../engine/chart-range';
 import { RowColError } from '../../engine/rowcol';
 import type { Cell } from '../../engine/types';
+import type {
+    ChartInsertBox,
+    Context,
+    FloatingRef,
+    GlobalCache,
+    Op,
+    Presence,
+    Range,
+    SearchHighlight,
+    SearchResult,
+    Settings,
+} from '../../state';
 import {
     addSheet,
     api,
-    type ChartInsertBox,
-    type Context,
     collectMatches,
     createContextResolver,
     createFilterOptions,
     deleteFloatingObject,
     deleteRowCol,
     deleteSheet,
-    type FloatingRef,
-    type GlobalCache,
     getFlowdata,
     getSheetIndex,
     insertChart,
     insertImage,
     insertRowCol,
     leaveCurrentSheet,
-    type Op,
     opToPatch,
-    type Presence,
-    type Range,
     registerSheetFormulas,
     removeImageByMediaName,
     reorderFloatingObject,
@@ -38,9 +45,6 @@ import {
     replaceMediaNameInHistory,
     replaceSearchMatch,
     revealSearchMatch,
-    type SearchHighlight,
-    type SearchResult,
-    type Settings,
     setChartDataRange,
     setChartLook,
     setChartSpec,

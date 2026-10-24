@@ -3,7 +3,8 @@ import * as criteriaEval from '@formulajs/formulajs/lib/utils/criteria-eval';
 import type { FormulaOutput, FormulaValue } from '../../types';
 import { ERROR_NOT_AVAILABLE, ERROR_VALUE } from '../error';
 import { toGrid } from '../helper/array';
-import { type FunctionArg, OMITTED, supplied } from '../omitted';
+import type { FunctionArg } from '../omitted';
+import { OMITTED, supplied } from '../omitted';
 
 // The criteria test formulajs's SUMIFS and COUNTIFS run, so MAXIFS matches the cells they match; an empty
 // criterion is the 0 they are handed.

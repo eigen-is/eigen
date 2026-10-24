@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { MATHML_NAMESPACE, type MathRow, writeMathml } from '@workspace/math';
+import type { MathRow } from '@workspace/math';
+import { MATHML_NAMESPACE, writeMathml } from '@workspace/math';
 import { readStoredEquation } from '../../lib/document/equation';
 
 const x: MathRow = [{ kind: 'identifier', text: 'x' }];

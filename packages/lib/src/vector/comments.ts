@@ -4,7 +4,8 @@
 // parseIdList/serializeIdList round trip the host does inline.
 
 import { ELEMENT_KINDS } from './kinds';
-import { parseIdList, type VectorElement } from './types';
+import type { VectorElement } from './types';
+import { parseIdList } from './types';
 
 const ANCHOR_TEXT_MAX = 100;
 

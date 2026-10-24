@@ -1,4 +1,5 @@
-import { decodeSheetsSnapshot, type Op, type Sheet, type SheetWithCalcChain } from '@workspace/lib/sheets';
+import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
 import {
     copySheetName,
     createDefaultSheets,

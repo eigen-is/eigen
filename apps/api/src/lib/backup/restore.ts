@@ -12,13 +12,8 @@ import { getUserById } from '../user/user';
 import { extractArtifact, readUnpackedHome } from './archive';
 import { resolveHomeDir } from './home-dir';
 import { restoreAuthRows, restoreAvatar, restoreShares } from './materialize';
-import {
-    checkRestoredDatabases,
-    containerDatabasesIn,
-    materializeMount,
-    movePathAsync,
-    type VersionedDatabase,
-} from './materialize-mount';
+import type { VersionedDatabase } from './materialize-mount';
+import { checkRestoredDatabases, containerDatabasesIn, materializeMount, movePathAsync } from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     buildSafetyCopyName,

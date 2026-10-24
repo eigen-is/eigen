@@ -1,6 +1,8 @@
 import { MathError } from './error';
-import { BARE_ENVIRONMENTS, LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
+import type { LatexCommand } from './latex-commands';
+import { BARE_ENVIRONMENTS, LATEX_COMMANDS, LATEX_ENVIRONMENTS } from './latex-commands';
 import { ACCENTS, COLOR_NAMES, MINUS, naryLimits, PRIME, SPACES } from './notation';
+import type { MathBudget, MathNode, MathRow, MathToken, MathVariant, RowSlot } from './tree';
 import {
     bound,
     clusters,
@@ -11,16 +13,10 @@ import {
     MARK,
     MATH_ENCLOSURES,
     MATH_LIMITS,
-    type MathBudget,
-    type MathNode,
-    type MathRow,
-    type MathToken,
-    type MathVariant,
     mark,
     numberEnd,
     optional,
     RowBuilder,
-    type RowSlot,
 } from './tree';
 import { checkedXml, NOT_XML } from './xml';
 
@@ -152,13 +148,13 @@ class LatexReader {
     // Groups, fonts and colours read into the row around them: levels the parser walks that the tree doesn't have.
     #wrappers = 0;
 
-    constructor(latex: string) {
+    public constructor(latex: string) {
         this.#latex = latex;
         ({ tokens: this.#tokens, partners: this.#partners } = tokenize(latex));
         this.#end = this.#tokens.length;
     }
 
-    read(): MathRow {
+    public read(): MathRow {
         const pieces: Piece[] = [];
         this.#atoms(pieces, MATH, 1);
         if (this.#pos < this.#end) throw this.#unexpected(this.#pos);

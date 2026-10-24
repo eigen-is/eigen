@@ -18,6 +18,7 @@ import { paths } from '../../lib/mount/schema';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { provisionDoc } from '../fault-storage-helpers';
+import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
@@ -27,7 +28,6 @@ import {
     findOrFail,
     getTestContext,
     TEST_PNG_BYTES,
-    type TestUser,
 } from '../setup';
 import { MARKER_DB_CONFIG, MARKER_SCHEMA, snapshotInto, waitForJob } from './backup-test-helpers';
 

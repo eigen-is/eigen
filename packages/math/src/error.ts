@@ -1,10 +1,10 @@
 export class MathError extends Error {
-    override name = 'MathError';
+    public override name = 'MathError';
 
     // Where in the LaTeX a reader stopped.
-    constructor(
+    public constructor(
         message: string,
-        readonly offset?: number,
+        public readonly offset?: number,
     ) {
         super(message);
     }

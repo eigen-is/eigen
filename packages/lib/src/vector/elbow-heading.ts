@@ -5,6 +5,7 @@
 // "how does it snake there". Everything is SCENE space; shape angles are DEGREES (rotatePoint owns the
 // radian conversion), matching the rest of packages/lib/src/vector.
 
+import type { Point } from './geometry';
 import {
     bindingAnchor,
     bindingGap,
@@ -14,19 +15,13 @@ import {
     linearLocalToScene,
     normalizeFixedPoint,
     outlineIntersections,
-    type Point,
     parsePoints,
     rotatePoint,
 } from './geometry';
 import { capabilitiesOf, ELEMENT_KINDS, isBindable } from './kinds';
 import { clamp, nearestPoint, outlineDistance } from './outline';
-import {
-    parseBinding,
-    serializeBinding,
-    type VectorArrowElement,
-    type VectorBindableElement,
-    type VectorElement,
-} from './types';
+import type { VectorArrowElement, VectorBindableElement, VectorElement } from './types';
+import { parseBinding, serializeBinding } from './types';
 
 // A unit orthogonal direction. Compared by value (compareHeading), never by reference.
 export type Heading = { x: number; y: number };

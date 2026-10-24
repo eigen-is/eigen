@@ -12,13 +12,13 @@ import {
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { getFontName, readCssFontSize } from '@workspace/lib/constants/fonts';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     ITALIC_HEADING_LEVELS,
     ITALIC_HEADING_SELECTOR,
     PAGE_NUMBER_TEXT,
     readChartAttrs,
     readEquation,
-    type TitleType,
 } from '@workspace/lib/docs/eigendoc';
 import type {
     EigenClipboardChartItem,

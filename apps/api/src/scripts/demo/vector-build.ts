@@ -6,6 +6,18 @@
 
 import { basename } from 'node:path';
 import { textToParagraphHtml } from '@workspace/lib/html';
+import type {
+    Point,
+    StyleDefaults,
+    VectorArrowElement,
+    VectorElement,
+    VectorElementBase,
+    VectorElementType,
+    VectorImageElement,
+    VectorLinearElement,
+    VectorRichTextElement,
+    VectorShapeElement,
+} from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
     bindingAnchor,
@@ -22,21 +34,11 @@ import {
     kindDefaults,
     measureLabel,
     normalizeLinear,
-    type Point,
-    type StyleDefaults,
     sceneBounds,
     serializeBinding,
     shapeAnchorPoints,
     solidFill,
     VECTOR_STYLE_DEFAULTS,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorElementBase,
-    type VectorElementType,
-    type VectorImageElement,
-    type VectorLinearElement,
-    type VectorRichTextElement,
-    type VectorShapeElement,
     writeElementInDoc,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
-import { CONVERT_SOURCES, type ConvertTarget, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import type { ConvertTarget } from '@workspace/lib/types/drive';
+import { CONVERT_SOURCES, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateItemCreated } from './keys';
 

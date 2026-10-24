@@ -1,6 +1,7 @@
 import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from '../core/errors';
-import { parseXmlRoot, type XmlElement, xmlChild, xmlElements } from '../core/xml';
+import type { XmlElement } from '../core/xml';
+import { parseXmlRoot, xmlChild, xmlElements } from '../core/xml';
 import { DAV_NAMESPACES, propstatNotFound, propstatOk } from './xml';
 
 // The shared PROPFIND core (RFC 4918 § 9.1): CalDAV and CardDAV parse the request body into the requested prop

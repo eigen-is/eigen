@@ -1,15 +1,6 @@
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
-import {
-    BORDER_STYLES,
-    type BorderSide,
-    type Cell,
-    type CellBorderSides,
-    type CellStyle,
-    cellFontName,
-    type DefaultConditionalFormatRule,
-    SHEET_DEFAULT_FONT,
-    SHEET_DEFAULT_FONT_SIZE,
-} from '@workspace/lib/sheets';
+import type { BorderSide, Cell, CellBorderSides, CellStyle, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
+import { BORDER_STYLES, cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
 import { cssColorToHex } from '../../../document/colors';

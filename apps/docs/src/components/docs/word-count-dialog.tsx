@@ -2,7 +2,8 @@ import type { Editor } from '@tiptap/react';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { useState } from 'react';
-import { countWords, type TextCounts } from './word-count';
+import type { TextCounts } from './word-count';
+import { countWords } from './word-count';
 
 type WordCountDialogProps = {
     // The editor counted.

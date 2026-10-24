@@ -1,12 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import type { VectorElement, VectorScene } from '@workspace/lib/vector';
 import {
     DEFAULT_SCENE_META,
     ELEMENT_KINDS,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
     solidFill,
-    type VectorElement,
-    type VectorScene,
 } from '@workspace/lib/vector';
 import {
     drawingPage,

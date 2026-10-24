@@ -1,5 +1,6 @@
 import { OMML_NAMESPACE, WORDML_NAMESPACE } from '../omml';
-import { attribute, elementsOf, type MathXmlElement, textOf } from '../xml';
+import type { MathXmlElement } from '../xml';
+import { attribute, elementsOf, textOf } from '../xml';
 
 // The OMML round trip's yardstick, written apart from the reader: an equation as Word shows it. Objects nest with their
 // properties resolved to Word's defaults; every character carries its text and effective style, so run boundaries don't

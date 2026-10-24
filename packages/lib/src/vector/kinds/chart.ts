@@ -3,7 +3,8 @@
 import { chartSearchText, exceedsChartSpecBytes, parseChartSpec, sampleChartSpec } from '../../charts/spec';
 import { hitTestBox } from '../geometry';
 import { rectOutline } from '../outline';
-import { DEFAULT_ELEMENT_PROPS, type VectorChartElement } from '../types';
+import type { VectorChartElement } from '../types';
+import { DEFAULT_ELEMENT_PROPS } from '../types';
 import { chartToElements } from './chart-convert';
 import { chartLayout, renderChartSvg } from './chart-render';
 import { defineKind } from './kind';

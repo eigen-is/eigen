@@ -6,7 +6,8 @@
 import * as fs from 'node:fs';
 import path from 'node:path';
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
-import { type FaceWidths, TEXT_WIDTH_RANGES } from '@workspace/lib/vector';
+import type { FaceWidths } from '@workspace/lib/vector';
+import { TEXT_WIDTH_RANGES } from '@workspace/lib/vector';
 import { DOCX_FONT_FILES, sfntTables } from '../lib/export/fonts';
 
 const OUT = path.join(import.meta.dir, '../../../../packages/lib/src/vector/text-width-data.ts');

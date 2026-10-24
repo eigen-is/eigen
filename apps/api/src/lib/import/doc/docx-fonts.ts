@@ -1,6 +1,7 @@
 import { bundledFont, bundledFontOfCategory, DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { codePoint as dingbat } from 'dingbat-to-unicode';
-import { hasXmlName, type XmlElement, xmlChild, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlChild, xmlElements } from '../../core/xml';
 import { A_NS, W_NS } from '../../ooxml/ooxml';
 import { FONT_FAMILY } from '../../ooxml/wordml';
 import { descendants, w, wChild } from './package';

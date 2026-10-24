@@ -4,16 +4,8 @@ import { BODY, boxSide, cssPt, HEADER_CELL_LOOK, proseBorder, TABLE_MARGIN, twip
 import { proseValue } from '../../../document/prose-css';
 import { BORDER_SIDES, MAX_TABLE_COLUMNS, STYLE_NAMES, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import type { Context } from './package';
-import {
-    type Block,
-    blocksOf,
-    blocksXml,
-    bordersXml,
-    clampInt,
-    JUSTIFICATION,
-    paragraphXml,
-    textProps,
-} from './paragraphs';
+import type { Block } from './paragraphs';
+import { blocksOf, blocksXml, bordersXml, clampInt, JUSTIFICATION, paragraphXml, textProps } from './paragraphs';
 import type { StyleDef } from './styles';
 
 // Tables: the grid as the editor lays it out.

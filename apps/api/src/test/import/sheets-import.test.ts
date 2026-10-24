@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
-import { DRIVE_MIME_SHEETS, type DrivePath, type ImportResult } from '@workspace/lib/types/drive';
+import type { Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
+import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
 import { update } from '@workspace/sheet/engine';
 import JSZip from 'jszip';

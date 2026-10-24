@@ -7,7 +7,8 @@ import { index, xlookup, xmatch } from '../../functions/lookup';
 import { maxifs, minifs } from '../../functions/statistical';
 import { concatenate, textjoin } from '../../functions/text';
 import { toNumber } from '../../helper/number';
-import { type FunctionArg, OMITTED } from '../../omitted';
+import type { FunctionArg } from '../../omitted';
+import { OMITTED } from '../../omitted';
 import SUPPORTED_FORMULAS from '../../supported-formulas';
 
 // Narrow view over the untyped formulajs module: a tree of callable functions keyed by name, a dotted

@@ -1,4 +1,5 @@
-import { type SlideSize, UNSTORED_SLIDE_WIDTH } from '@workspace/lib/vector';
+import type { SlideSize } from '@workspace/lib/vector';
+import { UNSTORED_SLIDE_WIDTH } from '@workspace/lib/vector';
 
 // PowerPoint's vocabulary, which the pptx writer writes and the pptx reader recognises, one source both ways. The OOXML
 // every format shares is ooxml/ooxml.ts.

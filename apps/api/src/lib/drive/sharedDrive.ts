@@ -21,7 +21,8 @@ import type { Home } from '../home';
 import type { Mount } from '../mount';
 import type { StorageFile } from '../storage';
 import type { User } from '../user';
-import { getMemberships, type Memberships } from '../user/';
+import type { Memberships } from '../user/';
+import { getMemberships } from '../user/';
 import { canReadFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
 import type Drive from './drive';
@@ -39,7 +40,7 @@ export default class SharedDrive {
     private user: User;
     private owner: User;
 
-    constructor(sharedHome: Home, user: User) {
+    public constructor(sharedHome: Home, user: User) {
         this.sharedDrive = sharedHome.drive;
         this.user = user;
         this.owner = sharedHome.user;

@@ -1,9 +1,12 @@
-import { DOMSerializer, type Node as PMNode } from '@tiptap/pm/model';
-import { type Editor, EditorContent, useEditorState } from '@tiptap/react';
+import type { Node as PMNode } from '@tiptap/pm/model';
+import { DOMSerializer } from '@tiptap/pm/model';
+import type { Editor } from '@tiptap/react';
+import { EditorContent, useEditorState } from '@tiptap/react';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useLayoutEffect, useRef } from 'react';
-import { footnotesInDoc, type NoteAnchor, noteKey } from './extensions/footnote';
+import type { NoteAnchor } from './extensions/footnote';
+import { footnotesInDoc, noteKey } from './extensions/footnote';
 
 type FootnoteListProps = {
     body: Editor;

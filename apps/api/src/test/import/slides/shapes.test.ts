@@ -1,9 +1,11 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { MAX_PATH_BYTES, type NewVectorElement, type SlidePage } from '@workspace/lib/vector';
+import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
+import { MAX_PATH_BYTES } from '@workspace/lib/vector';
 import * as customGeometryModule from '../../../lib/import/slides/custom-geometry';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
 import { MAX_GROUP_DEPTH } from '../../../lib/import/slides/shapes';
+import type { PptxFixture } from '../../fixtures/pptx';
 import {
     box,
     buildPptx,
@@ -13,7 +15,6 @@ import {
     groupXfrm,
     grp,
     PIXEL_PNG,
-    type PptxFixture,
     PX,
     para,
     pic,

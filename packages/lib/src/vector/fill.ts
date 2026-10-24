@@ -6,7 +6,8 @@
 import type { BackgroundFill, Fill, FillPaint } from '../types/background';
 import { isSafeMediaName } from './media-refs';
 import { normalizeAngle, round4 } from './outline';
-import { DEFAULT_FILL_STYLE, FILL_STYLES, type FillStyle, prop } from './types';
+import type { FillStyle } from './types';
+import { DEFAULT_FILL_STYLE, FILL_STYLES, prop } from './types';
 
 // "Paint nothing" as a bare color: a fill with no paint, a scene with no background, a shape or box
 // whose border is switched off. One token, so the predicate and every writer agree on the spelling.

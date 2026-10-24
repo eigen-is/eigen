@@ -90,19 +90,19 @@ export function createContextResolver(source: Context): CellResolver {
 // FormulaCache is defined as class to avoid being frozen by immer
 export class FormulaCache {
     // Shared state — delegated to engine so both FE and BE use the same cache
-    get execFunctionGlobalData(): Record<string, Cell> {
+    public get execFunctionGlobalData(): Record<string, Cell> {
         return this.engine.state.execFunctionGlobalData;
     }
 
-    set execFunctionGlobalData(v: Record<string, Cell> | null | undefined) {
+    public set execFunctionGlobalData(v: Record<string, Cell> | null | undefined) {
         this.engine.state.execFunctionGlobalData = v ?? {};
     }
 
-    get formulaCellInfoMap(): FormulaCellInfoMap | null {
+    public get formulaCellInfoMap(): FormulaCellInfoMap | null {
         return this.engine.state.formulaCellInfoMap;
     }
 
-    set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
+    public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
         this.engine.state.formulaCellInfoMap = v;
         // The map is only ever reassigned to reset it (null or {}); the reverse
         // index mirrors the map, so it resets too and refills via setFormulaCellInfo.
@@ -112,61 +112,61 @@ export class FormulaCache {
     // Reverse lookup cell → formulas reading it; lives in engine state next to
     // formulaCellInfoMap (so engine resets clear both) and is kept in lockstep
     // by setFormulaCellInfo and the setter above.
-    get dependencyIndex(): DependencyIndex {
+    public get dependencyIndex(): DependencyIndex {
         return this.engine.state.dependencyIndex;
     }
 
     // UI-only state — stays on FormulaCache
-    func_selectedrange?: Selection;
+    public func_selectedrange?: Selection;
 
-    data_parm_index: number;
+    public data_parm_index: number;
 
-    cellTextToIndexList: Record<string, FormulaDependency>;
+    public cellTextToIndexList: Record<string, FormulaDependency>;
 
-    rangechangeindex?: number;
+    public rangechangeindex?: number;
 
-    selectingRangeIndex: number;
+    public selectingRangeIndex: number;
 
-    rangeResizeObj?: unknown;
+    public rangeResizeObj?: unknown;
 
-    rangeResize?: unknown;
+    public rangeResize?: unknown;
 
-    rangeResizeIndex?: number;
+    public rangeResizeIndex?: number;
 
-    rangeResizexy?: unknown;
+    public rangeResizexy?: unknown;
 
-    rangeResizeWinH?: unknown;
+    public rangeResizeWinH?: unknown;
 
-    rangeResizeWinW?: unknown;
+    public rangeResizeWinW?: unknown;
 
-    rangeResizeTo?: HTMLDivElement[];
+    public rangeResizeTo?: HTMLDivElement[];
 
-    rangeSetValueTo?: Node | null;
+    public rangeSetValueTo?: Node | null;
 
-    rangeIndex?: number;
+    public rangeIndex?: number;
 
-    rangestart?: boolean;
+    public rangestart?: boolean;
 
-    rangetosheet?: string;
+    public rangetosheet?: string;
 
-    rangedrag_column_start?: boolean;
+    public rangedrag_column_start?: boolean;
 
-    rangedrag_row_start?: boolean;
+    public rangedrag_row_start?: boolean;
 
-    functionRangeIndex?: number[];
+    public functionRangeIndex?: number[];
 
-    functionlistMap: Record<string, unknown>;
+    public functionlistMap: Record<string, unknown>;
 
-    execFunctionExist?: CalcChainEntry[];
+    public execFunctionExist?: CalcChainEntry[];
 
     // Cells an edit actually changed (set by deleteSelectedCellText). When present,
     // runExecFunction recomputes only these instead of every cell in the selection
     // rectangle — so clearing a huge, mostly-empty selection stays cheap.
-    pendingChangedCells?: CalcChainEntry[];
+    public pendingChangedCells?: CalcChainEntry[];
 
-    engine: FormulaEngine;
+    public engine: FormulaEngine;
 
-    constructor() {
+    public constructor() {
         this.data_parm_index = 0;
         this.selectingRangeIndex = -1;
         this.functionlistMap = {};
@@ -174,7 +174,7 @@ export class FormulaCache {
         this.engine = new FormulaEngine();
     }
 
-    updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
+    public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
         // An unbuilt map reads the patched cells when it builds.
         const map = this.formulaCellInfoMap;
         if (map == null) return;

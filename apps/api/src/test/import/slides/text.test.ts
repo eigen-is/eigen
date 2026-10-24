@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_HTML_BYTES } from '@workspace/lib/vector';
-import { type XmlElement, xmlChild } from '../../../lib/core/xml';
+import type { XmlElement } from '../../../lib/core/xml';
+import { xmlChild } from '../../../lib/core/xml';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import type { SlideTheme } from '../../../lib/import/slides/inherit';
 import { richTextOf } from '../../../lib/import/slides/text';

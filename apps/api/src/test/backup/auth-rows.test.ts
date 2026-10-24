@@ -16,7 +16,8 @@ import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
-import { authedRequest, createTestUser, getTestContext, TEST_DATA_DIR, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { authedRequest, createTestUser, getTestContext, TEST_DATA_DIR } from '../setup';
 
 // `auth.json` is the one part of an archive that writes to users3.db, and an archive is a file an
 // admin uploaded. Taken as it stood, a planted `member` row with the public org id and role `owner`

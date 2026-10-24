@@ -5,13 +5,8 @@ import type { Snapshot } from '@workspace/lib/types/versioning';
 import { sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import type { Mount } from '../../lib/mount/mount';
-import {
-    DAY_MS,
-    DEFAULT_RETENTION,
-    HOUR_MS,
-    type RetentionPolicy,
-    selectSnapshotsToPrune,
-} from '../../lib/versioning/retention';
+import type { RetentionPolicy } from '../../lib/versioning/retention';
+import { DAY_MS, DEFAULT_RETENTION, HOUR_MS, selectSnapshotsToPrune } from '../../lib/versioning/retention';
 import { formatSnapshotTimestamp, parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
 import {
     authedRequest,

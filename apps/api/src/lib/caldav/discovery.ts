@@ -1,6 +1,7 @@
 import type { CalendarCollection } from '../calendar/resource-store';
 import { calendarHomeHref, encodePathSegment, principalHref } from '../dav/href';
-import { type PropfindRequest, selectProps } from '../dav/propfind';
+import type { PropfindRequest } from '../dav/propfind';
+import { selectProps } from '../dav/propfind';
 import { currentUserPrincipalProp, multistatusResponse, principalProps, propstatOk, response } from '../dav/xml';
 import { calendarCollectionProps, homeCollectionProps } from './xml-builder';
 

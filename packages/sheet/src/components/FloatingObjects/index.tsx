@@ -1,4 +1,5 @@
-import { floatingItems, type SheetFloatingItem } from '@workspace/lib/sheets';
+import type { SheetFloatingItem } from '@workspace/lib/sheets';
+import { floatingItems } from '@workspace/lib/sheets';
 import type { ZOp } from '@workspace/lib/vector';
 import { downloadChartImage } from '@workspace/ui/components/charts';
 import { ObjectContextMenu, useContextMenu } from '@workspace/ui/components/context-menu';

@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import type { VectorElementType } from '@workspace/lib/vector';
 import {
     CREATION_TOOL_TYPES,
     ELEMENT_KINDS,
     isVectorElementType,
     SLIDES_STYLE_DEFAULTS,
     VECTOR_STYLE_DEFAULTS,
-    type VectorElementType,
 } from '@workspace/lib/vector';
 import { VECTOR_TOOLS } from '../../../../components/vector/hooks/use-tool';
 import { ELEMENT_KIND_UI } from '../../../../components/vector/kinds';

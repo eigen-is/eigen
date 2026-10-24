@@ -4,7 +4,8 @@ import type { Snapshot } from '@workspace/lib/types/versioning';
 import type Drive from '../../lib/drive/drive';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
-import { chatGet, chatPost, createTestUserOnStorage, driveGet, drivePost, findOrFail, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { chatGet, chatPost, createTestUserOnStorage, driveGet, drivePost, findOrFail } from '../setup';
 
 const M = 'default';
 

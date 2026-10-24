@@ -1,10 +1,12 @@
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
 import type { DocumentImportOptions, DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import { CARD_TITLE_MAX_LENGTH, type ClientFileEventInput } from '@workspace/lib/types/file-history';
+import type { ClientFileEventInput } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { MAX_EMAIL_LENGTH, NO_CONTROL_PATTERN } from '@workspace/lib/validation';
-import { type Static, t } from 'elysia';
+import type { Static } from 'elysia';
+import { t } from 'elysia';
 
 // Explicit tuple — t.Union(arr.map(t.Literal)) loses the tuple and breaks
 // Elysia's EigenDocType param narrowing. Kept here (not in packages/lib) so

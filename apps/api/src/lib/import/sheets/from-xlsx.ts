@@ -12,10 +12,12 @@ import type { CountedWarningCode, TransformWarning } from '../../document/transf
 import { drawingTheme } from '../../ooxml/drawingml';
 import { optional } from '../../ooxml/opc';
 import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
-import { type ImportedMedia, importMedia } from '../image-types';
+import type { ImportedMedia } from '../image-types';
+import { importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError, TOO_MANY_CELLS } from '../messages';
 import { readGrid } from './cells';
-import { type Drawing, placeDrawings, readDrawing } from './drawing';
+import type { Drawing } from './drawing';
+import { placeDrawings, readDrawing } from './drawing';
 import { readBudget, readInBatches, readPackage } from './package';
 import { readRules } from './rules';
 import { readSharedStrings } from './strings';

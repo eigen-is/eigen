@@ -1,9 +1,11 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
-import { DRIVE_MIME_CHAT, type DriveACL, type DrivePath } from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
-import { getUserById, type User } from '../user/';
+import type { User } from '../user/';
+import { getUserById } from '../user/';
 
 const MAX_MEMBER_WALKS = 200;
 

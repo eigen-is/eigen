@@ -1,11 +1,6 @@
 import { parseOwnerId } from '@workspace/lib/types';
-import {
-    type DriveACL,
-    type DriveACLDelta,
-    type DrivePath,
-    type DriveVisibility,
-    isCollabType,
-} from '@workspace/lib/types/drive';
+import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import { isCollabType } from '@workspace/lib/types/drive';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { User } from '../user';
 import type { Memberships } from '../user/';

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Toaster as Sonner, type ToasterProps } from 'sonner';
+import type { ToasterProps } from 'sonner';
+import { Toaster as Sonner } from 'sonner';
 
 function useTheme(): 'light' | 'dark' {
     const [theme, setTheme] = useState<'light' | 'dark'>(() =>

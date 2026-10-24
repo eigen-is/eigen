@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { type DriveACL, type DrivePath, type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
+import type { DriveACL, DrivePath, MountInfo, OrgTeam } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
 import { getServerConfig } from '../../lib/config/server-config';
 import {
     assertJson,

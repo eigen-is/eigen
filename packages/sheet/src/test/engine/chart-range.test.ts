@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
+import type { ChartRange } from '../../engine/chart-range';
 import {
-    type ChartRange,
     chartRangeData,
     chartRangeOf,
     chartRangeText,

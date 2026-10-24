@@ -1,6 +1,7 @@
 import ICAL from 'ical.js';
 import { ApiError } from '../core/errors';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlTrimmedText } from '../core/xml';
+import type { XmlElement } from '../core/xml';
+import { parseXml, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlTrimmedText } from '../core/xml';
 import { asciiLower } from '../dav/collation';
 import { readHrefs, readSyncToken, UnsupportedFilterError } from '../dav/report-request';
 import { DAV_NAMESPACES } from '../dav/xml';

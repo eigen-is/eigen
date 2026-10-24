@@ -5,9 +5,11 @@ import type { CountedWarningCode } from '../../document/transform/protocol';
 import { THEME_TYPE } from '../../ooxml/drawingml';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../ooxml/ooxml';
 import { chartPart } from '../../ooxml/ooxml-chart';
-import { openPackage, optional, type Relationship, relOfType, relTarget } from '../../ooxml/opc';
+import type { Relationship } from '../../ooxml/opc';
+import { openPackage, optional, relOfType, relTarget } from '../../ooxml/opc';
 import { PML, PRESENTATION_TYPE } from '../../ooxml/presentationml';
-import { type MediaPart, pictureMediaPart } from '../image-types';
+import type { MediaPart } from '../image-types';
+import { pictureMediaPart } from '../image-types';
 import { IMPORT_MESSAGES, SAVE_AS_PPTX } from '../messages';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
 

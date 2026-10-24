@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { elbowBindPoint } from '../../../vector/elbow-heading';
 import { solidFill } from '../../../vector/fill';
+import type { Point } from '../../../vector/geometry';
 import {
     bindingAnchor,
     bindingGap,
     boundEndpoint,
-    type Point,
     rotatePoint,
     serializePoints,
     shapeAnchorPoints,
@@ -13,7 +13,8 @@ import {
 import { ELEMENT_KINDS } from '../../../vector/kinds';
 import { distanceToSegment, ellipseOutline, outlineContains } from '../../../vector/outline';
 import { readElementFromFields } from '../../../vector/read-vector';
-import { serializeBinding, type VectorPieElement } from '../../../vector/types';
+import type { VectorPieElement } from '../../../vector/types';
+import { serializeBinding } from '../../../vector/types';
 import { arrow, byIdOf, ellipse, pie } from '../element-factories';
 
 // A circular slice centered on (100, 100) with radius 100, so the oracle below is plain circle geometry.

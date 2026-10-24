@@ -17,9 +17,11 @@ import {
 import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, FileSliders, Hash, PanelBottom, PanelTop, Trash2 } from 'lucide-react';
-import { type ReactNode, useId, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useId, useState } from 'react';
 import { keepEditorFocus } from './editor-toolbar';
-import { PageNumberItems, type PageNumberPreset } from './page-numbers';
+import type { PageNumberPreset } from './page-numbers';
+import { PageNumberItems } from './page-numbers';
 import { HeadersAndFootersDialog, PageSetupDialog } from './page-setup-dialog';
 
 const BAND_LABEL: Record<BandRoot, string> = {

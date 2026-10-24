@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { type PeerPresence, presencesFromPeers } from '../../state/presence';
+import type { PeerPresence } from '../../state/presence';
+import { presencesFromPeers } from '../../state/presence';
 
 describe('state/presence/presencesFromPeers', () => {
     const alice: PeerPresence = {

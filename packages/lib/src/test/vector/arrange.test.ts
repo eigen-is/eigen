@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { type ArrangeItem, arrangeBoundingBox, computeArrange } from '../../vector/arrange';
+import type { ArrangeItem } from '../../vector/arrange';
+import { arrangeBoundingBox, computeArrange } from '../../vector/arrange';
 
 function obj(id: string, x: number, y: number, width: number, height: number): ArrangeItem {
     return { id, x, y, width, height };

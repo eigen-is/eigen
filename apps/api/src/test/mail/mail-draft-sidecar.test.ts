@@ -3,11 +3,13 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
-import { type Email, type EmailDraft, type EmailSummary, mailAttachmentName } from '@workspace/lib/types/mail';
+import type { Email, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
+import { mailAttachmentName } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
 import type { DraftMeta, MailStore } from '../../lib/mail/mail-store';
 import { mailRootOf, makeEml, seedMaildirFile } from '../mail-test-helpers';
+import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
@@ -15,7 +17,6 @@ import {
     createTestUser,
     ensureServer,
     putDraft,
-    type TestUser,
     uploadDraftAttachment,
 } from '../setup';
 

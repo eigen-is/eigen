@@ -1,4 +1,5 @@
-import { type DrivePath, isDocumentType } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isDocumentType } from '@workspace/lib/types/drive';
 
 // Returns the nearest enclosing Eigen document container (every collab type
 // plus chat) along the breadcrumb, or null. Plain folders never match. Used by

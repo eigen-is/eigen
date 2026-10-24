@@ -5,13 +5,12 @@
 // 13:30:30 (serial 11175.5628…), so chip examples and previews stay truthful.
 
 import { describe, expect, test } from 'bun:test';
+import type { DateTokenId, FormatSegment } from '../../../components/FormatDialogs/format-pattern';
 import {
     buildCurrencyPattern,
     CURRENCY_VARIANTS,
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
-    type DateTokenId,
-    type FormatSegment,
     NUMBER_FORMAT_PRESETS,
     previewPattern,
     serializeSegments,

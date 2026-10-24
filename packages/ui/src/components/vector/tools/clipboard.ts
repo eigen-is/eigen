@@ -16,14 +16,8 @@ import { stripTagsServer } from '@workspace/lib/html';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    buildElementsClipboardItem,
-    canvasPxToPt,
-    eigenMediaHref,
-    sceneToSvg,
-    type VectorElement,
-    type VectorMeta,
-} from '@workspace/lib/vector';
+import type { VectorElement, VectorMeta } from '@workspace/lib/vector';
+import { buildElementsClipboardItem, canvasPxToPt, eigenMediaHref, sceneToSvg } from '@workspace/lib/vector';
 
 // The items a foreign host reads: an image item per selected image (also the cross-mount re-upload
 // manifest a canvas→canvas paste keys on by `mediaName`), a text item per rich-text box carrying

@@ -10,7 +10,8 @@ import { ObjectTransform } from '@workspace/ui';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import { type ReactNode, type RefObject, useCallback, useRef, useState } from 'react';
+import type { ReactNode, RefObject } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { textColumnWidth } from './text-column';
 
 // The resize floor of a figure's side (px).

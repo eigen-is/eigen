@@ -1,21 +1,18 @@
 import type { BackgroundFill } from '@workspace/lib/types/background';
-import {
-    MAX_SLIDE_WIDTH,
-    MIN_SLIDE_WIDTH,
-    type NewVectorElement,
-    nearestSlideSize,
-    SLIDE_SIZES,
-    type SlidePage,
-} from '@workspace/lib/vector';
+import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
+import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, nearestSlideSize, SLIDE_SIZES } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
-import { type XmlElement, xmlAttr } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { xmlAttr } from '../../core/xml';
 import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
 import { EMU_PER_POINT, P_NS } from '../../ooxml/ooxml';
-import { type ImportedMedia, importMedia } from '../image-types';
+import type { ImportedMedia } from '../image-types';
+import { importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
 import { childOf, withWorkBudget } from './lookup';
-import { type DeckWalk, readPackage } from './package';
+import type { DeckWalk } from './package';
+import { readPackage } from './package';
 import { readSlideShapes } from './shapes';
 
 // pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform

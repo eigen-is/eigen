@@ -5,16 +5,16 @@ import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './index.css';
 import { debounce } from 'es-toolkit/compat';
-import { type SetContextOptions, WorkbookContext } from '../../context';
+import type { SetContextOptions } from '../../context';
+import { WorkbookContext } from '../../context';
 import { cellDisplay } from '../../engine/format';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
+import type { Context, GlobalCache } from '../../state';
 import {
     api,
     applySheetFilter,
-    type Context,
     computeOverlayRegions,
-    type GlobalCache,
     getCellHyperlink,
     getCellRowColumn,
     getRangetxt,

@@ -2,17 +2,15 @@
 // selected arrow carries a label — the label's font. The generic capability rows (stroke, sketch,
 // opacity) stay the panel's; these are the questions only an arrow answers.
 
+import type { Arrowhead, ArrowShape, VectorArrowElement } from '@workspace/lib/vector';
 import {
     ARROW_SHAPES,
-    type Arrowhead,
-    type ArrowShape,
     arrowShapeFields,
     arrowShapeOf,
     EDGES_OPTIONS,
     normalizeLinear,
     parsePoints,
     redockBindingsForElbow,
-    type VectorArrowElement,
 } from '@workspace/lib/vector';
 import {
     FontRow,

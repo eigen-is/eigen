@@ -2,23 +2,19 @@ import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { Subprocess } from 'bun';
 import { ApiError } from '../../core/errors';
-import {
-    type ChildAck,
-    type ChildMediaRequest,
-    type ChildResponseEnvelope,
-    COUNTED_WARNING_CODES,
-    type CountedWarningCode,
-    type DocumentTransformRequest,
-    type DocumentTransformResponse,
-    type ExportMedia,
-    inputBytesOf,
-    type ParentMediaReply,
-    resultBytes,
-    resultMatchesRequest,
-    type TransformError,
-    type TransformWarning,
-    toTransformError,
+import type {
+    ChildAck,
+    ChildMediaRequest,
+    ChildResponseEnvelope,
+    CountedWarningCode,
+    DocumentTransformRequest,
+    DocumentTransformResponse,
+    ExportMedia,
+    ParentMediaReply,
+    TransformError,
+    TransformWarning,
 } from './protocol';
+import { COUNTED_WARNING_CODES, inputBytesOf, resultBytes, resultMatchesRequest, toTransformError } from './protocol';
 
 // Process-wide runner for document-transform child processes. Owns admission and the
 // child's lifecycle only — document logic lives in child.ts and the format modules it
@@ -244,14 +240,14 @@ export class DocumentTransformRunner {
     private nextJobId = 1;
     private closing = false;
 
-    constructor(opts: { entry?: string } = {}) {
+    public constructor(opts: { entry?: string } = {}) {
         this.entry = opts.entry ?? fileURLToPath(new URL('./child', import.meta.url));
     }
 
     // Throws ApiError(503) synchronously when the job cannot be admitted. Callable
     // ahead of run() so a caller can refuse before paying for an expensive input
     // (run-transform.ts checks it before capturing the document).
-    assertAdmissible(priority: TransformPriority): void {
+    public assertAdmissible(priority: TransformPriority): void {
         if (this.closing) this.refuse(priority, 'closing');
         if (this.foreground.length + this.background.length >= this.maxQueued) this.refuse(priority, 'queue-full');
         if (priority === 'background' && this.background.length >= this.maxQueuedBackground) {
@@ -277,7 +273,7 @@ export class DocumentTransformRunner {
 
     // Throws ApiError(503) synchronously when the job cannot be admitted; the
     // returned promise always resolves with a DocumentTransformResponse.
-    run(request: DocumentTransformRequest, opts: RunOptions): Promise<DocumentTransformResponse> {
+    public run(request: DocumentTransformRequest, opts: RunOptions): Promise<DocumentTransformResponse> {
         this.assertAdmissible(opts.priority);
 
         return new Promise((resolve) => {
@@ -311,7 +307,7 @@ export class DocumentTransformRunner {
 
     // Server shutdown: stop admission, reject queued work, give active children a
     // short grace period, then kill them and wait a moment for their ends.
-    async close(): Promise<void> {
+    public async close(): Promise<void> {
         this.closing = true;
         const queued = [...this.foreground, ...this.background];
         this.foreground = [];

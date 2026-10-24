@@ -2,7 +2,8 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandEdge } from '@workspace/lib/docs/eigendoc';
-import { TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
+import type { TextAlign } from '@workspace/lib/vector';
+import { TEXT_ALIGNS } from '@workspace/lib/vector';
 import { ToolbarMenu } from '@workspace/ui';
 import { MenuSections } from '@workspace/ui/components/context-menu';
 import {
@@ -16,6 +17,7 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ColorPickerMenuItem } from '@workspace/ui/components/media';
+import type { LucideIcon } from 'lucide-react';
 import {
     AArrowDown,
     AArrowUp,
@@ -43,7 +45,6 @@ import {
     ListIndentIncrease,
     ListOrdered,
     ListRestart,
-    type LucideIcon,
     PanelTop,
     Pilcrow,
     Quote,
@@ -62,7 +63,8 @@ import {
 } from 'lucide-react';
 import type { ToolbarState } from './hooks/use-toolbar-state';
 import { setNumberedListType } from './list-numbering';
-import { PageNumberItems, type PageNumberPreset } from './page-numbers';
+import type { PageNumberPreset } from './page-numbers';
+import { PageNumberItems } from './page-numbers';
 import { paragraphStylesIn } from './paragraph-styles';
 import { tableMenuSections } from './table-menu-sections';
 

@@ -6,7 +6,8 @@ import {
     parseChartSpec,
     readChartLook,
 } from '@workspace/lib/charts';
-import { type SheetChart, sheetFloatingBox } from '@workspace/lib/sheets';
+import type { SheetChart } from '@workspace/lib/sheets';
+import { sheetFloatingBox } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
     ChartData,

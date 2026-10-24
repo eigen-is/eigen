@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { DEFAULT_ELEMENT_PROPS, type VectorElement } from '@workspace/lib/vector';
+import type { VectorElement } from '@workspace/lib/vector';
+import { DEFAULT_ELEMENT_PROPS } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { installHappyDom } from '../../../happy-dom';
 

@@ -1,23 +1,10 @@
 import { ApiError } from '../core/errors';
-import {
-    parseXml,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlText,
-    xmlTrimmedText,
-} from '../core/xml';
+import type { XmlElement } from '../core/xml';
+import { parseXml, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText, xmlTrimmedText } from '../core/xml';
 import { readHrefs, readSyncToken, UnsupportedFilterError } from '../dav/report-request';
 import { DAV_NAMESPACES } from '../dav/xml';
-import {
-    assertSupportedCollation,
-    type ParamFilter,
-    type PropFilter,
-    type QueryFilter,
-    type TextMatch,
-} from './query-filter';
+import type { ParamFilter, PropFilter, QueryFilter, TextMatch } from './query-filter';
+import { assertSupportedCollation } from './query-filter';
 
 const DAV = DAV_NAMESPACES.D;
 const CARDDAV = DAV_NAMESPACES.CARD;

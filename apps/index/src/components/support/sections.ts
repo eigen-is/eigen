@@ -1,5 +1,6 @@
 import { apps } from '@workspace/lib/apps';
-import { type LucideIcon, MonitorSmartphone, Rocket, Server, Settings, Shield } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { MonitorSmartphone, Rocket, Server, Settings, Shield } from 'lucide-react';
 
 export type SectionConfig = {
     id: string;

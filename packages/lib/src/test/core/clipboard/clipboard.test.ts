@@ -369,7 +369,7 @@ describe('writeEigenClipboardAsync', () => {
     test('a rejecting html promise still resolves the write with a marker-only text/html', async () => {
         const captured: { items?: Record<string, Blob | Promise<Blob>> } = {};
         gg.ClipboardItem = class {
-            constructor(public items: Record<string, Blob | Promise<Blob>>) {}
+            public constructor(public items: Record<string, Blob | Promise<Blob>>) {}
         };
         const origNavigator = gg.navigator;
         gg.navigator = {

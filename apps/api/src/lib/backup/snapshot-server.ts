@@ -19,7 +19,8 @@ import {
     INSTALL_FOLDERS,
     SERVER_ARCHIVE_ENV_MEMBER,
 } from './paths';
-import { listFileTree, type SnapshotProgress } from './snapshot-home';
+import type { SnapshotProgress } from './snapshot-home';
+import { listFileTree } from './snapshot-home';
 
 type ServerDatabase = (typeof SERVER_DATABASES)[keyof typeof SERVER_DATABASES];
 

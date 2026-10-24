@@ -1,10 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import {
-    DRIVE_MIME_DOC,
-    type DrivePath,
-    type EditorSaveResult,
-    type FileEditorContent,
-} from '@workspace/lib/types/drive';
+import type { DrivePath, EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
 import { getHome } from '../../lib/home';
 import { authedRequest, driveGet, driveUpload, getTestContext } from '../setup';

@@ -9,13 +9,8 @@ import {
     RICH_TEXT_CLASS,
     sceneLayers,
 } from '../../vector/scene-layers';
-import {
-    DEFAULT_ARROW_PROPS,
-    DEFAULT_ELEMENT_PROPS,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorImageElement,
-} from '../../vector/types';
+import type { VectorArrowElement, VectorElement, VectorImageElement } from '../../vector/types';
+import { DEFAULT_ARROW_PROPS, DEFAULT_ELEMENT_PROPS } from '../../vector/types';
 import { arrow, chart, ellipse, image, linear, pie, richtext, scene, shape } from './element-factories';
 
 describe('sceneLayers', () => {

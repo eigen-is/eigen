@@ -20,8 +20,10 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { Download, FileText, Folder, type LucideIcon, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { Download, FileText, Folder, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { DriveCreateEigenDoc } from '../../drive/drive-create-eigendoc';
 import { DriveDeleteItem } from '../../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../../drive/drive-email-collaborators';

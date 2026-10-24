@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
+import type { DatabaseConfig, SchemaType } from '../lib/core';
+import { ManagedDatabase } from '../lib/core';
 import type { Home } from '../lib/home';
 
 // A domain class over a temp home directory with no booted app behind it: the stub Home supplies only the

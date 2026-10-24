@@ -3,12 +3,14 @@
 // the fetches.
 
 import { parseChartSpec } from '../charts/spec';
-import { type BundledFontFace, fontFacesFor, getFontName } from '../constants/fonts';
+import type { BundledFontFace } from '../constants/fonts';
+import { fontFacesFor, getFontName } from '../constants/fonts';
 import type { EigenClipboardChartItem } from '../types/clipboard';
 import { ELEMENT_KINDS } from './kinds';
 import { readElementFromFields } from './read-vector';
 import type { MeasuredRichText } from './rich-text-svg';
-import { DEFAULT_SCENE_META, type VectorElement, type VectorScene } from './types';
+import type { VectorElement, VectorScene } from './types';
+import { DEFAULT_SCENE_META } from './types';
 
 // A chart in a doc or on a sheet is drawn on white paper, so one downloaded alone is too; a selection of anything
 // else keeps the transparency it has on the canvas, and the whole drawing has its own background.

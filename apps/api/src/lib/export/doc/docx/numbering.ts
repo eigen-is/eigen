@@ -3,17 +3,8 @@ import { BLOCK_MARGINS } from '../../../document/looks';
 import { W_NS } from '../../../ooxml/ooxml';
 import { CHECKBOX_GLYPHS, LIST_LEVELS } from '../../../ooxml/wordml';
 import type { Context, Package } from './package';
-import {
-    type Block,
-    blocksOf,
-    indentOf,
-    type Paragraph,
-    type ParagraphProps,
-    pPrXml,
-    quoteBar,
-    textProps,
-    withAfter,
-} from './paragraphs';
+import type { Block, Paragraph, ParagraphProps } from './paragraphs';
+import { blocksOf, indentOf, pPrXml, quoteBar, textProps, withAfter } from './paragraphs';
 import { rPrXml } from './runs';
 import { proseTwips } from './styles';
 

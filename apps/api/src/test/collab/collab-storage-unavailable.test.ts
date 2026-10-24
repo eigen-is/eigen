@@ -15,7 +15,8 @@ import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';
 import type { FakeS3Server } from '../fake-s3-server';
-import { createFakeS3Mount, type FakeS3Mount, removeFakeS3Mount, settleContainer } from '../fault-storage-helpers';
+import type { FakeS3Mount } from '../fault-storage-helpers';
+import { createFakeS3Mount, removeFakeS3Mount, settleContainer } from '../fault-storage-helpers';
 import { authedRequest, getTestContext } from '../setup';
 
 // Any server-side (5xx) failure closes the collab WS with 1013 'storage-unavailable', unreachable storage

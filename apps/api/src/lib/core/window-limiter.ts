@@ -6,7 +6,7 @@ const SWEEP_ABOVE_KEYS = 2000;
 export class WindowLimiter {
     private hits = new Map<string, number[]>();
 
-    constructor(
+    public constructor(
         private windowMs: number,
         private max: number,
     ) {}
@@ -18,11 +18,11 @@ export class WindowLimiter {
         return fresh;
     }
 
-    isFull(key: string): boolean {
+    public isFull(key: string): boolean {
         return this.fresh(key, Date.now()).length >= this.max;
     }
 
-    record(key: string): void {
+    public record(key: string): void {
         const now = Date.now();
         this.hits.set(key, [...this.fresh(key, now), now]);
         if (this.hits.size <= SWEEP_ABOVE_KEYS) return;
@@ -31,17 +31,17 @@ export class WindowLimiter {
     }
 
     // Records a hit when the key has room; false when it is full.
-    take(key: string): boolean {
+    public take(key: string): boolean {
         if (this.isFull(key)) return false;
         this.record(key);
         return true;
     }
 
-    release(key: string): void {
+    public release(key: string): void {
         this.hits.delete(key);
     }
 
-    clear(): void {
+    public clear(): void {
         this.hits.clear();
     }
 }

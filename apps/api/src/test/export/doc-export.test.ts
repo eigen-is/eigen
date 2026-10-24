@@ -2,16 +2,11 @@ import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import {
-    DEFAULT_PAGE_SETUP,
-    type NormalStyle,
-    PAGE_NUMBER_TEXT,
-    PAGE_ROOT,
-    pageRecord,
-    STYLE_ROOT,
-} from '@workspace/lib/docs/eigendoc';
+import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_PAGE_SETUP, PAGE_NUMBER_TEXT, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
-import { MATHML_NAMESPACE, type MathNode, type MathRow, writeMathml, writeText } from '@workspace/math';
+import type { MathNode, MathRow } from '@workspace/math';
+import { MATHML_NAMESPACE, writeMathml, writeText } from '@workspace/math';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';

@@ -1,11 +1,7 @@
-import {
-    floatingItems,
-    floatingWriteFilter,
-    nextFloatingIndex,
-    type SheetFloatingKind,
-    sheetFloatingBox,
-} from '@workspace/lib/sheets';
-import { type Box, DUPLICATE_OFFSET, type ZOp, zOrderKeys } from '@workspace/lib/vector';
+import type { SheetFloatingKind } from '@workspace/lib/sheets';
+import { floatingItems, floatingWriteFilter, nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
+import type { Box, ZOp } from '@workspace/lib/vector';
+import { DUPLICATE_OFFSET, zOrderKeys } from '@workspace/lib/vector';
 import type { Patch } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
 import type { Context } from '../context';

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { VectorFrame } from '../../vector/frames';
 import {
     canvasPtToPx,
     canvasPxToPt,
@@ -15,7 +16,6 @@ import {
     slidePtToPx,
     slidePxToPt,
     snapSlideFontSize,
-    type VectorFrame,
 } from '../../vector/frames';
 import { SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { shape } from './element-factories';

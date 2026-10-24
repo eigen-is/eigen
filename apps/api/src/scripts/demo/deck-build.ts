@@ -6,19 +6,19 @@
 // rebuilds the same deck.
 
 import { basename } from 'node:path';
+import type { NewVectorElement, StyleDefaults } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_RICHTEXT_PROPS,
     generateNKeysBetween,
-    type NewVectorElement,
     SLIDES_STYLE_DEFAULTS,
-    type StyleDefaults,
     serializeBackgroundFill,
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import { DECK_INK, type DeckImage, type DeckSlide, type DeckText } from './content';
+import type { DeckImage, DeckSlide, DeckText } from './content';
+import { DECK_INK } from './content';
 
 // The deck's style table: the slides app's own, in the deck's ink — what an editor-authored element inherits.
 const DECK_STYLE: StyleDefaults = { ...SLIDES_STYLE_DEFAULTS, color: DECK_INK };

@@ -12,7 +12,8 @@ import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK } from '../../../lib/docume
 import { chartFigureMedia } from '../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
 import { withSvgFallbacks } from '../../../lib/export/office-image';
-import { type DocxImage, docxToPmJson } from '../../../lib/import/doc/from-docx';
+import type { DocxImage } from '../../../lib/import/doc/from-docx';
+import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';

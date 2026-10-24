@@ -12,12 +12,12 @@ import type { Mount } from '../../lib/mount/mount';
 import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { FakeS3Server } from '../fake-s3-server';
+import type { FaultStorage } from '../fault-storage-helpers';
 import {
     countBackingRows,
     createHomeFaultMount,
     createS3MountConfig,
     FaultMount,
-    type FaultStorage,
     provisionDoc,
     registerFaultMount,
     SETTLE_BOUND_MS,

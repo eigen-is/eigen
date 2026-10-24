@@ -7,7 +7,8 @@ import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { MessageView } from '../mail/message-view';
-import { PREVIEW_BODY_CLASS, PreviewCounts, PreviewPane, type PreviewStatus } from './preview-pane';
+import type { PreviewStatus } from './preview-pane';
+import { PREVIEW_BODY_CLASS, PreviewCounts, PreviewPane } from './preview-pane';
 
 export function EmlPreviewContent({ path }: { path: DrivePath }) {
     const { data, status } = useEmlPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);

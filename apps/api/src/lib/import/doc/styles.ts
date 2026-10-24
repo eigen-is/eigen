@@ -1,4 +1,5 @@
-import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
 import { isOn, W_NS } from '../../ooxml/ooxml';
 import {
@@ -9,7 +10,8 @@ import {
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
 } from '../../ooxml/wordml';
-import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
+import type { Fonts, Script, Theme } from './docx-fonts';
+import { FONT_SLOTS } from './docx-fonts';
 import { halfPointsOf, int, onOff, twipsOf, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.
@@ -440,11 +442,11 @@ export class Styles {
     private readonly byId = new Map<string, Style>();
     // By id as given: a style with no w:styleId is '', no style undefined.
     private readonly resolved = new Map<string | undefined, Resolved>();
-    readonly defaultParagraph: string | undefined;
-    readonly docRun: DocxRunProps;
-    readonly docPara: ParaProps;
+    public readonly defaultParagraph: string | undefined;
+    public readonly docRun: DocxRunProps;
+    public readonly docPara: ParaProps;
 
-    constructor(root: XmlElement | undefined, theme: Theme) {
+    public constructor(root: XmlElement | undefined, theme: Theme) {
         let defaultParagraph: string | undefined;
         const defaults = wChild(root, 'docDefaults');
         this.docRun = readRunProps(wChild(wChild(defaults, 'rPrDefault'), 'rPr'), theme);
@@ -477,7 +479,7 @@ export class Styles {
             defaultParagraph ?? (this.byId.get('Normal')?.type === 'paragraph' ? 'Normal' : undefined);
     }
 
-    get(id: string | undefined): Style | undefined {
+    public get(id: string | undefined): Style | undefined {
         return id === undefined ? undefined : this.byId.get(id);
     }
 
@@ -509,23 +511,23 @@ export class Styles {
         return resolved;
     }
 
-    run(id: string | undefined): DocxRunProps {
+    public run(id: string | undefined): DocxRunProps {
         return this.resolve(id).run;
     }
 
-    para(id: string | undefined): ParaProps {
+    public para(id: string | undefined): ParaProps {
         return this.resolve(id).para;
     }
 
-    role(id: string | undefined): Role | undefined {
+    public role(id: string | undefined): Role | undefined {
         return this.resolve(id).role;
     }
 
-    isCodeCharacter(id: string | undefined): boolean {
+    public isCodeCharacter(id: string | undefined): boolean {
         return this.resolve(id).code;
     }
 
-    table(id: string | undefined): TableLook {
+    public table(id: string | undefined): TableLook {
         return this.resolve(id).table;
     }
 }

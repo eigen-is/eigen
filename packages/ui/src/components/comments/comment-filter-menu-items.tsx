@@ -1,4 +1,5 @@
-import { COMMENT_STATUS_FILTERS, COMMENT_STATUS_LABELS, type useCommentFilter } from '@workspace/lib/comments';
+import type { useCommentFilter } from '@workspace/lib/comments';
+import { COMMENT_STATUS_FILTERS, COMMENT_STATUS_LABELS } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { CircleDot, FilterX, Palette, Users } from 'lucide-react';

@@ -1,16 +1,17 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import type { VectorElement } from '@workspace/lib/vector';
 import {
     DEFAULT_SCENE_META,
     parseBackgroundFill,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
-    type VectorElement,
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../../../lib/document/slides';
-import { type SlidesImportJob, toTransferableBuffer } from '../../../lib/document/transform/protocol';
+import type { SlidesImportJob } from '../../../lib/document/transform/protocol';
+import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { runImportToSlidesUpdate } from '../../../lib/document/transform/run-transform';
 import { presetGeometry } from '../../../lib/import/slides/preset-geometry';
 import { importPptxToSlidesUpdate } from '../../../lib/import/slides/transform';

@@ -27,7 +27,8 @@ import { Paperclip, Send, Trash2 } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { DraftAttachments } from './draft-attachments';
 import { useDraft } from './hooks/use-draft';
-import { ShareAndSendDialog, type ShareGrant } from './share-and-send-dialog';
+import type { ShareGrant } from './share-and-send-dialog';
+import { ShareAndSendDialog } from './share-and-send-dialog';
 
 // Recipients as the backend will see them at send, minus the sender: the shared canonicaliser
 // flattens RFC 2822 groups and dedupes case-insensitively with to > cc > bcc precedence (an address

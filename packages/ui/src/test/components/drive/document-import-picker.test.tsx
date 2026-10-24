@@ -4,7 +4,8 @@
 // runs no import until the dialog after it says how the file comes in.
 import { expect, mock, test } from 'bun:test';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
-import { type ConvertTarget, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, type DrivePath } from '@workspace/lib/types/drive';
+import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 

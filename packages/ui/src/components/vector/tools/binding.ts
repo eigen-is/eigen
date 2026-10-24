@@ -4,9 +4,16 @@
 // boundEndpoint, followBindings, bindingDistance, remapBinding); this module is the thin UI glue the
 // canvas and the drawing hook call, so those files only dispatch.
 
+import type {
+    Box,
+    PinPatch,
+    Point,
+    VectorArrowElement,
+    VectorBindableElement,
+    VectorElement,
+} from '@workspace/lib/vector';
 import {
     anchorToScene,
-    type Box,
     bindingAnchor,
     bindingDistance,
     boxCenter,
@@ -20,8 +27,6 @@ import {
     moveEndpoints,
     outlineContains,
     outlinePath,
-    type PinPatch,
-    type Point,
     parseBinding,
     parseFill,
     parsePoints,
@@ -29,9 +34,6 @@ import {
     remapBinding,
     rotatePoint,
     serializeBinding,
-    type VectorArrowElement,
-    type VectorBindableElement,
-    type VectorElement,
 } from '@workspace/lib/vector';
 
 // Is `point` inside the shape's own outline grown by `pad` (shrunk, for a negative pad)? The kind owns

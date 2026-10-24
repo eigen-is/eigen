@@ -1,8 +1,10 @@
 import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from '../core/errors';
-import { hasXmlName, type XmlElement, XmlError, xmlElements } from '../core/xml';
+import type { XmlElement } from '../core/xml';
+import { hasXmlName, XmlError, xmlElements } from '../core/xml';
 import { CONTENT_TYPES_NS, CORE_PROPERTIES_NS, DC_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS } from './ooxml';
-import { openZip, writeZip, ZipError, type ZipReader, type ZipWriteEntry } from './zip';
+import type { ZipReader, ZipWriteEntry } from './zip';
+import { openZip, writeZip, ZipError } from './zip';
 
 // The Open Packaging Conventions every OOXML format shares: the package, a part's relationships and the part names they
 // resolve to, read and written.

@@ -2,34 +2,26 @@ import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import {
-    DEFAULT_NORMAL_STYLE,
-    DEFAULT_PAGE_SETUP,
-    type NormalStyle,
-    type PageSetup,
-} from '@workspace/lib/docs/eigendoc';
-import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
+import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import type { MathRow } from '@workspace/math';
+import { MATH_LIMITS, MATHML_NAMESPACE, readOmml, writeMathml } from '@workspace/math';
 import sharp from 'sharp';
-import {
-    parseXml,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlText,
-} from '../../../../lib/core/xml';
+import type { XmlElement } from '../../../../lib/core/xml';
+import { parseXml, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../../../lib/core/xml';
 import type { EigendocBands } from '../../../../lib/document/doc';
 import { docSchema } from '../../../../lib/document/doc-schema';
 import { cssPt, QUOTE_LOOK, twips } from '../../../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../../../lib/document/prose-css';
-import { type ExportMedia, toTransferableText } from '../../../../lib/document/transform/protocol';
+import type { ExportMedia } from '../../../../lib/document/transform/protocol';
+import { toTransferableText } from '../../../../lib/document/transform/protocol';
 import { chartFigureMedia } from '../../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/fonts';
 import { withSvgFallbacks } from '../../../../lib/export/office-image';
 import { parseOoxml } from '../../../../lib/ooxml/ooxml';
-import { openZip, type ZipReader } from '../../../../lib/ooxml/zip';
+import type { ZipReader } from '../../../../lib/ooxml/zip';
+import { openZip } from '../../../../lib/ooxml/zip';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,

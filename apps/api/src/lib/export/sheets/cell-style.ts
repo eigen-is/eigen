@@ -1,5 +1,6 @@
 import type { Cell, Sheet } from '@workspace/lib/sheets';
-import { type CellResolver, createArrayResolver } from '@workspace/sheet/engine';
+import type { CellResolver } from '@workspace/sheet/engine';
+import { createArrayResolver } from '@workspace/sheet/engine';
 
 // What both Sheet[] emitters read: the HTML/PDF renderer (render.ts) and the xlsx writer (xlsx/). It lives here, as
 // the xlsx writer must not import render.ts, which would pull DOMPurify and jsdom (through sanitize) into the xlsx path

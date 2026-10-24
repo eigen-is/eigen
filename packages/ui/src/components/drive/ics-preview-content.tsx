@@ -11,7 +11,8 @@ import { Calendar } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { EventDetailCard } from '../calendar/event-detail-card';
 import { EmptyState } from '../layout/app/empty-state';
-import { PREVIEW_BODY_CLASS, PreviewCounts, PreviewPane, type PreviewStatus } from './preview-pane';
+import type { PreviewStatus } from './preview-pane';
+import { PREVIEW_BODY_CLASS, PreviewCounts, PreviewPane } from './preview-pane';
 
 export function IcsPreviewContent({ path }: { path: DrivePath }) {
     const { data, status } = useIcsPreview(path.ownerId, path.mountId, path.id, path.updatedAt, path.size);

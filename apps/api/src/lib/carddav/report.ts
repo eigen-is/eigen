@@ -4,7 +4,8 @@ import type { CardRow } from '../contacts/dav-store';
 import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { UnsupportedFilterError } from '../dav/report-request';
-import { type DataBudget, multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
+import type { DataBudget } from '../dav/report-row';
+import { multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
 import { handleSyncCollection } from '../dav/sync-collection';
 import { davError, multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
 import { parseVCardLines } from '../vcard';
@@ -13,7 +14,8 @@ import { projectAddressData } from './address-data';
 import { bookHref, cardHref } from './discovery';
 import { matchCard, UnsupportedCollationError } from './query-filter';
 import { addressDataProp } from './xml-builder';
-import { type CardReportRequest, parseCardReport } from './xml-parser';
+import type { CardReportRequest } from './xml-parser';
+import { parseCardReport } from './xml-parser';
 
 // Caps a query result set so a book of any size cannot assemble an unbounded response.
 const QUERY_RESULT_CAP = 1000;

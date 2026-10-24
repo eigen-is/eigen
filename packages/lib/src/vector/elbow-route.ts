@@ -13,9 +13,9 @@
 // Everything runs in SCENE coordinates (elbow arrows pin angle 0, so the derived local frame is a pure
 // translation) and is converted to the arrow's local frame once at the end.
 
+import type { B4, Heading } from './elbow-heading';
 import {
     aabbForElement,
-    type B4,
     compareHeading,
     distanceToElement,
     flipHeading,
@@ -24,18 +24,16 @@ import {
     HEADING_LEFT,
     HEADING_RIGHT,
     HEADING_UP,
-    type Heading,
     headingIsHorizontal,
     vectorToHeading,
 } from './elbow-heading';
 import type { PinRoutingContext } from './elbow-pins';
+import type { Bounds, Point } from './geometry';
 import {
-    type Bounds,
     boundShape,
     elementBounds,
     linearLocalToScene,
     linearSceneToLocal,
-    type Point,
     parsePoints,
     unionBounds,
 } from './geometry';
@@ -660,12 +658,12 @@ class BinaryHeap {
         this.content[idx] = node;
     }
 
-    push(node: Node): void {
+    public push(node: Node): void {
         this.content.push(node);
         this.sinkDown(this.content.length - 1);
     }
 
-    pop(): Node | null {
+    public pop(): Node | null {
         if (this.content.length === 0) return null;
         const result = this.content[0];
         const end = this.content.pop();
@@ -676,11 +674,11 @@ class BinaryHeap {
         return result;
     }
 
-    size(): number {
+    public size(): number {
         return this.content.length;
     }
 
-    rescore(node: Node): void {
+    public rescore(node: Node): void {
         this.sinkDown(this.content.indexOf(node));
     }
 }

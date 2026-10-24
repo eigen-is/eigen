@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
-import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType, withEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPE_INFO, withEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
@@ -73,9 +74,9 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 // the ones that weren't, so the caller can run its after-delete side effects for the successes and narrow
 // a retry to just the failures (re-sending already-trashed ids 404s).
 export class PartialDeleteError extends Error {
-    constructor(
-        readonly succeeded: DrivePath[],
-        readonly failed: DrivePath[],
+    public constructor(
+        public readonly succeeded: DrivePath[],
+        public readonly failed: DrivePath[],
     ) {
         super(`Failed to delete ${failed.length} of ${succeeded.length + failed.length} items`);
         this.name = 'PartialDeleteError';

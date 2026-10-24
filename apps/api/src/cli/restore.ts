@@ -20,7 +20,8 @@ import {
 import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
-import { BACKUP_LEVELS, type BackupLevel } from '@workspace/lib/types/backup';
+import type { BackupLevel } from '@workspace/lib/types/backup';
+import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
 import { buildBackupStamp } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
 import { isLightSkipped } from '../lib/backup/archive-layout';
@@ -34,13 +35,8 @@ import {
     SERVER_ARCHIVE_ENV_MEMBER,
     STAGING_DIR,
 } from '../lib/backup/paths';
-import {
-    RESTORING_DATA_DIR,
-    RESTORING_DIR,
-    type ServerArchiveFile,
-    stageBytesNeeded,
-    stageServerArchive,
-} from '../lib/backup/restore-server';
+import type { ServerArchiveFile } from '../lib/backup/restore-server';
+import { RESTORING_DATA_DIR, RESTORING_DIR, stageBytesNeeded, stageServerArchive } from '../lib/backup/restore-server';
 import { describeFailures, readServerArchive, readServerArchiveMember } from '../lib/backup/verify';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
@@ -56,7 +52,8 @@ import { API_IMAGE_KEY, PIN_KEYS } from '../lib/config/release';
 import { PATHS } from '../lib/core/constants';
 import { readEnvFile } from './env-file';
 import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
-import { createUi, glyphLine, type Ui } from './ui';
+import type { Ui } from './ui';
+import { createUi, glyphLine } from './ui';
 
 // Two runs, as the launcher makes them. --stage runs as the API's user in its container while Eigen runs, on the
 // data root, .env.production and backups folder the API sees. --swap runs as root on the install folder (-w

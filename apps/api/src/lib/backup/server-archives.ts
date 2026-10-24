@@ -15,7 +15,8 @@ import { alertOwner } from '../user/alert-owner';
 import { writeRecord } from './archive';
 import { listBackupJobs, runningJobOn } from './jobs';
 import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
-import { pruneServerArchives, type RetainedArchive } from './retention';
+import type { RetainedArchive } from './retention';
+import { pruneServerArchives } from './retention';
 
 // The server archives and their records in the backups folder: what the owner's list and the status read, what a
 // delete takes with it, retention, and the boot that ends a record left running. Running a backup is server-job.ts.

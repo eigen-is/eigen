@@ -1,11 +1,14 @@
 import { CHART_DEFAULT_SIZE, parseChartSpec, readChartLook } from '@workspace/lib/charts';
 import { buildChartClipboardItem } from '@workspace/lib/clipboard';
-import { nextFloatingIndex, type SheetChart, sheetFloatingBox } from '@workspace/lib/sheets';
+import type { SheetChart } from '@workspace/lib/sheets';
+import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
 import type { EigenClipboardChartItem } from '@workspace/lib/types/clipboard';
-import { type Box, randomSeed } from '@workspace/lib/vector';
+import type { Box } from '@workspace/lib/vector';
+import { randomSeed } from '@workspace/lib/vector';
 import { inlineChartSpec, renderSheetChartSvg } from '../../engine/chart-data';
-import { type ChartRangeRefusal, currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
+import type { ChartRangeRefusal } from '../../engine/chart-range';
+import { currentRegion, setUpChartRange, suggestChartSpec } from '../../engine/chart-range';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { clipToUsedExtent } from '../utils';

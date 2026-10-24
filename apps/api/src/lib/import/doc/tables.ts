@@ -5,13 +5,16 @@ import {
     PROSE_TEXTBLOCKS,
     readCellBackground,
 } from '@workspace/lib/docs/eigendoc';
-import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK } from '../../document/looks';
 import { isOn, W_NS } from '../../ooxml/ooxml';
 import { MAX_TABLE_COLUMNS, STYLE_NAMES, TWIPS_PER_PX } from '../../ooxml/wordml';
-import { build, type Item, inlineText, isWhitespace, type Para } from './assemble';
+import type { Item, Para } from './assemble';
+import { build, inlineText, isWhitespace } from './assemble';
 import { int, onOff, twipsOf, w, wChild } from './package';
-import { type Reader, readBlocks, type Scope, WRAPPERS } from './paragraphs';
+import type { Reader, Scope } from './paragraphs';
+import { readBlocks, WRAPPERS } from './paragraphs';
 import { isFill, mergeRun, shadingOf } from './styles';
 
 type Row = { trPr?: XmlElement; cells: XmlElement[] };

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { BackgroundFill } from '@workspace/lib/types/background';
+import type { NewVectorElement, VectorElement } from '@workspace/lib/vector';
 import {
     generateNKeysBetween,
-    type NewVectorElement,
     normalizeAngle,
     parseFill,
     readVectorFromDoc,
@@ -10,7 +10,6 @@ import {
     serializeBackgroundFill,
     serializeFill,
     TRANSPARENT_FILL,
-    type VectorElement,
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';

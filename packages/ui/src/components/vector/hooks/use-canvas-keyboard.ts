@@ -7,19 +7,15 @@
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import {
-    NUDGE_STEP,
-    NUDGE_STEP_LARGE,
-    type VectorElement,
-    type VectorElementPatch,
-    type ZOp,
-} from '@workspace/lib/vector';
+import type { VectorElement, VectorElementPatch, ZOp } from '@workspace/lib/vector';
+import { NUDGE_STEP, NUDGE_STEP_LARGE } from '@workspace/lib/vector';
 import { holdCapture } from '@workspace/ui/components/properties-panel';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type * as Y from 'yjs';
 import { useZOrderHotkeys } from '../../properties-panel/z-order';
 import { applyZOrder, deleteSelection, duplicateSelection } from './selection-ops';
-import { VECTOR_TOOLS, type VectorTool } from './use-tool';
+import type { VectorTool } from './use-tool';
+import { VECTOR_TOOLS } from './use-tool';
 
 type CanvasKeyboardParams = {
     enabled: boolean;

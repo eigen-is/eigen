@@ -2,7 +2,8 @@
 // the separator lines (hidden rows/columns get a doubled separator).
 
 import { columnIndexToLabel } from '@workspace/lib/sheets';
-import { type Context, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getSheetConfig } from '../context';
 import { defaultFont, getMeasureText } from '../modules/text';
 import { canvasColors } from './colors';
 import { colEndX, colStartX, HALF_PIXEL, headerVisibleRange, rowEndY, rowStartY } from './geometry';

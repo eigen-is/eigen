@@ -1,4 +1,5 @@
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import { getCellValue, setCellValue } from './cell';
 
 // Generate 2D array

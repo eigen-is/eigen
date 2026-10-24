@@ -1,4 +1,5 @@
-import { type SheetChart, sheetFloatingBox } from '@workspace/lib/sheets';
+import type { SheetChart } from '@workspace/lib/sheets';
+import { sheetFloatingBox } from '@workspace/lib/sheets';
 import type { Box } from '@workspace/lib/vector';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';

@@ -2,15 +2,14 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { eq, type SQL, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { ApiError, type DatabaseConfig, eventLoopTurn, storageGone } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
+import { ApiError, eventLoopTurn, storageGone } from '../../lib/core';
 import { getUniqueFileName } from '../../lib/drive/naming';
-import {
-    CONTENT_REINDEX_CAP_SECONDS,
-    type ContentExtractor,
-    ContentReindexQueue,
-} from '../../lib/mount/content-reindex-queue';
+import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
+import { CONTENT_REINDEX_CAP_SECONDS, ContentReindexQueue } from '../../lib/mount/content-reindex-queue';
 import { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';

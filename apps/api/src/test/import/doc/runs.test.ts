@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { MATH_LIMITS, type MathRow, writeMathml } from '@workspace/math';
+import type { MathRow } from '@workspace/math';
+import { MATH_LIMITS, writeMathml } from '@workspace/math';
 import { CODE_LOOK } from '../../../lib/document/looks';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { writeZip } from '../../../lib/ooxml/zip';

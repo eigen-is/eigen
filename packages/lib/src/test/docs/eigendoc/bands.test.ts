@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { getSchema, type JSONContent } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
+import { getSchema } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
 import { writeMathml } from '@workspace/math';
 import * as Y from 'yjs';

@@ -1,5 +1,6 @@
 import { cloneDeep, isEmpty, isNil, last } from 'es-toolkit/compat';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import {
     createFormulaRangeSelect,
     createRangeHightlight,

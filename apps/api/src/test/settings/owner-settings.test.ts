@@ -2,7 +2,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, te
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
-import { EMPTY_S3, type S3Config } from '@workspace/lib/types/mount';
+import type { S3Config } from '@workspace/lib/types/mount';
+import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import { and, eq, inArray } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
@@ -17,7 +18,8 @@ import { LocalStorage } from '../../lib/storage/local-storage';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { FakeS3Server } from '../fake-s3-server';
 import { CLEARED_S3 } from '../fault-storage-helpers';
-import { assertJson, authedRequest, createTestUser, getTestContext, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { assertJson, authedRequest, createTestUser, getTestContext } from '../setup';
 import { TEST_DATA_DIR } from '../test-env';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };

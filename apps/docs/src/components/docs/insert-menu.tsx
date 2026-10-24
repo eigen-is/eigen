@@ -30,7 +30,8 @@ import {
 import { useRef } from 'react';
 import { textColumnWidth } from './extensions/text-column';
 import type { ToolbarState } from './hooks/use-toolbar-state';
-import { PageNumberItems, type PageNumberPreset } from './page-numbers';
+import type { PageNumberPreset } from './page-numbers';
+import { PageNumberItems } from './page-numbers';
 
 type InsertMenuProps = {
     editor: Editor;

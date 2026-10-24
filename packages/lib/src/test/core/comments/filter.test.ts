@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    type CommentFilter,
-    DEFAULT_COMMENT_FILTER,
-    isCommentFilterActive,
-    matchesCommentFilter,
-} from '../../../core/comments/filter';
+import type { CommentFilter } from '../../../core/comments/filter';
+import { DEFAULT_COMMENT_FILTER, isCommentFilterActive, matchesCommentFilter } from '../../../core/comments/filter';
 import type { CommentEntry } from '../../../types/chat';
 import type { CommentCard } from '../../../types/comments';
 

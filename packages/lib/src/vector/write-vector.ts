@@ -6,8 +6,10 @@
 import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
 import { isValidFractionalIndex, keysAfter, orderByFractionalIndex } from './fractional-index';
-import { DEFAULT_FRAME_BACKGROUND, FRAME_FIELDS, type VectorFrame } from './frames';
-import { baseDefaultsFor, ELEMENT_FIELDS, ELEMENT_KINDS, type StyleDefaults, storedFields } from './kinds';
+import type { VectorFrame } from './frames';
+import { DEFAULT_FRAME_BACKGROUND, FRAME_FIELDS } from './frames';
+import type { StyleDefaults } from './kinds';
+import { baseDefaultsFor, ELEMENT_FIELDS, ELEMENT_KINDS, storedFields } from './kinds';
 import type { NewVectorElement, VectorElementType } from './types';
 
 export function newElementId(): string {

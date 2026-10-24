@@ -1,18 +1,11 @@
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { readFontSize } from '@workspace/lib/constants/fonts';
-import { type Caps, PAGE_NUMBER_KINDS, type PageNumberKind } from '@workspace/lib/docs/eigendoc';
+import type { Caps, PageNumberKind } from '@workspace/lib/docs/eigendoc';
+import { PAGE_NUMBER_KINDS } from '@workspace/lib/docs/eigendoc';
 import { MathError, readOmml, readOmmlText, writeMathml } from '@workspace/math';
-import {
-    trimXmlSpace,
-    XML_NAMESPACE,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlText,
-} from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { LINK_LOOK } from '../../document/looks';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../ooxml/ooxml';
 import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../ooxml/wordml';
@@ -20,17 +13,17 @@ import type { Item } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, onOff, w, wChild } from './package';
-import { type Reader, readNote, type Scope } from './paragraphs';
+import type { Reader, Scope } from './paragraphs';
+import { readNote } from './paragraphs';
+import type { DocxRunProps, Role } from './styles';
 import {
     ABSORBED,
-    type DocxRunProps,
     isDark,
     isFill,
     isLight,
     isLightNeutral,
     markColor,
     mergeRun,
-    type Role,
     readRunProps,
     TOGGLES,
 } from './styles';

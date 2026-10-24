@@ -1,8 +1,11 @@
-import { BAND_ROOTS, type BandRoot, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspace/lib/docs/eigendoc';
+import type { BandRoot } from '@workspace/lib/docs/eigendoc';
+import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspace/lib/docs/eigendoc';
 import { ApiError } from '../../core/errors';
-import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import { alternativeFor, isOn, measure, R_NS, W_NS } from '../../ooxml/ooxml';
-import { type OoxmlPackage, openPackage, optional, type Relationship, relOfType } from '../../ooxml/opc';
+import type { OoxmlPackage, Relationship } from '../../ooxml/opc';
+import { openPackage, optional, relOfType } from '../../ooxml/opc';
 import type { ZipReader } from '../../ooxml/zip';
 import { IMPORT_MESSAGES } from '../messages';
 

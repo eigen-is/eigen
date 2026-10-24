@@ -8,10 +8,14 @@
 // (origin at its top-left) — elementToSvg's <g transform> is what places and rotates it.
 
 import { serializeFill, TRANSPARENT_FILL } from '../fill';
-import { type Bounds, boxCenter, getElementBounds, type Point, rotatePoint } from '../geometry';
-import { EMPTY_OUTLINE, type OutlineShape } from '../outline';
-import { type Corners, DEFAULT_ELEMENT_PROPS, prop, type VectorElement, type VectorElementBase } from '../types';
-import { fontFamily, type YMapLike } from './read-fields';
+import type { Bounds, Point } from '../geometry';
+import { boxCenter, getElementBounds, rotatePoint } from '../geometry';
+import type { OutlineShape } from '../outline';
+import { EMPTY_OUTLINE } from '../outline';
+import type { Corners, VectorElement, VectorElementBase } from '../types';
+import { DEFAULT_ELEMENT_PROPS, prop } from '../types';
+import type { YMapLike } from './read-fields';
+import { fontFamily } from './read-fields';
 
 // What a host's new elements look like: vector draws rough and hatched in Excalifont, slides flat and
 // solid in Inter. One table per app, not a per-kind fork.

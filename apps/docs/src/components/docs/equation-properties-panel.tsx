@@ -1,12 +1,12 @@
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorState, Transaction } from '@tiptap/pm/state';
-import { type Editor, useEditorState } from '@tiptap/react';
+import type { Editor } from '@tiptap/react';
+import { useEditorState } from '@tiptap/react';
 import { equationMath, parseMathml, readEquation, unlessRefused } from '@workspace/lib/docs/eigendoc';
+import type { MathRow, MathXmlElement } from '@workspace/math';
 import {
     LATEX_COMMANDS,
     MathError,
-    type MathRow,
-    type MathXmlElement,
     readLatex,
     readMathml,
     readMathmlLatex,
@@ -27,7 +27,8 @@ import {
     PropertyToggle,
 } from '@workspace/ui/components/properties-panel';
 import { Textarea } from '@workspace/ui/components/textarea';
-import { type RefObject, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EQUATION_STYLES } from './equation-menu-sections';
 import { EQUATION_MENUS } from './equation-menus';
 import { drawnMath, MathMount } from './extensions/equation';

@@ -3,7 +3,8 @@ import * as fs from 'node:fs';
 import { MAIL_PREVIEW_CHARS } from '@workspace/lib/constants/mail';
 import { MAILBOX_JUNK, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, RecipientSummary } from '@workspace/lib/types/mail';
-import { and, count, desc, eq, inArray, lt, notInArray, or, type SQL, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, lt, notInArray, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { PATHS, sanitizeFtsQuery } from '../core';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -43,11 +44,11 @@ export default class MailDB {
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
 
-    constructor(home: Home) {
+    public constructor(home: Home) {
         this.home = home;
     }
 
-    async init() {
+    public async init() {
         this.managedDb = await this.home.getLocalDatabase(MAIL_DB_CONFIG, PATHS.MAIL.DB);
         this.db = this.managedDb.db;
     }
@@ -79,7 +80,7 @@ export default class MailDB {
         };
     }
 
-    addEmail(email: EmailSummary): boolean {
+    public addEmail(email: EmailSummary): boolean {
         const record = this.toRecord(email);
 
         const existing = this.db.select().from(schema.emails).where(eq(schema.emails.id, record.id)).get();
@@ -102,7 +103,7 @@ export default class MailDB {
     // make a plain insert throw and roll back the entire chunk — and the next sync would retry the
     // same chunk and roll back again, permanently stuck. Upsert re-homes the row instead, matching
     // addEmail's own check-then-update semantics, while staying a single statement per row.
-    insertEmails(emails: EmailSummary[]): void {
+    public insertEmails(emails: EmailSummary[]): void {
         if (emails.length === 0) return;
         this.db.transaction((tx) => {
             for (const email of emails) {
@@ -116,13 +117,13 @@ export default class MailDB {
         });
     }
 
-    size() {
+    public size() {
         return this.db.select({ size: sql<number>`SUM(size)` }).from(schema.emails).get()?.size || 0;
     }
 
     // What an upsert chunk is about to replace, in one query — the store's byte counter needs it before
     // insertEmails runs, and a per-row select is what that path exists to avoid.
-    sumSizes(ids: string[]): number {
+    public sumSizes(ids: string[]): number {
         if (ids.length === 0) return 0;
         return (
             this.db
@@ -133,12 +134,12 @@ export default class MailDB {
         );
     }
 
-    getEmailsCount(mailbox: string) {
+    public getEmailsCount(mailbox: string) {
         return this.db.select({ count: count() }).from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).get()!
             .count;
     }
 
-    getEmailsCountUnread(mailbox: string) {
+    public getEmailsCountUnread(mailbox: string) {
         return this.db
             .select({ count: count() })
             .from(schema.emails)
@@ -146,19 +147,19 @@ export default class MailDB {
             .get()!.count;
     }
 
-    getEmail(id: string) {
+    public getEmail(id: string) {
         return this.db.select().from(schema.emails).where(eq(schema.emails.id, id)).get();
     }
 
-    deleteEmail(id: string) {
+    public deleteEmail(id: string) {
         this.db.delete(schema.emails).where(eq(schema.emails.id, id)).run();
     }
 
-    moveEmail(id: string, mailbox: string) {
+    public moveEmail(id: string, mailbox: string) {
         this.db.update(schema.emails).set({ mailbox }).where(eq(schema.emails.id, id)).run();
     }
 
-    updateFlags(
+    public updateFlags(
         id: string,
         flags: { isRead: boolean; isFlagged: boolean; isDraft: boolean; isReplied: boolean },
         filename: string,
@@ -173,7 +174,7 @@ export default class MailDB {
     // `text` is the full draft body, but emails.textShort stores a truncated preview for
     // list views — the same shape as received mail. The FTS5 trigger on emails picks up
     // whatever lands in textShort, so drafts get indexed at preview granularity.
-    updateDraftContent(id: string, subject: string, text: string, recipients: RecipientSummary): void {
+    public updateDraftContent(id: string, subject: string, text: string, recipients: RecipientSummary): void {
         this.db
             .update(schema.emails)
             .set({
@@ -190,7 +191,7 @@ export default class MailDB {
 
     // The three columns the reconcile diff reads. A `SELECT *` would carry every row's `textShort` — the
     // whole body, kept for FTS — so a 100k-message mailbox paid 417 MiB to compare filenames.
-    listReconcileRows(mailbox: string) {
+    public listReconcileRows(mailbox: string) {
         return this.db
             .select({ id: schema.emails.id, filename: schema.emails.filename, size: schema.emails.size })
             .from(schema.emails)
@@ -201,7 +202,7 @@ export default class MailDB {
     // Keyset pagination, newest-first. Composite (date, id) cursor because `date` has duplicate
     // values in practice; `id` (TEXT PK) is the tiebreak. Drizzle serializes the Date param to the
     // column's second unit, matching the stored value.
-    listMessages(mailbox: string, opts: { limit: number; before?: { date: Date; id: string } }): EmailSummary[] {
+    public listMessages(mailbox: string, opts: { limit: number; before?: { date: Date; id: string } }): EmailSummary[] {
         const conditions: (SQL | undefined)[] = [eq(schema.emails.mailbox, mailbox)];
         if (opts.before) {
             conditions.push(
@@ -221,7 +222,7 @@ export default class MailDB {
         return rows.map(cutPreview);
     }
 
-    searchMail(opts: MailSearchOptions): EmailSummary[] {
+    public searchMail(opts: MailSearchOptions): EmailSummary[] {
         const match = sanitizeFtsQuery(opts.q);
 
         // Filter-first: when a structured filter is present, narrow to candidate ids via
@@ -312,7 +313,7 @@ export default class MailDB {
         return ids.map((id) => byId.get(id)).filter((r): r is NonNullable<typeof r> => r !== undefined);
     }
 
-    async destruct(): Promise<void> {
+    public async destruct(): Promise<void> {
         if (this.managedDb) {
             await this.managedDb.close();
         }

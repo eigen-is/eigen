@@ -1,12 +1,12 @@
 import { readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
-import {
-    type ExportMediaLoader,
-    type ExportWorkerResult,
-    type SlidesExportFormat,
-    type TransformWarning,
-    toTransferableBuffer,
+import type {
+    ExportMediaLoader,
+    ExportWorkerResult,
+    SlidesExportFormat,
+    TransformWarning,
 } from '../../document/transform/protocol';
+import { toTransferableBuffer } from '../../document/transform/protocol';
 import { sceneMediaNames } from '../canvas/render';
 import { renderEigenslidesHtml } from '../canvas/transform';
 import { withSvgFallbacks } from '../office-image';

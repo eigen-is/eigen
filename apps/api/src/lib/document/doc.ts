@@ -1,14 +1,12 @@
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_EXCLUDED_NODES,
     BAND_ROOTS,
-    type BandRoot,
     bandHasContent,
     FIRST_PAGE_BAND,
-    type NormalStyle,
     PAGE_ROOT,
-    type PageSetup,
     pageRecord,
     readNormalStyle,
     readPageSetup,

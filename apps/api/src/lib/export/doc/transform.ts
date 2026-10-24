@@ -1,47 +1,34 @@
 import type { JSONContent } from '@tiptap/core';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
+import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
-    type BandRoot,
     DOC_PROSE_CLASS,
     FOOTNOTE_PARAGRAPH,
     footnotesInOrder,
     mmToPt,
-    type NormalStyle,
     normalStyleProperties,
     PAGE_BAND_CLASS,
     PAGE_BREAK_CLASS,
-    type PageSetup,
     pageStylesheet,
     pxToPt,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
-import {
-    type EigendocBands,
-    readEigendocBands,
-    readEigendocFromDoc,
-    readEigendocPage,
-    readEigendocStyle,
-} from '../../document/doc';
+import type { EigendocBands } from '../../document/doc';
+import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import { FONT_STACK_MONO } from '../../document/font-stacks';
 import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
-import {
-    type EigendocExportFormat,
-    type ExportMediaLoader,
-    htmlExportMode,
-    type TransformWarning,
-    toTransferableBuffer,
-    toTransferableText,
-} from '../../document/transform/protocol';
+import type { EigendocExportFormat, ExportMediaLoader, TransformWarning } from '../../document/transform/protocol';
+import { htmlExportMode, toTransferableBuffer, toTransferableText } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_SVG_EQUATIONS, mathmlToSvg, SVG_LIMIT } from '../math-svg';
 import { withSvgFallbacks } from '../office-image';
+import type { EquationDrawing } from './render';
 import {
-    type EquationDrawing,
     equationBudget,
     equationDrawing,
     equationKey,

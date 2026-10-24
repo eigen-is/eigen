@@ -29,20 +29,17 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { PATHS } from '../../lib/core/constants';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
+import type { RealShapeHome } from '../backup/backup-test-helpers';
 import {
     expectRealShape,
-    type RealShapeHome,
     readServerManifest,
     realShapeHome,
     removeServerRecords,
     waitForJob,
 } from '../backup/backup-test-helpers';
-import {
-    createHomeFaultMount,
-    type FaultStorage,
-    registerFaultMount,
-    unregisterFaultMount,
-} from '../fault-storage-helpers';
+import type { FaultStorage } from '../fault-storage-helpers';
+import { createHomeFaultMount, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
+import type { TestContext, TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
@@ -52,8 +49,6 @@ import {
     getTestContext,
     openMountMetadata,
     TEST_DATA_DIR,
-    type TestContext,
-    type TestUser,
 } from '../setup';
 
 // ./eigen restore as the launcher runs it: `restore <archive> --stage` as uid 1000 while Eigen runs, on the data

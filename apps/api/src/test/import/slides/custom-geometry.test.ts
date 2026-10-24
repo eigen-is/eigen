@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parsePathCommands } from '@workspace/lib/vector';
 import type { XmlElement } from '../../../lib/core/xml';
+import type { CustomGeometry } from '../../../lib/import/slides/custom-geometry';
 import {
-    type CustomGeometry,
     closedPath,
     customGeometry,
     MAX_GEOMETRY_NODES,

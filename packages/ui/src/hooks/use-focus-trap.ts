@@ -1,4 +1,5 @@
-import { type RefObject, useEffect } from 'react';
+import type { RefObject } from 'react';
+import { useEffect } from 'react';
 
 // Modal focus management for the hand-rolled full-screen overlays (FilePreview, MediaPreview)
 // that can't be Radix Dialogs because of their z-index / pointer-down choreography. Moves focus

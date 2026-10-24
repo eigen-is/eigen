@@ -10,18 +10,17 @@ import type React from 'react';
 import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
+import type { LinkCardProps, ViewportPoint } from '../../state';
 import {
     computeOverlayRegions,
     goToLink,
     isLinkValid,
-    type LinkCardProps,
     normalizeSelection,
     overlayAnchorToViewport,
     overlayRegionForCell,
     removeHyperlink,
     replaceHtml,
     saveHyperlink,
-    type ViewportPoint,
 } from '../../state';
 import { CellRangeDialog } from '../CellRangeDialog';
 

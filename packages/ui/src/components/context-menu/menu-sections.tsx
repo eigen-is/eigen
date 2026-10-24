@@ -1,7 +1,8 @@
 // The one order every context and ⋮ menu draws its rows in; docs/LAYOUT.md § Menus draw their rows in one order lists
 // each group's rows. A host passes each row to the group it belongs to; the order lives here, so no menu can drift.
 
-import { Fragment, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import { Fragment } from 'react';
 import { DropdownMenuSeparator } from '../dropdown-menu';
 
 const SECTIONS = [

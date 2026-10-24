@@ -11,13 +11,8 @@ import { SERVER_DATABASES } from '../config/paths';
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 import { hashFile } from '../storage/deadline';
-import {
-    type ArchiveMember,
-    type ArchiveMemberAt,
-    listArchiveMembers,
-    readArchiveMember,
-    readArchiveMembers,
-} from './archive';
+import type { ArchiveMember, ArchiveMemberAt } from './archive';
+import { listArchiveMembers, readArchiveMember, readArchiveMembers } from './archive';
 import {
     archivePath,
     checkArchivedPathRows,

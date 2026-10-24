@@ -4,7 +4,8 @@ import { readLatex, writeLatex } from '../latex';
 import { readMathml, writeMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
 import type { MathRow } from '../tree';
-import { elementsOf, type MathXmlElement } from '../xml';
+import type { MathXmlElement } from '../xml';
+import { elementsOf } from '../xml';
 
 const window = new Window();
 

@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { MathError } from '../error';
 import { readLatex, writeLatex } from '../latex';
-import { LATEX_COMMANDS, type LatexCommand } from '../latex-commands';
+import type { LatexCommand } from '../latex-commands';
+import { LATEX_COMMANDS } from '../latex-commands';
 import { readMathml, readMathmlLatex, writeMathml } from '../mathml';
 import { ACCENTS, LARGE_OPERATORS, naryLimits } from '../notation';
 import { readOmml } from '../omml';
-import { MATH_ENCLOSURES, MATH_LIMITS, MATH_SPACES, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
+import type { MathNode, MathRow } from '../tree';
+import { MATH_ENCLOSURES, MATH_LIMITS, MATH_SPACES, MATH_VARIANTS } from '../tree';
 import { canonicalIssue } from './canonical';
 import { CORPUS } from './corpus';
 import { LATEX_FORMULAS } from './fixtures/latex-formulas';

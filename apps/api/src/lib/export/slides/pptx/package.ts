@@ -1,3 +1,4 @@
+import type { VectorElement, VectorFrame } from '@workspace/lib/vector';
 import {
     arrowRoute,
     elementBounds,
@@ -6,8 +7,6 @@ import {
     parseBackgroundFill,
     parsePoints,
     pointsBounds,
-    type VectorElement,
-    type VectorFrame,
 } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { A_NS, P_NS, R_NS } from '../../../ooxml/ooxml';

@@ -1,6 +1,7 @@
 import { hitTestDiamond } from '../geometry';
 import { cornerRadius, diamondOutline } from '../outline';
-import { CORNERS, DEFAULT_CORNERS, type VectorDiamondElement } from '../types';
+import type { VectorDiamondElement } from '../types';
+import { CORNERS, DEFAULT_CORNERS } from '../types';
 import { defineKind } from './kind';
 import { fillField, oneOf } from './read-fields';
 import { isUnpainted, renderRoughShape } from './render-utils';

@@ -2,14 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { CLIPBOARD_SVG_MAX_ELEMENTS, extractClipboardSvgMetadata } from '@workspace/lib/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { VectorElement, VectorMeta } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SCENE_META,
     ELEMENT_KINDS,
     readElementsClipboardItem,
     VECTOR_STYLE_DEFAULTS,
-    type VectorElement,
-    type VectorMeta,
 } from '@workspace/lib/vector';
 import { Window } from 'happy-dom';
 import { buildSelectionData } from '../../../../components/vector/tools/clipboard';

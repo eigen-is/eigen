@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
-import { type DrivePathType, isCollabType, isDocumentType } from '@workspace/lib/types/drive';
+import type { DrivePathType } from '@workspace/lib/types/drive';
+import { isCollabType, isDocumentType } from '@workspace/lib/types/drive';
 import { CALENDAR_DB_CONFIG } from '../calendar/db-config';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';

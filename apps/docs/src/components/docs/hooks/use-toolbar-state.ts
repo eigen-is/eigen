@@ -1,6 +1,7 @@
 import { getAttributes, isActive } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
-import { type Editor, useEditorState } from '@tiptap/react';
+import type { Editor } from '@tiptap/react';
+import { useEditorState } from '@tiptap/react';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import {
     insertFootnote,
@@ -8,7 +9,8 @@ import {
     selectionFontSizes,
     selectionParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
-import { oneOf, TEXT_ALIGNS, type TextAlign } from '@workspace/lib/vector';
+import type { TextAlign } from '@workspace/lib/vector';
+import { oneOf, TEXT_ALIGNS } from '@workspace/lib/vector';
 import { canAnchorComment } from '../extensions/comment-mark';
 import { numberedListType, orderedListDepth } from '../list-numbering';
 import { paragraphStyleOf } from '../paragraph-styles';

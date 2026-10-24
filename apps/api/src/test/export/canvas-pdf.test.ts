@@ -1,24 +1,22 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { SlideSize, VectorRectangleElement, VectorRichTextElement, VectorScene } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
     DEFAULT_SCENE_META,
     ELEMENT_KINDS,
     SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
-    type SlideSize,
     serializeBackgroundFill,
     solidFill,
     TRANSPARENT_COLOR,
-    type VectorRectangleElement,
-    type VectorRichTextElement,
-    type VectorScene,
 } from '@workspace/lib/vector';
 import { exportDocument } from '../../lib/export/export-document';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import { seedVectorDoc } from '../fixtures/golden-documents';
-import { pixelAt, type Raster, type Rgb, rasterize, rasterizer } from '../pdf-test-helpers';
+import type { Raster, Rgb } from '../pdf-test-helpers';
+import { pixelAt, rasterize, rasterizer } from '../pdf-test-helpers';
 import { driveGet, drivePost, getTestContext } from '../setup';
 
 // What a canvas PDF looks like, read off its pixels. WeasyPrint 68 loses two things a scaled or shifted

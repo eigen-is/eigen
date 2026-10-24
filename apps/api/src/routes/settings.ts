@@ -10,14 +10,16 @@ import type {
     ServerSettingsSaved,
 } from '@workspace/lib/types/settings';
 import { SERVER_STORAGE_TYPES } from '@workspace/lib/types/settings';
-import { eq, isNull, ne, or, type SQL, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
+import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
 import { resolveBackupUpload, withoutBackupSecret } from '../lib/backup/upload';
 import { getOrgName, getServerConfig } from '../lib/config/server-config';
 import { DEFAULT_BACKUPS, getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
-import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
+import type { ControlStatus } from '../lib/config/server-status';
+import { getServerStatus } from '../lib/config/server-status';
 import { ApiError } from '../lib/core';
 import { requireAdmin, requireOwner } from '../lib/core/access';
 import { sendMailOrThrow, storedSender } from '../lib/core/mailer';

@@ -12,7 +12,8 @@ import {
     ITALIC_HEADING_LEVELS,
     normalStyleProperties,
 } from '@workspace/lib/docs/eigendoc';
-import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
+import type { XmlElement } from '../../lib/core/xml';
+import { parseXml, xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../lib/core/xml';
 import {
     BODY,
     CAPTION_LOOK,
