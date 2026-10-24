@@ -384,6 +384,7 @@ export function chartSpecChange(base: ChartSpec, next: ChartSpec): ChartSpecChan
 }
 
 // The parts a change touched, a string each, for a host that stores every part as one: a canvas element or a doc node.
+// A part set to the text it has is no write, so it can't undo a peer's edit of another entry in it.
 export function chartSpecWrites(
     stored: StoredChartSpec,
     change: ChartSpecChange,
@@ -391,8 +392,10 @@ export function chartSpecWrites(
     const next = applyChartSpecChange(stored, change);
     const writes: Partial<Record<ChartSpecPartKey, string>> = {};
     for (const part of PARTS) {
-        if (own(next, part) !== own(stored, part))
-            writes[CHART_SPEC_PART_KEY[part]] = partText(withoutOrphans(next, part));
+        const before = own(stored, part);
+        if (own(next, part) === before) continue;
+        const text = partText(withoutOrphans(next, part));
+        if (text !== partText(before)) writes[CHART_SPEC_PART_KEY[part]] = text;
     }
     return writes;
 }
@@ -406,7 +409,8 @@ export function sheetChartSpecWrites(stored: StoredChartSpec, change: ChartSpecC
         const before = own(stored, part);
         if (own(next, part) === before) continue;
         if (!isKeyedPart(part)) {
-            writes.push({ key: CHART_SPEC_PART_KEY[part], value: partText(own(next, part)) });
+            const text = partText(own(next, part));
+            if (text !== partText(before)) writes.push({ key: CHART_SPEC_PART_KEY[part], value: text });
             continue;
         }
         const key = CHART_SPEC_PART_KEY[part];
@@ -455,6 +459,7 @@ export function newSheetChartSpecParts(spec: ChartSpec): SheetChartSpecParts {
 
 // A part a change removed reads as broken, as an empty string does.
 const partText = (value: unknown) => (value === undefined ? '' : JSON.stringify(value));
+const entryText = (value: unknown) => (value === undefined ? null : JSON.stringify(value));
 
 // Writing series or points drops the entries of a series data no longer names, so a deleted series' style goes with
 // the next edit of its part. Data without a list of series drops none.
@@ -467,8 +472,8 @@ function withoutOrphans(next: StoredChartSpec, part: ChartSpecPart): unknown {
     return Object.fromEntries(Object.entries(value).filter(([id]) => ids.has(id)));
 }
 
-// Each entry depth levels below a keyed part that the change replaced, as its JSON, or null where it is gone. What the
-// change didn't touch is the record it was, so the walk skips it.
+// Each entry depth levels below a keyed part that the change replaced with other text, as its JSON, or null where it is
+// gone. What the change didn't touch is the record it was, so the walk skips it.
 function entryWrites(
     before: unknown,
     after: unknown,
@@ -478,7 +483,8 @@ function entryWrites(
 ): void {
     if (before === after) return;
     if (depth === 0) {
-        write(path.join('/'), after === undefined ? null : JSON.stringify(after));
+        const text = entryText(after);
+        if (text !== entryText(before)) write(path.join('/'), text);
         return;
     }
     const from = isRecord(before) ? before : {};

@@ -895,6 +895,21 @@ describe('the stored parts', () => {
         expect(sheetChartSpecWrites(readChartSpec(sheet()).stored, removes)).toEqual([]);
     });
 
+    test("a set to the stored value writes nothing, so a peer's edit of another entry in that part stands", () => {
+        const same: ChartSpecChange = [
+            { op: 'set', path: ['series', 's-1', 'color'], value: null },
+            { op: 'set', path: ['points', 's-1', '3', 'color'], value: '#eb6834' },
+            { op: 'set', path: ['title', 'text'], value: styled.title.text },
+        ];
+        const recolor: ChartSpecChange = [{ op: 'set', path: ['series', 's-2', 'color'], value: '#000000' }];
+        const base = parts();
+        const { stored } = readChartSpec(base);
+        expect(chartSpecWrites(stored, same)).toEqual({});
+        const both = { ...base, ...chartSpecWrites(stored, recolor), ...chartSpecWrites(stored, same) };
+        expect(readChartSpec(both).spec?.series['s-2'].color).toBe('#000000');
+        expect(sheetChartSpecWrites(readChartSpec(sheet()).stored, same)).toEqual([]);
+    });
+
     test("a series delete writes the data alone, and the next write of series or points drops the gone series' entries", () => {
         const [first, second] = styled.data.series;
         const deleteSecond: ChartSpecChange = [{ op: 'set', path: ['data', 'series'], value: [first] }];
