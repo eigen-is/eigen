@@ -1,5 +1,6 @@
 // A sheet chart's range data: reading its cells, drawing it, inlining it for a copy, and moving its refs through a row
-// op or a copied sheet. The writers apply a change onto the spec as stored, so a key this build doesn't know survives.
+// op or a copied sheet. The writers apply a change onto the spec as stored, so a key this build doesn't know survives,
+// and write a keyed part an entry at a time.
 
 import {
     applyChartSpecChange,
@@ -9,9 +10,9 @@ import {
     chartSeriesStyle,
     exceedsChartSpecBytes,
     MAX_CHART_POINTS,
-    parseChartSpec,
     readChartLook,
     readChartSpec,
+    sheetChartSpecWrites,
 } from '@workspace/lib/charts';
 import { isRecord } from '@workspace/lib/guards';
 import type { SheetChart } from '@workspace/lib/sheets';
@@ -24,6 +25,8 @@ import type {
     ChartSpecChange,
     RangeChartData,
     RangeChartSeries,
+    SheetChartSpecParts,
+    SheetChartSpecWrite,
 } from '@workspace/lib/types/chart';
 import { renderChartSpecSvg } from '@workspace/lib/vector';
 import { cellDisplay, numberDisplay } from './format';
@@ -81,7 +84,7 @@ export function seriesName(name: RangeChartSeries['name'], resolver: CellResolve
 // data read through the resolver, and value ticks in the axis's own format or else the first value cell's, Google's
 // "From source data".
 export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): string {
-    const spec = parseChartSpec(chart.spec);
+    const { spec } = readChartSpec(chart);
     const range = spec?.data.source === 'range' ? spec.data : null;
     const format = spec ? valueFormat(spec, resolver) : undefined;
     const { width, height } = sheetFloatingBox(chart);
@@ -106,12 +109,12 @@ function valueFormat(spec: ChartSpec, resolver: CellResolver): string | undefine
 
 // The chart as a copy carries it to a host with no cells: its ranges read into inline data, and the source
 // cells' tick format written on the axis. An automatic color stays automatic unless a deleted series before
-// it would shift its index, which writes the color it draws in, and an inline chart is its stored string. A ref
+// it would shift its index, which writes the color it draws in, and an inline chart is its stored parts joined. A ref
 // this build doesn't know is left out, as it would name cells the host doesn't have. Null for a chart that draws
 // #REF!, too much data or nothing, or whose numbers pass the spec's size limit.
 export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): string | null {
-    const { stored, spec } = readChartSpec(chart.spec);
-    if (spec?.data.source !== 'range') return spec ? chart.spec : null;
+    const { stored, spec } = readChartSpec(chart);
+    if (spec?.data.source !== 'range') return spec ? JSON.stringify(stored) : null;
     const resolved = resolveRangeChartData(spec.data, resolver);
     if (typeof resolved === 'string') return null;
     const kept = spec.data.series.flatMap(({ id, values }, i) => (values ? [{ id, i }] : []));
@@ -152,7 +155,7 @@ export function mapChartRefs(
     map: (ref: CellRangeRef) => CellRangeRef | null,
     points?: (ref: CellRangeRef) => ((index: number) => number | null) | null,
 ): SheetChart {
-    const { stored } = readChartSpec(chart.spec);
+    const { stored } = readChartSpec(chart);
     const before = stored['data'];
     if (!isRecord(before) || before['source'] !== 'range') return chart;
     let moved = false;
@@ -167,7 +170,51 @@ export function mapChartRefs(
     const along = [before['categories'], ...series.map((s) => (isRecord(s) ? s['values'] : null))].find(isRef);
     const target = along && points?.(along);
     if (target) change.push(...chartPointMoves(stored, target));
-    return { ...chart, spec: JSON.stringify(applyChartSpecChange(stored, change)) };
+    return withSheetChartSpecWrites(chart, sheetChartSpecWrites(stored, change));
+}
+
+// Sheets writes applied onto a chart in place, so a recipe's draft ships each entry as its own patch. An entry under a
+// field that isn't a record is skipped: no build stores one, and floatingWriteFilter drops the write.
+export function writeSheetChartSpec(chart: SheetChartSpecParts, writes: SheetChartSpecWrite[]): void {
+    for (const write of writes) {
+        if (!('entry' in write)) chart[write.key] = write.value;
+        else if (isRecord(chart[write.key])) {
+            if (write.value === null) delete chart[write.key][write.entry];
+            else chart[write.key][write.entry] = write.value;
+        }
+    }
+}
+
+// The same on a copy of the chart, sharing every record no write touched.
+function withSheetChartSpecWrites(chart: SheetChart, writes: SheetChartSpecWrite[]): SheetChart {
+    const next = { ...chart };
+    for (const write of writes) {
+        if ('entry' in write && next[write.key] === chart[write.key] && isRecord(chart[write.key])) {
+            next[write.key] = { ...chart[write.key] };
+        }
+    }
+    writeSheetChartSpec(next, writes);
+    return next;
+}
+
+// A clipboard item's one string as a Sheets chart's parts, a part the item lacks empty, a keyed one an empty record.
+export function sheetChartSpecParts(spec: string): SheetChartSpecParts {
+    const { stored } = readChartSpec(spec);
+    const parts: SheetChartSpecParts = {
+        specChart: '',
+        specTitle: '',
+        specLegend: '',
+        specAxes: {},
+        specPlots: {},
+        specSeries: {},
+        specPoints: {},
+        specData: '',
+    };
+    // A part at a time, so no data beside series or points drops an entry the item carries.
+    for (const [part, value] of Object.entries(stored)) {
+        writeSheetChartSpec(parts, sheetChartSpecWrites({}, [{ op: 'set', path: [part], value }]));
+    }
+    return parts;
 }
 
 // A record shaped as a CellRangeRef. A key beside its three is accepted, as the reader accepts it.

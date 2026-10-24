@@ -306,8 +306,8 @@ export type GlobalCache = {
     redoList: History[];
     // An open panel edit (a typed title): its writes merge into one undo entry.
     undoGesture?: object;
-    // The chart this workbook last copied: the inline spec it put on the clipboard and its own spec with its ranges,
-    // which a paste of that same item here keeps, as the wire carries only what every other app can read.
+    // The chart this workbook last copied: the inline spec it put on the clipboard and its own stored parts joined, with
+    // its ranges, which a paste of that same item here keeps, as the wire carries only what every other app can read.
     copiedChart?: { inline: string; spec: string };
     freezen?: Record<string, Freezen>;
 

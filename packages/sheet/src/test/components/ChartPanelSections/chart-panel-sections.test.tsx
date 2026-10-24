@@ -2,7 +2,13 @@
 // selects the chart and shows them, the data range reads the chart's block back from its refs and rewrites them,
 // the Customise rows write the spec, each change one undo step.
 import { afterEach, expect, test } from 'bun:test';
-import { DEFAULT_CHART_SERIES_STYLE, MAX_SKETCH_POINTS, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    DEFAULT_CHART_SERIES_STYLE,
+    MAX_SKETCH_POINTS,
+    newSheetChartSpecParts,
+    readChartSpec,
+    sampleChartSpec,
+} from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { parseFill } from '@workspace/lib/vector';
@@ -35,7 +41,7 @@ const rangeChart = (): SheetChart => ({
     y: 10,
     width: 400,
     height: 300,
-    spec: JSON.stringify({
+    ...newSheetChartSpecParts({
         ...sampleChartSpec('column'),
         title: { text: 'Scores' },
         series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#000000' } },
@@ -47,7 +53,7 @@ const rangeChart = (): SheetChart => ({
     }),
 });
 
-const inlineChart = (): SheetChart => ({ ...rangeChart(), spec: JSON.stringify(sampleChartSpec('column')) });
+const inlineChart = (): SheetChart => ({ ...rangeChart(), ...newSheetChartSpecParts(sampleChartSpec('column')) });
 
 const cell = (r: number, c: number, v: string | number) => ({ r, c, v: { v, m: String(v) } });
 const table = [cell(0, 0, 'Team'), cell(0, 1, 'Points'), cell(1, 0, 'Ajax'), cell(1, 1, 42)];
@@ -114,7 +120,10 @@ async function mount(chart: SheetChart) {
     await act(async () => box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })));
     await act(async () => document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 })));
 
-    const spec = (): ChartSpec | null => parseChartSpec(workbook.current?.getAllSheets()[0].charts?.c1.spec ?? '');
+    const spec = (): ChartSpec | null => {
+        const chart = workbook.current?.getAllSheets()[0].charts?.c1;
+        return chart ? readChartSpec(chart).spec : null;
+    };
     const field = (selector: string) => {
         const found = container.querySelector<HTMLInputElement>(selector);
         if (!found) throw new Error(`no ${selector}`);
@@ -250,31 +259,34 @@ test('Switch rows/columns re-derives the refs from the block, one undo step', as
 
 test("a Setup toggle keeps what this build doesn't know beside the data: a key on the spec and a legend", async () => {
     const chart = rangeChart();
-    const raw = JSON.parse(chart.spec);
-    const newer = { ...raw, future: 1, legend: { ...raw.legend, position: 'inside' } };
-    const { stored, toggle } = await mount({ ...chart, spec: JSON.stringify(newer) });
+    const { stored, toggle } = await mount({
+        ...chart,
+        specChart: JSON.stringify({ ...JSON.parse(chart.specChart), future: 1 }),
+        specLegend: JSON.stringify({ ...JSON.parse(chart.specLegend), position: 'inside' }),
+    });
     await act(async () => toggle('Switch rows/columns')?.click());
-    const written = JSON.parse(stored()?.spec ?? '{}');
-    expect(written.data.categories).toEqual(ref([0, 0], [1, 1]));
-    expect([written.future, written.legend.position]).toEqual([1, 'inside']);
-    expect(written.data.series[0].id).toBe('s-1');
-    expect(written.series['s-1'].color).toBe('#000000');
+    const part = (text: string | undefined) => JSON.parse(text ?? '{}');
+    const data = part(stored()?.specData);
+    expect(data.categories).toEqual(ref([0, 0], [1, 1]));
+    expect([part(stored()?.specChart).future, part(stored()?.specLegend).position]).toEqual([1, 'inside']);
+    expect(data.series[0].id).toBe('s-1');
+    expect(part(stored()?.specSeries['s-1']).color).toBe('#000000');
 });
 
 // Rebuilt values would fall out of step with an array a newer build keeps beside them, as in Edit data.
 test("Setup shows data holding a key this build doesn't know, says to reload, and writes nothing", async () => {
     const chart = rangeChart();
-    const raw = JSON.parse(chart.spec);
-    const series = raw.data.series.map((s: object) => ({ ...s, errors: ref([1, 3], [2, 2]) }));
-    const newer = { ...raw, data: { ...raw.data, series } };
-    const { container, field, toggle, type, stored } = await mount({ ...chart, spec: JSON.stringify(newer) });
-    const before = stored()?.spec;
+    const raw = JSON.parse(chart.specData);
+    const series = raw.series.map((s: object) => ({ ...s, errors: ref([1, 3], [2, 2]) }));
+    const newer = { ...chart, specData: JSON.stringify({ ...raw, series }) };
+    const { container, field, toggle, type, stored } = await mount(newer);
+    const before = stored();
     expect(container.textContent).toContain(NEWER_CHART_DATA_NOTICE);
     expect(field('input[aria-label="Data range"]').disabled).toBe(true);
     expect(toggle('Switch rows/columns')?.disabled).toBe(true);
     await act(async () => toggle('Switch rows/columns')?.click());
     await type('input[aria-label="Data range"]', 'A1:C4', 'Enter');
-    expect(stored()?.spec).toBe(before);
+    expect(stored()).toEqual(before);
 });
 
 test('a title typed letter by letter is one undo step', async () => {
@@ -298,13 +310,11 @@ test('a title typed letter by letter is one undo step', async () => {
 
 test("a peer's colour landing after the panel rendered survives a title typed in the panel", async () => {
     const { workbook, spec, field } = await mount(rangeChart());
-    const raw = JSON.parse(rangeChart().spec);
-    const series = { ...raw.series, 's-1': { ...raw.series['s-1'], color: '#00ff00' } };
-    const value = JSON.stringify({ ...raw, series });
+    const value = JSON.stringify({ ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' });
     const title = field('input[placeholder="Chart title"]');
     // One act, so the title's handler is the one the panel rendered before the peer's write.
     await act(async () => {
-        workbook.current?.applyOp([{ op: 'replace', id: 's1', path: ['charts', 'c1', 'spec'], value }]);
+        workbook.current?.applyOp([{ op: 'replace', id: 's1', path: ['charts', 'c1', 'specSeries', 's-1'], value }]);
         title.focus();
         title.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
         setValue?.call(title, 'Goals');
@@ -378,15 +388,17 @@ test("the paint rows write the chart's own look fields, each one undo step, and 
 
 test('a range chart past the sketch cap says so under Sketch', async () => {
     const chart = rangeChart();
-    const many = JSON.stringify({
-        ...JSON.parse(chart.spec),
+    const { spec } = readChartSpec(chart);
+    if (!spec) throw new Error('no spec');
+    const many = newSheetChartSpecParts({
+        ...spec,
         data: {
             source: 'range',
             categories: null,
             series: [{ id: 's-1', name: 'Points', values: ref([1, MAX_SKETCH_POINTS + 1], [1, 1]) }],
         },
     });
-    const capped = await mount({ ...chart, spec: many });
+    const capped = await mount({ ...chart, ...many });
     expect(capped.container.textContent).toContain(`Past ${MAX_SKETCH_POINTS} points`);
     await cleanup?.();
     cleanup = undefined;

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { createDefaultSheets } from '../../engine/defaults';
 import { replaySheetsOps } from '../../engine/replay-ops';
@@ -15,7 +16,15 @@ describe('normalizeSheetConfig', () => {
     });
 
     test('keeps the charts a sheet already has', () => {
-        const chart = { id: 'c1', index: 'a0', x: 0, y: 0, width: 400, height: 300, spec: '{}' };
+        const chart = {
+            id: 'c1',
+            index: 'a0',
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 300,
+            ...newSheetChartSpecParts(sampleChartSpec('column')),
+        };
         const sheet: Sheet = { id: 's1', name: 'Sheet1', charts: { c1: chart } };
         normalizeSheetConfig(sheet);
         expect(sheet.charts).toEqual({ c1: chart });

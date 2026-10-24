@@ -3,7 +3,7 @@
 // Workbook's applyOp and a joiner through replaySheetsOps.
 
 import { describe, expect, test } from 'bun:test';
-import { CHART_MAX_SIDE, sampleChartSpec } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart, SheetImage } from '@workspace/lib/sheets';
 import { floatingItems } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
@@ -27,7 +27,7 @@ import {
     replaceMediaNameInHistory,
 } from '../../../state/modules/image';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
-import type { Sheet } from '../../../state/types';
+import type { Op, Sheet } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
 import { inverseRowColOptions, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
@@ -41,7 +41,7 @@ const chart = (id: string, index: string): SheetChart => ({
     id,
     index,
     ...BOX,
-    spec: JSON.stringify(sampleChartSpec('column')),
+    ...newSheetChartSpecParts(sampleChartSpec('column')),
 });
 
 // S holds image i1 above chart c1; T holds image t1, whose upload is still pending.
@@ -158,6 +158,23 @@ describe('floating writers', () => {
         expect(objects(redone.next.sheets)).toEqual(expected);
         expect(objects(receive(back.next, redone.ops).sheets)).toEqual(expected);
         expect(objects(join(base, [inserted.ops, back.ops, redone.ops]))).toEqual(expected);
+    });
+
+    // No build stores a keyed part as anything but a record, nor a chart past the entry cap: a peer's batch that does
+    // costs those writes, and its other writes apply on every client and the joiner.
+    test("a forged chart's writes are dropped and the rest of their batch applies, everywhere", () => {
+        const base = workbook();
+        const points = Object.fromEntries(Array.from({ length: MAX_CHART_SPEC_ENTRIES }, (_, i) => [`s-1/${i}`, '{}']));
+        const batch: Op[] = [
+            { op: 'replace', id: S, path: ['charts', 'c1', 'specPoints'], value: 'forged' },
+            { op: 'add', id: S, path: ['charts', 'c1', 'specPoints', 's-1/0'], value: '{"color":"#ff0000"}' },
+            { op: 'add', id: S, path: ['charts', 'c2'], value: { ...chart('c2', 'a3'), specPoints: points } },
+            { op: 'replace', id: S, path: ['charts', 'c1', 'x'], value: 300 },
+        ];
+        const peer = receive(base, batch);
+        expect(peer.sheets[0].charts!.c1).toMatchObject({ x: 300, specPoints: 'forged' });
+        expect(peer.sheets[0].charts!.c2).toBeUndefined();
+        expect(objects(join(base, [batch]))).toEqual(objects(peer.sheets));
     });
 
     test('three clients editing different images end identical, and so does a joiner', () => {

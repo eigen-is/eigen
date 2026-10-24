@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { produce } from 'immer';
 import { getCellValue } from '../../../state/api/cell';
@@ -88,7 +88,7 @@ describe('sheet/core/api/sheet', () => {
                 series: [{ id: 's-1', name: ref('id_1'), values: ref('id_1') }],
             },
         };
-        const chart = { id: 'c1', index: 'a0', x: 0, y: 0, width: 400, height: 300, spec: JSON.stringify(spec) };
+        const chart = { id: 'c1', index: 'a0', x: 0, y: 0, width: 400, height: 300, ...newSheetChartSpecParts(spec) };
         const ctx = contextFactory({
             sheets: [
                 { name: 'S', id: 'id_1', order: 0, charts: { c1: chart } },
@@ -100,7 +100,7 @@ describe('sheet/core/api/sheet', () => {
         const [copied] = Object.values(copy.charts!);
         expect(copied.id).not.toBe('c1');
         expect(Object.keys(copy.charts!)).toEqual([copied.id]);
-        const data = parseChartSpec(copied.spec)?.data;
+        const data = readChartSpec(copied).spec?.data;
         expect(data?.source === 'range' && data.series[0].values?.sheetId).toBe(copy.id!);
         expect(data?.source === 'range' && typeof data.series[0].name !== 'string' && data.series[0].name.sheetId).toBe(
             copy.id!,

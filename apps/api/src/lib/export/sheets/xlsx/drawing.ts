@@ -1,4 +1,4 @@
-import { parseChartSpec, readChartLook } from '@workspace/lib/charts';
+import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { Sheet, SheetFloatingObject } from '@workspace/lib/sheets';
 import { floatingItems, sheetFloatingBox, sheetTrackAt } from '@workspace/lib/sheets';
 import { normalizeAngle } from '@workspace/lib/vector';
@@ -57,7 +57,7 @@ export function drawingOf(
             continue;
         }
         const chart = item.object;
-        const spec = parseChartSpec(chart.spec);
+        const { spec } = readChartSpec(chart);
         if (!spec) {
             lost('charts-dropped');
             continue;

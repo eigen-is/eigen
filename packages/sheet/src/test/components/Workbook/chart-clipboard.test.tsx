@@ -2,10 +2,17 @@
 // cells copied, ⌘X deletes it too, and ⌘V with a chart focused pastes one, linked to its cells in the workbook it
 // was copied from and inline anywhere else.
 import { afterEach, expect, spyOn, test } from 'bun:test';
-import { FLAT_CHART_LOOK, parseChartSpec, readChartLook, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    FLAT_CHART_LOOK,
+    newSheetChartSpecParts,
+    parseChartSpec,
+    readChartLook,
+    readChartSpec,
+    sampleChartSpec,
+} from '@workspace/lib/charts';
 import { buildChartClipboardItem, readEigenClipboard, writeEigenClipboard } from '@workspace/lib/clipboard';
 import type { SheetChart } from '@workspace/lib/sheets';
-import type { CellRangeRef, ChartLook } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartLook, ChartSpec } from '@workspace/lib/types/chart';
 import { serializeFill } from '@workspace/lib/vector';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
@@ -21,16 +28,17 @@ type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
 const ref = (row: [number, number], column: [number, number]): CellRangeRef => ({ sheetId: 's1', row, column });
 
-const rangeSpec = (values: CellRangeRef) =>
-    JSON.stringify({
-        ...sampleChartSpec('column'),
-        title: { text: 'Scores' },
-        data: {
-            source: 'range',
-            categories: ref([1, 2], [0, 0]),
-            series: [{ id: 's-1', name: ref([0, 0], [1, 1]), values }],
-        },
-    });
+// A style only for the series the data names, as a paste writes no other.
+const rangeSpec = (values: CellRangeRef): ChartSpec => ({
+    ...sampleChartSpec('column'),
+    title: { text: 'Scores' },
+    series: { 's-1': sampleChartSpec('column').series['s-1'] },
+    data: {
+        source: 'range',
+        categories: ref([1, 2], [0, 0]),
+        series: [{ id: 's-1', name: ref([0, 0], [1, 1]), values }],
+    },
+});
 
 const chart: SheetChart = {
     id: 'c1',
@@ -39,7 +47,7 @@ const chart: SheetChart = {
     y: 10,
     width: 400,
     height: 300,
-    spec: rangeSpec(ref([1, 2], [1, 1])),
+    ...newSheetChartSpecParts(rangeSpec(ref([1, 2], [1, 1]))),
 };
 
 const cell = (r: number, c: number, v: string | number) => ({ r, c, v: { v, m: String(v) } });
@@ -61,7 +69,11 @@ const ROUGH: ChartLook = {
     seed: 4242,
 };
 
-async function mount({ allowEdit = true, spec = chart.spec, look = {} as Partial<ChartLook> } = {}) {
+async function mount({
+    allowEdit = true,
+    spec = rangeSpec(ref([1, 2], [1, 1])),
+    look = {} as Partial<ChartLook>,
+} = {}) {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -83,7 +95,7 @@ async function mount({ allowEdit = true, spec = chart.spec, look = {} as Partial
                 cell(2, 1, 65),
             ],
             config: {},
-            charts: { c1: { ...chart, spec, ...look } },
+            charts: { c1: { ...chart, ...newSheetChartSpecParts(spec), ...look } },
         },
     ];
     await act(async () => {
@@ -188,7 +200,8 @@ test('⌘V in the workbook the chart came from pastes a duplicate linked to its 
     const { event } = await shortcut('KeyV', clipboardData);
     expect(event.defaultPrevented).toBe(true);
     const pasted = charts().find((c) => c.id !== 'c1');
-    expect(pasted).toMatchObject({ width: 400, height: 300, spec: chart.spec });
+    expect(pasted).toMatchObject({ width: 400, height: 300 });
+    expect(pasted && readChartSpec(pasted).stored).toEqual(readChartSpec(chart).stored);
     await undo();
     expect(charts()).toEqual([chart]);
 });
@@ -202,7 +215,7 @@ test('⌘X then ⌘V in the same workbook moves the chart and keeps its ranges',
     (document.querySelector<HTMLElement>('#sheet-rich-text-editor') ?? document.body).focus();
     const { event } = await shortcut('KeyV', clipboardData);
     expect(event.defaultPrevented).toBe(true);
-    expect(charts().map((c) => c.spec)).toEqual([chart.spec]);
+    expect(charts().map((c) => readChartSpec(c).stored)).toEqual([readChartSpec(chart).stored]);
 });
 
 test('⌘V in another workbook pastes the inline chart', async () => {
@@ -216,7 +229,9 @@ test('⌘V in another workbook pastes the inline chart', async () => {
     await target.select();
     await shortcut('KeyV', clipboardData);
     const pasted = target.charts().find((c) => c.id !== 'c1');
-    expect(inline?.type === 'chart' && pasted?.spec).toBe(inline?.type === 'chart' ? inline.spec : '');
+    expect(pasted && readChartSpec(pasted).stored).toEqual(
+        inline?.type === 'chart' ? readChartSpec(inline.spec).stored : {},
+    );
 });
 
 test('a chart item another app wrote pastes as an inline chart at its size', async () => {
@@ -228,7 +243,11 @@ test('a chart item another app wrote pastes as an inline chart at its size', asy
     const { select, charts } = await mount();
     await select();
     await shortcut('KeyV', clipboardData);
-    expect(charts().find((c) => c.id !== 'c1')).toMatchObject({ spec, width: 320.5, height: 200 });
+    expect(charts().find((c) => c.id !== 'c1')).toMatchObject({
+        ...newSheetChartSpecParts(sampleChartSpec('pie')),
+        width: 320.5,
+        height: 200,
+    });
 });
 
 test('⌘C carries the look the chart stores, and a chart storing none copies flat', async () => {

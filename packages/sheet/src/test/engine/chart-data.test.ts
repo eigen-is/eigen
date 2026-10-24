@@ -6,6 +6,7 @@ import {
     FLAT_CHART_LOOK,
     MAX_CHART_LABEL_LENGTH,
     MAX_CHART_POINTS,
+    newSheetChartSpecParts,
     parseChartSpec,
     sampleChartSpec,
 } from '@workspace/lib/charts';
@@ -186,7 +187,7 @@ describe('renderSheetChartSvg', () => {
             y: 0,
             width: 400,
             height: 300,
-            spec: JSON.stringify({
+            ...newSheetChartSpecParts({
                 ...spec,
                 axes: { ...spec.axes, y: { ...spec.axes.y, labels: { format } } },
                 data: data(ref([0, 1], [0, 0]), series(ref([0, 1], [1, 1]), 'Share')),
@@ -224,7 +225,7 @@ describe('renderSheetChartSvg', () => {
         const svg = renderSheetChartSvg(
             {
                 ...chart(null),
-                spec: JSON.stringify({
+                ...newSheetChartSpecParts({
                     ...spec,
                     series: {},
                     data: data(null, series(ref([0, 1], [1, 1])), series(null), series(ref([0, 1], [1, 1]))),
@@ -245,14 +246,14 @@ describe('renderSheetChartSvg', () => {
 });
 
 describe('inlineChartSpec', () => {
-    const sheetChart = (spec: object): SheetChart => ({
+    const sheetChart = (spec: ChartSpec): SheetChart => ({
         id: 'c1',
         index: 'a0',
         x: 0,
         y: 0,
         width: 400,
         height: 300,
-        spec: JSON.stringify(spec),
+        ...newSheetChartSpecParts(spec),
     });
     // Every series automatic unless styles names it.
     const rangeChart = (list: RangeChartSeries[], styles: ChartSpec['series'] = {}) =>
@@ -326,14 +327,18 @@ describe('inlineChartSpec', () => {
     });
 
     test('an inline chart copies its stored spec as it is', () => {
-        const chart = { ...sheetChart(sampleChartSpec('pie')), spec: `${JSON.stringify(sampleChartSpec('pie'))} ` };
-        expect(inlineChartSpec(chart, resolver)).toBe(chart.spec);
+        const pie = sampleChartSpec('pie');
+        const chart = { ...sheetChart(pie), specData: JSON.stringify({ ...pie.data, future: 1 }) };
+        expect(JSON.parse(inlineChartSpec(chart, resolver) ?? '{}')).toEqual({
+            ...pie,
+            data: { ...pie.data, future: 1 },
+        });
     });
 
     test('a chart showing #REF!, too much data or nothing copies nothing', () => {
         expect(inlineChartSpec(rangeChart([series(ref([1, 3], [1, 2]))]), resolver)).toBeNull();
         expect(inlineChartSpec(rangeChart([series(ref([0, MAX_CHART_POINTS], [1, 1]))]), resolver)).toBeNull();
-        expect(inlineChartSpec({ ...rangeChart([]), spec: '{' }, resolver)).toBeNull();
+        expect(inlineChartSpec({ ...rangeChart([]), specData: '{' }, resolver)).toBeNull();
     });
 
     test('a chart whose cells pass the spec’s size limit copies nothing', () => {
@@ -358,35 +363,34 @@ describe('inlineChartSpec', () => {
     });
 
     // A newer build's chart: a ref under a series key this build doesn't know, and keys beside it.
-    const newer = () => {
-        const spec = {
-            ...sampleChartSpec('line'),
-            future: 1,
-            data: data(ref([1, 3], [0, 0]), series(ref([1, 3], [1, 1]))),
-        };
-        return sheetChart({
-            ...spec,
-            data: {
-                ...spec.data,
+    const newer = (): SheetChart => {
+        const spec = sampleChartSpec('line');
+        const range = data(ref([1, 3], [0, 0]), series(ref([1, 3], [1, 1])));
+        return {
+            ...sheetChart({ ...spec, data: range }),
+            specChart: JSON.stringify({ ...spec.chart, future: 1 }),
+            specData: JSON.stringify({
+                ...range,
                 future: 2,
-                series: spec.data.series.map((s) => ({ ...s, x: ref([1, 3], [2, 2]), dash: 'dot' })),
-            },
-        });
+                series: range.series.map((s) => ({ ...s, x: ref([1, 3], [2, 2]), dash: 'dot' })),
+            }),
+        };
     };
 
     test("a ref this build doesn't know is left out of the copy, the other keys kept", () => {
         const copied = JSON.parse(inlineChartSpec(newer(), resolver) ?? '{}');
-        expect(copied.future).toBe(1);
+        expect(copied.chart.future).toBe(1);
         expect(copied.data).toMatchObject({ source: 'inline', future: 2, categories: ['Ajax', 'PSV', ''] });
         expect(copied.data.series).toEqual([{ id: 's-0', name: 'Points', values: [42, null, null], dash: 'dot' }]);
     });
 
     test("a row op moves a ref this build doesn't know, the other keys kept", () => {
         const down = (ref: CellRangeRef): CellRangeRef => ({ ...ref, row: [ref.row[0] + 2, ref.row[1] + 2] });
-        const moved = JSON.parse(mapChartRefs(newer(), down).spec);
-        expect(moved.future).toBe(1);
-        expect(moved.data.future).toBe(2);
-        expect(moved.data.series[0]).toMatchObject({
+        const moved = mapChartRefs(newer(), down);
+        expect(JSON.parse(moved.specChart).future).toBe(1);
+        const stored = JSON.parse(moved.specData);
+        expect(stored.future).toBe(2);
+        expect(stored.series[0]).toMatchObject({
             x: ref([3, 5], [2, 2]),
             values: ref([3, 5], [1, 1]),
             dash: 'dot',
@@ -394,16 +398,15 @@ describe('inlineChartSpec', () => {
     });
 
     test("a chart this build can't draw still moves its refs", () => {
-        const stored = JSON.parse(newer().spec);
         const unknown = {
             ...newer(),
-            spec: JSON.stringify({ ...stored, chart: { ...stored.chart, type: 'scatter' } }),
+            specChart: JSON.stringify({ ...JSON.parse(newer().specChart), type: 'scatter' }),
         };
         const down = (ref: CellRangeRef): CellRangeRef => ({ ...ref, row: [ref.row[0] + 2, ref.row[1] + 2] });
-        const moved = JSON.parse(mapChartRefs(unknown, down).spec);
-        expect(moved.chart.type).toBe('scatter');
-        expect(moved.data.categories).toEqual(ref([3, 5], [0, 0]));
-        expect(moved.data.series[0].x).toEqual(ref([3, 5], [2, 2]));
+        const moved = mapChartRefs(unknown, down);
+        expect(JSON.parse(moved.specChart).type).toBe('scatter');
+        expect(JSON.parse(moved.specData).categories).toEqual(ref([3, 5], [0, 0]));
+        expect(JSON.parse(moved.specData).series[0].x).toEqual(ref([3, 5], [2, 2]));
     });
 
     test('a chart nested past the stack, under the data or a series, is left as stored and copies as nothing', () => {
@@ -412,19 +415,19 @@ describe('inlineChartSpec', () => {
         for (let i = 0; i < 20_000; i += 1) deep = [deep];
         const down = (ref: CellRangeRef): CellRangeRef => ({ ...ref, row: [ref.row[0] + 2, ref.row[1] + 2] });
         for (const place of ['data', 'series'] as const) {
-            const raw = JSON.parse(newer().spec);
-            (place === 'data' ? raw.data : raw.data.series[0]).deep = deep;
-            const chart = { ...newer(), spec: JSON.stringify(raw) };
+            const raw = JSON.parse(newer().specData);
+            (place === 'data' ? raw : raw.series[0]).deep = deep;
+            const chart = { ...newer(), specData: JSON.stringify(raw) };
             expect(mapChartRefs(chart, down)).toBe(chart);
             expect(inlineChartSpec(chart, resolver)).toBeNull();
         }
     });
 
     test('a ref with a key of its own moves and keeps the key', () => {
-        const raw = JSON.parse(newer().spec);
-        raw.data.series[0].x = { ...ref([1, 3], [2, 2]), unit: 'px' };
+        const raw = JSON.parse(newer().specData);
+        raw.series[0].x = { ...ref([1, 3], [2, 2]), unit: 'px' };
         const down = (ref: CellRangeRef): CellRangeRef => ({ ...ref, row: [ref.row[0] + 2, ref.row[1] + 2] });
-        const moved = JSON.parse(mapChartRefs({ ...newer(), spec: JSON.stringify(raw) }, down).spec);
-        expect(moved.data.series[0].x).toEqual({ ...ref([3, 5], [2, 2]), unit: 'px' });
+        const moved = mapChartRefs({ ...newer(), specData: JSON.stringify(raw) }, down);
+        expect(JSON.parse(moved.specData).series[0].x).toEqual({ ...ref([3, 5], [2, 2]), unit: 'px' });
     });
 });

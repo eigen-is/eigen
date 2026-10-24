@@ -3,7 +3,7 @@
 // resize and rotate, the right-click menu and ⌘[ ⌘] reorder, a viewer only downloads, and Cut and Copy reach the
 // clipboard from the keys, the object's menu and Edit. Both kinds draw in one paint order.
 import { afterEach, describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { readEigenClipboard } from '@workspace/lib/clipboard';
 import type { SheetChart, SheetFloatingItem, SheetImage } from '@workspace/lib/sheets';
 import { drivePath } from '@workspace/ui/test/drive-path';
@@ -27,7 +27,7 @@ const chart: SheetChart = {
     y: 30,
     width: 300,
     height: 200,
-    spec: JSON.stringify({
+    ...newSheetChartSpecParts({
         ...sampleChartSpec('column'),
         data: {
             source: 'inline',

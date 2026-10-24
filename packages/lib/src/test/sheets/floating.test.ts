@@ -1,17 +1,29 @@
 import { describe, expect, test } from 'bun:test';
-import { CHART_MAX_SIDE } from '../../charts';
+import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, newSheetChartSpecParts, sampleChartSpec } from '../../charts';
+import { isRecord } from '../../core/guards';
 import {
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_COL_WIDTH,
     SHEET_DEFAULT_ROW_HEIGHT,
 } from '../../sheets/defaults';
-import { floatingItems, floatingWriteFilter, nextFloatingIndex, sheetFloatingBox } from '../../sheets/floating';
+import {
+    chartsWithinEntryCap,
+    floatingItems,
+    floatingWriteFilter,
+    nextFloatingIndex,
+    sheetFloatingBox,
+} from '../../sheets/floating';
 import type { Sheet, SheetChart, SheetImage } from '../../sheets/types';
 
 const BOX = { x: 10, y: 20, width: 40, height: 30 };
 const image = (id: string, index: string): SheetImage => ({ id, index, ...BOX, mediaName: `${id}.png` });
-const chart = (id: string, index: string): SheetChart => ({ id, index, ...BOX, spec: '{}' });
+const chart = (id: string, index: string): SheetChart => ({
+    id,
+    index,
+    ...BOX,
+    ...newSheetChartSpecParts(sampleChartSpec('column')),
+});
 
 describe('sheetFloatingBox', () => {
     test('keeps a box on the grid as it is, with no angle as 0', () => {
@@ -100,8 +112,14 @@ describe('nextFloatingIndex', () => {
 
 describe('floatingWriteFilter', () => {
     const sheets = (): Sheet[] => [{ name: 'S', images: {}, charts: { c1: chart('c1', 'a1') } }];
-    const kept = (writes: { op: string; path: (string | number)[]; value?: unknown }[]) =>
-        writes.filter(floatingWriteFilter(sheets())).map(({ path }) => path.join('/'));
+    // The sheets the filter reads are a store's, frozen, so it tracks a batch on copies.
+    const kept = (writes: { op: string; path: (string | number)[]; value?: unknown }[]) => {
+        const stored = sheets();
+        const before = structuredClone(stored);
+        const applied = writes.filter(floatingWriteFilter(stored)).map(({ path }) => path.join('/'));
+        expect(stored).toEqual(before);
+        return applied;
+    };
 
     test('a write into an object lands where the batch has left it, else where it stood', () => {
         expect(
@@ -126,5 +144,71 @@ describe('floatingWriteFilter', () => {
                 { op: 'replace', path: [0, 'images', 'i1', 'y'], value: 1 },
             ]),
         ).toEqual(['0/images', '0/images/i1/x', '0']);
+    });
+
+    // A keyed part is a record from the chart's creation on, so only a forged chart has another value there: an entry
+    // write below it is dropped, not the batch, and so is a write below an entry, which is a string.
+    test('an entry write lands on a record field only', () => {
+        const forged = { ...chart('c2', 'a2'), specPoints: '{}' };
+        expect(
+            kept([
+                { op: 'add', path: [0, 'charts', 'c2'], value: forged },
+                { op: 'add', path: [0, 'charts', 'c2', 'specPoints', 's-1/3'], value: '{"color":"#ff0000"}' },
+                { op: 'add', path: [0, 'charts', 'c1', 'specPoints', 's-1/3'], value: '{"color":"#ff0000"}' },
+                { op: 'add', path: [0, 'charts', 'c1', 'specTitle', 'text'], value: 'Goals' },
+                { op: 'add', path: [0, 'charts', 'c1', 'specSeries', 's-1', 'color'], value: '#ff0000' },
+                { op: 'replace', path: [0, 'charts', 'c1', 'specPoints'], value: 'gone' },
+                { op: 'add', path: [0, 'charts', 'c1', 'specPoints', 's-1/4'], value: '{}' },
+                { op: 'replace', path: [0, 'charts', 'c2', 'specPoints'], value: {} },
+                { op: 'add', path: [0, 'charts', 'c2', 'specPoints', 's-1/4'], value: '{}' },
+            ]),
+        ).toEqual([
+            '0/charts/c2',
+            '0/charts/c1/specPoints/s-1/3',
+            '0/charts/c1/specPoints',
+            '0/charts/c2/specPoints',
+            '0/charts/c2/specPoints/s-1/4',
+        ]);
+    });
+
+    // Every read lists a chart's entries, so a forged one of a million would cost every peer that walk on every draw.
+    test('a chart past the entry cap is dropped, whole or an entry at a time', () => {
+        const entries = (count: number) =>
+            Object.fromEntries(Array.from({ length: count }, (_, i) => [`s-1/${i}`, '{}']));
+        const fields = Object.values(chart('c1', 'a1'));
+        const held = fields.reduce(
+            (sum: number, value) => sum + 1 + (isRecord(value) ? Object.keys(value).length : 0),
+            0,
+        );
+        const full = MAX_CHART_SPEC_ENTRIES - held;
+        const forged = { ...chart('c2', 'a2'), specPoints: entries(full + 1) };
+        const keys = Object.fromEntries(Array.from({ length: full + 1 }, (_, i) => [`specFuture${i}`, '']));
+        expect(
+            kept([
+                { op: 'add', path: [0, 'charts', 'c2'], value: forged },
+                { op: 'add', path: [0, 'charts', 'c3'], value: { ...chart('c3', 'a3'), ...keys } },
+                { op: 'replace', path: [0, 'charts'], value: { c2: forged } },
+                { op: 'replace', path: [0], value: { name: 'S', charts: { c2: forged } } },
+                { op: 'replace', path: [0, 'charts', 'c1', 'specPoints'], value: entries(full + 1) },
+                { op: 'replace', path: [0, 'charts', 'c1', 'specPoints'], value: entries(full) },
+                { op: 'add', path: [0, 'charts', 'c1', 'specPoints', 's-1/0'], value: '{"color":"#ff0000"}' },
+                { op: 'add', path: [0, 'charts', 'c1', 'specPoints', `s-1/${full}`], value: '{}' },
+                { op: 'remove', path: [0, 'charts', 'c1', 'specPoints', 's-1/0'] },
+                { op: 'add', path: [0, 'charts', 'c1', 'specPoints', `s-1/${full}`], value: '{}' },
+            ]).map((path) => path.split('/').slice(0, 5).join('/')),
+        ).toEqual([
+            '0/charts/c1/specPoints',
+            '0/charts/c1/specPoints/s-1',
+            '0/charts/c1/specPoints/s-1',
+            '0/charts/c1/specPoints/s-1',
+        ]);
+    });
+
+    test('a snapshot or a whole sheet keeps the charts within the cap', () => {
+        const charts = { c1: chart('c1', 'a1') };
+        expect(chartsWithinEntryCap(charts)).toBe(charts);
+        const points = Object.fromEntries(Array.from({ length: MAX_CHART_SPEC_ENTRIES }, (_, i) => [`s-1/${i}`, '{}']));
+        const forged = { ...chart('c2', 'a2'), specPoints: points };
+        expect(Object.keys(chartsWithinEntryCap({ ...charts, c2: forged }))).toEqual(['c1']);
     });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
@@ -37,7 +37,7 @@ suite('sheets PDF — a rotated chart', () => {
         const sheet: Sheet = {
             name: 'Chart',
             id: 's1',
-            charts: { c1: { ...chart, spec: JSON.stringify(sampleChartSpec('column')) } },
+            charts: { c1: { ...chart, ...newSheetChartSpecParts(sampleChartSpec('column')) } },
         };
         const html = sheetsHtmlDocument({ title: 'Chart', sheets: [sheet], mediaUrls: NO_MEDIA, mode: 'pdf' });
         const page = await rasterize(await htmlToPdf(html));

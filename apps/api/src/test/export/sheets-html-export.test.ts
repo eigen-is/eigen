@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    CHART_MAX_SIDE,
+    DEFAULT_CHART_SERIES_STYLE,
+    newSheetChartSpecParts,
+    sampleChartSpec,
+} from '@workspace/lib/charts';
 import type { Cell, ConditionalFormatRule, Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import {
     REFERENCE_COLUMN_COUNT,
@@ -1198,7 +1203,7 @@ describe('Sheets HTML export — charts', () => {
             id: 'c1',
             index: 'a0',
             ...box,
-            spec: JSON.stringify({
+            ...newSheetChartSpecParts({
                 ...spec,
                 title: { text: 'Points scored' },
                 series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },

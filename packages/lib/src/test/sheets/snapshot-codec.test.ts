@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { newSheetChartSpecParts, sampleChartSpec } from '../../charts';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from '../../sheets/snapshot-codec';
 import type { Cell, CellWithRowAndCol, Sheet } from '../../sheets/types';
 
@@ -248,7 +249,15 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
 
     test('floating charts round-trip on the wire', () => {
         const charts = {
-            c1: { id: 'c1', index: 'a0', x: 120, y: 40, width: 480, height: 300, spec: '{"chart":{"type":"column"}}' },
+            c1: {
+                id: 'c1',
+                index: 'a0',
+                x: 120,
+                y: 40,
+                width: 480,
+                height: 300,
+                ...newSheetChartSpecParts(sampleChartSpec('column')),
+            },
         };
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], charts }];
         const encoded = encodeSheetsSnapshot(sheets, { computed: true });

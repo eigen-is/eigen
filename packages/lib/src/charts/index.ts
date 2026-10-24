@@ -38,6 +38,7 @@ export {
     MAX_CHART_SERIES,
     MAX_CHART_SPEC_BYTES,
     MAX_CHART_SPEC_DEPTH,
+    MAX_CHART_SPEC_ENTRIES,
     mapChartSpecParts,
     newChartSeriesId,
     newChartSpecParts,

@@ -1,4 +1,4 @@
-import { isSketchCapped, parseChartSpec } from '@workspace/lib/charts';
+import { isSketchCapped, readChartSpec } from '@workspace/lib/charts';
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
@@ -398,7 +398,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // biome-ignore lint/correctness/useExhaustiveDependencies: the resolver reads context.sheets alone; depending on `context` would rebuild on every selection and scroll
         const chartPanel = useMemo((): ChartPanelState | null => {
             if (!activeChart) return null;
-            const spec = parseChartSpec(activeChart.spec);
+            const { spec } = readChartSpec(activeChart);
             const data = spec?.data;
             const resolver = createContextResolver(context);
             const resolved = data?.source === 'range' ? resolveRangeChartData(data, resolver) : data;
@@ -594,7 +594,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (!item) return;
                     e.preventDefault();
                     writeEigenClipboard(e, { version: 1, items: [item] });
-                    globalCache.current.copiedChart = { inline: item.spec, spec: activeChart.spec };
+                    const { stored } = readChartSpec(activeChart);
+                    globalCache.current.copiedChart = { inline: item.spec, spec: JSON.stringify(stored) };
                     if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                     return;
                 }

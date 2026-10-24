@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { ConditionalFormatRule, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { XmlElement } from '../../lib/core/xml';
@@ -1271,7 +1271,9 @@ describe('an xlsx export carries the sheets’ images', () => {
                     drawing: { id: 'drawing', index: 'a2', ...box, angle: 90, mediaName: 'drawing.svg' },
                     gone: { id: 'gone', index: 'a3', ...box, mediaName: 'gone.png' },
                 },
-                charts: { chart: { id: 'chart', index: 'a1', ...box, spec: JSON.stringify(sampleChartSpec('pie')) } },
+                charts: {
+                    chart: { id: 'chart', index: 'a1', ...box, ...newSheetChartSpecParts(sampleChartSpec('pie')) },
+                },
             },
             {
                 name: 'Two',

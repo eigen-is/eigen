@@ -1,3 +1,4 @@
+import { newSheetChartSpecParts } from '@workspace/lib/charts';
 import type { Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import {
     REFERENCE_COLUMN_COUNT,
@@ -6,6 +7,7 @@ import {
     sheetFloatingBox,
     sheetRowsHeight,
 } from '@workspace/lib/sheets';
+import type { ChartSpec, SheetChartSpecParts } from '@workspace/lib/types/chart';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlTrimmedText } from '../../core/xml';
@@ -65,7 +67,7 @@ export type DrawingContext = {
     sheetIds: ReadonlyMap<string, string>;
     // A chart's elements, or an anchor's tracks, charged only when the budget left covers them: one it can't is left out.
     spend(count: number): boolean;
-    // Throws past the output budget, which a chart's spec string counts toward: enough charts refuse the workbook.
+    // Throws past the output budget, which a chart's parts' text counts toward: enough charts refuse the workbook.
     charge(cells: number, text: number): void;
     // A picture part's media file, null past the import's media budget (import/image-types.ts).
     mediaName(part: MediaPart): string | undefined | null;
@@ -79,7 +81,7 @@ export type DrawingContext = {
 // points (chartCost) and every anchor the tracks walked to place it. A chart sheet shows its chart alone.
 export function placeDrawings(drawings: Drawing[], context: DrawingContext): void {
     const costs = new Map<XmlElement, number>();
-    const specs = new Map<XmlElement, string | undefined>();
+    const specs = new Map<XmlElement, ChartSpec | undefined>();
     let placed = 0;
     for (const { sheet, chartSheet, anchors, rels } of drawings) {
         for (const rel of rels.values()) if (rel.type.endsWith('/chartEx')) context.lost('charts-dropped');
@@ -122,22 +124,33 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
                 context.lost('charts-dropped');
                 continue;
             }
-            context.charge(0, spec.length);
-            const chart: SheetChart = { id: `chart-${placed++}`, index: paint(), ...box, spec };
+            const parts = newSheetChartSpecParts(spec);
+            context.charge(0, partsText(parts));
+            const chart: SheetChart = { id: `chart-${placed++}`, index: paint(), ...box, ...parts };
             (sheet.charts ??= {})[chart.id] = chart;
             if (chartSheet) break;
         }
     }
 
     // By the cells it names, else by its caches.
-    function specOf(root: XmlElement): string | undefined {
+    function specOf(root: XmlElement): ChartSpec | undefined {
         if (specs.has(root)) return specs.get(root);
         const ranges = (name: string) => context.sheetIds.get(name.toLowerCase());
         const read = readChart(root, { theme: context.theme, data: { ranges } });
-        const spec = 'spec' in read ? JSON.stringify(read.spec) : undefined;
+        const spec = 'spec' in read ? read.spec : undefined;
         specs.set(root, spec);
         return spec;
     }
+}
+
+// The text a chart's parts spell out in the snapshot: each part's, and each entry's key and text.
+function partsText(parts: SheetChartSpecParts): number {
+    let length = 0;
+    for (const part of Object.values(parts)) {
+        if (typeof part === 'string') length += part.length;
+        else for (const [entry, text] of Object.entries(part)) length += entry.length + text.length;
+    }
+    return length;
 }
 
 // A picture over its box, turned by its a:xfrm's rot as Eigen turns it, clockwise. Excel and LibreOffice anchor a
