@@ -5,7 +5,7 @@
 // defaults while the module loads.
 import {
     chartSearchText,
-    exceedsChartSpecBytes,
+    chartSpecByteCounter,
     isChartSpecKey,
     mapChartSpecParts,
     newChartSpecParts,
@@ -20,7 +20,7 @@ import { DEFAULT_ELEMENT_PROPS } from '../types';
 import { chartToElements } from './chart-convert';
 import { chartLayout, renderChartSvg } from './chart-render';
 import { defineKind } from './kind';
-import { color, fillField, str } from './read-fields';
+import { color, fillField } from './read-fields';
 
 const PART_KEYS: ReadonlySet<string> = new Set(CHART_SPEC_PART_KEYS);
 
@@ -46,20 +46,25 @@ export const chartKind = defineKind<VectorChartElement>({
         color: style.color,
     }),
     // Each part is kept as stored, never re-serialized: one that doesn't parse draws a placeholder and stays in the
-    // doc for recovery, and a newer build's part rides along so a copy can carry it. Past the byte limit, summed over
-    // every part, each reads as '' and no newer part is kept.
+    // doc for recovery, and a newer build's part is kept on the element too. Past the byte limit, summed over every
+    // part, the read stops: each part reads as '' and no newer part is kept.
     read: (src, base) => {
-        const stored: Record<string, unknown> = {};
-        for (const key of src.keys()) if (isChartSpecKey(key)) stored[key] = src.get(key);
-        const blank = exceedsChartSpecBytes(stored);
-        const newer = Object.entries(stored).filter(
-            ([key, text]) => !blank && !PART_KEYS.has(key) && typeof text === 'string',
-        );
+        const exceeds = chartSpecByteCounter();
+        let stored = new Map<string, string>();
+        for (const key of src.keys()) {
+            if (!isChartSpecKey(key)) continue;
+            const text = src.get(key);
+            if (exceeds(key, text)) {
+                stored = new Map();
+                break;
+            }
+            if (typeof text === 'string') stored.set(key, text);
+        }
         return {
             ...base,
-            ...Object.fromEntries(newer),
+            ...Object.fromEntries([...stored].filter(([key]) => !PART_KEYS.has(key))),
             type: 'chart',
-            ...mapChartSpecParts((part) => (blank ? '' : str(stored[CHART_SPEC_PART_KEY[part]], ''))),
+            ...mapChartSpecParts((part) => stored.get(CHART_SPEC_PART_KEY[part]) ?? ''),
             fill: fillField(src.get('fill')),
             color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
         };

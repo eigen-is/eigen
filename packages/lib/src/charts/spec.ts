@@ -228,16 +228,16 @@ const ENCODER = new TextEncoder();
 // A stored string, or on a host's record every prefixed key's name and text summed, known or not, a Sheets entry's key
 // and text both. The count stops at the limit, so a forged record of a million keys or entries costs what fits under it.
 export function exceedsChartSpecBytes(value: string | Readonly<Record<string, unknown>>): boolean {
-    let left = MAX_CHART_SPEC_BYTES;
-    // Every UTF-16 unit is a UTF-8 byte or more, so a string longer than what is left is past it unencoded.
-    const spend = (text: string) => {
-        left -= text.length > left ? left + 1 : ENCODER.encode(text).length;
-        return left < 0;
-    };
-    if (typeof value === 'string') return spend(value);
-    return Object.keys(value).some((key) => {
-        if (!isChartSpecKey(key)) return false;
-        const part = value[key];
+    if (typeof value === 'string') return byteBudget()(value);
+    const exceeds = chartSpecByteCounter();
+    return Object.keys(value).some((key) => isChartSpecKey(key) && exceeds(key, value[key]));
+}
+
+// The same count one prefixed key at a time, for a host that collects its keys in the pass that counts them: true once
+// the keys so far are past the limit.
+export function chartSpecByteCounter(): (key: string, part: unknown) => boolean {
+    const spend = byteBudget();
+    return (key, part) => {
         if (spend(key)) return true;
         if (typeof part === 'string') return spend(part);
         return (
@@ -247,7 +247,16 @@ export function exceedsChartSpecBytes(value: string | Readonly<Record<string, un
                 return spend(entry) || (typeof text === 'string' && spend(text));
             })
         );
-    });
+    };
+}
+
+function byteBudget(): (text: string) => boolean {
+    let left = MAX_CHART_SPEC_BYTES;
+    // Every UTF-16 unit is a UTF-8 byte or more, so a string longer than what is left is past it unencoded.
+    return (text) => {
+        left -= text.length > left ? left + 1 : ENCODER.encode(text).length;
+        return left < 0;
+    };
 }
 
 // Counted on the string, in one pass before the parse; a bracket inside a JSON string is text.

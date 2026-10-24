@@ -20,6 +20,7 @@ export {
     chartPointMoves,
     chartSearchText,
     chartSeriesStyle,
+    chartSpecByteCounter,
     chartSpecChange,
     chartSpecWrites,
     DEFAULT_CHART_FONT,
