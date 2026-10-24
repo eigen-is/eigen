@@ -148,13 +148,13 @@ class LatexReader {
     // Groups, fonts and colours read into the row around them: levels the parser walks that the tree doesn't have.
     #wrappers = 0;
 
-    constructor(latex: string) {
+    public constructor(latex: string) {
         this.#latex = latex;
         ({ tokens: this.#tokens, partners: this.#partners } = tokenize(latex));
         this.#end = this.#tokens.length;
     }
 
-    read(): MathRow {
+    public read(): MathRow {
         const pieces: Piece[] = [];
         this.#atoms(pieces, MATH, 1);
         if (this.#pos < this.#end) throw this.#unexpected(this.#pos);
