@@ -6,8 +6,8 @@
 
 import {
     chartLabel,
+    chartPointMoves,
     chartSpecChange,
-    DEFAULT_CHART_SERIES_STYLE,
     exceedsInlineGridLimits,
     fitsInlineGrid,
     holdsUnknownChartData,
@@ -25,13 +25,7 @@ import {
     SHEET_DEFAULT_ROW_HEIGHT,
     SHEET_ROW_HEADER_WIDTH,
 } from '@workspace/lib/sheets';
-import type {
-    ChartSeriesStyle,
-    ChartSpec,
-    ChartSpecChange,
-    InlineChartData,
-    StoredChartSpec,
-} from '@workspace/lib/types/chart';
+import type { ChartSpec, ChartSpecChange, InlineChartData, StoredChartSpec } from '@workspace/lib/types/chart';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -49,10 +43,10 @@ import { fromPercent } from './percent';
 type InlineChartSpec = ChartSpec & { data: InlineChartData };
 
 // A cell holds what was typed, so a value that isn't a number stays on screen, flagged, instead of vanishing.
-type GridColumn = { id: string; name: string; style: ChartSeriesStyle };
-// A row carries its slice color, so a removed row takes its pie slice's color with it. New series and rows
-// are automatic (null), so the palette colors them by position.
-type GridRow = { category: string; color: string | null; cells: string[] };
+type GridColumn = { id: string; name: string };
+// A row carries the index it opened at, so a removed row takes its points, such as its pie slice's color, with it and
+// the rows after it keep theirs. A new row has none, so its points are automatic.
+type GridRow = { origin: number | null; category: string; cells: string[] };
 // The corner, A1, heads the categories column: the category axis title, as in Google.
 type Grid = { corner: string; columns: GridColumn[]; rows: GridRow[] };
 
@@ -65,38 +59,40 @@ type GridSelection = { anchor: CellRef; focus: CellRef; whole?: 'rows' | 'column
 // where an arrow moves the caret. As in Sheets.
 type Editing = { mode: 'replace' | 'in-place'; text: string };
 
-const newColumn = (): GridColumn => ({ id: newChartSeriesId(), name: '', style: DEFAULT_CHART_SERIES_STYLE });
-const newRow = (columns: number): GridRow => ({ category: '', color: null, cells: Array(columns).fill('') });
+const newColumn = (): GridColumn => ({ id: newChartSeriesId(), name: '' });
+const newRow = (columns: number): GridRow => ({ origin: null, category: '', cells: Array(columns).fill('') });
 
-function gridOf({ data, sliceColors, categoryAxis }: InlineChartSpec): Grid {
+function gridOf({ data, axes }: InlineChartSpec): Grid {
     const count = Math.max(data.categories.length, ...data.series.map((series) => series.values.length));
     return {
-        corner: categoryAxis.title,
-        columns: data.series.map(({ id, name, values, ...style }) => ({ id, name, style })),
+        corner: axes.x.title.text,
+        columns: data.series.map(({ id, name }) => ({ id, name })),
         rows: Array.from({ length: count }, (_, i) => ({
+            origin: i,
             category: data.categories[i] ?? '',
-            color: sliceColors[i] ?? null,
             cells: data.series.map((series) => String(series.values[i] ?? '')),
         })),
     };
 }
 
-// The spec a grid writes. A series' style isn't the grid's, so it is the chart's as it is now, and a peer's recolour
-// while the dialog was open stands.
+// The spec a grid writes: its data and the category axis title in A1. A series' style isn't the grid's.
 function specOf({ corner, columns, rows }: Grid, spec: InlineChartSpec): ChartSpec {
     return {
         ...spec,
-        categoryAxis: { ...spec.categoryAxis, title: corner },
-        sliceColors: rows.map((row) => row.color),
+        axes: { ...spec.axes, x: { ...spec.axes.x, title: { text: corner } } },
         data: {
             source: 'inline',
             categories: rows.map((row) => row.category),
-            series: columns.map(({ id, name, style }, j) => {
-                const { color, markers, smooth } = spec.data.series.find((series) => series.id === id) ?? style;
-                return { color, markers, smooth, id, name, values: rows.map((row) => numberOf(row.cells[j])) };
-            }),
+            series: columns.map(({ id, name }, j) => ({ id, name, values: rows.map((row) => numberOf(row.cells[j])) })),
         },
     };
+}
+
+// Every series' points follow their rows: a deleted row's go, and the rows after it take theirs along.
+function pointMoves(opened: Grid, final: Grid): ChartSpecChange {
+    const target = new Map(final.rows.flatMap((row, i) => (row.origin === null ? [] : [[row.origin, i]])));
+    const indexes = opened.rows.map((_, i) => i);
+    return opened.columns.flatMap(({ id }) => chartPointMoves(id, indexes, (index) => target.get(index) ?? null));
 }
 
 // A number as Sheets shows one in the en convention: grouped (1,234), after a currency symbol ($1,234.00,
@@ -519,7 +515,7 @@ function EditableGrid({
             setEditing(null);
             return;
         }
-        onSave(chartSpecChange(specOf(opened, spec), specOf(final, spec)));
+        onSave([...chartSpecChange(specOf(opened, spec), specOf(final, spec)), ...pointMoves(opened, final)]);
     };
 
     const activeText = cellText(grid, active);

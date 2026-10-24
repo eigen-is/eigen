@@ -1179,7 +1179,7 @@ test('a right-click on an equation in the band being edited opens its menu, whic
 function writeChart() {
     const paragraph = new Y.XmlElement('paragraph');
     const chart = new Y.XmlElement('chart');
-    chart.setAttribute('spec', JSON.stringify({ ...sampleChartSpec('column'), title: 'Light / dark' }));
+    chart.setAttribute('spec', JSON.stringify({ ...sampleChartSpec('column'), title: { text: 'Light / dark' } }));
     chart.setAttribute('color', '#123456');
     paragraph.insert(0, [chart]);
     doc.getXmlFragment('default').insert(0, [paragraph]);

@@ -127,7 +127,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
         // A chart's is the one its HTML gives its image.
         node.type === 'chart'
-            ? parseChartSpec(readChartAttrs(node.attrs ?? {}).spec ?? '')?.title || 'Chart'
+            ? parseChartSpec(readChartAttrs(node.attrs ?? {}).spec ?? '')?.title.text || 'Chart'
             : (alt ?? ''),
         context.pkg,
     );

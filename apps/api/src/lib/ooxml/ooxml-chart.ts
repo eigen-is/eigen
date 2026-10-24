@@ -14,6 +14,7 @@ import { bundledFont } from '@workspace/lib/constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
+    ChartPoint,
     ChartSeriesStyle,
     ChartSpec,
     ChartStacking,
@@ -138,7 +139,10 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
         const [group] = groups;
         if (!group || groups.length > 1) unsupported();
         const spec = parseChartSpec(
-            JSON.stringify({ ...chartSpec(chart, plotArea, group, colors, data), title, fontFamily: chartFont(root) }),
+            JSON.stringify({
+                ...chartSpec(chart, plotArea, group, colors, data, chartFont(root)),
+                title: { text: title },
+            }),
         );
         return spec ? { spec } : unsupported();
     } catch (error) {
@@ -160,7 +164,8 @@ function chartSpec(
     group: XmlElement,
     colors: DrawingTheme,
     data: ChartSource,
-): Omit<ChartSpec, 'title' | 'fontFamily'> {
+    fontFamily: string,
+): Omit<ChartSpec, 'title'> {
     const kind = TYPES.get(group.local) ?? unsupported();
     const type = kind === 'column' && val(child(group, 'barDir')) === 'bar' ? 'bar' : kind;
     const grouping = val(child(group, 'grouping')) ?? (type === 'line' ? 'standard' : 'clustered');
@@ -169,8 +174,12 @@ function chartSpec(
     if (!stacking) unsupported();
     const valueAxes = children(plotArea, 'valAx');
     const categoryAxes = [...children(plotArea, 'catAx'), ...children(plotArea, 'dateAx')];
-    const [valueAxis] = valueAxes;
-    const [categoryAxis] = categoryAxes;
+    // The group names its axes by c:axId; a file whose ids don't match draws on the plot area's own.
+    const axisIds = children(group, 'axId').map(val);
+    const groupAxis = (axes: XmlElement[]) =>
+        axes.find((axis) => axisIds.includes(val(child(axis, 'axId')))) ?? axes[0];
+    const valueAxis = groupAxis(valueAxes);
+    const categoryAxis = groupAxis(categoryAxes);
     const scaling = child(valueAxis, 'scaling');
     const orientation = (axis: XmlElement | undefined) => val(child(child(axis, 'scaling'), 'orientation'));
     if (valueAxes.length > 1 || categoryAxes.length > 1 || child(scaling, 'logBase')) unsupported();
@@ -205,9 +214,11 @@ function chartSpec(
         return fillColor(fill) ?? accent(count(val(child(ser, 'idx'))) ?? 0);
     };
     const style = (ser: XmlElement, index: number): ChartSeriesStyle => ({
+        plot: null,
+        yAxis: 'y',
         color: automatic(seriesColor(ser), index),
-        markers: markers && val(child(child(ser, 'marker'), 'symbol')) !== 'none',
-        smooth: type === 'line' && flag(child(ser, 'smooth')) === true,
+        line: { smooth: type === 'line' && flag(child(ser, 'smooth')) === true },
+        marker: { visible: markers && val(child(child(ser, 'marker'), 'symbol')) !== 'none' },
     });
 
     const [first] = series;
@@ -220,27 +231,49 @@ function chartSpec(
             : undefined
         : xmlAttr(numFmt, '', 'formatCode');
     const blanks = child(chart, 'dispBlanksAs');
-    const presentation = {
-        type,
-        stacking,
-        legend: legendPosition(child(chart, 'legend')),
-        // CT_DispBlanksAs: present without a val is zero.
-        blanks: CHART_BLANKS.find((option) => option === (blanks ? (val(blanks) ?? 'zero') : 'gap')) ?? 'gap',
-        categoryAxis: { title: axisTitle(categoryAxis), visible: visible(categoryAxis), reversed },
-        valueAxis: {
-            title: axisTitle(valueAxis),
-            min: numberOf(val(child(scaling, 'min'))),
-            max: numberOf(val(child(scaling, 'max'))),
-            gridlines: child(valueAxis, 'majorGridlines') !== undefined,
-            format:
-                format && format !== 'General' && !(stacking === 'percent' && format === PERCENT_AXIS_FORMAT)
-                    ? chartLabel(format)
-                    : null,
-            visible: visible(valueAxis),
+    const none = { stacking: 'none' } as const;
+    const presentation: Omit<ChartSpec, 'title' | 'points' | 'data'> = {
+        chart: {
+            type,
+            // CT_DispBlanksAs: present without a val is zero.
+            blanks: CHART_BLANKS.find((option) => option === (blanks ? (val(blanks) ?? 'zero') : 'gap')) ?? 'gap',
+            fontFamily,
         },
+        legend: { position: legendPosition(child(chart, 'legend')) },
+        axes: {
+            x: {
+                kind: 'category',
+                title: { text: axisTitle(categoryAxis) },
+                visible: visible(categoryAxis),
+                gridlines: { visible: false },
+                labels: { format: null },
+                scale: { min: null, max: null, reversed },
+            },
+            y: {
+                kind: 'value',
+                title: { text: axisTitle(valueAxis) },
+                visible: visible(valueAxis),
+                gridlines: { visible: child(valueAxis, 'majorGridlines') !== undefined },
+                labels: {
+                    format:
+                        format && format !== 'General' && !(stacking === 'percent' && format === PERCENT_AXIS_FORMAT)
+                            ? chartLabel(format)
+                            : null,
+                },
+                scale: {
+                    min: numberOf(val(child(scaling, 'min'))),
+                    max: numberOf(val(child(scaling, 'max'))),
+                    reversed: false,
+                },
+            },
+        },
+        plots: { column: none, bar: none, line: none, pie: none, [type]: { stacking } },
+        series: Object.fromEntries(series.map((ser, i) => [ids[i], style(ser, i)])),
     };
-    const slices = (total: number): ChartSpec['sliceColors'] => {
-        if (type !== 'pie' || !first) return [];
+    // A pie's slices are its first series' points: each c:dPt's colour, else the palette's or the series' as
+    // c:varyColors says, an automatic one left out.
+    const slices = (total: number): ChartSpec['points'] => {
+        if (type !== 'pie' || !first) return {};
         if (total > MAX_CHART_POINTS) unsupported();
         const points = new Map<number, string>();
         for (const point of children(first, 'dPt')) {
@@ -250,10 +283,11 @@ function chartSpec(
         }
         const vary = flag(child(group, 'varyColors')) !== false;
         const own = seriesColor(first);
-        const colors = Array.from({ length: total }, (_, i) => automatic(points.get(i) ?? (vary ? accent(i) : own), i));
-        // A missing slice colour is automatic too.
-        while (colors.length > 0 && colors.at(-1) === null) colors.pop();
-        return colors;
+        const colored = Array.from({ length: total }, (_, i): [number, ChartPoint][] => {
+            const color = automatic(points.get(i) ?? (vary ? accent(i) : own), i);
+            return color === null ? [] : [[i, { color }]];
+        }).flat();
+        return colored.length > 0 ? { [ids[0]]: Object.fromEntries(colored) } : {};
     };
 
     if (data === 'cache') {
@@ -269,12 +303,11 @@ function chartSpec(
         const length = Math.max(labels.length, longest);
         return {
             ...presentation,
-            sliceColors: slices(length),
+            points: slices(length),
             data: {
                 source: 'inline',
                 categories: categories ? labels : Array.from({ length }, (_, i) => String(i + 1)),
                 series: series.map((ser, i) => ({
-                    ...style(ser, i),
                     id: ids[i],
                     name: seriesName(ser),
                     values: values[i],
@@ -308,14 +341,13 @@ function chartSpec(
         : 0;
     return {
         ...presentation,
-        sliceColors: slices(size),
+        points: slices(size),
         data: {
             source: 'range',
             categories: categoryRange,
             series: series.map((ser, i) => {
                 const name = child(ser, 'tx');
                 return {
-                    ...style(ser, i),
                     id: ids[i],
                     name: (child(name, 'strRef') && range(name)) ?? seriesName(ser),
                     values: line(range(child(ser, 'val'))),

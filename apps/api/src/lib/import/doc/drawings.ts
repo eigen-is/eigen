@@ -214,7 +214,7 @@ function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): Doc
     const chart: DocxChart = !read
         ? NOT_IMPORTED
         : 'spec' in read
-          ? { title: read.spec.title, spec: JSON.stringify(read.spec) }
+          ? { title: read.spec.title.text, spec: JSON.stringify(read.spec) }
           : { title: read.unsupported.title, dropped: droppedChart(read.unsupported) };
     reader.charts.set(root, chart);
     return chart;

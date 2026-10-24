@@ -97,11 +97,12 @@ describe('canvasImageScene', () => {
 });
 
 describe('canvasImageName', () => {
-    const titled = (title: string) => chart({ id: 'c', chart: JSON.stringify({ ...sampleChartSpec('bar'), title }) });
+    const titled = (title: string) =>
+        chart({ id: 'c', chart: JSON.stringify({ ...sampleChartSpec('bar'), title: { text: title } }) });
 
     test("a chart is named for its title, without the characters a file name can't hold", () => {
         expect(canvasImageName([titled('Q3: sales / costs?')], 'Plan')).toBe('Q3 sales costs');
-        expect(chartImageName(JSON.stringify({ ...sampleChartSpec('bar'), title: 'Light' }))).toBe('Light');
+        expect(chartImageName(JSON.stringify({ ...sampleChartSpec('bar'), title: { text: 'Light' } }))).toBe('Light');
     });
 
     test('a chart without a title, or one that does not parse, is "Chart"', () => {

@@ -28,46 +28,63 @@ export type ChartStacking = (typeof CHART_STACKINGS)[number];
 // Sheets only. Zero-based, inclusive, row[0] <= row[1] and column[0] <= column[1].
 export type CellRangeRef = { sheetId: string; row: [number, number]; column: [number, number] };
 
-// markers and smooth apply to line charts only. A null color is the palette's at the series' index
-// (chartColor), so a palette change reaches it and deleting a series shifts the ones after it.
-export type ChartSeriesStyle = { color: string | null; markers: boolean; smooth: boolean };
+// Fixed, never minted, so two peers who each add the second value axis write the same key: x the category axis (up a
+// bar chart's side), y the value axis, x2 and y2 the second pair. This build draws x and y and keeps the others.
+export const CHART_AXIS_IDS = ['x', 'y', 'x2', 'y2'] as const;
+export const CHART_AXIS_KINDS = ['category', 'value'] as const;
 
-// id is stable across a delete or a reorder and unique in its chart, so what keys by it follows its series.
-export type InlineChartSeries = ChartSeriesStyle & { id: string; name: string; values: (number | null)[] };
-export type RangeChartSeries = ChartSeriesStyle & {
-    id: string;
-    name: string | CellRangeRef;
-    values: CellRangeRef | null;
+export type ChartAxisId = (typeof CHART_AXIS_IDS)[number];
+export type ChartAxisKind = (typeof CHART_AXIS_KINDS)[number];
+
+// visible false draws no labels and no axis line, as Excel's c:delete or a c:tickLblPos of none; the title and
+// gridlines are their own. format is an Excel number format, null General or linked to the source cells. min and max
+// bound a value axis. reversed runs a category axis the other way from Google's, as Excel's minMax bar chart does from
+// the bottom up: the whole axis turns, so the series in a category's band turn with it.
+export type ChartAxis = {
+    kind: ChartAxisKind;
+    title: { text: string };
+    visible: boolean;
+    gridlines: { visible: boolean };
+    labels: { format: string | null };
+    scale: { min: number | null; max: number | null; reversed: boolean };
 };
+
+// A plot type's own options, which every series drawn in that type shares. stacking: column and bar only.
+export type ChartPlot = { stacking: ChartStacking };
+
+// A series' style, by its id. plot null draws in the chart's type, and yAxis names the axis it plots against; this build
+// draws every series in the chart's type on y. A null color is the palette's at the series' index (chartColor), so a
+// palette change reaches it and deleting a series shifts the ones after it. line and marker apply to line charts only.
+export type ChartSeriesStyle = {
+    plot: ChartType | null;
+    yAxis: string;
+    color: string | null;
+    line: { smooth: boolean };
+    marker: { visible: boolean };
+};
+
+// One point's style over its series', by the point's index. A pie's slices are its first series' points, and a null
+// color is automatic: the palette's at the slice's index.
+export type ChartPoint = { color: string | null };
+
+// id is stable across a delete or a reorder and unique in its chart, so the styles keyed by it follow their series.
+export type InlineChartSeries = { id: string; name: string; values: (number | null)[] };
+export type RangeChartSeries = { id: string; name: string | CellRangeRef; values: CellRangeRef | null };
 
 export type InlineChartData = { source: 'inline'; categories: string[]; series: InlineChartSeries[] };
 export type RangeChartData = { source: 'range'; categories: CellRangeRef | null; series: RangeChartSeries[] };
 
+// The spec's eight parts, each a record, so a later option nests in one and an older build keeps it. fontFamily is an
+// EIGEN_FONTS name every label draws in. axes holds the axes this build draws, series a style per series id in data,
+// points the styled points by series id and index.
 export type ChartSpec = {
-    type: ChartType;
-    // column and bar only
-    stacking: ChartStacking;
-    title: string;
-    legend: LegendPosition;
-    blanks: ChartBlanks;
-    // visible false draws no labels and no axis line, as Excel's c:delete or a c:tickLblPos of none; the title and
-    // gridlines are their own.
-    // reversed runs the axis the other way from Google's, as Excel's minMax bar chart does from the bottom up: the
-    // whole axis turns, so the series in a category's band turn with it.
-    categoryAxis: { title: string; visible: boolean; reversed: boolean };
-    // format: an Excel number format; null is General, or linked to the source cells.
-    valueAxis: {
-        title: string;
-        min: number | null;
-        max: number | null;
-        gridlines: boolean;
-        format: string | null;
-        visible: boolean;
-    };
-    // pie only: one color per category, null or missing the palette's at its index, as for a series
-    sliceColors: (string | null)[];
-    // An EIGEN_FONTS name; every label draws in it.
-    fontFamily: string;
+    chart: { type: ChartType; blanks: ChartBlanks; fontFamily: string };
+    title: { text: string };
+    legend: { position: LegendPosition };
+    axes: Record<'x' | 'y', ChartAxis>;
+    plots: Record<ChartType, ChartPlot>;
+    series: Record<string, ChartSeriesStyle>;
+    points: Record<string, Record<number, ChartPoint>>;
     data: InlineChartData | RangeChartData;
 };
 

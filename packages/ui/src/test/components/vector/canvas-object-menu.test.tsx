@@ -74,7 +74,7 @@ afterAll(() => {
     Object.defineProperty(window.Range.prototype, 'getClientRects', { configurable: true, value: getClientRects });
 });
 
-const chartSpec = JSON.stringify({ ...sampleChartSpec('column'), title: 'Light' });
+const chartSpec = JSON.stringify({ ...sampleChartSpec('column'), title: { text: 'Light' } });
 const ELEMENTS: (NewVectorElement & { id: string })[] = [
     { id: 'r', type: 'rectangle', x: 0, y: 0, width: 100, height: 100 },
     {

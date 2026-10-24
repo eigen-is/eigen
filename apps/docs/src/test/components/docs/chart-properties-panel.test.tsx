@@ -10,7 +10,7 @@ const Y = await import('yjs');
 const { act, createElement, useState } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
 const { default: Collaboration } = await import('@tiptap/extension-collaboration');
-const { parseChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
+const { chartSeriesStyle, parseChartSpec, sampleChartSpec } = await import('@workspace/lib/charts');
 const { parseFill } = await import('@workspace/lib/vector');
 const { getFontFamily } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
@@ -61,6 +61,9 @@ async function mount() {
     const store = (raw: object) => act(async () => void editor.commands.updateChart({ spec: JSON.stringify(raw) }));
     return { editor, undoManager, spec, stored, store };
 }
+
+type Spec = ReturnType<typeof parseChartSpec>;
+const colorsOf = (spec: Spec) => spec?.data.series.map(({ id }) => chartSeriesStyle(spec, id).color);
 
 const dialog = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
 const button = (scope: ParentNode | undefined, label: string) => {
@@ -128,19 +131,19 @@ test('a title typed into the panel is one undo step, and the chart stays selecte
     await act(async () => {
         input?.dispatchEvent(new Event('focusout', { bubbles: true }));
     });
-    expect(spec()?.title).toBe('Goal');
+    expect(spec()?.title.text).toBe('Goal');
     expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 1 });
 
     undoManager.undo();
-    expect(spec()?.title).toBe("Where a star's light goes");
+    expect(spec()?.title.text).toBe("Where a star's light goes");
 });
 
 // The field still holds the caret after typing, so ⌘Z reaches the field, not the editor's keymap. The browser's own
 // field undo would walk the text back a character at a time, writing each one.
 const fieldTitle = {
-    'Chart title': (spec: ReturnType<typeof parseChartSpec>) => spec?.title,
-    'Horizontal axis title': (spec: ReturnType<typeof parseChartSpec>) => spec?.categoryAxis?.title,
-    'Vertical axis title': (spec: ReturnType<typeof parseChartSpec>) => spec?.valueAxis?.title,
+    'Chart title': (spec: Spec) => spec?.title.text,
+    'Horizontal axis title': (spec: Spec) => spec?.axes.x.title.text,
+    'Vertical axis title': (spec: Spec) => spec?.axes.y.title.text,
 };
 for (const [placeholder, read] of Object.entries(fieldTitle)) {
     test(`⌘Z in the ${placeholder} field takes the typed text back as one step, and ⇧⌘Z puts it back`, async () => {
@@ -164,7 +167,7 @@ for (const [placeholder, read] of Object.entries(fieldTitle)) {
 
 test("a font picked in the Font row is one undo step, and the chart's labels draw in it", async () => {
     const { undoManager, spec } = await mount();
-    expect(spec()?.fontFamily).toBe('Inter');
+    expect(spec()?.chart.fontFamily).toBe('Inter');
     const label = [...document.querySelectorAll('span.w-14')].find((span) => span.textContent?.trim() === 'Font');
     const trigger = label?.nextElementSibling?.querySelector('button[aria-haspopup="menu"]');
     await act(async () => {
@@ -175,14 +178,14 @@ test("a font picked in the Font row is one undo step, and the chart's labels dra
     );
     if (!serif) throw new Error('no Source Serif 4 in the Font menu');
     await click(serif);
-    expect(spec()?.fontFamily).toBe('Source Serif 4');
+    expect(spec()?.chart.fontFamily).toBe('Source Serif 4');
     const fonts = new Set(
         [...document.querySelectorAll('[data-document] svg text')].map((t) => t.getAttribute('font-family')),
     );
     expect(fonts).toEqual(new Set([getFontFamily('Source Serif 4')]));
 
     undoManager.undo();
-    expect(spec()?.fontFamily).toBe('Inter');
+    expect(spec()?.chart.fontFamily).toBe('Inter');
 });
 
 test("a Style toggle wraps the chart in one undo step and lights it, the spec's rows untouched", async () => {
@@ -211,14 +214,14 @@ test("the sample's colors are Automatic, and a picked color and a Stacking pick 
     if (!swatch) throw new Error('the color popover has no swatch');
     await click(swatch);
     const picked = spec();
-    expect(picked?.data.series.map((series) => series.color)).toEqual([null, swatch.title, null]);
+    expect(colorsOf(picked)).toEqual([null, swatch.title, null]);
     undoManager.undo();
-    expect(spec()?.data.series.map((series) => series.color)).toEqual([null, null, null]);
+    expect(colorsOf(spec())).toEqual([null, null, null]);
 
     await choose('Stacking', '100%');
-    expect(spec()?.stacking).toBe('percent');
+    expect(spec()?.plots.column.stacking).toBe('percent');
     undoManager.undo();
-    expect(spec()?.stacking).toBe('none');
+    expect(spec()?.plots.column.stacking).toBe('none');
 });
 
 test('Edit data saves the grid as one undo step', async () => {
@@ -237,25 +240,32 @@ test('Edit data saves the grid as one undo step', async () => {
 
 test("a title typed into the panel keeps what this build doesn't know: a key on the spec, on an axis, a legend", async () => {
     const { stored, store } = await mount();
-    const spec = sampleChartSpec('column');
-    const raw = { ...stored(), legend: 'inside', future: 1, valueAxis: { ...spec.valueAxis, logBase: 10 } };
+    const { axes } = sampleChartSpec('column');
+    const before = stored();
+    const raw = {
+        ...before,
+        legend: { position: 'inside' },
+        future: 1,
+        axes: { ...before.axes, y: { ...axes.y, logBase: 10 } },
+    };
     await store(raw);
     await type(document.querySelector<HTMLInputElement>('input[placeholder="Chart title"]'), 'Goals');
-    expect(stored()).toEqual({ ...raw, title: 'Goals' });
+    expect(stored()).toEqual({ ...raw, title: { text: 'Goals' } });
 });
 
 test("Edit data's Save applies onto the node as it is then, so a peer's colours and title while it was open stay", async () => {
     const { spec, stored, store } = await mount();
     await click(button(document.body, 'Edit data'));
     const before = stored();
-    const series = before.data.series.map((s: object, i: number) => (i === 1 ? { ...s, color: '#00ff00' } : s));
-    await store({ ...before, title: 'Peer title', sliceColors: [null, '#000002'], data: { ...before.data, series } });
+    const series = { ...before.series, 's-2': { ...before.series['s-2'], color: '#00ff00' } };
+    const points = { 's-1': { 1: { color: '#000002' } } };
+    await store({ ...before, title: { text: 'Peer title' }, series, points });
     await typeInB2('7');
     await click(button(dialog(), 'Save'));
     const saved = spec();
-    expect(saved?.title).toBe('Peer title');
-    expect(saved?.sliceColors).toEqual([null, '#000002']);
-    expect(saved?.data.series.map((s) => s.color)).toEqual([null, '#00ff00', null]);
+    expect(saved?.title.text).toBe('Peer title');
+    expect(saved?.points).toEqual(points);
+    expect(colorsOf(saved)).toEqual([null, '#00ff00', null]);
     expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);
 });
 

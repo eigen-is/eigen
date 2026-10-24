@@ -24,11 +24,11 @@ const ref = (row: [number, number], column: [number, number]): CellRangeRef => (
 const rangeSpec = (values: CellRangeRef) =>
     JSON.stringify({
         ...sampleChartSpec('column'),
-        title: 'Scores',
+        title: { text: 'Scores' },
         data: {
             source: 'range',
             categories: ref([1, 2], [0, 0]),
-            series: [{ id: 's-1', name: ref([0, 0], [1, 1]), values, color: null, markers: false, smooth: false }],
+            series: [{ id: 's-1', name: ref([0, 0], [1, 1]), values }],
         },
     });
 
@@ -139,7 +139,7 @@ test('⌘C on a selected chart writes the chart with its cells as inline data, a
         expect(item?.type === 'chart' && parseChartSpec(item.spec)?.data).toEqual({
             source: 'inline',
             categories: ['Ajax', 'PSV'],
-            series: [{ id: 's-1', name: 'Points', values: [42, 65], color: null, markers: false, smooth: false }],
+            series: [{ id: 's-1', name: 'Points', values: [42, 65] }],
         });
     } finally {
         copied.mockRestore();

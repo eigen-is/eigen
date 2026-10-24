@@ -14,6 +14,8 @@ import { MAX_PAPER_MM, mmToPx } from '../docs/eigendoc/page';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '../sheets/defaults';
 import type {
     CellRangeRef,
+    ChartAxis,
+    ChartPoint,
     ChartSeriesStyle,
     ChartSpec,
     ChartSpecChange,
@@ -25,7 +27,7 @@ import type {
     RangeChartSeries,
     StoredChartSpec,
 } from '../types/chart';
-import { CHART_BLANKS, CHART_STACKINGS, CHART_TYPES, LEGEND_POSITIONS } from '../types/chart';
+import { CHART_AXIS_KINDS, CHART_BLANKS, CHART_STACKINGS, CHART_TYPES, LEGEND_POSITIONS } from '../types/chart';
 import { bool, color, fontFamily, oneOf, str } from '../vector/kinds/read-fields';
 import { prop } from '../vector/types';
 
@@ -69,18 +71,39 @@ export function exceedsInlineGridLimits(data: InlineChartData): boolean {
     return !fitsInlineGrid(data.series.length, rows);
 }
 
-// What a new chart starts from and what a missing or invalid presentation field reads as, so a field
-// added later reads its default from charts stored before it.
-export function defaultChartPresentation(type: ChartType): Omit<ChartSpec, 'type' | 'data'> {
+// Google's axes: a category axis without gridlines and a value axis with them, both shown, neither bounded.
+const DEFAULT_AXES: ChartSpec['axes'] = {
+    x: {
+        kind: 'category',
+        title: { text: '' },
+        visible: true,
+        gridlines: { visible: false },
+        labels: { format: null },
+        scale: { min: null, max: null, reversed: false },
+    },
+    y: {
+        kind: 'value',
+        title: { text: '' },
+        visible: true,
+        gridlines: { visible: true },
+        labels: { format: null },
+        scale: { min: null, max: null, reversed: false },
+    },
+};
+
+// What a new chart of this data starts from and what a missing or invalid field reads as, so a field added later reads
+// its default from charts stored before it.
+export function defaultChartSpec(type: ChartType, data: ChartSpec['data']): ChartSpec {
+    const plot = { stacking: 'none' } as const;
     return {
-        stacking: 'none',
-        title: '',
-        legend: type === 'pie' ? 'none' : 'top',
-        blanks: 'gap',
-        categoryAxis: { title: '', visible: true, reversed: false },
-        valueAxis: { title: '', min: null, max: null, gridlines: true, format: null, visible: true },
-        sliceColors: [],
-        fontFamily: DEFAULT_CHART_FONT,
+        chart: { type, blanks: 'gap', fontFamily: DEFAULT_CHART_FONT },
+        title: { text: '' },
+        legend: { position: type === 'pie' ? 'none' : 'top' },
+        axes: DEFAULT_AXES,
+        plots: { column: plot, bar: plot, line: plot, pie: plot },
+        series: Object.fromEntries(data.series.map(({ id }) => [id, DEFAULT_CHART_SERIES_STYLE])),
+        points: {},
+        data,
     };
 }
 
@@ -97,34 +120,82 @@ export function newChartSeriesId(): string {
     return `s-${nanoid(10)}`;
 }
 
-// A new series, made in Eigen: its color automatic, so the palette colors it by position.
-export const DEFAULT_CHART_SERIES_STYLE: ChartSeriesStyle = { color: null, markers: false, smooth: false };
+// A new series, made in Eigen: in the chart's type on its value axis, its color automatic, so the palette colors it by
+// position.
+export const DEFAULT_CHART_SERIES_STYLE: ChartSeriesStyle = {
+    plot: null,
+    yAxis: 'y',
+    color: null,
+    line: { smooth: false },
+    marker: { visible: false },
+};
+
+// A series' style by its id, a new series' for one a spec built in memory doesn't style.
+export function chartSeriesStyle(spec: Pick<ChartSpec, 'series'>, id: string): ChartSeriesStyle {
+    return Object.hasOwn(spec.series, id) ? spec.series[id] : DEFAULT_CHART_SERIES_STYLE;
+}
+
+// A point's own color, null for one that takes its series' or the palette's.
+export function chartPointColor(spec: Pick<ChartSpec, 'points'>, id: string, index: number): string | null {
+    const points = Object.hasOwn(spec.points, id) ? spec.points[id] : null;
+    return points && Object.hasOwn(points, index) ? points[index].color : null;
+}
+
+// A point's key is its index as a canonical decimal under the point limit, so '03' or '1e3' names no point.
+export function chartPointIndex(key: string): number | null {
+    return /^(0|[1-9]\d*)$/.test(key) && Number(key) < MAX_CHART_POINTS ? Number(key) : null;
+}
+
+// The ops that take one series' points from each index to target(index), null removing it, for a remap that keeps
+// their order (a row op, Edit data's deleted rows). The moves down run first from the lowest target, those up last from
+// the highest, so none lands on a point still to move.
+export function chartPointMoves(
+    id: string,
+    indexes: readonly number[],
+    target: (index: number) => number | null,
+): ChartSpecOp[] {
+    const path = (index: number) => ['points', id, String(index)];
+    const removes: ChartSpecOp[] = [];
+    const down: [number, number][] = [];
+    const up: [number, number][] = [];
+    for (const index of indexes) {
+        const to = target(index);
+        if (to === null) removes.push({ op: 'remove', path: path(index) });
+        else if (to < index) down.push([index, to]);
+        else if (to > index) up.push([index, to]);
+    }
+    down.sort((a, b) => a[1] - b[1]);
+    up.sort((a, b) => b[1] - a[1]);
+    return [
+        ...removes,
+        ...[...down, ...up].map(([from, to]): ChartSpecOp => ({ op: 'move', from: path(from), path: path(to) })),
+    ];
+}
 
 // Insert → Chart's sample, one dataset for every type since the Type switch keeps the data: the share of a source's
 // light per 100 nm bin from 300 to 1000 nm, Planck's law at 5772 K (Sun), 2700 K (bulb) and 10000 K (hot star), each
-// source summing to 100, so the bars compare and the peak moves with temperature. A pie draws the Sun.
-export function sampleChartSpec(type: ChartType): ChartSpec {
+// source summing to 100, so the bars compare and the peak moves with temperature. A pie draws the Sun. Its labels draw in
+// the host's font.
+export function sampleChartSpec(type: ChartType, fontFamily = DEFAULT_CHART_FONT): ChartSpec {
     const categories = ['300–400', '400–500', '500–600', '600–700', '700–800', '800–900', '900–1000'];
     const sources = [
         { name: 'Sun', values: [13.1, 18.3, 18.6, 16.5, 13.7, 11.0, 8.8] },
         { name: 'Bulb (incandescent)', values: [0.3, 2.5, 7.5, 14.3, 20.9, 25.8, 28.7] },
         { name: 'Hot star', values: [32.4, 23.8, 16.2, 11.0, 7.5, 5.3, 3.8] },
     ];
-    const defaults = defaultChartPresentation(type);
+    const defaults = defaultChartSpec(type, {
+        source: 'inline',
+        categories,
+        series: (type === 'pie' ? sources.slice(0, 1) : sources).map((source, i) => ({ ...source, id: `s-${i + 1}` })),
+    });
+    const { x, y } = defaults.axes;
     return {
         ...defaults,
-        type,
-        title: "Where a star's light goes",
-        categoryAxis: { ...defaults.categoryAxis, title: 'Wavelength (nm)' },
-        valueAxis: { ...defaults.valueAxis, title: 'Share of light, 300–1000 nm (%)' },
-        data: {
-            source: 'inline',
-            categories,
-            series: (type === 'pie' ? sources.slice(0, 1) : sources).map((source, i) => ({
-                ...source,
-                ...DEFAULT_CHART_SERIES_STYLE,
-                id: `s-${i + 1}`,
-            })),
+        chart: { ...defaults.chart, fontFamily },
+        title: { text: "Where a star's light goes" },
+        axes: {
+            x: { ...x, title: { text: 'Wavelength (nm)' } },
+            y: { ...y, title: { text: 'Share of light, 300–1000 nm (%)' } },
         },
     };
 }
@@ -156,9 +227,9 @@ export function chartSearchText(spec: ChartSpec | null): string {
     if (!spec) return '';
     const { data } = spec;
     return [
-        spec.title,
-        spec.categoryAxis.title,
-        spec.valueAxis.title,
+        spec.title.text,
+        spec.axes.x.title.text,
+        spec.axes.y.title.text,
         ...data.series.flatMap((series) => (typeof series.name === 'string' ? [series.name] : [])),
         ...(data.source === 'inline' ? data.categories : []),
     ]
@@ -277,42 +348,97 @@ function invalid(): never {
     throw INVALID;
 }
 
+// A part that isn't a record reads as empty, so each of its keys reads its default; only the chart's type and its data
+// are required.
 function chartSpec(v: unknown): ChartSpec {
     const spec = record(v);
-    const type = member(prop(spec, 'type'), CHART_TYPES);
-    const defaults = defaultChartPresentation(type);
-    const categoryAxis = optionalRecord(prop(spec, 'categoryAxis'));
-    const valueAxis = optionalRecord(prop(spec, 'valueAxis'));
-    const min = finiteOr(prop(valueAxis, 'min'), defaults.valueAxis.min);
-    const max = finiteOr(prop(valueAxis, 'max'), defaults.valueAxis.max);
-    const ordered = min === null || max === null || min < max;
-    const format = prop(valueAxis, 'format');
-    const sliceColors = prop(spec, 'sliceColors');
-    const slices = Array.isArray(sliceColors) ? sliceColors : defaults.sliceColors;
-    if (slices.length > MAX_CHART_POINTS) invalid();
+    const chart = record(prop(spec, 'chart'));
+    const type = member(prop(chart, 'type'), CHART_TYPES);
+    const data = chartData(prop(spec, 'data'));
+    const defaults = defaultChartSpec(type, data);
+    const axes = optionalRecord(prop(spec, 'axes'));
+    const plots = optionalRecord(prop(spec, 'plots'));
+    const series = optionalRecord(prop(spec, 'series'));
+    const plot = (plotType: ChartType) => ({
+        stacking: oneOf(
+            prop(optionalRecord(own(plots, plotType)), 'stacking'),
+            CHART_STACKINGS,
+            defaults.plots[plotType].stacking,
+        ),
+    });
     return {
-        type,
-        stacking: oneOf(prop(spec, 'stacking'), CHART_STACKINGS, defaults.stacking),
-        title: text(str(prop(spec, 'title'), defaults.title)),
-        legend: oneOf(prop(spec, 'legend'), LEGEND_POSITIONS, defaults.legend),
-        blanks: oneOf(prop(spec, 'blanks'), CHART_BLANKS, defaults.blanks),
-        categoryAxis: {
-            title: text(str(prop(categoryAxis, 'title'), defaults.categoryAxis.title)),
-            visible: bool(prop(categoryAxis, 'visible'), defaults.categoryAxis.visible),
-            reversed: bool(prop(categoryAxis, 'reversed'), defaults.categoryAxis.reversed),
+        chart: {
+            type,
+            blanks: oneOf(prop(chart, 'blanks'), CHART_BLANKS, defaults.chart.blanks),
+            fontFamily: fontFamily(prop(chart, 'fontFamily'), defaults.chart.fontFamily),
         },
-        valueAxis: {
-            title: text(str(prop(valueAxis, 'title'), defaults.valueAxis.title)),
+        title: { text: text(str(prop(optionalRecord(prop(spec, 'title')), 'text'), defaults.title.text)) },
+        legend: {
+            position: oneOf(
+                prop(optionalRecord(prop(spec, 'legend')), 'position'),
+                LEGEND_POSITIONS,
+                defaults.legend.position,
+            ),
+        },
+        axes: { x: chartAxis(own(axes, 'x'), defaults.axes.x), y: chartAxis(own(axes, 'y'), defaults.axes.y) },
+        plots: { column: plot('column'), bar: plot('bar'), line: plot('line'), pie: plot('pie') },
+        series: Object.fromEntries(data.series.map(({ id }) => [id, seriesStyle(own(series, id))])),
+        points: chartPoints(prop(spec, 'points'), data.series),
+        data,
+    };
+}
+
+// An unknown kind reads its id's, so a later kind on x (a scatter's value axis) still draws as categories.
+function chartAxis(v: unknown, defaults: ChartAxis): ChartAxis {
+    const axis = optionalRecord(v);
+    const scale = optionalRecord(prop(axis, 'scale'));
+    const min = finiteOr(prop(scale, 'min'), defaults.scale.min);
+    const max = finiteOr(prop(scale, 'max'), defaults.scale.max);
+    const ordered = min === null || max === null || min < max;
+    const format = prop(optionalRecord(prop(axis, 'labels')), 'format');
+    return {
+        kind: oneOf(prop(axis, 'kind'), CHART_AXIS_KINDS, defaults.kind),
+        title: { text: text(str(prop(optionalRecord(prop(axis, 'title')), 'text'), defaults.title.text)) },
+        visible: bool(prop(axis, 'visible'), defaults.visible),
+        gridlines: {
+            visible: bool(prop(optionalRecord(prop(axis, 'gridlines')), 'visible'), defaults.gridlines.visible),
+        },
+        labels: { format: typeof format === 'string' ? text(format) : defaults.labels.format },
+        scale: {
             min: ordered ? min : null,
             max: ordered ? max : null,
-            gridlines: bool(prop(valueAxis, 'gridlines'), defaults.valueAxis.gridlines),
-            format: typeof format === 'string' ? text(format) : defaults.valueAxis.format,
-            visible: bool(prop(valueAxis, 'visible'), defaults.valueAxis.visible),
+            reversed: bool(prop(scale, 'reversed'), defaults.scale.reversed),
         },
-        sliceColors: slices.map((v) => color(v, null)),
-        fontFamily: fontFamily(prop(spec, 'fontFamily'), defaults.fontFamily),
-        data: chartData(prop(spec, 'data')),
     };
+}
+
+// An unknown plot type draws in the chart's. This build draws one value axis, so every series draws on y.
+function seriesStyle(v: unknown): ChartSeriesStyle {
+    const style = optionalRecord(v);
+    const plot = prop(style, 'plot');
+    const fallback = DEFAULT_CHART_SERIES_STYLE;
+    return {
+        plot: CHART_TYPES.find((type) => type === plot) ?? fallback.plot,
+        yAxis: fallback.yAxis,
+        color: color(prop(style, 'color'), fallback.color),
+        line: { smooth: bool(prop(optionalRecord(prop(style, 'line')), 'smooth'), fallback.line.smooth) },
+        marker: { visible: bool(prop(optionalRecord(prop(style, 'marker')), 'visible'), fallback.marker.visible) },
+    };
+}
+
+// The points of the series data names, by a key that is an index; a series with none has no entry.
+function chartPoints(v: unknown, series: readonly { id: string }[]): ChartSpec['points'] {
+    const stored = optionalRecord(v);
+    const points: ChartSpec['points'] = {};
+    for (const { id } of series) {
+        const entries = optionalRecord(own(stored, id));
+        const read = Object.entries(entries).flatMap(([key, entry]): [number, ChartPoint][] => {
+            const index = chartPointIndex(key);
+            return index !== null && isRecord(entry) ? [[index, { color: color(prop(entry, 'color'), null) }]] : [];
+        });
+        if (read.length > 0) points[id] = Object.fromEntries(read);
+    }
+    return points;
 }
 
 function chartData(v: unknown): InlineChartData | RangeChartData {
@@ -341,7 +467,6 @@ function chartData(v: unknown): InlineChartData | RangeChartData {
 function inlineSeries(v: unknown): InlineChartSeries {
     const series = record(v);
     return {
-        ...seriesStyle(series),
         id: seriesId(prop(series, 'id')),
         name: text(str(prop(series, 'name'), '')),
         values: list(prop(series, 'values')).map(finiteOrNull),
@@ -353,18 +478,9 @@ function rangeSeries(v: unknown): RangeChartSeries {
     const name = prop(series, 'name');
     const values = prop(series, 'values');
     return {
-        ...seriesStyle(series),
         id: seriesId(prop(series, 'id')),
         name: typeof name === 'string' ? text(name) : cellRange(name),
         values: values === null ? null : cellRange(values),
-    };
-}
-
-function seriesStyle(series: object): ChartSeriesStyle {
-    return {
-        color: color(prop(series, 'color'), null),
-        markers: bool(prop(series, 'markers'), DEFAULT_CHART_SERIES_STYLE.markers),
-        smooth: bool(prop(series, 'smooth'), DEFAULT_CHART_SERIES_STYLE.smooth),
     };
 }
 
@@ -428,7 +544,7 @@ function record(v: unknown): object {
     return isRecord(v) ? v : invalid();
 }
 
-function optionalRecord(v: unknown): object {
+function optionalRecord(v: unknown): Record<string, unknown> {
     return isRecord(v) ? v : {};
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { chartColor, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
+import { chartColor, DEFAULT_CHART_SERIES_STYLE, MAX_CHART_POINTS, MAX_CHART_SERIES } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
 import { ApiError } from '../../lib/core/errors';
 import type { XmlElement } from '../../lib/core/xml';
@@ -88,31 +88,44 @@ function spec(xml: string): ChartSpec {
 const title = (text: string) =>
     `<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>${text}</a:t></a:r></a:p></c:rich></c:tx></c:title>`;
 
+const styled = (color: string | null): ChartSpec['series'][string] => ({ ...DEFAULT_CHART_SERIES_STYLE, color });
+const colors = (read: ChartSpec) => read.data.series.map(({ id }) => read.series[id]?.color);
+
 describe('a bar chart', () => {
     test('a clustered column chart reads as a column spec with inline data', () => {
+        const none = { stacking: 'none' } as const;
+        const scale = { min: null, max: null, reversed: false };
         expect(spec(space(bar() + AXES))).toEqual({
-            type: 'column',
-            stacking: 'none',
-            title: '',
-            legend: 'right',
-            blanks: 'gap',
-            categoryAxis: { title: '', visible: true, reversed: false },
-            valueAxis: { title: '', min: null, max: null, gridlines: true, format: null, visible: true },
-            sliceColors: [],
-            fontFamily: 'Inter',
+            chart: { type: 'column', blanks: 'gap', fontFamily: 'Inter' },
+            title: { text: '' },
+            legend: { position: 'right' },
+            axes: {
+                x: {
+                    kind: 'category',
+                    title: { text: '' },
+                    visible: true,
+                    gridlines: { visible: false },
+                    labels: { format: null },
+                    scale,
+                },
+                y: {
+                    kind: 'value',
+                    title: { text: '' },
+                    visible: true,
+                    gridlines: { visible: true },
+                    labels: { format: null },
+                    scale,
+                },
+            },
+            plots: { column: none, bar: none, line: none, pie: none },
+            series: { 'x-0': styled(ACCENTS[0]), 'x-1': styled(ACCENTS[1]) },
+            points: {},
             data: {
                 source: 'inline',
                 categories: CATEGORIES,
                 series: [
-                    { id: 'x-0', name: 'Plan', color: ACCENTS[0], markers: false, smooth: false, values: [1, 2, 3] },
-                    {
-                        id: 'x-1',
-                        name: 'Actual',
-                        color: ACCENTS[1],
-                        markers: false,
-                        smooth: false,
-                        values: [4.5, 5, 6],
-                    },
+                    { id: 'x-0', name: 'Plan', values: [1, 2, 3] },
+                    { id: 'x-1', name: 'Actual', values: [4.5, 5, 6] },
                 ],
             },
         });
@@ -120,8 +133,8 @@ describe('a bar chart', () => {
 
     test('barDir bar is a bar chart, stacked grouping stacks', () => {
         expect(spec(space(bar(TWO_SERIES, { dir: 'bar', grouping: 'stacked' }) + AXES))).toMatchObject({
-            type: 'bar',
-            stacking: 'stacked',
+            chart: { type: 'bar' },
+            plots: { bar: { stacking: 'stacked' }, column: { stacking: 'none' } },
         });
     });
 
@@ -133,30 +146,30 @@ describe('a bar chart', () => {
     // Excel's minMax category axis runs up from the origin, a bar chart's from the bottom, where Google's runs down.
     test("a horizontal bar chart's category axis is reversed, its data in the file's order", () => {
         const minMax = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES));
-        expect(minMax.categoryAxis.reversed).toBe(true);
+        expect(minMax.axes.x.scale.reversed).toBe(true);
         expect(minMax.data).toMatchObject({
             categories: CATEGORIES,
             series: [{ values: [1, 2, 3] }, { values: [4.5, 5, 6] }],
         });
-        expect(spec(space(bar(TWO_SERIES, { dir: 'bar' }))).categoryAxis.reversed).toBe(true);
+        expect(spec(space(bar(TWO_SERIES, { dir: 'bar' }))).axes.x.scale.reversed).toBe(true);
         const maxMin = spec(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES.replace('minMax', 'maxMin')));
-        expect(maxMin.categoryAxis.reversed).toBe(false);
+        expect(maxMin.axes.x.scale.reversed).toBe(false);
         expect(maxMin.data).toMatchObject({ categories: CATEGORIES });
     });
 
     test('a reversed category axis on a column or line chart is reversed, its data in order', () => {
         const column = spec(space(bar() + AXES.replace('minMax', 'maxMin')));
-        expect(column.categoryAxis.reversed).toBe(true);
+        expect(column.axes.x.scale.reversed).toBe(true);
         expect(column.data).toMatchObject({
             categories: CATEGORIES,
             series: [{ values: [1, 2, 3] }, { values: [4.5, 5, 6] }],
         });
-        expect(spec(space(bar() + AXES)).categoryAxis.reversed).toBe(false);
+        expect(spec(space(bar() + AXES)).axes.x.scale.reversed).toBe(false);
         const line = `<c:lineChart><c:grouping val="standard"/>${ser({ idx: 0, name: 'L', values: [1, 2, 3] })}</c:lineChart>`;
         const reversed = spec(space(line + AXES.replace('minMax', 'maxMin')));
-        expect(reversed).toMatchObject({ type: 'line', categoryAxis: { reversed: true } });
+        expect(reversed).toMatchObject({ chart: { type: 'line' }, axes: { x: { scale: { reversed: true } } } });
         expect(reversed.data).toMatchObject({ categories: CATEGORIES, series: [{ values: [1, 2, 3] }] });
-        expect(spec(space(line + AXES)).categoryAxis.reversed).toBe(false);
+        expect(spec(space(line + AXES)).axes.x.scale.reversed).toBe(false);
     });
 
     // python-pptx's sample (fixtures/charts/SOURCES.md): Office draws Category 1 at the bottom and, in each band,
@@ -166,7 +179,10 @@ describe('a bar chart', () => {
             join(import.meta.dir, '../fixtures/charts/python-pptx-cht-chart-type-chart7.xml'),
         ).text();
         const read = spec(xml);
-        expect(read).toMatchObject({ type: 'bar', categoryAxis: { reversed: true, visible: false } });
+        expect(read).toMatchObject({
+            chart: { type: 'bar' },
+            axes: { x: { scale: { reversed: true }, visible: false } },
+        });
         expect(read.data).toMatchObject({
             categories: ['Category 1', 'Category 2', 'Category 3', 'Category 4'],
             series: [
@@ -191,13 +207,13 @@ describe('a bar chart', () => {
                 '</c:chartSpace>',
                 `<c:txPr><a:bodyPr/><a:p><a:pPr><a:defRPr><a:latin typeface="${typeface}"/></a:defRPr></a:pPr></a:p></c:txPr></c:chartSpace>`,
             );
-        expect(spec(font('Georgia')).fontFamily).not.toBe('Inter');
-        expect(spec(font('+mn-lt')).fontFamily).toBe('Inter');
+        expect(spec(font('Georgia')).chart.fontFamily).not.toBe('Inter');
+        expect(spec(font('+mn-lt')).chart.fontFamily).toBe('Inter');
     });
 
     test('percent stacked stacks to 100%', () => {
         expect(spec(space(bar(TWO_SERIES, { grouping: 'percentStacked' }) + AXES))).toMatchObject({
-            stacking: 'percent',
+            plots: { column: { stacking: 'percent' } },
         });
     });
 
@@ -210,7 +226,7 @@ describe('a bar chart', () => {
             { idx: 7, name: 'C', values: [3] },
         ];
         const read = spec(space(bar(series) + AXES));
-        expect(read.data.series.map((s) => s.color)).toEqual(['#70ad4780', ACCENTS[1], chartColor(7)]);
+        expect(colors(read)).toEqual(['#70ad4780', ACCENTS[1], chartColor(7)]);
     });
 
     // Eigen's writer writes an automatic colour as its palette slot's, so the round trip keeps it automatic.
@@ -223,7 +239,7 @@ describe('a bar chart', () => {
             { idx: 2, name: 'C', values: [3], extra: fill(chartColor(2).toUpperCase()) },
         ];
         const read = spec(space(bar(series) + AXES));
-        expect(read.data.series.map((s) => s.color)).toEqual([null, chartColor(0), null]);
+        expect(colors(read)).toEqual([null, chartColor(0), null]);
     });
 
     test('series draw in their c:order, and one without a name is named as Excel names it', () => {
@@ -271,16 +287,20 @@ describe('a line chart', () => {
 
     test('standard grouping reads its stroke colour, markers and smoothing', () => {
         const plain = spec(space(line('standard', `${stroke}<c:marker><c:symbol val="none"/></c:marker>`) + AXES));
-        expect(plain.type).toBe('line');
-        expect(plain.data.series[0]).toMatchObject({ color: '#c00000', markers: false, smooth: false });
+        expect(plain.chart.type).toBe('line');
+        expect(plain.series['x-0']).toEqual(styled('#c00000'));
         const marked = spec(space(line('standard', '<c:smooth val="1"/>', '<c:marker val="1"/>') + AXES));
-        expect(marked.data.series[0]).toMatchObject({ color: ACCENTS[0], markers: true, smooth: true });
+        expect(marked.series['x-0']).toEqual({
+            ...styled(ACCENTS[0]),
+            line: { smooth: true },
+            marker: { visible: true },
+        });
         const off = spec(space(line('standard', '', '<c:marker val="0"/>') + AXES));
-        expect(off.data.series[0]).toMatchObject({ markers: false });
+        expect(off.series['x-0']).toMatchObject({ marker: { visible: false } });
     });
 
     test('a 3D line chart is flattened; a stacked line is no spec', () => {
-        expect(spec(space(line('standard', '').replaceAll('lineChart', 'line3DChart') + AXES)).type).toBe('line');
+        expect(spec(space(line('standard', '').replaceAll('lineChart', 'line3DChart') + AXES)).chart.type).toBe('line');
         expect(read(space(line('stacked', '') + AXES))).toEqual({
             unsupported: { title: 'Trend', name: 'Stacked Line with Markers' },
         });
@@ -298,27 +318,34 @@ describe('a pie chart', () => {
             extra: slice(1, '112233'),
         })}${ser({ idx: 1, name: 'Ignored', values: [1, 1, 1] })}<c:firstSliceAng val="90"/></c:${group}>`;
 
-    test("reads its first series only, a data point's fill as its slice colour and the accents for the rest", () => {
+    test("reads its first series only, a c:dPt's fill as its first series' point and the accents for the rest", () => {
         const read = spec(space(pie(), { head: title('Market') }));
-        expect(read).toMatchObject({ type: 'pie', title: 'Market', sliceColors: [ACCENTS[0], '#112233', ACCENTS[2]] });
+        expect(read).toMatchObject({ chart: { type: 'pie' }, title: { text: 'Market' } });
+        expect(read.points).toEqual({
+            'x-0': { 0: { color: ACCENTS[0] }, 1: { color: '#112233' }, 2: { color: ACCENTS[2] } },
+        });
+        expect(read.series).toEqual({ 'x-0': styled(ACCENTS[0]) });
         expect(read.data).toEqual({
             source: 'inline',
             categories: CATEGORIES,
-            series: [
-                { id: 'x-0', name: 'Share', color: ACCENTS[0], markers: false, smooth: false, values: [10, 20, 30] },
-            ],
+            series: [{ id: 'x-0', name: 'Share', values: [10, 20, 30] }],
         });
     });
 
-    test("a slice colour equal to the palette's at its place reads as automatic, the automatic tail left out", () => {
-        const slices = [chartColor(0), '#112233', chartColor(2), chartColor(3)];
+    // Past the theme's six accents, varyColors colours a slice with no c:dPt from the palette.
+    test("a slice colour equal to the palette's at its place, or a slice past the accents with no c:dPt, is no point", () => {
+        const slices = [chartColor(0), '#112233', chartColor(2), chartColor(3), chartColor(4), chartColor(5)];
         const points = slices.map((color, i) => slice(i, color.slice(1))).join('');
-        const plot = `<c:pieChart><c:varyColors val="1"/>${ser({ idx: 0, name: 'S', values: [1, 2, 3, 4], extra: points })}</c:pieChart>`;
-        expect(spec(space(plot)).sliceColors).toEqual([null, '#112233']);
+        const values = [1, 2, 3, 4, 5, 6, 7, 8];
+        const plot = `<c:pieChart><c:varyColors val="1"/>${ser({ idx: 0, name: 'S', values, extra: points })}</c:pieChart>`;
+        expect(spec(space(plot)).points).toEqual({ 'x-0': { 1: { color: '#112233' } } });
+        const automatic = slices.map((color, i) => slice(i, (i === 1 ? chartColor(1) : color).slice(1))).join('');
+        const none = `<c:pieChart><c:varyColors val="1"/>${ser({ idx: 0, name: 'S', values, extra: automatic })}</c:pieChart>`;
+        expect(spec(space(none)).points).toEqual({});
     });
 
     test('a 3D pie is flattened; a doughnut or a pie of pie is no spec', () => {
-        expect(spec(space(pie('pie3DChart'))).type).toBe('pie');
+        expect(spec(space(pie('pie3DChart'))).chart.type).toBe('pie');
         expect(read(space(pie('doughnutChart')))).toEqual({ unsupported: { title: '', name: 'Doughnut' } });
         expect(read(space(pie('ofPieChart')))).toEqual({ unsupported: { title: '', name: 'Pie of Pie' } });
     });
@@ -461,16 +488,7 @@ describe('the data from the caches', () => {
         expect(spec(space(sparse + AXES)).data).toEqual({
             source: 'inline',
             categories: ['1', '2', '3', '4'],
-            series: [
-                {
-                    id: 'x-0',
-                    name: 'Series1',
-                    color: ACCENTS[0],
-                    markers: false,
-                    smooth: false,
-                    values: [1, null, null, 4],
-                },
-            ],
+            series: [{ id: 'x-0', name: 'Series1', values: [1, null, null, 4] }],
         });
     });
 
@@ -558,37 +576,37 @@ describe('the title', () => {
     test('rich text runs are joined, paragraphs by a space', () => {
         const rich =
             '<c:title><c:tx><c:rich><a:bodyPr/><a:p><a:r><a:t>Sales </a:t></a:r><a:r><a:t>2024</a:t></a:r></a:p><a:p><a:r><a:t>by region</a:t></a:r></a:p></c:rich></c:tx></c:title>';
-        expect(spec(space(bar() + AXES, { head: rich })).title).toBe('Sales 2024 by region');
+        expect(spec(space(bar() + AXES, { head: rich })).title.text).toBe('Sales 2024 by region');
     });
 
     test("a title from a cell is the cell's cached text, its line breaks spaces as a rich title's", () => {
         const cell = `<c:title><c:tx>${strRef('Sheet1!$A$1', ['From cell'])}</c:tx></c:title>`;
-        expect(spec(space(bar() + AXES, { head: cell })).title).toBe('From cell');
+        expect(spec(space(bar() + AXES, { head: cell })).title.text).toBe('From cell');
         const lines = `<c:title><c:tx>${strRef('Sheet1!$A$1', ['From\ncell'])}</c:tx></c:title>`;
-        expect(spec(space(bar() + AXES, { head: lines })).title).toBe('From cell');
+        expect(spec(space(bar() + AXES, { head: lines })).title.text).toBe('From cell');
     });
 
     test("a literal title's and a series name's line breaks are a space each, a Windows one too", () => {
         const named = bar([{ idx: 0, name: 'Plan&#13;&#10;2024', values: [1] }]);
         expect(spec(space(named + AXES)).data.series[0]?.name).toBe('Plan 2024');
         const literal = '<c:title><c:tx><c:v>From&#13;&#10;Excel&#13;old&#10;Mac</c:v></c:tx></c:title>';
-        expect(spec(space(bar() + AXES, { head: literal })).title).toBe('From Excel old Mac');
+        expect(spec(space(bar() + AXES, { head: literal })).title.text).toBe('From Excel old Mac');
     });
 
     test('a title with no text is the series name for one series, Chart Title for more', () => {
         const auto = '<c:title><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>';
-        expect(spec(space(bar(one) + AXES, { head: auto })).title).toBe('Revenue');
-        expect(spec(space(bar([{ idx: 0, values: [1] }]) + AXES, { head: auto })).title).toBe('');
-        expect(spec(space(bar() + AXES, { head: auto })).title).toBe('Chart Title');
+        expect(spec(space(bar(one) + AXES, { head: auto })).title.text).toBe('Revenue');
+        expect(spec(space(bar([{ idx: 0, values: [1] }]) + AXES, { head: auto })).title.text).toBe('');
+        expect(spec(space(bar() + AXES, { head: auto })).title.text).toBe('Chart Title');
     });
 
     test('no title and an auto title not deleted shows the only series name', () => {
-        expect(spec(space(bar(one) + AXES)).title).toBe('Revenue');
-        expect(spec(space(bar([{ idx: 0, values: [1] }]) + AXES)).title).toBe('');
-        expect(spec(space(bar() + AXES)).title).toBe('');
-        expect(spec(space(bar(one) + AXES, { head: '<c:autoTitleDeleted val="1"/>' })).title).toBe('');
-        expect(spec(space(bar(one) + AXES, { head: '<c:autoTitleDeleted/>' })).title).toBe('');
-        expect(spec(space(bar(one) + AXES, { head: '' })).title).toBe('');
+        expect(spec(space(bar(one) + AXES)).title.text).toBe('Revenue');
+        expect(spec(space(bar([{ idx: 0, values: [1] }]) + AXES)).title.text).toBe('');
+        expect(spec(space(bar() + AXES)).title.text).toBe('');
+        expect(spec(space(bar(one) + AXES, { head: '<c:autoTitleDeleted val="1"/>' })).title.text).toBe('');
+        expect(spec(space(bar(one) + AXES, { head: '<c:autoTitleDeleted/>' })).title.text).toBe('');
+        expect(spec(space(bar(one) + AXES, { head: '' })).title.text).toBe('');
     });
 });
 
@@ -599,8 +617,15 @@ describe('the axes, legend and blanks', () => {
     test('value-axis bounds, titles and a format of its own', () => {
         const axes = `<c:catAx><c:axId val="1"/>${axis('Region')}</c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="100"/><c:min val="-5.5"/></c:scaling>${axis('Units')}<c:numFmt formatCode="0.0%" sourceLinked="0"/></c:valAx>`;
         expect(spec(space(bar() + axes))).toMatchObject({
-            categoryAxis: { title: 'Region' },
-            valueAxis: { title: 'Units', min: -5.5, max: 100, gridlines: false, format: '0.0%' },
+            axes: {
+                x: { title: { text: 'Region' } },
+                y: {
+                    title: { text: 'Units' },
+                    scale: { min: -5.5, max: 100 },
+                    gridlines: { visible: false },
+                    labels: { format: '0.0%' },
+                },
+            },
         });
     });
 
@@ -609,8 +634,8 @@ describe('the axes, legend and blanks', () => {
             '<c:formatCode>General',
             '<c:formatCode>#,##0',
         );
-        expect(spec(space(linked + AXES)).valueAxis.format).toBe('#,##0');
-        expect(spec(space(bar() + AXES)).valueAxis.format).toBeNull();
+        expect(spec(space(linked + AXES)).axes.y.labels.format).toBe('#,##0');
+        expect(spec(space(bar() + AXES)).axes.y.labels.format).toBeNull();
     });
 
     test('a date axis titles the categories', () => {
@@ -618,17 +643,18 @@ describe('the axes, legend and blanks', () => {
             '</c:catAx>',
             '</c:dateAx>',
         );
-        expect(spec(space(bar() + axes)).categoryAxis.title).toBe('When');
+        expect(spec(space(bar() + axes)).axes.x.title.text).toBe('When');
     });
 
     test('legend positions; top right is right; none without a legend', () => {
-        const legend = (pos: string) => spec(space(bar() + AXES, { tail: `<c:legend>${pos}</c:legend>` })).legend;
+        const legend = (pos: string) =>
+            spec(space(bar() + AXES, { tail: `<c:legend>${pos}</c:legend>` })).legend.position;
         expect(legend('<c:legendPos val="t"/>')).toBe('top');
         expect(legend('<c:legendPos val="b"/>')).toBe('bottom');
         expect(legend('<c:legendPos val="l"/>')).toBe('left');
         expect(legend('<c:legendPos val="tr"/>')).toBe('right');
         expect(legend('')).toBe('right');
-        expect(spec(space(bar() + AXES, { tail: '' })).legend).toBe('none');
+        expect(spec(space(bar() + AXES, { tail: '' })).legend.position).toBe('none');
     });
 
     test('an axis the file deletes, or whose tick labels are none, is hidden', () => {
@@ -640,19 +666,19 @@ describe('the axes, legend and blanks', () => {
                 `$1${element}`,
             );
         const shown = spec(space(bar() + AXES));
-        expect([shown.categoryAxis.visible, shown.valueAxis.visible]).toEqual([true, true]);
+        expect([shown.axes.x.visible, shown.axes.y.visible]).toEqual([true, true]);
         const deleted = spec(space(bar() + hide('catAx', '<c:delete val="1"/>')));
-        expect([deleted.categoryAxis.visible, deleted.valueAxis.visible]).toEqual([false, true]);
-        expect(spec(space(bar() + hide('valAx', '<c:delete/>'))).valueAxis.visible).toBe(false);
+        expect([deleted.axes.x.visible, deleted.axes.y.visible]).toEqual([false, true]);
+        expect(spec(space(bar() + hide('valAx', '<c:delete/>'))).axes.y.visible).toBe(false);
         const none = AXES.replace('<c:axPos val="l"/>', '<c:axPos val="l"/><c:tickLblPos val="none"/>');
-        expect(spec(space(bar() + none)).valueAxis.visible).toBe(false);
-        expect(spec(space(bar())).valueAxis.visible).toBe(true);
+        expect(spec(space(bar() + none)).axes.y.visible).toBe(false);
+        expect(spec(space(bar())).axes.y.visible).toBe(true);
     });
 
     test('dispBlanksAs reads as blanks', () => {
-        expect(spec(space(bar() + AXES).replace('val="gap"', 'val="span"')).blanks).toBe('span');
-        expect(spec(space(bar() + AXES).replace('<c:dispBlanksAs val="gap"/>', '')).blanks).toBe('gap');
-        expect(spec(space(bar() + AXES).replace('<c:dispBlanksAs val="gap"/>', '<c:dispBlanksAs/>')).blanks).toBe(
+        expect(spec(space(bar() + AXES).replace('val="gap"', 'val="span"')).chart.blanks).toBe('span');
+        expect(spec(space(bar() + AXES).replace('<c:dispBlanksAs val="gap"/>', '')).chart.blanks).toBe('gap');
+        expect(spec(space(bar() + AXES).replace('<c:dispBlanksAs val="gap"/>', '<c:dispBlanksAs/>')).chart.blanks).toBe(
             'zero',
         );
     });
@@ -662,7 +688,7 @@ describe('markup compatibility, Strict and colour maps', () => {
     test("the Fallback of a choice the reader doesn't know is read", () => {
         const style = `<mc:AlternateContent><mc:Choice Requires="c14" xmlns:c14="http://schemas.microsoft.com/office/drawing/2007/8/2/chart"><c14:style val="102"/></mc:Choice><mc:Fallback><c:style val="2"/></mc:Fallback></mc:AlternateContent>`;
         const wrapped = `<mc:AlternateContent><mc:Choice Requires="c99" xmlns:c99="urn:x"><c99:legend/></mc:Choice><mc:Fallback><c:legend><c:legendPos val="b"/></c:legend></mc:Fallback></mc:AlternateContent>`;
-        expect(spec(space(bar() + AXES, { before: style, tail: wrapped })).legend).toBe('bottom');
+        expect(spec(space(bar() + AXES, { before: style, tail: wrapped })).legend.position).toBe('bottom');
     });
 
     test('a Strict chart reads as its transitional twin, percentages too', () => {
@@ -671,7 +697,7 @@ describe('markup compatibility, Strict and colour maps', () => {
         const series = (lumMod: string) => [{ idx: 0, name: 'A', values: [1, 2], extra: fill(lumMod) }];
         const strict = spec(space(bar(series('50%')) + AXES, { ns: STRICT }));
         expect(strict).toEqual(spec(space(bar(series('50000')) + AXES)));
-        expect(strict.data.series[0]?.color).toBe('#203864');
+        expect(colors(strict)).toEqual(['#203864']);
     });
 
     test("the chart's own colour map overrides the theme's", () => {
@@ -679,8 +705,8 @@ describe('markup compatibility, Strict and colour maps', () => {
         const override =
             '<c:clrMapOvr bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>';
         const xml = space(bar([{ idx: 0, name: 'A', values: [1], extra: text }]) + AXES);
-        expect(spec(xml).data.series[0]?.color).toBe('#000000');
-        expect(spec(xml.replace('</c:chart>', `</c:chart>${override}`)).data.series[0]?.color).toBe('#ffffff');
+        expect(colors(spec(xml))).toEqual(['#000000']);
+        expect(colors(spec(xml.replace('</c:chart>', `</c:chart>${override}`)))).toEqual(['#ffffff']);
     });
 });
 
@@ -707,17 +733,11 @@ describe('range data for a workbook', () => {
                     id: 'x-0',
                     name: { sheetId: 's1', row: [0, 0], column: [1, 1] },
                     values: { sheetId: 's1', row: [1, 3], column: [1, 1] },
-                    color: ACCENTS[0],
-                    markers: false,
-                    smooth: false,
                 },
                 {
                     id: 'x-1',
                     name: { sheetId: 's1', row: [0, 0], column: [2, 2] },
                     values: { sheetId: 's1', row: [1, 3], column: [2, 2] },
-                    color: ACCENTS[1],
-                    markers: false,
-                    smooth: false,
                 },
             ],
         });
@@ -777,14 +797,14 @@ describe('range data for a workbook', () => {
         const areaCategories = space(bar([{ idx: 0, name: 'A', values: [1, 2, 3], cat }]) + AXES, { head });
         for (const xml of [areaValues, areaCategories]) {
             const cached = read(xml);
-            expect('spec' in cached && cached.spec.title).toBe('Sales');
+            expect('spec' in cached && cached.spec.title.text).toBe('Sales');
             expect(read(xml, ranges)).toEqual(cached);
         }
     });
 
     test('a horizontal bar chart over ranges reads, its axis reversed', () => {
         const flipped = byRange(space(bar(TWO_SERIES, { dir: 'bar' }) + AXES));
-        expect(flipped.categoryAxis.reversed).toBe(true);
+        expect(flipped.axes.x.scale.reversed).toBe(true);
         expect(flipped.data.categories).toEqual({ sheetId: 's1', row: [1, 3], column: [0, 0] });
     });
 
@@ -802,9 +822,10 @@ describe('range data for a workbook', () => {
         });
     });
 
-    test("a pie's slice colours cover its value range", () => {
+    test("a pie's points cover its value range", () => {
         const pie = `<c:pieChart><c:varyColors val="1"/>${ser({ idx: 0, name: 'P', values: [1, 2, 3] })}</c:pieChart>`;
-        expect(byRange(space(pie)).sliceColors).toEqual(ACCENTS.slice(0, 3));
+        const points = Object.fromEntries(ACCENTS.slice(0, 3).map((color, i) => [i, { color }]));
+        expect(byRange(space(pie)).points).toEqual({ 'x-0': points });
     });
 });
 

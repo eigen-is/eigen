@@ -32,7 +32,7 @@ const chart: SheetChart = {
         data: {
             source: 'inline',
             categories: ['A', 'B'],
-            series: [{ id: 's-1', name: 'S', values: [1, 2], color: null }],
+            series: [{ id: 's-1', name: 'S', values: [1, 2] }],
         },
     }),
 };

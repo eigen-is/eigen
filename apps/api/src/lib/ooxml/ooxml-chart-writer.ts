@@ -1,9 +1,8 @@
-import { chartColor, GRIDLINE_OPACITY } from '@workspace/lib/charts';
+import { chartColor, chartPointColor, chartSeriesStyle, GRIDLINE_OPACITY } from '@workspace/lib/charts';
 import type {
     CellRangeRef,
     ChartData,
     ChartLook,
-    ChartSeriesStyle,
     ChartSpec,
     InlineChartSeries,
     LegendPosition,
@@ -31,6 +30,7 @@ export type ChartWriteOptions = {
     look: ChartLook;
 };
 
+// The fixed c:axId of x, the category axis, and y, the value axis.
 const CATEGORY_AXIS = 1;
 const VALUE_AXIS = 2;
 
@@ -39,21 +39,22 @@ const GROUPING = turned(STACKING_BY_GROUPING);
 const LEGEND = turned(LEGEND_BY_POSITION);
 
 export function writeChart(spec: ChartSpec, { ranges, cache, look }: ChartWriteOptions): string {
-    const text = textProperties(look.color, spec.fontFamily);
+    const text = textProperties(look.color, spec.chart.fontFamily);
     const group = groupXml(spec, look, ranges, cache);
-    const plot = spec.type === 'pie' ? group : `${group}${axesXml(spec, look)}`;
-    const legend = spec.legend === 'none' ? '' : legendXml(spec.legend);
+    const plot = spec.chart.type === 'pie' ? group : `${group}${axesXml(spec, look)}`;
+    const { position } = spec.legend;
+    const legend = position === 'none' ? '' : legendXml(position);
     const background = parseFill(look.fill);
     const fill = background.type === 'solid' ? solidFillXml(background.color) : '<a:noFill/>';
     return [
         `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}">`,
         '<c:date1904 val="0"/><c:lang val="en-US"/><c:roundedCorners val="0"/><c:chart>',
-        spec.title
-            ? `${titleXml(spec.title, { bold: true })}<c:autoTitleDeleted val="0"/>`
+        spec.title.text
+            ? `${titleXml(spec.title.text, { bold: true })}<c:autoTitleDeleted val="0"/>`
             : '<c:autoTitleDeleted val="1"/>',
         `<c:plotArea><c:layout/>${plot}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}`,
         // Eigen reads a hidden row's cells like any other.
-        `<c:plotVisOnly val="0"/><c:dispBlanksAs val="${spec.blanks}"/></c:chart>`,
+        `<c:plotVisOnly val="0"/><c:dispBlanksAs val="${spec.chart.blanks}"/></c:chart>`,
         `<c:spPr>${fill}<a:ln><a:noFill/></a:ln></c:spPr>${text}</c:chartSpace>`,
     ].join('');
 }
@@ -63,15 +64,16 @@ type Ranges = ChartWriteOptions['ranges'];
 function groupXml(spec: ChartSpec, look: ChartLook, ranges: Ranges, cache: ChartData | undefined): string {
     const series = seriesXml(spec, look, ranges, cache);
     const axes = `<c:axId val="${CATEGORY_AXIS}"/><c:axId val="${VALUE_AXIS}"/>`;
-    if (spec.type === 'pie')
-        return `<c:pieChart><c:varyColors val="1"/>${series}<c:firstSliceAng val="0"/></c:pieChart>`;
-    if (spec.type === 'line') {
+    const { type } = spec.chart;
+    if (type === 'pie') return `<c:pieChart><c:varyColors val="1"/>${series}<c:firstSliceAng val="0"/></c:pieChart>`;
+    if (type === 'line') {
         return `<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>${series}<c:marker val="1"/>${axes}</c:lineChart>`;
     }
-    const stacked = spec.stacking !== 'none';
+    const { stacking } = spec.plots[type];
+    const stacked = stacking !== 'none';
     return [
-        `<c:barChart><c:barDir val="${spec.type === 'bar' ? 'bar' : 'col'}"/>`,
-        `<c:grouping val="${GROUPING.get(spec.stacking)}"/><c:varyColors val="0"/>${series}`,
+        `<c:barChart><c:barDir val="${type === 'bar' ? 'bar' : 'col'}"/>`,
+        `<c:grouping val="${GROUPING.get(stacking)}"/><c:varyColors val="0"/>${series}`,
         `<c:gapWidth val="150"/>${stacked ? '<c:overlap val="100"/>' : ''}${axes}</c:barChart>`,
     ].join('');
 }
@@ -83,22 +85,23 @@ function seriesXml(spec: ChartSpec, look: ChartLook, ranges: Ranges, cache: Char
         data.source === 'inline'
             ? data.series.map(({ name, values }) => inlineSource(data.categories, name, values))
             : rangeSources(data, ranges, cache);
-    const styles: ChartSeriesStyle[] = data.series;
+    const { type } = spec.chart;
     const width = Math.round(look.strokeWidth * EMU_PER_PX);
-    return styles
-        .map(({ color: picked, markers, smooth }, i) => {
-            const color = picked ?? chartColor(i);
+    return data.series
+        .map(({ id }, i) => {
+            const style = chartSeriesStyle(spec, id);
+            const color = style.color ?? chartColor(i);
             const source = sources[i];
             const head = `<c:idx val="${i}"/><c:order val="${i}"/>${source.name}`;
-            if (spec.type === 'line') {
-                const marker = markers
+            if (type === 'line') {
+                const marker = style.marker.visible
                     ? `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr>${solidFillXml(color)}<a:ln>${solidFillXml(color)}</a:ln></c:spPr></c:marker>`
                     : '<c:marker><c:symbol val="none"/></c:marker>';
                 const line = `<c:spPr><a:ln w="${width}" cap="rnd">${solidFillXml(color)}<a:round/></a:ln></c:spPr>`;
-                return `<c:ser>${head}${line}${marker}${source.data}<c:smooth val="${smooth ? 1 : 0}"/></c:ser>`;
+                return `<c:ser>${head}${line}${marker}${source.data}<c:smooth val="${style.line.smooth ? 1 : 0}"/></c:ser>`;
             }
-            if (spec.type === 'pie') {
-                const points = i === 0 ? slicesXml(spec, source.points) : '';
+            if (type === 'pie') {
+                const points = i === 0 ? slicesXml(spec, id, source.points) : '';
                 return `<c:ser>${head}<c:spPr>${solidFillXml(color)}</c:spPr>${points}${PIE_LABELS}${source.data}</c:ser>`;
             }
             return `<c:ser>${head}<c:spPr>${solidFillXml(color)}</c:spPr><c:invertIfNegative val="0"/>${source.data}</c:ser>`;
@@ -110,9 +113,10 @@ function seriesXml(spec: ChartSpec, look: ChartLook, ranges: Ranges, cache: Char
 const PIE_LABELS =
     '<c:dLbls><c:dLblPos val="outEnd"/><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="1"/><c:showSerName val="0"/><c:showPercent val="1"/><c:showBubbleSize val="0"/><c:showLeaderLines val="0"/></c:dLbls>';
 
-function slicesXml(spec: ChartSpec, points: number): string {
+// A pie's slices are its first series' points, each written as a c:dPt.
+function slicesXml(spec: ChartSpec, id: string, points: number): string {
     return Array.from({ length: points }, (_, i) => {
-        const color = spec.sliceColors[i] ?? chartColor(i);
+        const color = chartPointColor(spec, id, i) ?? chartColor(i);
         return `<c:dPt><c:idx val="${i}"/><c:bubble3D val="0"/><c:spPr>${solidFillXml(color)}</c:spPr></c:dPt>`;
     }).join('');
 }
@@ -178,36 +182,36 @@ function cellRange(ref: CellRangeRef, ranges: Ranges): string {
     return name === undefined ? '#REF!' : `${quoteSheetName(name)}!${rangeToA1(ref, true)}`;
 }
 
-// The category axis, then the value axis. A bar chart lies on its side. CHARTS.md: the category axis is maxMin when
-// (type === 'bar') !== reversed, and the value axis crosses it at that end, so it stays where Eigen draws it.
+// x, the category axis, then y, the value axis. A bar chart lies on its side. CHARTS.md: the category axis is maxMin
+// when (type === 'bar') !== reversed, and the value axis crosses it at that end, so it stays where Eigen draws it.
 function axesXml(spec: ChartSpec, look: ChartLook): string {
-    const { categoryAxis, valueAxis } = spec;
-    const sideways = spec.type === 'bar';
-    const maxMin = sideways !== categoryAxis.reversed;
+    const { x: categoryAxis, y: valueAxis } = spec.axes;
+    const { type } = spec.chart;
+    const sideways = type === 'bar';
+    const maxMin = sideways !== categoryAxis.scale.reversed;
     const stroke = (opacity = 1) =>
         `<a:ln w="${Math.round(look.strokeWidth * EMU_PER_PX)}">${solidFillXml(look.strokeColor, opacity)}</a:ln>`;
     const deleted = (visible: boolean) => `<c:delete val="${visible ? 0 : 1}"/>`;
     const noTicks = '<c:majorTickMark val="none"/><c:minorTickMark val="none"/>';
     const scaling = (orientation: string, bounds = '') =>
         `<c:scaling><c:orientation val="${orientation}"/>${bounds}</c:scaling>`;
-    const bounds = [
-        valueAxis.max === null ? '' : `<c:max val="${valueAxis.max}"/>`,
-        valueAxis.min === null ? '' : `<c:min val="${valueAxis.min}"/>`,
-    ].join('');
+    const { min, max } = valueAxis.scale;
+    const bounds = [max === null ? '' : `<c:max val="${max}"/>`, min === null ? '' : `<c:min val="${min}"/>`].join('');
     // A 100% stack's axis runs 0 to 1; without a format of its own Excel would label it so.
-    const format = valueAxis.format ?? (spec.stacking === 'percent' ? PERCENT_AXIS_FORMAT : 'General');
-    const linked = valueAxis.format === null && format === 'General';
+    const own = valueAxis.labels.format;
+    const format = own ?? (spec.plots[type].stacking === 'percent' ? PERCENT_AXIS_FORMAT : 'General');
+    const linked = own === null && format === 'General';
     return [
         `<c:catAx><c:axId val="${CATEGORY_AXIS}"/>${scaling(maxMin ? 'maxMin' : 'minMax')}${deleted(categoryAxis.visible)}`,
-        `<c:axPos val="${sideways ? 'l' : 'b'}"/>${axisTitleXml(categoryAxis.title, sideways)}`,
+        `<c:axPos val="${sideways ? 'l' : 'b'}"/>${axisTitleXml(categoryAxis.title.text, sideways)}`,
         `<c:numFmt formatCode="General" sourceLinked="1"/>${noTicks}<c:tickLblPos val="low"/><c:spPr>${stroke()}</c:spPr>`,
         `<c:crossAx val="${VALUE_AXIS}"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>`,
         `<c:valAx><c:axId val="${VALUE_AXIS}"/>${scaling('minMax', bounds)}${deleted(valueAxis.visible)}`,
         `<c:axPos val="${sideways ? 'b' : 'l'}"/>`,
-        valueAxis.gridlines
+        valueAxis.gridlines.visible
             ? `<c:majorGridlines><c:spPr>${stroke(GRIDLINE_OPACITY / 100)}</c:spPr></c:majorGridlines>`
             : '',
-        axisTitleXml(valueAxis.title, !sideways),
+        axisTitleXml(valueAxis.title.text, !sideways),
         `<c:numFmt formatCode="${escapeXml(format)}" sourceLinked="${linked ? 1 : 0}"/>${noTicks}`,
         `<c:tickLblPos val="nextTo"/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr><c:crossAx val="${CATEGORY_AXIS}"/>`,
         `<c:crosses val="${maxMin ? 'max' : 'autoZero'}"/><c:crossBetween val="between"/></c:valAx>`,

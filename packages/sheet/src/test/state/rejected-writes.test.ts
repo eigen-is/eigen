@@ -96,7 +96,7 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
     ]),
     [
         'setting the spec of a chart that is not there',
-        (ctx) => setChartSpec(ctx, 'gone', [{ op: 'set', path: ['type'], value: 'line' }]),
+        (ctx) => setChartSpec(ctx, 'gone', [{ op: 'set', path: ['chart', 'type'], value: 'line' }]),
     ],
     ['setting the look of a chart that is not there', (ctx) => setChartLook(ctx, 'gone', { roughness: 1 })],
     ['renaming the media of no image', (ctx) => replaceImageMediaName(ctx, 'pending:gone', 'photo.png')],

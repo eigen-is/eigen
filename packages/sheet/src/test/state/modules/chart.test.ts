@@ -3,7 +3,14 @@
 // joiner through replaySheetsOps. Every client and the joiner must end on the same charts.
 
 import { describe, expect, test } from 'bun:test';
-import { CHART_MAX_SIDE, FLAT_CHART_LOOK, parseChartSpec, readChartLook, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    CHART_MAX_SIDE,
+    DEFAULT_CHART_SERIES_STYLE,
+    FLAT_CHART_LOOK,
+    parseChartSpec,
+    readChartLook,
+    sampleChartSpec,
+} from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import {
     decodeSheetsSnapshot,
@@ -33,6 +40,7 @@ const S = 'id_1';
 const T = 'id_2';
 const BOX = { x: 10, y: 20, width: 400, height: 300 };
 const SPEC = JSON.stringify(sampleChartSpec('column'));
+const TO_LINE: ChartSpecChange = [{ op: 'set', path: ['chart', 'type'], value: 'line' }];
 
 const ref = (sheetId: string, row: [number, number], column: [number, number] = [1, 1]): CellRangeRef => ({
     sheetId,
@@ -41,8 +49,15 @@ const ref = (sheetId: string, row: [number, number], column: [number, number] = 
 });
 
 function rangeSpec(values: CellRangeRef, categories: CellRangeRef | null = null): ChartSpec {
-    const series = { id: 's-1', name: 'Points', values, color: '#2a78d6', markers: false, smooth: false };
-    return { ...sampleChartSpec('column'), data: { source: 'range', categories, series: [series] } };
+    return {
+        ...sampleChartSpec('column'),
+        series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
+        data: { source: 'range', categories, series: [{ id: 's-1', name: 'Points', values }] },
+    };
+}
+
+function asLine(spec: ChartSpec): ChartSpec {
+    return { ...spec, chart: { ...spec.chart, type: 'line' } };
 }
 
 function chart(id: string, spec: ChartSpec, index = 'a0'): SheetChart {
@@ -109,10 +124,8 @@ describe('chart writers', () => {
     });
 
     test('a spec edit is one replace of the spec string', () => {
-        const spec = { ...rangeSpec(ref(S, [2, 5])), type: 'line' } as const;
-        const { ops } = author(workbook(), (ctx) =>
-            setChartSpec(ctx, 'c1', [{ op: 'set', path: ['type'], value: 'line' }]),
-        );
+        const spec = asLine(rangeSpec(ref(S, [2, 5])));
+        const { ops } = author(workbook(), (ctx) => setChartSpec(ctx, 'c1', TO_LINE));
         expect(ops).toEqual([{ op: 'replace', id: S, path: ['charts', 'c1', 'spec'], value: JSON.stringify(spec) }]);
     });
 
@@ -148,7 +161,7 @@ describe('chart writers', () => {
         });
         for (const recipe of [
             (ctx: Context) => insertChart(ctx, 'c3', BOX, sampleChartSpec('line')),
-            (ctx: Context) => setChartSpec(ctx, 'c1', [{ op: 'set', path: ['type'], value: 'pie' }]),
+            (ctx: Context) => setChartSpec(ctx, 'c1', [{ op: 'set', path: ['chart', 'type'], value: 'pie' }]),
             (ctx: Context) => setChartLook(ctx, 'c1', { roughness: 2 }),
         ]) {
             expect(author(base, recipe).ops).toEqual([]);
@@ -228,21 +241,21 @@ describe('a chart edit keeps what this build does not know', () => {
             c1.spec = JSON.stringify({
                 ...raw,
                 future: 1,
-                legend: 'inside',
-                valueAxis: { ...raw.valueAxis, logBase: 10 },
+                legend: { ...raw.legend, position: 'inside' },
+                axes: { ...raw.axes, y: { ...raw.axes.y, logBase: 10 } },
                 data: { ...raw.data, future: 2, series },
             });
         });
     const stored = (ctx: Context) => JSON.parse(ctx.sheets[0].charts!.c1.spec);
     const kept = (ctx: Context) => {
         const raw = stored(ctx);
-        return [raw.future, raw.legend, raw.valueAxis.logBase, raw.data.future, raw.data.series[0].dash];
+        return [raw.future, raw.legend.position, raw.axes.y.logBase, raw.data.future, raw.data.series[0].dash];
     };
-    const title: ChartSpecChange = [{ op: 'set', path: ['title'], value: 'Goals' }];
+    const title: ChartSpecChange = [{ op: 'set', path: ['title', 'text'], value: 'Goals' }];
 
     test('a title through setChartSpec', () => {
         const { next } = author(newer(), (ctx) => setChartSpec(ctx, 'c1', title));
-        expect(stored(next).title).toBe('Goals');
+        expect(stored(next).title.text).toBe('Goals');
         expect(kept(next)).toEqual([1, 'inside', 10, 2, 'dot']);
     });
 
@@ -276,15 +289,12 @@ describe('a chart edit keeps what this build does not know', () => {
     // The panel hands a change, which the recipe applies onto the chart as it then stores it.
     test("a peer's colour landing after the panel rendered survives the panel's title", () => {
         const base = workbook();
-        const [series] = rangeSpec(ref(S, [2, 5])).data.series;
-        const recolor: ChartSpecChange = [
-            { op: 'set', path: ['data', 'series'], value: [{ ...series, color: '#00ff00' }] },
-        ];
+        const recolor: ChartSpecChange = [{ op: 'set', path: ['series', 's-1', 'color'], value: '#00ff00' }];
         const peer = author(base, (ctx) => setChartSpec(ctx, 'c1', recolor));
         const mine = author(receive(base, peer.ops), (ctx) => setChartSpec(ctx, 'c1', title));
         expect(parseChartSpec(mine.next.sheets[0].charts!.c1.spec)).toMatchObject({
-            title: 'Goals',
-            data: { series: [{ color: '#00ff00' }] },
+            title: { text: 'Goals' },
+            series: { 's-1': { color: '#00ff00' } },
         });
         expect(charts(join(base, [peer.ops, mine.ops]))).toEqual(charts(mine.next.sheets));
     });
@@ -295,7 +305,7 @@ describe('charts converge over real ops', () => {
         const base = workbook();
         const a = author(base, (ctx) => insertChart(ctx, 'c3', BOX, sampleChartSpec('pie')));
         const b = author(base, (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300, y: 40 }));
-        const c = author(base, (ctx) => setChartSpec(ctx, 'c2', [{ op: 'set', path: ['type'], value: 'line' }]));
+        const c = author(base, (ctx) => setChartSpec(ctx, 'c2', TO_LINE));
         const onA = receive(receive(a.next, b.ops), c.ops);
         const onB = receive(receive(b.next, c.ops), a.ops);
         const onC = receive(receive(c.next, a.ops), b.ops);
@@ -311,7 +321,7 @@ describe('charts converge over real ops', () => {
         const a = author(base, (ctx) => setChartLook(ctx, 'c1', { roughness: 2 }));
         const b = author(base, (ctx) => setChartLook(ctx, 'c1', { strokeWidth: 4 }));
         const c = author(base, (ctx) => updateFloatingBox(ctx, { kind: 'chart', id: 'c1' }, { x: 300 }));
-        const d = author(base, (ctx) => setChartSpec(ctx, 'c1', [{ op: 'set', path: ['type'], value: 'line' }]));
+        const d = author(base, (ctx) => setChartSpec(ctx, 'c1', TO_LINE));
         const all = [a, b, c, d];
         const clients = all.map((self) =>
             all.filter((other) => other !== self).reduce((ctx, other) => receive(ctx, other.ops), self.next),
@@ -326,7 +336,7 @@ describe('charts converge over real ops', () => {
             roughness: 2,
             strokeWidth: 4,
             x: 300,
-            spec: JSON.stringify({ ...rangeSpec(ref(S, [2, 5])), type: 'line' }),
+            spec: JSON.stringify(asLine(rangeSpec(ref(S, [2, 5])))),
         });
     });
 

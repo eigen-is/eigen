@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     CHART_MAX_SIDE,
     chartColor,
+    DEFAULT_CHART_SERIES_STYLE,
     FLAT_CHART_LOOK,
     MAX_CHART_LABEL_LENGTH,
     MAX_CHART_POINTS,
@@ -9,13 +10,11 @@ import {
     sampleChartSpec,
 } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
-import type { CellRangeRef, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartSpec, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
 import { serializeFill } from '@workspace/lib/vector';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import { inlineChartSpec, mapChartRefs, renderSheetChartSvg, resolveRangeChartData } from '../../engine/chart-data';
 import type { Cell } from '../../engine/types';
-
-const STYLE = { color: '#2a78d6', markers: false, smooth: false };
 
 const ref = (row: [number, number], column: [number, number], sheetId = 's1'): CellRangeRef => ({
     sheetId,
@@ -24,7 +23,6 @@ const ref = (row: [number, number], column: [number, number], sheetId = 's1'): C
 });
 
 const series = (values: CellRangeRef | null, name: string | CellRangeRef = 'Points'): RangeChartSeries => ({
-    ...STYLE,
     id: 's-0',
     name,
     values,
@@ -74,8 +72,8 @@ describe('resolveRangeChartData', () => {
         ).toEqual({
             categories: ['Ajax', 'PSV', ''],
             series: [
-                { ...STYLE, id: 's-0', name: 'Points', values: [42, null, null] },
-                { ...STYLE, id: 's-1', name: 'Points', values: [3, 1000, 7] },
+                { id: 's-0', name: 'Points', values: [42, null, null] },
+                { id: 's-1', name: 'Points', values: [3, 1000, 7] },
             ],
         });
     });
@@ -91,8 +89,8 @@ describe('resolveRangeChartData', () => {
         ).toEqual({
             categories: ['1', '2'],
             series: [
-                { ...STYLE, id: 's-0', name: 'Points', values: [null, 7] },
-                { ...STYLE, id: 's-1', name: 'Points', values: [42] },
+                { id: 's-0', name: 'Points', values: [null, 7] },
+                { id: 's-1', name: 'Points', values: [42] },
             ],
         });
     });
@@ -129,23 +127,13 @@ describe('resolveRangeChartData', () => {
         expect(resolved).toMatchObject({ categories: ['x'.repeat(MAX_CHART_LABEL_LENGTH)] });
     });
 
-    test('a series whose values were deleted is left out, and the rest keep their own colors', () => {
-        const red = { ...series(ref([1, 3], [2, 2]), ref([0, 0], [2, 2])), color: '#ff0000' };
-        expect(resolveRangeChartData(data(ref([1, 3], [0, 0]), series(null), red), resolver)).toEqual({
+    // The style is keyed by id, so the series after a deleted one keep theirs.
+    test('a series whose values were deleted is left out, and the rest keep their ids', () => {
+        const goals = series(ref([1, 3], [2, 2]), ref([0, 0], [2, 2]));
+        expect(resolveRangeChartData(data(ref([1, 3], [0, 0]), series(null), goals), resolver)).toEqual({
             categories: ['Ajax', 'PSV', ''],
-            series: [{ ...STYLE, id: 's-1', color: '#ff0000', name: 'Goals', values: [3, 1000, 7] }],
+            series: [{ id: 's-1', name: 'Goals', values: [3, 1000, 7] }],
         });
-    });
-
-    // The editor shows a series' automatic color by its index in the spec, so the chart must too.
-    test('an automatic color is the palette color at the series index in the spec, a deleted one before it kept', () => {
-        const automatic = (values: CellRangeRef | null) => ({ ...series(values), color: null });
-        const resolved = resolveRangeChartData(
-            data(null, automatic(ref([1, 3], [1, 1])), automatic(null), automatic(ref([1, 3], [2, 2]))),
-            resolver,
-        );
-        if (typeof resolved === 'string') throw new Error(resolved);
-        expect(resolved.series.map((s) => s.color)).toEqual([chartColor(0), chartColor(2)]);
     });
 
     test('a ref spanning rows and columns, no series left or a ref to a missing sheet is a ref error', () => {
@@ -200,7 +188,7 @@ describe('renderSheetChartSvg', () => {
             height: 300,
             spec: JSON.stringify({
                 ...spec,
-                valueAxis: { ...spec.valueAxis, format },
+                axes: { ...spec.axes, y: { ...spec.axes.y, labels: { format } } },
                 data: data(ref([0, 1], [0, 0]), series(ref([0, 1], [1, 1]), 'Share')),
             }),
         };
@@ -230,6 +218,25 @@ describe('renderSheetChartSvg', () => {
         expect(flat).toContain(`fill="${FLAT_CHART_LOOK.color}"`);
     });
 
+    // The editor shows a series' automatic color by its place in the spec, so the chart must too.
+    test('an automatic color is the palette color at the series place in the spec, a deleted one before it kept', () => {
+        const spec = sampleChartSpec('column');
+        const svg = renderSheetChartSvg(
+            {
+                ...chart(null),
+                spec: JSON.stringify({
+                    ...spec,
+                    series: {},
+                    data: data(null, series(ref([0, 1], [1, 1])), series(null), series(ref([0, 1], [1, 1]))),
+                }),
+            },
+            shares,
+        );
+        expect(svg).toContain(`fill="${chartColor(0)}"`);
+        expect(svg).toContain(`fill="${chartColor(2)}"`);
+        expect(svg).not.toContain(chartColor(1));
+    });
+
     // A peer or a file can store any number; at a trillion px the painter overflows its stack.
     test('a stored side past the max draws at the max', () => {
         const svg = renderSheetChartSvg({ ...chart(null), width: 9.4e11, height: 9.4e11 }, shares);
@@ -247,37 +254,52 @@ describe('inlineChartSpec', () => {
         height: 300,
         spec: JSON.stringify(spec),
     });
-    const auto = (values: CellRangeRef | null, name: string | CellRangeRef = 'Points'): RangeChartSeries => ({
-        ...series(values, name),
-        color: null,
-    });
-    const rangeChart = (...list: RangeChartSeries[]) =>
-        sheetChart({ ...sampleChartSpec('line'), title: 'Scores', data: data(ref([1, 3], [0, 0]), ...list) });
+    // Every series automatic unless styles names it.
+    const rangeChart = (list: RangeChartSeries[], styles: ChartSpec['series'] = {}) =>
+        sheetChart({
+            ...sampleChartSpec('line'),
+            title: { text: 'Scores' },
+            series: styles,
+            data: data(ref([1, 3], [0, 0]), ...list),
+        });
+    // The copy's colors by its data's series, null automatic.
+    const colorsOf = (copied: string | null) => {
+        const spec = parseChartSpec(copied ?? '');
+        return spec?.data.series.map(({ id }) => spec.series[id].color);
+    };
 
     test('a range chart copies as the same chart with its cells read into inline data', () => {
         const spec = parseChartSpec(
-            inlineChartSpec(rangeChart(auto(ref([1, 3], [2, 2]), ref([0, 0], [1, 1]))), resolver) ?? '',
+            inlineChartSpec(rangeChart([series(ref([1, 3], [2, 2]), ref([0, 0], [1, 1]))]), resolver) ?? '',
         );
         expect(spec).toEqual({
             ...sampleChartSpec('line'),
-            title: 'Scores',
+            title: { text: 'Scores' },
+            series: { 's-0': DEFAULT_CHART_SERIES_STYLE },
             data: {
                 source: 'inline',
                 categories: ['Ajax', 'PSV', ''],
-                series: [
-                    { color: null, markers: false, smooth: false, id: 's-0', name: 'Points', values: [3, 1000, 7] },
-                ],
+                series: [{ id: 's-0', name: 'Points', values: [3, 1000, 7] }],
             },
         });
     });
 
     test('an automatic color stays automatic, and one a deleted series before it would shift keeps its color', () => {
         const copied = inlineChartSpec(
-            rangeChart(auto(ref([1, 3], [1, 1])), auto(null), auto(ref([1, 3], [2, 2]))),
+            rangeChart([series(ref([1, 3], [1, 1])), series(null), series(ref([1, 3], [2, 2]))]),
             resolver,
         );
-        const colors = parseChartSpec(copied ?? '')?.data.series.map((s) => s.color);
-        expect(colors).toEqual([null, chartColor(2)]);
+        expect(colorsOf(copied)).toEqual([null, chartColor(2)]);
+    });
+
+    test('a deleted first series writes the next one’s automatic color on its style, and an own color stays', () => {
+        const red = { ...DEFAULT_CHART_SERIES_STYLE, color: '#ff0000' };
+        const copied = inlineChartSpec(
+            rangeChart([series(null), series(ref([1, 3], [1, 1])), series(ref([1, 3], [2, 2]))], { 's-2': red }),
+            resolver,
+        );
+        expect(colorsOf(copied)).toEqual([chartColor(1), '#ff0000']);
+        expect(JSON.parse(copied ?? '{}').series['s-1']).toEqual({ color: chartColor(1) });
     });
 
     test('ticks drawn from the source cells keep their format, and a stored format stays', () => {
@@ -295,11 +317,12 @@ describe('inlineChartSpec', () => {
         const withFormat = (format: string | null) =>
             sheetChart({
                 ...spec,
-                valueAxis: { ...spec.valueAxis, format },
+                axes: { ...spec.axes, y: { ...spec.axes.y, labels: { format } } },
                 data: data(ref([0, 0], [0, 0]), series(ref([0, 0], [1, 1]))),
             });
-        expect(parseChartSpec(inlineChartSpec(withFormat(null), shares) ?? '')?.valueAxis.format).toBe('0%');
-        expect(parseChartSpec(inlineChartSpec(withFormat('0.00'), shares) ?? '')?.valueAxis.format).toBe('0.00');
+        const formatOf = (copied: string | null) => parseChartSpec(copied ?? '')?.axes.y.labels.format;
+        expect(formatOf(inlineChartSpec(withFormat(null), shares))).toBe('0%');
+        expect(formatOf(inlineChartSpec(withFormat('0.00'), shares))).toBe('0.00');
     });
 
     test('an inline chart copies its stored spec as it is', () => {
@@ -308,9 +331,9 @@ describe('inlineChartSpec', () => {
     });
 
     test('a chart showing #REF!, too much data or nothing copies nothing', () => {
-        expect(inlineChartSpec(rangeChart(auto(ref([1, 3], [1, 2]))), resolver)).toBeNull();
-        expect(inlineChartSpec(rangeChart(auto(ref([0, MAX_CHART_POINTS], [1, 1]))), resolver)).toBeNull();
-        expect(inlineChartSpec({ ...rangeChart(), spec: '{' }, resolver)).toBeNull();
+        expect(inlineChartSpec(rangeChart([series(ref([1, 3], [1, 2]))]), resolver)).toBeNull();
+        expect(inlineChartSpec(rangeChart([series(ref([0, MAX_CHART_POINTS], [1, 1]))]), resolver)).toBeNull();
+        expect(inlineChartSpec({ ...rangeChart([]), spec: '{' }, resolver)).toBeNull();
     });
 
     test('a chart whose cells pass the spec’s size limit copies nothing', () => {
@@ -355,9 +378,7 @@ describe('inlineChartSpec', () => {
         const copied = JSON.parse(inlineChartSpec(newer(), resolver) ?? '{}');
         expect(copied.future).toBe(1);
         expect(copied.data).toMatchObject({ source: 'inline', future: 2, categories: ['Ajax', 'PSV', ''] });
-        expect(copied.data.series).toEqual([
-            { ...STYLE, id: 's-0', name: 'Points', values: [42, null, null], dash: 'dot' },
-        ]);
+        expect(copied.data.series).toEqual([{ id: 's-0', name: 'Points', values: [42, null, null], dash: 'dot' }]);
     });
 
     test("a row op moves a ref this build doesn't know, the other keys kept", () => {
@@ -373,10 +394,14 @@ describe('inlineChartSpec', () => {
     });
 
     test("a chart this build can't draw still moves its refs", () => {
-        const unknown = { ...newer(), spec: JSON.stringify({ ...JSON.parse(newer().spec), type: 'scatter' }) };
+        const stored = JSON.parse(newer().spec);
+        const unknown = {
+            ...newer(),
+            spec: JSON.stringify({ ...stored, chart: { ...stored.chart, type: 'scatter' } }),
+        };
         const down = (ref: CellRangeRef): CellRangeRef => ({ ...ref, row: [ref.row[0] + 2, ref.row[1] + 2] });
         const moved = JSON.parse(mapChartRefs(unknown, down).spec);
-        expect(moved.type).toBe('scatter');
+        expect(moved.chart.type).toBe('scatter');
         expect(moved.data.categories).toEqual(ref([3, 5], [0, 0]));
         expect(moved.data.series[0].x).toEqual(ref([3, 5], [2, 2]));
     });

@@ -9,6 +9,7 @@ import type {
     ChartLayout,
     ChartLayoutInput,
     ChartPaint,
+    ChartSeriesStyle,
     ChartShape,
     ChartSpec,
     InlineChartSeries,
@@ -26,7 +27,7 @@ import type {
     VectorPieElement,
     VectorRectangleElement,
 } from '../vector/types';
-import { chartColor } from './spec';
+import { chartColor, chartPointColor, chartSeriesStyle } from './spec';
 import { formatPercentTick, nice, tickStep, ticks } from './ticks';
 
 // Every line a chart draws in place of a plot.
@@ -92,10 +93,10 @@ type Context = {
 };
 
 type LegendItem = { name: string; color: string };
-type PaintedSeries = InlineChartSeries & { color: string };
+type PaintedSeries = InlineChartSeries & { color: string; style: ChartSeriesStyle };
 
 export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput): ChartLayout {
-    const ctx = context(box, spec.fontFamily);
+    const ctx = context(box, spec.chart.fontFamily);
     const background = backgroundShapes(ctx);
     const message = (text: string): ChartLayout => ({ shapes: background, labels: messageLabel(ctx, text) });
 
@@ -109,20 +110,29 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
     );
     if (values.every((row) => row.every((value) => value === null))) return message(CHART_MESSAGES.noData);
     const categories = Array.from({ length: count }, (_, i) => data.categories[i] ?? '');
-    const series = data.series.map((s, i) => ({ ...s, color: s.color ?? chartColor(i) }));
+    // An automatic color is the palette's at the series' place in the spec, so a range series after one whose values
+    // were deleted keeps the color the editor shows it in.
+    const series = data.series.map((s, i) => {
+        const style = chartSeriesStyle(spec, s.id);
+        const place = spec.data.series.findIndex(({ id }) => id === s.id);
+        return { ...s, style, color: style.color ?? chartColor(place === -1 ? i : place) };
+    });
+    const type = spec.chart.type;
+    // A pie draws its first series, whose points are its slices.
+    const pieId = data.series[0].id;
 
-    if (spec.type === 'pie') {
+    if (type === 'pie') {
         const slices = values[0];
         if (slices.some((value) => value !== null && value < 0)) return message(CHART_MESSAGES.pieNeedsPositive);
         if (!slices.some((value) => value !== null && value > 0)) return message(CHART_MESSAGES.noData);
     }
 
-    let frame = placeTitle(ctx, spec.title);
+    let frame = placeTitle(ctx, spec.title.text);
     const items: LegendItem[] =
-        spec.type === 'pie'
-            ? categories.map((name, i) => ({ name, color: sliceColor(spec, i) }))
+        type === 'pie'
+            ? categories.map((name, i) => ({ name, color: sliceColor(spec, pieId, i) }))
             : series.map(({ name, color }) => ({ name, color }));
-    const legend = placeLegend(ctx, spec.legend, items, frame);
+    const legend = placeLegend(ctx, spec.legend.position, items, frame);
     frame = legend.frame;
 
     // Past MAX_SKETCH_POINTS the data marks draw unsketched and solid, their labels still the chart's.
@@ -130,8 +140,8 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
         ? { ...ctx, paint: { ...ctx.paint, roughness: 0, fillStyle: 'solid' } }
         : ctx;
     const plot =
-        spec.type === 'pie'
-            ? layoutPie(marks, spec, categories, values[0], frame)
+        type === 'pie'
+            ? layoutPie(marks, spec, pieId, categories, values[0], frame)
             : layoutCartesian(ctx, marks, spec, categories, series, values, frame, formatTick);
     if (!plot) return message(CHART_MESSAGES.tooSmall);
     return { shapes: [...background, ...plot, ...legend.shapes], labels: ctx.labels };
@@ -139,7 +149,7 @@ export function layoutChart({ spec, data, formatTick, ...box }: ChartLayoutInput
 
 // The values the chart plots: a pie's first series, every series' otherwise.
 export function chartPointCount(spec: ChartSpec, data: ChartData): number {
-    const plotted = spec.type === 'pie' ? data.series.slice(0, 1) : data.series;
+    const plotted = spec.chart.type === 'pie' ? data.series.slice(0, 1) : data.series;
     return plotted.reduce((sum, series) => sum + series.values.length, 0);
 }
 
@@ -186,8 +196,8 @@ function backgroundShapes(ctx: Context): ChartShape[] {
     return [rectangle(ctx, 'background', box, TRANSPARENT_COLOR, serializeFill({ ...fill, style: 'solid' }))];
 }
 
-function sliceColor(spec: ChartSpec, index: number): string {
-    return spec.sliceColors[index] ?? chartColor(index);
+function sliceColor(spec: ChartSpec, id: string, index: number): string {
+    return chartPointColor(spec, id, index) ?? chartColor(index);
 }
 
 function messageLabel(ctx: Context, text: string): ChartLabel[] {
@@ -210,7 +220,7 @@ function placeTitle(ctx: Context, title: string): Frame {
 // the last one kept counts them.
 function placeLegend(
     ctx: Context,
-    position: ChartSpec['legend'],
+    position: ChartSpec['legend']['position'],
     items: LegendItem[],
     frame: Frame,
 ): { shapes: ChartShape[]; frame: Frame } {
@@ -315,23 +325,24 @@ function layoutCartesian(
     sourceFormat: ChartLayoutInput['formatTick'],
 ): ChartShape[] | null {
     const { lineHeight: lh, gap, fontSize } = ctx;
-    const horizontal = spec.type === 'bar';
-    const stacked = spec.stacking !== 'none' && spec.type !== 'line';
-    const percent = stacked && spec.stacking === 'percent';
+    const { type, blanks } = spec.chart;
+    const { x, y } = spec.axes;
+    const horizontal = type === 'bar';
+    const { stacking } = spec.plots[type];
+    const stacked = stacking !== 'none' && type !== 'line';
+    const percent = stacked && stacking === 'percent';
     const values = percent ? shares(stored) : stored;
     const formatTick = percent ? formatPercentTick : sourceFormat;
-    const [low, high] = valueExtent(values, stacked, spec.blanks === 'zero', spec.type !== 'line');
+    const [low, high] = valueExtent(values, stacked, blanks === 'zero', type !== 'line');
     // Float sums can run a hair past ±100%, which nice ends would round up a whole step.
     const extent: [number, number] = percent ? [Math.max(-1, low), Math.min(1, high)] : [low, high];
-    const [sideTitle, bottomTitle] = horizontal
-        ? [spec.categoryAxis.title, spec.valueAxis.title]
-        : [spec.valueAxis.title, spec.categoryAxis.title];
+    const [sideTitle, bottomTitle] = horizontal ? [x.title.text, y.title.text] : [y.title.text, x.title.text];
     const sideReserve = sideTitle === '' ? 0 : lh + gap;
     const bottomReserve = bottomTitle === '' ? 0 : lh + gap;
     const count = categories.length;
-    const showNames = spec.categoryAxis.visible;
-    const showTicks = spec.valueAxis.visible;
-    const reversed = spec.categoryAxis.reversed;
+    const showNames = x.visible;
+    const showTicks = y.visible;
+    const reversed = x.scale.reversed;
     // A bar chart's names sit centered on their bands, so thin bands keep half a line in from the plot's ends.
     const edge = horizontal && showNames ? lh / 2 : 0;
 
@@ -435,10 +446,9 @@ function layoutCartesian(
             );
         }
         // The baseline draws zero's line; without it a gridline does, as Office keeps its 0 line.
-        if (spec.valueAxis.gridlines && (t !== zero || !showNames))
-            shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
+        if (y.gridlines.visible && (t !== zero || !showNames)) shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
     });
-    if (spec.type === 'line') shapes.push(...lineMarks(marks, spec, series, values, band, scale));
+    if (type === 'line') shapes.push(...lineMarks(marks, spec, series, values, band, scale));
     else shapes.push(...barMarks(marks, spec, series, values, band, scale, horizontal, stacked));
     if (showNames) shapes.push(rule('baseline', scale(zero)));
 
@@ -504,7 +514,7 @@ function valueAxis(
     formatTick: ChartLayoutInput['formatTick'],
     ctx: Context,
 ): ValueAxis {
-    const { min, max } = spec.valueAxis;
+    const { min, max } = spec.axes.y.scale;
     for (let n = count; ; n--) {
         let [lo, hi] = nice(low, high, n);
         if (min !== null) lo = min;
@@ -601,7 +611,7 @@ function barMarks(
     series.forEach((s, si) => {
         const fill = serializeFill({ type: 'solid', color: s.color, style: ctx.paint.fillStyle });
         values[si].forEach((stored, c) => {
-            const value = stored ?? (spec.blanks === 'zero' ? 0 : null);
+            const value = stored ?? (spec.chart.blanks === 'zero' ? 0 : null);
             if (value === null) return;
             let from = 0;
             if (stacked) {
@@ -644,16 +654,16 @@ function lineMarks(
         const runs: { first: number; points: Point[] }[] = [];
         let open = false;
         values[si].forEach((stored, c) => {
-            const value = stored ?? (spec.blanks === 'zero' ? 0 : null);
+            const value = stored ?? (spec.chart.blanks === 'zero' ? 0 : null);
             if (value === null) {
-                if (spec.blanks === 'gap') open = false;
+                if (spec.chart.blanks === 'gap') open = false;
                 return;
             }
             const point = { x: band.center(c), y: scale(value) };
             if (open) runs[runs.length - 1].points.push(point);
             else runs.push({ first: c, points: [point] });
             open = true;
-            if (s.markers) {
+            if (s.style.marker.visible) {
                 const r = diameter / 2;
                 markers.push(
                     ellipse(
@@ -668,7 +678,9 @@ function lineMarks(
         });
         for (const run of runs) {
             if (run.points.length < 2) continue;
-            lines.push(line(ctx, `line:${si}:${run.first}`, run.points, s.color, s.smooth ? 'round' : 'sharp'));
+            lines.push(
+                line(ctx, `line:${si}:${run.first}`, run.points, s.color, s.style.line.smooth ? 'round' : 'sharp'),
+            );
         }
     });
     return [...lines, ...markers];
@@ -679,6 +691,7 @@ function lineMarks(
 function layoutPie(
     ctx: Context,
     spec: ChartSpec,
+    id: string,
     categories: string[],
     values: (number | null)[],
     frame: Frame,
@@ -732,7 +745,7 @@ function layoutPie(
     if (!labeled) radius = full;
 
     const shapes = slices.map((slice) => {
-        const color = sliceColor(spec, slice.c);
+        const color = sliceColor(spec, id, slice.c);
         const fill = serializeFill({ type: 'solid', color, style: ctx.paint.fillStyle });
         return pie(
             ctx,

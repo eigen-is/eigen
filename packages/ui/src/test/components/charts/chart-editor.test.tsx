@@ -1,7 +1,20 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { applyChartSpecChange, chartColor, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    applyChartSpecChange,
+    chartColor,
+    DEFAULT_CHART_SERIES_STYLE,
+    readChartSpec,
+    sampleChartSpec,
+} from '@workspace/lib/charts';
 import { EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
-import type { ChartSpec, ChartSpecChange, ChartType, StoredChartSpec } from '@workspace/lib/types/chart';
+import type {
+    ChartAxis,
+    ChartSpec,
+    ChartSpecChange,
+    ChartStacking,
+    ChartType,
+    StoredChartSpec,
+} from '@workspace/lib/types/chart';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -188,36 +201,70 @@ async function mount(
 
 const sample = (type: ChartType) => sampleChartSpec(type);
 
+// The spec as the editor reads it back after a Type switch.
+const ofType = (spec: ChartSpec, type: ChartType): ChartSpec => ({ ...spec, chart: { ...spec.chart, type } });
+
+function withAxis(spec: ChartSpec, id: 'x' | 'y', patch: Partial<ChartAxis>): ChartSpec {
+    return { ...spec, axes: { ...spec.axes, [id]: { ...spec.axes[id], ...patch } } };
+}
+
+// The sample with its own type's stacking and its value axis's bounds.
+function bounded(type: ChartType, scale: Partial<ChartAxis['scale']>, stacking: ChartStacking = 'none'): ChartSpec {
+    const spec = sample(type);
+    const { y } = spec.axes;
+    return {
+        ...withAxis(spec, 'y', { scale: { ...y.scale, ...scale } }),
+        plots: { ...spec.plots, [type]: { stacking } },
+    };
+}
+
 describe('ChartEditor', () => {
     test("offers Google's four types in its Insert order and writes the one chosen", async () => {
         const editor = await mount(sample('column'));
         expect(await editor.options('Type')).toEqual(['Bar', 'Column', 'Line', 'Pie']);
         await editor.choose('Type', 'Bar');
-        expect(editor.last().type).toBe('bar');
+        expect(editor.last().chart.type).toBe('bar');
     });
 
     test('a switch to pie leaves its slices on the palette', async () => {
         const editor = await mount(sample('column'));
         await editor.choose('Type', 'Pie');
-        expect(editor.changes).toEqual([{ ...sample('column'), type: 'pie' }]);
+        expect(editor.changes).toEqual([ofType(sample('column'), 'pie')]);
     });
 
     test("a switch between bar and any other type sets the category axis back to Google's direction, in the same change", async () => {
-        const reversed = (type: ChartType): ChartSpec => {
+        const reversed = (type: ChartType, on = true): ChartSpec => {
             const spec = sample(type);
-            return { ...spec, categoryAxis: { ...spec.categoryAxis, reversed: true } };
+            return withAxis(spec, 'x', { scale: { ...spec.axes.x.scale, reversed: on } });
         };
         const bar = await mount(reversed('bar'));
         await bar.choose('Type', 'Column');
-        expect(bar.changes).toEqual([
-            { ...reversed('bar'), type: 'column', categoryAxis: { ...reversed('bar').categoryAxis, reversed: false } },
-        ]);
+        expect(bar.changes).toEqual([ofType(reversed('bar', false), 'column')]);
         const column = await mount(reversed('column'));
         await column.choose('Type', 'Bar');
-        expect(column.last().categoryAxis.reversed).toBe(false);
+        expect(column.last().axes.x.scale.reversed).toBe(false);
         const line = await mount(reversed('column'));
         await line.choose('Type', 'Line');
-        expect(line.changes).toEqual([{ ...reversed('column'), type: 'line' }]);
+        expect(line.changes).toEqual([ofType(reversed('column'), 'line')]);
+    });
+
+    test('a switch between column and bar carries the stacking over, in the same change; a switch to line does not', async () => {
+        const columnPercent = bounded('column', {}, 'percent');
+        const column = await mount(columnPercent);
+        await column.choose('Type', 'Bar');
+        expect(column.changes).toEqual([
+            { ...ofType(columnPercent, 'bar'), plots: { ...columnPercent.plots, bar: { stacking: 'percent' } } },
+        ]);
+        expect(column.row('Stacking').textContent).toBe('100%');
+        const barStacked = bounded('bar', {}, 'stacked');
+        const bar = await mount(barStacked);
+        await bar.choose('Type', 'Column');
+        expect(bar.changes).toEqual([
+            { ...ofType(barStacked, 'column'), plots: { ...barStacked.plots, column: { stacking: 'stacked' } } },
+        ]);
+        const line = await mount(columnPercent);
+        await line.choose('Type', 'Line');
+        expect(line.changes).toEqual([ofType(columnPercent, 'line')]);
     });
 
     test('stacking shows for column and bar, writes the grouping, and is gone for line and pie', async () => {
@@ -225,11 +272,11 @@ describe('ChartEditor', () => {
         expect(column.rowLabels()).toContain('Stacking');
         expect(await column.options('Stacking')).toEqual(['None', 'Standard', '100%']);
         await column.choose('Stacking', '100%');
-        expect(column.last().stacking).toBe('percent');
+        expect(column.last().plots.column.stacking).toBe('percent');
         await column.choose('Stacking', 'Standard');
-        expect(column.last().stacking).toBe('stacked');
+        expect(column.last().plots.column.stacking).toBe('stacked');
         await column.choose('Stacking', 'None');
-        expect(column.last().stacking).toBe('none');
+        expect(column.last().plots.column.stacking).toBe('none');
 
         expect((await mount(sample('bar'))).rowLabels()).toContain('Stacking');
         expect((await mount(sample('line'))).rowLabels()).not.toContain('Stacking');
@@ -237,37 +284,37 @@ describe('ChartEditor', () => {
     });
 
     test("the Font row shows the spec's font, offers the Eigen fonts and writes the one picked, once", async () => {
-        const editor = await mount({ ...sample('line'), fontFamily: 'Excalifont' });
+        const editor = await mount(sampleChartSpec('line', 'Excalifont'));
         expect(editor.row('Font').textContent).toBe('Excalifont');
         const items = await editor.fonts();
         expect(items.map((item) => item.textContent)).toEqual([...EIGEN_FONT_NAMES]);
         const mono = items.find((item) => item.textContent === 'JetBrains Mono');
         await act(async () => mono?.click());
-        expect(editor.changes).toEqual([{ ...sample('line'), fontFamily: 'JetBrains Mono' }]);
+        expect(editor.changes).toEqual([sampleChartSpec('line', 'JetBrains Mono')]);
     });
 
     test('the chart title writes the title', async () => {
         const editor = await mount(sample('column'));
         await editor.type('Chart title', 'Revenue');
-        expect(editor.last().title).toBe('Revenue');
+        expect(editor.last().title.text).toBe('Revenue');
     });
 
     test('a column chart titles its category axis horizontally and its value axis vertically', async () => {
         const editor = await mount(sample('column'));
         expect(editor.sectionTitles()).toEqual(['Chart', 'Horizontal axis', 'Vertical axis', 'Series']);
         await editor.type('Horizontal axis title', 'Team');
-        expect(editor.last().categoryAxis.title).toBe('Team');
+        expect(editor.last().axes.x.title.text).toBe('Team');
         await editor.type('Vertical axis title', 'Points');
-        expect(editor.last().valueAxis.title).toBe('Points');
+        expect(editor.last().axes.y.title.text).toBe('Points');
     });
 
     test('a bar chart turns the axes: its horizontal axis is the value axis', async () => {
         const editor = await mount(sample('bar'));
         await editor.type('Horizontal axis title', 'Points');
-        expect(editor.last().valueAxis.title).toBe('Points');
-        expect(editor.last().categoryAxis.title).toBe('Wavelength (nm)');
+        expect(editor.last().axes.y.title.text).toBe('Points');
+        expect(editor.last().axes.x.title.text).toBe('Wavelength (nm)');
         await editor.type('Vertical axis title', 'Team');
-        expect(editor.last().categoryAxis.title).toBe('Team');
+        expect(editor.last().axes.x.title.text).toBe('Team');
     });
 
     test('min and max sit with the value axis, and an emptied one is auto again', async () => {
@@ -276,19 +323,14 @@ describe('ChartEditor', () => {
         expect(column.rowLabels()).toEqual(expect.arrayContaining(['Min', 'Max']));
         expect(column.boxLabels()).toContain('Gridlines');
         await column.type('Auto', '10');
-        expect(column.last().valueAxis.min).toBe(10);
+        expect(column.last().axes.y.scale.min).toBe(10);
         await column.type('Auto', '');
-        expect(column.last().valueAxis.min).toBeNull();
+        expect(column.last().axes.y.scale.min).toBeNull();
     });
 
     // A 100% stack stores its min and max as fractions, Excel's c:min and c:max, and the editor shows percents.
     test('under a 100% stack, min and max read and write as percents', async () => {
-        const percent: ChartSpec = {
-            ...sample('column'),
-            stacking: 'percent',
-            valueAxis: { ...sample('column').valueAxis, max: 0.07 },
-        };
-        const editor = await mount(percent);
+        const editor = await mount(bounded('column', { max: 0.07 }, 'percent'));
         const [min, max] = [...document.querySelectorAll<HTMLInputElement>('input[placeholder="Auto"]')];
         expect(max.value).toBe('7');
         await act(async () => {
@@ -296,40 +338,44 @@ describe('ChartEditor', () => {
             setValue?.call(max, '100');
             max.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        expect(editor.last().valueAxis.max).toBe(1);
+        expect(editor.last().axes.y.scale.max).toBe(1);
         await act(async () => {
             min.focus();
             setValue?.call(min, '-20');
             min.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        expect(editor.last().valueAxis).toMatchObject({ min: -0.2, max: 1 });
+        expect(editor.last().axes.y.scale).toMatchObject({ min: -0.2, max: 1 });
         // 33.3 / 100 is 0.33299999999999996 in floating point.
         await act(async () => {
             setValue?.call(max, '33.3');
             max.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        expect(editor.last().valueAxis.max).toBe(0.333);
+        expect(editor.last().axes.y.scale.max).toBe(0.333);
     });
 
     // A raw max of 100 would be 10,000% under a 100% stack, and a share of 1 a raw 1 out of it.
     test('a switch to or from a 100% stack sets min and max back to auto, in the same change', async () => {
-        const bounded = { ...sample('column').valueAxis, min: 0, max: 100 };
-        const raw = await mount({ ...sample('column'), valueAxis: bounded });
+        const raw = await mount(bounded('column', { min: 0, max: 100 }));
         await raw.choose('Stacking', 'Standard');
-        expect(raw.last().valueAxis).toMatchObject({ min: 0, max: 100 });
+        expect(raw.last().axes.y.scale).toMatchObject({ min: 0, max: 100 });
         await raw.choose('Stacking', '100%');
         expect(raw.changes).toHaveLength(2);
-        expect(raw.last()).toMatchObject({ stacking: 'percent', valueAxis: { min: null, max: null } });
+        expect(raw.last()).toMatchObject({
+            plots: { column: { stacking: 'percent' } },
+            axes: { y: { scale: { min: null, max: null } } },
+        });
 
-        const shares = { ...sample('column').valueAxis, min: 0, max: 1 };
-        const percent = await mount({ ...sample('column'), stacking: 'percent', valueAxis: shares });
+        const percent = await mount(bounded('column', { min: 0, max: 1 }, 'percent'));
         await percent.choose('Stacking', 'None');
         expect(percent.changes).toHaveLength(1);
-        expect(percent.last()).toMatchObject({ stacking: 'none', valueAxis: { min: null, max: null } });
+        expect(percent.last()).toMatchObject({
+            plots: { column: { stacking: 'none' } },
+            axes: { y: { scale: { min: null, max: null } } },
+        });
     });
 
     test('a max at or below the min is not written', async () => {
-        const editor = await mount({ ...sample('line'), valueAxis: { ...sample('line').valueAxis, min: 50 } });
+        const editor = await mount(bounded('line', { min: 50 }));
         const max = [...document.querySelectorAll<HTMLInputElement>('input[placeholder="Auto"]')].at(-1);
         if (!max) throw new Error('no Max field');
         await act(async () => {
@@ -342,38 +388,36 @@ describe('ChartEditor', () => {
             setValue?.call(max, '400');
             max.dispatchEvent(new Event('input', { bubbles: true }));
         });
-        expect(editor.last().valueAxis).toMatchObject({ min: 50, max: 400 });
+        expect(editor.last().axes.y.scale).toMatchObject({ min: 50, max: 400 });
     });
 
     test('legend positions follow Google, and None hides it', async () => {
         const editor = await mount(sample('column'));
         expect(await editor.options('Legend')).toEqual(['Top', 'Bottom', 'Left', 'Right', 'None']);
         await editor.choose('Legend', 'None');
-        expect(editor.last().legend).toBe('none');
+        expect(editor.last().legend.position).toBe('none');
     });
 
     test('the gridlines box turns the value gridlines off', async () => {
         const editor = await mount(sample('column'));
         await editor.click('Vertical axis: Gridlines');
-        expect(editor.last().valueAxis.gridlines).toBe(false);
+        expect(editor.last().axes.y.gridlines.visible).toBe(false);
     });
 
     test('each axis section shows or hides its axis, one write a click', async () => {
         const column = await mount(sample('column'));
         await column.click('Horizontal axis: Show axis');
-        expect(column.changes).toEqual([
-            { ...sample('column'), categoryAxis: { ...sample('column').categoryAxis, visible: false } },
-        ]);
+        expect(column.changes).toEqual([withAxis(sample('column'), 'x', { visible: false })]);
         await column.click('Vertical axis: Show axis');
-        expect(column.last().valueAxis.visible).toBe(false);
+        expect(column.last().axes.y.visible).toBe(false);
         expect(column.changes).toHaveLength(2);
 
         // A bar chart lies on its side, so its vertical section holds the category axis.
         const bar = await mount(sample('bar'));
         await bar.click('Vertical axis: Show axis');
-        expect(bar.last().categoryAxis.visible).toBe(false);
+        expect(bar.last().axes.x.visible).toBe(false);
         await bar.click('Horizontal axis: Show axis');
-        expect(bar.last().valueAxis.visible).toBe(false);
+        expect(bar.last().axes.y.visible).toBe(false);
     });
 
     test("the category axis's section reverses its order, one write a click", async () => {
@@ -381,12 +425,11 @@ describe('ChartEditor', () => {
         // Google's words, each beside its box, the category axis's section first.
         expect(column.boxLabels()).toEqual(['Show axis', 'Reverse axis order', 'Show axis', 'Gridlines']);
         await column.click('Horizontal axis: Reverse axis order');
-        expect(column.changes).toEqual([
-            { ...sample('column'), categoryAxis: { ...sample('column').categoryAxis, reversed: true } },
-        ]);
+        const { x } = sample('column').axes;
+        expect(column.changes).toEqual([withAxis(sample('column'), 'x', { scale: { ...x.scale, reversed: true } })]);
         const bar = await mount(sample('bar'));
         await bar.click('Vertical axis: Reverse axis order');
-        expect(bar.last().categoryAxis.reversed).toBe(true);
+        expect(bar.last().axes.x.scale.reversed).toBe(true);
         expect(bar.boxLabels().filter((label) => label === 'Reverse axis order')).toHaveLength(1);
     });
 
@@ -425,14 +468,14 @@ describe('ChartEditor', () => {
 
     test('range data has no Edit data, as its grid is the sheet', async () => {
         const ref = { sheetId: 's1', row: [1, 3] as [number, number], column: [1, 1] as [number, number] };
-        const series = { id: 's-1', name: 'Points', values: ref, color: chartColor(0), markers: false, smooth: false };
+        const series = { id: 's-1', name: 'Points', values: ref };
         const range: ChartSpec = { ...sample('column'), data: { source: 'range', categories: null, series: [series] } };
         expect((await mount(range)).button('Edit data')).toBeUndefined();
     });
 
     test("a range chart's slices take the categories its sheet resolved", async () => {
         const ref = { sheetId: 's1', row: [1, 3] as [number, number], column: [1, 1] as [number, number] };
-        const series = { id: 's-1', name: 'Points', values: ref, color: chartColor(0), markers: false, smooth: false };
+        const series = { id: 's-1', name: 'Points', values: ref };
         const range: ChartSpec = { ...sample('column'), data: { source: 'range', categories: null, series: [series] } };
         const editor = await mount(range, undefined, { categories: ['Ajax', 'PSV', ''] });
         await editor.choose('Type', 'Pie');
@@ -447,18 +490,16 @@ describe('ChartEditor', () => {
         const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
         if (!swatch) throw new Error('the color popover has no swatch');
         await act(async () => swatch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-        const [first, second] = editor.last().data.series;
-        expect(first.color).toBeNull();
-        expect(second.color).toBe(swatch.title);
+        const { series } = editor.last();
+        expect(series['s-1'].color).toBeNull();
+        expect(series['s-2'].color).toBe(swatch.title);
     });
 
     test('an automatic color shows its palette color and says Automatic; a picked one resets to it in one write', async () => {
         const picked = sample('column');
-        if (picked.data.source !== 'inline') throw new Error('the sample is inline');
-        const [first, second, ...rest] = picked.data.series;
         const spec: ChartSpec = {
             ...picked,
-            data: { ...picked.data, series: [first, { ...second, color: '#123456' }, ...rest] },
+            series: { ...picked.series, 's-2': { ...DEFAULT_CHART_SERIES_STYLE, color: '#123456' } },
         };
         const editor = await mount(spec);
         expect(editor.row('Sun').textContent).toBe('Automatic');
@@ -485,12 +526,12 @@ describe('ChartEditor', () => {
     });
 
     test('a picked slice color resets to the palette in one write', async () => {
-        const editor = await mount({ ...sample('pie'), sliceColors: [null, '#123456'] });
+        const editor = await mount({ ...sample('pie'), points: { 's-1': { 1: { color: '#123456' } } } });
         expect(editor.row('400–500').textContent).toBe('#123456');
         expect(editor.row('500–600').textContent).toBe('Automatic');
         const reset = await editor.automatic('400–500');
         await act(async () => reset?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-        expect(editor.changes.map((spec) => spec.sliceColors)).toEqual([[null, null, null, null, null, null, null]]);
+        expect(editor.changes.map((spec) => spec.points)).toEqual([{ 's-1': { 1: { color: null } } }]);
     });
 
     test("a range chart's series rows take the names its sheet resolved, and a deleted series has none", async () => {
@@ -500,16 +541,17 @@ describe('ChartEditor', () => {
             column: [column, column] as [number, number],
         });
         const name = (column: number) => ({ ...ref(column), row: [0, 0] as [number, number] });
-        const style = (i: number) => ({ color: chartColor(i), markers: false, smooth: false });
+        const style = (i: number) => ({ ...DEFAULT_CHART_SERIES_STYLE, color: chartColor(i) });
         const range: ChartSpec = {
             ...sample('column'),
+            series: { 's-1': style(0), 's-2': style(1), 's-3': style(2) },
             data: {
                 source: 'range',
                 categories: null,
                 series: [
-                    { ...style(0), id: 's-1', name: name(1), values: ref(1) },
-                    { ...style(1), id: 's-2', name: '', values: null },
-                    { ...style(2), id: 's-3', name: name(2), values: ref(2) },
+                    { id: 's-1', name: name(1), values: ref(1) },
+                    { id: 's-2', name: '', values: null },
+                    { id: 's-3', name: name(2), values: ref(2) },
                 ],
             },
         };
@@ -521,7 +563,8 @@ describe('ChartEditor', () => {
         const swatch = document.querySelector<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]');
         if (!swatch) throw new Error('the color popover has no swatch');
         await act(async () => swatch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-        expect(editor.last().data.series.map((s) => s.color)).toEqual([chartColor(0), chartColor(1), swatch.title]);
+        const colors = ['s-1', 's-2', 's-3'].map((id) => editor.last().series[id].color);
+        expect(colors).toEqual([chartColor(0), chartColor(1), swatch.title]);
     });
 
     test('a title typed letter by letter is one gesture, released when the field is left', async () => {
@@ -534,7 +577,7 @@ describe('ChartEditor', () => {
             };
         });
         for (const typed of ['P', 'Po', 'Poi']) await editor.type('Chart title', typed);
-        expect(editor.changes.map((spec) => spec.title)).toEqual(['P', 'Po', 'Poi']);
+        expect(editor.changes.map((spec) => spec.title.text)).toEqual(['P', 'Po', 'Poi']);
         expect([opened, released]).toEqual([1, 0]);
         await editor.blur('Chart title');
         expect([opened, released]).toEqual([1, 1]);

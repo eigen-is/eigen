@@ -9,7 +9,7 @@ import {
 } from '../../../charts';
 import { getFontFamily } from '../../../constants/fonts';
 import { escapeXml } from '../../../core/xml';
-import type { ChartLayout, ChartSpec } from '../../../types/chart';
+import type { ChartLayout, ChartSpec, ChartType } from '../../../types/chart';
 import { parseFill, serializeFill, TRANSPARENT_FILL } from '../../../vector/fill';
 import { ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../../vector/kinds';
 import { svgTextLine } from '../../../vector/kinds/render-utils';
@@ -19,7 +19,7 @@ import type { VectorChartElement, VectorElement } from '../../../vector/types';
 import { DEFAULT_ELEMENT_PROPS } from '../../../vector/types';
 import { chart, richtext } from '../element-factories';
 
-const specJson = (over: Partial<ChartSpec> = {}, type: ChartSpec['type'] = 'column'): string =>
+const specJson = (over: Partial<ChartSpec> = {}, type: ChartType = 'column'): string =>
     JSON.stringify({ ...sampleChartSpec(type), ...over });
 
 const RANGE_SPEC = specJson({
@@ -31,9 +31,6 @@ const RANGE_SPEC = specJson({
                 id: 's-1',
                 name: 'Sales',
                 values: { sheetId: 's1', row: [1, 4], column: [1, 1] },
-                color: '#2a78d6',
-                markers: false,
-                smooth: false,
             },
         ],
     },
@@ -79,7 +76,7 @@ const textCount = (svg: string): number => svg.split('<text ').length - 1;
 
 describe('chart read', () => {
     test('a malformed spec stays stored as it is and draws the placeholder', () => {
-        const broken = '{"type":"column","data":';
+        const broken = '{"chart":{"type":"column"},"data":';
         const el = readChart({ chart: broken });
         expect(el.chart).toBe(broken);
         const svg = svgOf(el);
@@ -109,11 +106,11 @@ describe('chart read', () => {
 
     test('a new chart is the column sample in the host font, color and fill', () => {
         const el = chart({ id: 'c1' });
-        expect(el.chart).toBe(JSON.stringify({ ...sampleChartSpec('column'), fontFamily: 'Excalifont' }));
+        expect(el.chart).toBe(JSON.stringify(sampleChartSpec('column', 'Excalifont')));
         expect(parseFill(el.fill).style).toBe('cross-hatch');
         const slide = ELEMENT_KINDS.chart.defaults(SLIDES_STYLE_DEFAULTS);
-        expect(parseChartSpec(slide.chart)?.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
-        expect(parseChartSpec(ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS).chart)?.fontFamily).toBe(
+        expect(parseChartSpec(slide.chart)?.chart.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
+        expect(parseChartSpec(ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS).chart)?.chart.fontFamily).toBe(
             'Excalifont',
         );
     });
@@ -139,21 +136,16 @@ describe('chart placeholder', () => {
 describe('chart painter', () => {
     test('each shape draws exactly as the same element would on the canvas', () => {
         const el = chart({ id: 'c1' });
-        const out = layoutOf(el, { ...sampleChartSpec('column'), fontFamily: 'Excalifont' });
+        const out = layoutOf(el, sampleChartSpec('column', 'Excalifont'));
         const svg = svgOf(el);
         expect(out.shapes.filter((shape) => shape.type === 'rectangle').length).toBeGreaterThan(4);
         for (const shape of out.shapes) expect([shape.id, svg.includes(elementToSvg(shape))]).toEqual([shape.id, true]);
     });
 
     test('the labels are SVG text, one per layout label', () => {
-        const el = chart({
-            id: 'c1',
-            chart: specJson({ valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' } }),
-        });
-        const spec = {
-            ...sampleChartSpec('column'),
-            valueAxis: { ...sampleChartSpec('column').valueAxis, title: 'Points' },
-        };
+        const sample = sampleChartSpec('column');
+        const spec = { ...sample, axes: { ...sample.axes, y: { ...sample.axes.y, title: { text: 'Points' } } } };
+        const el = chart({ id: 'c1', chart: JSON.stringify(spec) });
         const { labels } = layoutOf(el, spec);
         const svg = svgOf(el);
         expect(textCount(svg)).toBe(labels.length);
@@ -179,13 +171,13 @@ describe('chart painter', () => {
     });
 
     test('every label draws in the spec font', () => {
-        const svg = svgOf(chart({ id: 'c1', chart: specJson({ fontFamily: 'JetBrains Mono' }) }));
+        const svg = svgOf(chart({ id: 'c1', chart: JSON.stringify(sampleChartSpec('column', 'JetBrains Mono')) }));
         const fonts = new Set(Array.from(svg.matchAll(/font-family="([^"]*)"/g), (m) => m[1]));
         expect(fonts).toEqual(new Set([escapeXml(getFontFamily('JetBrains Mono'))]));
     });
 
     test('label text is escaped', () => {
-        const svg = svgOf(chart({ id: 'c1', chart: specJson({ title: 'A < B & "C"' }) }));
+        const svg = svgOf(chart({ id: 'c1', chart: specJson({ title: { text: 'A < B & "C"' } }) }));
         expect(svg).toContain('A &lt; B &amp; &quot;C&quot;');
         expect(svg).not.toContain('A < B');
     });
@@ -251,7 +243,7 @@ describe('chart text', () => {
     });
 
     test('a chart draws its labels in the font of its spec, and none for a placeholder', () => {
-        const serif = chart({ id: 'c1', chart: specJson({ fontFamily: 'Source Serif 4' }) });
+        const serif = chart({ id: 'c1', chart: JSON.stringify(sampleChartSpec('column', 'Source Serif 4')) });
         const families = (el: VectorElement) => new Set(ELEMENT_KINDS[el.type].fontFamilies(el));
         expect(families(serif)).toEqual(new Set(['Source Serif 4']));
         expect(families(chart({ id: 'c2', chart: 'nope' }))).toEqual(new Set());

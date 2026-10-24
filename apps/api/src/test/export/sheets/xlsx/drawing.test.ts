@@ -31,20 +31,11 @@ const range = (row: [number, number], column: [number, number]) => ({ sheetId: '
 // Sales by region in My Data: names down A2:A4, numbers in B2:B4 under B1.
 const RANGE_SPEC = JSON.stringify({
     ...sampleChartSpec('column'),
-    title: 'Sales',
+    title: { text: 'Sales' },
     data: {
         source: 'range',
         categories: range([1, 3], [0, 0]),
-        series: [
-            {
-                id: 's-1',
-                name: range([0, 0], [1, 1]),
-                values: range([1, 3], [1, 1]),
-                color: null,
-                markers: false,
-                smooth: false,
-            },
-        ],
+        series: [{ id: 's-1', name: range([0, 0], [1, 1]), values: range([1, 3], [1, 1]) }],
     },
 });
 
@@ -216,7 +207,7 @@ describe('drawingOf', () => {
             data: {
                 source: 'range',
                 categories: null,
-                series: [{ id: 's-1', name: 'Sales', values, color: null, markers: false, smooth: false }],
+                series: [{ id: 's-1', name: 'Sales', values }],
             },
         });
         const pie: Sheet = { ...SUMMARY, charts: byId({ ...RANGED, spec }) };

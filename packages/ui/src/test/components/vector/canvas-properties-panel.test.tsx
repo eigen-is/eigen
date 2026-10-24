@@ -59,8 +59,6 @@ function textBox(id: string, over: Partial<VectorRichTextElement> = {}): VectorR
     };
 }
 
-const DEFAULT_SERIES = { color: null, markers: false, smooth: false };
-
 let cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
     for (const cleanup of cleanups) await cleanup();
@@ -256,7 +254,7 @@ describe('the panel for a chart', () => {
         const spec = sampleChartSpec('pie');
         const categories = Array.from({ length: MAX_SKETCH_POINTS + 1 }, (_, i) => `C${i}`);
         const values = categories.map(() => 1);
-        const data = { source: 'inline', categories, series: [{ ...DEFAULT_SERIES, id: 's-1', name: 'S', values }] };
+        const data = { source: 'inline', categories, series: [{ id: 's-1', name: 'S', values }] };
         const { container } = await renderPanel(chart({ chart: JSON.stringify({ ...spec, data }) }));
         expect(container.textContent).toContain(`${MAX_SKETCH_POINTS} points`);
     });

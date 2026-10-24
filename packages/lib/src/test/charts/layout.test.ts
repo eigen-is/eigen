@@ -2,14 +2,26 @@ import { describe, expect, test } from 'bun:test';
 import {
     chartColor,
     chartPointCount,
-    defaultChartPresentation,
+    DEFAULT_CHART_SERIES_STYLE,
+    defaultChartSpec,
     formatTickValue,
     layoutChart,
     layoutChartMessage,
     MAX_SKETCH_POINTS,
     sampleChartSpec,
 } from '../../charts';
-import type { ChartData, ChartLabel, ChartLayout, ChartPaint, ChartSpec, ChartType } from '../../types/chart';
+import type {
+    ChartAxis,
+    ChartData,
+    ChartLabel,
+    ChartLayout,
+    ChartPaint,
+    ChartSeriesStyle,
+    ChartSpec,
+    ChartStacking,
+    ChartType,
+    InlineChartSeries,
+} from '../../types/chart';
 import { CHART_STACKINGS, CHART_TYPES, LEGEND_POSITIONS } from '../../types/chart';
 import { parseFill, serializeFill, solidFill, TRANSPARENT_FILL } from '../../vector/fill';
 import { getLineHeightPx } from '../../vector/font-metrics';
@@ -29,17 +41,47 @@ const PAINT: ChartPaint = {
     fillStyle: 'solid',
 };
 
-const style = { markers: false, smooth: false };
+function series(name: string, values: (number | null)[]): InlineChartSeries {
+    return { id: name, name, values };
+}
 
-function series(name: string, values: (number | null)[], color: string | null = '#2a78d6') {
-    return { ...style, id: name, color, name, values };
+// A series' style: a new series' with the patch laid over.
+function style(patch: Partial<ChartSeriesStyle>): ChartSeriesStyle {
+    return { ...DEFAULT_CHART_SERIES_STYLE, ...patch };
+}
+
+// Markers on every series of the data.
+function marked(data: ChartData): ChartSpec['series'] {
+    return Object.fromEntries(data.series.map(({ id }) => [id, style({ marker: { visible: true } })]));
+}
+
+// One stacking for every plot type, as the type a test draws reads its own.
+function plots(stacking: ChartStacking): ChartSpec['plots'] {
+    return { column: { stacking }, bar: { stacking }, line: { stacking }, pie: { stacking } };
+}
+
+const DEFAULT_AXES = defaultChartSpec('column', { source: 'inline', categories: [], series: [] }).axes;
+
+type AxisPatch = { [K in keyof ChartAxis]?: ChartAxis[K] extends object ? Partial<ChartAxis[K]> : ChartAxis[K] };
+type SpecPatch = Partial<Omit<ChartSpec, 'chart' | 'axes'>> & {
+    chart?: Partial<ChartSpec['chart']>;
+    axes?: Partial<Record<'x' | 'y', AxisPatch>>;
+};
+
+// An axis the patch names lays over the untitled default, not the sample's titled one.
+function axisOver(axis: ChartAxis, patch: AxisPatch): ChartAxis {
+    return {
+        kind: patch.kind ?? axis.kind,
+        title: { ...axis.title, ...patch.title },
+        visible: patch.visible ?? axis.visible,
+        gridlines: { ...axis.gridlines, ...patch.gridlines },
+        labels: { ...axis.labels, ...patch.labels },
+        scale: { ...axis.scale, ...patch.scale },
+    };
 }
 
 // The sample without its axis titles, for tests that measure the room left to the plot and its labels.
-const UNTITLED: Partial<ChartSpec> = {
-    categoryAxis: defaultChartPresentation('column').categoryAxis,
-    valueAxis: defaultChartPresentation('column').valueAxis,
-};
+const UNTITLED: SpecPatch = { axes: { x: {}, y: {} } };
 
 type Options = { data?: ChartData; width?: number; height?: number; paint?: Partial<ChartPaint> };
 
@@ -48,10 +90,16 @@ function sampleData(type: ChartType): ChartData {
     return data.source === 'inline' ? data : { categories: [], series: [] };
 }
 
-function layout(type: ChartType, patch: Partial<ChartSpec> = {}, options: Options = {}): ChartLayout {
+function layout(type: ChartType, patch: SpecPatch = {}, options: Options = {}): ChartLayout {
+    const sample = sampleChartSpec(type);
+    const { chart, axes, ...rest } = patch;
+    const axis = (id: 'x' | 'y') => {
+        const over = axes?.[id];
+        return over ? axisOver(DEFAULT_AXES[id], over) : sample.axes[id];
+    };
     return layoutChart({
         id: 'c1',
-        spec: { ...sampleChartSpec(type), ...patch },
+        spec: { ...sample, ...rest, chart: { ...sample.chart, ...chart }, axes: { x: axis('x'), y: axis('y') } },
         data: options.data ?? sampleData(type),
         width: options.width ?? 640,
         height: options.height ?? 400,
@@ -143,11 +191,10 @@ describe('layoutChart invariants', () => {
     test.each(cases)(
         '$type legend $legend stacking $stacking at $width × $height',
         ({ type, legend, stacking, width, height }) => {
-            const spec: Partial<ChartSpec> = {
-                legend,
-                stacking,
-                categoryAxis: { ...defaultChartPresentation('column').categoryAxis, title: 'Teams' },
-                valueAxis: { ...defaultChartPresentation('column').valueAxis, title: 'Points' },
+            const spec: SpecPatch = {
+                legend: { position: legend },
+                plots: plots(stacking),
+                axes: { x: { title: { text: 'Teams' } }, y: { title: { text: 'Points' } } },
             };
             const out = layout(type, spec, { width, height });
 
@@ -179,12 +226,8 @@ describe('layoutChart invariants', () => {
     test('paint order: background, gridlines, bars, lines, markers, baseline, legend', () => {
         const order = ['background', 'gridline', 'bar', 'slice', 'line', 'marker', 'baseline', 'legend'];
         for (const type of CHART_TYPES) {
-            const { categories, series } = sampleData(type);
-            const out = layout(
-                type,
-                { legend: 'top' },
-                { data: { categories, series: series.map((s) => ({ ...s, markers: true })) } },
-            );
+            const data = sampleData(type);
+            const out = layout(type, { legend: { position: 'top' }, series: marked(data) }, { data });
             const ranks = out.shapes.map((shape) => order.indexOf(shape.id.split(':')[1]));
             expect(ranks).not.toContain(-1);
             expect(ranks).toEqual([...ranks].sort((x, y) => x - y));
@@ -219,12 +262,7 @@ describe('layoutChart invariants', () => {
             if (shape.id.split(':')[1] === 'gridline') expect(shape.opacity).toBeLessThanOrEqual(20);
             else expect(shape.opacity).toBe(100);
         }
-        expect(
-            ofPart(
-                layout('column', { valueAxis: { ...defaultChartPresentation('column').valueAxis, gridlines: false } }),
-                'gridline',
-            ),
-        ).toEqual([]);
+        expect(ofPart(layout('column', { axes: { y: { gridlines: { visible: false } } } }), 'gridline')).toEqual([]);
     });
 
     test('the paint dashes the gridlines and the baseline, never the marks', () => {
@@ -252,7 +290,7 @@ describe('layoutChart invariants', () => {
         // Narrow in Inter, a full cell each in a monospace face.
         const data = { categories: ['illicit', 'iii'], series: [series('S', [3, 5])] };
         const bar = (fontFamily: string) => {
-            const out = layout('bar', { ...UNTITLED, fontFamily }, { data });
+            const out = layout('bar', { ...UNTITLED, chart: { fontFamily } }, { data });
             expect(out.labels.every((label) => label.fontFamily === fontFamily)).toBe(true);
             const names = out.labels.filter((label) => data.categories.includes(label.text));
             const widest = Math.max(...names.map((l) => measureLabel(l.text, fontFamily, l.fontSize, l.bold)));
@@ -269,7 +307,7 @@ describe('layoutChart invariants', () => {
 describe('column and bar', () => {
     const data: ChartData = {
         categories: ['A', 'B', 'C', 'D'],
-        series: [series('S1', [10, 20, 0, 40]), series('S2', [5, -15, 25, null], '#eb6834')],
+        series: [series('S1', [10, 20, 0, 40]), series('S2', [5, -15, 25, null])],
     };
 
     test('column heights are proportional to the values, a zero column has zero height', () => {
@@ -306,7 +344,7 @@ describe('column and bar', () => {
 
     test('stacked: positives and negatives stack apart, each top at its sum', () => {
         for (const type of ['column', 'bar'] as const) {
-            const out = layout(type, { stacking: 'stacked' }, { data });
+            const out = layout(type, { plots: plots('stacked') }, { data });
             const bars = rects(out, 'bar');
             const along = (bar: VectorRectangleElement) => (type === 'column' ? bar.height : bar.width);
             const perUnit = along(bars[0]) / 10;
@@ -336,10 +374,10 @@ describe('column and bar', () => {
     test('100% stacked: every category fills the axis, each bar its share, the ticks percents', () => {
         const shares: ChartData = {
             categories: ['A', 'B'],
-            series: [series('S1', [10, 1]), series('S2', [30, 3], '#eb6834')],
+            series: [series('S1', [10, 1]), series('S2', [30, 3])],
         };
         for (const type of ['column', 'bar'] as const) {
-            const out = layout(type, { stacking: 'percent' }, { data: shares });
+            const out = layout(type, { plots: plots('percent') }, { data: shares });
             const bars = rects(out, 'bar');
             const along = (bar: VectorRectangleElement) => (type === 'column' ? bar.height : bar.width);
             const span = (c: number) =>
@@ -357,12 +395,8 @@ describe('column and bar', () => {
     });
 
     test('100% stacked: min and max are shares, so 0.5 ends the axis at 50%', () => {
-        const data: ChartData = { categories: ['A'], series: [series('S1', [1]), series('S2', [3], '#eb6834')] };
-        const out = layout(
-            'column',
-            { stacking: 'percent', valueAxis: { ...defaultChartPresentation('column').valueAxis, max: 0.5 } },
-            { data },
-        );
+        const data: ChartData = { categories: ['A'], series: [series('S1', [1]), series('S2', [3])] };
+        const out = layout('column', { plots: plots('percent'), axes: { y: { scale: { max: 0.5 } } } }, { data });
         const ticks = out.labels.filter((label) => label.anchor === 'end').map((label) => label.text);
         expect(ticks[0]).toBe('0%');
         expect(ticks.at(-1)).toBe('50%');
@@ -371,9 +405,9 @@ describe('column and bar', () => {
     test('100% stacked with mixed signs: shares of the absolute sum, negatives below zero', () => {
         const mixed: ChartData = {
             categories: ['A', 'B'],
-            series: [series('S1', [5, 4]), series('S2', [-3, 4], '#eb6834')],
+            series: [series('S1', [5, 4]), series('S2', [-3, 4])],
         };
-        const out = layout('column', { stacking: 'percent' }, { data: mixed });
+        const out = layout('column', { plots: plots('percent') }, { data: mixed });
         const bar = (id: string) => rects(out, 'bar').find((shape) => shape.id === `c1:${id}`);
         const [up, down, b0, b1] = ['bar:0:0', 'bar:1:0', 'bar:0:1', 'bar:1:1'].map(bar);
         expect((up?.height ?? 0) / (down?.height ?? 1)).toBeCloseTo(5 / 3);
@@ -385,10 +419,10 @@ describe('column and bar', () => {
     test('100% stacked: a category that totals zero draws no bar and no NaN', () => {
         const zero: ChartData = {
             categories: ['A', 'B', 'C'],
-            series: [series('S1', [0, 10, null]), series('S2', [0, 30, null], '#eb6834')],
+            series: [series('S1', [0, 10, null]), series('S2', [0, 30, null])],
         };
         for (const type of ['column', 'bar'] as const) {
-            const out = layout(type, { stacking: 'percent' }, { data: zero });
+            const out = layout(type, { plots: plots('percent') }, { data: zero });
             const ids = rects(out, 'bar').map((bar) => bar.id);
             expect(ids).toEqual(['c1:bar:0:1', 'c1:bar:1:1']);
             for (const n of numbersIn(out)) expect(Number.isFinite(n)).toBe(true);
@@ -403,13 +437,7 @@ describe('column and bar', () => {
     });
 
     test('min and max override the nice domain, and bars stay in the plot', () => {
-        const out = layout(
-            'column',
-            {
-                valueAxis: { ...defaultChartPresentation('column').valueAxis, min: 10, max: 30 },
-            },
-            { data },
-        );
+        const out = layout('column', { axes: { y: { scale: { min: 10, max: 30 } } } }, { data });
         const ticks = out.labels.filter((label) => label.anchor === 'end').map((label) => Number(label.text));
         expect(ticks[0]).toBe(10);
         expect(ticks.at(-1)).toBe(30);
@@ -457,7 +485,7 @@ describe('column and bar', () => {
     test("a bar chart's value labels drop ticks until they stop touching", () => {
         const wide: ChartData = { categories: ['A', 'B'], series: [series('S', [123456789, -987654321])] };
         for (const width of [240, 320, 480, 640, 1200]) {
-            const out = layout('bar', { title: '', legend: 'none' }, { data: wide, width });
+            const out = layout('bar', { title: { text: '' }, legend: { position: 'none' } }, { data: wide, width });
             const ticks = out.labels.filter((label) => label.anchor === 'middle').map(labelBounds);
             expect(ticks.length).toBeGreaterThanOrEqual(2);
             for (let i = 1; i < ticks.length; i++) expect(overlaps(ticks[i - 1], ticks[i])).toBe(false);
@@ -544,10 +572,7 @@ describe('category labels', () => {
     });
 
     test('axis titles: the category title below, the value title turned -90', () => {
-        const out = layout('column', {
-            categoryAxis: { ...defaultChartPresentation('column').categoryAxis, title: 'Teams' },
-            valueAxis: { ...defaultChartPresentation('column').valueAxis, title: 'Points' },
-        });
+        const out = layout('column', { axes: { x: { title: { text: 'Teams' } }, y: { title: { text: 'Points' } } } });
         const teams = out.labels.find((label) => label.text === 'Teams');
         const points = out.labels.find((label) => label.text === 'Points');
         expect(teams?.rotate).toBe(0);
@@ -568,7 +593,7 @@ describe('category labels', () => {
             ],
         };
         for (const legend of ['none', 'top'] as const) {
-            const out = layout('bar', { ...UNTITLED, legend }, { data });
+            const out = layout('bar', { ...UNTITLED, legend: { position: legend } }, { data });
             const above = out.labels.filter((label) => label.bold || label.anchor === 'start').map(labelBounds);
             const ticks = out.labels.filter((label) => label.anchor === 'middle' && !label.bold).map(labelBounds);
             const names = out.labels.filter((label) => label.anchor === 'end').map(labelBounds);
@@ -586,15 +611,11 @@ describe('category labels', () => {
 describe('axes', () => {
     const data: ChartData = {
         categories: ['A', 'B', 'C', 'D'],
-        series: [series('S1', [10, 20, 30, 40], '#2a78d6'), series('S2', [5, 15, 25, 35], '#eb6834')],
+        series: [series('S1', [10, 20, 30, 40]), series('S2', [5, 15, 25, 35])],
     };
-    type AxesPatch = { category?: Partial<ChartSpec['categoryAxis']>; value?: Partial<ChartSpec['valueAxis']> };
-    function axes(type: ChartType, { category = {}, value = {} }: AxesPatch): Partial<ChartSpec> {
-        const spec = defaultChartPresentation(type);
-        return {
-            categoryAxis: { ...spec.categoryAxis, ...category },
-            valueAxis: { ...spec.valueAxis, ...value },
-        };
+    // Both axes laid over the untitled defaults.
+    function axes({ x = {}, y = {} }: { x?: AxisPatch; y?: AxisPatch }): SpecPatch {
+        return { axes: { x, y } };
     }
     const bar = (out: ChartLayout, s: number, c: number) => {
         const found = rects(out, 'bar').find((shape) => shape.id === `c1:bar:${s}:${c}`);
@@ -607,7 +628,7 @@ describe('axes', () => {
     test('a hidden category axis draws no names and no baseline, and the plot takes its room', () => {
         for (const type of ['column', 'bar'] as const) {
             const shown = layout(type, {}, { data });
-            const hidden = layout(type, axes(type, { category: { visible: false } }), { data });
+            const hidden = layout(type, axes({ x: { visible: false } }), { data });
             expect(texts(shown)).toContain('A');
             expect(texts(hidden)).not.toContain('A');
             expect(lines(hidden, 'baseline')).toEqual([]);
@@ -628,10 +649,10 @@ describe('axes', () => {
                 return type === 'column' ? positive.y + positive.height : positive.x;
             };
             const at = (shape: VectorLinearElement) => (type === 'column' ? shape.y : shape.x);
-            const hidden = layout(type, axes(type, { category: { visible: false } }), { data: signed });
+            const hidden = layout(type, axes({ x: { visible: false } }), { data: signed });
             expect(lines(hidden, 'baseline')).toEqual([]);
             expect(lines(hidden, 'gridline').some((shape) => Math.abs(at(shape) - zero(hidden)) < 0.01)).toBe(true);
-            const bare = layout(type, axes(type, { category: { visible: false }, value: { gridlines: false } }), {
+            const bare = layout(type, axes({ x: { visible: false }, y: { gridlines: { visible: false } } }), {
                 data: signed,
             });
             expect(bare.shapes.filter((shape) => shape.type === 'line')).toEqual([]);
@@ -641,9 +662,9 @@ describe('axes', () => {
     test('a hidden category axis keeps half a line below the plot for the lowest tick label, off the title and legend', () => {
         for (const type of ['column', 'line'] as const) {
             for (const patch of [
-                axes(type, { category: { visible: false, title: 'Teams' } }),
-                { ...axes(type, { category: { visible: false } }), legend: 'bottom' as const },
-            ]) {
+                axes({ x: { visible: false, title: { text: 'Teams' } } }),
+                { ...axes({ x: { visible: false } }), legend: { position: 'bottom' } },
+            ] satisfies SpecPatch[]) {
                 const out = layout(type, patch, { data });
                 const ticks = out.labels.filter((label) => isTick(label.text));
                 const lowest = ticks.reduce((a, b) => (a.y > b.y ? a : b));
@@ -658,7 +679,7 @@ describe('axes', () => {
     test('a hidden value axis draws no tick labels, keeps its gridlines, and the plot takes its room', () => {
         for (const type of ['column', 'bar'] as const) {
             const shown = layout(type, {}, { data });
-            const hidden = layout(type, axes(type, { value: { visible: false } }), { data });
+            const hidden = layout(type, axes({ y: { visible: false } }), { data });
             expect(texts(shown).some(isTick)).toBe(true);
             expect(texts(hidden).some(isTick)).toBe(false);
             expect(lines(hidden, 'gridline').length).toBeGreaterThan(0);
@@ -674,9 +695,9 @@ describe('axes', () => {
     test('a hidden axis keeps its title', () => {
         const out = layout(
             'column',
-            axes('column', {
-                category: { visible: false, title: 'Teams' },
-                value: { visible: false, title: 'Points' },
+            axes({
+                x: { visible: false, title: { text: 'Teams' } },
+                y: { visible: false, title: { text: 'Points' } },
             }),
             { data },
         );
@@ -691,7 +712,7 @@ describe('axes', () => {
     });
 
     test('a reversed bar chart runs up from the bottom, each first series lowest in its band, as Excel draws one', () => {
-        const out = layout('bar', axes('bar', { category: { reversed: true } }), { data });
+        const out = layout('bar', axes({ x: { scale: { reversed: true } } }), { data });
         expect(bar(out, 0, 0).y).toBeGreaterThan(bar(out, 0, 3).y);
         expect(bar(out, 0, 0).y).toBeGreaterThan(bar(out, 1, 0).y);
         const name = (text: string) => out.labels.find((label) => label.text === text)?.y ?? Number.NaN;
@@ -699,11 +720,11 @@ describe('axes', () => {
     });
 
     test('a reversed column or line chart runs right to left', () => {
-        const column = layout('column', axes('column', { category: { reversed: true } }), { data });
+        const reversed = axes({ x: { scale: { reversed: true } } });
+        const column = layout('column', reversed, { data });
         expect(bar(column, 0, 0).x).toBeGreaterThan(bar(column, 0, 3).x);
         expect(bar(column, 0, 0).x).toBeGreaterThan(bar(column, 1, 0).x);
-        const marked = { ...data, series: data.series.map((s) => ({ ...s, markers: true })) };
-        const line = layout('line', axes('line', { category: { reversed: true } }), { data: marked });
+        const line = layout('line', { ...reversed, series: marked(data) }, { data });
         const marker = (c: number) =>
             ofPart(line, 'marker').find((shape) => shape.id === `c1:marker:0:${c}`)?.x ?? Number.NaN;
         expect(marker(0)).toBeGreaterThan(marker(3));
@@ -712,7 +733,7 @@ describe('axes', () => {
     test('hidden and reversed axes stay inside the box at every size', () => {
         for (const type of CHART_TYPES) {
             for (const [width, height] of SIZES) {
-                const spec = axes(type, { category: { visible: false, reversed: true }, value: { visible: false } });
+                const spec = axes({ x: { visible: false, scale: { reversed: true } }, y: { visible: false } });
                 const out = layout(type, spec, { width, height });
                 for (const n of numbersIn(out)) expect(Number.isFinite(n)).toBe(true);
                 for (const shape of out.shapes) expect(within(shapeBounds(shape), width, height)).toBe(true);
@@ -724,7 +745,7 @@ describe('axes', () => {
 
 describe('legend', () => {
     test('top and bottom are a centered row of swatches, left and right a column', () => {
-        const top = layout('column', { legend: 'top' });
+        const top = layout('column', { legend: { position: 'top' } });
         const swatches = rects(top, 'legend');
         expect(swatches.map((swatch) => swatch.fill)).toEqual([0, 1, 2].map((i) => solidFill(chartColor(i))));
         expect(swatches[0].y).toBeCloseTo(swatches[1].y);
@@ -735,24 +756,28 @@ describe('legend', () => {
         const right = (last?.x ?? 0) + measureLabel('Hot star', 'Inter', last?.fontSize ?? 0, false);
         expect((left + right) / 2).toBeCloseTo(320, -1);
 
-        const bottom = rects(layout('column', { legend: 'bottom' }), 'legend');
+        const bottom = rects(layout('column', { legend: { position: 'bottom' } }), 'legend');
         expect(bottom[0].y).toBeGreaterThan(300);
 
         for (const side of ['left', 'right'] as const) {
-            const column = rects(layout('column', { legend: side }), 'legend');
+            const column = rects(layout('column', { legend: { position: side } }), 'legend');
             expect(column[0].x).toBeCloseTo(column[1].x);
             expect(column[1].y).toBeGreaterThan(column[0].y);
             expect(side === 'left' ? column[0].x < 100 : column[0].x > 400).toBe(true);
         }
-        expect(rects(layout('column', { legend: 'none' }), 'legend')).toEqual([]);
+        expect(rects(layout('column', { legend: { position: 'none' } }), 'legend')).toEqual([]);
     });
 
     test('a null series color is the palette color at its index, on the bar and the swatch', () => {
         const data: ChartData = {
             categories: ['A'],
-            series: [series('S1', [1], null), series('S2', [2], '#123456'), series('S3', [3], null)],
+            series: [series('S1', [1]), series('S2', [2]), series('S3', [3])],
         };
-        const out = layout('column', {}, { data, paint: { fillStyle: 'hachure' } });
+        const out = layout(
+            'column',
+            { series: { S2: style({ color: '#123456' }) } },
+            { data, paint: { fillStyle: 'hachure' } },
+        );
         const colors = [chartColor(0), '#123456', chartColor(2)];
         expect(rects(out, 'legend').map((swatch) => swatch.strokeColor)).toEqual(colors);
         expect(rects(out, 'bar').map((bar) => bar.strokeColor)).toEqual(colors);
@@ -763,7 +788,7 @@ describe('legend', () => {
         const names = Array.from({ length: 12 }, (_, i) => `Series number ${i + 1}`);
         const out = layout(
             'column',
-            { legend: 'top' },
+            { legend: { position: 'top' } },
             {
                 data: { categories: ['A', 'B'], series: names.map((name, i) => series(name, [i, i + 1])) },
             },
@@ -777,8 +802,16 @@ describe('line', () => {
     const categories = ['A', 'B', 'C', 'D', 'E'];
     const values = [1, 2, null, 4, 5];
 
-    function lineOf(blanks: ChartSpec['blanks'], s = { ...series('S', values), markers: true }) {
-        return layout('line', { blanks }, { data: { categories, series: [s] } });
+    function lineOf(
+        blanks: ChartSpec['chart']['blanks'],
+        patch: Partial<ChartSeriesStyle> = { marker: { visible: true } },
+        s = series('S', values),
+    ) {
+        return layout(
+            'line',
+            { chart: { blanks }, series: { S: style(patch) } },
+            { data: { categories, series: [s] } },
+        );
     }
 
     test('points sit at band centers with the min corner at 0,0', () => {
@@ -802,12 +835,12 @@ describe('line', () => {
     });
 
     test('a lone point between gaps draws no line', () => {
-        const out = lineOf('gap', { ...series('S', [1, null, 3, null, 5]), markers: false });
+        const out = lineOf('gap', {}, series('S', [1, null, 3, null, 5]));
         expect(lines(out, 'line')).toEqual([]);
     });
 
     test('smooth draws round, markers are ellipses in the series color', () => {
-        const out = lineOf('span', { ...series('S', values, '#1baf7a'), markers: true, smooth: true });
+        const out = lineOf('span', { color: '#1baf7a', marker: { visible: true }, line: { smooth: true } });
         expect(lines(out, 'line')[0].roundness).toBe('round');
         expect(lines(out, 'line')[0].strokeColor).toBe('#1baf7a');
         expect(
@@ -834,12 +867,14 @@ describe('pie', () => {
         for (const slice of pie) expect(slice.x).toBe(first.x);
     });
 
-    test('slices take sliceColors, then the palette', () => {
-        const out = layout('pie', { sliceColors: ['#000000'] });
+    test("slices take their first series' points, then the palette, and the legend shows the same", () => {
+        const out = layout('pie', { legend: { position: 'right' }, points: { 's-1': { 0: { color: '#000000' } } } });
         const pie = slices(out);
         expect(pie[0].fill).toBe(solidFill('#000000'));
         expect(pie[1].fill).toBe(solidFill(chartColor(1)));
-        const automatic = slices(layout('pie', { sliceColors: [null, '#000000'] }));
+        expect(rects(out, 'legend')[0].fill).toBe(solidFill('#000000'));
+        const points = { 's-1': { 1: { color: '#000000' }, 2: { color: null } }, other: { 0: { color: '#ffffff' } } };
+        const automatic = slices(layout('pie', { points }));
         expect(automatic.map((slice) => slice.fill)).toEqual(
             [chartColor(0), '#000000', chartColor(2), chartColor(3), chartColor(4), chartColor(5), chartColor(6)].map(
                 (color) => solidFill(color),
@@ -942,7 +977,7 @@ describe('unusable data', () => {
         for (const [type, stacking] of CHART_TYPES.flatMap((type) => CHART_STACKINGS.map((s) => [type, s] as const))) {
             const out = layout(
                 type,
-                { stacking },
+                { plots: plots(stacking) },
                 {
                     data: {
                         categories: ['A', 'B'],
@@ -976,11 +1011,15 @@ describe('edge cases', () => {
     });
 
     test('the value axis draws at most 20 ticks, however many d3 hands back', () => {
-        const column = layout('column', { title: '', legend: 'none' }, { data: one([61]), width: 400, height: 2000 });
+        const column = layout(
+            'column',
+            { title: { text: '' }, legend: { position: 'none' } },
+            { data: one([61]), width: 400, height: 2000 },
+        );
         expect(valueTicks(column).length).toBeGreaterThan(10);
         expect(valueTicks(column).length).toBeLessThanOrEqual(20);
-        const pinned = { ...defaultChartPresentation('column').valueAxis, min: 10, max: 30 };
-        const fixed = layout('column', { valueAxis: pinned }, { data: one([20]), width: 400, height: 2000 });
+        const pinned = { axes: { y: { scale: { min: 10, max: 30 } } } };
+        const fixed = layout('column', pinned, { data: one([20]), width: 400, height: 2000 });
         expect(valueTicks(fixed).length).toBeLessThanOrEqual(20);
     });
 
@@ -1015,7 +1054,7 @@ describe('edge cases', () => {
     test('no plottable value says No data for every type', () => {
         for (const type of CHART_TYPES) {
             for (const blanks of ['gap', 'zero', 'span'] as const) {
-                const out = layout(type, { blanks }, { data: one([null, null]) });
+                const out = layout(type, { chart: { blanks } }, { data: one([null, null]) });
                 expect(out.shapes.map((shape) => shape.id)).toEqual(['c1:background']);
                 expect(out.labels.map((label) => label.text)).toEqual(['No data']);
             }
@@ -1037,7 +1076,7 @@ describe('edge cases', () => {
 
     test('a stack of mixed signs covers both sums, negatives below zero', () => {
         const data = { categories: ['A', 'B'], series: [series('S', [5, -3]), series('T', [2, -1])] };
-        const out = layout('column', { stacking: 'stacked' }, { data });
+        const out = layout('column', { plots: plots('stacked') }, { data });
         const ticks = valueTicks(out).map(Number);
         expect(ticks[0]).toBeLessThanOrEqual(-4);
         expect(ticks.at(-1)).toBeGreaterThanOrEqual(7);
@@ -1048,8 +1087,8 @@ describe('edge cases', () => {
     });
 
     test('pinned bounds: exact decimal labels, and a min past the data draws a finite empty plot', () => {
-        const axis = { ...defaultChartPresentation('column').valueAxis, min: 0.1, max: 0.7 };
-        expect(valueTicks(layout('column', { ...UNTITLED, valueAxis: axis }, { data: one([0.3, 0.5]) }))).toEqual([
+        const pinned = { axes: { x: {}, y: { scale: { min: 0.1, max: 0.7 } } } };
+        expect(valueTicks(layout('column', pinned, { data: one([0.3, 0.5]) }))).toEqual([
             '0.1',
             '0.2',
             '0.3',
@@ -1058,7 +1097,7 @@ describe('edge cases', () => {
             '0.6',
             '0.7',
         ]);
-        const past = layout('column', { valueAxis: { ...axis, min: 200, max: null } }, { data: one([1, 2]) });
+        const past = layout('column', { axes: { y: { scale: { min: 200, max: null } } } }, { data: one([1, 2]) });
         for (const n of numbersIn(past)) expect(Number.isFinite(n)).toBe(true);
         expect(Number(valueTicks(past)[0])).toBe(200);
         for (const bar of rects(past, 'bar')) expect(bar.height).toBe(0);
@@ -1066,23 +1105,23 @@ describe('edge cases', () => {
             [1e20, null],
             [0, 1e-310],
         ]) {
-            const out = layout('column', { valueAxis: { ...axis, min, max } }, { data: one([1, 2]) });
+            const out = layout('column', { axes: { y: { scale: { min, max } } } }, { data: one([1, 2]) });
             for (const n of numbersIn(out)) expect(Number.isFinite(n)).toBe(true);
         }
     });
 
     test('a 100% stack holds at the edges: denormals, no data and the tick cap', () => {
         for (const type of ['column', 'bar'] as const) {
-            const tiny = layout(type, { stacking: 'percent' }, { ...small, data: one([1e-310, 2e-310]) });
+            const tiny = layout(type, { plots: plots('percent') }, { ...small, data: one([1e-310, 2e-310]) });
             for (const n of numbersIn(tiny)) expect(Number.isFinite(n)).toBe(true);
             const ticks = tiny.labels.map((label) => label.text).filter((text) => text.endsWith('%'));
             expect([ticks[0], ticks.at(-1)]).toEqual(['0%', '100%']);
-            const blank = layout(type, { stacking: 'percent' }, { data: one([null, null]) });
+            const blank = layout(type, { plots: plots('percent') }, { data: one([null, null]) });
             expect(blank.labels.map((label) => label.text)).toEqual(['No data']);
         }
         const tall = layout(
             'column',
-            { stacking: 'percent', title: '', legend: 'none' },
+            { plots: plots('percent'), title: { text: '' }, legend: { position: 'none' } },
             { data: one([1]), width: 400, height: 2000 },
         );
         expect(valueTicks(tall).length).toBeLessThanOrEqual(20);
@@ -1093,7 +1132,7 @@ describe('edge cases', () => {
         for (const legend of ['top', 'bottom', 'left', 'right'] as const) {
             const out = layout(
                 'column',
-                { legend, title: '' },
+                { legend: { position: legend }, title: { text: '' } },
                 { ...small, data: { categories: ['A', 'B'], series: many } },
             );
             const swatches = rects(out, 'legend');
@@ -1117,7 +1156,6 @@ describe('edge cases', () => {
                 series(
                     `S${s}`,
                     [3, 5, 2, 4, 1].map((v) => v + s),
-                    chartColor(s),
                 ),
             ),
         };
@@ -1128,7 +1166,7 @@ describe('edge cases', () => {
                     [400, 300],
                     [1200, 675],
                 ]) {
-                    const out = layout(type, { stacking: 'none' }, { data, width, height, paint });
+                    const out = layout(type, { plots: plots('none') }, { data, width, height, paint });
                     const bars = rects(out, 'bar');
                     expect(bars).toHaveLength(20);
                     // Each bar's extent across the band, its outline included.
@@ -1146,7 +1184,7 @@ describe('edge cases', () => {
 });
 
 describe('outlines follow the fill style', () => {
-    const legend = { legend: 'right' } as const;
+    const legend: SpecPatch = { legend: { position: 'right' } };
 
     test('a solid fill draws bars, slices and legend swatches with no outline, the bars filling their slots', () => {
         const column = layout('column', legend, { paint: { strokeWidth: 4 } });
@@ -1198,9 +1236,8 @@ describe('sketch cap', () => {
                 series(
                     `S${s}`,
                     categories.map((_, i) => 1 + ((i + s) % 5)),
-                    chartColor(s),
                 ),
-            ).map((s) => ({ ...s, markers: type === 'line' })),
+            ),
         };
     }
     const DATA_PARTS = new Set(['bar', 'slice', 'line', 'marker']);
@@ -1208,11 +1245,12 @@ describe('sketch cap', () => {
     test('counts the points the chart plots: a pie its first series, others every series', () => {
         const spec = sampleChartSpec('column');
         expect(chartPointCount(spec, wide('column', 40))).toBe(40);
-        expect(chartPointCount({ ...spec, type: 'pie' }, wide('column', 40))).toBe(10);
+        expect(chartPointCount({ ...spec, chart: { ...spec.chart, type: 'pie' } }, wide('column', 40))).toBe(10);
     });
 
     test.each([...CHART_TYPES])('%s: at the cap every shape keeps the sketch', (type) => {
-        const out = layout(type, { legend: 'top' }, { data: wide(type, MAX_SKETCH_POINTS), paint: SKETCH });
+        const data = wide(type, MAX_SKETCH_POINTS);
+        const out = layout(type, { legend: { position: 'top' }, series: marked(data) }, { data, paint: SKETCH });
         for (const shape of out.shapes) {
             const part = shape.id.split(':')[1];
             if (part === 'background') continue;
@@ -1223,10 +1261,11 @@ describe('sketch cap', () => {
     });
 
     test.each([...CHART_TYPES])('%s: past the cap the data draws flat, the rest keeps the sketch', (type) => {
+        const data = wide(type, MAX_SKETCH_POINTS + 4);
         const out = layout(
             type,
-            { legend: 'top' },
-            { data: wide(type, MAX_SKETCH_POINTS + 4), paint: SKETCH, width: 2000, height: 1200 },
+            { legend: { position: 'top' }, series: marked(data) },
+            { data, paint: SKETCH, width: 2000, height: 1200 },
         );
         const parts = new Set(out.shapes.map((shape) => shape.id.split(':')[1]));
         expect(parts.has('legend')).toBe(true);

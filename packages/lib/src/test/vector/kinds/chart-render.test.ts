@@ -27,9 +27,6 @@ const RANGE_SPEC: ChartSpec = {
                 id: 's-1',
                 name: 'Sales',
                 values: { sheetId: 's1', row: [1, 2], column: [1, 1] },
-                color: '#2a78d6',
-                markers: false,
-                smooth: false,
             },
         ],
     },
@@ -37,7 +34,7 @@ const RANGE_SPEC: ChartSpec = {
 
 const RESOLVED: ChartData = {
     categories: ['North', 'South'],
-    series: [{ id: 's-1', name: 'Sales', values: [3, 5], color: '#2a78d6', markers: false, smooth: false }],
+    series: [{ id: 's-1', name: 'Sales', values: [3, 5] }],
 };
 
 const svgOf = (spec: ChartSpec | null, data?: ChartData | 'ref' | 'too-many-points'): string =>
@@ -123,9 +120,9 @@ describe('renderChartSpecSvg', () => {
     test('the labels draw in the spec font; the placeholder, which has no spec, in Inter', () => {
         const fontsOf = (svg: string) => new Set(Array.from(svg.matchAll(/font-family="([^"]*)"/g), (m) => m[1]));
         const face = (font: string) => new Set([escapeXml(getFontFamily(font))]);
-        const serif: ChartSpec = { ...sampleChartSpec('column'), fontFamily: 'Source Serif 4' };
-        expect(fontsOf(svgOf(serif))).toEqual(face('Source Serif 4'));
-        expect(fontsOf(svgOf({ ...RANGE_SPEC, fontFamily: 'Excalifont' }, 'ref'))).toEqual(face('Excalifont'));
+        expect(fontsOf(svgOf(sampleChartSpec('column', 'Source Serif 4')))).toEqual(face('Source Serif 4'));
+        const excalifont = { ...RANGE_SPEC, chart: { ...RANGE_SPEC.chart, fontFamily: 'Excalifont' } };
+        expect(fontsOf(svgOf(excalifont, 'ref'))).toEqual(face('Excalifont'));
         expect(fontsOf(svgOf(null))).toEqual(face('Inter'));
     });
 
@@ -145,7 +142,7 @@ describe('renderChartSpecSvg', () => {
             roughness: 0,
         };
         for (const type of ['column', 'pie'] as const) {
-            const spec = { ...sampleChartSpec(type), legend: 'top' as const };
+            const spec: ChartSpec = { ...sampleChartSpec(type), legend: { position: 'top' } };
             if (spec.data.source !== 'inline') throw new Error('expected inline data');
             const svg = renderChartSpecSvg({ id: 'c1', spec, width: 600, height: 371, look });
             const { shapes } = layoutChart({

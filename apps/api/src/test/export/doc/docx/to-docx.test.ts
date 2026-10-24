@@ -2418,7 +2418,7 @@ describe('docx writer — figures', () => {
         const zip = await unzip(json, undefined, media);
         const svg = await part(zip, 'word/media/image1.svg');
         expect([xmlAttr(svg, '', 'width'), xmlAttr(svg, '', 'height')]).toEqual(['480', '300']);
-        expect(entryText(zip, 'word/media/image1.svg')).toContain(`>${sample.categoryAxis.title}</text>`);
+        expect(entryText(zip, 'word/media/image1.svg')).toContain(`>${sample.axes.x.title.text}</text>`);
         const { format, width, height } = await sharp(zip.read('word/media/image1.png')).metadata();
         expect([format, width, height]).toEqual(['png', 480, 300]);
     });

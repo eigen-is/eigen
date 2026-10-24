@@ -510,7 +510,7 @@ describe('chart items', () => {
 
     test('a range, unreadable or oversized spec builds no item', () => {
         const box = { width: 10, height: 10 };
-        const oversized = JSON.stringify({ ...sampleChartSpec('column'), title: 'x'.repeat(70 * 1024) });
+        const oversized = JSON.stringify({ ...sampleChartSpec('column'), title: { text: 'x'.repeat(70 * 1024) } });
         for (const spec of [range, '{', oversized]) expect(buildChartClipboardItem({ spec, box, look })).toBeNull();
     });
 

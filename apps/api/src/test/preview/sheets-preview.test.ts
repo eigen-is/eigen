@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -300,7 +300,8 @@ describe('eigensheets preview (charts)', () => {
                     height: 300,
                     spec: JSON.stringify({
                         ...sampleChartSpec('column'),
-                        title: 'Scores',
+                        title: { text: 'Scores' },
+                        series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#2a78d6' } },
                         data: {
                             source: 'range',
                             categories: ref([1, 2], [0, 0]),
@@ -309,9 +310,6 @@ describe('eigensheets preview (charts)', () => {
                                     id: 's-1',
                                     name: ref([0, 0], [1, 1]),
                                     values: ref([1, 2], [1, 1]),
-                                    color: '#2a78d6',
-                                    markers: false,
-                                    smooth: false,
                                 },
                             ],
                         },

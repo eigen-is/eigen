@@ -46,7 +46,7 @@ export function renderChartSpecSvg({
     let body: string;
     if (spec === null || resolved === null) body = chartBodySvg(box, null);
     else if (typeof resolved === 'string')
-        body = layoutSvg(layoutChartMessage(box, dataErrorMessage(resolved), spec.fontFamily));
+        body = layoutSvg(layoutChartMessage(box, dataErrorMessage(resolved), spec.chart.fontFamily));
     else body = layoutSvg(layoutChart({ ...box, spec, data: resolved, formatTick }));
     const width = round(Math.max(0, box.width));
     const height = round(Math.max(0, box.height));

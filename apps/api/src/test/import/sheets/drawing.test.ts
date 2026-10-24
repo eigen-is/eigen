@@ -161,7 +161,7 @@ describe('a worksheet chart', () => {
         );
         const spec = parseChartSpec(chartsOf(sheets[0])[0].spec);
         const data = { sheetId: 'sheet-1' };
-        expect(spec?.type).toBe('column');
+        expect(spec?.chart.type).toBe('column');
         expect(spec?.data).toMatchObject({
             source: 'range',
             categories: { ...data, row: [1, 3], column: [0, 0] },
@@ -170,7 +170,7 @@ describe('a worksheet chart', () => {
             ],
         });
         // Theme colours: the series takes accent1, as the theme states it.
-        expect(spec?.data.series[0].color).toBe('#4472c4');
+        expect(spec?.series['x-0']?.color).toBe('#4472c4');
     });
 
     test('a one-cell anchor takes its size from its ext, an absolute one its place too, each painted in file order', () => {
@@ -298,7 +298,9 @@ describe('a worksheet chart', () => {
             }),
         );
         const specs = chartsOf(sheets[0]).map((chart) => JSON.parse(chart.spec));
-        expect(specs).toMatchObject([{ type: 'pie', data: { source: 'inline', series: [{ values: [1, 2, 3] }] } }]);
+        expect(specs).toMatchObject([
+            { chart: { type: 'pie' }, data: { source: 'inline', series: [{ values: [1, 2, 3] }] } },
+        ]);
         expect(warnings).toEqual([{ code: 'charts-dropped', count: 1 }]);
     });
 

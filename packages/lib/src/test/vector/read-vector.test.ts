@@ -734,7 +734,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         type: 'chart',
         ...paint,
         ...sketch,
-        chart: '{"type":"pie","data":{"source":"inline","categories":[],"series":[]}}',
+        chart: '{"chart":{"type":"pie"},"data":{"source":"inline","categories":[],"series":[]}}',
         fontFamily: 'JetBrains Mono',
         color: '#0a0b0c',
     });

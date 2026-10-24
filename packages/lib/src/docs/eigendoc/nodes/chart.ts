@@ -115,7 +115,7 @@ export const ChartNode = Node.create({
         };
         const img = {
             src: `data:image/svg+xml,${encodeURIComponent(chartSvg(spec, attrs))}`,
-            alt: spec?.title || 'Chart',
+            alt: spec?.title.text || 'Chart',
             width: attrs.width ?? CHART_DEFAULT_SIZE.width,
             height: attrs.height ?? CHART_DEFAULT_SIZE.height,
         };

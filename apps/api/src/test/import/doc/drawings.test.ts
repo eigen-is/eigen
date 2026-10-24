@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CHART_MAX_SIDE } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE } from '@workspace/lib/charts';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
@@ -415,7 +415,7 @@ describe('charts', () => {
         const { json, warnings } = await imported(centered, [chartSpace(COLUMNS)]);
         const [chart] = charts(json);
         const spec = JSON.parse(String(chart?.attrs?.['spec']));
-        expect([spec.type, spec.title, spec.legend, spec.data]).toEqual([
+        expect([spec.chart.type, spec.title.text, spec.legend.position, spec.data]).toEqual([
             'column',
             'Sales',
             'bottom',
@@ -423,11 +423,15 @@ describe('charts', () => {
                 source: 'inline',
                 categories: ['North', 'South'],
                 series: [
-                    { id: 'x-0', name: 'Plan', values: [1, 2], color: '#c00000', markers: false, smooth: false },
-                    { id: 'x-1', name: 'Actual', values: [3, 4], color: '#00b050', markers: false, smooth: false },
+                    { id: 'x-0', name: 'Plan', values: [1, 2] },
+                    { id: 'x-1', name: 'Actual', values: [3, 4] },
                 ],
             },
         ]);
+        expect(spec.series).toEqual({
+            'x-0': { ...DEFAULT_CHART_SERIES_STYLE, color: '#c00000' },
+            'x-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#00b050' },
+        });
         expect([chart?.attrs?.['width'], chart?.attrs?.['height'], chart?.attrs?.['alignment']]).toEqual([
             480,
             288,

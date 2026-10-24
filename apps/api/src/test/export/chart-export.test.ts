@@ -25,7 +25,7 @@ const TITLE = 'Q1 <draft> & more';
 
 function chartElement(style: StyleDefaults, over: Partial<VectorChartElement> = {}): VectorChartElement {
     // In the host's font, as Insert → Chart places one.
-    const spec = { ...sampleChartSpec('column'), fontFamily: style.fontFamily };
+    const spec = sampleChartSpec('column', style.fontFamily);
     return {
         ...baseDefaultsFor('chart', style),
         ...ELEMENT_KINDS.chart.defaults(style),
@@ -39,7 +39,11 @@ function chartElement(style: StyleDefaults, over: Partial<VectorChartElement> = 
         index: 'a0',
         seed: 7,
         // A turned axis title, a bold title and escaped text all reach the export.
-        chart: JSON.stringify({ ...spec, title: TITLE, valueAxis: { ...spec.valueAxis, title: 'Points' } }),
+        chart: JSON.stringify({
+            ...spec,
+            title: { text: TITLE },
+            axes: { ...spec.axes, y: { ...spec.axes.y, title: { text: 'Points' } } },
+        }),
         ...over,
     };
 }

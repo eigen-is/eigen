@@ -39,7 +39,7 @@ export function canvasImageScene(
 // A chart's file is named for its title, less what a file name can't hold; one without a title is "Chart". Anything
 // else is a selection of the file.
 export function chartImageName(spec: string): string {
-    const title = parseChartSpec(spec)?.title ?? '';
+    const title = parseChartSpec(spec)?.title.text ?? '';
     return (
         title
             .replace(/[\\/:*?"<>|\p{Cc}]/gu, ' ')

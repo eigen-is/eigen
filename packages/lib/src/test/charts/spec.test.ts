@@ -2,9 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import {
     applyChartSpecChange,
     chartColor,
+    chartPointColor,
+    chartPointIndex,
+    chartPointMoves,
     chartSearchText,
+    chartSeriesStyle,
     chartSpecChange,
-    defaultChartPresentation,
+    DEFAULT_CHART_SERIES_STYLE,
+    defaultChartSpec,
     exceedsInlineGridLimits,
     fitsInlineGrid,
     holdsUnknownChartData,
@@ -27,14 +32,11 @@ import type { ChartSpec, ChartSpecChange, InlineChartData, RangeChartData } from
 import { CHART_STACKINGS, CHART_TYPES } from '../../types/chart';
 import { isColorToken } from '../../vector/fill';
 
-const style = { color: '#2a78d6', markers: false, smooth: false };
-
 function inlineData(seriesCount: number, pointCount: number): InlineChartData {
     return {
         source: 'inline',
         categories: Array.from({ length: pointCount }, (_, i) => `C${i}`),
         series: Array.from({ length: seriesCount }, (_, i) => ({
-            ...style,
             id: `s-${i}`,
             name: `S${i}`,
             values: Array.from({ length: pointCount }, (_, j) => j),
@@ -42,8 +44,10 @@ function inlineData(seriesCount: number, pointCount: number): InlineChartData {
     };
 }
 
+// The sample, its series styled automatic for whatever data the patch gives it.
 function chart(patch: Partial<ChartSpec> = {}): ChartSpec {
-    return { ...sampleChartSpec('column'), ...patch };
+    const sample = sampleChartSpec('column');
+    return { ...sample, series: defaultChartSpec('column', patch.data ?? sample.data).series, ...patch };
 }
 
 // A raw stored object, so a test can write what the type forbids.
@@ -56,39 +60,59 @@ const rangeData: RangeChartData = {
     categories: { sheetId: 'sheet-1', row: [1, 4], column: [0, 0] },
     series: [
         {
-            ...style,
             id: 's-1',
             name: { sheetId: 'sheet-1', row: [0, 0], column: [1, 1] },
             values: { sheetId: 'sheet-1', row: [1, 4], column: [1, 1] },
         },
-        { ...style, id: 's-2', color: '#eb6834', markers: true, smooth: true, name: 'Literal', values: null },
+        { id: 's-2', name: 'Literal', values: null },
     ],
 };
+
+// Every key of the spec is one of its eight parts: a ninth fails to compile here.
+const PARTS: Record<keyof ChartSpec, true> = {
+    chart: true,
+    title: true,
+    legend: true,
+    axes: true,
+    plots: true,
+    series: true,
+    points: true,
+    data: true,
+};
+
+describe('the shape', () => {
+    test('a spec is eight parts, each a record', () => {
+        const spec = sampleChartSpec('column');
+        expect(Object.keys(spec).sort()).toEqual(Object.keys(PARTS).sort());
+        for (const part of Object.values(spec)) expect(typeof part === 'object' && !Array.isArray(part)).toBe(true);
+    });
+});
 
 describe('sampleChartSpec', () => {
     test('every chart type round-trips through its stored string', () => {
         for (const type of CHART_TYPES) {
             const spec = sampleChartSpec(type);
-            expect(spec.type).toBe(type);
+            expect(spec.chart.type).toBe(type);
             expect(parseChartSpec(JSON.stringify(spec))).toEqual(spec);
         }
     });
 
     test("the sample: where a star's light goes, three sources over seven 100 nm bins; pie draws the Sun", () => {
         const column = sampleChartSpec('column');
-        expect(column.title).toBe("Where a star's light goes");
-        expect(column.categoryAxis.title).toBe('Wavelength (nm)');
-        expect(column.valueAxis.title).toBe('Share of light, 300–1000 nm (%)');
-        expect(column.legend).toBe('top');
-        expect(column.valueAxis.gridlines).toBe(true);
+        expect(column.title.text).toBe("Where a star's light goes");
+        expect(column.axes.x.title.text).toBe('Wavelength (nm)');
+        expect(column.axes.y.title.text).toBe('Share of light, 300–1000 nm (%)');
+        expect(column.legend.position).toBe('top');
+        expect(column.axes.y.gridlines.visible).toBe(true);
+        expect(column.axes.x.gridlines.visible).toBe(false);
         expect(column.data).toMatchObject({
             source: 'inline',
             categories: ['300–400', '400–500', '500–600', '600–700', '700–800', '800–900', '900–1000'],
         });
         expect(column.data.series.map((s) => s.name)).toEqual(['Sun', 'Bulb (incandescent)', 'Hot star']);
-        expect(column.stacking).toBe('none');
+        expect(column.plots.column.stacking).toBe('none');
         const pie = sampleChartSpec('pie');
-        expect(pie.legend).toBe('none');
+        expect(pie.legend.position).toBe('none');
         expect(pie.data.series.map((s) => s.name)).toEqual(['Sun']);
     });
 
@@ -101,8 +125,9 @@ describe('sampleChartSpec', () => {
         }
     });
 
-    test("the sample draws in Google's Inter", () => {
-        for (const type of CHART_TYPES) expect(sampleChartSpec(type).fontFamily).toBe('Inter');
+    test("the sample draws in Google's Inter, or the host's font", () => {
+        for (const type of CHART_TYPES) expect(sampleChartSpec(type).chart.fontFamily).toBe('Inter');
+        expect(sampleChartSpec('bar', 'Excalifont').chart.fontFamily).toBe('Excalifont');
     });
 });
 
@@ -136,9 +161,9 @@ describe('palette', () => {
 
     test('a sample stores no colors, so its series and slices take the palette as it is when drawn', () => {
         for (const type of CHART_TYPES) {
-            const { data, sliceColors } = sampleChartSpec(type);
-            expect(data.series.map((s) => s.color)).toEqual(data.series.map(() => null));
-            expect(sliceColors).toEqual([]);
+            const spec = sampleChartSpec(type);
+            expect(spec.data.series.map((s) => spec.series[s.id].color)).toEqual(spec.data.series.map(() => null));
+            expect(spec.points).toEqual({});
         }
     });
 
@@ -157,52 +182,130 @@ describe('parseChartSpec', () => {
         }
     });
 
-    test('an unknown type or data source rejects the spec', () => {
-        expect(parseChartSpec(stored({ type: 'area' }))).toBeNull();
+    test('an unknown type or data source, or no chart part, rejects the spec', () => {
+        expect(parseChartSpec(stored({ chart: { type: 'area' } }))).toBeNull();
+        expect(parseChartSpec(stored({ chart: undefined }))).toBeNull();
+        expect(parseChartSpec(stored({ chart: 'column' }))).toBeNull();
         expect(parseChartSpec(stored({ data: { ...inlineData(1, 1), source: 'cache' } }))).toBeNull();
         expect(parseChartSpec(stored({ data: undefined }))).toBeNull();
         expect(parseChartSpec(stored({ data: { ...inlineData(1, 1), series: [42] } }))).toBeNull();
     });
 
     test('a missing or invalid presentation field reads its default, so a field added later reads on old charts', () => {
-        const { blanks, valueAxis, ...rest } = chart();
-        const defaults = defaultChartPresentation('column');
-        expect(parseChartSpec(JSON.stringify(rest))).toEqual(chart({ valueAxis: defaults.valueAxis }));
-        expect(parseChartSpec(stored({ legend: 'center' }))?.legend).toBe('top');
-        expect(parseChartSpec(stored({ type: 'pie', legend: 'center' }))?.legend).toBe('none');
-        expect(parseChartSpec(stored({ blanks: 'skip' }))?.blanks).toBe('gap');
-        expect(parseChartSpec(stored({ stacking: 'yes' }))?.stacking).toBe('none');
-        expect(parseChartSpec(stored({ title: 7 }))?.title).toBe('');
-        expect(parseChartSpec(stored({ valueAxis: { min: 'Infinity', gridlines: 1, format: 3 } }))?.valueAxis).toEqual(
-            defaults.valueAxis,
+        const { legend, axes, plots, ...rest } = chart();
+        const defaults = defaultChartSpec('column', chart().data);
+        expect(parseChartSpec(JSON.stringify({ ...rest, chart: { type: 'column' } }))).toEqual(
+            chart({ legend: defaults.legend, axes: defaults.axes }),
         );
+        expect(parseChartSpec(stored({ legend: { position: 'center' } }))?.legend.position).toBe('top');
+        expect(parseChartSpec(stored({ chart: { type: 'pie' }, legend: 'right' }))?.legend.position).toBe('none');
+        expect(parseChartSpec(stored({ chart: { type: 'column', blanks: 'skip' } }))?.chart.blanks).toBe('gap');
+        expect(parseChartSpec(stored({ plots: { column: { stacking: 'yes' } } }))?.plots.column.stacking).toBe('none');
+        expect(parseChartSpec(stored({ title: { text: 7 } }))?.title.text).toBe('');
+        expect(parseChartSpec(stored({ title: 'Old' }))?.title.text).toBe('');
         expect(
-            parseChartSpec(stored({ categoryAxis: { title: 'T', visible: 0, reversed: 'yes' } }))?.categoryAxis,
-        ).toEqual({ title: 'T', visible: true, reversed: false });
-        expect(parseChartSpec(stored({ valueAxis: { visible: null } }))?.valueAxis.visible).toBe(true);
+            parseChartSpec(
+                stored({
+                    axes: { y: { scale: { min: 'Infinity' }, gridlines: { visible: 1 }, labels: { format: 3 } } },
+                }),
+            )?.axes.y,
+        ).toEqual(defaults.axes.y);
+        expect(
+            parseChartSpec(stored({ axes: { x: { title: { text: 'T' }, visible: 0, scale: { reversed: 'yes' } } } }))
+                ?.axes.x,
+        ).toEqual({ ...defaults.axes.x, title: { text: 'T' } });
+        expect(parseChartSpec(stored({ axes: { y: { visible: null } } }))?.axes.y.visible).toBe(true);
+        expect(parseChartSpec(stored({ axes: 'x' }))?.axes).toEqual(defaults.axes);
+    });
+
+    test("an unknown axis kind reads its id's, and an axis this build doesn't draw is left out", () => {
+        const axes = parseChartSpec(
+            stored({ axes: { x: { kind: 'date' }, y: { kind: 'log' }, y2: { kind: 'value', visible: false } } }),
+        )?.axes;
+        expect([axes?.x.kind, axes?.y.kind]).toEqual(['category', 'value']);
+        expect(Object.keys(axes ?? {})).toEqual(['x', 'y']);
+        expect(parseChartSpec(stored({ axes: { x: { kind: 'value' } } }))?.axes.x.kind).toBe('value');
+    });
+
+    test("a series' unknown plot type draws in the chart's, and a series on an axis this build doesn't draw draws on y", () => {
+        const style = (series: unknown) => parseChartSpec(stored({ series: { 's-1': series } }))?.series['s-1'];
+        expect(style({ plot: 'line' })?.plot).toBe('line');
+        expect(style({ plot: 'area' })?.plot).toBeNull();
+        expect(style({ yAxis: 'y2' })?.yAxis).toBe('y');
+        expect(style({ yAxis: 'y3' })?.yAxis).toBe('y');
+        expect(style({ line: { smooth: true }, marker: { visible: true } })).toEqual({
+            ...DEFAULT_CHART_SERIES_STYLE,
+            line: { smooth: true },
+            marker: { visible: true },
+        });
+        expect(style({ line: true, marker: 'circle' })).toEqual(DEFAULT_CHART_SERIES_STYLE);
+    });
+
+    test('every series in data has a style, and a style for a series data no longer names is left out', () => {
+        const spec = parseChartSpec(stored({ series: { 's-1': { color: '#eb6834' }, 's-9': { color: '#000000' } } }));
+        expect(Object.keys(spec?.series ?? {})).toEqual(['s-1', 's-2', 's-3']);
+        expect(spec?.series['s-1'].color).toBe('#eb6834');
+        expect(spec?.series['s-2']).toEqual(DEFAULT_CHART_SERIES_STYLE);
+    });
+
+    test("a point's key is a canonical index under the point limit, and a series data doesn't name has none", () => {
+        const points = parseChartSpec(
+            stored({
+                points: {
+                    's-1': {
+                        0: { color: '#eb6834' },
+                        3: { color: 'blue' },
+                        1999: { color: '#000001' },
+                        2000: { color: '#000002' },
+                        '03': { color: '#000003' },
+                        '-1': { color: '#000004' },
+                        '1e3': { color: '#000005' },
+                        5: '#000006',
+                    },
+                    's-2': {},
+                    's-9': { 0: { color: '#000007' } },
+                },
+            }),
+        )?.points;
+        expect(points).toEqual({ 's-1': { 0: { color: '#eb6834' }, 3: { color: null }, 1999: { color: '#000001' } } });
+        expect(parseChartSpec(stored({ points: ['#fff'] }))?.points).toEqual({});
+        expect(['0', '7', '1999', '2000', '03', '-1', '1e3', '1.0', ''].map(chartPointIndex)).toEqual([
+            0,
+            7,
+            1999,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+        ]);
     });
 
     test('a hidden or reversed axis reads back as stored', () => {
+        const { x, y } = chart().axes;
         const spec = chart({
-            categoryAxis: { title: '', visible: false, reversed: true },
-            valueAxis: { ...chart().valueAxis, visible: false },
+            axes: { x: { ...x, visible: false, scale: { ...x.scale, reversed: true } }, y: { ...y, visible: false } },
         });
         expect(parseChartSpec(JSON.stringify(spec))).toEqual(spec);
     });
 
     test('the font is one of the Eigen fonts, and reads Inter when missing or anything else', () => {
-        const { fontFamily, ...rest } = chart();
-        expect(parseChartSpec(JSON.stringify(rest))?.fontFamily).toBe('Inter');
+        expect(parseChartSpec(stored({ chart: { type: 'column' } }))?.chart.fontFamily).toBe('Inter');
         for (const bad of ['Comic Sans', 'Inter; color: red', 7, null]) {
-            expect(parseChartSpec(stored({ fontFamily: bad }))?.fontFamily).toBe('Inter');
+            expect(parseChartSpec(stored({ chart: { type: 'column', fontFamily: bad } }))?.chart.fontFamily).toBe(
+                'Inter',
+            );
         }
         for (const font of EIGEN_FONT_NAMES)
-            expect(parseChartSpec(stored({ fontFamily: font }))?.fontFamily).toBe(font);
+            expect(parseChartSpec(stored({ chart: { type: 'column', fontFamily: font } }))?.chart.fontFamily).toBe(
+                font,
+            );
     });
 
     test('a non-number value in an inline series rejects the spec, since values are data', () => {
         const values = (v: unknown) =>
-            stored({ data: { ...inlineData(1, 1), series: [{ ...style, id: 's-1', name: 'S', values: [v] }] } });
+            stored({ data: { ...inlineData(1, 1), series: [{ id: 's-1', name: 'S', values: [v] }] } });
         expect(parseChartSpec(values('NaN'))).toBeNull();
         // JSON.parse reads an overflowing literal as Infinity
         expect(parseChartSpec(values('INF').replace('"INF"', '1e999'))).toBeNull();
@@ -212,7 +315,7 @@ describe('parseChartSpec', () => {
         const data: InlineChartData = {
             source: 'inline',
             categories: ['a', 'b'],
-            series: [{ ...style, id: 's-1', name: 'S', values: [1, null] }],
+            series: [{ id: 's-1', name: 'S', values: [1, null] }],
         };
         expect(parseChartSpec(JSON.stringify(chart({ data })))?.data).toEqual(data);
     });
@@ -221,48 +324,40 @@ describe('parseChartSpec', () => {
         const data: InlineChartData = {
             source: 'inline',
             categories: ['a'],
-            series: [{ ...style, id: 's-1', name: 'S', values: [1, 2, 3] }],
+            series: [{ id: 's-1', name: 'S', values: [1, 2, 3] }],
         };
         expect(parseChartSpec(JSON.stringify(chart({ data })))?.data).toEqual(data);
     });
 
-    test("stacking reads Excel's grouping: none, stacked or percent", () => {
-        for (const stacking of CHART_STACKINGS) expect(parseChartSpec(stored({ stacking }))?.stacking).toBe(stacking);
-        expect(parseChartSpec(stored({ stacking: 'normal' }))?.stacking).toBe('none');
-        const { stacking, ...rest } = chart();
-        expect(parseChartSpec(JSON.stringify({ ...rest, stacked: true }))?.stacking).toBe('none');
+    test("stacking reads Excel's grouping per plot type: none, stacked or percent", () => {
+        for (const stacking of CHART_STACKINGS)
+            expect(parseChartSpec(stored({ plots: { column: { stacking } } }))?.plots.column.stacking).toBe(stacking);
+        const plots = parseChartSpec(
+            stored({ plots: { bar: { stacking: 'percent' }, column: { stacking: 'normal' } } }),
+        )?.plots;
+        expect(plots).toEqual({
+            column: { stacking: 'none' },
+            bar: { stacking: 'percent' },
+            line: { stacking: 'none' },
+            pie: { stacking: 'none' },
+        });
     });
 
     test('a missing color, or one that is not a color token, reads null: the palette color at its index', () => {
-        const series = (color: unknown) =>
-            parseChartSpec(
-                stored({
-                    data: {
-                        ...inlineData(2, 1),
-                        series: [
-                            { ...style, id: 's-1', name: 'A', values: [1] },
-                            { ...style, id: 's-2', color, name: 'B', values: [1] },
-                        ],
-                    },
-                }),
-            )?.data.series[1];
-        expect(series(null)?.color).toBeNull();
-        expect(series('url(#x)')?.color).toBeNull();
-        expect(series('red')?.color).toBeNull();
-        expect(series('#eb6834')?.color).toBe('#eb6834');
-        expect(series('transparent')?.color).toBe('transparent');
-        const { color, markers, smooth, ...rest } = style;
+        const color = (value: unknown) =>
+            parseChartSpec(stored({ series: { 's-2': { color: value } } }))?.series['s-2'];
+        expect(color(null)?.color).toBeNull();
+        expect(color('url(#x)')?.color).toBeNull();
+        expect(color('red')?.color).toBeNull();
+        expect(color('#eb6834')?.color).toBe('#eb6834');
+        expect(color('transparent')?.color).toBe('transparent');
         expect(
-            parseChartSpec(
-                stored({ data: { ...inlineData(1, 1), series: [{ ...rest, id: 's-1', name: 7, values: [1] }] } }),
-            )?.data.series[0],
-        ).toEqual({ color: null, markers: false, smooth: false, id: 's-1', name: '', values: [1] });
-        expect(parseChartSpec(stored({ sliceColors: ['#fff', 'blue', null] }))?.sliceColors).toEqual([
-            '#fff',
-            null,
-            null,
-        ]);
-        expect(parseChartSpec(stored({ sliceColors: 'blue' }))?.sliceColors).toEqual([]);
+            parseChartSpec(stored({ data: { ...inlineData(1, 1), series: [{ id: 's-1', name: 7, values: [1] }] } }))
+                ?.data.series[0],
+        ).toEqual({ id: 's-1', name: '', values: [1] });
+        const point = (value: unknown) =>
+            parseChartSpec(stored({ points: { 's-1': { 0: { color: value } } } }))?.points['s-1'][0].color;
+        expect([point('#fff'), point('blue'), point(null)]).toEqual(['#fff', null, null]);
     });
 
     test('a label over the length cap is truncated, not rejected', () => {
@@ -270,33 +365,33 @@ describe('parseChartSpec', () => {
         const spec = parseChartSpec(
             JSON.stringify(
                 chart({
-                    title: long,
-                    categoryAxis: { ...chart().categoryAxis, title: long },
+                    title: { text: long },
+                    axes: { ...chart().axes, x: { ...chart().axes.x, title: { text: long } } },
                     data: {
                         source: 'inline',
                         categories: [long],
-                        series: [{ ...style, id: 's-1', name: long, values: [1] }],
+                        series: [{ id: 's-1', name: long, values: [1] }],
                     },
                 }),
             ),
         );
         const capped = 'x'.repeat(MAX_CHART_LABEL_LENGTH);
-        expect(spec?.title).toBe(capped);
-        expect(spec?.categoryAxis.title).toBe(capped);
+        expect(spec?.title.text).toBe(capped);
+        expect(spec?.axes.x.title.text).toBe(capped);
         expect(spec?.data).toEqual({
             source: 'inline',
             categories: [capped],
-            series: [{ ...style, id: 's-1', name: capped, values: [1] }],
+            series: [{ id: 's-1', name: capped, values: [1] }],
         });
     });
 
     test('labels drop characters XML cannot hold, since every label reaches SVG', () => {
-        expect(parseChartSpec(stored({ title: 'a\u0000b\u0007c' }))?.title).toBe('abc');
+        expect(parseChartSpec(stored({ title: { text: 'a\u0000b\u0007c' } }))?.title.text).toBe('abc');
     });
 
     test('min and max read as null unless min < max', () => {
         const axis = (min: number | null, max: number | null) =>
-            parseChartSpec(JSON.stringify(chart({ valueAxis: { ...chart().valueAxis, min, max } })))?.valueAxis;
+            parseChartSpec(stored({ axes: { y: { scale: { min, max } } } }))?.axes.y.scale;
         expect(axis(0, 100)).toMatchObject({ min: 0, max: 100 });
         expect(axis(-5, null)).toMatchObject({ min: -5, max: null });
         expect(axis(100, 0)).toMatchObject({ min: null, max: null });
@@ -305,7 +400,7 @@ describe('parseChartSpec', () => {
 
     test('a number format is kept, and null means General', () => {
         const format = (f: string | null) =>
-            parseChartSpec(JSON.stringify(chart({ valueAxis: { ...chart().valueAxis, format: f } })))?.valueAxis.format;
+            parseChartSpec(stored({ axes: { y: { labels: { format: f } } } }))?.axes.y.labels.format;
         expect(format('#,##0.00')).toBe('#,##0.00');
         expect(format(null)).toBeNull();
     });
@@ -324,12 +419,6 @@ describe('parseChartSpec', () => {
         ).toBeNull();
     });
 
-    test('more slice colors than the point limit rejects the spec', () => {
-        const slices = (count: number) => Array.from({ length: count }, () => '#fff');
-        expect(parseChartSpec(stored({ sliceColors: slices(MAX_CHART_POINTS) }))).not.toBeNull();
-        expect(parseChartSpec(stored({ sliceColors: slices(MAX_CHART_POINTS + 1) }))).toBeNull();
-    });
-
     test('a stored string over the size limit rejects the spec', () => {
         const padded = JSON.stringify(chart()).replace(/}$/, `,"pad":"${'x'.repeat(MAX_CHART_SPEC_BYTES)}"}`);
         expect(parseChartSpec(padded)).toBeNull();
@@ -340,10 +429,16 @@ describe('parseChartSpec', () => {
         const raw = {
             ...spec,
             extra: 1,
-            valueAxis: { ...spec.valueAxis, extra: 2 },
+            chart: { ...spec.chart, extra: 2 },
+            axes: { ...spec.axes, y: { ...spec.axes.y, extra: 2, scale: { ...spec.axes.y.scale, extra: 2 } } },
+            series: { ...spec.series, 's-1': { ...spec.series['s-1'], extra: 2, line: { smooth: false, extra: 2 } } },
+            points: { 's-1': { 0: { color: '#eb6834', extra: 2 } } },
             data: { ...spec.data, extra: 3, series: spec.data.series.map((s) => ({ ...s, extra: 4 })) },
         };
-        expect(parseChartSpec(JSON.stringify(raw))).toEqual(spec);
+        expect(parseChartSpec(JSON.stringify(raw))).toEqual({
+            ...spec,
+            points: { 's-1': { 0: { color: '#eb6834' } } },
+        });
     });
 
     test('range data round-trips', () => {
@@ -355,7 +450,7 @@ describe('parseChartSpec', () => {
         const ref = { sheetId: 'sheet-1', row: [0, 3], column: [1, 1] };
         const withValues = (values: unknown) =>
             stored({
-                data: { source: 'range', categories: null, series: [{ ...style, id: 's-1', name: 'S', values }] },
+                data: { source: 'range', categories: null, series: [{ id: 's-1', name: 'S', values }] },
             });
         expect(parseChartSpec(withValues(ref))).not.toBeNull();
         expect(parseChartSpec(withValues({ ...ref, row: [-1, 3] }))).toBeNull();
@@ -370,7 +465,7 @@ describe('parseChartSpec', () => {
         const ref = { sheetId: 'sheet-1', row: [0, REFERENCE_ROW_COUNT - 1], column: [0, REFERENCE_COLUMN_COUNT - 1] };
         const withValues = (values: unknown) =>
             stored({
-                data: { source: 'range', categories: null, series: [{ ...style, id: 's-1', name: 'S', values }] },
+                data: { source: 'range', categories: null, series: [{ id: 's-1', name: 'S', values }] },
             });
         expect(parseChartSpec(withValues(ref))).not.toBeNull();
         expect(parseChartSpec(withValues({ ...ref, row: [0, REFERENCE_ROW_COUNT] }))).toBeNull();
@@ -383,7 +478,7 @@ describe('series ids', () => {
         stored({
             data: {
                 ...inlineData(ids.length, 1),
-                series: ids.map((id, i) => ({ ...style, id, name: `S${i}`, values: [1] })),
+                series: ids.map((id, i) => ({ id, name: `S${i}`, values: [1] })),
             },
         });
 
@@ -418,17 +513,15 @@ describe('series ids', () => {
 
 describe('readChartSpec', () => {
     test('returns the spec as stored, unknown keys and values in place, beside the view resolved from it', () => {
-        const raw = { ...chart(), legend: 'inside', future: { on: true } };
+        const raw = { ...chart(), legend: { position: 'inside' }, future: { on: true } };
         const { stored, spec } = readChartSpec(JSON.stringify(raw));
         expect(stored).toEqual(raw);
         expect(spec).toEqual(chart());
     });
 
     test('a spec that does not resolve keeps what is stored; one that is no JSON object, or past the limit, has none', () => {
-        expect(readChartSpec(stored({ type: 'scatter' }))).toEqual({
-            stored: JSON.parse(stored({ type: 'scatter' })),
-            spec: null,
-        });
+        const scatter = stored({ chart: { type: 'scatter' } });
+        expect(readChartSpec(scatter)).toEqual({ stored: JSON.parse(scatter), spec: null });
         for (const value of ['{', '[1]', '"x"']) expect(readChartSpec(value)).toEqual({ stored: {}, spec: null });
         const padded = JSON.stringify({ ...chart(), pad: 'x'.repeat(MAX_CHART_SPEC_BYTES) });
         expect(readChartSpec(padded)).toEqual({ stored: {}, spec: null });
@@ -465,14 +558,14 @@ describe('chartSpecChange', () => {
         const base = chart();
         const next = {
             ...base,
-            title: 'New',
-            valueAxis: { ...base.valueAxis, max: 50 },
-            sliceColors: ['#eb6834'],
+            title: { text: 'New' },
+            axes: { ...base.axes, y: { ...base.axes.y, scale: { ...base.axes.y.scale, max: 50 } } },
+            points: { 's-1': { 0: { color: '#eb6834' } } },
         };
         expect(chartSpecChange(base, next)).toEqual([
-            { op: 'set', path: ['title'], value: 'New' },
-            { op: 'set', path: ['valueAxis', 'max'], value: 50 },
-            { op: 'set', path: ['sliceColors'], value: ['#eb6834'] },
+            { op: 'set', path: ['title', 'text'], value: 'New' },
+            { op: 'set', path: ['axes', 'y', 'scale', 'max'], value: 50 },
+            { op: 'set', path: ['points', 's-1'], value: { 0: { color: '#eb6834' } } },
         ]);
     });
 
@@ -487,8 +580,8 @@ describe('applyChartSpecChange', () => {
     const raw = {
         ...chart(),
         future: 1,
-        legend: 'inside',
-        valueAxis: { ...chart().valueAxis, logBase: 10 },
+        legend: { position: 'inside' },
+        axes: { ...chart().axes, y: { ...chart().axes.y, scale: { ...chart().axes.y.scale, logBase: 10 } } },
         data: {
             ...chart().data,
             future: 3,
@@ -499,19 +592,19 @@ describe('applyChartSpecChange', () => {
 
     test('unknown keys at every level, and an unknown legend, survive a change elsewhere', () => {
         const next = apply([
-            { op: 'set', path: ['title'], value: 'New' },
-            { op: 'set', path: ['valueAxis', 'max'], value: 50 },
+            { op: 'set', path: ['title', 'text'], value: 'New' },
+            { op: 'set', path: ['axes', 'y', 'scale', 'max'], value: 50 },
         ]);
         expect(JSON.parse(JSON.stringify(next))).toEqual({
             ...raw,
-            title: 'New',
-            valueAxis: { ...raw.valueAxis, max: 50 },
+            title: { text: 'New' },
+            axes: { ...raw.axes, y: { ...raw.axes.y, scale: { ...raw.axes.y.scale, max: 50 } } },
         });
     });
 
     test('leaves the stored spec it was given as it was', () => {
         const { stored: before } = readChartSpec(JSON.stringify(raw));
-        applyChartSpecChange(before, [{ op: 'set', path: ['valueAxis', 'max'], value: 50 }]);
+        applyChartSpecChange(before, [{ op: 'set', path: ['axes', 'y', 'scale', 'max'], value: 50 }]);
         expect(before).toEqual(raw);
     });
 
@@ -529,8 +622,8 @@ describe('applyChartSpecChange', () => {
     });
 
     test('a set makes the records along its path; a remove of what is not there changes nothing', () => {
-        const next = apply([{ op: 'set', path: ['plots', 'column', 'stacking'], value: 'stacked' }]);
-        expect(next.plots).toEqual({ column: { stacking: 'stacked' } });
+        const next = apply([{ op: 'set', path: ['points', 's-1', '3', 'color'], value: '#eb6834' }]);
+        expect(next.points).toEqual({ 's-1': { 3: { color: '#eb6834' } } });
         expect(apply([{ op: 'remove', path: ['future'] }]).future).toBeUndefined();
         expect(apply([{ op: 'remove', path: ['nothing', 'here'] }])).toEqual(readChartSpec(JSON.stringify(raw)).stored);
     });
@@ -542,9 +635,9 @@ describe('applyChartSpecChange', () => {
     });
 
     test('the records it makes and copies have no prototype', () => {
-        const next = apply([{ op: 'set', path: ['plots', 'column', 'stacking'], value: 'stacked' }]);
+        const next = apply([{ op: 'set', path: ['points', 's-1', '3', 'color'], value: '#eb6834' }]);
         expect(Object.getPrototypeOf(next)).toBeNull();
-        expect(Object.getPrototypeOf(next.plots)).toBeNull();
+        expect(Object.getPrototypeOf(next.points)).toBeNull();
     });
 
     test('an op through __proto__, constructor or prototype changes nothing and leaves Object.prototype alone', () => {
@@ -552,7 +645,7 @@ describe('applyChartSpecChange', () => {
         for (const key of ['__proto__', 'constructor', 'prototype']) {
             const change: ChartSpecChange = [
                 { op: 'set', path: [key, 'polluted'], value: true },
-                { op: 'set', path: ['valueAxis', key], value: { polluted: true } },
+                { op: 'set', path: ['axes', key], value: { polluted: true } },
                 { op: 'remove', path: [key] },
                 { op: 'move', from: ['future'], path: [key] },
             ];
@@ -563,7 +656,7 @@ describe('applyChartSpecChange', () => {
 
     test('a stored __proto__ key stays data through a change', () => {
         const { stored: read } = readChartSpec(stored({ ['__proto__']: { polluted: true } }));
-        const next = applyChartSpecChange(read, [{ op: 'set', path: ['title'], value: 'New' }]);
+        const next = applyChartSpecChange(read, [{ op: 'set', path: ['title', 'text'], value: 'New' }]);
         expect(JSON.stringify(next)).toContain('"__proto__":{"polluted":true}');
         expect(Object.hasOwn(Object.prototype, 'polluted')).toBe(false);
     });
@@ -579,7 +672,7 @@ describe('holdsUnknownChartData', () => {
     test('says whether the data or a series holds a key this build does not read', () => {
         const spec = chart();
         expect(read(spec)).toBe(false);
-        expect(read({ ...spec, future: 1, valueAxis: { ...spec.valueAxis, logBase: 10 } })).toBe(false);
+        expect(read({ ...spec, future: 1, axes: { ...spec.axes, y: { ...spec.axes.y, logBase: 10 } } })).toBe(false);
         expect(read({ ...spec, data: { ...spec.data, future: 1 } })).toBe(true);
         const sizes = spec.data.series.map((series, i) => (i === 1 ? { ...series, sizes: [1] } : series));
         expect(read({ ...spec, data: { ...spec.data, series: sizes } })).toBe(true);
@@ -597,7 +690,7 @@ describe('exceedsInlineGridLimits', () => {
         const ragged: InlineChartData = {
             source: 'inline',
             categories: [],
-            series: [{ ...style, id: 's-1', name: 'S', values: Array(INLINE_GRID_MAX_CATEGORIES + 1).fill(1) }],
+            series: [{ id: 's-1', name: 'S', values: Array(INLINE_GRID_MAX_CATEGORIES + 1).fill(1) }],
         };
         expect(exceedsInlineGridLimits(ragged)).toBe(true);
     });
@@ -613,9 +706,8 @@ describe('exceedsInlineGridLimits', () => {
             source: 'inline',
             categories: [],
             series: [
-                { ...style, id: 's-0', name: 'Long', values: Array(INLINE_GRID_MAX_CATEGORIES).fill(1) },
+                { id: 's-0', name: 'Long', values: Array(INLINE_GRID_MAX_CATEGORIES).fill(1) },
                 ...Array.from({ length: INLINE_GRID_MAX_SERIES - 1 }, (_, i) => ({
-                    ...style,
                     id: `s-${i + 1}`,
                     name: 'Short',
                     values: [1],
@@ -623,5 +715,52 @@ describe('exceedsInlineGridLimits', () => {
             ],
         };
         expect(exceedsInlineGridLimits(ragged)).toBe(true);
+    });
+});
+
+describe('chartSeriesStyle and chartPointColor', () => {
+    test("read a spec's own entries only, so an id an object inherits finds nothing", () => {
+        const spec = chart({
+            series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#eb6834' } },
+            points: { 's-1': { 2: { color: '#2a78d6' } } },
+        });
+        expect(chartSeriesStyle(spec, 's-1').color).toBe('#eb6834');
+        expect(chartSeriesStyle(spec, 'toString')).toEqual(DEFAULT_CHART_SERIES_STYLE);
+        expect(chartPointColor(spec, 's-1', 2)).toBe('#2a78d6');
+        expect([chartPointColor(spec, 's-1', 0), chartPointColor(spec, 'toString', 0)]).toEqual([null, null]);
+    });
+});
+
+describe('chartPointMoves', () => {
+    const points = (colors: Record<number, string>) => ({
+        points: { 's-1': Object.fromEntries(Object.entries(colors).map(([i, color]) => [i, { color, future: i }])) },
+    });
+    const moved = (before: Record<number, string>, indexes: number[], target: (index: number) => number | null) =>
+        JSON.parse(JSON.stringify(applyChartSpecChange(points(before), chartPointMoves('s-1', indexes, target))))
+            .points['s-1'];
+
+    test('a delete removes its points and moves the ones after it down, unknown keys with them', () => {
+        const after = moved({ 0: '#000000', 1: '#000001', 2: '#000002', 3: '#000003' }, [0, 1, 2, 3], (i) =>
+            i === 1 ? null : i > 1 ? i - 1 : i,
+        );
+        expect(after).toEqual({
+            0: { color: '#000000', future: '0' },
+            1: { color: '#000002', future: '2' },
+            2: { color: '#000003', future: '3' },
+        });
+    });
+
+    test('an insert moves the points after it up, from the highest, leaving the inserted ones automatic', () => {
+        const after = moved({ 0: '#000000', 1: '#000001', 2: '#000002' }, [0, 1, 2], (i) => (i >= 1 ? i + 1 : i));
+        expect(after).toEqual({
+            0: { color: '#000000', future: '0' },
+            2: { color: '#000001', future: '1' },
+            3: { color: '#000002', future: '2' },
+        });
+    });
+
+    test('a move from an index with no point clears its target, and an index that stays writes nothing', () => {
+        expect(moved({ 1: '#000001' }, [0, 1], (i) => (i === 0 ? 1 : null))).toEqual({});
+        expect(chartPointMoves('s-1', [0, 1, 2], (i) => i)).toEqual([]);
     });
 });

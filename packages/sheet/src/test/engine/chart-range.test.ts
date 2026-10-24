@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, MAX_CHART_POINTS, parseChartSpec } from '@workspace/lib/charts';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { createArrayResolver } from '../../engine/cell-resolver';
 import type { ChartRange } from '../../engine/chart-range';
@@ -119,13 +119,14 @@ describe('chartRangeData', () => {
         expect(data?.series[0]).toMatchObject({ name: '', values: ref([0, 3], [0, 0]) });
     });
 
-    test("keeps the previous data's series ids and styles by index, and a series past them is new and automatic", () => {
+    // A series' style is keyed by its id, so keeping the id keeps the style.
+    test("keeps the previous data's series ids by index, and a series past them is new", () => {
         const previous = chartRangeData({ ...range, ref: ref([0, 3], [0, 1]) });
         if (!previous) throw new Error('no data');
-        const kept = { ...previous.series[0], id: 's-kept', color: '#000000', markers: true };
+        const kept = { ...previous.series[0], id: 's-kept' };
         const data = chartRangeData(range, { ...previous, series: [kept] });
-        expect(data?.series[0]).toMatchObject({ id: 's-kept', color: '#000000', markers: true });
-        expect(data?.series[1]).toMatchObject({ color: null, markers: false });
+        expect(data?.series[0]).toEqual(kept);
+        expect(Object.keys(data?.series[1] ?? {})).toEqual(['id', 'name', 'values']);
         expect(data?.series.map(({ id }) => id.startsWith('s-'))).toEqual([true, true, true]);
         expect(new Set(data?.series.map(({ id }) => id)).size).toBe(3);
     });
@@ -196,9 +197,9 @@ describe('suggestChartSpec', () => {
         const spec = suggestChartSpec(ref([0, 3], [0, 3]), resolver);
         if (typeof spec === 'string') throw new Error(spec);
         expect(spec).toMatchObject({
-            type: 'column',
-            title: 'North, South and East',
-            categoryAxis: { title: 'Month' },
+            chart: { type: 'column' },
+            title: { text: 'North, South and East' },
+            axes: { x: { title: { text: 'Month' } } },
         });
         // What is stored must read back.
         expect(parseChartSpec(JSON.stringify(spec))).toEqual(spec);
@@ -207,27 +208,31 @@ describe('suggestChartSpec', () => {
     test('the series store no color, so they draw in the palette as it is, in Inter', () => {
         const spec = suggestChartSpec(ref([0, 3], [0, 3]), resolver);
         if (typeof spec === 'string') throw new Error(spec);
-        expect(spec.data.series.map((series) => series.color)).toEqual([null, null, null]);
-        expect(spec.fontFamily).toBe('Inter');
+        expect(spec.data.series.map(({ id }) => spec.series[id])).toEqual([
+            DEFAULT_CHART_SERIES_STYLE,
+            DEFAULT_CHART_SERIES_STYLE,
+            DEFAULT_CHART_SERIES_STYLE,
+        ]);
+        expect(spec.chart.fontFamily).toBe('Inter');
     });
 
     test("starts from the default look, not Insert → Chart's sample, so no sample axis title carries over", () => {
         const spec = suggestChartSpec(ref([0, 3], [0, 3]), resolver);
         if (typeof spec === 'string') throw new Error(spec);
-        expect(spec.valueAxis).toEqual({
-            title: '',
-            min: null,
-            max: null,
-            gridlines: true,
-            format: null,
+        expect(spec.axes.y).toEqual({
+            kind: 'value',
+            title: { text: '' },
             visible: true,
+            gridlines: { visible: true },
+            labels: { format: null },
+            scale: { min: null, max: null, reversed: false },
         });
     });
 
     test('one or two series titles read naturally, unnamed series leave it empty', () => {
-        expect(suggestChartSpec(ref([0, 3], [0, 1]), resolver)).toMatchObject({ title: 'North' });
-        expect(suggestChartSpec(ref([0, 3], [0, 2]), resolver)).toMatchObject({ title: 'North and South' });
-        expect(suggestChartSpec(ref([0, 2], [0, 1], 's3'), resolver)).toMatchObject({ title: '' });
+        expect(suggestChartSpec(ref([0, 3], [0, 1]), resolver)).toMatchObject({ title: { text: 'North' } });
+        expect(suggestChartSpec(ref([0, 3], [0, 2]), resolver)).toMatchObject({ title: { text: 'North and South' } });
+        expect(suggestChartSpec(ref([0, 2], [0, 1], 's3'), resolver)).toMatchObject({ title: { text: '' } });
     });
 
     test('more series than a chart holds is refused', () => {

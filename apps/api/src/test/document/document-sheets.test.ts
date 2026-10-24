@@ -762,8 +762,8 @@ describe('document/sheets — appendSheetsToYjs', () => {
         column: [0, 0] as [number, number],
     });
     const spec = JSON.stringify({
-        type: 'bar',
-        title: 'Totals',
+        chart: { type: 'bar' },
+        title: { text: 'Totals' },
         data: {
             source: 'range',
             categories: range('sheet-0'),

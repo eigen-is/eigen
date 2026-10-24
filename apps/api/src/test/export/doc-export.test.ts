@@ -297,7 +297,7 @@ describe('doc export — fonts', () => {
                             {
                                 type: 'chart',
                                 attrs: {
-                                    spec: JSON.stringify({ ...sampleChartSpec('column'), fontFamily }),
+                                    spec: JSON.stringify(sampleChartSpec('column', fontFamily)),
                                     width: 400,
                                     height: 240,
                                 },
@@ -417,7 +417,7 @@ describe('doc export — charts', () => {
             );
             // Never wider than the column, its height following, by the prose rule the editor's node view draws with.
             expect(html).toMatch(/\.figure svg\s*\{[^}]*max-width: 100%;[^}]*height: auto;/);
-            expect(html).toContain(`>${sampleChartSpec('column').categoryAxis.title}</text>`);
+            expect(html).toContain(`>${sampleChartSpec('column').axes.x.title.text}</text>`);
             expect(html).toContain('</svg><span class="figcaption">Points</span></span>');
             expect(html).not.toContain('<img');
         },
@@ -438,7 +438,7 @@ describe('doc export — charts', () => {
             new Set(Array.from(html.matchAll(/<text[^>]*font-family="([^"]*)"/g), (m) => m[1]));
         const face = (font: string) => new Set([escapeXml(getFontFamily(font))]);
         expect(fontsOf(renderDocHtml(chartDoc({}), () => null))).toEqual(face('Inter'));
-        const serif = { ...sampleChartSpec('column'), fontFamily: 'Source Serif 4' };
+        const serif = sampleChartSpec('column', 'Source Serif 4');
         expect(fontsOf(renderDocHtml(chartDoc({}, serif), () => null))).toEqual(face('Source Serif 4'));
     });
 

@@ -2,7 +2,7 @@
 // selects the chart and shows them, the data range reads the chart's block back from its refs and rewrites them,
 // the Customise rows write the spec, each change one undo step.
 import { afterEach, expect, test } from 'bun:test';
-import { MAX_SKETCH_POINTS, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, MAX_SKETCH_POINTS, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { SheetChart } from '@workspace/lib/sheets';
 import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
 import { parseFill } from '@workspace/lib/vector';
@@ -37,20 +37,12 @@ const rangeChart = (): SheetChart => ({
     height: 300,
     spec: JSON.stringify({
         ...sampleChartSpec('column'),
-        title: 'Scores',
+        title: { text: 'Scores' },
+        series: { 's-1': { ...DEFAULT_CHART_SERIES_STYLE, color: '#000000' } },
         data: {
             source: 'range',
             categories: ref([1, 3], [0, 0]),
-            series: [
-                {
-                    id: 's-1',
-                    name: ref([0, 0], [1, 1]),
-                    values: ref([1, 3], [1, 1]),
-                    color: '#000000',
-                    markers: false,
-                    smooth: false,
-                },
-            ],
+            series: [{ id: 's-1', name: ref([0, 0], [1, 1]), values: ref([1, 3], [1, 1]) }],
         },
     }),
 });
@@ -215,8 +207,9 @@ test('a range typed on another sheet points the refs at that sheet by id, the se
     expect(spec()?.data).toMatchObject({
         source: 'range',
         categories: ref([1, 2], [0, 0], 's2'),
-        series: [{ name: ref([0, 0], [1, 1], 's2'), values: ref([1, 2], [1, 1], 's2'), color: '#000000' }],
+        series: [{ id: 's-1', name: ref([0, 0], [1, 1], 's2'), values: ref([1, 2], [1, 1], 's2') }],
     });
+    expect(spec()?.series['s-1'].color).toBe('#000000');
 });
 
 test('an invalid range says so and writes nothing', async () => {
@@ -245,24 +238,27 @@ test('Switch rows/columns re-derives the refs from the block, one undo step', as
     expect(spec()?.data).toMatchObject({
         categories: ref([0, 0], [1, 1]),
         series: [
-            { name: ref([1, 1], [0, 0]), values: ref([1, 1], [1, 1]), color: '#000000' },
+            { id: 's-1', name: ref([1, 1], [0, 0]), values: ref([1, 1], [1, 1]) },
             { name: ref([2, 2], [0, 0]), values: ref([2, 2], [1, 1]) },
             { name: ref([3, 3], [0, 0]), values: ref([3, 3], [1, 1]) },
         ],
     });
+    expect(spec()?.series['s-1'].color).toBe('#000000');
     await undo();
     expect(spec()).toEqual(before);
 });
 
 test("a Setup toggle keeps what this build doesn't know beside the data: a key on the spec and a legend", async () => {
     const chart = rangeChart();
-    const newer = { ...JSON.parse(chart.spec), future: 1, legend: 'inside' };
+    const raw = JSON.parse(chart.spec);
+    const newer = { ...raw, future: 1, legend: { ...raw.legend, position: 'inside' } };
     const { stored, toggle } = await mount({ ...chart, spec: JSON.stringify(newer) });
     await act(async () => toggle('Switch rows/columns')?.click());
     const written = JSON.parse(stored()?.spec ?? '{}');
     expect(written.data.categories).toEqual(ref([0, 0], [1, 1]));
-    expect([written.future, written.legend]).toEqual([1, 'inside']);
-    expect(written.data.series[0]).toMatchObject({ id: 's-1', color: '#000000' });
+    expect([written.future, written.legend.position]).toEqual([1, 'inside']);
+    expect(written.data.series[0].id).toBe('s-1');
+    expect(written.series['s-1'].color).toBe('#000000');
 });
 
 // Rebuilt values would fall out of step with an array a newer build keeps beside them, as in Edit data.
@@ -295,16 +291,16 @@ test('a title typed letter by letter is one undo step', async () => {
         });
     }
     await act(async () => title.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
-    expect(spec()?.title).toBe('Pos');
+    expect(spec()?.title.text).toBe('Pos');
     await undo();
-    expect(spec()?.title).toBe('Scores');
+    expect(spec()?.title.text).toBe('Scores');
 });
 
 test("a peer's colour landing after the panel rendered survives a title typed in the panel", async () => {
     const { workbook, spec, field } = await mount(rangeChart());
     const raw = JSON.parse(rangeChart().spec);
-    const series = [{ ...raw.data.series[0], color: '#00ff00' }];
-    const value = JSON.stringify({ ...raw, data: { ...raw.data, series } });
+    const series = { ...raw.series, 's-1': { ...raw.series['s-1'], color: '#00ff00' } };
+    const value = JSON.stringify({ ...raw, series });
     const title = field('input[placeholder="Chart title"]');
     // One act, so the title's handler is the one the panel rendered before the peer's write.
     await act(async () => {
@@ -315,7 +311,7 @@ test("a peer's colour landing after the panel rendered survives a title typed in
         title.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await act(async () => title.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
-    expect(spec()).toMatchObject({ title: 'Goals', data: { series: [{ color: '#00ff00' }] } });
+    expect(spec()).toMatchObject({ title: { text: 'Goals' }, series: { 's-1': { color: '#00ff00' } } });
 });
 
 test('an inline chart edits its data in the grid dialog instead of a data range', async () => {
@@ -334,12 +330,12 @@ test("Edit data's Save keeps a peer's colours and title written while it was ope
         [...(scope?.querySelectorAll('button') ?? [])].find((el) => el.textContent?.trim() === label);
     await click(buttonIn(container, 'Edit data'));
     const dialog = [...document.querySelectorAll('[role="dialog"]')].at(-1);
-    const series = sampleChartSpec('column').data.series.map((s, i) => (i === 1 ? { ...s, color: '#00ff00' } : s));
+    const [first, second] = sampleChartSpec('column').data.series;
     await act(async () =>
         workbook.current?.setChartSpec('c1', [
-            { op: 'set', path: ['title'], value: 'Peer title' },
-            { op: 'set', path: ['sliceColors'], value: [null, '#000002'] },
-            { op: 'set', path: ['data', 'series'], value: series },
+            { op: 'set', path: ['title', 'text'], value: 'Peer title' },
+            { op: 'set', path: ['points', first.id, '1', 'color'], value: '#000002' },
+            { op: 'set', path: ['series', second.id, 'color'], value: '#00ff00' },
         ]),
     );
     const b2 = dialog?.querySelector('[role="row"][aria-rowindex="3"] > [aria-colindex="3"]');
@@ -352,9 +348,9 @@ test("Edit data's Save keeps a peer's colours and title written while it was ope
     });
     await click(buttonIn(dialog, 'Save'));
     const saved = spec();
-    expect(saved?.title).toBe('Peer title');
-    expect(saved?.sliceColors).toEqual([null, '#000002']);
-    expect(saved?.data.series.map((s) => s.color)).toEqual([null, '#00ff00', null]);
+    expect(saved?.title.text).toBe('Peer title');
+    expect(saved?.points).toEqual({ [first.id]: { 1: { color: '#000002' } } });
+    expect(saved?.data.series.map(({ id }) => saved.series[id].color)).toEqual([null, '#00ff00', null]);
     expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);
 });
 
@@ -387,16 +383,7 @@ test('a range chart past the sketch cap says so under Sketch', async () => {
         data: {
             source: 'range',
             categories: null,
-            series: [
-                {
-                    id: 's-1',
-                    name: 'Points',
-                    values: ref([1, MAX_SKETCH_POINTS + 1], [1, 1]),
-                    color: null,
-                    markers: false,
-                    smooth: false,
-                },
-            ],
+            series: [{ id: 's-1', name: 'Points', values: ref([1, MAX_SKETCH_POINTS + 1], [1, 1]) }],
         },
     });
     const capped = await mount({ ...chart, spec: many });

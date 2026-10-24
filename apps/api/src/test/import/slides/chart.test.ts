@@ -89,16 +89,16 @@ describe('a chart', () => {
         expect(element).toMatchObject({ strokeStyle: 'solid', roughness: 0 });
         expect(element.fill && JSON.parse(element.fill)).toMatchObject({ color: TRANSPARENT_COLOR });
         expect(spec).toMatchObject({
-            type: 'column',
-            fontFamily: 'Inter',
-            title: 'Revenue',
-            legend: 'bottom',
+            chart: { type: 'column', fontFamily: 'Inter' },
+            title: { text: 'Revenue' },
+            legend: { position: 'bottom' },
+            series: { 'x-0': { color: ACCENT[3] }, 'x-1': { color: ACCENT[1] } },
             data: {
                 source: 'inline',
                 categories: CATEGORIES,
                 series: [
-                    { name: 'Plan', values: [1, 2, 3], color: ACCENT[3] },
-                    { name: 'Actual', values: [4, 5, 6], color: ACCENT[1] },
+                    { id: 'x-0', name: 'Plan', values: [1, 2, 3] },
+                    { id: 'x-1', name: 'Actual', values: [4, 5, 6] },
                 ],
             },
         });
@@ -132,19 +132,20 @@ describe('a chart', () => {
         );
         const { element, spec } = chartOf(own, { masters: [{ clrMap: DARK }] });
         expect(element).toMatchObject({ color: '#000000', strokeColor: '#00000099' });
-        expect(spec?.data.series[0].color).toBe(ACCENT[2]);
+        expect(spec?.series['x-0']?.color).toBe(ACCENT[2]);
     });
 
     test('a line chart keeps its series, smoothing and markers; a pie its slices in the accents', () => {
         expect(chartOf(LINE).spec).toMatchObject({
-            type: 'line',
-            title: 'Trend',
-            data: { series: [{ name: 'Trend', values: [3, 1, 2], color: ACCENT[1], smooth: true, markers: true }] },
+            chart: { type: 'line' },
+            title: { text: 'Trend' },
+            series: { 'x-0': { color: ACCENT[1], line: { smooth: true }, marker: { visible: true } } },
+            data: { series: [{ id: 'x-0', name: 'Trend', values: [3, 1, 2] }] },
         });
         expect(chartOf(PIE).spec).toMatchObject({
-            type: 'pie',
-            title: '',
-            sliceColors: [ACCENT[1], ACCENT[2], ACCENT[3]],
+            chart: { type: 'pie' },
+            title: { text: '' },
+            points: { 'x-0': { 0: { color: ACCENT[1] }, 1: { color: ACCENT[2] }, 2: { color: ACCENT[3] } } },
             data: { categories: CATEGORIES, series: [{ values: [5, 3, 2] }] },
         });
     });
@@ -171,7 +172,7 @@ describe('a chart', () => {
             OPTIONS,
         );
         const colors = deck.slides.map(({ elements: [found] }) =>
-            found?.type === 'chart' ? parseChartSpec(found.chart ?? '')?.data.series[0].color : undefined,
+            found?.type === 'chart' ? parseChartSpec(found.chart ?? '')?.series['x-0']?.color : undefined,
         );
         expect(colors).toEqual([ACCENT[1], ACCENT[1], ACCENT[3]]);
     });
@@ -188,7 +189,7 @@ describe('a chart', () => {
                 'ppt/drawings/drawing1.xml': '<c:userShapes',
             },
         });
-        expect(spec?.title).toBe('Revenue');
+        expect(spec?.title.text).toBe('Revenue');
     });
 });
 

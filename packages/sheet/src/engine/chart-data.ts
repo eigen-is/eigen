@@ -5,6 +5,9 @@ import {
     applyChartSpecChange,
     chartColor,
     chartLabel,
+    chartPointIndex,
+    chartPointMoves,
+    chartSeriesStyle,
     exceedsChartSpecBytes,
     MAX_CHART_POINTS,
     parseChartSpec,
@@ -30,17 +33,14 @@ import type { Cell, CellResolver } from './types';
 // Reads a range chart's cells: values from the computed `v`, labels and names from the display
 // text `m` or a rich-text cell's runs, the same strings the grid shows. Hidden rows and columns are
 // read like any other. A series whose values were deleted is left out, as Google does, and keeps its
-// color in the spec for an undo. An automatic color resolves by the series' index in the spec, before
-// that, so the series after a deleted one keep the color the editor shows them in.
+// id, so its style stays in the spec for an undo.
 export function resolveRangeChartData(data: RangeChartData, resolver: CellResolver): ChartData | ChartDataError {
     const sheetIds = new Set(resolver.getSheets().map((sheet) => sheet.id));
     const usable = (ref: CellRangeRef): boolean =>
         sheetIds.has(ref.sheetId) && (ref.row[0] === ref.row[1] || ref.column[0] === ref.column[1]);
     const { categories } = data;
     if (categories !== null && !usable(categories)) return 'ref';
-    const series = data.series.flatMap(({ values, color, ...rest }, i) =>
-        values ? [{ ...rest, color: color ?? chartColor(i), values }] : [],
-    );
+    const series = data.series.flatMap(({ values, ...rest }) => (values ? [{ ...rest, values }] : []));
     if (series.length === 0) return 'ref';
     for (const s of series) {
         if (!usable(s.values) || (typeof s.name !== 'string' && !sheetIds.has(s.name.sheetId))) return 'ref';
@@ -59,8 +59,8 @@ export function resolveRangeChartData(data: RangeChartData, resolver: CellResolv
         }
         return out;
     };
-    const resolved = series.map(({ name, values, ...style }) => ({
-        ...style,
+    const resolved = series.map(({ id, name, values }) => ({
+        id,
         name: seriesName(name, resolver),
         values: cells(values).map((cell) => (typeof cell?.v === 'number' && Number.isFinite(cell.v) ? cell.v : null)),
     }));
@@ -99,34 +99,35 @@ export function renderSheetChartSvg(chart: SheetChart, resolver: CellResolver): 
 
 // The value axis's own format, or for a range chart the first value cell's.
 function valueFormat(spec: ChartSpec, resolver: CellResolver): string | undefined {
-    if (spec.valueAxis.format !== null) return spec.valueAxis.format;
+    const { format } = spec.axes.y.labels;
+    if (format !== null) return format;
     const first = spec.data.source === 'range' ? spec.data.series.find((s) => s.values)?.values : null;
     return first ? resolver.getCell(first.sheetId, first.row[0], first.column[0])?.ct?.fa : undefined;
 }
 
 // The chart as a copy carries it to a host with no cells: its ranges read into inline data, and the source
 // cells' tick format written on the axis. An automatic color stays automatic unless a deleted series before
-// it would shift its index, and an inline chart is its stored string. A ref this build doesn't know is left out,
-// as it would name cells the host doesn't have. Null for a chart that draws #REF!, too much data or nothing, or
+// it would shift its index, which writes the color it draws in, and an inline chart is its stored string. A ref
+// this build doesn't know is left out, as it would name cells the host doesn't have. Null for a chart that draws #REF!, too much data or nothing, or
 // whose numbers pass the spec's size limit.
 export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): string | null {
     const { stored, spec } = readChartSpec(chart.spec);
     if (spec?.data.source !== 'range') return spec ? chart.spec : null;
     const resolved = resolveRangeChartData(spec.data, resolver);
     if (typeof resolved === 'string') return null;
-    const kept = spec.data.series.flatMap(({ values, color }, i) => (values ? [{ color, i }] : []));
+    const kept = spec.data.series.flatMap(({ id, values }, i) => (values ? [{ id, i }] : []));
+    const shifted: ChartSpecChange = kept.flatMap(({ id, i }, j) =>
+        i !== j && chartSeriesStyle(spec, id).color === null
+            ? [{ op: 'set', path: ['series', id, 'color'], value: chartColor(i) }]
+            : [],
+    );
     const change: ChartSpecChange = [
         { op: 'set', path: ['data'], value: walkRefs(stored['data'], () => undefined) },
         { op: 'set', path: ['data', 'source'], value: 'inline' },
         { op: 'set', path: ['data', 'categories'], value: resolved.categories },
-        {
-            op: 'set',
-            path: ['data', 'series'],
-            value: resolved.series.map((s, j) =>
-                kept[j].color === null && kept[j].i === j ? { ...s, color: null } : s,
-            ),
-        },
-        { op: 'set', path: ['valueAxis', 'format'], value: valueFormat(spec, resolver) ?? null },
+        { op: 'set', path: ['data', 'series'], value: resolved.series },
+        { op: 'set', path: ['axes', 'y', 'labels', 'format'], value: valueFormat(spec, resolver) ?? null },
+        ...shifted,
     ];
     const inline = JSON.stringify(applyChartSpecChange(stored, change));
     return exceedsChartSpecBytes(inline) ? null : inline;
@@ -144,12 +145,13 @@ export function cellLabel(cell: Cell | null): string {
 // Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or its
 // stored data is not range data. Every ref on the data or a series moves, under any key, so a ref this build
 // doesn't know moves too, even in a chart it can't draw. A null empties a ref, and a name ref leaves the series
-// unnamed. `slices` rewrites the slice colors of a chart this build reads, given the ref the slices run along
-// before the map: the categories, or the first drawn series' values for a chart without them.
+// unnamed. `points` says where each point index of a chart this build reads goes, given the ref its points run along
+// before the map: the categories, or the first drawn series' values for a chart without them. Every series' points
+// move, each stored entry whole.
 export function mapChartRefs(
     chart: SheetChart,
     map: (ref: CellRangeRef) => CellRangeRef | null,
-    slices?: (colors: ChartSpec['sliceColors'], ref: CellRangeRef) => ChartSpec['sliceColors'],
+    points?: (ref: CellRangeRef) => ((index: number) => number | null) | null,
 ): SheetChart {
     const { stored, spec } = readChartSpec(chart.spec);
     if (!isRecord(stored['data']) || stored['data']['source'] !== 'range') return chart;
@@ -163,9 +165,22 @@ export function mapChartRefs(
     const change: ChartSpecChange = [{ op: 'set', path: ['data'], value: data }];
     const range = spec?.data.source === 'range' ? spec.data : null;
     const along = range && (range.categories ?? range.series.find((s) => s.values)?.values);
-    if (spec && slices && along)
-        change.push({ op: 'set', path: ['sliceColors'], value: slices(spec.sliceColors, along) });
+    const target = along && points?.(along);
+    if (target) change.push(...pointMovesOf(stored['points'], target));
     return { ...chart, spec: JSON.stringify(applyChartSpecChange(stored, change)) };
+}
+
+// The moves of every stored series' points, the ones this build reads and the ones it doesn't.
+function pointMovesOf(points: unknown, target: (index: number) => number | null): ChartSpecChange {
+    if (!isRecord(points)) return [];
+    return Object.entries(points).flatMap(([id, entries]) => {
+        if (!isRecord(entries)) return [];
+        const indexes = Object.keys(entries).flatMap((key) => {
+            const index = chartPointIndex(key);
+            return index === null ? [] : [index];
+        });
+        return chartPointMoves(id, indexes, target);
+    });
 }
 
 // A record shaped as a CellRangeRef. A key beside its three is accepted, as the reader accepts it.

@@ -1,6 +1,6 @@
 import type { MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
 import { cloneSides, parseCellKey, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import type { CellRangeRef, ChartSpec } from '@workspace/lib/types/chart';
+import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { mapChartRefs } from './chart-data';
 import { withCfRanges } from './conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
@@ -70,23 +70,24 @@ export function shiftRangeForDelete<R extends AxisRange>(
     return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
 }
 
-type SliceColors = ChartSpec['sliceColors'];
-
-// A pie's slice colors go by index along its categories, so an insert inside them puts automatic colors at the
-// new slices. Only a ref that runs along the op's axis has slices there.
-function shiftSlicesForInsert(colors: SliceColors, ref: CellRangeRef, op: InsertRowColOp): SliceColors {
-    if (!runsAlong(ref, op.type)) return colors;
+// A chart's points, a pie's slice colors among them, go by index along its categories, so an insert inside them leaves
+// the new points automatic and moves the ones after up. Only a ref that runs along the op's axis has points there.
+function pointsForInsert(ref: CellRangeRef, op: InsertRowColOp): ((index: number) => number) | null {
+    if (!runsAlong(ref, op.type)) return null;
     const [start, end] = op.type === 'row' ? ref.row : ref.column;
     const at = (op.direction === 'lefttop' ? op.index : op.index + 1) - start;
-    if (at <= 0 || at > end - start || at >= colors.length) return colors;
-    return [...colors.slice(0, at), ...new Array<null>(op.count).fill(null), ...colors.slice(at)];
+    if (at <= 0 || at > end - start) return null;
+    return (index) => (index >= at ? index + op.count : index);
 }
 
-// A delete drops the deleted slices' colors, so the slices after them keep theirs.
-function shiftSlicesForDelete(colors: SliceColors, ref: CellRangeRef, op: DeleteRowColOp): SliceColors {
-    if (!runsAlong(ref, op.type)) return colors;
+// A delete drops the deleted points, so the points after them keep theirs.
+function pointsForDelete(ref: CellRangeRef, op: DeleteRowColOp): ((index: number) => number | null) | null {
+    if (!runsAlong(ref, op.type)) return null;
     const [start, end] = op.type === 'row' ? ref.row : ref.column;
-    return colors.filter((_, i) => start + i < op.start || start + i > op.end || start + i > end);
+    const first = Math.max(op.start, start) - start;
+    const last = Math.min(op.end, end) - start;
+    if (first > last) return null;
+    return (index) => (index < first ? index : index > last ? index - (last - first + 1) : null);
 }
 
 function runsAlong(ref: CellRangeRef, type: 'row' | 'column'): boolean {
@@ -333,21 +334,20 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
 }
 
 // A chart ref names its sheet by id, so an op on one sheet moves the refs to it on every sheet's
-// charts, and the slice colors along them. Only a chart whose refs moved is rewritten; a malformed
+// charts, and the points along them. Only a chart whose refs moved is rewritten; a malformed
 // spec stays as stored.
 function shiftChartsAcrossSheets<S extends Sheet>(
     sheets: S[],
     sheetId: string,
     shift: (ref: CellRangeRef) => CellRangeRef | null,
-    shiftSlices: (colors: SliceColors, ref: CellRangeRef) => SliceColors,
+    shiftPoints: (ref: CellRangeRef) => ((index: number) => number | null) | null,
 ): S[] {
     const move = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shift(ref) : ref);
-    const slices = (colors: SliceColors, ref: CellRangeRef) =>
-        ref.sheetId === sheetId ? shiftSlices(colors, ref) : colors;
+    const points = (ref: CellRangeRef) => (ref.sheetId === sheetId ? shiftPoints(ref) : null);
     return sheets.map((sheet) => {
         let charts: Record<string, SheetChart> | null = null;
         for (const chart of Object.values(sheet.charts ?? {})) {
-            const moved = mapChartRefs(chart, move, slices);
+            const moved = mapChartRefs(chart, move, points);
             if (moved === chart) continue;
             charts ??= { ...sheet.charts };
             charts[chart.id] = moved;
@@ -467,7 +467,7 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
                 column: [Math.min(moved.column[0], lastColumn), Math.min(moved.column[1], lastColumn)],
             };
         },
-        (colors, ref) => shiftSlicesForInsert(colors, ref, op),
+        (ref) => pointsForInsert(ref, op),
     );
 }
 
@@ -548,6 +548,6 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         shifted,
         op.id,
         (ref) => shiftRangeForDelete(ref, op),
-        (colors, ref) => shiftSlicesForDelete(colors, ref, op),
+        (ref) => pointsForDelete(ref, op),
     );
 }

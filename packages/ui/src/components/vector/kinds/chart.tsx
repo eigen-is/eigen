@@ -28,7 +28,7 @@ export function newChartElement(
         y: center.y - height / 2,
         width,
         height,
-        chart: JSON.stringify({ ...sampleChartSpec(type), fontFamily: style.fontFamily }),
+        chart: JSON.stringify(sampleChartSpec(type, style.fontFamily)),
     };
 }
 

@@ -3,8 +3,9 @@
 // the fields a row edits, which the host applies onto the spec it stores. A typed field writes as the user goes
 // inside the host's gesture (PropertyGestureContext), so a typed title is one undo step.
 
-import { chartColor, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';
+import { chartColor, chartPointColor, chartSeriesStyle, MAX_CHART_LABEL_LENGTH } from '@workspace/lib/charts';
 import type {
+    ChartAxis,
     ChartSpec,
     ChartSpecChange,
     ChartSpecOp,
@@ -73,47 +74,43 @@ export function ChartEditor({
     children,
 }: ChartEditorProps) {
     const [dataOpen, setDataOpen] = useState(false);
-    const { type, data, valueAxis, categoryAxis } = spec;
+    const { data } = spec;
+    const { type } = spec.chart;
+    const { x, y } = spec.axes;
+    const { stacking } = spec.plots[type];
     const pie = type === 'pie';
     // A bar chart lies on its side, so its value axis is the horizontal one.
     const valueHorizontal = type === 'bar';
 
-    // Range data names no categories until a sheet resolves it; without them its slices go by number.
+    // A pie draws its first series with values, whose points are its slices. Range data names no categories until a
+    // sheet resolves it; without them its slices go by number, as far as a slice has a color.
+    const pieSeries = data.series.find((series) => series.values !== null);
+    const pieId = pieSeries?.id ?? '';
+    const colored = Object.hasOwn(spec.points, pieId) ? Object.keys(spec.points[pieId]).map(Number) : [];
     const sliceLabels = (
-        data.source === 'inline' ? data.categories : (categories ?? spec.sliceColors.map(() => ''))
+        data.source === 'inline'
+            ? data.categories
+            : (categories ?? Array.from({ length: Math.max(-1, ...colored) + 1 }, () => ''))
     ).map((category, i) => category || `Slice ${i + 1}`);
-    const sliceColors = sliceLabels.map((_, i) => spec.sliceColors[i] ?? null);
 
     // A 100% stack's min and max are fractions of the whole, Excel's c:min and c:max, shown and typed as
     // percents; toPrecision keeps 0.07 from showing as 7.000000000000001.
-    const percent = spec.stacking === 'percent' && (type === 'column' || type === 'bar');
+    const percent = stacking === 'percent' && (type === 'column' || type === 'bar');
     const shownBound = (bound: number | null) =>
         bound === null ? undefined : percent ? Number((bound * 100).toPrecision(12)) : bound;
     const storedBound = (typed: number) => (percent ? fromPercent(typed) : typed);
 
-    const setValueAxis = (patch: Partial<ChartSpec['valueAxis']>) => {
-        const next = { ...valueAxis, ...patch };
+    const setBounds = (bounds: Partial<ChartAxis['scale']>) => {
+        const next = { ...y.scale, ...bounds };
         // The reader drops a min at or past the max, so it would not stick.
         if (next.min !== null && next.max !== null && next.min >= next.max) return;
-        onChange(Object.entries(patch).map(([key, value]) => set(['valueAxis', key], value)));
+        onChange(Object.entries(bounds).map(([key, value]) => set(['axes', 'y', 'scale', key], value)));
     };
 
     const setSliceColor = (index: number, color: string | null) =>
-        onChange([
-            set(
-                ['sliceColors'],
-                sliceColors.map((c, i) => (i === index ? color : c)),
-            ),
-        ]);
+        onChange([set(['points', pieId, String(index), 'color'], color)]);
 
-    // The list lands on the stored series by id, so what a newer build keeps on a series stays.
-    const setSeriesColor = (index: number, color: string | null) =>
-        onChange([
-            set(
-                ['data', 'series'],
-                data.series.map((s, i) => (i === index ? { ...s, color } : s)),
-            ),
-        ]);
+    const setSeriesColor = (id: string, color: string | null) => onChange([set(['series', id, 'color'], color)]);
 
     // An axis's rows take their section's name, since a bar chart swaps which section holds which axis.
     type AxisName = 'Horizontal axis' | 'Vertical axis';
@@ -125,25 +122,22 @@ export function ChartEditor({
             onCheckedChange={onVisible}
         />
     );
-    const setCategoryAxis = (patch: Partial<ChartSpec['categoryAxis']>) =>
-        onChange(Object.entries(patch).map(([key, value]) => set(['categoryAxis', key], value)));
-
     const categoryRows = (axis: AxisName) => (
         <>
             <PropertyRow label="Title">
                 <PropertyTextInput
-                    value={categoryAxis.title}
+                    value={x.title.text}
                     placeholder={`${axis} title`}
                     maxLength={MAX_CHART_LABEL_LENGTH}
-                    onChange={(title) => setCategoryAxis({ title })}
+                    onChange={(text) => onChange([set(['axes', 'x', 'title', 'text'], text)])}
                 />
             </PropertyRow>
-            {showAxisRow(axis, categoryAxis.visible, (visible) => setCategoryAxis({ visible }))}
+            {showAxisRow(axis, x.visible, (visible) => onChange([set(['axes', 'x', 'visible'], visible)]))}
             <PropertyCheckbox
                 label="Reverse axis order"
                 aria-label={`${axis}: Reverse axis order`}
-                checked={categoryAxis.reversed}
-                onCheckedChange={(reversed) => setCategoryAxis({ reversed })}
+                checked={x.scale.reversed}
+                onCheckedChange={(reversed) => onChange([set(['axes', 'x', 'scale', 'reversed'], reversed)])}
             />
         </>
     );
@@ -152,70 +146,71 @@ export function ChartEditor({
         <>
             <PropertyRow label="Title">
                 <PropertyTextInput
-                    value={valueAxis.title}
+                    value={y.title.text}
                     placeholder={`${axis} title`}
                     maxLength={MAX_CHART_LABEL_LENGTH}
-                    onChange={(title) => setValueAxis({ title })}
+                    onChange={(text) => onChange([set(['axes', 'y', 'title', 'text'], text)])}
                 />
             </PropertyRow>
-            {showAxisRow(axis, valueAxis.visible, (visible) => setValueAxis({ visible }))}
+            {showAxisRow(axis, y.visible, (visible) => onChange([set(['axes', 'y', 'visible'], visible)]))}
             <PropertyRow label="Min">
                 <PropertyNumberInput
-                    value={shownBound(valueAxis.min)}
+                    value={shownBound(y.scale.min)}
                     placeholder="Auto"
-                    onChange={(min) => setValueAxis({ min: storedBound(min) })}
-                    onClear={() => setValueAxis({ min: null })}
+                    onChange={(min) => setBounds({ min: storedBound(min) })}
+                    onClear={() => setBounds({ min: null })}
                 />
             </PropertyRow>
             <PropertyRow label="Max">
                 <PropertyNumberInput
-                    value={shownBound(valueAxis.max)}
+                    value={shownBound(y.scale.max)}
                     placeholder="Auto"
-                    onChange={(max) => setValueAxis({ max: storedBound(max) })}
-                    onClear={() => setValueAxis({ max: null })}
+                    onChange={(max) => setBounds({ max: storedBound(max) })}
+                    onClear={() => setBounds({ max: null })}
                 />
             </PropertyRow>
             <PropertyCheckbox
                 label="Gridlines"
                 aria-label={`${axis}: Gridlines`}
-                checked={valueAxis.gridlines}
-                onCheckedChange={(gridlines) => setValueAxis({ gridlines })}
+                checked={y.gridlines.visible}
+                onCheckedChange={(visible) => onChange([set(['axes', 'y', 'gridlines', 'visible'], visible)])}
             />
         </>
     );
+
+    // Excel's bar chart reads reversed by default, so its direction would turn a column chart right to left. Column and
+    // bar share their stacking, so a switch between them keeps it.
+    const setType = (next: ChartSpec['chart']['type']) => {
+        const bars = (t: string) => t === 'column' || t === 'bar';
+        onChange([
+            set(['chart', 'type'], next),
+            ...((next === 'bar') === valueHorizontal ? [] : [set(['axes', 'x', 'scale', 'reversed'], false)]),
+            ...(bars(type) && bars(next) && spec.plots[next].stacking !== stacking
+                ? [set(['plots', next, 'stacking'], stacking)]
+                : []),
+        ]);
+    };
 
     return (
         <>
             <PropertySection title="Chart">
                 <PropertyRow label="Type">
-                    <MergedSelect
-                        value={type}
-                        options={CHART_TYPE_OPTIONS}
-                        onChange={(next) =>
-                            // Excel's bar chart reads reversed by default, so its direction would turn a
-                            // column chart right to left.
-                            onChange(
-                                (next === 'bar') === (type === 'bar')
-                                    ? [set(['type'], next)]
-                                    : [set(['type'], next), set(['categoryAxis', 'reversed'], false)],
-                            )
-                        }
-                    />
+                    <MergedSelect value={type} options={CHART_TYPE_OPTIONS} onChange={setType} />
                 </PropertyRow>
                 {(type === 'column' || type === 'bar') && (
                     <PropertyRow label="Stacking">
                         <MergedSelect
-                            value={spec.stacking}
+                            value={stacking}
                             options={STACKING_OPTIONS}
-                            onChange={(stacking) =>
+                            onChange={(next) =>
                                 // Shares and raw values don't carry over: a raw max of 100 would be 10,000%.
                                 onChange(
-                                    (stacking === 'percent') === (spec.stacking === 'percent')
-                                        ? [set(['stacking'], stacking)]
+                                    (next === 'percent') === percent
+                                        ? [set(['plots', type, 'stacking'], next)]
                                         : [
-                                              set(['stacking'], stacking),
-                                              set(['valueAxis', 'min'], null),
-                                              set(['valueAxis', 'max'], null),
+                                              set(['plots', type, 'stacking'], next),
+                                              set(['axes', 'y', 'scale', 'min'], null),
+                                              set(['axes', 'y', 'scale', 'max'], null),
                                           ],
                                 )
                             }
@@ -224,22 +219,22 @@ export function ChartEditor({
                 )}
                 <PropertyRow label="Title">
                     <PropertyTextInput
-                        value={spec.title}
+                        value={spec.title.text}
                         placeholder="Chart title"
                         maxLength={MAX_CHART_LABEL_LENGTH}
-                        onChange={(title) => onChange([set(['title'], title)])}
+                        onChange={(text) => onChange([set(['title', 'text'], text)])}
                     />
                 </PropertyRow>
                 <PropertyRow label="Legend">
                     <MergedSelect
-                        value={spec.legend}
+                        value={spec.legend.position}
                         options={LEGEND_OPTIONS}
-                        onChange={(legend) => onChange([set(['legend'], legend)])}
+                        onChange={(position) => onChange([set(['legend', 'position'], position)])}
                     />
                 </PropertyRow>
                 <FontRow
-                    value={spec.fontFamily}
-                    onChange={(fontFamily) => onChange([set(['fontFamily'], fontFamily)])}
+                    value={spec.chart.fontFamily}
+                    onChange={(fontFamily) => onChange([set(['chart', 'fontFamily'], fontFamily)])}
                 />
                 {data.source === 'inline' && (
                     <>
@@ -278,37 +273,39 @@ export function ChartEditor({
 
             {pie ? (
                 <PropertySection title="Slices">
-                    {sliceLabels.map((label, i) => (
-                        <ColorRow
-                            key={i}
-                            label={label}
-                            value={sliceColors[i] ?? chartColor(i)}
-                            onChange={(color) => setSliceColor(i, color)}
-                            automatic={{ active: sliceColors[i] === null, onReset: () => setSliceColor(i, null) }}
-                        />
-                    ))}
+                    {sliceLabels.map((label, i) => {
+                        const color = chartPointColor(spec, pieId, i);
+                        return (
+                            <ColorRow
+                                key={i}
+                                label={label}
+                                value={color ?? chartColor(i)}
+                                onChange={(picked) => setSliceColor(i, picked)}
+                                automatic={{ active: color === null, onReset: () => setSliceColor(i, null) }}
+                            />
+                        );
+                    })}
                 </PropertySection>
             ) : (
                 <PropertySection title="Series">
                     {/* A range series whose values were deleted draws nothing, so it has no row. */}
-                    {data.series.map((series, i) =>
-                        series.values === null ? null : (
+                    {data.series.map((series, i) => {
+                        if (series.values === null) return null;
+                        const { color } = chartSeriesStyle(spec, series.id);
+                        return (
                             <ColorRow
-                                key={i}
+                                key={series.id}
                                 label={
                                     seriesNames?.[i] ||
                                     (typeof series.name === 'string' && series.name) ||
                                     `Series ${i + 1}`
                                 }
-                                value={series.color ?? chartColor(i)}
-                                onChange={(color) => setSeriesColor(i, color)}
-                                automatic={{
-                                    active: series.color === null,
-                                    onReset: () => setSeriesColor(i, null),
-                                }}
+                                value={color ?? chartColor(i)}
+                                onChange={(picked) => setSeriesColor(series.id, picked)}
+                                automatic={{ active: color === null, onReset: () => setSeriesColor(series.id, null) }}
                             />
-                        ),
-                    )}
+                        );
+                    })}
                 </PropertySection>
             )}
         </>

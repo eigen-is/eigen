@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
     applyChartSpecChange,
-    chartColor,
     DEFAULT_CHART_SERIES_STYLE,
-    defaultChartPresentation,
+    defaultChartSpec,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     MAX_CHART_LABEL_LENGTH,
@@ -20,7 +19,6 @@ const { createRoot } = await import('react-dom/client');
 const { ChartDataDialog } = await import('../../../components/charts');
 
 const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-const style = { markers: false, smooth: false };
 
 type InlineSpec = ChartSpec & { data: InlineChartData };
 
@@ -28,36 +26,43 @@ type InlineSpec = ChartSpec & { data: InlineChartData };
 // down column A, A1 empty. A pie keeps the first series, as a new pie does.
 function scores(type: 'column' | 'pie' = 'column'): InlineSpec {
     const periods = [
-        { ...DEFAULT_CHART_SERIES_STYLE, id: 's-1', name: 'Period 1', values: [42, 65, 38, 80] },
-        { ...DEFAULT_CHART_SERIES_STYLE, id: 's-2', name: 'Period 2', values: [58, 47, 71, 63] },
+        { id: 's-1', name: 'Period 1', values: [42, 65, 38, 80] },
+        { id: 's-2', name: 'Period 2', values: [58, 47, 71, 63] },
     ];
+    const data: InlineChartData = {
+        source: 'inline',
+        categories: ['Team 1', 'Team 2', 'Team 3', 'Team 4'],
+        series: type === 'pie' ? periods.slice(0, 1) : periods,
+    };
+    return { ...defaultChartSpec(type, data), title: { text: 'Points scored' }, data };
+}
+
+// The scores with a category axis title, which A1 shows.
+function titled(text: string): InlineSpec {
+    const spec = scores();
+    return { ...spec, axes: { ...spec.axes, x: { ...spec.axes.x, title: { text } } } };
+}
+
+// A pie whose slices each have a color, beside a key this build doesn't know.
+function coloredPie(): InlineSpec {
+    const colors = ['#000001', '#000002', '#000003', '#000004'];
     return {
-        ...defaultChartPresentation(type),
-        type,
-        title: 'Points scored',
-        data: {
-            source: 'inline',
-            categories: ['Team 1', 'Team 2', 'Team 3', 'Team 4'],
-            series: type === 'pie' ? periods.slice(0, 1) : periods,
-        },
+        ...scores('pie'),
+        points: { 's-1': Object.fromEntries(colors.map((color, i) => [i, { color, future: color }])) },
     };
 }
 
 function grid(seriesCount: number, rows: number): InlineSpec {
-    return {
-        ...scores(),
-        data: {
-            source: 'inline',
-            categories: Array.from({ length: rows }, (_, i) => `C${i}`),
-            series: Array.from({ length: seriesCount }, (_, j) => ({
-                ...style,
-                id: `s-${j}`,
-                color: chartColor(j),
-                name: `S${j}`,
-                values: Array.from({ length: rows }, (_, i) => i),
-            })),
-        },
+    const data: InlineChartData = {
+        source: 'inline',
+        categories: Array.from({ length: rows }, (_, i) => `C${i}`),
+        series: Array.from({ length: seriesCount }, (_, j) => ({
+            id: `s-${j}`,
+            name: `S${j}`,
+            values: Array.from({ length: rows }, (_, i) => i),
+        })),
     };
+    return { ...scores(), series: defaultChartSpec('column', data).series, data };
 }
 
 type KeyOptions = { shiftKey?: boolean; metaKey?: boolean };
@@ -292,21 +297,21 @@ describe('ChartDataDialog: the grid', () => {
 
     // The header of the categories column, as in Google.
     test('A1 shows the category axis title and types it', async () => {
-        const dialog = await open({ ...scores(), categoryAxis: { ...scores().categoryAxis, title: 'Teams' } });
+        const dialog = await open(titled('Teams'));
         expect(dialog.cell(0, 0).textContent).toBe('Teams');
         expect(dialog.editor().getAttribute('aria-label')).toBe('A1: Teams');
         await dialog.type('Squads');
         await dialog.key('Enter');
         expect(dialog.cell(0, 0).textContent).toBe('Squads');
-        expect((await dialog.save()).categoryAxis.title).toBe('Squads');
+        expect((await dialog.save()).axes.x.title.text).toBe('Squads');
     });
 
     test("Save leaves a peer's category axis title alone when A1 did not change", async () => {
-        const dialog = await open({ ...scores(), categoryAxis: { ...scores().categoryAxis, title: 'Teams' } });
-        await dialog.rerender({ ...scores(), categoryAxis: { ...scores().categoryAxis, title: 'Squads' } });
+        const dialog = await open(titled('Teams'));
+        await dialog.rerender(titled('Squads'));
         await dialog.select(1, 1);
         await dialog.type('7');
-        expect((await dialog.save()).categoryAxis.title).toBe('Squads');
+        expect((await dialog.save()).axes.x.title.text).toBe('Squads');
     });
 
     test('Save writes the grid once, Cancel nothing', async () => {
@@ -319,7 +324,7 @@ describe('ChartDataDialog: the grid', () => {
         const spec = await again.save();
         expect(again.saved).toHaveLength(1);
         expect(spec.data).toEqual(scores().data);
-        expect(spec.title).toBe('Points scored');
+        expect(spec.title.text).toBe('Points scored');
     });
 
     test('a chart past the grid limits opens read-only with a note', async () => {
@@ -336,7 +341,7 @@ describe('ChartDataDialog: the grid', () => {
 describe('ChartDataDialog: Save is a change', () => {
     test('Save writes only what the grid changed, so what the chart stores beside it stays', async () => {
         const spec = scores();
-        const dialog = await open(spec, { ...spec, future: 1, legend: 'inside' });
+        const dialog = await open(spec, { ...spec, future: 1, legend: { position: 'inside' } });
         await dialog.select(1, 1);
         await dialog.type('7');
         await dialog.key('Enter');
@@ -350,18 +355,18 @@ describe('ChartDataDialog: Save is a change', () => {
                 },
             ],
         ]);
-        expect(dialog.stored()).toMatchObject({ future: 1, legend: 'inside' });
+        expect(dialog.stored()).toMatchObject({ future: 1, legend: { position: 'inside' } });
     });
 
     test('deleting series 1 keeps series 2 under its id, with its colour', async () => {
-        const [first, second] = scores().data.series;
-        const dialog = await open({
-            ...scores(),
-            data: { ...scores().data, series: [first, { ...second, color: '#00ff00' }] },
-        });
+        const [, second] = scores().data.series;
+        const green = { ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' };
+        const dialog = await open({ ...scores(), series: { ...scores().series, 's-2': green } });
         await dialog.mouseDown(dialog.columnHeader('B'));
         await dialog.key('Delete');
-        expect((await dialog.save()).data.series).toEqual([{ ...second, color: '#00ff00' }]);
+        const spec = await dialog.save();
+        expect(spec.data.series).toEqual([second]);
+        expect(spec.series).toEqual({ 's-2': green });
     });
 
     test('a stored key on the data or on a series this build does not read opens the grid read-only', async () => {
@@ -376,30 +381,43 @@ describe('ChartDataDialog: Save is a change', () => {
             expect(dialog.dialog().textContent).toContain('made in a newer version of Eigen');
             expect(dialog.dialog().textContent).toContain('Period 2');
         }
-        const plain = await open(spec, { ...spec, future: 1, valueAxis: { ...spec.valueAxis, logBase: 10 } });
+        const plain = await open(spec, {
+            ...spec,
+            future: 1,
+            axes: { ...spec.axes, y: { ...spec.axes.y, logBase: 10 } },
+        });
         expect(plain.dialog().querySelectorAll('input')).toHaveLength(1);
     });
 
     test("a peer's series colour, slice colour and title while the dialog is open survive Save", async () => {
         const dialog = await open(scores());
-        const [first, second] = scores().data.series;
         const peer: InlineSpec = {
             ...scores(),
-            title: 'Peer title',
-            sliceColors: [null, '#000002'],
-            data: { ...scores().data, series: [first, { ...second, color: '#00ff00' }] },
+            title: { text: 'Peer title' },
+            series: { ...scores().series, 's-2': { ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' } },
+            points: { 's-1': { 1: { color: '#000002' } } },
         };
         await dialog.rerender(peer);
         await dialog.select(1, 1);
         await dialog.type('7');
         await dialog.key('Enter');
         const spec = await dialog.save();
-        expect(spec.title).toBe('Peer title');
-        expect(spec.sliceColors).toEqual([null, '#000002']);
-        expect(spec.data.series.map((s) => [s.color, s.values[0]])).toEqual([
+        expect(spec.title.text).toBe('Peer title');
+        expect(spec.points).toEqual({ 's-1': { 1: { color: '#000002' } } });
+        expect(spec.data.series.map((s) => [spec.series[s.id].color, s.values[0]])).toEqual([
             [null, 7],
             ['#00ff00', 58],
         ]);
+    });
+
+    test("a peer's slice colour past a deleted row moves with its row", async () => {
+        const dialog = await open(scores('pie'));
+        await dialog.rerender({ ...scores('pie'), points: { 's-1': { 3: { color: '#000004' } } } });
+        await dialog.mouseDown(dialog.rowHeader('2'));
+        await dialog.key('Delete');
+        const spec = await dialog.save();
+        expect(spec.data.categories).toEqual(['Team 2', 'Team 3', 'Team 4']);
+        expect(spec.points).toEqual({ 's-1': { 2: { color: '#000004' } } });
     });
 });
 
@@ -484,9 +502,8 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
         expect(spec.data.categories).toEqual(['', 'Team 2', 'Team 3', 'Team 4']);
     });
 
-    test('a row header selects the row, and Delete removes it with its slice color', async () => {
-        const pie = { ...scores('pie'), sliceColors: ['#000001', '#000002', '#000003', '#000004'] };
-        const dialog = await open(pie);
+    test('a row header selects the row, and Delete removes it with its points, the rows after keeping theirs', async () => {
+        const dialog = await open(coloredPie());
         await dialog.mouseDown(dialog.rowHeader('3'));
         expect(dialog.highlighted('columnheader')).toEqual(
             Array.from({ length: INLINE_GRID_MAX_SERIES + 1 }, (_, i) => String.fromCharCode(65 + i)),
@@ -494,7 +511,15 @@ describe('ChartDataDialog: the keyboard is Sheets', () => {
         await dialog.key('Delete');
         const spec = await dialog.save();
         expect(spec.data.categories).toEqual(['Team 1', 'Team 3', 'Team 4']);
-        expect(spec.sliceColors).toEqual(['#000001', '#000003', '#000004']);
+        expect(spec.points).toEqual({
+            's-1': { 0: { color: '#000001' }, 1: { color: '#000003' }, 2: { color: '#000004' } },
+        });
+        // Each point moves whole, so what this build doesn't read on it goes along.
+        expect(JSON.parse(JSON.stringify(dialog.stored())).points['s-1']).toEqual({
+            0: { color: '#000001', future: '#000001' },
+            1: { color: '#000003', future: '#000003' },
+            2: { color: '#000004', future: '#000004' },
+        });
     });
 
     test('a column header selects the column, and Delete removes its series', async () => {
@@ -529,7 +554,7 @@ describe('ChartDataDialog: growing the grid', () => {
         const spec = await dialog.save();
         expect(spec.data.categories.at(-1)).toBe('Team 5');
         expect(spec.data.series[0].values.at(-1)).toBeNull();
-        expect(spec.sliceColors).toEqual([null, null, null, null, null]);
+        expect(spec.points).toEqual({});
     });
 
     test('typing in the trailing column adds a series in an automatic color, under a new id', async () => {
@@ -539,8 +564,9 @@ describe('ChartDataDialog: growing the grid', () => {
         await dialog.key('Enter');
         const spec = await dialog.save();
         const { id, ...added } = spec.data.series[2];
-        expect(added).toEqual({ ...style, color: null, name: '', values: [null, 5, null, null] });
+        expect(added).toEqual({ name: '', values: [null, 5, null, null] });
         expect(id).toMatch(/^s-[A-Za-z0-9_-]{10}$/);
+        expect(spec.series[id]).toEqual(DEFAULT_CHART_SERIES_STYLE);
         expect(spec.data.series.slice(0, 2).map((series) => series.id)).toEqual(['s-1', 's-2']);
     });
 
@@ -633,7 +659,7 @@ describe('ChartDataDialog: paste fits the grid', () => {
         await dialog.paste(1, 0, { 'text/plain': 'North\r\nSouth' });
         const spec = await dialog.save();
         expect(spec.data.series.map((series) => series.name)).toEqual(['A', 'B', 'C']);
-        expect(spec.data.series[2]).toMatchObject({ color: null, values: [3, 6, 9, 12, 15] });
+        expect(spec.data.series[2]).toMatchObject({ values: [3, 6, 9, 12, 15] });
         expect(spec.data.categories).toEqual(['North', 'South', 'Team 3', 'Team 4', '']);
     });
 
@@ -667,11 +693,11 @@ describe('ChartDataDialog: paste fits the grid', () => {
     });
 
     test('a pasted corner header titles the category axis, and shows in A1', async () => {
-        const dialog = await open({ ...scores(), categoryAxis: { ...scores().categoryAxis, title: 'Teams' } });
+        const dialog = await open(titled('Teams'));
         await dialog.paste(0, 0, { 'text/plain': 'Month\tNorth\nJan\t10' });
         expect(dialog.cell(0, 0).textContent).toBe('Month');
         const spec = await dialog.save();
-        expect(spec.categoryAxis.title).toBe('Month');
+        expect(spec.axes.x.title.text).toBe('Month');
         expect(spec.data.series[0]).toMatchObject({ name: 'North', values: [10, 65, 38, 80] });
     });
 

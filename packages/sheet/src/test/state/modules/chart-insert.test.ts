@@ -61,7 +61,11 @@ test('charts the selection below itself at Google’s size, selected', () => {
     expect(chart).toMatchObject({ x: 0, y: 100, width: 600, height: 371 });
     expect(next.activeObject).toEqual({ kind: 'chart', id: 'new' });
     const spec = parseChartSpec(chart?.spec ?? '');
-    expect(spec).toMatchObject({ type: 'column', title: 'North, South and East', categoryAxis: { title: 'Month' } });
+    expect(spec).toMatchObject({
+        chart: { type: 'column' },
+        title: { text: 'North, South and East' },
+        axes: { x: { title: { text: 'Month' } } },
+    });
     expect(spec?.data).toMatchObject({
         source: 'range',
         categories: ref([1, 4], [0, 0]),
@@ -116,14 +120,16 @@ test('a typed data range is set up from its cells and keeps each series’ color
     const recolored = produce(next, (draft: Context) => {
         const spec = parseChartSpec(draft.sheets[0].charts?.new.spec ?? '');
         if (spec?.data.source !== 'range') throw new Error('no range chart');
-        spec.data.series[0].color = '#000000';
+        const { id } = spec.data.series[0];
+        spec.series[id] = { ...spec.series[id], color: '#000000' };
         if (draft.sheets[0].charts) draft.sheets[0].charts.new.spec = JSON.stringify(spec);
     });
     const ranged = produce(recolored, (draft: Context) => setChartDataRange(draft, 'new', ref([0, 4], [0, 1])));
     const spec = parseChartSpec(ranged.sheets[0].charts?.new.spec ?? '');
-    expect(spec?.title).toBe('North, South and East');
+    expect(spec?.title.text).toBe('North, South and East');
     expect(spec?.data).toMatchObject({
         categories: ref([1, 4], [0, 0]),
-        series: [{ name: ref([0, 0], [1, 1]), values: ref([1, 4], [1, 1]), color: '#000000' }],
+        series: [{ name: ref([0, 0], [1, 1]), values: ref([1, 4], [1, 1]) }],
     });
+    expect(spec?.data.series.map(({ id }) => spec.series[id].color)).toEqual(['#000000']);
 });

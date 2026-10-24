@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '../../../charts';
-import type { ChartLabel, ChartSpec } from '../../../types/chart';
+import { DEFAULT_CHART_SERIES_STYLE, sampleChartSpec } from '../../../charts';
+import type { ChartLabel, ChartSpec, ChartType } from '../../../types/chart';
 import { serializeFill, TRANSPARENT_FILL } from '../../../vector/fill';
 import { getLineHeightPx } from '../../../vector/font-metrics';
 import type { Point } from '../../../vector/geometry';
@@ -14,7 +14,7 @@ import { chart, shape } from '../element-factories';
 
 const SOLID = serializeFill({ type: 'solid', color: '#fffbe6', style: 'cross-hatch' });
 
-const specJson = (type: ChartSpec['type'], over: Partial<ChartSpec> = {}): string =>
+const specJson = (type: ChartType, over: Partial<ChartSpec> = {}): string =>
     JSON.stringify({ ...sampleChartSpec(type), ...over });
 
 // Crowded enough that the category labels turn -45°.
@@ -27,9 +27,6 @@ const CROWDED = specJson('column', {
                 id: 's-1',
                 name: 'Sales',
                 values: Array.from({ length: 12 }, (_, i) => i + 1),
-                color: '#2a78d6',
-                markers: false,
-                smooth: false,
             },
         ],
     },
@@ -79,11 +76,10 @@ describe('chartToElements', () => {
 
     test('a line chart: one line per series, an ellipse per marker', () => {
         const spec = sampleChartSpec('line');
-        if (spec.data.source !== 'inline') throw new Error('expected inline data');
-        const series = spec.data.series.map((s) => ({ ...s, markers: true }));
-        const elements = chartToElements(
-            chart({ id: 'c1', chart: specJson('line', { data: { ...spec.data, series } }) }),
+        const series = Object.fromEntries(
+            spec.data.series.map(({ id }) => [id, { ...DEFAULT_CHART_SERIES_STYLE, marker: { visible: true } }]),
         );
+        const elements = chartToElements(chart({ id: 'c1', chart: specJson('line', { series }) }));
         expect(typesById(elements, 'line:')).toEqual(['line', 'line', 'line']);
         expect(typesById(elements, 'marker:')).toEqual(Array(21).fill('ellipse'));
     });
@@ -105,7 +101,7 @@ describe('chartToElements', () => {
     });
 
     test('a chart that does not draw converts to nothing', () => {
-        expect(chartToElements(chart({ id: 'c1', chart: '{"type":"column"' }))).toEqual([]);
+        expect(chartToElements(chart({ id: 'c1', chart: '{"chart":{"type":"column"}' }))).toEqual([]);
         const range = specJson('column', {
             data: { source: 'range', categories: null, series: [] },
         });
@@ -161,7 +157,7 @@ describe('chartToElements', () => {
     test('a label box is rich text in the spec font, aligned by its anchor, with no paint of its own', () => {
         const el = chart({
             id: 'c1',
-            chart: specJson('column', { title: 'A < B & "C"', fontFamily: 'Source Serif 4' }),
+            chart: JSON.stringify({ ...sampleChartSpec('column', 'Source Serif 4'), title: { text: 'A < B & "C"' } }),
         });
         const title = labelsOf(chartToElements(el)).find((box) => box.fontWeight === 'bold');
         if (!title) throw new Error('expected a bold title');

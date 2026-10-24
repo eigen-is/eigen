@@ -27,7 +27,7 @@ export const chartKind = defineKind<VectorChartElement>({
     },
     // The host's font goes into the spec, which every label reads it from.
     defaults: (style) => ({
-        chart: JSON.stringify({ ...sampleChartSpec('column'), fontFamily: style.fontFamily }),
+        chart: JSON.stringify(sampleChartSpec('column', style.fontFamily)),
         fill: style.fill,
         color: style.color,
     }),

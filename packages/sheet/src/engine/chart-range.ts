@@ -1,13 +1,7 @@
 // Google's Setup of a range chart: a block of cells derived to the refs the spec stores, and read back from them.
 // The sheet's chart writers, such as Insert → Chart and the panel's Setup rows, set a chart up through it.
 
-import {
-    DEFAULT_CHART_SERIES_STYLE,
-    defaultChartPresentation,
-    MAX_CHART_POINTS,
-    MAX_CHART_SERIES,
-    newChartSeriesId,
-} from '@workspace/lib/charts';
+import { defaultChartSpec, MAX_CHART_POINTS, MAX_CHART_SERIES, newChartSeriesId } from '@workspace/lib/charts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
@@ -61,8 +55,8 @@ export function suggestChartRange(ref: CellRangeRef, resolver: CellResolver): Ch
     return { ref, seriesInRows: dataColumns > dataRows, headerRow, headerColumn };
 }
 
-// The refs a block derives, each series keeping the id and style of the previous data's series at its index, and a
-// series past them a new id. Null when the block has no values or more series than a stored chart holds.
+// The refs a block derives, each series keeping the id of the previous data's series at its index, and so its style,
+// and a series past them a new id. Null when the block has no values or more series than a stored chart holds.
 export function chartRangeData(
     { ref, seriesInRows, headerRow, headerColumn }: ChartRange,
     previous?: ChartSpec['data'],
@@ -73,18 +67,15 @@ export function chartRangeData(
     const count = seriesInRows ? row[1] - top + 1 : column[1] - left + 1;
     if (top > row[1] || left > column[1] || count > MAX_CHART_SERIES) return null;
     const series: RangeChartSeries[] = Array.from({ length: count }, (_, i) => {
-        const kept = previous?.series[i];
-        const style = kept
-            ? { id: kept.id, color: kept.color, markers: kept.markers, smooth: kept.smooth }
-            : { ...DEFAULT_CHART_SERIES_STYLE, id: newChartSeriesId() };
+        const id = previous?.series[i]?.id ?? newChartSeriesId();
         if (seriesInRows) {
             const r = top + i;
             const values: CellRangeRef = { sheetId, row: [r, r], column: [left, column[1]] };
-            return { ...style, name: headerColumn ? cellRef(sheetId, r, column[0]) : '', values };
+            return { id, name: headerColumn ? cellRef(sheetId, r, column[0]) : '', values };
         }
         const c = left + i;
         const values: CellRangeRef = { sheetId, row: [top, row[1]], column: [c, c] };
-        return { ...style, name: headerRow ? cellRef(sheetId, row[0], c) : '', values };
+        return { id, name: headerRow ? cellRef(sheetId, row[0], c) : '', values };
     });
     const categories: CellRangeRef | null = seriesInRows
         ? headerRow
@@ -200,8 +191,9 @@ export function suggestChartSpec(ref: CellRangeRef, resolver: CellResolver): Cha
     const title = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : (names[0] ?? '');
     const corner = range.headerRow && range.headerColumn && !range.seriesInRows;
     const axisTitle = corner ? cellLabel(resolver.getCell(ref.sheetId, ref.row[0], ref.column[0])) : '';
-    const defaults = defaultChartPresentation('column');
-    return { ...defaults, type: 'column', title, categoryAxis: { ...defaults.categoryAxis, title: axisTitle }, data };
+    const defaults = defaultChartSpec('column', data);
+    const { x } = defaults.axes;
+    return { ...defaults, title: { text: title }, axes: { ...defaults.axes, x: { ...x, title: { text: axisTitle } } } };
 }
 
 // Excel's current region: a single cell grows to the block of filled cells around it, the way Google

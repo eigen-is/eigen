@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { DEFAULT_CHART_SERIES_STYLE, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { ChartType } from '@workspace/lib/types/chart';
 import type { StyleDefaults, VectorChartElement, VectorElement } from '@workspace/lib/vector';
 import {
@@ -96,10 +96,7 @@ describe('newChartElement', () => {
         expect(inserted).toHaveLength(1);
         const [el] = inserted;
         expect(el).toMatchObject({ type: 'chart', x: 640, y: 340, width: 640, height: 400 });
-        expect(el.type === 'chart' && parseChartSpec(el.chart)).toEqual({
-            ...sampleChartSpec('bar'),
-            fontFamily: 'Excalifont',
-        });
+        expect(el.type === 'chart' && parseChartSpec(el.chart)).toEqual(sampleChartSpec('bar', 'Excalifont'));
         expect(el.roughness).toBe(VECTOR_STYLE_DEFAULTS.roughness);
         expect(undoManager.undoStack).toHaveLength(1);
         undoManager.undo();
@@ -110,10 +107,7 @@ describe('newChartElement', () => {
         const { inserted } = insert('pie', 'frame', SLIDES_STYLE_DEFAULTS);
         const [el] = inserted;
         expect(el).toMatchObject({ type: 'chart', x: 360, y: 202.5, width: 1200, height: 675 });
-        expect(el.type === 'chart' && parseChartSpec(el.chart)).toEqual({
-            ...sampleChartSpec('pie'),
-            fontFamily: 'Inter',
-        });
+        expect(el.type === 'chart' && parseChartSpec(el.chart)).toEqual(sampleChartSpec('pie', 'Inter'));
         expect(el.roughness).toBe(SLIDES_STYLE_DEFAULTS.roughness);
     });
 });
@@ -159,16 +153,17 @@ describe('ChartPanelSection', () => {
         await type(container.querySelector('input[placeholder="Chart title"]'), 'Goals');
         expect(writes).toHaveLength(1);
         const written = writes[0].chart;
-        expect(typeof written === 'string' && parseChartSpec(written)?.title).toBe('Goals');
+        expect(typeof written === 'string' && parseChartSpec(written)?.title.text).toBe('Goals');
     });
 
     test("a title edit keeps what this build doesn't know: a key on the spec, on an axis and an unknown legend", async () => {
         const spec = sampleChartSpec('column');
-        const raw = { ...spec, legend: 'inside', future: 1, valueAxis: { ...spec.valueAxis, logBase: 10 } };
+        const axes = { ...spec.axes, y: { ...spec.axes.y, logBase: 10 } };
+        const raw = { ...spec, legend: { position: 'inside' }, future: 1, axes };
         const { container, writes } = await section([{ ...chart('c1'), chart: JSON.stringify(raw) }]);
         await type(container.querySelector('input[placeholder="Chart title"]'), 'Goals');
         const written = writes[0].chart;
-        expect(typeof written === 'string' && JSON.parse(written)).toEqual({ ...raw, title: 'Goals' });
+        expect(typeof written === 'string' && JSON.parse(written)).toEqual({ ...raw, title: { text: 'Goals' } });
     });
 
     test('Edit data saves the grid as one write; Cancel writes nothing', async () => {
@@ -241,16 +236,20 @@ describe('ChartEditDialog', () => {
             );
         await show(chart('c1'));
         const spec = sampleChartSpec('column');
-        const series = spec.data.series.map((s, i) => (i === 1 ? { ...s, color: '#00ff00' } : s));
-        const peer = { ...spec, title: 'Peer title', sliceColors: [null, '#000002'], data: { ...spec.data, series } };
+        const peer = {
+            ...spec,
+            title: { text: 'Peer title' },
+            series: { ...spec.series, 's-2': { ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' } },
+            points: { 's-1': { 1: { color: '#000002' } } },
+        };
         await show({ ...chart('c1'), chart: JSON.stringify(peer) });
         await typeInB2('7');
         await click(buttonIn(dialog(), 'Save'));
         const written = writes[0]?.chart;
         const saved = typeof written === 'string' ? parseChartSpec(written) : null;
-        expect(saved?.title).toBe('Peer title');
-        expect(saved?.sliceColors).toEqual([null, '#000002']);
-        expect(saved?.data.series.map((s) => s.color)).toEqual([null, '#00ff00', null]);
+        expect(saved?.title.text).toBe('Peer title');
+        expect(saved?.points).toEqual({ 's-1': { 1: { color: '#000002' } } });
+        expect(['s-1', 's-2', 's-3'].map((id) => saved?.series[id].color)).toEqual([null, '#00ff00', null]);
         expect(saved?.data.source === 'inline' && saved.data.series[0].values[0]).toBe(7);
     });
 });
@@ -283,7 +282,7 @@ test('a font picked in the panel is one write of the spec and one undo step', as
         (item) => item.textContent === 'Source Serif 4',
     );
     await click(serif);
-    expect(parseChartSpec(element.get('chart') ?? '')?.fontFamily).toBe('Source Serif 4');
+    expect(parseChartSpec(element.get('chart') ?? '')?.chart.fontFamily).toBe('Source Serif 4');
     expect(undoManager.undoStack).toHaveLength(1);
     undoManager.undo();
     expect(element.get('chart')).toBeUndefined();
@@ -310,6 +309,6 @@ test('a typed chart title through the panel is one undo step', async () => {
     const input = container.querySelector<HTMLInputElement>('input[placeholder="Chart title"]');
     for (const typed of ['G', 'Go', 'Goa', 'Goal']) await type(input, typed);
     await act(async () => input?.dispatchEvent(new Event('focusout', { bubbles: true })));
-    expect(parseChartSpec(element.get('chart') ?? '')?.title).toBe('Goal');
+    expect(parseChartSpec(element.get('chart') ?? '')?.title.text).toBe('Goal');
     expect(undoManager.undoStack).toHaveLength(1);
 });
