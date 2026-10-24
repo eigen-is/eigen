@@ -172,7 +172,8 @@ describe('floating writers', () => {
             { op: 'replace', id: S, path: ['charts', 'c1', 'x'], value: 300 },
         ];
         const peer = receive(base, batch);
-        expect(peer.sheets[0].charts!.c1).toMatchObject({ x: 300, specPoints: 'forged' });
+        expect(peer.sheets[0].charts!.c1).toMatchObject({ x: 300 });
+        expect(peer.sheets[0].charts!.c1.specPoints).toEqual({ 's-1/0': '{"color":"#ff0000"}' });
         expect(peer.sheets[0].charts!.c2).toBeUndefined();
         expect(objects(join(base, [batch]))).toEqual(objects(peer.sheets));
     });

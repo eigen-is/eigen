@@ -147,8 +147,9 @@ describe('floatingWriteFilter', () => {
     });
 
     // A keyed part is a record from the chart's creation on, so only a forged chart has another value there: an entry
-    // write below it is dropped, not the batch, and so is a write below an entry, which is a string.
-    test('an entry write lands on a record field only', () => {
+    // write below it is dropped, not the batch, and so is a write below an entry, which is a string, and a write that
+    // would leave the part no record.
+    test('an entry write lands on a record field only, and a keyed part stays a record', () => {
         const forged = { ...chart('c2', 'a2'), specPoints: '{}' };
         expect(
             kept([
@@ -158,14 +159,19 @@ describe('floatingWriteFilter', () => {
                 { op: 'add', path: [0, 'charts', 'c1', 'specTitle', 'text'], value: 'Goals' },
                 { op: 'add', path: [0, 'charts', 'c1', 'specSeries', 's-1', 'color'], value: '#ff0000' },
                 { op: 'replace', path: [0, 'charts', 'c1', 'specPoints'], value: 'gone' },
+                { op: 'remove', path: [0, 'charts', 'c1', 'specSeries'] },
                 { op: 'add', path: [0, 'charts', 'c1', 'specPoints', 's-1/4'], value: '{}' },
+                { op: 'add', path: [0, 'charts', 'c1', 'specSeries', 's-1'], value: '{}' },
+                { op: 'replace', path: [0, 'charts', 'c1', 'specTitle'], value: '{"text":"Goals"}' },
                 { op: 'replace', path: [0, 'charts', 'c2', 'specPoints'], value: {} },
                 { op: 'add', path: [0, 'charts', 'c2', 'specPoints', 's-1/4'], value: '{}' },
             ]),
         ).toEqual([
             '0/charts/c2',
             '0/charts/c1/specPoints/s-1/3',
-            '0/charts/c1/specPoints',
+            '0/charts/c1/specPoints/s-1/4',
+            '0/charts/c1/specSeries/s-1',
+            '0/charts/c1/specTitle',
             '0/charts/c2/specPoints',
             '0/charts/c2/specPoints/s-1/4',
         ]);

@@ -322,6 +322,11 @@ const PARTS = Object.keys(CHART_SPEC_PARTS).filter((part): part is ChartSpecPart
 
 const isKeyedPart = (part: ChartSpecPart): part is ChartSpecKeyedPart => CHART_SPEC_PARTS[part] > 0;
 
+// The fields a Sheets chart holds as a record from its creation on.
+export const SHEET_CHART_KEYED_PART_KEYS: ReadonlySet<string> = new Set(
+    PARTS.filter(isKeyedPart).map((part) => CHART_SPEC_PART_KEY[part]),
+);
+
 // Counted before the parse, which V8's JSON.stringify would recurse through in every writer.
 function storedRecord(text: unknown): StoredRecord | undefined {
     if (typeof text !== 'string' || exceedsChartSpecDepth(text)) return undefined;

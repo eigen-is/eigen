@@ -1,4 +1,4 @@
-import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES } from '../charts/spec';
+import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, SHEET_CHART_KEYED_PART_KEYS } from '../charts/spec';
 import { isRecord } from '../core/guards';
 import { generateKeyBetween, orderByFractionalIndex, syncInvalidIndices } from '../vector/fractional-index';
 import type { Box } from '../vector/geometry';
@@ -31,8 +31,9 @@ type FloatingMaps = Partial<Record<'images' | 'charts', Record<string, unknown>>
 // is there as the batch's earlier writes leave it, else as it stood before the batch: one a peer deleted resolves on
 // nothing, so every client, the replay and an undo or redo drop just that write and the rest of the batch applies. An
 // insert whose index repair names a tied object a peer deleted keeps its insert; a merged gesture's undo that puts an
-// object back and then its field keeps the field. A chart's entry write applies on a record field only, and no write
-// leaves a chart holding more than MAX_CHART_SPEC_ENTRIES. Paths are Sheet[]-rooted, the sheet's index first.
+// object back and then its field keeps the field. A chart's entry write applies on a record field only, a keyed part
+// stays a record, and no write leaves a chart holding more than MAX_CHART_SPEC_ENTRIES. Paths are Sheet[]-rooted, the
+// sheet's index first.
 export function floatingWriteFilter(sheets: Sheet[]): (write: SheetWrite) => boolean {
     const written = new Map<number, FloatingMaps>();
     const mapsOf = (sheet: number) => {
@@ -59,7 +60,7 @@ export function floatingWriteFilter(sheets: Sheet[]): (write: SheetWrite) => boo
         if (entry !== undefined) {
             if (!isRecord(field) || !isKey(entry)) return false;
             record = field;
-        }
+        } else if (SHEET_CHART_KEYED_PART_KEYS.has(String(key)) && !isRecord(value)) return false;
         const at = entry ?? key;
         const kept = op !== 'remove';
         const held = record ? 0 : (kept ? recordEntries(value) : 0) - recordEntries(field);
