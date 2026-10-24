@@ -16,7 +16,7 @@ import type { User } from '../user';
 import { Home } from './home';
 
 export class UserHome extends Home {
-    public declare settings: JsonStore<UserSettings>;
+    declare public settings: JsonStore<UserSettings>;
 
     public constructor(user: User, onClosed?: () => void) {
         super(user, getUserHomePath(user.id), onClosed);
