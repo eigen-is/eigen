@@ -10,7 +10,7 @@ The sections go from the files up: how a message is written and named, how folde
 
 - Eigen and Dovecot both move a message from `new/` to `cur/`, and whoever loses that race just skips the file ([§ Eigen and Dovecot both move new/ to cur/](#eigen-and-dovecot-both-move-new-to-cur)).
 - A mailbox the index sees for the first time announces no new mail, because its files were already there ([§ Only a delivered message is new mail](#only-a-delivered-message-is-new-mail)).
-- Only the six standard folders have a watcher, the `fs.watch` that syncs a folder as soon as its files change, and only once the home's mail was listed, so another folder catches up only when it is opened or listed ([§ Only the six standard folders have a watcher](#only-the-six-standard-folders-have-a-watcher)).
+- Only the six standard folders have a watcher, the `fs.watch` that syncs a folder as soon as its files change, and only while someone has the home open in a tab, so another folder catches up only when it is opened or listed ([§ Only the six standard folders have a watcher](#only-the-six-standard-folders-have-a-watcher)).
 - The exit code of Dovecot's login helper decides whether a mail client asks for the password again or retries later ([§ Dovecot asks the API whether a password is right](#dovecot-asks-the-api-whether-a-password-is-right)).
 
 ## The files are the truth because Dovecot writes them too
@@ -99,9 +99,9 @@ Every other file follows its mailbox. A mailbox with no rows yet is a first inde
 
 ## Only the six standard folders have a watcher
 
-The first `mailboxesList` puts `fs.watch` on `cur/` and `new/` of the standard six: twelve handles per home whose mail was listed, whatever the folder count. A watcher per folder does not scale. A tree with hundreds of IMAP folders would cost hundreds of handles per home, against a per-user inotify limit that every home on the host shares.
+`watch` puts `fs.watch` on `cur/` and `new/` of the standard six: twelve handles per home, whatever the folder count. A watcher per folder does not scale. A tree with hundreds of IMAP folders would cost hundreds of handles per home, against a per-user inotify limit that every home on the host shares.
 
-Loading a home attaches none. A home the relay opens for a notification or a share, or one only Drive uses, never lists its mail, and on macOS each `fs.watch` blocks the event loop for longer the more the process already watches: Bun rebuilds one FSEvents stream over every watched path, so 240 watches cost 11–33 s. Until the first listing, a change an IMAP client makes reaches the index when the folder is opened, as it does for a home that was not loaded.
+Loading a home attaches none. The watchers start when the home gets its first event stream, so when the user has any Eigen app open, and `mailboxesList` makes sure of them too. A home the relay opens for a notification or a share has no stream and costs nothing, which matters on macOS: each `fs.watch` blocks the event loop for longer the more the process already watches, because Bun rebuilds one FSEvents stream over every watched path. A folder that gets its watcher reconciles once, for what an IMAP client changed while nobody watched; that is also what clears the new-mail notification for mail the user read on their phone.
 
 A folder outside the six reconciles when it is opened, and when a listing's once-a-minute reconcile comes due. So a message an IMAP client files into `Projects` shows up on a later listing (the sidebar refetches on its stale time and on every mail SSE event) or on open, not within milliseconds of the write.
 
@@ -109,7 +109,7 @@ A folder outside the six reconciles when it is opened, and when a listing's once
 
 inotify reports the removal of a watched directory as a plain event, and the handle then goes dead without an error. So every watcher event stats its directory and compares the inode and birth time with those read at attach. The inode alone is not enough: Linux hands a removed directory's inode number to the next directory created.
 
-A directory recreated by then is re-attached and reconciled at once, in a fresh pass after any sync already running. A directory still gone closes the watcher, and so does a watcher `error`. A standard folder missing then, or missing at the first listing, gets its watcher back from the next `mailboxesList` once the directory exists. Until then it still reconciles when opened. A listing during teardown attaches nothing. `unwatch` closes every watcher and waits for in-flight syncs when `Mail` destructs, since a running sync would otherwise reach a closed database.
+A directory recreated by then is re-attached and reconciled at once, in a fresh pass after any sync already running. A directory still gone closes the watcher, and so does a watcher `error`. A standard folder missing then, or missing when the watchers start, gets its watcher from the next `mailboxesList` or event stream once the directory exists. Until then it still reconciles when opened. A listing during teardown attaches nothing. `unwatch` closes every watcher and waits for in-flight syncs when `Mail` destructs, since a running sync would otherwise reach a closed database.
 
 ## Eigen never writes Dovecot's files
 
