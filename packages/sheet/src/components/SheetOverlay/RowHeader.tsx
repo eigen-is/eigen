@@ -2,9 +2,9 @@ import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import type { Freezen } from '../../state';
 import {
     computeRowHeaderRegions,
-    type Freezen,
     fixPositionOnFrozenCells,
     getSheetIndex,
     handleRowFreezeHandleMouseDown,

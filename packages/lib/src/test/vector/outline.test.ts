@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { solidFill } from '../../vector/fill';
-// The shipped sharp implementation, for the radius-0 parity check.
-import { outlineIntersections, type Point } from '../../vector/geometry';
+import type { Point } from '../../vector/geometry';
+import { outlineIntersections } from '../../vector/geometry';
 import {
     cornerRadius,
     diamondOutline,
@@ -15,7 +15,8 @@ import {
     round4,
     sharpDiamondOffset,
 } from '../../vector/outline';
-import { DEFAULT_ELEMENT_PROPS, type VectorRectangleElement, type VectorShapeElement } from '../../vector/types';
+import type { VectorRectangleElement, VectorShapeElement } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS } from '../../vector/types';
 
 // The box every outline routine takes; outline.ts keeps its own copy private.
 type OutlineBox = { x: number; y: number; width: number; height: number };

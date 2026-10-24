@@ -1,5 +1,6 @@
 import { useLocation } from '@tanstack/react-router';
-import { type ReactNode, useEffect } from 'react';
+import type { ReactNode } from 'react';
+import { useEffect } from 'react';
 import { cn } from '../../../lib/utils';
 import { useLayout } from '../app/layout-context';
 

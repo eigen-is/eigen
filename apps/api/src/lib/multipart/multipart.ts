@@ -3,12 +3,8 @@
 // of buffering each part in memory. Supports exactly what our upload routes need:
 // browser/fetch-generated multipart bodies read from a web ReadableStream on Bun.
 
-import {
-    createPartialTailSearch,
-    createSearch,
-    type PartialTailSearchFunction,
-    type SearchFunction,
-} from './buffer-search';
+import type { PartialTailSearchFunction, SearchFunction } from './buffer-search';
+import { createPartialTailSearch, createSearch } from './buffer-search';
 
 export class MultipartParseError extends Error {
     constructor(message: string) {

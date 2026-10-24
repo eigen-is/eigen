@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { distanceToElement, elbowBindPoint, redockBindingsForElbow } from '../../vector/elbow-heading';
 import { elbowRoute } from '../../vector/elbow-route';
 import { solidFill } from '../../vector/fill';
+import type { Point } from '../../vector/geometry';
 import {
     bindingAnchor,
     boundEndpoint,
@@ -9,19 +10,16 @@ import {
     followBindings,
     linearLocalToScene,
     normalizeFixedPoint,
-    type Point,
     parsePoints,
 } from '../../vector/geometry';
-import {
-    type Corners,
-    DEFAULT_ELEMENT_PROPS,
-    parseBinding,
-    serializeBinding,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorRectangleElement,
-    type VectorShapeElement,
+import type {
+    Corners,
+    VectorArrowElement,
+    VectorElement,
+    VectorRectangleElement,
+    VectorShapeElement,
 } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, parseBinding, serializeBinding } from '../../vector/types';
 import { byIdOf } from './element-factories';
 
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.

@@ -8,7 +8,8 @@ import {
 } from '@workspace/lib/constants/collab';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
-import { type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import { getCommentIndex } from '../lib/chat/comment-index';

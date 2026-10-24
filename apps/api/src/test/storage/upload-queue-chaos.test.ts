@@ -6,15 +6,8 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
-import {
-    createFaultMount,
-    type FaultStorage,
-    type ParkedWrite,
-    provisionDoc,
-    restorePutTimeout,
-    shrinkPutTimeout,
-    waitFor,
-} from '../fault-storage-helpers';
+import type { FaultStorage, ParkedWrite } from '../fault-storage-helpers';
+import { createFaultMount, provisionDoc, restorePutTimeout, shrinkPutTimeout, waitFor } from '../fault-storage-helpers';
 
 // Chaos verification for the "orphaned PUT lands after a newer PUT and regresses the object" class
 // (performUpload's Promise.race timeout; repaired in-process via trackOrphan). A PUT that stalls

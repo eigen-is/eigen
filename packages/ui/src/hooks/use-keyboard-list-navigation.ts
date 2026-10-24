@@ -1,4 +1,5 @@
-import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent, RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UseListSelectionReturn } from './use-list-selection';
 
 // Lifted-cursor mode, both props or neither: the parent owns the cursor — mail tracks it by

@@ -22,13 +22,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import {
-    type Cell,
-    cellFontName,
-    SHEET_DEFAULT_FONT,
-    SHEET_DEFAULT_FONT_SIZE,
-    type Sheet,
-} from '@workspace/lib/sheets';
+import type { Cell, Sheet } from '@workspace/lib/sheets';
+import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { parseA1Range, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
 import { peakRss } from '../lib/core/peak-rss';
@@ -41,23 +36,26 @@ import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS } from '../lib/ooxml/ooxml';
 import { uriReference } from '../lib/ooxml/opc';
 import { MAX_FORMULA_STRING_LENGTH } from '../lib/ooxml/spreadsheetml';
-import { MAX_DECOMPRESSED_BYTES, openZip, writeZip, type ZipWriteEntry } from '../lib/ooxml/zip';
+import type { ZipWriteEntry } from '../lib/ooxml/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../lib/ooxml/zip';
+import type {
+    RoundtripDifference as BaseDifference,
+    CorpusFile,
+    DifferenceGroup,
+    Listed,
+    RoundtripGate,
+    RoundtripMeta,
+    RoundtripOptions,
+} from './office-audit';
 import {
-    type RoundtripDifference as BaseDifference,
-    type CorpusFile,
     canonical,
     cellText,
     classify,
     DEFAULT_MAX_RSS_MB,
-    type DifferenceGroup,
-    type Listed,
     listCorpus,
     MB,
     message,
     officeMedia,
-    type RoundtripGate,
-    type RoundtripMeta,
-    type RoundtripOptions,
     roundtripChild,
     roundtripLine,
     runRoundtrip as runGate,

@@ -1,13 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    type Content,
-    createDocument,
-    Editor,
-    generateHTML,
-    getSchema,
-    type JSONContent,
-    type SingleCommands,
-} from '@tiptap/core';
+import type { Content, JSONContent, SingleCommands } from '@tiptap/core';
+import { createDocument, Editor, generateHTML, getSchema } from '@tiptap/core';
 import { GapCursor } from '@tiptap/pm/gapcursor';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { TextSelection } from '@tiptap/pm/state';

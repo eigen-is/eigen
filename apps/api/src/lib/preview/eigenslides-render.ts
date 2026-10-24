@@ -1,8 +1,8 @@
 import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
+import type { MediaResolver } from '@workspace/lib/vector';
 import {
     DEFAULT_FRAME_BACKGROUND,
     FRAME_WIDTH,
-    type MediaResolver,
     orderByFractionalIndex,
     parseBackgroundFill,
     readVectorFromDoc,

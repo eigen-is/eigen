@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { type MountInfo, type OrgTeam, teamOwnerId } from '@workspace/lib/types';
+import type { MountInfo, OrgTeam } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { getServerConfig } from '../../lib/config/server-config';
+import type { PermissionResult } from '../setup';
 import {
     assertJson,
     authedRequest,
@@ -11,7 +13,6 @@ import {
     drivePut,
     driveUpload,
     getTestContext,
-    type PermissionResult,
     TEST_PNG_BYTES,
 } from '../setup';
 

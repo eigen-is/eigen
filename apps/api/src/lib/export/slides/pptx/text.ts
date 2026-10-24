@@ -1,4 +1,5 @@
-import { slidePxToPt, type TextAlign, type VerticalAlign } from '@workspace/lib/vector';
+import type { TextAlign, VerticalAlign } from '@workspace/lib/vector';
+import { slidePxToPt } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import { canvasTextValue } from '../../../document/prose-css';
@@ -6,7 +7,8 @@ import { solidFillXml } from '../../../ooxml/drawingml';
 import { AHYP_NS } from '../../../ooxml/ooxml';
 import { uriReference } from '../../../ooxml/opc';
 import { isElement } from '../../sanitize';
-import { relate, type Slide } from './package';
+import type { Slide } from './package';
+import { relate } from './package';
 import { toEmu } from './shapes';
 
 // Text: a box's HTML as the paragraphs and runs of a text body, laid out as canvas-text.css lays it out.

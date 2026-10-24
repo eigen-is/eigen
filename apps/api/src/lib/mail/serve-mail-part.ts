@@ -1,4 +1,5 @@
-import { type Attachment, mailAttachmentName } from '@workspace/lib/types/mail';
+import type { Attachment } from '@workspace/lib/types/mail';
+import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { ElysiaCustomStatusResponse } from 'elysia';
 import { ApiError, answerRevalidated, contentDisposition, rangeResponse, scriptableInlineHeaders } from '../core';
 import type { Mail } from './mail-domain';

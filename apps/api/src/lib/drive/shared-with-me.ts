@@ -1,10 +1,5 @@
-import {
-    type DriveACL,
-    type DrivePath,
-    getEigenDocInfoByType,
-    isFolderType,
-    stripEigenExtension,
-} from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';

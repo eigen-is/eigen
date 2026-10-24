@@ -4,7 +4,8 @@
 // now occupies its position (packages/lib/src/vector/frames.ts owns that decision, so it is testable
 // without a DOM). `index` and `step` are what the counter and the phone swipe read.
 
-import { nearestFrameId, type VectorFrame } from '@workspace/lib/vector';
+import type { VectorFrame } from '@workspace/lib/vector';
+import { nearestFrameId } from '@workspace/lib/vector';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function useActiveFrame(frames: VectorFrame[]): {

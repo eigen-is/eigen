@@ -3,7 +3,8 @@ import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { EmailDraft } from '@workspace/lib/types/mail';
 import { getMailDomain } from '../../lib/config/server-config';
 import { renderAttachmentLinksText } from '../../lib/core/mail-template';
-import { buildMailOptions, composeRfc822, type OutboundMail } from '../../lib/core/mailer';
+import type { OutboundMail } from '../../lib/core/mailer';
+import { buildMailOptions, composeRfc822 } from '../../lib/core/mailer';
 import { draftToOutboundMail } from '../../lib/mail/sender';
 import { ensureServer } from '../setup';
 

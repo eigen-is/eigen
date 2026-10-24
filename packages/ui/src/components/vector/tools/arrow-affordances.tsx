@@ -5,22 +5,18 @@
 // `vectorEffect="non-scaling-stroke"`, exactly as SnapGuides does. Colors are ours (the selection-handle
 // accent), the geometry/sizes are Excalidraw's (interactiveScene.ts).
 
+import type { Box, Point, VectorArrowElement, VectorBindableElement, VectorElement } from '@workspace/lib/vector';
 import {
     anchorToScene,
-    type Box,
     bindingAnchor,
     bindingDistance,
     boundEndpoint,
     distance,
     focusSnapPoint,
     isBindable,
-    type Point,
     parseBinding,
     parsePoints,
     shapeAnchorPoints,
-    type VectorArrowElement,
-    type VectorBindableElement,
-    type VectorElement,
 } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
 import { useState } from 'react';

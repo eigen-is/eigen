@@ -2,7 +2,8 @@
 // deletes the nodes a band leaves out and keeps every mark, a paste into it drops comment anchors, and an image pasted
 // into it lands in that editor. A table is fitted to the text column of the page the doc holds, not the one on screen.
 import { afterEach, expect, jest, mock, spyOn, test } from 'bun:test';
-import { getSchema, type JSONContent } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
+import { getSchema } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();

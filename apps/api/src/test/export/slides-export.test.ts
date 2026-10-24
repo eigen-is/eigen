@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { VectorRichTextElement } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
     DEFAULT_SCENE_META,
@@ -10,7 +11,6 @@ import {
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
     solidFill,
-    type VectorRichTextElement,
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';

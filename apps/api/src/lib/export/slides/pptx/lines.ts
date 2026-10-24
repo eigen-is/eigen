@@ -1,26 +1,28 @@
+import type {
+    Arrowhead,
+    Box,
+    PathCommand,
+    Point,
+    StrokeStyle,
+    VectorArrowElement,
+    VectorLinearElement,
+    VectorPathElement,
+} from '@workspace/lib/vector';
 import {
     ARROW_LABEL_PAD,
-    type Arrowhead,
     arrowCurveBeziers,
     arrowheadGeometry,
     arrowLabelBox,
     arrowRoute,
-    type Box,
     freedrawOutline,
     getFontMetrics,
     isClosedPath,
     isTransparentFill,
     linearLocalToScene,
-    type PathCommand,
-    type Point,
     parseFill,
     parsePoints,
     pointsBounds,
-    type StrokeStyle,
     scaledPathCommands,
-    type VectorArrowElement,
-    type VectorLinearElement,
-    type VectorPathElement,
 } from '@workspace/lib/vector';
 import { colorXml } from '../../../ooxml/drawingml';
 import type { Slide } from './package';

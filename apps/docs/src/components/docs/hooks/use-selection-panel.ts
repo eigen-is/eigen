@@ -1,6 +1,7 @@
 import type { Transaction } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export type SelectionPanel = 'document' | 'figure' | 'chart' | 'equation' | 'table';
 

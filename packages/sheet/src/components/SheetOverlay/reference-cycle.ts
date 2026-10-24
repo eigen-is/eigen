@@ -1,6 +1,6 @@
 import { cycleReferenceAtCaret } from '../../engine/formula-reference-cycle';
+import type { Context } from '../../state';
 import {
-    type Context,
     cancelFunctionrangeSelected,
     createRangeHightlight,
     functionHTMLGenerate,

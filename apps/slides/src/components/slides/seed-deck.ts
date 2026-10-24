@@ -6,12 +6,12 @@
 // both seed it, and the same keys make those two writes converge on one title slide instead of two.
 
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
+import type { VectorElementPatch } from '@workspace/lib/vector';
 import {
     DEFAULT_SCENE_META,
     generateKeyBetween,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
-    type VectorElementPatch,
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';

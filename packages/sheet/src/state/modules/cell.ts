@@ -1,5 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
-import { type BorderSide, columnIndexToLabel, type MergeCell, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
+import { columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
@@ -14,7 +15,8 @@ import {
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import type { Range, RangeOrWholeAxis, Selection } from '../types';
 import { getSheetIndex, rgbToHex, styleObjectToCss } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
@@ -22,14 +24,8 @@ import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
-import {
-    convertSpanToShareString,
-    cssDomKeyForAttr,
-    isInlineStringCell,
-    isInlineStringCT,
-    type StyleAttr,
-    type UnderlineHints,
-} from './inline-string';
+import type { StyleAttr, UnderlineHints } from './inline-string';
+import { convertSpanToShareString, cssDomKeyForAttr, isInlineStringCell, isInlineStringCT } from './inline-string';
 import { getCellTextInfo } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 

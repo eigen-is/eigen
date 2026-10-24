@@ -10,13 +10,16 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
-import { columnIndexToLabel, type SheetFloatingItem } from '@workspace/lib/sheets';
+import type { SheetFloatingItem } from '@workspace/lib/sheets';
+import { columnIndexToLabel } from '@workspace/lib/sheets';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft, CardFormPatch } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
-import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
-import { ChartPanelSections, type ChartPanelState, Workbook, type WorkbookInstance } from '@workspace/sheet';
+import type { ImageSize } from '@workspace/lib/vector';
+import { fitImageSize } from '@workspace/lib/vector';
+import type { ChartPanelState, WorkbookInstance } from '@workspace/sheet';
+import { ChartPanelSections, Workbook } from '@workspace/sheet';
 import {
     CollabDocumentGate,
     DocumentShareCluster,
@@ -30,7 +33,8 @@ import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/c
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { readImageSizeFromUrl } from '@workspace/ui/components/media';
-import { type TransformFields, useAspectLock } from '@workspace/ui/components/properties-panel';
+import type { TransformFields } from '@workspace/ui/components/properties-panel';
+import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';

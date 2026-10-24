@@ -2,7 +2,8 @@ import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/cons
 import { readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
-import { type CanvasPage, drawingPage, emptyPage, renderFittedPage, sceneBackground } from '../export/canvas/render';
+import type { CanvasPage } from '../export/canvas/render';
+import { drawingPage, emptyPage, renderFittedPage, sceneBackground } from '../export/canvas/render';
 import { sanitizeExportHtml, sanitizeSceneHtml } from '../export/sanitize';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 import { capPreviewElements } from './preview-scene';

@@ -3,13 +3,10 @@ import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state';
 import type { Editor, NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import { CELL_INDICATOR_SIZE } from '@workspace/lib/constants/comment-indicator';
-import {
-    type Equation as EquationAttributes,
-    EquationNode,
-    equationMath,
-    readEquation,
-} from '@workspace/lib/docs/eigendoc';
-import { type MathNode, type MathRow, writeMathml } from '@workspace/math';
+import type { Equation as EquationAttributes } from '@workspace/lib/docs/eigendoc';
+import { EquationNode, equationMath, readEquation } from '@workspace/lib/docs/eigendoc';
+import type { MathNode, MathRow } from '@workspace/math';
+import { writeMathml } from '@workspace/math';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import { useLayoutEffect, useMemo, useRef } from 'react';

@@ -5,7 +5,8 @@ import { describe, expect, test } from 'bun:test';
 import { produce } from 'immer';
 import type { Context } from '../../../state/context';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
-import { expectedDelete, expectedInsert, SPANS, type Span } from '../../engine/range-oracle';
+import type { Span } from '../../engine/range-oracle';
+import { expectedDelete, expectedInsert, SPANS } from '../../engine/range-oracle';
 import { contextFactory } from '../factories/context';
 
 const OTHER: Span = [0, 1];

@@ -6,10 +6,10 @@ import type { DatabaseConfig } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
 import { buildStorageKey } from '../../lib/mount/names';
 import { setShutdownDrainDeadline } from '../../lib/sync';
+import type { FaultStorage } from '../fault-storage-helpers';
 import {
     countBackingRows,
     createFaultMount,
-    type FaultStorage,
     provisionDoc,
     restorePutTimeout,
     shrinkPutTimeout,

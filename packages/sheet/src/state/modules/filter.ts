@@ -1,7 +1,8 @@
 import { cloneDeep, find, flatten, reduce, size } from 'es-toolkit/compat';
 import { cellDisplay, cellValue, parseCellInput, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import type { FilterCondition, FilterConditionName, Selection } from '../types';
 import { getSheetIndex, isAllowEdit, rgbToHex } from '../utils';
 import { normalizedAttr } from './cell';

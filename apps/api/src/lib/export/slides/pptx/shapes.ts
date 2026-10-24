@@ -1,19 +1,16 @@
 import { gradientStops } from '@workspace/lib/background';
 import type { FillPaint } from '@workspace/lib/types/background';
+import type { Box, Corners, Point, VectorElement } from '@workspace/lib/vector';
 import {
-    type Box,
-    type Corners,
     convertToShapes,
     cornerRadius,
     diamondOutline,
     isBordered,
     isTransparentFill,
     normalizeAngle,
-    type Point,
     parseFill,
     parsePoints,
     rectOutline,
-    type VectorElement,
 } from '@workspace/lib/vector';
 import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
 import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';

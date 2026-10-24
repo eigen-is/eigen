@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createElement, createRef, type KeyboardEvent } from 'react';
+import type { KeyboardEvent } from 'react';
+import { createElement, createRef } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { useKeyboardListNavigation } from '../../hooks/use-keyboard-list-navigation';
 import type { UseListSelectionReturn } from '../../hooks/use-list-selection';

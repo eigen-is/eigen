@@ -2,17 +2,8 @@
 // marquee "contain" test. Chrome (ObjectTransform vs plain union ring) is chosen by the canvas
 // from selectedIds; group move/nudge/delete apply to the whole set.
 
-import {
-    arrowRoute,
-    type Bounds,
-    elementBounds,
-    hitTestElement,
-    hitThresholdScreen,
-    type MarqueeMode,
-    marqueeHits,
-    type Point,
-    type VectorElement,
-} from '@workspace/lib/vector';
+import type { Bounds, MarqueeMode, Point, VectorElement } from '@workspace/lib/vector';
+import { arrowRoute, elementBounds, hitTestElement, hitThresholdScreen, marqueeHits } from '@workspace/lib/vector';
 import { useCallback, useState } from 'react';
 
 // Top-most element under a scene point — `ordered` is back-to-front, so scan in reverse. `byId` lets an

@@ -1,7 +1,9 @@
-import { constants, Database, type Statement } from 'bun:sqlite';
+import type { Statement } from 'bun:sqlite';
+import { constants, Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { time } from '../../utils/timing';
 import { isTest } from '../config/env';

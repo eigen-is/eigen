@@ -1,8 +1,9 @@
 import type { JSONContent } from '@tiptap/core';
-import { isFigureFrameNode, readParagraphFormat, type TitleType } from '@workspace/lib/docs/eigendoc';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
+import { isFigureFrameNode, readParagraphFormat } from '@workspace/lib/docs/eigendoc';
+import type { Border } from '../../../document/looks';
 import {
     BLOCK_MARGINS,
-    type Border,
     CODE_BLOCK_LOOK,
     cssPt,
     nodeLook,
@@ -14,14 +15,19 @@ import {
 } from '../../../document/looks';
 import { lowlight } from '../../../document/lowlight';
 import { proseValueIfSet } from '../../../document/prose-css';
-import { BORDER_SIDES, codeBlockStyle, LIST_FORMATS, LIST_LEVELS, type StyleId } from '../../../ooxml/wordml';
-import { type HastNode, highlightCode } from '../render';
+import type { StyleId } from '../../../ooxml/wordml';
+import { BORDER_SIDES, codeBlockStyle, LIST_FORMATS, LIST_LEVELS } from '../../../ooxml/wordml';
+import type { HastNode } from '../render';
+import { highlightCode } from '../render';
 import { figureOf } from './drawings';
-import { familyLine, type RunFace, useFace } from './fonts';
+import type { RunFace } from './fonts';
+import { familyLine, useFace } from './fonts';
 import { CLEAR_FLOATS, checkboxXml, itemOf, LIST_LEVEL, listOf } from './numbering';
 import type { Context, Package } from './package';
-import { INLINES, LINE_BREAK, type RunProps, rPrXml, runsXml, textXml } from './runs';
-import { HAIRLINE_TWIPS, normalLine, proseTwips, type Styles, textMetrics } from './styles';
+import type { RunProps } from './runs';
+import { INLINES, LINE_BREAK, rPrXml, runsXml, textXml } from './runs';
+import type { Styles } from './styles';
+import { HAIRLINE_TWIPS, normalLine, proseTwips, textMetrics } from './styles';
 import { TABLE_LOOK, tableOf } from './tables';
 
 // Each block as paragraphs and tables, a paragraph's properties written in the ECMA-376 sequence: Word reports a

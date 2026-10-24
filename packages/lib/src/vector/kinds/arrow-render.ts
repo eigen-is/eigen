@@ -6,7 +6,8 @@ import type { Options } from 'roughjs/bin/core';
 import type { RoughGenerator } from 'roughjs/bin/generator';
 import { headingIsHorizontal, vectorToHeading } from '../elbow-heading';
 import { getLineHeightPx } from '../font-metrics';
-import { ARROW_LABEL_PAD, arrowheadGeometry, distance, type Point, round } from '../geometry';
+import type { Point } from '../geometry';
+import { ARROW_LABEL_PAD, arrowheadGeometry, distance, round } from '../geometry';
 import type { Arrowhead, VectorArrowElement } from '../types';
 import { baseRoughOptions, drawableToSvg, svgTextLine } from './render-utils';
 

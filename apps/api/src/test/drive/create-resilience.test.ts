@@ -10,9 +10,9 @@ import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';
 import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
+import type { FaultStorage } from '../fault-storage-helpers';
 import {
     createFaultMount,
-    type FaultStorage,
     registerFaultMount,
     settleContainer,
     unregisterFaultMount,

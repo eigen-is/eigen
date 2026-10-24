@@ -1,27 +1,23 @@
 import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { VectorElement } from '@workspace/lib/vector';
 import {
     elementsInFrame,
     parseBackgroundFill,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
-    type VectorElement,
 } from '@workspace/lib/vector';
 import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
-import {
-    ContextMenuAnchor,
-    MenuSections,
-    type MenuSectionsProps,
-    useContextMenu,
-} from '@workspace/ui/components/context-menu';
+import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
+import { ContextMenuAnchor, MenuSections, useContextMenu } from '@workspace/ui/components/context-menu';
 import { DocumentImportPicker } from '@workspace/ui/components/drive';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
+import type { CanvasHandle } from '@workspace/ui/components/vector';
 import {
     CanvasDocumentShell,
     CanvasEditor,
-    type CanvasHandle,
     CanvasPropertiesPanel,
     CanvasToolbar,
     useActiveFrame,

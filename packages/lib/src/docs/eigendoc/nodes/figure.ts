@@ -1,11 +1,7 @@
-import { type CommandProps, Node } from '@tiptap/core';
-import {
-    type FigureFrameAttrs,
-    figureFrameAttributes,
-    figureFrameHTML,
-    readFigureFrameAttrs,
-    updateFigureNodes,
-} from './figure-frame';
+import type { CommandProps } from '@tiptap/core';
+import { Node } from '@tiptap/core';
+import type { FigureFrameAttrs } from './figure-frame';
+import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
 
 // The node's attribute set, as it comes back off a stored document (every attr defaults to null).
 export type FigureAttrs = FigureFrameAttrs & {

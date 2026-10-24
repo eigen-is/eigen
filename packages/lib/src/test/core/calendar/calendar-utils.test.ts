@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import type { SeriesEdit } from '../../../core/calendar/calendar-utils';
 import {
     formatEventWhen,
     getEventsForDay,
@@ -6,7 +7,6 @@ import {
     isSeriesOccurrence,
     normalizeTimezone,
     rruleToText,
-    type SeriesEdit,
     seriesEditFromOccurrence,
     viewerTimeZone,
 } from '../../../core/calendar/calendar-utils';

@@ -1,11 +1,7 @@
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useCheckPermissions, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
-import {
-    type DriveACLDelta,
-    type DrivePath,
-    type DriveVisibility,
-    stripEigenExtension,
-} from '@workspace/lib/types/drive';
+import type { DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { DriveAccessList } from '@workspace/ui/components/drive/drive-access-list';
 import { DriveAccessListEdit } from '@workspace/ui/components/drive/drive-access-list-edit';

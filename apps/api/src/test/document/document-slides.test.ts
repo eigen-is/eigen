@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import type { VectorElement } from '@workspace/lib/vector';
 import {
     DEFAULT_SCENE_META,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
     serializeBinding,
     UNSTORED_SLIDE_WIDTH,
-    type VectorElement,
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';

@@ -1,37 +1,34 @@
 import { randomUUID } from 'node:crypto';
+import type { MountConfig, MountInfo } from '@workspace/lib/types';
 import {
     CHATS_FOLDER_NAME,
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
-    type MountConfig,
-    type MountInfo,
     mountStorageIdentity,
     parseOwnerId,
 } from '@workspace/lib/types';
-import {
-    type DriveACL,
-    type DriveACLDelta,
-    type DriveAccessCheckResult,
-    type DriveAccessRecipient,
-    type DriveContainerType,
-    type DrivePath,
-    type DrivePathDetails,
-    type DriveVisibility,
-    type EffectiveMember,
-    type EigenDocType,
-    type InviteResult,
-    isContainerType,
-    withEigenExtension,
+import type {
+    DriveACL,
+    DriveACLDelta,
+    DriveAccessCheckResult,
+    DriveAccessRecipient,
+    DriveContainerType,
+    DrivePath,
+    DrivePathDetails,
+    DriveVisibility,
+    EffectiveMember,
+    EigenDocType,
+    InviteResult,
 } from '@workspace/lib/types/drive';
-import {
-    CARD_TITLE_MAX_LENGTH,
-    type ClientFileEventRecord,
-    type FileEvent,
-    type FileEventRecord,
-    isClientFileEventType,
-    type PathWatchStatus,
+import { isContainerType, withEigenExtension } from '@workspace/lib/types/drive';
+import type {
+    ClientFileEventRecord,
+    FileEvent,
+    FileEventRecord,
+    PathWatchStatus,
 } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH, isClientFileEventType } from '@workspace/lib/types/file-history';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
@@ -41,7 +38,8 @@ import { ChatRoom } from '../chat';
 import { assertCommentChatExists, getCommentIndex, openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
 import { getServerSettings } from '../config/server-settings';
-import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
+import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
+import { ApiError } from '../core';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
@@ -49,9 +47,11 @@ import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
-import { type StorageFile, writeTempWithHash } from '../storage';
+import type { StorageFile } from '../storage';
+import { writeTempWithHash } from '../storage';
 import type { User } from '../user';
-import { getMemberships, getUserByEmail, type Memberships } from '../user/';
+import type { Memberships } from '../user/';
+import { getMemberships, getUserByEmail } from '../user/';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
@@ -65,8 +65,8 @@ import {
     mergeACLDelta,
     normalizeACL,
 } from './acl';
+import type { ACLPropagationOptions } from './acl-propagation';
 import {
-    type ACLPropagationOptions,
     addEffectiveMember,
     diffACLPrincipals,
     propagateSharedPathChange,

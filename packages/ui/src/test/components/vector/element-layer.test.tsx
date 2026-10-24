@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
+import type { VectorArrowElement, VectorRichTextElement, VectorShapeElement } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
@@ -7,9 +8,6 @@ import {
     serializePoints,
     solidFill,
     VECTOR_STYLE_DEFAULTS,
-    type VectorArrowElement,
-    type VectorRichTextElement,
-    type VectorShapeElement,
 } from '@workspace/lib/vector';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ElementLayer, sameLayerProps } from '../../../components/vector/element-layer';

@@ -1,6 +1,7 @@
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
-import { DRIVE_TYPE_STICKIES, type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_STICKIES, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import { desc, lt, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { ServerWebSocket } from 'elysia/ws/bun';

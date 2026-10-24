@@ -3,7 +3,8 @@
 // The canvas only DISPATCHES into these handlers; all touch LOGIC lives here so the canvas file stays
 // flat. The behaviors are documented in docs/CANVAS.md § Touch policy lives beside the canvas.
 
-import { type MutableRefObject, useRef } from 'react';
+import type { MutableRefObject } from 'react';
+import { useRef } from 'react';
 import type { VectorTool } from '../hooks/use-tool';
 
 export type TouchXY = { x: number; y: number };

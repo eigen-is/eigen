@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CHART_MAX_SIDE, parseChartSpec } from '@workspace/lib/charts';
+import type { Sheet } from '@workspace/lib/sheets';
 import {
     floatingItems,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_COL_WIDTH,
-    type Sheet,
 } from '@workspace/lib/sheets';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
@@ -17,7 +17,8 @@ import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
 import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
 import { PIXEL_PNG } from '../../fixtures/pptx';
-import { type FixtureSheet, OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
+import type { FixtureSheet } from '../../fixtures/xlsx';
+import { OFFICE_COLORS, xlsxFixture } from '../../fixtures/xlsx';
 
 // A sheet's drawing: each chart anchored on a worksheet a SheetChart over the cells Excel draws it over, its refs by
 // sheet id or its caches inline, and a chart sheet a tab of its own holding its chart.

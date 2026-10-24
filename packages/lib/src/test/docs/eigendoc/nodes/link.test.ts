@@ -1,7 +1,8 @@
 // The doc's link autolinks the word a space or Enter ends, as TipTap's does, read through a text walk where a footnote's
 // note is one space, so a URL typed after a reference links itself alone.
 import { afterAll, expect, test } from 'bun:test';
-import { Editor, type JSONContent } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
+import { Editor } from '@tiptap/core';
 import { JSDOM } from 'jsdom';
 import { getDocExtensions } from '../../../../docs/eigendoc';
 

@@ -1,4 +1,5 @@
-import { type ArticleMeta, getBlogArticle, getBlogArticles } from '../content/manifest';
+import type { ArticleMeta } from '../content/manifest';
+import { getBlogArticle, getBlogArticles } from '../content/manifest';
 
 export type BlogPost = ArticleMeta;
 

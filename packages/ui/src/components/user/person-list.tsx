@@ -5,7 +5,8 @@ import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
-import { type ReactNode, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
+import { useMemo, useRef } from 'react';
 import { ContextMenuAnchor } from '../context-menu';
 import { AlphabeticalList, alphaGroupKey } from './alphabetical-list';
 

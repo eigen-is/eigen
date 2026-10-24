@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { parseChartSpec } from '@workspace/lib/charts';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
+import type { Op, Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import * as Y from 'yjs';

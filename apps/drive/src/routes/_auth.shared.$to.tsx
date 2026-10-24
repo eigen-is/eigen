@@ -3,7 +3,8 @@ import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { EmptyState, LoadingState } from '@workspace/ui';
-import { DRIVE_CAPABILITIES, type DriveCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
+import type { DriveCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
+import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 

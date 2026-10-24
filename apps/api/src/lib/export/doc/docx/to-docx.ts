@@ -1,31 +1,19 @@
 import type { JSONContent } from '@tiptap/core';
-import {
-    FIRST_PAGE_BAND,
-    flattenNestedFootnotes,
-    type NormalStyle,
-    type PageSetup,
-    pageTwips,
-} from '@workspace/lib/docs/eigendoc';
+import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import { FIRST_PAGE_BAND, flattenNestedFootnotes, pageTwips } from '@workspace/lib/docs/eigendoc';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EigendocBands } from '../../../document/doc';
 import { R_NS } from '../../../ooxml/ooxml';
-import { type PackagePart, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
+import type { PackagePart } from '../../../ooxml/opc';
+import { relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
 import { NOTE_SEPARATORS } from '../../../ooxml/wordml';
-import { OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia } from '../../office-image';
-import { embeddedFonts, type FontSlot, fontTableXml } from './fonts';
+import type { OfficeMedia } from '../../office-image';
+import { OFFICE_IMAGE_CONTENT_TYPES } from '../../office-image';
+import type { FontSlot } from './fonts';
+import { embeddedFonts, fontTableXml } from './fonts';
 import { numberingXml } from './numbering';
-import {
-    BAND_TAGS,
-    type Context,
-    DOCUMENT_NAMESPACES,
-    numbered,
-    type Package,
-    type PartRelationships,
-    sectionXml,
-    separatorXml,
-    settingsXml,
-    WML,
-} from './package';
+import type { Context, Package, PartRelationships } from './package';
+import { BAND_TAGS, DOCUMENT_NAMESPACES, numbered, sectionXml, separatorXml, settingsXml, WML } from './package';
 import { blocksOf, blocksXml, withoutAfter } from './paragraphs';
 import { styleDefinitions, stylesXml } from './styles';
 

@@ -1,4 +1,5 @@
-import { EIGEN_FONTS, type EigenFont } from '../constants/fonts';
+import type { EigenFont } from '../constants/fonts';
+import { EIGEN_FONTS } from '../constants/fonts';
 import { getFontMetrics } from '../vector/font-metrics';
 import { SHEET_DEFAULT_FONT_SIZE } from './defaults';
 

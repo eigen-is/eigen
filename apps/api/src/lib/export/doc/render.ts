@@ -3,11 +3,9 @@ import type { Node } from '@tiptap/pm/model';
 import { domOutputSpecToHTMLString, renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { parseChartSpec } from '@workspace/lib/charts';
 import { getFontName } from '@workspace/lib/constants/fonts';
+import type { ChartAttrs, FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import {
-    type ChartAttrs,
     chartSvg,
-    type FigureAttrs,
-    type FigureFrameAttrs,
     FOOTNOTE_PARAGRAPH,
     flattenNestedFootnotes,
     PROSE_TEXTBLOCKS,
@@ -16,7 +14,8 @@ import {
     readPageNumberKind,
 } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import { type MathRow, writeMathml } from '@workspace/math';
+import type { MathRow } from '@workspace/math';
+import { writeMathml } from '@workspace/math';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import { nodeLook, QUOTE_LOOK } from '../../document/looks';

@@ -1,5 +1,6 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
-import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
+import type { Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
 import * as engine from '@workspace/sheet/engine';
 import { SERVER_RECALC_BUDGET } from '../../../lib/document/sheets';
 import { toTransferableBuffer } from '../../../lib/document/transform/protocol';

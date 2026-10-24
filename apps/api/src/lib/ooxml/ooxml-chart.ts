@@ -8,22 +8,25 @@ import {
 } from '@workspace/lib/charts';
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import {
-    type CellRangeRef,
-    CHART_BLANKS,
-    type ChartSeriesStyle,
-    type ChartSpec,
-    type ChartStacking,
-    type ChartType,
-    type LegendPosition,
+import type {
+    CellRangeRef,
+    ChartSeriesStyle,
+    ChartSpec,
+    ChartStacking,
+    ChartType,
+    LegendPosition,
 } from '@workspace/lib/types/chart';
+import { CHART_BLANKS } from '@workspace/lib/types/chart';
 // The two engine modules a chart reads, not the engine: a docx or pptx import never evaluates the formula engine.
 import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
 import { numberDisplay } from '@workspace/sheet/engine/format';
-import { hasXmlName, type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText, xmlTrimmedText } from '../core/xml';
-import { type DrawingTheme, drawingColor, drawingLines, readColorMap } from './drawingml';
+import type { XmlElement } from '../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlElements, xmlText, xmlTrimmedText } from '../core/xml';
+import type { DrawingTheme } from './drawingml';
+import { drawingColor, drawingLines, readColorMap } from './drawingml';
 import { A_NS, alternativeFor, C_NS, isAlternateContent, isOn } from './ooxml';
-import { type OoxmlPackage, optional, type Relationship, relTarget } from './opc';
+import type { OoxmlPackage, Relationship } from './opc';
+import { optional, relTarget } from './opc';
 
 // A DrawingML chart part, c:chartSpace, the same in a docx, an xlsx and a pptx, read into a ChartSpec. A chart the spec
 // can't draw as the file does is no spec, with its title for the caller to show instead: never a different chart.

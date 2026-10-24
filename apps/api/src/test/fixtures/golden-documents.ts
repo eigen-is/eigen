@@ -2,15 +2,12 @@ import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { sampleChartSpec } from '@workspace/lib/charts';
-import {
-    type BandRoot,
-    DEFAULT_NORMAL_STYLE,
-    DEFAULT_PAGE_SETUP,
-    type FigureAttrs,
-} from '@workspace/lib/docs/eigendoc';
+import type { BandRoot, FigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { VectorElement, VectorFrame, VectorRichTextElement, VectorScene } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_RICHTEXT_PROPS,
@@ -22,12 +19,9 @@ import {
     serializeFill,
     solidFill,
     TRANSPARENT_FILL,
-    type VectorElement,
-    type VectorFrame,
-    type VectorRichTextElement,
-    type VectorScene,
 } from '@workspace/lib/vector';
-import { type MathRow, readOmml, writeMathml } from '@workspace/math';
+import type { MathRow } from '@workspace/math';
+import { readOmml, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
 import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';

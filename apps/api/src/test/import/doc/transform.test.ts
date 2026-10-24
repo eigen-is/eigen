@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { join } from 'node:path';
-import { Editor, type JSONContent } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
+import { Editor } from '@tiptap/core';
 import { Node } from '@tiptap/pm/model';
 import { EditorState } from '@tiptap/pm/state';
 import { fixTables, TableMap } from '@tiptap/pm/tables';

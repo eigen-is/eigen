@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../../lib/core/errors';
 import { xmlChild } from '../../../lib/core/xml';
-import { evaluateGuides, type GuideList, guideListOf, guideValue, MAX_GUIDES } from '../../../lib/import/slides/guides';
+import type { GuideList } from '../../../lib/import/slides/guides';
+import { evaluateGuides, guideListOf, guideValue, MAX_GUIDES } from '../../../lib/import/slides/guides';
 import { affords, withWorkBudget } from '../../../lib/import/slides/lookup';
 import { A_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import { NS } from '../../fixtures/pptx';

@@ -1,23 +1,24 @@
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
-import { type MediaResolver, readVectorFromDoc, round, slidePxToPt } from '@workspace/lib/vector';
+import type { MediaResolver } from '@workspace/lib/vector';
+import { readVectorFromDoc, round, slidePxToPt } from '@workspace/lib/vector';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { FONT_STACK_SANS } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
-import {
-    type DocumentExportFormat,
-    type ExportMediaLoader,
-    type ExportWorkerResult,
-    htmlExportMode,
-    type TransformWarning,
-    toTransferableText,
+import type {
+    DocumentExportFormat,
+    ExportMediaLoader,
+    ExportWorkerResult,
+    TransformWarning,
 } from '../../document/transform/protocol';
+import { htmlExportMode, toTransferableText } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { sanitizeSceneHtml } from '../sanitize';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
-import { type CanvasPage, framePages, renderFittedPage, renderPrintPage, sceneMediaNames } from './render';
+import type { CanvasPage } from './render';
+import { framePages, renderFittedPage, renderPrintPage, sceneMediaNames } from './render';
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
 // PDF all leave through here, so there is one @page rule, one font block and one reset instead of a

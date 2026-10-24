@@ -4,7 +4,8 @@
 // finish. Parameterized by `type` so the arrow tool starts the draft with
 // `type: 'arrow'` — no second implementation.
 
-import { type Point, snapAngle } from '@workspace/lib/vector';
+import type { Point } from '@workspace/lib/vector';
+import { snapAngle } from '@workspace/lib/vector';
 
 // The arrow tool reuses the whole line gesture, parameterized by `type` — no second implementation.
 // The draft carries the type so a commit knows whether to write a line or a bindable arrow.

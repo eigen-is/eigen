@@ -1,14 +1,9 @@
-import { type AuthUser, useAuth } from '@workspace/lib/auth';
+import type { AuthUser } from '@workspace/lib/auth';
+import { useAuth } from '@workspace/lib/auth';
 import { flattenAddresses } from '@workspace/lib/mail';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import {
-    type AddressObject,
-    type Attachment,
-    type AttachmentMeta,
-    type EmailDraft,
-    mailAttachmentName,
-    type NewDraft,
-} from '@workspace/lib/types/mail';
+import type { AddressObject, Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
+import { mailAttachmentName } from '@workspace/lib/types/mail';
 import { useEffect, useReducer, useRef } from 'react';
 
 const AUTO_SAVE_DEBOUNCE_MS = 2500;

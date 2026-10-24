@@ -1,7 +1,8 @@
 import type { Editor } from '@tiptap/react';
 import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
 import { ChoiceMenuSub, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
-import { type LucideIcon, Pencil, Rows3, TextCursorInput, Trash2, WrapText } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Pencil, Rows3, TextCursorInput, Trash2, WrapText } from 'lucide-react';
 
 // The panel's Style row and the menu's Style submenu name an equation's display alike.
 export const EQUATION_STYLES: readonly { display: boolean; label: string; icon: LucideIcon }[] = [

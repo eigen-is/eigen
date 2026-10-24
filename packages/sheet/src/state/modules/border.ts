@@ -1,12 +1,5 @@
-import {
-    type BorderSide,
-    type BorderType,
-    type CellBorderSides,
-    cloneSides,
-    forEachInRect,
-    type MergeCell,
-    mergeEdgeSides,
-} from '@workspace/lib/sheets';
+import type { BorderSide, BorderType, CellBorderSides, MergeCell } from '@workspace/lib/sheets';
+import { cloneSides, forEachInRect, mergeEdgeSides } from '@workspace/lib/sheets';
 import type { Context } from '../context';
 import type { Selection, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';

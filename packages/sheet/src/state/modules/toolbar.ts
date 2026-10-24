@@ -2,7 +2,8 @@ import type { BorderType } from '@workspace/lib/sheets';
 import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
 import { cellValue, is_date, numberDisplay, parseCellInput } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
 import { clipToUsedExtent, getSheetIndex, isAllowEdit } from '../utils';
 import { applyBorder, clearSides } from './border';
@@ -13,12 +14,8 @@ import { israngeseleciton } from './formula-editor';
 import { execFunctionGroup, execfunction } from './formula-exec';
 import { createFormulaRangeSelect, rangeSetValue, setCaretPosition } from './formula-range';
 import { showLinkCard } from './hyperlink';
-import {
-    inlineStyleAffectAttribute,
-    type StyleAttr,
-    updateInlineStringFormat,
-    updateInlineStringFormatOutside,
-} from './inline-string';
+import type { StyleAttr } from './inline-string';
+import { inlineStyleAffectAttribute, updateInlineStringFormat, updateInlineStringFormatOutside } from './inline-string';
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
 import { selectIsOverlap } from './selection';

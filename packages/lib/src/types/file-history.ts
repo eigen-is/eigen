@@ -1,6 +1,7 @@
 import { formatChatPreview } from '../core/chat/format-preview';
 import { formatFileSize } from '../core/format';
-import { type DrivePathType, stripEigenExtension } from './drive';
+import type { DrivePathType } from './drive';
+import { stripEigenExtension } from './drive';
 import { parseOwnerId, UNRESOLVED_TEAM_LABEL } from './owner';
 
 export type FileEventDetailsMap = {

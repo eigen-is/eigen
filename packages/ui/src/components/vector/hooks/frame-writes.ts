@@ -3,14 +3,13 @@
 // meta keys that size them. Plain functions over the doc, the way element-writes.ts is, so the hook
 // stays the thin React surface.
 
+import type { VectorFrame, VectorMeta } from '@workspace/lib/vector';
 import {
     elementsInFrame,
     FRAME_FIELDS,
     frameKeysAfter,
     newFrameId,
     readVectorFromDoc,
-    type VectorFrame,
-    type VectorMeta,
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';

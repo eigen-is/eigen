@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import sharp, { type Sharp } from 'sharp';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { Sharp } from 'sharp';
+import sharp from 'sharp';
+import type { DatabaseConfig, SchemaType } from '../../lib/core';
+import { ManagedDatabase } from '../../lib/core';
 import type { ExportMedia } from '../../lib/document/transform/protocol';
 import { collectExportMedia } from '../../lib/export/media';
 import { Mount } from '../../lib/mount/mount';

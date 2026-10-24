@@ -4,11 +4,11 @@ import { ApiError } from '../../../lib/core/errors';
 import * as xml from '../../../lib/core/xml';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { MAX_PACKAGE_XML_BYTES } from '../../../lib/ooxml/opc';
+import type { DocxBand } from '../../fixtures/golden-docx';
 import {
     BAND_NAMESPACES,
     buildDocxWithBands,
     buildDocxWithBody,
-    type DocxBand,
     GOLDEN_DOCX_IMAGE_NAME,
     GOLDEN_DOCX_IMAGE_RUN,
     nodesOfType,

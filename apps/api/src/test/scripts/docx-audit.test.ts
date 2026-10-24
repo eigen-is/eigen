@@ -8,16 +8,15 @@ import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/ei
 import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { writeZip } from '../../lib/ooxml/zip';
+import type { Feature, Tally } from '../../scripts/docx-audit';
 import {
     auditImported,
     auditSource,
     classifyDocx,
     compareRuns,
     compareTallies,
-    type Feature,
     runAudit,
     runRoundtrip,
-    type Tally,
 } from '../../scripts/docx-audit';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 import { buildDocxWithBody } from '../fixtures/golden-docx';

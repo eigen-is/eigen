@@ -5,7 +5,8 @@ import type { MathNode, MathRow } from '../tree';
 import type { MathXmlElement } from '../xml';
 import { canonicalIssue } from './canonical';
 import { canonicalOmml, NORMALISATIONS } from './canonical-omml';
-import { CORPUS, type CorpusEquation } from './corpus';
+import type { CorpusEquation } from './corpus';
+import { CORPUS } from './corpus';
 import { generateTree, seedChunks } from './generate';
 import { el, parseWritten } from './parse';
 

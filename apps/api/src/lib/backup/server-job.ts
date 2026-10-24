@@ -26,8 +26,10 @@ import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/home-relay';
 import { getTeamExists } from '../team/team';
 import { getUserById } from '../user';
 import { alertOwner } from '../user/alert-owner';
-import { type ArchiveWriter, createArchiveWriter, packFolder } from './archive';
-import { enumerateHomes, type ServerHome } from './enumerate-homes';
+import type { ArchiveWriter } from './archive';
+import { createArchiveWriter, packFolder } from './archive';
+import type { ServerHome } from './enumerate-homes';
+import { enumerateHomes } from './enumerate-homes';
 import { describeError } from './errors';
 import { listBackupJobs, runningJobOn, startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
 import {
@@ -46,7 +48,8 @@ import {
     wipeBackupStagingDir,
 } from './paths';
 import { pruneLocalArchives, readServerSidecar, writeServerSidecar } from './server-archives';
-import { type SnapshotProgress, treeBytes } from './snapshot-home';
+import type { SnapshotProgress } from './snapshot-home';
+import { treeBytes } from './snapshot-home';
 import { appendInstallFiles, assertEnvFileMounted, snapshotServer } from './snapshot-server';
 import { backupKey, uploadServerArchive } from './upload';
 import { readServerArchive, requireVerified, verifyFolder } from './verify';

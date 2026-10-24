@@ -12,7 +12,8 @@
 // a newline (never commits). The textarea is uncontrolled so its native ⌘Z owns in-session undo.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import { type Box, getLineHeightPx, labelText, MAX_ARROW_LABEL_BYTES, type TextAlign } from '@workspace/lib/vector';
+import type { Box, TextAlign } from '@workspace/lib/vector';
+import { getLineHeightPx, labelText, MAX_ARROW_LABEL_BYTES } from '@workspace/lib/vector';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { loadVectorFont } from './text-measure';
 

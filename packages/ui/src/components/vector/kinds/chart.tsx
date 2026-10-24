@@ -4,13 +4,8 @@
 
 import { parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { ChartType } from '@workspace/lib/types/chart';
-import {
-    convertToShapes,
-    type NewVectorElement,
-    type Point,
-    type StyleDefaults,
-    type VectorElement,
-} from '@workspace/lib/vector';
+import type { NewVectorElement, Point, StyleDefaults, VectorElement } from '@workspace/lib/vector';
+import { convertToShapes } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { ChartEditor, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import { Shapes } from 'lucide-react';

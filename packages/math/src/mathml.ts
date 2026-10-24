@@ -11,6 +11,7 @@ import {
     SPACES,
     toAlphanumeric,
 } from './notation';
+import type { MathBudget, MathEnclosure, MathNode, MathRow, MathSpace, MathToken, MathVariant, RowSlot } from './tree';
 import {
     bound,
     casesOf,
@@ -22,28 +23,12 @@ import {
     MATH_LIMITS,
     MATH_SPACES,
     MATH_VARIANTS,
-    type MathBudget,
-    type MathEnclosure,
-    type MathNode,
-    type MathRow,
-    type MathSpace,
-    type MathToken,
-    type MathVariant,
     mark,
     optional,
     RowBuilder,
-    type RowSlot,
 } from './tree';
-import {
-    attribute,
-    checkedXml,
-    elementsOf,
-    escapeXml,
-    type MathXmlElement,
-    replaceEdges,
-    textOf,
-    trimXmlSpace,
-} from './xml';
+import type { MathXmlElement } from './xml';
+import { attribute, checkedXml, elementsOf, escapeXml, replaceEdges, textOf, trimXmlSpace } from './xml';
 
 export const MATHML_NAMESPACE = 'http://www.w3.org/1998/Math/MathML';
 const XHTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';

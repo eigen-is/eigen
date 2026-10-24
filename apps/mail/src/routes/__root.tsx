@@ -1,5 +1,6 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
+import type { RouterAppContext } from '@workspace/lib/auth';
+import { useAuth } from '@workspace/lib/auth';
 import { useEmailById, useMailboxes, useMoveEmail } from '@workspace/lib/mail';
 import { useMailEnabled } from '@workspace/lib/public';
 import type { Email } from '@workspace/lib/types/mail';

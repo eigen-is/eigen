@@ -12,7 +12,8 @@
 // the moment someone reintroduces `ctx.sheets = ...`.
 
 import { describe, expect, test } from 'bun:test';
-import { enablePatches, type Patch, produceWithPatches } from 'immer';
+import type { Patch } from 'immer';
+import { enablePatches, produceWithPatches } from 'immer';
 import type { Context } from '../../../state/context';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { contextFactory } from '../factories/context';

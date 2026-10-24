@@ -1,4 +1,5 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';

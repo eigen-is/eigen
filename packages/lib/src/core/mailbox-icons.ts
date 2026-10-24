@@ -1,3 +1,4 @@
+import type { StandardMailbox } from '@workspace/lib/constants/mailboxes';
 import {
     MAILBOX_ARCHIVE,
     MAILBOX_DRAFTS,
@@ -5,9 +6,9 @@ import {
     MAILBOX_JUNK,
     MAILBOX_SENT,
     MAILBOX_TRASH,
-    type StandardMailbox,
 } from '@workspace/lib/constants/mailboxes';
-import { AlertOctagon, Archive, File, Folder, Inbox, type LucideIcon, Send, Trash2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { AlertOctagon, Archive, File, Folder, Inbox, Send, Trash2 } from 'lucide-react';
 
 // Sibling-of-SPECIAL_MAILBOXES icon registry. Kept out of constants/mailboxes.ts so that module stays
 // React-free on the BE side. Single source for the lucide icon of each special mailbox.

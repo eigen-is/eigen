@@ -1,13 +1,17 @@
 import { DOCUMENT_FONT } from '@workspace/lib/constants/fonts';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-import { elementsInFrame, SLIDE_SIZES, slidePxToPt, type VectorScene } from '@workspace/lib/vector';
+import type { VectorScene } from '@workspace/lib/vector';
+import { elementsInFrame, SLIDE_SIZES, slidePxToPt } from '@workspace/lib/vector';
 import { ApiError } from '../../../core/errors';
 import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import { A_NS, EMU_PER_POINT, R_NS } from '../../../ooxml/ooxml';
-import { type PackagePart, type Relationship, relationshipsXml, writePackage } from '../../../ooxml/opc';
+import type { PackagePart, Relationship } from '../../../ooxml/opc';
+import { relationshipsXml, writePackage } from '../../../ooxml/opc';
 import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../../ooxml/presentationml';
-import { OFFICE_IMAGE_CONTENT_TYPES, type OfficeMedia } from '../../office-image';
-import { type Deck, LAYOUT_XML, MASTER_XML, NAMESPACES, slideXml } from './package';
+import type { OfficeMedia } from '../../office-image';
+import { OFFICE_IMAGE_CONTENT_TYPES } from '../../office-image';
+import type { Deck } from './package';
+import { LAYOUT_XML, MASTER_XML, NAMESPACES, slideXml } from './package';
 
 // A deck → hand-written PresentationML, one slide per frame, each element as the DrawingML shape that draws it. Takes
 // the scene sanitizeSceneHtml returns, and media by name as the Office media prep hands it over (an SVG beside its PNG).

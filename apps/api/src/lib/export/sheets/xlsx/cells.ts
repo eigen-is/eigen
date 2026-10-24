@@ -1,19 +1,12 @@
 import { pxToPt } from '@workspace/lib/docs/eigendoc';
-import {
-    type Cell,
-    type CellBorderSides,
-    type CellWithRowAndCol,
-    columnIndexToLabel,
-    parseCellKey,
-    REFERENCE_COLUMN_COUNT,
-    REFERENCE_ROW_COUNT,
-    type Sheet,
-} from '@workspace/lib/sheets';
+import type { Cell, CellBorderSides, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
+import { columnIndexToLabel, parseCellKey, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { rangeToA1, valueIsError } from '@workspace/sheet/engine';
 import type { CountedWarningCode } from '../../../document/transform/protocol';
 import { MAX_FORMULA_LENGTH, withFuturePrefixes } from '../../../ooxml/spreadsheetml';
-import { BATCH_CHARS, cutText, type SharedStringTable } from './strings';
+import type { SharedStringTable } from './strings';
+import { BATCH_CHARS, cutText } from './strings';
 import type { StyleRegistry } from './styles';
 
 // A worksheet's grid as <sheetData>'s rows, handed over a batch at a time so a sheet of millions of cells is never one

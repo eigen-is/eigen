@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { createRouter, type RouterHistory } from '@tanstack/react-router';
+import type { RouterHistory } from '@tanstack/react-router';
+import { createRouter } from '@tanstack/react-router';
 import { AuthProvider } from '@workspace/lib/auth';
 import type { ReactNode } from 'react';
 import { routeTree } from './routeTree.gen';

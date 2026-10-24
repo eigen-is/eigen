@@ -1,9 +1,11 @@
 import { CHART_MAX_SIDE } from '@workspace/lib/charts';
-import { nextFloatingIndex, type SheetImage, sheetFloatingBox } from '@workspace/lib/sheets';
+import type { SheetImage } from '@workspace/lib/sheets';
+import { nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
 import { mapValues } from 'es-toolkit';
 import type { Patch } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import type { GlobalCache, Sheet } from '../types';
 import { mergeBorder } from '.';
 import { editableCurrentSheet } from './floating';

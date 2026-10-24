@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
-import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType, withEigenExtension } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import { EIGEN_DOC_TYPE_INFO, withEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';

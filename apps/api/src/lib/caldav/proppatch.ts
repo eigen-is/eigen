@@ -1,6 +1,7 @@
 import type { Calendar } from '../calendar/calendar';
 import { sanitizeCalendarId } from '../calendar/resource-store';
-import { ApiError, parseXmlRoot, type XmlElement, xmlChild, xmlChildren, xmlTrimmedText } from '../core';
+import type { XmlElement } from '../core';
+import { ApiError, parseXmlRoot, xmlChild, xmlChildren, xmlTrimmedText } from '../core';
 import { DAV_NAMESPACES, multistatusResponse, propstatOk, response } from '../dav/xml';
 import { calendarHref } from './discovery';
 

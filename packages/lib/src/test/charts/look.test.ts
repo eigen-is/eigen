@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from '../../charts';
-import { CHART_LOOK_FIELDS, type ChartLook } from '../../types/chart';
+import type { ChartLook } from '../../types/chart';
+import { CHART_LOOK_FIELDS } from '../../types/chart';
 import { isTransparentFill, parseFill, serializeFill } from '../../vector/fill';
 
 const SKETCH: ChartLook = {

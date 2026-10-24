@@ -1,4 +1,5 @@
-import { type Editor, useEditorState } from '@tiptap/react';
+import type { Editor } from '@tiptap/react';
+import { useEditorState } from '@tiptap/react';
 import { readCellBackground } from '@workspace/lib/docs/eigendoc';
 import { Button } from '@workspace/ui/components/button';
 import { ColorRow, PropertiesPanel, PropertySection } from '@workspace/ui/components/properties-panel';

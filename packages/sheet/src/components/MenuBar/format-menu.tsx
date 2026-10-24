@@ -35,7 +35,8 @@ import {
     numberMenuPresets,
     updateFormat,
 } from '../../state';
-import { ConditionRules, type ConditionRuleType, RULE_COPY } from '../ConditionFormat/ConditionRules';
+import type { ConditionRuleType } from '../ConditionFormat/ConditionRules';
+import { ConditionRules, RULE_COPY } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 import { CustomCurrencies } from '../FormatDialogs/CustomCurrencies';
 import { CustomDateTimeFormats } from '../FormatDialogs/CustomDateTimeFormats';

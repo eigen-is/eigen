@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createArrayResolver, type SheetData } from '../../engine/cell-resolver';
+import type { SheetData } from '../../engine/cell-resolver';
+import { createArrayResolver } from '../../engine/cell-resolver';
 import { FormulaEngine, isFormula } from '../../engine/formula-engine';
 import { functionCopy } from '../../engine/formula-shift';
 

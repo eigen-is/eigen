@@ -10,8 +10,10 @@
 // key by `index` into `points` (points[index-1]→points[index]); start/end are rebuilt from the polyline on
 // every normalize, so the stored copies never drift.
 
-import { type Point, parsePoints, serializePoints } from './geometry';
-import { type FixedSegment, parseFixedSegments, serializeFixedSegments, type VectorArrowElement } from './types';
+import type { Point } from './geometry';
+import { parsePoints, serializePoints } from './geometry';
+import type { FixedSegment, VectorArrowElement } from './types';
+import { parseFixedSegments, serializeFixedSegments } from './types';
 
 // The geometry patch every editor returns — the fields a pinned-arrow write persists together.
 export type PinPatch = {

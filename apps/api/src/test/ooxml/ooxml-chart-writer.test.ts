@@ -8,8 +8,10 @@ import {
     sampleChartSpec,
 } from '@workspace/lib/charts';
 import type { CellRangeRef, ChartData, ChartSpec, ChartType, RangeChartSeries } from '@workspace/lib/types/chart';
-import { hasXmlName, type XmlElement, xmlAttr, xmlElements, xmlTrimmedText } from '../../lib/core/xml';
-import { type DrawingTheme, IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
+import type { XmlElement } from '../../lib/core/xml';
+import { hasXmlName, xmlAttr, xmlElements, xmlTrimmedText } from '../../lib/core/xml';
+import type { DrawingTheme } from '../../lib/ooxml/drawingml';
+import { IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
 import { A_NS, C_NS, parseOoxml } from '../../lib/ooxml/ooxml';
 import { readChart } from '../../lib/ooxml/ooxml-chart';
 import { writeChart } from '../../lib/ooxml/ooxml-chart-writer';

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { getServerConfig } from '../../lib/config/server-config';
-import { assertJson, authedRequest, findOrFail, getTestContext, type TestContext } from '../setup';
+import type { TestContext } from '../setup';
+import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 type MyTeam = {
     id: string;

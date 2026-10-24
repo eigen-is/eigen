@@ -6,15 +6,10 @@
 import type * as Y from 'yjs';
 import { parseBackgroundFill, serializeBackgroundFill } from './fill';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
-import {
-    MAX_SLIDE_WIDTH,
-    MIN_SLIDE_WIDTH,
-    SLIDE_SIZE_KEYS,
-    SLIDE_SIZES,
-    UNSTORED_SLIDE_WIDTH,
-    type VectorFrame,
-} from './frames';
+import type { VectorFrame } from './frames';
+import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, SLIDE_SIZE_KEYS, SLIDE_SIZES, UNSTORED_SLIDE_WIDTH } from './frames';
 import { ELEMENT_KINDS, isBindable, isVectorElementType } from './kinds';
+import type { YMapLike } from './kinds/read-fields';
 import {
     clampNum,
     color,
@@ -28,21 +23,16 @@ import {
     size,
     str,
     strokeWidth,
-    type YMapLike,
 } from './kinds/read-fields';
 import { normalizeAngle } from './outline';
+import type { SlidePage, VectorElement, VectorElementBase, VectorElementType, VectorScene } from './types';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SCENE_META,
     parseBinding,
     parseIdList,
-    type SlidePage,
     STROKE_STYLES,
     serializeIdList,
-    type VectorElement,
-    type VectorElementBase,
-    type VectorElementType,
-    type VectorScene,
 } from './types';
 import type { Extent } from './viewport';
 

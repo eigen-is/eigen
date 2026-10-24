@@ -1,5 +1,6 @@
 import { TaskItem, TaskList } from '@tiptap/extension-list';
-import { type Editor, EditorContent, useEditor } from '@tiptap/react';
+import type { Editor } from '@tiptap/react';
+import { EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import { mathAsText } from '@workspace/lib/docs/eigendoc';

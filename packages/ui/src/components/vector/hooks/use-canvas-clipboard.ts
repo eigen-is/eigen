@@ -24,20 +24,22 @@ import { textToParagraphHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type {
+    NewVectorElement,
+    Point,
+    StyleDefaults,
+    TextAlign,
+    VectorElement,
+    VectorElementPatch,
+    VectorMeta,
+} from '@workspace/lib/vector';
 import {
     canvasPtToPx,
     IMAGE_CASCADE_OFFSET,
-    type NewVectorElement,
-    type Point,
     pasteAnchorOffset,
     readClipboardTypography,
     readElementsClipboardItem,
     reanchorElements,
-    type StyleDefaults,
-    type TextAlign,
-    type VectorElement,
-    type VectorElementPatch,
-    type VectorMeta,
 } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
 import { useCallback, useEffect, useRef } from 'react';
@@ -48,7 +50,8 @@ import { downloadCanvasImage } from '../canvas-image';
 import { measureVectorText } from '../text-measure';
 import { remapPastedArrows } from '../tools/binding';
 import { buildSelectionData, selectionPlainText } from '../tools/clipboard';
-import { type PastePlan, planElementsPaste } from '../tools/paste-elements';
+import type { PastePlan } from '../tools/paste-elements';
+import { planElementsPaste } from '../tools/paste-elements';
 import { deleteSelection } from './selection-ops';
 
 // How many cross-mount images re-upload at once. The wire is forgeable, so a paste must not turn into

@@ -1,11 +1,6 @@
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
-import {
-    BORDER_SIDE_CSS,
-    type CellBorderSides,
-    type ConditionalFormatRule,
-    type DataVerificationRule,
-    SHEET_DEFAULT_FONT_SIZE,
-} from '@workspace/lib/sheets';
+import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import {
     cloneDeep,
     forEach,
@@ -24,7 +19,8 @@ import { numberDisplay, parseCellInput, richText } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import { carrySides, clearSides, getBorderInfoCompute } from '../modules/border';
 import { getdatabyselection, getQKBorder, setCellValue } from '../modules/cell';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';

@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { xmlChild, xmlElements } from '../../../lib/core/xml';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
-import { paintOf, type SlideTheme } from '../../../lib/import/slides/inherit';
+import type { SlideTheme } from '../../../lib/import/slides/inherit';
+import { paintOf } from '../../../lib/import/slides/inherit';
 import { withWorkBudget } from '../../../lib/import/slides/lookup';
 import { A_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
+import type { PptxFixture } from '../../fixtures/pptx';
 import {
     box,
     buildPptx,
@@ -12,7 +14,6 @@ import {
     countVisits,
     NS,
     PIXEL_PNG,
-    type PptxFixture,
     para,
     pptxParts,
     rel,

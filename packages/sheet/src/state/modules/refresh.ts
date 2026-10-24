@@ -1,5 +1,6 @@
 import type { CellMatrix } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
 import type { Selection } from '../types';
 import { setFormulaCellInfo } from './formula-cache';
 import { execFunctionGroup } from './formula-exec';

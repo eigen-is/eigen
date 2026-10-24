@@ -18,30 +18,23 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
 import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
     bandHasContent,
     isFigureFrameNode,
     PROSE_TEXTBLOCKS,
     pageTwips,
-    type TitleType,
 } from '@workspace/lib/docs/eigendoc';
-import {
-    trimXmlSpace,
-    XML_NAMESPACE,
-    type XmlElement,
-    xmlAttr,
-    xmlChild,
-    xmlChildren,
-    xmlElements,
-    xmlText,
-} from '../lib/core/xml';
+import type { XmlElement } from '../lib/core/xml';
+import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../lib/core/xml';
 import { cssColorToHex } from '../lib/document/colors';
 import { docSchema } from '../lib/document/doc-schema';
 import { readStoredEquation } from '../lib/document/equation';
 import { nodeLook } from '../lib/document/looks';
 import type { writeDocx } from '../lib/export/doc/docx/to-docx';
-import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
+import type { Fonts, Script } from '../lib/import/doc/docx-fonts';
+import { FONT_SLOTS, fontMark, readFontTable, readTheme } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
 import { isBodySizedRun } from '../lib/import/doc/paragraphs';
@@ -73,17 +66,19 @@ import {
     STYLE_NAMES,
 } from '../lib/ooxml/wordml';
 import { openZip } from '../lib/ooxml/zip';
+import type {
+    DifferenceGroup,
+    Listed,
+    RoundtripDifference,
+    RoundtripGate,
+    RoundtripMeta,
+    RoundtripOptions,
+} from './office-audit';
 import {
     canonical,
     classify,
-    type DifferenceGroup,
-    type Listed,
     message,
     officeMedia,
-    type RoundtripDifference,
-    type RoundtripGate,
-    type RoundtripMeta,
-    type RoundtripOptions,
     roundtripChild,
     roundtripLine,
     runRoundtrip as runGate,

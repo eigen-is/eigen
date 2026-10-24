@@ -3,7 +3,8 @@ import { sampleChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
-import { pixelAt, type Raster, rasterize, rasterizer } from '../pdf-test-helpers';
+import type { Raster } from '../pdf-test-helpers';
+import { pixelAt, rasterize, rasterizer } from '../pdf-test-helpers';
 import { NO_MEDIA } from '../setup';
 
 // The page margin the export sets, in CSS px, and the points a CSS px prints at.

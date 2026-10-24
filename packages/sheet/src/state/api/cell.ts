@@ -15,7 +15,8 @@ import {
     updateFormatCell,
 } from '../modules';
 import type { SingleRange } from '../types';
-import { type CommonOptions, getSheet } from './common';
+import type { CommonOptions } from './common';
+import { getSheet } from './common';
 import { sheetNotFound } from './errors';
 
 // Cell keys handled by `updateFormatCell` (range-aware style writes) rather than

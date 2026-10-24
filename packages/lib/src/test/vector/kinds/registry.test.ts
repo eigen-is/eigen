@@ -14,13 +14,8 @@ import {
 } from '../../../vector/kinds';
 import { EMPTY_OUTLINE } from '../../../vector/outline';
 import { readElementFromFields } from '../../../vector/read-vector';
-import {
-    BASE_ELEMENT_FIELDS,
-    DEFAULT_ELEMENT_PROPS,
-    type VectorElement,
-    type VectorElementBase,
-    type VectorRichTextElement,
-} from '../../../vector/types';
+import type { VectorElement, VectorElementBase, VectorRichTextElement } from '../../../vector/types';
+import { BASE_ELEMENT_FIELDS, DEFAULT_ELEMENT_PROPS } from '../../../vector/types';
 import { chart, ellipse, image, linear, path, pie, richtext, shape } from '../element-factories';
 
 const TYPES = [

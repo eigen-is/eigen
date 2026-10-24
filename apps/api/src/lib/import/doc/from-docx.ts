@@ -1,14 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
-import {
-    BAND_EXCLUDED_NODES,
-    BAND_ROOTS,
-    type BandRoot,
-    bandHasContent,
-    type NormalStyle,
-    type PageSetup,
-    PROSE_TEXTBLOCKS,
-} from '@workspace/lib/docs/eigendoc';
+import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import { BAND_EXCLUDED_NODES, BAND_ROOTS, bandHasContent, PROSE_TEXTBLOCKS } from '@workspace/lib/docs/eigendoc';
 import { ApiError, isOutOfMemory } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';

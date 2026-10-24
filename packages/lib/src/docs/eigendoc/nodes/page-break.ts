@@ -1,4 +1,5 @@
-import { type CommandProps, canInsertNode, isNodeSelection, Node } from '@tiptap/core';
+import type { CommandProps } from '@tiptap/core';
+import { canInsertNode, isNodeSelection, Node } from '@tiptap/core';
 import { GapCursor } from '@tiptap/pm/gapcursor';
 import { TextSelection } from '@tiptap/pm/state';
 import { CellSelection } from '@tiptap/pm/tables';

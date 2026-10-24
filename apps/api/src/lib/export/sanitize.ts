@@ -4,7 +4,8 @@ import type { VectorScene } from '@workspace/lib/vector';
 import { stripNonXmlChars } from '@workspace/lib/xml';
 import DOMPurify from 'isomorphic-dompurify';
 import { JSDOM } from 'jsdom';
-import { type ExportMedia, toTransferableText } from '../document/transform/protocol';
+import type { ExportMedia } from '../document/transform/protocol';
+import { toTransferableText } from '../document/transform/protocol';
 
 type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
 

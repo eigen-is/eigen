@@ -12,6 +12,7 @@ import type React from 'react';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
+import type { Sheet } from '../../state';
 import {
     api,
     cancelNormalSelected,
@@ -20,7 +21,6 @@ import {
     deselectFloatingObject,
     editSheetName,
     getSheetIndex,
-    type Sheet,
 } from '../../state';
 
 const NO_MORE_SHEET =

@@ -6,13 +6,13 @@
 
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
 import type { NewVectorElement, VectorElement, VectorElementPatch, VectorElementType } from '@workspace/lib/vector';
+import type { LucideIcon } from 'lucide-react';
 import {
     ChartColumn,
     ChartPie,
     Circle,
     Diamond,
     Image as ImageIcon,
-    type LucideIcon,
     Minus,
     MoveUpRight,
     Pencil,

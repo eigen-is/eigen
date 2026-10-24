@@ -2,7 +2,8 @@ import { Slider } from '@workspace/ui/components/slider';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback } from 'react';
 import { MergedNumberInput } from './merged-number-input';
-import { isMixed, type MergedValue } from './merged-value';
+import type { MergedValue } from './merged-value';
+import { isMixed } from './merged-value';
 import { useHeldGesture } from './property-gesture';
 
 type MergedSliderProps = {

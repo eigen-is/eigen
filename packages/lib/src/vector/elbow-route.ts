@@ -13,9 +13,9 @@
 // Everything runs in SCENE coordinates (elbow arrows pin angle 0, so the derived local frame is a pure
 // translation) and is converted to the arrow's local frame once at the end.
 
+import type { B4, Heading } from './elbow-heading';
 import {
     aabbForElement,
-    type B4,
     compareHeading,
     distanceToElement,
     flipHeading,
@@ -24,18 +24,16 @@ import {
     HEADING_LEFT,
     HEADING_RIGHT,
     HEADING_UP,
-    type Heading,
     headingIsHorizontal,
     vectorToHeading,
 } from './elbow-heading';
 import type { PinRoutingContext } from './elbow-pins';
+import type { Bounds, Point } from './geometry';
 import {
-    type Bounds,
     boundShape,
     elementBounds,
     linearLocalToScene,
     linearSceneToLocal,
-    type Point,
     parsePoints,
     unionBounds,
 } from './geometry';

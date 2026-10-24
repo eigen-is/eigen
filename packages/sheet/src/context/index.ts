@@ -1,12 +1,6 @@
 import React from 'react';
-import {
-    type Context,
-    defaultContext,
-    defaultSettings,
-    type GlobalCache,
-    type PatchOptions,
-    type Settings,
-} from '../state';
+import type { Context, GlobalCache, PatchOptions, Settings } from '../state';
+import { defaultContext, defaultSettings } from '../state';
 
 export type RefValues = {
     globalCache: GlobalCache;

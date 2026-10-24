@@ -5,7 +5,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home';
 import { openZip } from '../../lib/ooxml/zip';
-import { createFakeS3Mount, type FakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
+import type { FakeS3Mount } from '../fault-storage-helpers';
+import { createFakeS3Mount, removeFakeS3Mount } from '../fault-storage-helpers';
 import { buildGoldenDocJson, GOLDEN_MEDIA_NAME, seedDocumentMedia, seedEigendoc } from '../fixtures/golden-documents';
 import { authedRequest, getTestContext, TEST_PNG_BYTES } from '../setup';
 

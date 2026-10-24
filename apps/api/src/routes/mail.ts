@@ -1,18 +1,20 @@
 import { EML_MAX_BYTES, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import { type DrivePath, EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
-import {
-    type DraftAttachmentUpload,
-    type Email,
-    type EmailDraft,
-    type EmailSummary,
-    type ImportMailResult,
-    type MaildirMailbox,
-    mailAttachmentName,
-    type NewDraft,
-    type SentMailResult,
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { EML_MIME, isEmlFile } from '@workspace/lib/types/drive';
+import type {
+    DraftAttachmentUpload,
+    Email,
+    EmailDraft,
+    EmailSummary,
+    ImportMailResult,
+    MaildirMailbox,
+    NewDraft,
+    SentMailResult,
 } from '@workspace/lib/types/mail';
+import { mailAttachmentName } from '@workspace/lib/types/mail';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
-import { Elysia, type ElysiaCustomStatusResponse, type Static, t } from 'elysia';
+import type { ElysiaCustomStatusResponse, Static } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireMailEnabled, requireNonGuest, requireSelf } from '../lib/core/access';
 import { readImportSourceBytes } from '../lib/drive';

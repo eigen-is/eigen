@@ -5,14 +5,16 @@ import { escapeXml } from '@workspace/lib/xml';
 import { BODY, boxSide, cssPt, twips } from '../../../document/looks';
 import { sanitizeMedia } from '../../../document/media';
 import { proseValue } from '../../../document/prose-css';
-import { type ExportMedia, toTransferableBuffer, toTransferableText } from '../../../document/transform/protocol';
+import type { ExportMedia } from '../../../document/transform/protocol';
+import { toTransferableBuffer, toTransferableText } from '../../../document/transform/protocol';
 import { EMU_PER_PX, PIC_NS, R_NS } from '../../../ooxml/ooxml';
 import { BORDER_SIDES, EMU_PER_TWIP, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { splitDataUri } from '../../../shared/data-uri';
 import { blipXml, encodeOfficeImage, officeImageParts } from '../../office-image';
 import { useFace } from './fonts';
 import type { Context, Package } from './package';
-import { type Block, type Inset, indentOf, type Paragraph, paragraphXml, quoteBar, styleSpacing } from './paragraphs';
+import type { Block, Inset, Paragraph } from './paragraphs';
+import { indentOf, paragraphXml, quoteBar, styleSpacing } from './paragraphs';
 import { textXml } from './runs';
 import { TABLE_BORDER_SIDES } from './tables';
 

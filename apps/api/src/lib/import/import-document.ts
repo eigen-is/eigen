@@ -1,11 +1,9 @@
+import type { ConvertTarget, DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
 import {
     CONVERT_SOURCES,
-    type ConvertTarget,
-    type DocumentImportOptions,
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
-    type DrivePath,
     EIGEN_DOC_TYPE_INFO,
     isCollabType,
     isConvertSource,
@@ -19,21 +17,21 @@ import { ApiError } from '../core/errors';
 import { commitEigendocImport } from '../document/doc';
 import { appendSheetsToYjs, writeSheetsSnapshotToYjs } from '../document/sheets';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
-import {
-    type DocImportWorkerResult,
-    type ImportTransformJob,
-    type SheetsImportJob,
-    type SlidesImportJob,
-    type SlidesImportWorkerResult,
-    type TransformMedia,
-    type TransformWarning,
-    toTransferableBuffer,
+import type {
+    DocImportWorkerResult,
+    ImportTransformJob,
+    SheetsImportJob,
+    SlidesImportJob,
+    SlidesImportWorkerResult,
+    TransformMedia,
+    TransformWarning,
 } from '../document/transform/protocol';
+import { toTransferableBuffer } from '../document/transform/protocol';
+import type { SheetsImportSnapshot } from '../document/transform/run-transform';
 import {
     runImportToDocumentUpdate,
     runImportToSlidesUpdate,
     runImportToSnapshotJson,
-    type SheetsImportSnapshot,
 } from '../document/transform/run-transform';
 import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';

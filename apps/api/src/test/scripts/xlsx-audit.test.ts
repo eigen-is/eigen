@@ -5,11 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Sheet } from '@workspace/lib/sheets';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
+import type { Feature } from '../../scripts/xlsx-audit';
 import {
     classifyDifferences,
     compareRuns,
     drawHeldout,
-    type Feature,
     runAudit,
     runRoundtrip,
     tallySheets,

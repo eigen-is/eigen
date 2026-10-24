@@ -1,6 +1,7 @@
 // Pure utility functions for formula parsing and evaluation.
 // Zero dependencies on Context or any state module.
-import { type CellMatrix, columnLabelToIndex, type Sheet } from '@workspace/lib/sheets';
+import type { CellMatrix, Sheet } from '@workspace/lib/sheets';
+import { columnLabelToIndex } from '@workspace/lib/sheets';
 import { SHEET_NAME_PREFIX } from './parser/helper/cell';
 import type { FormulaDependency } from './types';
 

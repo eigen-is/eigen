@@ -4,11 +4,11 @@ import { CHART_DEFAULT_SIZE, parseChartSpec } from '@workspace/lib/charts';
 import { ChartNode, chartSvg, readChartAttrs, setFigureAttributes } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { useCallback, useMemo, useRef } from 'react';
+import type { FigureFrameOptions } from './figure-frame';
 import {
     clampFigureWidth,
     FIGURE_MIN_SIZE,
     FigureFrame,
-    type FigureFrameOptions,
     figureFramePlugins,
     figureMaxWidth,
     useFigureResize,

@@ -8,6 +8,7 @@
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { gradientStops } from '@workspace/lib/background';
+import type { VectorElement, VectorFrame, VectorScene } from '@workspace/lib/vector';
 import {
     convertToShapes,
     elementsInFrame,
@@ -15,23 +16,22 @@ import {
     parsePoints,
     pointsBounds,
     slidePxToPt,
-    type VectorElement,
-    type VectorFrame,
-    type VectorScene,
 } from '@workspace/lib/vector';
 import type { writePptx } from '../lib/export/slides/pptx/to-pptx';
 import type { ImportedMedia } from '../lib/import/image-types';
 import { EMU_PER_POINT } from '../lib/ooxml/ooxml';
+import type {
+    DifferenceGroup,
+    Listed,
+    RoundtripDifference,
+    RoundtripGate,
+    RoundtripMeta,
+    RoundtripOptions,
+} from './office-audit';
 import {
     canonical,
     classify,
-    type DifferenceGroup,
-    type Listed,
     officeMedia,
-    type RoundtripDifference,
-    type RoundtripGate,
-    type RoundtripMeta,
-    type RoundtripOptions,
     roundtripChild,
     roundtripLine,
     runRoundtrip as runGate,

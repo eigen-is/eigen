@@ -4,7 +4,8 @@ import type { BunFile } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { isVideoCandidate } from '../preview/video-preview';
-import { readStorageFile, type StorageFile } from '../storage';
+import type { StorageFile } from '../storage';
+import { readStorageFile } from '../storage';
 import { THUMBNAIL_TIMEOUT_SECONDS } from './thumbnail-timeout';
 import type { ImageResult, WorkerInput, WorkerOutput } from './thumbnail-worker';
 

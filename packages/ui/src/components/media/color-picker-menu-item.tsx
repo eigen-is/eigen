@@ -6,7 +6,8 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
-import { Check, type LucideIcon, RotateCcw } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Check, RotateCcw } from 'lucide-react';
 import { DEFAULT_COLORS } from './color-picker';
 
 type ColorPickerMenuItemProps = {

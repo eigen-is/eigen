@@ -1,5 +1,6 @@
 import * as path from 'node:path';
-import { isS3ConfigValid, keepsSavedSecret, type S3Config } from '@workspace/lib/types/mount';
+import type { S3Config } from '@workspace/lib/types/mount';
+import { isS3ConfigValid, keepsSavedSecret } from '@workspace/lib/types/mount';
 import type { S3CheckResult, ServerSettings } from '@workspace/lib/types/settings';
 import { getDomain } from '../config/server-config';
 import { getS3Config, getServerSettings } from '../config/server-settings';

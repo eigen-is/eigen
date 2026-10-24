@@ -1,16 +1,8 @@
 import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
-import {
-    ApiError,
-    computeResourceEtag,
-    type DeleteResourceResult,
-    matchesIfMatch,
-    matchesIfNoneMatch,
-    normalizeResourceUri,
-    type PutResourceResult,
-    type ResourcePreconditions,
-} from '../core';
+import type { DeleteResourceResult, PutResourceResult, ResourcePreconditions } from '../core';
+import { ApiError, computeResourceEtag, matchesIfMatch, matchesIfNoneMatch, normalizeResourceUri } from '../core';
 import { parseResource, restampResource, stripEigenStamps } from '../ical';
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';

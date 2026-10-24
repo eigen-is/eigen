@@ -1,6 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { COLLAB_DB_CONFIG } from '../../collab/db-config';
-import { readYjsStatePayload, type YjsStatePayload } from '../../collab/yjs-loader';
+import type { YjsStatePayload } from '../../collab/yjs-loader';
+import { readYjsStatePayload } from '../../collab/yjs-loader';
 import type { Mount } from '../../mount';
 
 // Main-thread capture of a collab document's persisted state for the transform process.

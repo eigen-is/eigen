@@ -1,7 +1,9 @@
-import { CommandPaletteContext, type CommandPaletteContextValue } from '@workspace/lib/command-palette';
+import type { CommandPaletteContextValue } from '@workspace/lib/command-palette';
+import { CommandPaletteContext } from '@workspace/lib/command-palette';
 import type { PaletteScope, PaletteSelection, PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DocCommentSearch, DocSearchController, DocSearchSession } from '@workspace/lib/types/doc-search';
-import { type ReactNode, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 
 type Props = { children: ReactNode };
 

@@ -1,8 +1,10 @@
 import type { BackgroundFill } from '@workspace/lib/types/background';
-import { isBordered, type VectorFrame, type VectorImageElement } from '@workspace/lib/vector';
+import type { VectorFrame, VectorImageElement } from '@workspace/lib/vector';
+import { isBordered } from '@workspace/lib/vector';
 import { blipXml, officeImageParts } from '../../office-image';
 import { lineXml } from './lines';
-import { type Deck, type Image, relate, type Slide } from './package';
+import type { Deck, Image, Slide } from './package';
+import { relate } from './package';
 import { boxGeometry, fillXml, presetXml, share, spXml, xfrmXml } from './shapes';
 
 // Pictures and backgrounds.

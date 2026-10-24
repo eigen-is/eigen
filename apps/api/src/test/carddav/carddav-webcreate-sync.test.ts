@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { basicAuth } from '../dav-test-helpers';
-import { app, authedRequest, getTestContext, type TestContext } from '../setup';
+import type { TestContext } from '../setup';
+import { app, authedRequest, getTestContext } from '../setup';
 
 // Pins the ingest path a Mac depends on for WEB-created contacts: a card added through the
 // REST/app path must appear in the next sync-collection delta and be multiget-fetchable —

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { BackupReason } from '@workspace/lib/types/backup';
 import { BUCKET_PARTIAL_SUFFIX, buildServerArchiveName } from '../../lib/backup/paths';
-import { pruneBucketArchives, pruneServerArchives, type RetainedArchive } from '../../lib/backup/retention';
+import type { RetainedArchive } from '../../lib/backup/retention';
+import { pruneBucketArchives, pruneServerArchives } from '../../lib/backup/retention';
 
 // One archive a night at 02:00 UTC, `night` days after 1 September.
 function archive(reason: BackupReason, night: number, good = true): RetainedArchive {

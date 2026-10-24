@@ -5,9 +5,11 @@ import {
     isExiftoolExtension,
     TEXT_PREVIEW_MAX_BYTES,
 } from '../constants/preview';
-import { type DrivePath, isCollabType, isEmlFile, isIcsFile, isImageMime, isVCardFile } from '../types/drive';
+import type { DrivePath } from '../types/drive';
+import { isCollabType, isEmlFile, isIcsFile, isImageMime, isVCardFile } from '../types/drive';
 import type { FileImportSource, FileSubject, MailPartRef, PreviewMode, SubjectInfo } from '../types/file-subject';
-import { type Attachment, mailAttachmentName } from '../types/mail';
+import type { Attachment } from '../types/mail';
+import { mailAttachmentName } from '../types/mail';
 import {
     getDriveDownloadUrl,
     getDriveEmbedUrl,

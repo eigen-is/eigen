@@ -35,8 +35,8 @@ import { isImageMime } from '@workspace/lib/types/drive';
 import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { downloadChartImage } from '@workspace/ui/components/charts';
+import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import {
-    type CommentContextMenuItem,
     CommentLifecycleDialogs,
     CommentLifecycleMenuItems,
     CommentMenuItems,
@@ -85,12 +85,14 @@ import { FigurePropertiesPanel } from './figure-properties-panel';
 import { FootnoteList } from './footnote-list';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useOpenNote } from './hooks/use-open-note';
-import { type SelectionPanel, useSelectionPanel } from './hooks/use-selection-panel';
+import type { SelectionPanel } from './hooks/use-selection-panel';
+import { useSelectionPanel } from './hooks/use-selection-panel';
 import { cellBackground, selectCellCommands } from './hooks/use-toolbar-state';
 import { useYMapRead } from './hooks/use-y-map-read';
 import { updateNormalStyle } from './normal-style';
 import { BandControls, PageBands } from './page-band';
-import { applyPageNumberPreset, type PageNumberPreset } from './page-numbers';
+import type { PageNumberPreset } from './page-numbers';
+import { applyPageNumberPreset } from './page-numbers';
 import { createDocUndoManager, writePageSetup } from './page-setup';
 import { tableMenuSections } from './table-menu-sections';
 import { TablePropertiesPanel } from './table-properties-panel';

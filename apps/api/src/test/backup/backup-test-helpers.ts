@@ -11,19 +11,13 @@ import { buildHomeFolderName, getBackupsDir, serverSidecarPath } from '../../lib
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { readServerArchive } from '../../lib/backup/verify';
 import { getDomain } from '../../lib/config/server-config';
-import { type DatabaseConfig, PATHS } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
+import { PATHS } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
-import {
-    assertJson,
-    authedRequest,
-    createTestUserOnStorage,
-    drivePost,
-    driveUpload,
-    TEST_DATA_DIR,
-    type TestUser,
-} from '../setup';
+import type { TestUser } from '../setup';
+import { assertJson, authedRequest, createTestUserOnStorage, drivePost, driveUpload, TEST_DATA_DIR } from '../setup';
 
 export async function waitForJob(id: string): Promise<BackupJob> {
     for (let attempt = 0; attempt < 2400; attempt++) {

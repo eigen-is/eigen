@@ -1,10 +1,12 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
-import { type DrivePath, VCARD_MIMES } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { VCARD_MIMES } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { splitVCards } from '../../lib/vcard';
 import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
+import type { TestUser } from '../setup';
 import {
     app,
     assertJson,
@@ -15,7 +17,6 @@ import {
     driveUpload,
     firstMountId,
     getTestContext,
-    type TestUser,
 } from '../setup';
 import { importFromDriveRequest, importRaw } from '../transfer-test-helpers';
 

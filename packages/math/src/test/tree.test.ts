@@ -4,8 +4,10 @@ import { readLatex, writeLatex } from '../latex';
 import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
 import { writeText } from '../text';
-import { MATH_LIMITS, type MathNode, type MathRow, RowBuilder } from '../tree';
-import { checkedXml, type MathXmlElement } from '../xml';
+import type { MathNode, MathRow } from '../tree';
+import { MATH_LIMITS, RowBuilder } from '../tree';
+import type { MathXmlElement } from '../xml';
+import { checkedXml } from '../xml';
 import { canonicalIssue } from './canonical';
 import { el, letter, viaLatex, viaMathml, viaOmml } from './parse';
 

@@ -6,13 +6,8 @@ import {
     writeFrameInDoc,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import {
-    type SlidesImportJob,
-    type SlidesImportWorkerResult,
-    type TransformWarning,
-    toTransferableBuffer,
-    toTransferableMedia,
-} from '../../document/transform/protocol';
+import type { SlidesImportJob, SlidesImportWorkerResult, TransformWarning } from '../../document/transform/protocol';
+import { toTransferableBuffer, toTransferableMedia } from '../../document/transform/protocol';
 import { importError } from '../messages';
 import { readPptx } from './from-pptx';
 import { PPTX_STYLE } from './shapes';

@@ -8,7 +8,8 @@ import {
     usePathInfo,
 } from '@workspace/lib/drive';
 import { subjectFromPath } from '@workspace/lib/file-subject';
-import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
+import { isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
 import { EmptyState } from '../layout/app/empty-state';
 import { useLayout } from '../layout/app/layout-context';

@@ -1,7 +1,8 @@
 // Format › Paragraph styles › Normal text › Update 'Normal text' to match: what the selection draws becomes the doc's
 // Normal, one undo step of the body, and the content keeps its marks.
 import { expect, test } from 'bun:test';
-import { getSchema, type JSONContent } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
+import { getSchema } from '@tiptap/core';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();

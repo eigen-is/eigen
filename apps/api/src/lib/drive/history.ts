@@ -1,21 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { type DrivePath, type DrivePathType, isDocumentType } from '@workspace/lib/types/drive';
-import {
-    aclPrincipalsToResolve,
-    describeFileEvent,
-    type FileEvent,
-    type FileEventInput,
-    type FileEventType,
-    type PathWatchStatus,
-    toFileEventType,
-} from '@workspace/lib/types/file-history';
+import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
+import { isDocumentType } from '@workspace/lib/types/drive';
+import type { FileEvent, FileEventInput, FileEventType, PathWatchStatus } from '@workspace/lib/types/file-history';
+import { aclPrincipalsToResolve, describeFileEvent, toFileEventType } from '@workspace/lib/types/file-history';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { sendToHome } from '../home/home-relay';
 import type * as schema from '../mount/schema';
 import { fileEvents, paths, pathWatchers } from '../mount/schema';
 import { getBatchPublicInfo } from '../space/public';
-import { getMemberships, getUserById, type User } from '../user';
+import type { User } from '../user';
+import { getMemberships, getUserById } from '../user';
 import { canReadFromAncestors } from './acl';
 
 // Per-path caps, no age cap: a quiet file keeps its whole story. 'edited' rows are the noise

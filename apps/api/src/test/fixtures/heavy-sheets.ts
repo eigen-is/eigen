@@ -1,4 +1,5 @@
-import { type CellMatrix, encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
+import type { CellMatrix, Op, Sheet } from '@workspace/lib/sheets';
+import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type * as Y from 'yjs';
 import { writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 

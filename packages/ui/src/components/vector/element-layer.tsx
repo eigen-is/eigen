@@ -5,23 +5,20 @@
 // placeLayer, are the one definition of what an element draws and where it goes.
 
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
+import type { Layer, MediaResolver, RenderOutput, VectorArrowElement, VectorElement } from '@workspace/lib/vector';
 import {
     arrowRoute,
     boundShape,
     ELEMENT_FIELDS,
-    type Layer,
     layerBoxCss,
     layerContent,
     layerInnerHtml,
-    type MediaResolver,
     PLACEMENT_FIELDS,
     placeLayer,
-    type RenderOutput,
-    type VectorArrowElement,
-    type VectorElement,
 } from '@workspace/lib/vector';
 import { memo, useRef } from 'react';
-import { type FitHeight, useRichTextAutoFit } from './text-fit';
+import type { FitHeight } from './text-fit';
+import { useRichTextAutoFit } from './text-fit';
 
 type ElementLayerProps = {
     el: VectorElement;

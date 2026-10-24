@@ -8,7 +8,8 @@
 // plain ring the host draws itself, so this component is simply not mounted for it (no
 // `showResize` prop — an ObjectTransform that can't transform isn't rendered).
 
-import { type Box, normalizeAngle, resizeRotatedRect, snapAngle } from '@workspace/lib/vector';
+import type { Box } from '@workspace/lib/vector';
+import { normalizeAngle, resizeRotatedRect, snapAngle } from '@workspace/lib/vector';
 import { cn } from '@workspace/ui/lib/utils';
 import { RotateCw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';

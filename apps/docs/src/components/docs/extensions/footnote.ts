@@ -1,9 +1,14 @@
-import { combineTransactionSteps, type Editor, Extension, getChangedRanges } from '@tiptap/core';
+import type { Editor } from '@tiptap/core';
+import { combineTransactionSteps, Extension, getChangedRanges } from '@tiptap/core';
 import type { Fragment, Node as PMNode } from '@tiptap/pm/model';
-import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
-import { type MapResult, ReplaceAroundStep, ReplaceStep } from '@tiptap/pm/transform';
-import { Decoration, DecorationSet, type DecorationSource, type NodeView } from '@tiptap/pm/view';
-import { type ProsemirrorBinding, relativePositionToAbsolutePosition, ySyncPluginKey } from '@tiptap/y-tiptap';
+import type { Transaction } from '@tiptap/pm/state';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import type { MapResult } from '@tiptap/pm/transform';
+import { ReplaceAroundStep, ReplaceStep } from '@tiptap/pm/transform';
+import type { DecorationSource, NodeView } from '@tiptap/pm/view';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import type { ProsemirrorBinding } from '@tiptap/y-tiptap';
+import { relativePositionToAbsolutePosition, ySyncPluginKey } from '@tiptap/y-tiptap';
 import { FootnoteNode, footnoteNumbers, insertFootnote } from '@workspace/lib/docs/eigendoc';
 import * as Y from 'yjs';
 

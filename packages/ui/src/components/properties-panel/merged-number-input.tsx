@@ -1,4 +1,5 @@
-import { isMixed, type MergedValue } from './merged-value';
+import type { MergedValue } from './merged-value';
+import { isMixed } from './merged-value';
 import { PropertyNumberInput } from './property-number-input';
 
 type MergedNumberInputProps = {

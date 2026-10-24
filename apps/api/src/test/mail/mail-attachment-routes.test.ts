@@ -1,4 +1,5 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, type Mock, setSystemTime, spyOn, test } from 'bun:test';
+import type { Mock } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { renameSync } from 'node:fs';
 import { join } from 'node:path';

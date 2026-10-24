@@ -13,14 +13,10 @@ import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
+import type { Context, FilterColor, FilterConditionName, FilterDate, FilterValue } from '../../state';
 import {
-    type Context,
     clearFilter,
     FILTER_CONDITION_ITEMS,
-    type FilterColor,
-    type FilterConditionName,
-    type FilterDate,
-    type FilterValue,
     filterConditionArity,
     getFilterColumnColors,
     getFilterColumnValues,

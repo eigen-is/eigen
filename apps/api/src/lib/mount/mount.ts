@@ -2,15 +2,8 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { isSearchableTextFile } from '@workspace/lib/constants';
-import {
-    CHATS_FOLDER_NAME,
-    DRIVE_MIME_FOLDER,
-    DRIVE_TYPE_FOLDER,
-    type DriveContainerType,
-    type DrivePath,
-    type MountConfig,
-    parseOwnerId,
-} from '@workspace/lib/types';
+import type { DriveContainerType, DrivePath, MountConfig } from '@workspace/lib/types';
+import { CHATS_FOLDER_NAME, DRIVE_MIME_FOLDER, DRIVE_TYPE_FOLDER, parseOwnerId } from '@workspace/lib/types';
 import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import { CONTROL_CHARS } from '@workspace/lib/validation';
 import type { BunFile } from 'bun';
@@ -18,27 +11,16 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RWLock } from '../../utils/rw-lock';
 import { getServerSettings } from '../config/server-settings';
-import {
-    ApiError,
-    type DatabaseConfig,
-    type ManagedDatabase,
-    PATHS,
-    type SchemaType,
-    StaleWriteError,
-    storageGone,
-} from '../core';
+import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
+import { ApiError, PATHS, StaleWriteError, storageGone } from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
-import {
-    isMissingObjectCause,
-    readStorageFile,
-    type StorageBackend,
-    type StorageFile,
-    writeTempWithHash,
-} from '../storage';
+import type { StorageBackend, StorageFile } from '../storage';
+import { isMissingObjectCause, readStorageFile, writeTempWithHash } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
-import { type ContentExtractor, ContentReindexQueue } from './content-reindex-queue';
+import type { ContentExtractor } from './content-reindex-queue';
+import { ContentReindexQueue } from './content-reindex-queue';
 import * as copy from './copy';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type { DocumentDbSlot } from './document-db';

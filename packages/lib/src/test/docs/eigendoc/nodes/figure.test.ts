@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { createDocument, generateHTML, getSchema, type JSONContent } from '@tiptap/core';
+import type { JSONContent } from '@tiptap/core';
+import { createDocument, generateHTML, getSchema } from '@tiptap/core';
 import { getDocExtensions, readFigureAttrs } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 

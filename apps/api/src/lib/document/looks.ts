@@ -1,5 +1,6 @@
 import { EIGEN_FONT_NAMES, FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
-import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips, type TitleType } from '@workspace/lib/docs/eigendoc';
+import type { TitleType } from '@workspace/lib/docs/eigendoc';
+import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips } from '@workspace/lib/docs/eigendoc';
 import { LIST_FORMATS, LIST_LEVELS } from '../ooxml/wordml';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';

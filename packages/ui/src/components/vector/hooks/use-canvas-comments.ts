@@ -1,5 +1,6 @@
 import type { ActiveComments, CommentCard } from '@workspace/lib/types/comments';
-import { commentAnchorTexts, type VectorElement } from '@workspace/lib/vector';
+import type { VectorElement } from '@workspace/lib/vector';
+import { commentAnchorTexts } from '@workspace/lib/vector';
 import { useMemo } from 'react';
 import { ELEMENT_KIND_UI } from '../kinds';
 

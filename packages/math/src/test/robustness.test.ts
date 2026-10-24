@@ -5,10 +5,13 @@ import { MATHML_NAMESPACE, readMathml, writeMathml } from '../mathml';
 import { SPACES } from '../notation';
 import { OMML_NAMESPACE, readOmml, WORDML_NAMESPACE, writeOmml } from '../omml';
 import { writeText } from '../text';
-import { MATH_ENCLOSURES, MATH_LIMITS, MATH_VARIANTS, type MathNode, type MathRow } from '../tree';
-import { elementsOf, type MathXmlElement } from '../xml';
+import type { MathNode, MathRow } from '../tree';
+import { MATH_ENCLOSURES, MATH_LIMITS, MATH_VARIANTS } from '../tree';
+import type { MathXmlElement } from '../xml';
+import { elementsOf } from '../xml';
 import { canonicalIssue } from './canonical';
-import { generateTree, pick, type Random, seeded } from './generate';
+import type { Random } from './generate';
+import { generateTree, pick, seeded } from './generate';
 import { el, parseWritten, viaLatex, viaMathml, viaOmml } from './parse';
 
 // Over the whole package: every reader on seeded random input, the largest admitted trees through every writer, and

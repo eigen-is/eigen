@@ -21,7 +21,8 @@ import type {
     TransformResultFor,
     TransformWarning,
 } from './protocol';
-import { documentTransformRunner, type RunOptions, TRANSFORM_LIMITS, type TransformPriority } from './runner';
+import type { RunOptions, TransformPriority } from './runner';
+import { documentTransformRunner, TRANSFORM_LIMITS } from './runner';
 
 // The one main-thread path every document transform takes: admit the job, surface
 // warnings, map failures — plus, for document-sourced jobs, the capture of the

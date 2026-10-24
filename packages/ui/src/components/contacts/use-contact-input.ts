@@ -1,4 +1,5 @@
-import { type ParsedContactInput, parseContactInput } from '@workspace/lib/validation';
+import type { ParsedContactInput } from '@workspace/lib/validation';
+import { parseContactInput } from '@workspace/lib/validation';
 import { useState } from 'react';
 
 // Shared input plumbing for people-picking dialogs: tracks the typed value, parses the

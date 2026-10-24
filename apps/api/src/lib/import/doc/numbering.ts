@@ -1,9 +1,11 @@
-import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlElements } from '../../core/xml';
 import { W_NS } from '../../ooxml/ooxml';
 import { LIST_LEVELS, spellNumber } from '../../ooxml/wordml';
 import { symbolOf } from './docx-fonts';
 import { int, onOff, w, wChild } from './package';
-import { MAX_CHAIN, type ParaProps, readParaProps, type Styles } from './styles';
+import type { ParaProps, Styles } from './styles';
+import { MAX_CHAIN, readParaProps } from './styles';
 
 // Word's counters, emulated in document order: lists sharing a definition continue, a start override restarts once.
 

@@ -1,14 +1,8 @@
 import type * as Y from 'yjs';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { readSheetsFromDoc } from '../../document/sheets';
-import {
-    type ExportMediaLoader,
-    htmlExportMode,
-    type SheetExportFormat,
-    type TransformWarning,
-    toTransferableBuffer,
-    toTransferableText,
-} from '../../document/transform/protocol';
+import type { ExportMediaLoader, SheetExportFormat, TransformWarning } from '../../document/transform/protocol';
+import { htmlExportMode, toTransferableBuffer, toTransferableText } from '../../document/transform/protocol';
 import { withSvgFallbacks } from '../office-image';
 
 // Materialized doc → export bytes. Runs inside the transform process (child.ts owns

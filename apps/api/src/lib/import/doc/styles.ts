@@ -1,4 +1,5 @@
-import { hasXmlName, type XmlElement, xmlElements } from '../../core/xml';
+import type { XmlElement } from '../../core/xml';
+import { hasXmlName, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
 import { isOn, W_NS } from '../../ooxml/ooxml';
 import {
@@ -9,7 +10,8 @@ import {
     PAGE_SECTION_TYPES,
     STYLE_NAMES,
 } from '../../ooxml/wordml';
-import { FONT_SLOTS, type Fonts, type Script, type Theme } from './docx-fonts';
+import type { Fonts, Script, Theme } from './docx-fonts';
+import { FONT_SLOTS } from './docx-fonts';
 import { halfPointsOf, int, onOff, twipsOf, w, wChild } from './package';
 
 // '' is an explicit none (auto color, no highlight), undefined inherits.

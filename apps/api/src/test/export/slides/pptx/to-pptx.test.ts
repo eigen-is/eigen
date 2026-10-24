@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { gradientStops } from '@workspace/lib/background';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { BackgroundFill } from '@workspace/lib/types/background';
+import type { SlideSize, VectorElementType, VectorScene } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
     convertToShapes,
@@ -9,21 +10,20 @@ import {
     FRAME_FIELDS,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
-    type SlideSize,
     serializeBackgroundFill,
     serializeFill,
     slidePtToPx,
-    type VectorElementType,
-    type VectorScene,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { type XmlElement, xmlAttr, xmlChild, xmlElements, xmlText } from '../../../../lib/core/xml';
+import type { XmlElement } from '../../../../lib/core/xml';
+import { xmlAttr, xmlChild, xmlElements, xmlText } from '../../../../lib/core/xml';
 import { toTransferableText } from '../../../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../../../lib/export/office-image';
 import { sanitizeSceneHtml } from '../../../../lib/export/sanitize';
 import { writePptx } from '../../../../lib/export/slides/pptx/to-pptx';
 import { parseOoxml } from '../../../../lib/ooxml/ooxml';
-import { openZip, type ZipReader } from '../../../../lib/ooxml/zip';
+import type { ZipReader } from '../../../../lib/ooxml/zip';
+import { openZip } from '../../../../lib/ooxml/zip';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';

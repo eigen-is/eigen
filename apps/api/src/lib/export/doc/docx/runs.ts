@@ -10,9 +10,11 @@ import { cssPt, halfPoints, SMALL_LOOK, twips } from '../../../document/looks';
 import { proseValue } from '../../../document/prose-css';
 import { R_NS } from '../../../ooxml/ooxml';
 import { uriReference } from '../../../ooxml/opc';
-import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS, type StyleId } from '../../../ooxml/wordml';
+import type { StyleId } from '../../../ooxml/wordml';
+import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../../ooxml/wordml';
 import { absoluteHref } from '../render';
-import { type RunFace, useFace } from './fonts';
+import type { RunFace } from './fonts';
+import { useFace } from './fonts';
 import type { Context } from './package';
 
 // Inline content: one run per text node, its properties written in the ECMA-376 sequence, as a paragraph's are.

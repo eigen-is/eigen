@@ -1,4 +1,5 @@
-import { type BytesTextPreviewMode, getExtension } from '@workspace/lib/constants/preview';
+import type { BytesTextPreviewMode } from '@workspace/lib/constants/preview';
+import { getExtension } from '@workspace/lib/constants/preview';
 import { escapeHtml } from '@workspace/lib/html';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import { sanitizeExportHtml } from '../export/sanitize';

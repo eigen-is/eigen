@@ -1,17 +1,13 @@
 import { cellsToTsv } from '@workspace/lib/clipboard';
 import { escapeHtml } from '@workspace/lib/html';
-import {
-    borderSidesToCss,
-    type CellBorderSides,
-    type ConditionalFormatRule,
-    type DataVerificationRule,
-    mergedBorderSides,
-} from '@workspace/lib/sheets';
+import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import { borderSidesToCss, mergedBorderSides } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
+import { getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';

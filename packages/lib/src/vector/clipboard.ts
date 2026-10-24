@@ -3,10 +3,12 @@
 // hostile peer write — one validator, no second field list to drift.
 
 import type { EigenClipboardElementsItem, EigenClipboardItem, EigenClipboardTypography } from '../types/clipboard';
-import { DUPLICATE_OFFSET, getElementsBounds, type Point } from './geometry';
+import type { Point } from './geometry';
+import { DUPLICATE_OFFSET, getElementsBounds } from './geometry';
 import { ELEMENT_FIELDS } from './kinds';
 import { letterSpacingField, lineHeightField, oneOf } from './kinds/read-fields';
 import { readElementFromFields } from './read-vector';
+import type { VectorElement, VectorRichTextElement } from './types';
 import {
     DEFAULT_RICHTEXT_PROPS,
     FONT_STYLES,
@@ -14,8 +16,6 @@ import {
     TEXT_ALIGNS,
     TEXT_DECORATIONS,
     VERTICAL_ALIGNS,
-    type VectorElement,
-    type VectorRichTextElement,
 } from './types';
 
 function storedRecord(el: VectorElement): Record<string, string | number | boolean> {

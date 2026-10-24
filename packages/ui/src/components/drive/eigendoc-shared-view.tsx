@@ -2,14 +2,16 @@ import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
-import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
+import { isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
 import { EmptyState } from '../layout/app/empty-state';
 import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
-import { type EigenDocAppConfig, eigenDocSharedTitle } from './eigendoc-config';
+import type { EigenDocAppConfig } from './eigendoc-config';
+import { eigenDocSharedTitle } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
 
 type EigenDocSharedViewProps = {

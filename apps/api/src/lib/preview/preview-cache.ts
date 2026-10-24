@@ -5,7 +5,8 @@ import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
-import { type DrivePath, isCollabType, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isCollabType, isEmlFile, isIcsFile, isVCardFile } from '@workspace/lib/types/drive';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { ApiError } from '../core/errors';
 import { NOT_A_CALENDAR_FILE, NOT_A_VCARD_FILE, NOT_AN_EMAIL_FILE } from '../core/transfer';

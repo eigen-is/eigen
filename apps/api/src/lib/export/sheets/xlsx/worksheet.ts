@@ -1,10 +1,10 @@
 import { pxToPt } from '@workspace/lib/docs/eigendoc';
+import type { Sheet } from '@workspace/lib/sheets';
 import {
     parseCellKey,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_DIGIT_WIDTH,
-    type Sheet,
     sheetDefaultColWidth,
     sheetDefaultRowHeight,
 } from '@workspace/lib/sheets';
@@ -12,9 +12,11 @@ import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { escapeXml } from '@workspace/lib/xml';
 import { parseA1Range, quoteSheetName, rangeToA1, toA1, unquoteSheetName } from '@workspace/sheet/engine';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';
-import { type Relationship, uriReference } from '../../../ooxml/opc';
+import type { Relationship } from '../../../ooxml/opc';
+import { uriReference } from '../../../ooxml/opc';
 import { MAX_SHEET_LINKS, pxToColumnWidth } from '../../../ooxml/spreadsheetml';
-import { type GridContext, inGrid, keyOf, sheetGrid } from './cells';
+import type { GridContext } from './cells';
+import { inGrid, keyOf, sheetGrid } from './cells';
 import { rulesXml } from './rules';
 import { argbOf } from './styles';
 

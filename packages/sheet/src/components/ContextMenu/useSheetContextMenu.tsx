@@ -23,7 +23,8 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext } from 'react';
-import { type SetContextOptions, WorkbookContext } from '../../context';
+import type { SetContextOptions } from '../../context';
+import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {

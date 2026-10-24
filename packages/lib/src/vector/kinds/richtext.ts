@@ -2,6 +2,7 @@ import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';
 import { hitTestBox, round } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
+import type { VectorRichTextElement } from '../types';
 import {
     CORNERS,
     DEFAULT_CORNERS,
@@ -12,7 +13,6 @@ import {
     TEXT_ALIGNS,
     TEXT_DECORATIONS,
     VERTICAL_ALIGNS,
-    type VectorRichTextElement,
 } from '../types';
 import { defineKind } from './kind';
 import {

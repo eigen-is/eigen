@@ -1,6 +1,8 @@
 import { MathError } from './error';
-import { BARE_ENVIRONMENTS, LATEX_COMMANDS, LATEX_ENVIRONMENTS, type LatexCommand } from './latex-commands';
+import type { LatexCommand } from './latex-commands';
+import { BARE_ENVIRONMENTS, LATEX_COMMANDS, LATEX_ENVIRONMENTS } from './latex-commands';
 import { ACCENTS, COLOR_NAMES, MINUS, naryLimits, PRIME, SPACES } from './notation';
+import type { MathBudget, MathNode, MathRow, MathToken, MathVariant, RowSlot } from './tree';
 import {
     bound,
     clusters,
@@ -11,16 +13,10 @@ import {
     MARK,
     MATH_ENCLOSURES,
     MATH_LIMITS,
-    type MathBudget,
-    type MathNode,
-    type MathRow,
-    type MathToken,
-    type MathVariant,
     mark,
     numberEnd,
     optional,
     RowBuilder,
-    type RowSlot,
 } from './tree';
 import { checkedXml, NOT_XML } from './xml';
 

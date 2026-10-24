@@ -7,7 +7,8 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
-import { parseBackgroundFill, type VectorElement, type VectorFrame } from '@workspace/lib/vector';
+import type { VectorElement, VectorFrame } from '@workspace/lib/vector';
+import { parseBackgroundFill } from '@workspace/lib/vector';
 import type { useContextMenu } from '@workspace/ui/components/context-menu';
 import { FrameThumbnail } from '@workspace/ui/components/vector';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';

@@ -4,7 +4,8 @@ import { member as memberSchema, user as userSchema } from '../../../auth-schema
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getUserById } from '../../lib/user';
-import { authedRequest, createTestUser, getTestContext, hasSession, type TestUser } from '../setup';
+import type { TestUser } from '../setup';
+import { authedRequest, createTestUser, getTestContext, hasSession } from '../setup';
 
 // Every org admin holds better-auth's user.role 'admin', so the admin plugin's own routes must not reach the owner.
 describe("better-auth's admin routes against the owner", () => {

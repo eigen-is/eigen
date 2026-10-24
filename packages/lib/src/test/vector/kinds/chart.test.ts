@@ -15,7 +15,8 @@ import { ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../
 import { svgTextLine } from '../../../vector/kinds/render-utils';
 import { readElementFromFields } from '../../../vector/read-vector';
 import { elementToSvg } from '../../../vector/scene-to-svg';
-import { DEFAULT_ELEMENT_PROPS, type VectorChartElement, type VectorElement } from '../../../vector/types';
+import type { VectorChartElement, VectorElement } from '../../../vector/types';
+import { DEFAULT_ELEMENT_PROPS } from '../../../vector/types';
 import { chart, richtext } from '../element-factories';
 
 const specJson = (over: Partial<ChartSpec> = {}, type: ChartSpec['type'] = 'column'): string =>
