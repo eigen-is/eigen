@@ -24,23 +24,12 @@ import {
     pointsBounds,
     scaledPathCommands,
 } from '@workspace/lib/vector';
-import { colorXml } from '../../../ooxml/drawingml';
+import { colorXml, LINE_END_BY_ARROWHEAD, PRESET_DASH_BY_STYLE } from '../../../ooxml/drawingml';
 import type { Slide } from './package';
 import { customXml, fillXml, presetXml, spXml, toEmu, xfrmXml } from './shapes';
 import { NO_MARKS, textBodyXml } from './text';
 
 // Lines, arrows, freehand strokes and paths, and the a:ln every stroke is written as.
-
-const DASHES: Record<StrokeStyle, string> = { solid: '', dashed: 'dash', dotted: 'dot' };
-
-// DrawingML has no bar end: arrowXml draws a bar as a line of its own.
-const LINE_ENDS: Record<Arrowhead, string> = {
-    none: '',
-    arrow: 'arrow',
-    triangle: 'triangle',
-    circle: 'oval',
-    bar: '',
-};
 
 type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeStyle };
 
@@ -53,9 +42,9 @@ export function lineXml(
 ): string {
     const color = stroke.strokeWidth > 0 ? colorXml(stroke.strokeColor, opacity) : null;
     if (!color) return NO_LINE;
-    const dash = DASHES[stroke.strokeStyle];
+    const dash = PRESET_DASH_BY_STYLE[stroke.strokeStyle];
     const end = (tag: string, head: Arrowhead) =>
-        LINE_ENDS[head] ? `<a:${tag} type="${LINE_ENDS[head]}" w="lg" len="lg"/>` : '';
+        LINE_END_BY_ARROWHEAD[head] ? `<a:${tag} type="${LINE_END_BY_ARROWHEAD[head]}" w="lg" len="lg"/>` : '';
     return [
         `<a:ln w="${toEmu(slide, stroke.strokeWidth)}" cap="rnd"><a:solidFill>${color}</a:solidFill>`,
         dash ? `<a:prstDash val="${dash}"/>` : '',

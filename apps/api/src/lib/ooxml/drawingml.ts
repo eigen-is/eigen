@@ -1,3 +1,4 @@
+import type { Arrowhead, StrokeStyle, TextAlign, VerticalAlign } from '@workspace/lib/vector';
 import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import type { XmlElement } from '../core/xml';
@@ -5,7 +6,8 @@ import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from
 import { A_NS, ASVG_NS, R_NS } from './ooxml';
 
 // DrawingML, the drawing vocabulary docx, xlsx and pptx share: a theme's colours, a colour element with its
-// transforms, a picture's blip both ways, a text body's plain text, and the theme the writers write.
+// transforms, a picture's blip both ways, text and line vocabulary both ways, a text body's plain text, and the theme
+// the writers write.
 
 // A theme's colours by slot name (dk1, lt1, accent1…), each '#rrggbb'.
 export type ColorScheme = ReadonlyMap<string, string>;
@@ -305,6 +307,53 @@ export function blipEmbeds(blip: XmlElement | undefined): [svg: string | undefin
         ? xmlChildren(extensions, A_NS, 'ext').flatMap((ext) => xmlChildren(ext, ASVG_NS, 'svgBlip'))
         : [];
     return [svg && xmlAttr(svg, R_NS, 'embed'), xmlAttr(blip, R_NS, 'embed')];
+}
+
+// A paragraph's a:pPr algn for each canvas alignment, and back; the reader takes every justified kind as justify.
+export const ALGN_BY_ALIGN: Record<TextAlign, string> = { left: 'l', center: 'ctr', right: 'r', justify: 'just' };
+export const ALIGN_BY_ALGN = new Map<string, TextAlign>([
+    ['l', 'left'],
+    ['ctr', 'center'],
+    ['r', 'right'],
+    ['just', 'justify'],
+    ['justLow', 'justify'],
+    ['dist', 'justify'],
+    ['thaiDist', 'justify'],
+]);
+
+// A text body's a:bodyPr anchor, both ways.
+export const ANCHOR_BY_ALIGN: Record<VerticalAlign, string> = { top: 't', center: 'ctr', bottom: 'b' };
+export const ALIGN_BY_ANCHOR = new Map<string, VerticalAlign>([
+    ['t', 'top'],
+    ['ctr', 'center'],
+    ['b', 'bottom'],
+]);
+
+// An a:ln's headEnd or tailEnd type for each arrowhead. DrawingML has no bar end, so a writer draws a bar as a line of
+// its own.
+export const LINE_END_BY_ARROWHEAD: Record<Arrowhead, string> = {
+    none: '',
+    arrow: 'arrow',
+    triangle: 'triangle',
+    circle: 'oval',
+    bar: '',
+};
+
+// A head or tail end as the arrowhead that draws closest.
+export const ARROWHEAD_BY_LINE_END = new Map<string, Arrowhead>([
+    ['triangle', 'triangle'],
+    ['stealth', 'triangle'],
+    ['arrow', 'arrow'],
+    ['oval', 'circle'],
+    ['diamond', 'circle'],
+]);
+
+// An a:ln's a:prstDash for each stroke style; a solid line writes none.
+export const PRESET_DASH_BY_STYLE: Record<StrokeStyle, string> = { solid: '', dashed: 'dash', dotted: 'dot' };
+
+// A preset dash as the stroke style that draws closest: the dots dotted, every other dash dashed.
+export function strokeStyleOf(dash: string | undefined): StrokeStyle {
+    return !dash || dash === 'solid' ? 'solid' : dash === 'dot' || dash === 'sysDot' ? 'dotted' : 'dashed';
 }
 
 // A text body's (c:rich, a:txBody) plain text: a line per paragraph and per break, runs and fields joined.

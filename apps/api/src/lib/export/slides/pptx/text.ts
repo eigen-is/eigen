@@ -3,7 +3,7 @@ import { slidePxToPt } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import { canvasTextValue } from '../../../document/prose-css';
-import { solidFillXml } from '../../../ooxml/drawingml';
+import { ALGN_BY_ALIGN, ANCHOR_BY_ALIGN, solidFillXml } from '../../../ooxml/drawingml';
 import { AHYP_NS } from '../../../ooxml/ooxml';
 import { uriReference } from '../../../ooxml/opc';
 import { isElement } from '../../sanitize';
@@ -100,9 +100,6 @@ export function paragraphsOf(html: string): Paragraph[] {
     return paragraphs.map((paragraph) => ({ ...paragraph, runs: trimmed(paragraph.runs) }));
 }
 
-const ANCHORS: Record<VerticalAlign, string> = { top: 't', center: 'ctr', bottom: 'b' };
-const ALIGNS: Record<TextAlign, string> = { left: 'l', center: 'ctr', right: 'r', justify: 'just' };
-
 // A length canvas-text.css states in the unit the writer reads it in; a shorthand's first value.
 function canvasTextLength(selector: string, property: string, unit: 'em' | 'px'): number {
     const [length = ''] = canvasTextValue(selector, property).split(/\s+/);
@@ -144,7 +141,7 @@ export function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox)
             margin ? ` marL="${margin}"` : '',
             indent ? ` indent="${indent}"` : '',
             level ? ` lvl="${level}"` : '',
-            ` algn="${ALIGNS[box.textAlign]}"`,
+            ` algn="${ALGN_BY_ALIGN[box.textAlign]}"`,
         ].join('');
         const spacing = paragraph.spaceBefore
             ? `<a:spcBef><a:spcPts val="${centipoints(slide, PARAGRAPH_GAP_EM * box.fontSize)}"/></a:spcBef>`
@@ -164,7 +161,7 @@ export function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox)
         return `<a:p><a:pPr${attrs}>${lineSpacing}${spacing}${marker}</a:pPr>${runs.join('')}${end}</a:p>`;
     });
     const wrap = box.wrap ? 'square' : 'none';
-    return `<p:txBody><a:bodyPr wrap="${wrap}" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${ANCHORS[box.verticalAlign]}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${body.join('')}</p:txBody>`;
+    return `<p:txBody><a:bodyPr wrap="${wrap}" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${ANCHOR_BY_ALIGN[box.verticalAlign]}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${body.join('')}</p:txBody>`;
 }
 
 // CSS drops the collapsed space at a block's start and end, then the block's last break, which starts no line.
