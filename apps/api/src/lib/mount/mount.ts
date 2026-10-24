@@ -61,49 +61,49 @@ function locksFor(folder: string): FolderLocks {
 }
 
 export class Mount {
-    readonly id: string;
-    readonly config: MountConfig;
+    public readonly id: string;
+    public readonly config: MountConfig;
 
     private readonly baseDir: string;
-    storage: StorageBackend; // internal — used by mount/*.ts + versioning/snapshot.ts
+    public storage: StorageBackend; // internal — used by mount/*.ts + versioning/snapshot.ts
     // internal — used by mount/*.ts + versioning/snapshot.ts + lib/backup + drive/history.ts
     // (the last one constructor-injected)
-    db!: BunSQLiteDatabase<typeof schema>;
+    public db!: BunSQLiteDatabase<typeof schema>;
     private getLocalDatabase: LocalDatabaseGetter;
     private ownerId: string;
     // internal — used by mount/*.ts + versioning/snapshot.ts
-    documentDbs: Map<string, DocumentDbSlot> = new Map();
+    public documentDbs: Map<string, DocumentDbSlot> = new Map();
     // One-way teardown gate: set by closeAllDatabases, it refuses every later document-db open.
-    closing = false; // internal — used by mount/*.ts
+    public closing = false; // internal — used by mount/*.ts
     private readonly pathLocks: Map<string, Promise<void>>;
     private readonly treeLock: RWLock;
 
     // Write-behind upload queue — only for isRemote (s3) mounts; undefined otherwise.
-    uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
+    public uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
     // Set for an s3 mount only — see buildUploadDestinationKey, which is also the gate Mount.init
     // stands the upload queue up behind.
     private readonly uploadDestinationKey?: string;
 
     // Per-mount content reindexer — built in init() only when an extractor is injected (the
     // document-loader stack is wired from Drive so it never enters this module's graph).
-    reindexQueue?: ContentReindexQueue; // internal — used by mount/*.ts
+    public reindexQueue?: ContentReindexQueue; // internal — used by mount/*.ts
     private readonly extractContent?: ContentExtractor;
 
     // init schedules the history prune off the ready path; held so a fast teardown can cancel it
     // before the Home closes metadata.db (else prune scans a closed db — see closeAllDatabases).
-    pruneTimer: ReturnType<typeof setTimeout> | null = null; // internal — used by mount/*.ts
+    public pruneTimer: ReturnType<typeof setTimeout> | null = null; // internal — used by mount/*.ts
 
     // Fire-and-forget thumbnail jobs (drive/upload.ts); closeAllDatabases awaits them so no sharp
     // worker or row update outlives the mount's metadata.db.
-    thumbnailJobs = new Set<Promise<void>>(); // internal — used by drive/upload.ts + mount/*.ts
+    public thumbnailJobs = new Set<Promise<void>>(); // internal — used by drive/upload.ts + mount/*.ts
 
     // Aborted at teardown so no close or Home shutdown waits on a download or an extraction read.
     // internal — used by mount/*.ts + drive/drive.ts
-    readonly downloads = new AbortController();
+    public readonly downloads = new AbortController();
 
     public history!: FileHistory;
 
-    constructor(
+    public constructor(
         ownerId: string,
         baseDir: string,
         config: MountConfig,
@@ -123,37 +123,37 @@ export class Mount {
     }
 
     // Read live off config so a settings rename (TeamHome.updateMount) shows up without rebuilding.
-    get name(): string {
+    public get name(): string {
         return this.config.name;
     }
 
     // Hot-swap a live settings change. Only fields that don't define the storage backend (name, quota)
     // apply here; storageType/s3Config are bound to this.storage + uploadQueue at build time, so a
     // storage re-point is a rebuild — Drive.updateMount handles it via removeMount + addMount.
-    applyConfig(config: MountConfig): void {
+    public applyConfig(config: MountConfig): void {
         this.config.name = config.name;
         this.config.maxSizeMB = config.maxSizeMB;
     }
 
-    get thumbsDir(): string {
+    public get thumbsDir(): string {
         return path.join(this.baseDir, PATHS.DRIVE.THUMBS_DIR);
     }
 
-    get tmpDir(): string {
+    public get tmpDir(): string {
         return path.join(this.baseDir, PATHS.DRIVE.TMP_DIR);
     }
 
     // Frozen VACUUM INTO upload payloads live here, NOT in tmpDir — the cleanupStaleFiles
     // sweep must never purge a staged copy whose PUT hasn't acked yet. Only used by isRemote mounts.
-    get stagingDir(): string {
+    public get stagingDir(): string {
         return path.join(this.baseDir, PATHS.DRIVE.STAGING_DIR);
     }
 
-    get previewsDir(): string {
+    public get previewsDir(): string {
         return path.join(this.tmpDir, PATHS.DRIVE.PREVIEWS_DIR);
     }
 
-    get trashDir(): string {
+    private get trashDir(): string {
         return path.join(this.dataDir, '.trash');
     }
 
@@ -164,7 +164,7 @@ export class Mount {
     // builds the upload queue OBJECT, which is what answers "is there a staged copy newer than the
     // stored object" (pendingStagedCopy, the freshest-first read every archive relies on). Only
     // reconcile() uploads, and that stays behind the gate.
-    async init(opts?: { passive?: boolean }): Promise<void> {
+    public async init(opts?: { passive?: boolean }): Promise<void> {
         const passive = opts?.passive === true;
         if (!passive) {
             if (!fs.existsSync(this.baseDir)) {
@@ -242,7 +242,7 @@ export class Mount {
         }, 0);
     }
 
-    get dataDir(): string {
+    public get dataDir(): string {
         return path.join(this.baseDir, PATHS.DRIVE.DATA_DIR);
     }
 
@@ -299,19 +299,19 @@ export class Mount {
         }
     }
 
-    async getRootFolder(): Promise<DrivePath | null> {
+    public async getRootFolder(): Promise<DrivePath | null> {
         const result = await this.db.select().from(paths).where(isNull(paths.parentId)).get();
 
         return result ? this.toDrivePath(result) : null;
     }
 
-    async getPath(pathId: string): Promise<DrivePath | null> {
+    public async getPath(pathId: string): Promise<DrivePath | null> {
         const result = await this.db.select().from(paths).where(eq(paths.id, pathId)).get();
 
         return result ? this.toDrivePath(result) : null;
     }
 
-    async listFolder(parentId: string): Promise<DrivePath[]> {
+    public async listFolder(parentId: string): Promise<DrivePath[]> {
         const results = await this.db
             .select()
             .from(paths)
@@ -321,12 +321,12 @@ export class Mount {
         return results.map((r) => this.toDrivePath(r));
     }
 
-    async listFolderAll(parentId: string): Promise<DrivePath[]> {
+    public async listFolderAll(parentId: string): Promise<DrivePath[]> {
         const results = await this.db.select().from(paths).where(eq(paths.parentId, parentId)).all();
         return results.map((r) => this.toDrivePath(r));
     }
 
-    async getActivePath(pathId: string): Promise<DrivePath> {
+    public async getActivePath(pathId: string): Promise<DrivePath> {
         const path = await this.getPath(pathId);
         if (!path) throw new ApiError(404, 'Path not found');
         if (path.trashedAt) throw new ApiError(404, 'File is in trash');
@@ -334,7 +334,7 @@ export class Mount {
     }
 
     // Copy-only guard (copyPath would recurse forever); a move checks inside updatePath's row write.
-    async isSelfOrDescendant(ancestorId: string, candidateId: string): Promise<boolean> {
+    public async isSelfOrDescendant(ancestorId: string, candidateId: string): Promise<boolean> {
         if (ancestorId === candidateId) return true;
         let current = await this.getPath(candidateId);
         while (current?.parentId) {
@@ -347,7 +347,7 @@ export class Mount {
     // Flush the container's cached live data.db so an on-storage byte copy
     // reflects pending Yjs ops. No-op if the doc isn't open or has no data.db.
     // Mirrors the flush step in snapshotContainerDataDb.
-    async flushContainerDb(containerId: string): Promise<void> {
+    public async flushContainerDb(containerId: string): Promise<void> {
         const dataDb = await this.getChildByName(containerId, 'data.db');
         if (!dataDb) return;
         await documentDb.withDocumentDb(this, dataDb.id, async (slot) => {
@@ -355,7 +355,7 @@ export class Mount {
         });
     }
 
-    async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
+    public async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
         name = name.normalize('NFC');
         const result = await this.db
             .select()
@@ -388,7 +388,7 @@ export class Mount {
         return siblings.find((s) => s.name.toLowerCase() === folded) ?? null;
     }
 
-    async resolvePath(pathStr: string): Promise<DrivePath | null> {
+    public async resolvePath(pathStr: string): Promise<DrivePath | null> {
         const segments = pathStr
             .split('/')
             .filter((s) => s.length > 0)
@@ -408,7 +408,7 @@ export class Mount {
     }
 
     // internal — used by mount/*.ts
-    async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
+    private async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
         const existing =
             (await this.db
                 .select({ id: paths.id })
@@ -462,7 +462,7 @@ export class Mount {
         }
     }
 
-    async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
+    public async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
         name = validateName(name);
         const folderId = randomUUID();
         // Derive the container mime from the canonical registry; only plain folders
@@ -506,7 +506,7 @@ export class Mount {
         return hasher.digest('hex');
     }
 
-    async createFile(
+    public async createFile(
         parentId: string,
         name: string,
         mimeType: string,
@@ -552,7 +552,7 @@ export class Mount {
         return fileId;
     }
 
-    async createFileFromTemp(
+    public async createFileFromTemp(
         parentId: string,
         name: string,
         mimeType: string,
@@ -597,7 +597,7 @@ export class Mount {
     }
 
     // Recursive same-mount copy — implementation in mount/copy.ts.
-    async copyPath(
+    public async copyPath(
         srcPathId: string,
         destParentId: string,
         name: string,
@@ -607,17 +607,20 @@ export class Mount {
     }
 
     // Versioning mechanics — implementation in lib/versioning/snapshot.ts (next to restore.ts).
-    async snapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
+    public async snapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<DrivePath> {
         return snapshot.snapshotContainerDataDb(this, containerId, policy);
     }
 
     // Skip-if-contended twin for the tick/close snapshot callback — never parks on the
     // container lock (see document-db.ts onSnapshot).
-    async trySnapshotContainerDataDb(containerId: string, policy: RetentionPolicy): Promise<'taken' | 'skipped'> {
+    public async trySnapshotContainerDataDb(
+        containerId: string,
+        policy: RetentionPolicy,
+    ): Promise<'taken' | 'skipped'> {
         return snapshot.trySnapshotContainerDataDb(this, containerId, policy);
     }
 
-    async replaceContainerDataDb(containerId: string, sourcePath: string): Promise<void> {
+    public async replaceContainerDataDb(containerId: string, sourcePath: string): Promise<void> {
         return snapshot.replaceContainerDataDb(this, containerId, sourcePath);
     }
 
@@ -626,18 +629,18 @@ export class Mount {
     // storage: local mounts (no queue), a key nothing staged, or an already-acked upload. Synchronous,
     // so a caller can copy the returned path with no await before a concurrent enqueue could unlink it.
     // internal — used by mount/*.ts + versioning/snapshot.ts
-    pendingStagedCopy(storageKey: string): string | null {
+    public pendingStagedCopy(storageKey: string): string | null {
         const staged = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
         return staged && fs.existsSync(staged) ? staged : null;
     }
 
-    async touchFile(parentId: string, name: string, mimeType: string): Promise<string> {
+    public async touchFile(parentId: string, name: string, mimeType: string): Promise<string> {
         return this.createFile(parentId, name, mimeType, 0, undefined);
     }
 
     // internal — used by mount/*.ts + versioning/snapshot.ts + lib/backup + Drive.withPathLock
     // (ChatRoom.init)
-    async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
+    public async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);
         }
@@ -658,7 +661,7 @@ export class Mount {
     // free lock withPathLock falls straight through its wait loop and sets the lock before its first
     // await, so nothing can slip in between the check here and the acquire there.
     // internal — used by versioning/snapshot.ts
-    async tryWithPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T | null> {
+    public async tryWithPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T | null> {
         if (this.pathLocks.has(pathId)) return null;
         return this.withPathLock(pathId, fn);
     }
@@ -667,16 +670,16 @@ export class Mount {
     // write, directory renames exclusive. Order: path lock → document-db slot → tree lock → nothing;
     // a holder never locks again (shared inside shared deadlocks once an exclusive is queued).
     // internal — used by mount/*.ts
-    async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
+    public async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
         return this.isPathBased ? this.treeLock.shared(fn) : fn();
     }
 
     // internal — used by mount/*.ts
-    async withTreeExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    public async withTreeExclusive<T>(fn: () => Promise<T>): Promise<T> {
         return this.isPathBased ? this.treeLock.exclusive(fn) : fn();
     }
 
-    async updatePath(
+    public async updatePath(
         pathId: string,
         updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>,
     ): Promise<DrivePath> {
@@ -794,7 +797,7 @@ export class Mount {
     // For a missing row an id key is still the id, so a read of a deleted file finds no object. A name path is a
     // 404, never the root's '': a create into a deleted folder would write at the mount root.
     // internal — used by mount/*.ts + versioning/snapshot.ts
-    async getStorageKey(pathId: string): Promise<string> {
+    public async getStorageKey(pathId: string): Promise<string> {
         const storageKey = await this.findStorageKey(pathId);
         if (storageKey !== null) return storageKey;
         if (!this.isPathBased) return pathId;
@@ -803,7 +806,7 @@ export class Mount {
 
     // Null once the row is gone, for a caller racing a permanent delete, which takes no path lock.
     // internal — used by mount/*.ts + lib/backup
-    async findStorageKey(pathId: string): Promise<string | null> {
+    public async findStorageKey(pathId: string): Promise<string | null> {
         if (!this.isPathBased) {
             const row = await this.db.select({ file: paths.file }).from(paths).where(eq(paths.id, pathId)).get();
             return row ? row.file || pathId : null;
@@ -837,7 +840,7 @@ export class Mount {
         return parentPath ? `${parentPath}/${fileValue}` : fileValue;
     }
 
-    async deletePath(pathId: string): Promise<void> {
+    public async deletePath(pathId: string): Promise<void> {
         const pathEntry = await this.getPath(pathId);
         if (!pathEntry) return;
         if (pathEntry.parentId === null) throw new ApiError(400, 'Cannot delete root folder');
@@ -943,32 +946,32 @@ export class Mount {
 
     // ---- Trash facade — implementation in mount/trash.ts ----
 
-    async trashPath(pathId: string): Promise<DrivePath> {
+    public async trashPath(pathId: string): Promise<DrivePath> {
         return trash.trashPath(this, pathId);
     }
 
-    async listTrash(): Promise<DrivePath[]> {
+    public async listTrash(): Promise<DrivePath[]> {
         return trash.listTrash(this);
     }
 
-    async getTrashedFrom(pathId: string): Promise<string | null> {
+    public async getTrashedFrom(pathId: string): Promise<string | null> {
         return trash.getTrashedFrom(this, pathId);
     }
 
-    async restorePath(pathId: string): Promise<DrivePath> {
+    public async restorePath(pathId: string): Promise<DrivePath> {
         return trash.restorePath(this, pathId);
     }
 
-    async permanentlyDeleteFromTrash(pathId: string): Promise<void> {
+    public async permanentlyDeleteFromTrash(pathId: string): Promise<void> {
         return trash.permanentlyDeleteFromTrash(this, pathId);
     }
 
-    async purgeTrash(maxAgeDays: number): Promise<void> {
+    public async purgeTrash(maxAgeDays: number): Promise<void> {
         return trash.purgeTrash(this, maxAgeDays);
     }
 
     // internal — used by mount/*.ts
-    collectDescendantIds(parentId: string): string[] {
+    public collectDescendantIds(parentId: string): string[] {
         const ids: string[] = [];
         const collect = (pid: string) => {
             const children = this.db.select({ id: paths.id }).from(paths).where(eq(paths.parentId, pid)).all();
@@ -981,7 +984,7 @@ export class Mount {
         return ids;
     }
 
-    async readFile(pathId: string): Promise<StorageFile | null> {
+    public async readFile(pathId: string): Promise<StorageFile | null> {
         return this.readKey(await this.getStorageKey(pathId));
     }
 
@@ -992,7 +995,7 @@ export class Mount {
     // always fresher-or-equal: a document db frozen on its way to the bucket, or a plain file a home
     // restore staged, which the object behind it does not hold at all yet.
     // internal — used by mount/*.ts + lib/backup
-    async readKey(storageKey: string): Promise<StorageFile | null> {
+    public async readKey(storageKey: string): Promise<StorageFile | null> {
         const staged = this.pendingStagedCopy(storageKey);
         if (staged) return Bun.file(staged);
         if (await this.storage.exists(storageKey)) {
@@ -1001,7 +1004,7 @@ export class Mount {
         return null;
     }
 
-    async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
+    public async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
         const storageKey = await this.getStorageKey(pathId);
         // Freshest-first, same as readFile: a Range GET or content extraction must not read the stale object.
         const staged = this.pendingStagedCopy(storageKey);
@@ -1011,7 +1014,7 @@ export class Mount {
     }
 
     // A file's bytes, the first `limit` with one, freshest-first; the teardown abort ends the read too.
-    async readBytes(pathId: string, limit?: number): Promise<ArrayBuffer | null> {
+    public async readBytes(pathId: string, limit?: number): Promise<ArrayBuffer | null> {
         const file = limit === undefined ? await this.readFile(pathId) : await this.readRange(pathId, 0, limit);
         return file ? readStorageFile(file, { signal: this.downloads.signal }) : null;
     }
@@ -1026,7 +1029,7 @@ export class Mount {
         return !!row && isSearchableTextFile(row.mimeType, row.name);
     }
 
-    async writeFile(
+    public async writeFile(
         pathId: string,
         data: Buffer | Uint8Array | ArrayBuffer | BunFile,
         expectedUpdatedAt?: Date,
@@ -1054,7 +1057,7 @@ export class Mount {
 
     // Overwrite using a temp file with size+hash already known (from writeTempWithHash).
     // Mirrors createFileFromTemp on the create side and avoids re-hashing.
-    async writeFileFromTemp(
+    public async writeFileFromTemp(
         pathId: string,
         tempId: string,
         size: number,
@@ -1104,7 +1107,7 @@ export class Mount {
         if (committed.trashedAt) throw new ApiError(404, 'File is in trash');
     }
 
-    getTempPath(pathId: string): string {
+    public getTempPath(pathId: string): string {
         return path.join(this.tmpDir, pathId.replace(/\//g, '_'));
     }
 
@@ -1112,7 +1115,7 @@ export class Mount {
     // (e.g. reading a SQLite snapshot on any storage backend). tempId must be
     // unique per invocation (a fresh randomUUID): a shared id lets concurrent
     // downloads of one file clobber each other. Caller owns cleanupTemp(tempId).
-    async downloadToTemp(pathId: string, tempId: string): Promise<string> {
+    public async downloadToTemp(pathId: string, tempId: string): Promise<string> {
         // Invariant: an open doc's live working copy is the temp path keyed by its
         // data.db pathId (getTempPath) — a tempId colliding with one would truncate it.
         if (this.documentDbs.has(tempId)) {
@@ -1142,7 +1145,7 @@ export class Mount {
     }
 
     // internal — used by mount/*.ts
-    async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
+    public async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
         const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
         await this.cleanupTemp(tempId);
@@ -1167,7 +1170,7 @@ export class Mount {
     // Into a side file, renamed on success: a process death mid-read must not leave a truncated file
     // at the temp path, which the next open would adopt as crash recovery. Returns the byte count.
     // internal — used by mount/*.ts
-    async replaceTempFrom(tempId: string, source: StorageFile): Promise<number> {
+    public async replaceTempFrom(tempId: string, source: StorageFile): Promise<number> {
         const sideId = randomUUID();
         let size: number;
         try {
@@ -1181,7 +1184,7 @@ export class Mount {
     }
 
     // internal — used by mount/*.ts
-    async uploadFromTemp(storageKey: string, tempId: string): Promise<void> {
+    public async uploadFromTemp(storageKey: string, tempId: string): Promise<void> {
         const tempPath = this.getTempPath(tempId);
         const tempFile = Bun.file(tempPath);
         if (!(await tempFile.exists())) {
@@ -1195,7 +1198,7 @@ export class Mount {
         console.log(`[timing] Mount.upload ${storageKey} ${(tempFile.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
     }
 
-    async cleanupTemp(tempId: string): Promise<void> {
+    public async cleanupTemp(tempId: string): Promise<void> {
         const tempPath = this.getTempPath(tempId);
         // The journals too: SQLite replays a leftover -wal into whatever main file next lands at this path.
         try {
@@ -1208,17 +1211,17 @@ export class Mount {
     }
 
     // internal — used by mount/*.ts + versioning/snapshot.ts
-    get isRemote(): boolean {
+    public get isRemote(): boolean {
         return this.config.storageType !== 'local-key' && this.config.storageType !== 'local';
     }
 
     // internal — used by mount/*.ts + lib/backup
-    get isPathBased(): boolean {
+    public get isPathBased(): boolean {
         return this.config.storageType === 'local';
     }
 
     // internal — used by mount/*.ts
-    get needsTempCopy(): boolean {
+    public get needsTempCopy(): boolean {
         return this.isRemote || this.isPathBased;
     }
 
@@ -1227,7 +1230,10 @@ export class Mount {
     // Open an EXISTING managed document database. Throws ApiError(410) if the
     // backing storage object isn't there — never silently creates fresh.
     // Use createDatabase for the first-time provisioning instead.
-    async openDatabase<S extends SchemaType>(config: DatabaseConfig<S>, pathId: string): Promise<ManagedDatabase<S>> {
+    public async openDatabase<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+    ): Promise<ManagedDatabase<S>> {
         return documentDb.openDatabase(this, config, pathId);
     }
 
@@ -1235,22 +1241,25 @@ export class Mount {
     // does not already exist, creates fresh schema, and flushes to storage
     // before returning so subsequent openDatabase calls (incl. after API
     // restart) find a real object. Caller must touchFile() the path first.
-    async createDatabase<S extends SchemaType>(config: DatabaseConfig<S>, pathId: string): Promise<ManagedDatabase<S>> {
+    public async createDatabase<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+    ): Promise<ManagedDatabase<S>> {
         return documentDb.createDatabase(this, config, pathId);
     }
 
-    async closeDatabase(pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
+    public async closeDatabase(pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {
         return documentDb.closeDatabase(this, pathId, opts);
     }
 
-    async closeAllDatabases(): Promise<void> {
+    public async closeAllDatabases(): Promise<void> {
         return documentDb.closeAllDatabases(this);
     }
 
     // Force-drain this mount's content reindex queue and await it. The queue otherwise self-drives
     // (on dirty-mark + cap timer); this facade exists for tests and ad-hoc ops. No-op until init
     // builds the queue (i.e. when no extractor was injected).
-    flushContentReindex(): Promise<void> {
+    public flushContentReindex(): Promise<void> {
         return this.reindexQueue?.drain() ?? Promise.resolve();
     }
 
@@ -1259,16 +1268,16 @@ export class Mount {
     // Force a drain of this mount's pending uploads. The queue otherwise self-drives (on enqueue +
     // backoff), and process shutdown flushes via uploadQueue.drain() directly (see closeAllDatabases),
     // so this thin facade exists only for tests and ad-hoc ops. No-op for non-S3 mounts.
-    drainPendingUploads(opts?: { flushNow?: boolean }): Promise<void> {
+    public drainPendingUploads(opts?: { flushNow?: boolean }): Promise<void> {
         return this.uploadQueue?.drain(opts) ?? Promise.resolve();
     }
 
     // Queue depth (observability): how many uploads are awaiting an ack on this mount.
-    get pendingUploadCount(): number {
+    public get pendingUploadCount(): number {
         return this.uploadQueue?.pendingCount ?? 0;
     }
 
-    async getTotalSize(): Promise<number> {
+    public async getTotalSize(): Promise<number> {
         const result = await this.db
             .select({
                 total: sql<number>`COALESCE(SUM(${paths.size}), 0)`,
@@ -1280,7 +1289,7 @@ export class Mount {
         return result?.total ?? 0;
     }
 
-    async getFileCount(): Promise<number> {
+    public async getFileCount(): Promise<number> {
         const result = await this.db
             .select({
                 count: sql<number>`COUNT(*)`,
@@ -1293,7 +1302,7 @@ export class Mount {
     }
 
     // Container internals (data.db, media, embedded chats) are never listed — see docContainerDescendantIds.
-    async getPathsByMimeType(mimeTypePrefix: string): Promise<DrivePath[]> {
+    public async getPathsByMimeType(mimeTypePrefix: string): Promise<DrivePath[]> {
         const results = await this.db
             .select()
             .from(paths)
@@ -1310,35 +1319,35 @@ export class Mount {
 
     // ---- Content index + search facade — implementation in mount/search-index.ts ----
 
-    upsertPathContent(pathId: string, body: string): void {
+    public upsertPathContent(pathId: string, body: string): void {
         searchIndex.upsertPathContent(this, pathId, body);
     }
 
-    clearPathContent(pathId: string): void {
+    public clearPathContent(pathId: string): void {
         searchIndex.clearPathContent(this, pathId);
     }
 
-    getContentDirtyPaths(reindexCapSeconds: number, limit: number): DrivePath[] {
+    public getContentDirtyPaths(reindexCapSeconds: number, limit: number): DrivePath[] {
         return searchIndex.getContentDirtyPaths(this, reindexCapSeconds, limit);
     }
 
-    earliestPendingReindexAt(reindexCapSeconds: number): number | null {
+    public earliestPendingReindexAt(reindexCapSeconds: number): number | null {
         return searchIndex.earliestPendingReindexAt(this, reindexCapSeconds);
     }
 
-    markContentIndexed(pathId: string): void {
+    public markContentIndexed(pathId: string): void {
         searchIndex.markContentIndexed(this, pathId);
     }
 
-    markContentIndexAttempted(pathId: string): void {
+    public markContentIndexAttempted(pathId: string): void {
         searchIndex.markContentIndexAttempted(this, pathId);
     }
 
-    searchPaths(opts: { q: string; limit: number }): DrivePath[] {
+    public searchPaths(opts: { q: string; limit: number }): DrivePath[] {
         return searchIndex.searchPaths(this, opts);
     }
 
-    async getPathsWithACL(): Promise<DrivePath[]> {
+    public async getPathsWithACL(): Promise<DrivePath[]> {
         const results = await this.db
             .select()
             .from(paths)
@@ -1347,13 +1356,13 @@ export class Mount {
         return results.map((r) => this.toDrivePath(r));
     }
 
-    async getBreadcrumb(pathId: string): Promise<DrivePath[]> {
+    public async getBreadcrumb(pathId: string): Promise<DrivePath[]> {
         const [crumbs] = await this.getBreadcrumbs([pathId]);
         return crumbs;
     }
 
     // One chain per id, in input order, each root first; an id with no row gets [].
-    async getBreadcrumbs(pathIds: string[]): Promise<DrivePath[][]> {
+    public async getBreadcrumbs(pathIds: string[]): Promise<DrivePath[][]> {
         if (pathIds.length === 0) return [];
         const rows = await this.db
             .select()
@@ -1374,7 +1383,7 @@ export class Mount {
     }
 
     // internal — used by mount/*.ts
-    toDrivePath(row: typeof paths.$inferSelect): DrivePath {
+    public toDrivePath(row: typeof paths.$inferSelect): DrivePath {
         let size = row.size;
         if (row.type !== 'file' && size === null) {
             size = this.computeAndCacheFolderSize(row.id);
@@ -1401,7 +1410,7 @@ export class Mount {
     }
 
     // internal — used by mount/*.ts + versioning/snapshot.ts
-    async invalidateAncestorsOf(pathId: string): Promise<void> {
+    public async invalidateAncestorsOf(pathId: string): Promise<void> {
         let parentId: string | null;
         try {
             const row = await this.db
@@ -1420,7 +1429,7 @@ export class Mount {
     // NULL the cached size on `parentId` and every ancestor up to the mount root.
     // Every caller has committed its write: a failure leaves a stale size, logged, not a 500.
     // internal — used by mount/*.ts
-    async invalidateSizesFrom(parentId: string | null): Promise<void> {
+    public async invalidateSizesFrom(parentId: string | null): Promise<void> {
         if (!parentId) return;
         try {
             await this.db.run(sql`

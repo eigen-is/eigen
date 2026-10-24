@@ -19,10 +19,10 @@ const HISTORY_MAX_EDITED_PER_PATH = 100;
 const HISTORY_MAX_PER_PATH = 500;
 
 export class FileHistory {
-    constructor(
+    public constructor(
         private db: BunSQLiteDatabase<typeof schema>,
-        readonly ownerId: string,
-        readonly mountId: string,
+        public readonly ownerId: string,
+        public readonly mountId: string,
     ) {}
 
     // Entities inside an eigendoc/chat container (per-card comment threads, attachment media)
@@ -40,7 +40,7 @@ export class FileHistory {
         return ancestors.some((a) => isDocumentType(a.type));
     }
 
-    record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): void {
+    public record(input: FileEventInput, opts?: { dedupeWindowMs?: number }): void {
         if (this.isContainerInternal(input.pathId)) return;
         if (opts?.dedupeWindowMs) {
             const last = this.db
@@ -75,7 +75,7 @@ export class FileHistory {
 
     // File: direct events. Folder/container: events on the path and every descendant
     // (recursive CTE downward), newest first.
-    list(pathId: string, opts?: { limit?: number }): FileEvent[] {
+    public list(pathId: string, opts?: { limit?: number }): FileEvent[] {
         const limit = opts?.limit ?? 50;
 
         const rows = this.db.all<{
@@ -116,18 +116,18 @@ export class FileHistory {
         }));
     }
 
-    addWatcher(pathId: string, userId: string): void {
+    public addWatcher(pathId: string, userId: string): void {
         this.db.insert(pathWatchers).values({ pathId, userId, createdAt: new Date() }).onConflictDoNothing().run();
     }
 
-    removeWatcher(pathId: string, userId: string): void {
+    public removeWatcher(pathId: string, userId: string): void {
         this.db
             .delete(pathWatchers)
             .where(and(eq(pathWatchers.pathId, pathId), eq(pathWatchers.userId, userId)))
             .run();
     }
 
-    getWatchStatus(pathId: string, userId: string): PathWatchStatus {
+    public getWatchStatus(pathId: string, userId: string): PathWatchStatus {
         const direct = this.db
             .select({ pathId: pathWatchers.pathId })
             .from(pathWatchers)
@@ -156,7 +156,7 @@ export class FileHistory {
         };
     }
 
-    listWatchedPathIds(userId: string): string[] {
+    public listWatchedPathIds(userId: string): string[] {
         return this.db
             .select({ pathId: pathWatchers.pathId })
             .from(pathWatchers)
@@ -167,7 +167,7 @@ export class FileHistory {
 
     // Watchers on the root paths and on every ancestor of each root (one inclusive
     // upward CTE seeded with all roots), deduped, with the acting user removed.
-    collectWatcherIds(rootPathIds: string[], excludeUserId: string): string[] {
+    public collectWatcherIds(rootPathIds: string[], excludeUserId: string): string[] {
         const rootList = sql.join(
             rootPathIds.map((id) => sql`${id}`),
             sql`, `,
@@ -189,7 +189,7 @@ export class FileHistory {
     // revoked since watching is silently skipped. verifyAncestors is the chain
     // that justifies the notification — callers capture it BEFORE mutations that
     // rewrite the parent chain (trash re-parents to the mount root).
-    async notifyWatchers(
+    public async notifyWatchers(
         watcherIds: string[],
         opts: {
             eventType: FileEventType;
@@ -249,7 +249,7 @@ export class FileHistory {
         );
     }
 
-    async fanOut(opts: {
+    public async fanOut(opts: {
         eventType: FileEventType;
         actor: User;
         path: DrivePath; // affected item (pre-mutation shape where relevant)
@@ -282,7 +282,7 @@ export class FileHistory {
         });
     }
 
-    prune(): void {
+    public prune(): void {
         this.db.run(sql`
             DELETE FROM ${fileEvents} WHERE id IN (
                 SELECT id FROM (
