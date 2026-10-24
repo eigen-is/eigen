@@ -24,7 +24,7 @@ import { IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
 import { A_NS, C_NS, parseOoxml } from '../../lib/ooxml/ooxml';
 import { readChart } from '../../lib/ooxml/ooxml-chart';
 import { writeChart } from '../../lib/ooxml/ooxml-chart-writer';
-import { seriesIdsByPlace } from '../fixtures/chart-spec';
+import { seriesIdsByPlace } from '../../scripts/office-audit';
 
 // A ChartSpec written as a c:chartSpace and read back by Eigen's own reader: the same spec, its ranges by the names the
 // workbook writes and its numbers inline as literals.

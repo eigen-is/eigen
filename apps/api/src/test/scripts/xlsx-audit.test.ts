@@ -3,7 +3,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { chartSeriesStyle, defaultChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
+import type { ChartSpec } from '@workspace/lib/types/chart';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import type { Feature } from '../../scripts/xlsx-audit';
 import {
@@ -425,5 +427,37 @@ describe('round trip', () => {
         expect(classify({ contentType: 'image/png', width: 4, height: 4 })).toEqual([]);
         expect(classify({ contentType: 'image/jpeg', width: 4, height: 4 })).toEqual([['images', false, 1]]);
         expect(classify({ contentType: 'image/png', width: 2, height: 2 })).toEqual([['images', false, 1]]);
+    });
+
+    test('a chart whose series came back under other ids is alike, one whose series changed its colour is not', () => {
+        // Two series, the second's first bar red, under the ids a source names them by.
+        const bars = (ids: [string, string], color: string | null = null): ChartSpec => {
+            const spec = defaultChartSpec('bar', {
+                source: 'inline',
+                categories: ['a', 'b'],
+                series: ids.map((id, i) => ({ id, name: `S${i}`, values: [i, i + 1] })),
+            });
+            const [first, second] = ids;
+            return {
+                ...spec,
+                series: { ...spec.series, [first]: { ...chartSeriesStyle(spec, first), color } },
+                points: { [second]: { 0: { color: '#ff0000' } } },
+            };
+        };
+        const chart = (spec: ChartSpec): Sheet[] => [
+            {
+                name: 'S',
+                charts: { c: { id: 'c', index: 'a0', x: 0, y: 0, width: 10, height: 10, spec: JSON.stringify(spec) } },
+            },
+        ];
+        const classify = (b: ChartSpec) =>
+            classifyDifferences({
+                warnings: new Map(),
+                a: chart(bars(['4F2A9C1E-0001', '4F2A9C1E-0002'])),
+                b: chart(b),
+                media: { a: new Map(), b: new Map() },
+            }).map(({ kind, listed, count }) => [kind, listed, count]);
+        expect(classify(bars(['x-0', 'x-1']))).toEqual([]);
+        expect(classify(bars(['x-0', 'x-1'], '#00ff00'))).toEqual([['charts', false, 1]]);
     });
 });

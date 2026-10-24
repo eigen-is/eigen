@@ -4,6 +4,7 @@
 // explains is unlisted, and the run passes with no crash, no cut and no unlisted difference.
 import * as fs from 'node:fs';
 import path from 'node:path';
+import type { ChartSpec } from '@workspace/lib/types/chart';
 import { peakRss } from '../lib/core/peak-rss';
 import type { ExportMedia } from '../lib/document/transform/protocol';
 import { toTransferableBuffer } from '../lib/document/transform/protocol';
@@ -121,6 +122,26 @@ export type DifferenceGroup = { kind: string; listed: boolean; count: number; ex
 
 const ROUNDTRIP_EXAMPLES = 3;
 const EXAMPLE_CHARS = 300;
+
+// A series id is identity for merging edits, not content, and our chart writer writes none, so a chart read back names
+// its series by c:idx where the source's had c16:uniqueId GUIDs. Two specs compare with every series id set to its
+// place, s-1 first, and the styles and points keyed by an id following it.
+export function seriesIdsByPlace(spec: ChartSpec): ChartSpec {
+    const { data } = spec;
+    const ids = new Map(data.series.map(({ id }, i) => [id, `s-${i + 1}`]));
+    const id = (old: string) => ids.get(old) ?? old;
+    const rekeyed = <T>(record: Record<string, T>): Record<string, T> =>
+        Object.fromEntries(Object.entries(record).map(([key, value]) => [id(key), value]));
+    return {
+        ...spec,
+        series: rekeyed(spec.series),
+        points: rekeyed(spec.points),
+        data:
+            data.source === 'inline'
+                ? { ...data, series: data.series.map((series) => ({ ...series, id: id(series.id) })) }
+                : { ...data, series: data.series.map((series) => ({ ...series, id: id(series.id) })) },
+    };
+}
 
 const shown = (value: unknown) => (value === undefined ? '–' : canonical(value));
 

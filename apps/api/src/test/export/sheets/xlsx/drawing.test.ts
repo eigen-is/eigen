@@ -15,7 +15,7 @@ import { CHART_CONTENT_TYPE } from '../../../../lib/ooxml/ooxml-chart';
 import type { PackagePart } from '../../../../lib/ooxml/opc';
 import { DRAWING_CONTENT_TYPE, pxToColumnWidth } from '../../../../lib/ooxml/spreadsheetml';
 import { MAX_DECOMPRESSED_BYTES, openZip } from '../../../../lib/ooxml/zip';
-import { seriesIdsByPlace } from '../../../fixtures/chart-spec';
+import { seriesIdsByPlace } from '../../../../scripts/office-audit';
 import { PIXEL_PNG } from '../../../fixtures/pptx';
 import { exportXlsx, xlsxFixture } from '../../../fixtures/xlsx';
 

@@ -22,6 +22,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { parseChartSpec } from '@workspace/lib/charts';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
@@ -60,6 +61,7 @@ import {
     roundtripLine,
     runRoundtrip as runGate,
     seconds,
+    seriesIdsByPlace,
     spawnChild,
 } from './office-audit';
 
@@ -982,10 +984,14 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
             } else if (field === 'hyperlink' || field === 'dataVerification' || field === 'conditionalFormatRules')
                 keyed(field, sheet, x, y);
             else if (field === 'charts') {
+                const read = (stored: string) => {
+                    const spec = parseChartSpec(stored);
+                    return spec ? seriesIdsByPlace(spec) : JSON.parse(stored);
+                };
                 const spec = (value: unknown) =>
                     Object.values(isRecord(value) ? value : {}).map((chart: unknown) =>
                         isRecord(chart) && typeof chart['spec'] === 'string'
-                            ? { ...chart, spec: JSON.parse(chart['spec']) }
+                            ? { ...chart, spec: read(chart['spec']) }
                             : chart,
                     );
                 keyed('charts', sheet, spec(x), spec(y));
