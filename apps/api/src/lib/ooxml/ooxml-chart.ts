@@ -24,7 +24,7 @@ import type { XmlElement } from '../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements, xmlText, xmlTrimmedText } from '../core/xml';
 import type { DrawingTheme } from './drawingml';
 import { drawingColor, drawingLines, readColorMap } from './drawingml';
-import { A_NS, alternativeFor, C_NS, isAlternateContent, isOn } from './ooxml';
+import { A_NS, alternativeFor, C_NS, isOn, ooxmlElements } from './ooxml';
 import type { OoxmlPackage, Relationship } from './opc';
 import { optional, relTarget } from './opc';
 
@@ -472,7 +472,6 @@ function cellRange(formula: string, sheetId: (sheetName: string) => string | und
     return { sheetId: id, row: rows, column: columns };
 }
 
-// An element's children in the chart namespace, an mc:AlternateContent read as the choice this reader understands.
 // The chart-wide text properties' Latin typeface, as a bundled font; a theme font (+mn-lt) or an unbundled one is the default.
 function chartFont(root: XmlElement): string {
     let latin = child(root, 'txPr');
@@ -481,9 +480,9 @@ function chartFont(root: XmlElement): string {
     return (typeface && bundledFont(typeface)) ?? DEFAULT_CHART_FONT;
 }
 
+// An element's children, an mc:AlternateContent read as the choice this reader understands.
 function elements(element: XmlElement | undefined): XmlElement[] {
-    if (!element) return [];
-    return xmlElements(element).flatMap((item) => (isAlternateContent(item) ? alternative(item) : [item]));
+    return element ? ooxmlElements(element, alternative) : [];
 }
 
 function children(element: XmlElement | undefined, local: string): XmlElement[] {

@@ -8,21 +8,11 @@ import {
 } from '@workspace/lib/sheets';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
-import { hasXmlName, xmlAttr, xmlChild, xmlElements, xmlTrimmedText } from '../../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlTrimmedText } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
 import type { Box, DrawingTheme } from '../../ooxml/drawingml';
 import { anchoredBox, blipEmbeds, DEGREE } from '../../ooxml/drawingml';
-import {
-    A_NS,
-    alternativeFor,
-    C_NS,
-    EMU_PER_PX,
-    emu,
-    isAlternateContent,
-    R_NS,
-    SML_NS,
-    XDR_NS,
-} from '../../ooxml/ooxml';
+import { A_NS, alternativeFor, C_NS, EMU_PER_PX, emu, ooxmlElements, R_NS, SML_NS, XDR_NS } from '../../ooxml/ooxml';
 import { chartCost, chartPart, readChart } from '../../ooxml/ooxml-chart';
 import type { OoxmlPackage, Relationship } from '../../ooxml/opc';
 import { optional, relTarget } from '../../ooxml/opc';
@@ -61,7 +51,9 @@ export function readDrawing(
     const root = path === undefined ? undefined : optional(() => pkg.part(path));
     if (!path || !root || !hasXmlName(root, XDR_NS, 'wsDr')) return undefined;
     return {
-        anchors: elements(root).filter((element) => element.ns === XDR_NS && ANCHORS.has(element.local)),
+        anchors: ooxmlElements(root, alternative).filter(
+            (element) => element.ns === XDR_NS && ANCHORS.has(element.local),
+        ),
         rels: optional(() => pkg.relationships(path)) ?? new Map(),
     };
 }
@@ -102,7 +94,7 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
             const tracks = chartSheet ? 0 : [from, to].reduce((sum, at) => sum + (at ? at.col + at.row : 0), 0);
             const picture = chartSheet
                 ? undefined
-                : elements(anchor).find((element) => hasXmlName(element, XDR_NS, 'pic'));
+                : ooxmlElements(anchor, alternative).find((element) => hasXmlName(element, XDR_NS, 'pic'));
             if (picture) {
                 const image = pictureOf(picture, rels, context, () => anchorBox(anchor, from, to, sheet), tracks);
                 if (image) (sheet.images ??= {})[image.id] = { ...image, index: paint() };
@@ -110,7 +102,9 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
                 continue;
             }
             // The c:chart the anchor's graphic frame shows.
-            const frame = elements(anchor).find((element) => hasXmlName(element, XDR_NS, 'graphicFrame'));
+            const frame = ooxmlElements(anchor, alternative).find((element) =>
+                hasXmlName(element, XDR_NS, 'graphicFrame'),
+            );
             const graphic = frame && xmlChild(frame, A_NS, 'graphic');
             const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
             const reference = data && xmlChild(data, C_NS, 'chart');
@@ -232,9 +226,4 @@ function rounded({ x, y, width, height }: Box): Box {
         width: Math.round(width),
         height: Math.round(height),
     });
-}
-
-// An element's children, an mc:AlternateContent read as the branch this reader understands.
-function elements(element: XmlElement): XmlElement[] {
-    return xmlElements(element).flatMap((item) => (isAlternateContent(item) ? alternative(item) : [item]));
 }

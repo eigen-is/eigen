@@ -9,9 +9,9 @@ import {
     TRANSPARENT_COLOR,
 } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
-import { xmlAttr, xmlElements, xmlText } from '../../core/xml';
+import { xmlAttr, xmlText } from '../../core/xml';
 import { percent } from '../../ooxml/drawingml';
-import { A_NS, EMU_PER_POINT, emu, isAlternateContent, isOn, R_NS } from '../../ooxml/ooxml';
+import { A_NS, EMU_PER_POINT, emu, isOn, ooxmlElements, R_NS } from '../../ooxml/ooxml';
 import type { Relationship } from '../../ooxml/opc';
 import type { ShapeProperties, SlideTheme } from './inherit';
 import { colorOf, fillIn, paintOf } from './inherit';
@@ -139,9 +139,7 @@ export function richTextOf(
         const bullet = firstOf(chain, (entry) => firstChildOf(entry, isBullet));
         const runs: Run[] = [];
         let text = false;
-        const children = xmlElements(paragraph).flatMap((child) =>
-            isAlternateContent(child) ? alternative(child) : [child],
-        );
+        const children = ooxmlElements(paragraph, alternative);
         charge(1 + children.length);
         for (const child of children) {
             if (child.ns !== A_NS) continue;

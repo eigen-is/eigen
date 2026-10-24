@@ -80,6 +80,11 @@ export function alternativeFor(understood: ReadonlySet<string>): (element: XmlEl
     };
 }
 
+// An element's children, an mc:AlternateContent read as the branch the format's reader understands (alternativeFor).
+export function ooxmlElements(element: XmlElement, alternative: (element: XmlElement) => XmlElement[]): XmlElement[] {
+    return xmlElements(element).flatMap((item) => (isAlternateContent(item) ? alternative(item) : [item]));
+}
+
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export const EMU_PER_PX = 9525;
