@@ -815,8 +815,11 @@ describe('the stored parts', () => {
     test('a spec round-trips through its parts, a string each or Sheets entries', () => {
         for (const type of CHART_TYPES) {
             const spec = { ...styled, chart: { ...styled.chart, type } };
-            expect(readChartSpec(newChartSpecParts(spec)).spec).toEqual(spec);
-            expect(readChartSpec(newSheetChartSpecParts(spec)).spec).toEqual(spec);
+            const strings = readChartSpec(newChartSpecParts(spec));
+            const entries = readChartSpec(newSheetChartSpecParts(spec));
+            expect(strings.spec).toEqual(spec);
+            expect(entries.spec).toEqual(spec);
+            expect(entries.stored).toEqual(strings.stored);
         }
     });
 
