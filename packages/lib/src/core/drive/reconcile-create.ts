@@ -11,7 +11,7 @@ const RECONCILE_DELAY_MS = 5_000;
 // The create failed AND the item never showed up. Carries the copy the toast shows (onMutationError
 // reads Error.message), with the original failure as `cause`.
 export class CreateUnconfirmedError extends Error {
-    constructor(cause: unknown) {
+    public constructor(cause: unknown) {
         super('Storage is responding slowly. The item may still appear in the list automatically.', { cause });
         this.name = 'CreateUnconfirmedError';
     }

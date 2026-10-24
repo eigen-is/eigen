@@ -658,12 +658,12 @@ class BinaryHeap {
         this.content[idx] = node;
     }
 
-    push(node: Node): void {
+    public push(node: Node): void {
         this.content.push(node);
         this.sinkDown(this.content.length - 1);
     }
 
-    pop(): Node | null {
+    public pop(): Node | null {
         if (this.content.length === 0) return null;
         const result = this.content[0];
         const end = this.content.pop();
@@ -674,11 +674,11 @@ class BinaryHeap {
         return result;
     }
 
-    size(): number {
+    public size(): number {
         return this.content.length;
     }
 
-    rescore(node: Node): void {
+    public rescore(node: Node): void {
         this.sinkDown(this.content.indexOf(node));
     }
 }
