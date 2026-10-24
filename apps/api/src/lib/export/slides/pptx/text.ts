@@ -8,7 +8,6 @@ import { AHYP_NS } from '../../../ooxml/ooxml';
 import { uriReference } from '../../../ooxml/opc';
 import { isElement } from '../../sanitize';
 import type { Slide } from './package';
-import { relate } from './package';
 import { toEmu } from './shapes';
 
 // Text: a box's HTML as the paragraphs and runs of a text body, laid out as canvas-text.css lays it out.
@@ -199,7 +198,7 @@ function runPropsXml(slide: Slide, tag: 'a:rPr' | 'a:endParaRPr', box: TextBox, 
     // A link draws in the run's color, as canvas-text.css draws it: PowerPoint's own extension for that.
     const link =
         marks.href && tag === 'a:rPr'
-            ? `<a:hlinkClick r:id="${relate(slide, 'hyperlink', uriReference(marks.href), true)}"><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="${AHYP_NS}" val="tx"/></a:ext></a:extLst></a:hlinkClick>`
+            ? `<a:hlinkClick r:id="${slide.part.relate('hyperlink', uriReference(marks.href), true)}"><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="${AHYP_NS}" val="tx"/></a:ext></a:extLst></a:hlinkClick>`
             : '';
     return `<${tag}${attrs} dirty="0">${fill}${fonts}${link}</${tag}>`;
 }

@@ -10,7 +10,8 @@ import {
 } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { A_NS, P_NS, R_NS } from '../../../ooxml/ooxml';
-import type { Relationship } from '../../../ooxml/opc';
+import type { PartRelationships, Relationship } from '../../../ooxml/opc';
+import { partRelationships } from '../../../ooxml/opc';
 import type { OfficeImageParts, OfficeMedia } from '../../office-image';
 import { backgroundXml } from './pictures';
 import { elementXml } from './shapes';
@@ -43,9 +44,7 @@ export type Image = OfficeImageParts & { media: OfficeMedia };
 
 export type Slide = {
     deck: Deck;
-    relationships: Relationship[];
-    // A picture or link a slide shows twice relates once.
-    rIds: Map<string, string>;
+    part: PartRelationships;
     shapes: number;
     // An arrow label's mask paints the slide's solid color, where Eigen masks the shaft out under the text.
     ground: string | undefined;
@@ -59,12 +58,12 @@ export function slideXml(
     const background = parseBackgroundFill(frame.background);
     const slide: Slide = {
         deck,
-        relationships: [{ type: `${R_NS}/slideLayout`, target: '../slideLayouts/slideLayout1.xml' }],
-        rIds: new Map(),
+        part: partRelationships(),
         // The tree's own group is 1.
         shapes: 1,
         ground: background?.type === 'solid' ? background.color : undefined,
     };
+    slide.part.relate('slideLayout', '../slideLayouts/slideLayout1.xml');
     // The canvas clips a slide to its frame: an element wholly outside draws nothing. A line draws its points, which a
     // peer may write past its box, and a stroke reaches half its width past them (a freehand stroke's ink is wider).
     const shown = elements.filter((el) => {
@@ -78,15 +77,5 @@ export function slideXml(
     const shapes = shown.map((el) => elementXml(el, slide)).join('');
     const name = frame.name ? ` name="${escapeXml(frame.name)}"` : '';
     const xml = `<p:sld ${NAMESPACES}><p:cSld${name}>${backgroundXml(background, frame, slide)}<p:spTree>${GROUP_PROPERTIES}${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
-    return { xml, relationships: slide.relationships };
-}
-
-export function relate(slide: Slide, type: string, target: string, external?: true): string {
-    const key = `${type} ${target}`;
-    let rId = slide.rIds.get(key);
-    if (!rId) {
-        rId = `rId${slide.relationships.push({ type: `${R_NS}/${type}`, target, external })}`;
-        slide.rIds.set(key, rId);
-    }
-    return rId;
+    return { xml, relationships: slide.part.relationships };
 }

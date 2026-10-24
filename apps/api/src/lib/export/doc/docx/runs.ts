@@ -8,7 +8,6 @@ import { cssColorToHex, isTransparentCssColor } from '../../../document/colors';
 import { readStoredEquation } from '../../../document/equation';
 import { cssPt, halfPoints, SMALL_LOOK, twips } from '../../../document/looks';
 import { proseValue } from '../../../document/prose-css';
-import { R_NS } from '../../../ooxml/ooxml';
 import { uriReference } from '../../../ooxml/opc';
 import type { StyleId } from '../../../ooxml/wordml';
 import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../../ooxml/wordml';
@@ -142,12 +141,7 @@ export function runsXml(nodes: JSONContent[], context: Context, style: StyleId |
             xml += runs;
             continue;
         }
-        const { part } = context.pkg;
-        let id = part.hyperlinks.get(link.target);
-        if (!id) {
-            id = `rId${part.relationships.push({ type: `${R_NS}/hyperlink`, target: link.target, external: true })}`;
-            part.hyperlinks.set(link.target, id);
-        }
+        const id = context.pkg.part.relate('hyperlink', link.target, true);
         const tooltip = link.tooltip ? ` w:tooltip="${escapeXml(link.tooltip)}"` : '';
         xml += `<w:hyperlink r:id="${id}"${tooltip} w:history="1">${runs}</w:hyperlink>`;
     }

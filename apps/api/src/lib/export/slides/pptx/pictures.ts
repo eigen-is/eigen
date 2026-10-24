@@ -5,7 +5,6 @@ import { blipXml } from '../../../ooxml/drawingml';
 import { officeImageParts } from '../../office-image';
 import { lineXml } from './lines';
 import type { Deck, Image, Slide } from './package';
-import { relate } from './package';
 import { boxGeometry, fillXml, presetXml, share, spXml, xfrmXml } from './shapes';
 
 // Pictures and backgrounds.
@@ -23,8 +22,8 @@ function imageOf(name: string, deck: Deck): Image | undefined {
 }
 
 function slideBlipXml(image: Image, slide: Slide, opacity: number): string {
-    const rId = relate(slide, 'image', `../media/${image.part}`);
-    const svgRId = image.svgPart && relate(slide, 'image', `../media/${image.svgPart}`);
+    const rId = slide.part.relate('image', `../media/${image.part}`);
+    const svgRId = image.svgPart && slide.part.relate('image', `../media/${image.svgPart}`);
     return blipXml(rId, svgRId, opacity < 1 ? `<a:alphaModFix amt="${share(opacity)}"/>` : '');
 }
 

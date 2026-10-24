@@ -9,8 +9,8 @@ import { anchoredBox, blipXml, DEGREE } from '../../../ooxml/drawingml';
 import { A_NS, C_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../ooxml/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
 import { writeChart } from '../../../ooxml/ooxml-chart-writer';
-import type { PackagePart, Relationship } from '../../../ooxml/opc';
-import { relationshipsXml, relsPathOf } from '../../../ooxml/opc';
+import type { PackagePart } from '../../../ooxml/opc';
+import { partRelationships, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
 import type { ZipWriteEntry } from '../../../ooxml/zip';
 import type { OfficeImageParts, OfficeMedia } from '../../office-image';
 import { officeImageParts } from '../../office-image';
@@ -45,12 +45,9 @@ export function drawingOf(
     const ranges = (sheetId: string) => names.get(sheetId);
     let resolver: CellResolver | undefined;
     const anchors: string[] = [];
-    const rels: Relationship[] = [];
-    const relate = (type: string, target: string) => `rId${rels.push({ type: `${R_NS}/${type}`, target })}`;
+    const { relationships, relate } = partRelationships();
     const charts: PackagePart[] = [];
     const files: ZipWriteEntry[] = [];
-    // A picture the sheet shows twice relates once.
-    const blips = new Map<string, string>();
     for (const item of floatingItems(sheet)) {
         // Excel numbers a drawing's shapes from 2.
         const id = anchors.length + 2;
@@ -61,12 +58,8 @@ export function drawingOf(
                 lost('images-dropped');
                 continue;
             }
-            let blip = blips.get(mediaName);
-            if (!blip) {
-                const svg = parts.svgPart && relate('image', `../media/${parts.svgPart}`);
-                blip = blipXml(relate('image', `../media/${parts.part}`), svg);
-                blips.set(mediaName, blip);
-            }
+            const svg = parts.svgPart && relate('image', `../media/${parts.svgPart}`);
+            const blip = blipXml(relate('image', `../media/${parts.part}`), svg);
             const placed = placedBox(item.object);
             anchors.push(anchorXml(sheet, placed, pictureXml(placed, id, blip)));
             continue;
@@ -97,7 +90,7 @@ export function drawingOf(
     const drawing = `<xdr:wsDr xmlns:xdr="${XDR_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:c="${C_NS}">${anchors.join('')}</xdr:wsDr>`;
     return {
         path,
-        parts: [[path, drawing, DRAWING_CONTENT_TYPE], [relsPathOf(path), relationshipsXml(rels)], ...charts],
+        parts: [[path, drawing, DRAWING_CONTENT_TYPE], [relsPathOf(path), relationshipsXml(relationships)], ...charts],
         files,
     };
 }

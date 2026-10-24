@@ -8,7 +8,7 @@ import { proseValue } from '../../../document/prose-css';
 import type { ExportMedia } from '../../../document/transform/protocol';
 import { toTransferableBuffer, toTransferableText } from '../../../document/transform/protocol';
 import { blipXml } from '../../../ooxml/drawingml';
-import { EMU_PER_PX, PIC_NS, R_NS } from '../../../ooxml/ooxml';
+import { EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
 import { BORDER_SIDES, EMU_PER_TWIP, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { splitDataUri } from '../../../shared/data-uri';
 import { encodeOfficeImage, officeImageParts } from '../../office-image';
@@ -190,8 +190,6 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
 // The first figure to show a media name adds its files, and the first in each part that part's relationships; no
 // positive size, an SVG without PNG or another type adds none.
 function imageOf(name: string, pkg: Package): Image | undefined {
-    const known = pkg.part.images.get(name);
-    if (known) return known;
     let file = pkg.imageFiles.get(name);
     if (!file) {
         const media = pkg.media.get(name);
@@ -204,11 +202,8 @@ function imageOf(name: string, pkg: Package): Image | undefined {
         if (parts.svgPart) pkg.files.push([`word/media/${parts.svgPart}`, media.data]);
         pkg.imageFiles.set(name, file);
     }
-    const relate = (target: string) =>
-        `rId${pkg.part.relationships.push({ type: `${R_NS}/image`, target: `media/${target}` })}`;
-    const image: Image = { ...file, rId: relate(file.part), ...(file.svgPart && { svgRId: relate(file.svgPart) }) };
-    pkg.part.images.set(name, image);
-    return image;
+    const relate = (target: string) => pkg.part.relate('image', `media/${target}`);
+    return { ...file, rId: relate(file.part), ...(file.svgPart && { svgRId: relate(file.svgPart) }) };
 }
 
 function isPositive(value: number | undefined): value is number {

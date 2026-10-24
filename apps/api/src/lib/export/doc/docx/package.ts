@@ -1,11 +1,11 @@
 import type { JSONContent } from '@tiptap/core';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../../ooxml/ooxml';
-import type { Relationship } from '../../../ooxml/opc';
+import type { PartRelationships } from '../../../ooxml/opc';
 import type { NOTE_SEPARATORS, StyleId } from '../../../ooxml/wordml';
 import { WORD_SETTINGS_URI } from '../../../ooxml/wordml';
 import type { OfficeMedia } from '../../office-image';
-import type { Image, ImageFile } from './drawings';
+import type { ImageFile } from './drawings';
 import type { FontSlot } from './fonts';
 import type { List } from './numbering';
 import type { Block, NumberingRef } from './paragraphs';
@@ -30,15 +30,9 @@ export const DOCUMENT_NAMESPACES = [
 
 export const BAND_TAGS = { header: 'w:hdr', footer: 'w:ftr' } as const;
 
-// The relationships of the part being written, the document's or a band's, each hyperlink target and image once.
-export type PartRelationships = {
-    relationships: Relationship[];
-    hyperlinks: Map<string, string>;
-    images: Map<string, Image>;
-};
-
 // What one export accumulates as it walks, each image file, shared bullet numbering and face once.
 export type Package = {
+    // The relationships of the part being written, the document's, a band's or the notes'.
     part: PartRelationships;
     publicOrigin: string | undefined;
     lists: List[];

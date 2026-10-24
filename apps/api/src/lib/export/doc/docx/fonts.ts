@@ -4,6 +4,7 @@ import { escapeXml } from '@workspace/lib/xml';
 import { halfPoints } from '../../../document/looks';
 import { R_NS, W_NS } from '../../../ooxml/ooxml';
 import type { Relationship } from '../../../ooxml/opc';
+import { partRelationships } from '../../../ooxml/opc';
 import type { StyleId } from '../../../ooxml/wordml';
 import { FONT_FAMILY } from '../../../ooxml/wordml';
 import type { DocxFontFiles } from '../../fonts';
@@ -55,7 +56,7 @@ export function embeddedFonts(faces: Map<string, Set<FontSlot>>): {
     files: [path: string, data: Uint8Array][];
 } {
     const embeds = new Map<string, string>();
-    const relationships: Relationship[] = [];
+    const { relationships, relate } = partRelationships();
     const files: [path: string, data: Uint8Array][] = [];
     for (const [family, slots] of DOCX_FONT_FILES) {
         let xml = '';
@@ -70,8 +71,7 @@ export function embeddedFonts(faces: Map<string, Set<FontSlot>>): {
                 data[i] ^= Number.parseInt(digits.slice(30 - 2 * (i % 16), 32 - 2 * (i % 16)), 16);
             const part = `fonts/font${files.length + 1}.odttf`;
             files.push([`word/${part}`, data]);
-            const rId = relationships.push({ type: `${R_NS}/font`, target: part });
-            xml += `<w:embed${slot} r:id="rId${rId}" w:fontKey="${key}"/>`;
+            xml += `<w:embed${slot} r:id="${relate('font', part)}" w:fontKey="${key}"/>`;
         }
         if (xml) embeds.set(family, xml);
     }

@@ -195,6 +195,31 @@ export function relationshipsXml(relationships: Relationship[]): string {
     return `<Relationships xmlns="${PACKAGE_RELATIONSHIPS_NS}">${items.join('')}</Relationships>`;
 }
 
+// The relationships of a part being written: relate gives a type and target the next id the first time, and that id
+// after, so a picture or link the part shows twice relates once.
+export type PartRelationships = {
+    relationships: Relationship[];
+    relate(type: string, target: string, external?: true): string;
+};
+
+// A type is the last segment of an R_NS relationship type; an id is rId and its place, as relationshipsXml writes it.
+export function partRelationships(): PartRelationships {
+    const relationships: Relationship[] = [];
+    const ids = new Map<string, string>();
+    return {
+        relationships,
+        relate: (type, target, external) => {
+            const key = `${type} ${target}`;
+            let id = ids.get(key);
+            if (!id) {
+                id = `rId${relationships.push({ type: `${R_NS}/${type}`, target, external })}`;
+                ids.set(key, id);
+            }
+            return id;
+        },
+    };
+}
+
 // A format's XML part: its path, its XML whole or as chunks (ooxml/zip) and, unless an extension's Default covers it, its
 // content type.
 export type PackagePart = [path: string, xml: string | (() => Iterable<string>), contentType?: string];

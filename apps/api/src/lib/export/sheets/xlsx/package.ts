@@ -5,8 +5,8 @@ import { MAX_SHEET_NAME_LENGTH, quoteSheetName, rangeToA1, SHEET_NAME_FORBIDDEN 
 import type { CountedWarningCode } from '../../../document/transform/protocol';
 import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';
-import type { PackagePart, Relationship } from '../../../ooxml/opc';
-import { relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
+import type { PackagePart } from '../../../ooxml/opc';
+import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
 import type { ZipWriteEntry } from '../../../ooxml/zip';
 import type { OfficeMedia } from '../../office-image';
 import { OFFICE_IMAGE_CONTENT_TYPES } from '../../office-image';
@@ -61,19 +61,17 @@ export function writeWorkbook(
             files.push(...drawing.files);
         }
     }
-    const relationships: Relationship[] = [
-        ...sheets.map((_, index) => ({ type: `${R_NS}/worksheet`, target: `worksheets/sheet${index + 1}.xml` })),
-        { type: `${R_NS}/sharedStrings`, target: 'sharedStrings.xml' },
-        { type: `${R_NS}/styles`, target: 'styles.xml' },
-        { type: `${R_NS}/theme`, target: 'theme/theme1.xml' },
-    ];
+    const workbook = partRelationships();
+    const ids = sheets.map((_, index) => workbook.relate('worksheet', `worksheets/sheet${index + 1}.xml`));
+    for (const type of ['sharedStrings', 'styles']) workbook.relate(type, `${type}.xml`);
+    workbook.relate('theme', 'theme/theme1.xml');
     return writePackage({
         main: 'xl/workbook.xml',
         title,
         defaults: files.length > 0 ? OFFICE_IMAGE_CONTENT_TYPES : {},
         parts: [
-            ['xl/workbook.xml', workbookXml(sheets, names, active), `${SPREADSHEETML}.sheet.main+xml`],
-            ['xl/_rels/workbook.xml.rels', relationshipsXml(relationships)],
+            ['xl/workbook.xml', workbookXml(sheets, names, ids, active), `${SPREADSHEETML}.sheet.main+xml`],
+            ['xl/_rels/workbook.xml.rels', relationshipsXml(workbook.relationships)],
             ...parts,
             ['xl/sharedStrings.xml', () => strings.xml(), `${SPREADSHEETML}.sharedStrings+xml`],
             ['xl/styles.xml', () => [styles.xml()], `${SPREADSHEETML}.styles+xml`],
@@ -92,12 +90,12 @@ export function activeTabOf(sheets: Pick<Sheet, 'hide'>[]): number {
     );
 }
 
-// The workbook's sheets, the hidden ones hidden, each filtered sheet's hidden filter database name, which Excel writes
-// beside its autoFilter, and the calculation Excel last saved with.
-export function workbookXml(sheets: Sheet[], names: string[], active: number): string {
+// The workbook's sheets by their relationship ids, the hidden ones hidden, each filtered sheet's hidden filter database
+// name, which Excel writes beside its autoFilter, and the calculation Excel last saved with.
+export function workbookXml(sheets: Sheet[], names: string[], ids: string[], active: number): string {
     const entries = sheets.map(
         (sheet, index) =>
-            `<sheet name="${escapeXml(names[index])}" sheetId="${index + 1}"${sheet.hide === 1 && index !== active ? ' state="hidden"' : ''} r:id="rId${index + 1}"/>`,
+            `<sheet name="${escapeXml(names[index])}" sheetId="${index + 1}"${sheet.hide === 1 && index !== active ? ' state="hidden"' : ''} r:id="${ids[index]}"/>`,
     );
     const filters = sheets.flatMap((sheet, index) => {
         const area = filterArea(sheet);
