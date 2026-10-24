@@ -227,7 +227,7 @@ const ENCODER = new TextEncoder();
 
 // A stored string, or on a host's record every prefixed key's name and text summed, known or not, a Sheets entry's key
 // and text both. The count stops at the limit, so a forged record of a million keys or entries costs what fits under it.
-export function exceedsChartSpecBytes(value: string | object): boolean {
+export function exceedsChartSpecBytes(value: string | Readonly<Record<string, unknown>>): boolean {
     let left = MAX_CHART_SPEC_BYTES;
     // Every UTF-16 unit is a UTF-8 byte or more, so a string longer than what is left is past it unencoded.
     const spend = (text: string) => {
@@ -237,7 +237,7 @@ export function exceedsChartSpecBytes(value: string | object): boolean {
     if (typeof value === 'string') return spend(value);
     return Object.keys(value).some((key) => {
         if (!isChartSpecKey(key)) return false;
-        const part = prop(value, key);
+        const part = value[key];
         if (spend(key)) return true;
         if (typeof part === 'string') return spend(part);
         return (
@@ -286,7 +286,10 @@ export function chartSearchText(spec: ChartSpec | null): string {
 // Takes what peers store, one string or a host's record of parts, so the size limit is measured on it. stored is what a
 // writer applies a change onto and a copy carries; past the size limit it is empty. A string past the depth limit or no
 // JSON object is empty too; on a record such a part is absent, a keyed one empty, so the other parts still read.
-export function readChartSpec(value: string | object): { stored: StoredChartSpec; spec: ChartSpec | null } {
+export function readChartSpec(value: string | Readonly<Record<string, unknown>>): {
+    stored: StoredChartSpec;
+    spec: ChartSpec | null;
+} {
     if (exceedsChartSpecBytes(value)) return { stored: {}, spec: null };
     if (typeof value === 'string') {
         const stored = storedRecord(value);
@@ -294,7 +297,7 @@ export function readChartSpec(value: string | object): { stored: StoredChartSpec
     }
     const stored: StoredRecord = Object.create(null);
     for (const part of PARTS) {
-        const raw = prop(value, CHART_SPEC_PART_KEY[part]);
+        const raw = value[CHART_SPEC_PART_KEY[part]];
         const read = isKeyedPart(part) ? keyedPart(raw, CHART_SPEC_PARTS[part]) : storedRecord(raw);
         if (read) stored[part] = read;
     }
