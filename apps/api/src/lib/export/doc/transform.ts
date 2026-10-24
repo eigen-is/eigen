@@ -57,7 +57,7 @@ import {
 //
 // HTML and PDF render the same document by design: WeasyPrint consumes what the HTML download
 // serves, but for the small caps the PDF fakes and the equations it draws as SVG (render.ts). The
-// docx is written from the JSON by to-docx.ts, which loads lazily so an HTML export never evaluates
+// docx is written from the JSON by docx/to-docx.ts, which loads lazily so an HTML export never evaluates
 // it, its styles or its fonts.
 export async function renderEigendocExport(
     doc: Y.Doc,
@@ -72,7 +72,8 @@ export async function renderEigendocExport(
     const bands = readEigendocBands(doc);
     const media = await loadMedia(mediaNamesIn([json, bands]));
     if (format === 'docx') {
-        const { chartFigureMedia, eigendocToDocx, pastedFigureMedia } = await import('./to-docx');
+        const { eigendocToDocx } = await import('./docx/to-docx');
+        const { chartFigureMedia, pastedFigureMedia } = await import('./docx/drawings');
         const roots = [json, ...Object.values(bands)];
         const drawn = [...(await pastedFigureMedia(roots)), ...(await chartFigureMedia(roots))];
         const docxMedia = await withSvgFallbacks([...media, ...drawn]);

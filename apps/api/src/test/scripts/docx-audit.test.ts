@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JSONContent } from '@tiptap/core';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
-import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { eigendocToDocx } from '../../lib/export/doc/docx/to-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { writeZip } from '../../lib/ooxml/zip';
 import {
@@ -829,7 +829,7 @@ describe('runs', () => {
 });
 
 describe('round trip', () => {
-    const WRITER = fileURLToPath(new URL('../../lib/export/doc/to-docx.ts', import.meta.url));
+    const WRITER = fileURLToPath(new URL('../../lib/export/doc/docx/to-docx.ts', import.meta.url));
     const script = fileURLToPath(new URL('../../scripts/docx-audit.ts', import.meta.url));
     const text = (value: string, ...marks: { type: string; attrs?: Record<string, unknown> }[]): JSONContent => ({
         type: 'text',

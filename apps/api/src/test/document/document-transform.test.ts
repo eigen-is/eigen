@@ -44,7 +44,7 @@ import {
 import { runTransformToBytes, runTransformToExtractedText } from '../../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../../lib/document/transform/runner';
 import type { Drive } from '../../lib/drive';
-import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { eigendocToDocx } from '../../lib/export/doc/docx/to-docx';
 import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
 import { collectExportMedia } from '../../lib/export/media';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';

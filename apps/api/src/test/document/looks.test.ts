@@ -30,7 +30,7 @@ import {
     TITLE_LOOKS,
 } from '../../lib/document/looks';
 import { PROSE_CSS, proseValue } from '../../lib/document/prose-css';
-import { eigendocToDocx } from '../../lib/export/doc/to-docx';
+import { eigendocToDocx } from '../../lib/export/doc/docx/to-docx';
 import { W_NS } from '../../lib/ooxml/ooxml';
 import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../lib/ooxml/wordml';
 import { openZip } from '../../lib/ooxml/zip';

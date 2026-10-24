@@ -40,7 +40,7 @@ import { cssColorToHex } from '../lib/document/colors';
 import { docSchema } from '../lib/document/doc-schema';
 import { readStoredEquation } from '../lib/document/equation';
 import { nodeLook } from '../lib/document/looks';
-import type { eigendocToDocx } from '../lib/export/doc/to-docx';
+import type { eigendocToDocx } from '../lib/export/doc/docx/to-docx';
 import { FONT_SLOTS, type Fonts, fontMark, readFontTable, readTheme, type Script } from '../lib/import/doc/docx-fonts';
 import type { docxToPmJson } from '../lib/import/doc/from-docx';
 import { descendants } from '../lib/import/doc/package';
@@ -2259,7 +2259,7 @@ async function picturesOf(media: { name: string; contentType: string; data: Arra
 }
 
 const DOCUMENT = /\.do[ct][xm](?![a-z0-9])/i;
-const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/doc/to-docx.ts');
+const DEFAULT_WRITER = path.join(import.meta.dir, '../lib/export/doc/docx/to-docx.ts');
 
 function isWriter(value: unknown): value is typeof eigendocToDocx {
     return typeof value === 'function';
@@ -2281,7 +2281,7 @@ async function docxRoundtripChild(
     options: { writer: string; reports: string; dump?: string },
 ): Promise<void> {
     const { docxToPmJson: read } = await import('../lib/import/doc/from-docx');
-    const { chartFigureMedia, pastedFigureMedia } = await import('../lib/export/doc/to-docx');
+    const { chartFigureMedia, pastedFigureMedia } = await import('../lib/export/doc/docx/drawings');
     const module: unknown = await import(options.writer);
     const write = typeof module === 'object' && module !== null && 'eigendocToDocx' in module && module.eigendocToDocx;
     if (!isWriter(write)) throw new Error(`${options.writer} exports no eigendocToDocx`);
