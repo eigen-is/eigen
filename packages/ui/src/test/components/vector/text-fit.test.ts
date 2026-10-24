@@ -20,11 +20,11 @@ g.IS_REACT_ACT_ENVIRONMENT = true;
 // the offsets a browser would have laid out are on the node.
 let remeasure: (() => void) | null = null;
 class FakeResizeObserver {
-    constructor(callback: () => void) {
+    public constructor(callback: () => void) {
         remeasure = callback;
     }
-    observe() {}
-    disconnect() {}
+    public observe() {}
+    public disconnect() {}
 }
 g.ResizeObserver = FakeResizeObserver;
 

@@ -12,17 +12,17 @@ type ErrorBoundaryState = {
 
 // React requires class components for error boundaries — no hooks equivalent exists.
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-    state: ErrorBoundaryState = { hasError: false };
+    public state: ErrorBoundaryState = { hasError: false };
 
-    static getDerivedStateFromError(): ErrorBoundaryState {
+    public static getDerivedStateFromError(): ErrorBoundaryState {
         return { hasError: true };
     }
 
-    componentDidCatch(error: Error, info: React.ErrorInfo) {
+    public componentDidCatch(error: Error, info: React.ErrorInfo) {
         console.error('[ErrorBoundary]', error, info.componentStack);
     }
 
-    render() {
+    public render() {
         if (this.state.hasError) {
             return this.props.fallback ?? <ErrorFallback />;
         }
