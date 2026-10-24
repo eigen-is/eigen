@@ -108,8 +108,8 @@ function valueFormat(spec: ChartSpec, resolver: CellResolver): string | undefine
 // The chart as a copy carries it to a host with no cells: its ranges read into inline data, and the source
 // cells' tick format written on the axis. An automatic color stays automatic unless a deleted series before
 // it would shift its index, which writes the color it draws in, and an inline chart is its stored string. A ref
-// this build doesn't know is left out, as it would name cells the host doesn't have. Null for a chart that draws #REF!, too much data or nothing, or
-// whose numbers pass the spec's size limit.
+// this build doesn't know is left out, as it would name cells the host doesn't have. Null for a chart that draws
+// #REF!, too much data or nothing, or whose numbers pass the spec's size limit.
 export function inlineChartSpec(chart: SheetChart, resolver: CellResolver): string | null {
     const { stored, spec } = readChartSpec(chart.spec);
     if (spec?.data.source !== 'range') return spec ? chart.spec : null;
@@ -145,26 +145,27 @@ export function cellLabel(cell: Cell | null): string {
 // Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or its
 // stored data is not range data. Every ref on the data or a series moves, under any key, so a ref this build
 // doesn't know moves too, even in a chart it can't draw. A null empties a ref, and a name ref leaves the series
-// unnamed. `points` says where each point index of a chart this build reads goes, given the ref its points run along
-// before the map: the categories, or the first drawn series' values for a chart without them. Every series' points
-// move, each stored entry whole.
+// unnamed. `points` says where each point index goes, given the ref its points run along before the map: the
+// categories, or the first series' values for a chart without them, found by shape as the refs are, so a chart this
+// build can't draw moves its points too. Every series' points move, each stored entry whole.
 export function mapChartRefs(
     chart: SheetChart,
     map: (ref: CellRangeRef) => CellRangeRef | null,
     points?: (ref: CellRangeRef) => ((index: number) => number | null) | null,
 ): SheetChart {
-    const { stored, spec } = readChartSpec(chart.spec);
-    if (!isRecord(stored['data']) || stored['data']['source'] !== 'range') return chart;
+    const { stored } = readChartSpec(chart.spec);
+    const before = stored['data'];
+    if (!isRecord(before) || before['source'] !== 'range') return chart;
     let moved = false;
-    const data = walkRefs(stored['data'], (ref, key) => {
+    const data = walkRefs(before, (ref, key) => {
         const next = map(ref);
         if (next !== ref) moved = true;
         return next ?? (key === 'name' ? '' : null);
     });
     if (!moved) return chart;
     const change: ChartSpecChange = [{ op: 'set', path: ['data'], value: data }];
-    const range = spec?.data.source === 'range' ? spec.data : null;
-    const along = range && (range.categories ?? range.series.find((s) => s.values)?.values);
+    const series = Array.isArray(before['series']) ? before['series'] : [];
+    const along = [before['categories'], ...series.map((s) => (isRecord(s) ? s['values'] : null))].find(isRef);
     const target = along && points?.(along);
     if (target) change.push(...pointMovesOf(stored['points'], target));
     return { ...chart, spec: JSON.stringify(applyChartSpecChange(stored, change)) };

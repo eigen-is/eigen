@@ -795,6 +795,16 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
             expect(parseChartSpec(s.charts!.c1.spec)?.points['s-1'][2]).toEqual({ color: '#000004' });
         });
 
+        test('a chart this build can’t draw moves its points as a pie does', () => {
+            const stored = JSON.parse(pie().spec);
+            const scatter = {
+                ...pie(),
+                spec: JSON.stringify({ ...stored, chart: { ...stored.chart, type: 'scatter' } }),
+            };
+            const [s] = applySheetsDeleteRowCol(workbook({ c1: scatter }), deleteRows(1, 1));
+            expect(sliceColors(s)).toEqual({ 0: '#000001', 1: '#000003', 2: '#000004', 3: '#000005' });
+        });
+
         test('an insert inside the categories leaves the inserted points automatic', () => {
             const [s] = applySheetsInsertRowCol(workbook({ c1: pie() }), insertRows(2, 2, 'lefttop'));
             expect(rangeData(s)?.categories?.row).toEqual([0, 6]);
