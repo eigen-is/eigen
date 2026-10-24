@@ -28,11 +28,9 @@ type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
 const ref = (row: [number, number], column: [number, number]): CellRangeRef => ({ sheetId: 's1', row, column });
 
-// A style only for the series the data names, as a paste writes no other.
 const rangeSpec = (values: CellRangeRef): ChartSpec => ({
     ...sampleChartSpec('column'),
     title: { text: 'Scores' },
-    series: { 's-1': sampleChartSpec('column').series['s-1'] },
     data: {
         source: 'range',
         categories: ref([1, 2], [0, 0]),
