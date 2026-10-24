@@ -776,7 +776,7 @@ describe('chartPointMoves', () => {
         };
         const fastest = (run: () => unknown) =>
             Math.min(
-                ...[1, 2, 3].map(() => {
+                ...Array.from({ length: 7 }, () => {
                     const start = performance.now();
                     run();
                     return performance.now() - start;
