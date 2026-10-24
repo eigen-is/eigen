@@ -298,6 +298,24 @@ test('a title typed letter by letter is one undo step', async () => {
     expect(spec()?.title).toBe('Scores');
 });
 
+test("a peer's colour landing after the panel rendered survives a title typed in the panel", async () => {
+    const { workbook, spec, field } = await mount(rangeChart());
+    const raw = JSON.parse(rangeChart().spec);
+    const series = [{ ...raw.data.series[0], color: '#00ff00' }];
+    const value = JSON.stringify({ ...raw, data: { ...raw.data, series } });
+    const title = field('input[placeholder="Chart title"]');
+    // One act, so the title's handler is the one the panel rendered before the peer's write.
+    await act(async () => {
+        workbook.current?.applyOp([{ op: 'replace', id: 's1', path: ['charts', 'c1', 'spec'], value }]);
+        title.focus();
+        title.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+        setValue?.call(title, 'Goals');
+        title.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => title.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    expect(spec()).toMatchObject({ title: 'Goals', data: { series: [{ color: '#00ff00' }] } });
+});
+
 test('an inline chart edits its data in the grid dialog instead of a data range', async () => {
     const { container } = await mount(inlineChart());
     expect(container.querySelector('input[aria-label="Data range"]')).toBeNull();
