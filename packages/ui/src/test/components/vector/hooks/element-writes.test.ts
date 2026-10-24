@@ -69,6 +69,17 @@ describe('duplicateElementsInDoc', () => {
         );
         expect(clone?.type === 'arrow' && clone.endBinding).toBe('');
     });
+
+    // A newer build's part and a part that doesn't parse are stored text, so the copy holds them as the original does.
+    test('a chart copy keeps a part a newer build added and a part that does not parse', () => {
+        const doc = docWith([{ ...CHART, specTitle: '{"text":', specFuture: '{"later":true}' }]);
+        const [cloneId] = duplicateElementsInDoc(doc, ['c1'], 10, 10);
+        const clone = doc.getMap('elements').get(cloneId);
+        if (!(clone instanceof Y.Map)) throw new Error('expected the clone');
+        expect(clone.get('specFuture')).toBe('{"later":true}');
+        expect(clone.get('specTitle')).toBe('{"text":');
+        expect(clone.get('specData')).toBe(CHART.specData);
+    });
 });
 
 const CHART = {

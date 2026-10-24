@@ -5,7 +5,7 @@
 import type { EigenClipboardElementsItem, EigenClipboardItem, EigenClipboardTypography } from '../types/clipboard';
 import type { Point } from './geometry';
 import { DUPLICATE_OFFSET, getElementsBounds } from './geometry';
-import { ELEMENT_FIELDS } from './kinds';
+import { storedElementFields } from './kinds';
 import { letterSpacingField, lineHeightField, oneOf } from './kinds/read-fields';
 import { readElementFromFields } from './read-vector';
 import type { VectorElement, VectorRichTextElement } from './types';
@@ -19,10 +19,8 @@ import {
 } from './types';
 
 function storedRecord(el: VectorElement): Record<string, string | number | boolean> {
-    const source: Record<string, unknown> = { ...el };
     const record: Record<string, string | number | boolean> = {};
-    for (const field of ELEMENT_FIELDS) {
-        const value = source[field];
+    for (const [field, value] of storedElementFields(el)) {
         if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
             record[field] = value;
         }

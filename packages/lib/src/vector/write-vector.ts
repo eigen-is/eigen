@@ -9,7 +9,7 @@ import { isValidFractionalIndex, keysAfter, orderByFractionalIndex } from './fra
 import type { VectorFrame } from './frames';
 import { DEFAULT_FRAME_BACKGROUND, FRAME_FIELDS } from './frames';
 import type { StyleDefaults } from './kinds';
-import { baseDefaultsFor, ELEMENT_FIELDS, ELEMENT_KINDS, storedFields } from './kinds';
+import { baseDefaultsFor, ELEMENT_KINDS, storedElementFields, storedFields } from './kinds';
 import type { NewVectorElement, VectorElementType } from './types';
 
 export function newElementId(): string {
@@ -63,7 +63,7 @@ export function writeElementInDoc(
         index,
     };
     const element = new Y.Map<unknown>();
-    for (const [field, value] of storedFields(record, ELEMENT_FIELDS)) element.set(field, value);
+    for (const [field, value] of storedElementFields(record)) element.set(field, value);
     doc.transact(() => doc.getMap('elements').set(id, element));
     return id;
 }

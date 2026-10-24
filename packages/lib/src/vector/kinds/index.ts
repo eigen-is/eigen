@@ -1,6 +1,7 @@
 // The registry. TypeScript forces every member of VectorElementType to have an entry, so a new kind
 // cannot be half-added.
 
+import { chartSpecTexts } from '../../charts/spec';
 import type {
     ElementOfType,
     VectorBindableElement,
@@ -19,6 +20,8 @@ import type { Capabilities, ElementKind, StyleDefaults } from './kind';
 import { lineKind } from './line';
 import { pathKind } from './path';
 import { pieKind } from './pie';
+import type { YMapLike } from './read-fields';
+import { isYMapLike } from './read-fields';
 import { rectangleKind } from './rectangle';
 import { richTextKind } from './richtext';
 
@@ -107,9 +110,8 @@ export const CREATION_TOOL_TYPES: readonly CreationToolType[] = CREATION_ORDER;
 export const ELEMENT_FIELDS: readonly string[] = buildElementFields();
 
 // A record's stored fields, in allow-list order, with undefined values dropped: exactly what a writer
-// sets into a Y.Map and nothing else, so a spec-only or stale key can never reach the doc. Pass
-// ELEMENT_FIELDS for an element and FRAME_FIELDS for a frame — the editor's add and duplicate passes,
-// the deck seeder, the frame writer and the demo builders all store through this one filter.
+// sets into a Y.Map and nothing else, so a spec-only or stale key can never reach the doc. The frame
+// writer passes FRAME_FIELDS; every element writer stores through storedElementFields.
 export function storedFields(source: object, fields: readonly string[]): [string, unknown][] {
     const out: [string, unknown][] = [];
     for (const field of fields) {
@@ -117,6 +119,23 @@ export function storedFields(source: object, fields: readonly string[]): [string
         if (value !== undefined) out.push([field, value]);
     }
     return out;
+}
+
+// An element's stored fields, off a stored Y.Map or an element, in allow-list order with undefined values dropped, and
+// on a chart every part a newer build added after them, within the spec's byte limit: what a duplicate, a copy and a
+// paste store, so they keep what this build can't read.
+export function storedElementFields(source: YMapLike | Readonly<Record<string, unknown>>): [string, unknown][] {
+    const read = (key: string) => (isYMapLike(source) ? source.get(key) : prop(source, key));
+    const fields: [string, unknown][] = [];
+    for (const field of ELEMENT_FIELDS) {
+        const value = read(field);
+        if (value !== undefined) fields.push([field, value]);
+    }
+    if (read('type') !== 'chart') return fields;
+    for (const [key, text] of Object.entries(chartSpecTexts(source) ?? {})) {
+        if (!ELEMENT_FIELDS.includes(key)) fields.push([key, text]);
+    }
+    return fields;
 }
 
 function buildElementFields(): string[] {

@@ -4,12 +4,12 @@
 
 import type { NewVectorElement, StyleDefaults, ZOp } from '@workspace/lib/vector';
 import {
-    ELEMENT_FIELDS,
     generateNKeysBetween,
     isValidFractionalIndex,
     newElementId,
     randomSeed,
     remapBinding,
+    storedElementFields,
     topmostIndex,
     writeElementInDoc,
     zOrderKeys,
@@ -110,10 +110,7 @@ export function duplicateElementsInDoc(doc: Y.Doc, ids: string[], dx: number, dy
         for (const [i, src] of sources.entries()) {
             const id = newIds[i];
             const clone = new Y.Map();
-            for (const field of ELEMENT_FIELDS) {
-                const v = src.get(field);
-                if (v !== undefined) clone.set(field, v);
-            }
+            for (const [field, v] of storedElementFields(src)) clone.set(field, v);
             clone.set('id', id);
             clone.set('seed', randomSeed());
             clone.set('index', keys[i]);
