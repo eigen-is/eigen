@@ -381,7 +381,7 @@ describe('inlineChartSpec', () => {
         expect(moved.data.series[0].x).toEqual(ref([3, 5], [2, 2]));
     });
 
-    test('an unknown key nested past the stack, under the data and a series, neither throws nor stops a move', () => {
+    test('a chart nested past the stack, under the data or a series, is left as stored and copies as nothing', () => {
         // A chart holding two of these would pass the spec's size limit, so each place gets its own.
         let deep: unknown = ref([1, 3], [2, 2]);
         for (let i = 0; i < 20_000; i += 1) deep = [deep];
@@ -390,12 +390,8 @@ describe('inlineChartSpec', () => {
             const raw = JSON.parse(newer().spec);
             (place === 'data' ? raw.data : raw.data.series[0]).deep = deep;
             const chart = { ...newer(), spec: JSON.stringify(raw) };
-            const moved = JSON.parse(mapChartRefs(chart, down).spec);
-            expect(moved.data.series[0].values).toEqual(ref([3, 5], [1, 1]));
-            const kept = place === 'data' ? moved.data.deep : moved.data.series[0].deep;
-            expect(JSON.stringify(kept)).toBe(JSON.stringify(deep));
-            const copied = JSON.parse(inlineChartSpec(chart, resolver) ?? '{}');
-            expect(copied.data.series[0].values).toEqual([42, null, null]);
+            expect(mapChartRefs(chart, down)).toBe(chart);
+            expect(inlineChartSpec(chart, resolver)).toBeNull();
         }
     });
 

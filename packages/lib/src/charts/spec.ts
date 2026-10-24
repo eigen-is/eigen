@@ -32,6 +32,9 @@ import { prop } from '../vector/types';
 // Hard limits: every peer lays out and paints whatever is stored, so they bound one chart's cost.
 // Range data counts its points when the sheet resolves it, since a selection can outgrow the limit.
 export const MAX_CHART_SPEC_BYTES = 64 * 1024;
+// Levels of [ and {, far past what Eigen writes: V8's JSON.stringify recurses, and throws at about 8,000 levels in
+// every writer that serializes what is stored.
+export const MAX_CHART_SPEC_DEPTH = 32;
 export const MAX_CHART_SERIES = 32;
 export const MAX_CHART_POINTS = 2000;
 export const MAX_CHART_LABEL_LENGTH = 200;
@@ -130,6 +133,24 @@ export function exceedsChartSpecBytes(value: string): boolean {
     return new TextEncoder().encode(value).length > MAX_CHART_SPEC_BYTES;
 }
 
+// Counted on the string, in one pass before the parse; a bracket inside a JSON string is text.
+function exceedsChartSpecDepth(value: string): boolean {
+    let depth = 0;
+    let quoted = false;
+    let escaped = false;
+    for (const char of value) {
+        if (escaped) escaped = false;
+        else if (quoted) {
+            if (char === '\\') escaped = true;
+            else if (char === '"') quoted = false;
+        } else if (char === '"') quoted = true;
+        else if (char === '[' || char === '{') depth += 1;
+        else if (char === ']' || char === '}') depth -= 1;
+        if (depth > MAX_CHART_SPEC_DEPTH) return true;
+    }
+    return false;
+}
+
 // What a search finds a chart by: its titles, series names and inline categories, a line each.
 export function chartSearchText(spec: ChartSpec | null): string {
     if (!spec) return '';
@@ -146,10 +167,10 @@ export function chartSearchText(spec: ChartSpec | null): string {
 }
 
 // Takes the stored string, like the fill and points codecs, so the size limit is measured on what peers store. stored
-// is what a writer applies a change onto and a copy carries; past the limit, or when it isn't a JSON object, it is
-// empty.
+// is what a writer applies a change onto and a copy carries; past the size or depth limit, or when it isn't a JSON
+// object, it is empty.
 export function readChartSpec(value: string): { stored: StoredChartSpec; spec: ChartSpec | null } {
-    if (exceedsChartSpecBytes(value)) return { stored: {}, spec: null };
+    if (exceedsChartSpecBytes(value) || exceedsChartSpecDepth(value)) return { stored: {}, spec: null };
     let stored: StoredChartSpec = {};
     // One catch for malformed JSON and every field reader's invalid(), so the readers stay straight-line.
     try {

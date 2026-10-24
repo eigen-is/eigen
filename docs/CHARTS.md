@@ -22,7 +22,7 @@ The sections cover the spec and its reader, how an edit is written, series ids, 
 
 Everything that reads what a stored chart says goes through `readChartSpec` (`packages/lib/src/charts/spec.ts`), because a stored chart is written by any collaborator or a paste. It takes the stored string, so the byte limit is measured on what peers store. It returns two things. `stored` is the JSON as parsed and unvalidated, every key in place, known to this build or not: writers apply their change onto it and copies carry it. `spec` is the resolved view: validated, defaults filled, known keys only. Search, exports, the layout and the editors read `spec` only. `parseChartSpec` is the same reader when only `spec` is wanted.
 
-Broken structure (no type, an unknown type, no data, a series that is not a list, a bad series id, a range outside Excel's grid) or a hard limit resolves `spec` as `null`, which draws the placeholder, while `stored` is kept. Past the byte limit, or for a string that is no JSON object, both are empty. A broken, missing or unknown presentation value reads its default instead, so a field added to the type later never turns a chart stored before it into a placeholder. Text is cut to 200 characters and loses what XML can't hold, because every label ends up in SVG.
+Broken structure (no type, an unknown type, no data, a series that is not a list, a bad series id, a range outside Excel's grid) or a hard limit resolves `spec` as `null`, which draws the placeholder, while `stored` is kept. Past the byte or depth limit, or for a string that is no JSON object, both are empty. A broken, missing or unknown presentation value reads its default instead, so a field added to the type later never turns a chart stored before it into a placeholder. Text is cut to 200 characters and loses what XML can't hold, because every label ends up in SVG.
 
 ## An edit is a change applied onto the spec as stored
 
@@ -35,7 +35,7 @@ An editor never writes the spec it resolved. It hands its host a `ChartSpecChang
 
 Each host applies the change onto the stored spec it has at that moment. Sheets applies it inside the recipe onto the chart as the workbook then stores it, so a panel that rendered before a peer's edit keeps it when the panel's change sets another field. A series color sets the whole `data.series` and a slice color the whole `sliceColors`, so those two can revert a peer's edit inside them. A canvas and a doc apply it onto the element or node as last rendered. Edit data is the one editor that diffs (`chartSpecChange`), [§ Edit data](#edit-data-is-a-grid-over-inline-data-and-save-is-one-write).
 
-Structural writers walk `stored` too. A row op and a copied sheet (`mapChartRefs`, `packages/sheet/src/engine/chart-data.ts`) move every record shaped as a `CellRangeRef` on `data` or on one of its series, under any key, so a ref a newer build stores moves as well, even in a chart this build can't draw. Nothing deeper is walked, since no ref lives there, so a forged spec nested deep can't throw out of a row op. A copy to a host without cells (`inlineChartSpec`) reads the known ranges into numbers and leaves out every other ref, which would name cells the host doesn't have.
+Structural writers walk `stored` too. A row op and a copied sheet (`mapChartRefs`, `packages/sheet/src/engine/chart-data.ts`) move every record shaped as a `CellRangeRef` on `data` or on one of its series, under any key, so a ref a newer build stores moves as well, even in a chart this build can't draw. Nothing deeper is walked, since no ref lives there. A copy to a host without cells (`inlineChartSpec`) reads the known ranges into numbers and leaves out every other ref, which would name cells the host doesn't have.
 
 ## Every series has an id that follows it
 
@@ -65,11 +65,14 @@ Every peer lays out and paints whatever is stored, so the limits bound one chart
 
 | Limit | Value | Over it |
 |---|---|---|
-| Serialized spec | 64 KiB | the spec reads as `null` |
+| Serialized spec | 64 KiB | the spec reads as `null`, and `stored` as empty |
+| Nesting of `[` and `{` | 32 levels | the spec reads as `null`, and `stored` as empty |
 | Series | 32 | `null` |
 | Points (all inline values, or categories) | 2,000 | `null` |
 | One label | 200 characters | cut |
 | Inline data the Edit data grid edits | 12 series, 200 categories and 2,000 cells | `exceedsInlineGridLimits` answers true, and the grid opens read-only |
+
+The depth limit guards the writers. Every writer serializes `stored` with `JSON.stringify`, and V8's recurses: it throws at about 8,000 levels, which a forged spec reaches in 16 KB. Bun's engine doesn't throw, so only a browser shows it. The reader counts the brackets outside strings in one pass before it parses. A spec past 32 levels reads as empty, like one past 64 KiB: it draws the placeholder, no editor opens, and a row op or a copied sheet leaves it as stored.
 
 ## A canvas keeps the spec as stored, and draws a placeholder for one it can't draw
 

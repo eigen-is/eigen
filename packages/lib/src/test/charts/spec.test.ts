@@ -14,6 +14,7 @@ import {
     MAX_CHART_POINTS,
     MAX_CHART_SERIES,
     MAX_CHART_SPEC_BYTES,
+    MAX_CHART_SPEC_DEPTH,
     newChartSeriesId,
     parseChartSpec,
     readChartSpec,
@@ -431,6 +432,31 @@ describe('readChartSpec', () => {
         for (const value of ['{', '[1]', '"x"']) expect(readChartSpec(value)).toEqual({ stored: {}, spec: null });
         const padded = JSON.stringify({ ...chart(), pad: 'x'.repeat(MAX_CHART_SPEC_BYTES) });
         expect(readChartSpec(padded)).toEqual({ stored: {}, spec: null });
+    });
+
+    // The spec is one level, so a key on it nested `levels` deep reaches 1 + levels.
+    const nested = (levels: number, open: string, close: string, base = stored({})) =>
+        base.replace(/}$/, `,"future":${open.repeat(levels)}0${close.repeat(levels)}}`);
+
+    test('a spec nested up to the depth limit reads; one level past it has none, in arrays and in records', () => {
+        for (const [open, close] of [
+            ['[', ']'],
+            ['{"a":', '}'],
+        ]) {
+            const deepest = nested(MAX_CHART_SPEC_DEPTH - 1, open, close);
+            expect(readChartSpec(deepest)).toEqual({ stored: JSON.parse(deepest), spec: chart() });
+            expect(readChartSpec(nested(MAX_CHART_SPEC_DEPTH, open, close))).toEqual({ stored: {}, spec: null });
+        }
+    });
+
+    test('brackets inside a string are no nesting, after an escaped quote too, and an escaped backslash ends it', () => {
+        const brackets = '[{'.repeat(MAX_CHART_SPEC_DEPTH);
+        for (const pad of [brackets, `"${brackets}`, `\\"${brackets}`]) {
+            const value = stored({ pad });
+            expect(readChartSpec(value)).toEqual({ stored: JSON.parse(value), spec: chart() });
+        }
+        const afterBackslash = nested(MAX_CHART_SPEC_DEPTH, '[', ']', stored({ pad: '\\' }));
+        expect(readChartSpec(afterBackslash)).toEqual({ stored: {}, spec: null });
     });
 });
 

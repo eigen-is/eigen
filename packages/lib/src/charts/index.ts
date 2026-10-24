@@ -31,6 +31,7 @@ export {
     MAX_CHART_POINTS,
     MAX_CHART_SERIES,
     MAX_CHART_SPEC_BYTES,
+    MAX_CHART_SPEC_DEPTH,
     newChartSeriesId,
     parseChartSpec,
     readChartSpec,
