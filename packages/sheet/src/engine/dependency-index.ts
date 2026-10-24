@@ -66,7 +66,7 @@ export class DependencyIndex {
     private byKey = new Map<string, KeyedEntry[]>();
     private queryCache = new Map<string, Map<number, readonly string[]>>();
 
-    set(key: string, deps: FormulaDependency[]): void {
+    public set(key: string, deps: FormulaDependency[]): void {
         this.delete(key);
 
         const stored: KeyedEntry[] = [];
@@ -109,7 +109,7 @@ export class DependencyIndex {
         this.queryCache.clear();
     }
 
-    delete(key: string): void {
+    public delete(key: string): void {
         const stored = this.byKey.get(key);
         if (stored == null) return;
         this.byKey.delete(key);
@@ -141,7 +141,7 @@ export class DependencyIndex {
         this.queryCache.clear();
     }
 
-    clear(): void {
+    public clear(): void {
         this.points.clear();
         this.ranges.clear();
         this.byKey.clear();
@@ -150,7 +150,7 @@ export class DependencyIndex {
 
     // Keys of formulas whose dependency ranges cover (r, c). Results are cached
     // until the next mutation; callers must not mutate the returned array.
-    dependentsOf(sheetId: string, r: number, c: number): readonly string[] {
+    public dependentsOf(sheetId: string, r: number, c: number): readonly string[] {
         const packed = r * CELL_PACK + c;
         let sheetCache = this.queryCache.get(sheetId);
         const cached = sheetCache?.get(packed);

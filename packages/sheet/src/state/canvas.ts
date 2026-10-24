@@ -26,7 +26,7 @@ export class Canvas {
 
     private sheetCtx: Context;
 
-    constructor(canvasElement: HTMLCanvasElement, ctx: Context) {
+    public constructor(canvasElement: HTMLCanvasElement, ctx: Context) {
         this.canvasElement = canvasElement;
         this.sheetCtx = ctx;
     }

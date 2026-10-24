@@ -29,9 +29,9 @@ export type RowColErrorCode = 'readOnly' | 'maxExceeded';
 // on `code`; the BE replay path catches and skips. The contract is enforced at
 // the type level so the catch sites don't depend on message punctuation.
 export class RowColError extends Error {
-    readonly code: RowColErrorCode;
+    public readonly code: RowColErrorCode;
 
-    constructor(code: RowColErrorCode) {
+    public constructor(code: RowColErrorCode) {
         super(code);
         this.name = 'RowColError';
         this.code = code;

@@ -35,14 +35,14 @@ function inferType(value: unknown): EvaluationResult['type'] {
 }
 
 export class FormulaEngine {
-    state: FormulaEngineState;
+    public state: FormulaEngineState;
     private parser: Parser;
     private currentResolver: CellResolver | null = null;
     // The cells range reads have cost; a read that would pass `maxCellsRead` fails before it reads.
-    cellsRead = 0;
+    public cellsRead = 0;
     private readonly maxCellsRead: number;
 
-    constructor({ maxCellsRead = Number.POSITIVE_INFINITY } = {}) {
+    public constructor({ maxCellsRead = Number.POSITIVE_INFINITY } = {}) {
         this.maxCellsRead = maxCellsRead;
         this.state = {
             execFunctionGlobalData: {},
@@ -127,15 +127,15 @@ export class FormulaEngine {
         );
     }
 
-    evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {
+    public evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {
         return this.evaluateCompiled(this.compile(formula), sheetId, resolver);
     }
 
-    compile(formula: string): CompiledFormula {
+    public compile(formula: string): CompiledFormula {
         return this.parser.compile(formula.substring(1));
     }
 
-    evaluateCompiled(
+    public evaluateCompiled(
         compiled: CompiledFormula,
         sheetId: string,
         resolver: CellResolver,
