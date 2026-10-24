@@ -23,10 +23,10 @@ import {
 import { proseValue, proseValueIfSet } from '../../../document/prose-css';
 import { W_NS } from '../../../ooxml/ooxml';
 import type { StyleId } from '../../../ooxml/wordml';
-import { codeBlockStyle, headingStyleName, STYLE_NAMES } from '../../../ooxml/wordml';
+import { codeBlockStyle, headingStyleName, JUSTIFICATION, STYLE_NAMES } from '../../../ooxml/wordml';
 import type { Package } from './package';
 import type { ParagraphProps } from './paragraphs';
-import { JUSTIFICATION, pPrXml, TITLE_STYLES } from './paragraphs';
+import { pPrXml, TITLE_STYLES } from './paragraphs';
 import type { RunProps } from './runs';
 import { rPrXml } from './runs';
 

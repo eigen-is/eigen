@@ -13,8 +13,6 @@ import type { Styles } from './styles';
 // The document part's frame, its namespaces, section, settings and notes' separators, and what one export accumulates
 // as it walks.
 
-export const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
-
 export const DOCUMENT_NAMESPACES = [
     `xmlns:w="${W_NS}"`,
     `xmlns:r="${R_NS}"`,

@@ -5,14 +5,14 @@ import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EigendocBands } from '../../../document/doc';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
-import { NOTE_SEPARATORS } from '../../../ooxml/wordml';
+import { NOTE_SEPARATORS, WML } from '../../../ooxml/wordml';
 import type { OfficeMedia } from '../../office-image';
 import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import type { FontSlot } from './fonts';
 import { embeddedFonts, fontTableXml } from './fonts';
 import { numberingXml } from './numbering';
 import type { Context, Package } from './package';
-import { BAND_TAGS, DOCUMENT_NAMESPACES, numbered, sectionXml, separatorXml, settingsXml, WML } from './package';
+import { BAND_TAGS, DOCUMENT_NAMESPACES, numbered, sectionXml, separatorXml, settingsXml } from './package';
 import { blocksOf, blocksXml, withoutAfter } from './paragraphs';
 import { styleDefinitions, stylesXml } from './styles';
 

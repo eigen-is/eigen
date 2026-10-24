@@ -21,7 +21,7 @@ import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
-import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES } from '../../ooxml/wordml';
+import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES, textAlignOf } from '../../ooxml/wordml';
 import { mediaNamer } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import type { Item, Para } from './assemble';
@@ -491,7 +491,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             // draws it at the title's height.
             role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
             inlines: content,
-            textAlign: alignmentOf(props.jc, props.bidi),
+            textAlign: textAlignOf(props.jc, props.bidi),
             continued: numbered,
             indLeft,
             quote,
@@ -639,24 +639,5 @@ function stripLook(pieces: Piece[], toggle: string | undefined, color: string): 
             return Object.values(attrs).some((value) => value !== null) ? [{ ...mark, attrs }] : [];
         });
         if (piece.node.marks.length === 0) delete piece.node.marks;
-    }
-}
-
-// Left is the default, so no attribute (Google Docs writes it on every paragraph); start and end follow the direction.
-function alignmentOf(jc: string | undefined, bidi: boolean | undefined): string | null {
-    switch (jc) {
-        case 'center':
-            return 'center';
-        case 'right':
-            return 'right';
-        case 'start':
-            return bidi ? 'right' : null;
-        case 'end':
-            return bidi ? null : 'right';
-        case 'both':
-        case 'distribute':
-            return 'justify';
-        default:
-            return null;
     }
 }
