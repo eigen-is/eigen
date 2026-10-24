@@ -5,38 +5,41 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import {
-    type AddressObject,
-    type Attachment,
-    type DraftAttachmentUpload,
-    type DraftUpdateOptions,
-    type Email,
-    type EmailDraft,
-    type EmailSummary,
-    type ImportMailResult,
-    isCalendarPart,
-    isEmailDraft,
-    type MaildirMailbox,
-    mailAttachmentName,
-    type NewDraft,
-    type SentMailResult,
+import type {
+    AddressObject,
+    Attachment,
+    DraftAttachmentUpload,
+    DraftUpdateOptions,
+    Email,
+    EmailDraft,
+    EmailSummary,
+    ImportMailResult,
+    MaildirMailbox,
+    NewDraft,
+    SentMailResult,
 } from '@workspace/lib/types/mail';
-import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
+import { isCalendarPart, isEmailDraft, mailAttachmentName } from '@workspace/lib/types/mail';
+import type { SSEventMail } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { isDemo, isMailAppEnabled } from '../config/env';
 import { getMailDomain, isInternalAddress } from '../config/server-config';
 import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
-import { type OutboundMail, sendMail } from '../core/mailer';
+import type { OutboundMail } from '../core/mailer';
+import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
-import { type StorageFile, streamStorageFile } from '../storage';
+import type { StorageFile } from '../storage';
+import { streamStorageFile } from '../storage';
 import { grantAccessForReferences } from './access-grants';
 import { verifyImipSender } from './imip-auth';
-import { type PartHeaders, parseMail, splitMime } from './mail-parser';
+import type { PartHeaders } from './mail-parser';
+import { parseMail, splitMime } from './mail-parser';
 import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
-import { createEmlContent, type EmlAttachment } from './mailfile';
+import type { EmlAttachment } from './mailfile';
+import { createEmlContent } from './mailfile';
 import { createUniqueMessageId } from './mailutils';
 import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
 import { draftToOutboundMail } from './sender';
@@ -67,7 +70,7 @@ function appendReferenceLinks(html: string, refs: AttachmentReference[], recipie
 }
 
 export class Mail {
-    constructor(
+    public constructor(
         private home: Home,
         private store: MailStore,
     ) {}
@@ -80,7 +83,7 @@ export class Mail {
         if (this.store.unreadCount(MAILBOX_INBOX) === 0) this.home.notifications.markReadByTag(MAIL_NOTIFICATION_TAG);
     }
 
-    async init(): Promise<void> {
+    public async init(): Promise<void> {
         const isNew = await this.store.init({
             received: (email, isNewMessage) => {
                 this.emit(SSEventType.MAIL_RECEIVED, { messageId: email.id, mailbox: email.mailbox });
@@ -108,9 +111,8 @@ export class Mail {
                 this.readNotificationOnceInboxRead();
             },
         });
-        // Every user Home carries a Mail; with mail off it seeds and cleans nothing. The folder watchers wait for
-        // the first listing: a home opened for a notification or a share needs none, and on macOS each costs
-        // the event loop up to a second, more the more the process already watches.
+        // Every user Home carries a Mail; with mail off it seeds and cleans nothing. Its folder watchers start
+        // only when somebody has the home open in a tab: see watchFolders.
         if (!isMailAppEnabled()) return;
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
@@ -120,11 +122,11 @@ export class Mail {
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
     }
 
-    async size(): Promise<number> {
+    public async size(): Promise<number> {
         return this.store.size();
     }
 
-    search(opts: MailSearchOptions): EmailSummary[] {
+    public search(opts: MailSearchOptions): EmailSummary[] {
         if (!isMailAppEnabled()) return [];
         // The FTS mailbox filter matches the stored value exactly, so any caller casing is canonicalised first.
         const mailboxes = opts.mailboxes?.map(canonicalMailbox);
@@ -133,11 +135,11 @@ export class Mail {
 
     // -- Mailbox operations --
 
-    async mailboxesList(): Promise<MaildirMailbox[]> {
+    public async mailboxesList(): Promise<MaildirMailbox[]> {
         return this.store.mailboxesList();
     }
 
-    async mailboxDeliver(message: Buffer): Promise<string> {
+    public async mailboxDeliver(message: Buffer): Promise<string> {
         const uniqueId = await this.store.append(MAILBOX_INBOX, message);
 
         // Process iMIP calendar attachments (blocking so event exists before client queries)
@@ -162,7 +164,7 @@ export class Mail {
     }
 
     // No processInboundImip: an imported file carries no DKIM verdict, so it must never touch the calendar.
-    async messageImport(bytes: Buffer): Promise<ImportMailResult> {
+    public async messageImport(bytes: Buffer): Promise<ImportMailResult> {
         // The sync after the append parses the message anyway, so a full parse here is a second one (103 ms vs 0.05 ms on 1.1 MiB).
         let headers: PartHeaders;
         try {
@@ -180,7 +182,7 @@ export class Mail {
         return { id };
     }
 
-    async mailboxGet(
+    public async mailboxGet(
         mailbox: string,
         opts?: { limit?: number; beforeDate?: number; beforeId?: string },
     ): Promise<EmailSummary[]> {
@@ -194,7 +196,7 @@ export class Mail {
 
     // -- Message operations --
 
-    async messageGet(messageId: string): Promise<Email | null> {
+    public async messageGet(messageId: string): Promise<Email | null> {
         // null means "no summary row" only: a parse, read or DB fault propagates to a 500, never a silent 404.
         const message = await this.store.getMessage(messageId);
         if (!message) return null;
@@ -225,20 +227,20 @@ export class Mail {
         return message;
     }
 
-    async messageGetFile(messageId: string): Promise<ArrayBuffer> {
+    public async messageGetFile(messageId: string): Promise<ArrayBuffer> {
         return this.store.getRawMessage(messageId);
     }
 
     // The index row, which serveMailPart validates its ETag against before it parses anything.
-    messageGetSummary(messageId: string): EmailSummary | undefined {
+    public messageGetSummary(messageId: string): EmailSummary | undefined {
         return this.store.getSummary(messageId);
     }
 
-    messageGetModifiedAt(summary: EmailSummary): Promise<number> {
+    public messageGetModifiedAt(summary: EmailSummary): Promise<number> {
         return this.store.getModifiedAt(summary);
     }
 
-    async messageGetAttachment(messageId: string, index: number): Promise<Attachment> {
+    public async messageGetAttachment(messageId: string, index: number): Promise<Attachment> {
         const attachments = await this.store.getAttachments(messageId);
         if (index < 0 || index >= attachments.length) {
             throw new ApiError(404, `Attachment ${index} not found for message '${messageId}'`);
@@ -246,11 +248,11 @@ export class Mail {
         return attachments[index];
     }
 
-    async messageGetAttachments(messageId: string): Promise<Attachment[]> {
+    public async messageGetAttachments(messageId: string): Promise<Attachment[]> {
         return this.store.getAttachments(messageId);
     }
 
-    async messageDelete(messageId: string): Promise<void> {
+    public async messageDelete(messageId: string): Promise<void> {
         const email = this.store.getSummary(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
@@ -261,7 +263,7 @@ export class Mail {
         this.readNotificationOnceInboxRead();
     }
 
-    async messageMove(messageId: string, targetMailbox: string): Promise<void> {
+    public async messageMove(messageId: string, targetMailbox: string): Promise<void> {
         targetMailbox = canonicalMailbox(targetMailbox);
         const email = this.store.getSummary(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
@@ -272,7 +274,7 @@ export class Mail {
         this.readNotificationOnceInboxRead();
     }
 
-    async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
+    public async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
         targetMailbox = canonicalMailbox(targetMailbox);
         if (!this.store.getSummary(messageId)) {
             throw new ApiError(404, `Message '${messageId}' not found`);
@@ -286,7 +288,7 @@ export class Mail {
         await this.store.append(targetMailbox, bytes, { arrival: false });
     }
 
-    async messageSetRead(messageId: string, read: boolean): Promise<void> {
+    public async messageSetRead(messageId: string, read: boolean): Promise<void> {
         const email = this.store.getSummary(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
@@ -295,7 +297,7 @@ export class Mail {
         this.readNotificationOnceInboxRead();
     }
 
-    async messageSetFlagged(messageId: string, flagged: boolean): Promise<void> {
+    public async messageSetFlagged(messageId: string, flagged: boolean): Promise<void> {
         const email = this.store.getSummary(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
@@ -303,7 +305,7 @@ export class Mail {
         this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox: email.mailbox });
     }
 
-    async messageSetReplied(messageId: string): Promise<void> {
+    public async messageSetReplied(messageId: string): Promise<void> {
         const email = this.store.getSummary(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
         await this.markReplied(messageId, email.mailbox);
@@ -316,7 +318,7 @@ export class Mail {
 
     // -- Draft & Send --
 
-    async messageHandleDraft(email: NewDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
+    public async messageHandleDraft(email: NewDraft, options: DraftUpdateOptions = {}): Promise<EmailDraft> {
         const existingId = draftIdOf(email);
         const hasNewTemps = !!options.tempAttachmentIds?.length;
 
@@ -524,7 +526,7 @@ export class Mail {
         return saved;
     }
 
-    async uploadDraftAttachment(request: Request, maxSize: number): Promise<DraftAttachmentUpload> {
+    public async uploadDraftAttachment(request: Request, maxSize: number): Promise<DraftAttachmentUpload> {
         try {
             const events = parseMultipartRequest(request, { maxFileSize: maxSize });
             for await (const event of events) {
@@ -550,7 +552,7 @@ export class Mail {
         throw new ApiError(400, 'No file in request');
     }
 
-    async stageDriveAttachment(
+    public async stageDriveAttachment(
         source: StorageFile,
         filename: string,
         contentType: string,
@@ -571,7 +573,10 @@ export class Mail {
         );
     }
 
-    async messageSend(mailToSend: NewDraft, options?: { grantAccessRefIds?: string[] }): Promise<SentMailResult> {
+    public async messageSend(
+        mailToSend: NewDraft,
+        options?: { grantAccessRefIds?: string[] },
+    ): Promise<SentMailResult> {
         // Full EML rebuild so attachment content is available for SMTP.
         const mail = await this.draftFullSave(mailToSend, draftIdOf(mailToSend), {});
         const message = draftToOutboundMail(mail, this.home.user.email);
@@ -672,7 +677,14 @@ export class Mail {
         return failedRecipients.length ? { ...mail, failedRecipients } : mail;
     }
 
-    async destruct(): Promise<void> {
+    // A home opened only to deliver a notification or a share needs no watchers, and on macOS each one
+    // blocks the event loop for longer the more the process already holds.
+    public async watchFolders(): Promise<void> {
+        if (!isMailAppEnabled()) return;
+        await this.store.watch();
+    }
+
+    public async destruct(): Promise<void> {
         await this.store.unwatch();
         // With mail off no index is open for a sidecar to be saved into.
         if (isMailAppEnabled()) await this.flushDraftSidecars();

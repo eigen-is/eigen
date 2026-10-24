@@ -194,6 +194,8 @@ export class Home {
 
     public subscribeSSE(listener: (event: SSEvent) => void): void {
         this.sseListeners.add(listener);
+        // Somebody has the home open in a tab, so changes made in other mail apps should reach them live.
+        this._mail?.watchFolders().catch((err) => console.error(`[Home] Mail watch failed for ${this.user.id}:`, err));
     }
 
     public unsubscribeSSE(listener: (event: SSEvent) => void): void {
