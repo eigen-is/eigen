@@ -4,6 +4,7 @@ import type { Box, ZOp } from '@workspace/lib/vector';
 import { DUPLICATE_OFFSET, zOrderKeys } from '@workspace/lib/vector';
 import type { Patch } from 'immer';
 import { v4 as uuidv4 } from 'uuid';
+import { copySheetChartSpec } from '../../engine/chart-data';
 import type { Context } from '../context';
 import { getSheetIndex } from '../utils';
 
@@ -58,7 +59,9 @@ export function duplicateFloatingObject(ctx: Context, { kind, id }: FloatingRef)
         ...sheetFloatingBox({ ...original, x: original.x + DUPLICATE_OFFSET, y: original.y + DUPLICATE_OFFSET }),
     };
     if (kind === 'image' && sheet.images?.[id]) sheet.images[copy] = { ...sheet.images[id], ...placed };
-    if (kind === 'chart' && sheet.charts?.[id]) sheet.charts[copy] = { ...sheet.charts[id], ...placed };
+    if (kind === 'chart' && sheet.charts?.[id]) {
+        sheet.charts[copy] = { ...sheet.charts[id], ...copySheetChartSpec(sheet.charts[id]), ...placed };
+    }
     ctx.activeObject = { kind, id: copy };
 }
 

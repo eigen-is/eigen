@@ -396,6 +396,20 @@ describe.each(KINDS)('a floating $kind', ({ rows, download, ...item }) => {
     });
 });
 
+// A record shared with the original would be one object in two charts, which a later in-place write would change in both.
+test('Duplicate gives a chart’s copy records of its own', async () => {
+    const { content, order, record } = await mount();
+    await rightClick(content(chart.id));
+    await pick('Duplicate');
+    const copy = record(order().at(-1) ?? '');
+    const original = record(chart.id);
+    if (!copy || !original || !('specSeries' in copy) || !('specSeries' in original)) throw new Error('no copy');
+    for (const key of ['specAxes', 'specPlots', 'specSeries', 'specPoints'] as const) {
+        expect(copy[key]).toEqual(original[key]);
+        expect(copy[key]).not.toBe(original[key]);
+    }
+});
+
 test('images and charts draw in one paint order, by index', async () => {
     const { order, frame } = await mount({ images: { i1: { ...image, index: 'a2' } } });
     expect(order()).toEqual(['c1', 'i1']);
