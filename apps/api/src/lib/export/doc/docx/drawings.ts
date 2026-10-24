@@ -32,16 +32,21 @@ function figureMediaKey(node: JSONContent): string | null {
 
 // A chart's SVG, named for what it draws, so two charts that draw the same, a chart repeated or two whose ids differ,
 // are one picture. A docx holds each SVG in a file of its own, so every drawing takes one id. Drawn once per node,
-// though the media and the writer both ask; a spec that doesn't parse draws nothing.
-const drawings = new WeakMap<JSONContent, { name: string; svg: string } | null>();
+// though the media and the writer both ask; a spec that doesn't parse draws nothing. The alt text is the one its HTML
+// gives its image.
+type ChartDrawing = { name: string; svg: string; alt: string };
 
-function chartDrawing(node: JSONContent): { name: string; svg: string } | null {
+const drawings = new WeakMap<JSONContent, ChartDrawing | null>();
+
+function chartDrawing(node: JSONContent): ChartDrawing | null {
     const known = drawings.get(node);
     if (known !== undefined) return known;
     const attrs = node.attrs ?? {};
     const { spec } = readChartSpec(attrs);
     const svg = spec && chartSvg(spec, readChartAttrs(attrs), 'chart');
-    const drawing = svg ? { name: `chart/${Bun.CryptoHasher.hash('sha256', svg, 'hex')}`, svg } : null;
+    const drawing = svg
+        ? { name: `chart/${Bun.CryptoHasher.hash('sha256', svg, 'hex')}`, svg, alt: spec.title.text || 'Chart' }
+        : null;
     drawings.set(node, drawing);
     return drawing;
 }
@@ -133,8 +138,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         cx,
         // Observed in Word: a fractional-twip height refits the width (a 1204×4 px divider drew 466.5 pt wide), so the height is whole.
         Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
-        // A chart's is the one its HTML gives its image.
-        node.type === 'chart' ? readChartSpec(node.attrs ?? {}).spec?.title.text || 'Chart' : (alt ?? ''),
+        (node.type === 'chart' ? chartDrawing(node)?.alt : alt) ?? '',
         context.pkg,
     );
     if (!side) {
