@@ -373,7 +373,7 @@ describe('ChartDataDialog: Save is a change', () => {
         ]) {
             const dialog = await open(spec, raw);
             expect(dialog.dialog().querySelectorAll('input')).toHaveLength(0);
-            expect(dialog.dialog().textContent).toContain('can’t edit, so it opens read-only');
+            expect(dialog.dialog().textContent).toContain('made in a newer version of Eigen');
             expect(dialog.dialog().textContent).toContain('Period 2');
         }
         const plain = await open(spec, { ...spec, future: 1, valueAxis: { ...spec.valueAxis, logBase: 10 } });
