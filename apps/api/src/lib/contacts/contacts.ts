@@ -68,19 +68,19 @@ function normalizeContactInput(contact: CreateContactInput): void {
 
 export class Contacts {
     private managedDb!: ManagedDatabase<typeof schema>;
-    db!: BunSQLiteDatabase<typeof schema>;
-    home: Home;
-    storage: LocalFilesystem;
+    public db!: BunSQLiteDatabase<typeof schema>;
+    public home: Home;
+    public storage: LocalFilesystem;
 
     // bun:sqlite makes a transaction atomic and serial by itself, but a write path holds async gaps between
     // its check and its commit (the quota check, the avatar derivation), and a racing If-Match PUT must lose
     // inside the lock, not after it.
-    writeLock = new Semaphore(1);
+    public writeLock = new Semaphore(1);
 
     // Running totals so size() answers from memory: a SUM per metered write makes an N-card device sync O(N²).
     // Each delta is read inside the transaction that moves it and applied after: a rollback would otherwise leave it applied.
-    cardsBytes = 0;
-    avatarsBytes = 0;
+    public cardsBytes = 0;
+    public avatarsBytes = 0;
 
     // Whether card writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
@@ -88,7 +88,7 @@ export class Contacts {
     // Bulk writes in flight; while any runs, per-card events are held and the last one out closes them.
     private readonly batch = new BroadcastBatch(() => this.home.broadcast(buildContactsChangedEvent()));
 
-    constructor(home: Home) {
+    public constructor(home: Home) {
         this.home = home;
         this.storage = new LocalFilesystem(`${home.homeDir}/${PATHS.CONTACTS.ROOT}`);
     }
@@ -163,7 +163,7 @@ export class Contacts {
         return this.cardsBytes + this.avatarsBytes;
     }
 
-    async destruct(): Promise<void> {
+    public async destruct(): Promise<void> {
         if (this.managedDb) {
             await this.managedDb.close();
         }
@@ -171,21 +171,21 @@ export class Contacts {
 
     // --- Seams used by contacts/*.ts ---
 
-    announce(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
+    public announce(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
         if (this.batch.hold()) return;
         this.home.broadcast(buildContactEvent(type, contactId));
     }
 
     // A card written by something else inside the window loses nothing: its invalidation is owner-wide too.
-    async withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
+    public async withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
         return this.batch.run(fn);
     }
 
-    emitLabel(type: Parameters<typeof buildLabelEvent>[0], labelId: string): void {
+    public emitLabel(type: Parameters<typeof buildLabelEvent>[0], labelId: string): void {
         this.home.broadcast(buildLabelEvent(type, labelId));
     }
 
-    bumpCtag(tx: Tx): number {
+    public bumpCtag(tx: Tx): number {
         tx.update(schema.book)
             .set({ ctag: sql`${schema.book.ctag} + 1` })
             .where(eq(schema.book.id, 1))
@@ -193,7 +193,7 @@ export class Contacts {
         return tx.select({ ctag: schema.book.ctag }).from(schema.book).where(eq(schema.book.id, 1)).get()!.ctag;
     }
 
-    tombstone(tx: Tx, uri: string, ctag: number): void {
+    private tombstone(tx: Tx, uri: string, ctag: number): void {
         tx.insert(schema.contactTombstones)
             .values({ uri, deletedAtCtag: ctag })
             .onConflictDoUpdate({ target: schema.contactTombstones.uri, set: { deletedAtCtag: ctag } })
@@ -222,7 +222,7 @@ export class Contacts {
     // derives the avatar and before the transaction that stores them, so a refusal leaves neither a row nor a
     // webp behind. `creditBytes` is the stored card this one replaces, or a rewrite that shrinks a card would
     // be refused on a quota its own bytes already hold. Returns the avatar URL the projection stored.
-    async writeCard(opts: {
+    public async writeCard(opts: {
         row: CardProjection & Pick<CardRowInput, 'id' | 'uri' | 'eigenId'>;
         categories: string[];
         creditBytes: number;
@@ -240,7 +240,7 @@ export class Contacts {
     }
 
     // Callers hold the write lock, have run their own guards, and announce the deletion once they let go of it.
-    async purgeCard(row: PurgedCard): Promise<void> {
+    public async purgeCard(row: PurgedCard): Promise<void> {
         const removed = this.db.transaction((tx) => {
             const size = tx
                 .select({ size: cardBytes })

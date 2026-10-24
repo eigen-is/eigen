@@ -31,8 +31,8 @@ export type ZipErrorCode =
 // Every refusal of openZip and of a read: 413 for an archive past the caps, 400 for any other. The message
 // reaches the user, so it names no entry: those are the archive's own bytes.
 export class ZipError extends ApiError {
-    constructor(
-        readonly code: ZipErrorCode,
+    public constructor(
+        public readonly code: ZipErrorCode,
         options?: ErrorOptions,
     ) {
         const tooLarge = code === 'too-many-entries' || code === 'too-large';
@@ -70,26 +70,26 @@ export class ZipReader {
     readonly #bytes: Uint8Array;
     readonly #entries: Map<string, Located>;
 
-    constructor(bytes: Uint8Array, entries: Map<string, Located>) {
+    public constructor(bytes: Uint8Array, entries: Map<string, Located>) {
         this.#bytes = bytes;
         this.#entries = entries;
     }
 
-    names(): string[] {
+    public names(): string[] {
         return [...this.#entries.keys()];
     }
 
-    entry(name: string): ZipEntry | undefined {
+    public entry(name: string): ZipEntry | undefined {
         return this.#entries.get(name)?.entry;
     }
 
-    read(name: string): Uint8Array | undefined {
+    public read(name: string): Uint8Array | undefined {
         const located = this.#entries.get(name);
         return located && this.#inflate(located);
     }
 
     // Every entry in the directory's order, inflated only when read: a rewrite replaces some unread.
-    *files(): Generator<[name: string, read: () => Uint8Array]> {
+    public *files(): Generator<[name: string, read: () => Uint8Array]> {
         for (const [name, located] of this.#entries) yield [name, () => this.#inflate(located)];
     }
 

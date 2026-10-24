@@ -32,11 +32,11 @@ type Gate = { parked: Promise<void>; release: () => void };
 // LocalStorage whose next write or rename after arm parks until the test releases it. `order`
 // records the storage calls that completed since the last arm.
 class GatedLocalStorage extends LocalStorage {
-    order: string[] = [];
+    public order: string[] = [];
     private writeGate: { parked: () => void; released: Promise<void> } | null = null;
     private renameGate: { parked: () => void; released: Promise<void> } | null = null;
 
-    armWrite(): Gate {
+    public armWrite(): Gate {
         const parked = Promise.withResolvers<void>();
         const released = Promise.withResolvers<void>();
         this.writeGate = { parked: parked.resolve, released: released.promise };
@@ -44,7 +44,7 @@ class GatedLocalStorage extends LocalStorage {
         return { parked: parked.promise, release: released.resolve };
     }
 
-    armRename(): Gate {
+    public armRename(): Gate {
         const parked = Promise.withResolvers<void>();
         const released = Promise.withResolvers<void>();
         this.renameGate = { parked: parked.resolve, released: released.promise };
@@ -52,7 +52,7 @@ class GatedLocalStorage extends LocalStorage {
         return { parked: parked.promise, release: released.resolve };
     }
 
-    override async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    public override async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const gate = this.writeGate;
         if (gate) {
             this.writeGate = null;
@@ -64,7 +64,7 @@ class GatedLocalStorage extends LocalStorage {
         return written;
     }
 
-    override async rename(oldKey: string, newKey: string): Promise<void> {
+    public override async rename(oldKey: string, newKey: string): Promise<void> {
         const gate = this.renameGate;
         if (gate) {
             this.renameGate = null;
@@ -75,13 +75,13 @@ class GatedLocalStorage extends LocalStorage {
         this.order.push('rename');
     }
 
-    override async delete(key: string): Promise<boolean> {
+    public override async delete(key: string): Promise<boolean> {
         const deleted = await super.delete(key);
         this.order.push('delete');
         return deleted;
     }
 
-    override async deleteDir(key: string): Promise<boolean> {
+    public override async deleteDir(key: string): Promise<boolean> {
         const deleted = await super.deleteDir(key);
         this.order.push('deleteDir');
         return deleted;
@@ -94,16 +94,16 @@ class GatedLocalStorage extends LocalStorage {
 class ProbeMount extends Mount {
     private treeWait: PromiseWithResolvers<void> | null = null;
 
-    armTreeWait(): Promise<void> {
+    public armTreeWait(): Promise<void> {
         this.treeWait = Promise.withResolvers<void>();
         return this.treeWait.promise;
     }
 
-    override async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
+    public override async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
         return this.probe((body) => super.withTreeShared(body), fn);
     }
 
-    override async withTreeExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    public override async withTreeExclusive<T>(fn: () => Promise<T>): Promise<T> {
         return this.probe((body) => super.withTreeExclusive(body), fn);
     }
 

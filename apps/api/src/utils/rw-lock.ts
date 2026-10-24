@@ -5,7 +5,7 @@ export class RWLock {
     private writer = false;
     private waiters: { exclusive: boolean; grant: () => void }[] = [];
 
-    async shared<T>(fn: () => Promise<T>): Promise<T> {
+    public async shared<T>(fn: () => Promise<T>): Promise<T> {
         if (!this.writer && this.waiters.length === 0) {
             this.readers++;
         } else {
@@ -19,7 +19,7 @@ export class RWLock {
         }
     }
 
-    async exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    public async exclusive<T>(fn: () => Promise<T>): Promise<T> {
         if (!this.writer && this.readers === 0 && this.waiters.length === 0) {
             this.writer = true;
         } else {

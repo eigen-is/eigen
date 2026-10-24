@@ -40,7 +40,7 @@ export default class SharedDrive {
     private user: User;
     private owner: User;
 
-    constructor(sharedHome: Home, user: User) {
+    public constructor(sharedHome: Home, user: User) {
         this.sharedDrive = sharedHome.drive;
         this.user = user;
         this.owner = sharedHome.user;

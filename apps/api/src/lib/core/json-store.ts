@@ -24,7 +24,7 @@ function merge<T extends Record<string, unknown>>(target: T, source: DeepPartial
 export class JsonStore<T extends Record<string, unknown>> {
     private data: T;
 
-    constructor(
+    public constructor(
         private fs: LocalFilesystem,
         private filename: string,
         private defaults: T,
@@ -32,7 +32,7 @@ export class JsonStore<T extends Record<string, unknown>> {
         this.data = { ...defaults };
     }
 
-    async load(): Promise<void> {
+    public async load(): Promise<void> {
         const file = this.fs.file(this.filename);
         // Fail-closed: a corrupt existing file must reject, or the next set() persists defaults over the real bytes.
         if (await file.exists()) {
@@ -40,11 +40,11 @@ export class JsonStore<T extends Record<string, unknown>> {
         }
     }
 
-    get(): T {
+    public get(): T {
         return this.data;
     }
 
-    async set(update: DeepPartial<T>): Promise<T> {
+    public async set(update: DeepPartial<T>): Promise<T> {
         const prev = this.data;
         this.data = merge(this.data, update);
         try {
