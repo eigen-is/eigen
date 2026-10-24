@@ -678,10 +678,7 @@ describe('a forged chart costs a read what fits under the byte limit', () => {
             },
         });
         const forged = { ...chart('f1', rangeSpec(ref(S, [2, 5]))), specPoints: points };
-        const ctx = produce(workbook(), (draft: Context) => {
-            draft.sheets[0].charts!.c1 = { ...draft.sheets[0].charts!.c1 };
-        });
-        sheetChartSvg(ctx, forged);
+        sheetChartSvg(workbook(), forged);
         expect(mapChartRefs(forged, (r) => ({ ...r, row: [r.row[0] + 1, r.row[1] + 1] }))).toBe(forged);
         expect(visited).toBeGreaterThan(0);
         expect(visited).toBeLessThan(2 * 4_000);
