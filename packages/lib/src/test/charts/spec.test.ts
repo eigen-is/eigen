@@ -979,9 +979,18 @@ describe('the stored parts', () => {
 
     test('an entry key that is no path is ignored, and the other entries read', () => {
         const specPoints = Object.fromEntries(
-            ['s-1/1', 's-1', 's-1/3/4', 's-1/-1', 's-1/1e3', 's-1/03', `s-1/${MAX_CHART_POINTS}`, '/1', 'a b/1'].map(
-                (key) => [key, point],
-            ),
+            [
+                's-1/1',
+                's-1',
+                '12',
+                's-1/3/4',
+                's-1/-1',
+                's-1/1e3',
+                's-1/03',
+                `s-1/${MAX_CHART_POINTS}`,
+                '/1',
+                'a b/1',
+            ].map((key) => [key, point]),
         );
         const specSeries = { ...sheet().specSeries, 'a/b': '{}', ['__proto__']: '{}' };
         const { stored, spec } = readChartSpec(sheet({ specPoints, specSeries }));

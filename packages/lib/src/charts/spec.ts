@@ -343,6 +343,7 @@ function entryPath(key: string, depth: number): string[] | null {
     const at = key.lastIndexOf('/');
     const id = key.slice(0, at);
     const index = key.slice(at + 1);
+    // With no /, the slices would read '12' as point 12 of series '1'.
     return at > 0 && isChartSeriesId(id) && chartPointIndex(index) !== null ? [id, index] : null;
 }
 
