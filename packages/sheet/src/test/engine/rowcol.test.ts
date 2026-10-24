@@ -769,4 +769,62 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
         const [s] = applySheetsInsertRowCol(workbook({ c1: broken }), insertRows(0, 1, 'lefttop'));
         expect(s.charts!.c1).toBe(broken);
     });
+
+    describe('slice colors', () => {
+        const COLORS = ['#000001', '#000002', '#000003', '#000004', '#000005'];
+        // Categories A1:A5, values B1:B5.
+        const pie = (categories: CellRangeRef | null = ref('S', [0, 4], [0, 0])) => {
+            const c = chart({ categories, series: [series(ref('S', [0, 4]))] });
+            const spec: ChartSpec = { ...JSON.parse(c.spec), type: 'pie', sliceColors: COLORS };
+            return { ...c, spec: JSON.stringify(spec) };
+        };
+        const sliceColors = (sheet: Sheet) => parseChartSpec(sheet.charts!.c1.spec)?.sliceColors;
+        const deleteRows = (start: number, end: number) => ({ type: 'row', start, end, id: 'S' }) as const;
+
+        test('a delete inside the categories drops the deleted slices’ colors', () => {
+            const [s] = applySheetsDeleteRowCol(workbook({ c1: pie() }), deleteRows(2, 2));
+            expect(rangeData(s)?.categories?.row).toEqual([0, 3]);
+            expect(sliceColors(s)).toEqual(['#000001', '#000002', '#000004', '#000005']);
+        });
+
+        test('an insert inside the categories adds automatic colors at the inserted slices', () => {
+            const [s] = applySheetsInsertRowCol(workbook({ c1: pie() }), insertRows(2, 2, 'lefttop'));
+            expect(rangeData(s)?.categories?.row).toEqual([0, 6]);
+            expect(sliceColors(s)).toEqual(['#000001', '#000002', null, null, '#000003', '#000004', '#000005']);
+        });
+
+        test('a chart without categories keeps its colors with its first series’ values', () => {
+            const [s] = applySheetsDeleteRowCol(workbook({ c1: pie(null) }), deleteRows(0, 0));
+            expect(sliceColors(s)).toEqual(['#000002', '#000003', '#000004', '#000005']);
+        });
+
+        test('an op outside the categories or across them keeps the colors', () => {
+            const [below] = applySheetsDeleteRowCol(workbook({ c1: pie() }), deleteRows(6, 7));
+            expect(sliceColors(below)).toEqual(COLORS);
+            const [moved] = applySheetsInsertRowCol(workbook({ c1: pie() }), insertRows(0, 1, 'lefttop'));
+            expect(rangeData(moved)?.categories?.row).toEqual([1, 5]);
+            expect(sliceColors(moved)).toEqual(COLORS);
+            const [column] = applySheetsDeleteRowCol(workbook({ c1: pie() }), {
+                type: 'column',
+                start: 2,
+                end: 2,
+                id: 'S',
+            });
+            expect(sliceColors(column)).toEqual(COLORS);
+        });
+
+        test('a bar chart’s spec changes only in its refs', () => {
+            const bar = chart({ categories: ref('S', [0, 4], [0, 0]), series: [series(ref('S', [0, 4]))] });
+            const [s] = applySheetsDeleteRowCol(workbook({ c1: bar }), deleteRows(2, 2));
+            const before: ChartSpec = JSON.parse(bar.spec);
+            expect(JSON.parse(s.charts!.c1.spec)).toEqual({
+                ...before,
+                data: {
+                    source: 'range',
+                    categories: ref('S', [0, 3], [0, 0]),
+                    series: [series(ref('S', [0, 3]))],
+                },
+            });
+        });
+    });
 });

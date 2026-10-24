@@ -131,8 +131,13 @@ export function cellLabel(cell: Cell | null): string {
 
 // Rewrites a range chart's refs through `map`, and returns the chart itself when no ref changed or
 // its spec is not a readable range chart. A null empties a values or categories ref, and a name ref
-// leaves the series unnamed.
-export function mapChartRefs(chart: SheetChart, map: (ref: CellRangeRef) => CellRangeRef | null): SheetChart {
+// leaves the series unnamed. `slices` rewrites the slice colors, given the ref the slices run along
+// before the map: the categories, or the first drawn series' values for a chart without them.
+export function mapChartRefs(
+    chart: SheetChart,
+    map: (ref: CellRangeRef) => CellRangeRef | null,
+    slices?: (colors: ChartSpec['sliceColors'], ref: CellRangeRef) => ChartSpec['sliceColors'],
+): SheetChart {
     const spec = parseChartSpec(chart.spec);
     if (spec?.data.source !== 'range') return chart;
     let moved = false;
@@ -151,5 +156,7 @@ export function mapChartRefs(chart: SheetChart, map: (ref: CellRangeRef) => Cell
             values: s.values && move(s.values),
         })),
     };
-    return moved ? { ...chart, spec: JSON.stringify({ ...spec, data }) } : chart;
+    const along = categories ?? series.find((s) => s.values)?.values;
+    const sliceColors = slices && along ? slices(spec.sliceColors, along) : spec.sliceColors;
+    return moved ? { ...chart, spec: JSON.stringify({ ...spec, sliceColors, data }) } : chart;
 }
