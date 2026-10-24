@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { createDocument, Editor, generateHTML, getSchema } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
@@ -6,6 +6,8 @@ import {
     CHART_DEFAULT_SIZE,
     CHART_MAX_SIDE,
     FLAT_CHART_LOOK,
+    MAX_CHART_SPEC_BYTES,
+    MAX_CHART_SPEC_DEPTH,
     newChartSpecParts,
     sampleChartSpec,
 } from '../../../../charts';
@@ -138,6 +140,57 @@ describe('chart HTML', () => {
     test('a pasted span.chart with an unbounded size parses at the max side', () => {
         const html = `<p><span class="chart" data-chart='${JSON.stringify(PARTS)}' data-width="300" data-height="100000000"></span></p>`;
         expect(chartsIn(html)).toMatchObject([{ width: 300, height: CHART_MAX_SIDE }]);
+    });
+
+    // A forged span.chart costs one bounded read: past the byte or depth limit its attribute isn't parsed, and the
+    // chart stores nothing from it, so nothing big syncs to the peers.
+    describe('a pasted span.chart', () => {
+        const pasted = (attrs: Record<string, string>) => {
+            const span = document.createElement('span');
+            span.className = 'chart';
+            for (const [name, value] of Object.entries(attrs)) span.setAttribute(name, value);
+            return `<p>${span.outerHTML}</p>`;
+        };
+        // The chart it parses as, and how often each attribute's text was parsed.
+        const read = (attrs: Record<string, string>) => {
+            const parse = spyOn(JSON, 'parse');
+            try {
+                const [chart] = chartsIn(pasted(attrs));
+                const parses = Object.values(attrs).map(
+                    (text) => parse.mock.calls.filter(([arg]) => arg === text).length,
+                );
+                return { chart, parses };
+            } finally {
+                parse.mockRestore();
+            }
+        };
+        const UNSET_LOOK = Object.fromEntries(Object.keys(LOOK).map((field) => [field, null]));
+
+        test('parses its parts and its look once each', () => {
+            const { chart, parses } = read({ 'data-chart': JSON.stringify(PARTS), 'data-look': JSON.stringify(LOOK) });
+            expect(chart).toMatchObject({ ...PARTS, ...LOOK });
+            expect(parses).toEqual([1, 1]);
+        });
+
+        test('past the byte limit parses neither, and stores no part and no look', () => {
+            const title = JSON.stringify({ text: 'x'.repeat(MAX_CHART_SPEC_BYTES) });
+            const { chart, parses } = read({
+                'data-chart': JSON.stringify({ ...PARTS, specTitle: title }),
+                'data-look': JSON.stringify({ ...LOOK, color: 'x'.repeat(MAX_CHART_SPEC_BYTES) }),
+            });
+            expect(chart).toMatchObject({ ...UNSET_PARTS, ...UNSET_LOOK });
+            expect(parses).toEqual([0, 0]);
+        });
+
+        test('past the depth limit parses neither, and stores no part and no look', () => {
+            const deep = `${'['.repeat(MAX_CHART_SPEC_DEPTH + 1)}${']'.repeat(MAX_CHART_SPEC_DEPTH + 1)}`;
+            const { chart, parses } = read({
+                'data-chart': `${JSON.stringify(PARTS).slice(0, -1)},"specFuture":${deep}}`,
+                'data-look': `${JSON.stringify(LOOK).slice(0, -1)},"future":${deep}}`,
+            });
+            expect(chart).toMatchObject({ ...UNSET_PARTS, ...UNSET_LOOK });
+            expect(parses).toEqual([0, 0]);
+        });
     });
 
     test('a caption that is not a string renders none, never throwing', () => {

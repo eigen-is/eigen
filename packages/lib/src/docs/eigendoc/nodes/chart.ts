@@ -5,6 +5,8 @@ import { nanoid } from 'nanoid';
 import {
     CHART_DEFAULT_SIZE,
     CHART_MAX_SIDE,
+    exceedsChartSpecBytes,
+    exceedsChartSpecDepth,
     newChartSpecParts,
     readChartLook,
     readChartSpec,
@@ -84,13 +86,25 @@ export function chartSvg(
 const sideOf = (element: HTMLElement, name: string) => side(Number(element.getAttribute(name)));
 
 // A pasted span.chart's parts or look, one JSON attribute for each set, each value read through the validators later.
+// One past the spec's byte or depth limit reads as empty, unparsed, so a forged one stores nothing.
 function recordOf(element: HTMLElement, name: 'data-chart' | 'data-look'): Record<string, unknown> {
+    const text = element.getAttribute(name) ?? '';
+    if (exceedsChartSpecBytes(text) || exceedsChartSpecDepth(text)) return {};
     try {
-        const record: unknown = JSON.parse(element.getAttribute(name) ?? '');
+        const record: unknown = JSON.parse(text);
         return isRecord(record) ? record : {};
     } catch {
         return {};
     }
+}
+
+// Every part and look field off one read of each attribute.
+function pastedChartAttrs(element: HTMLElement): Record<string, unknown> {
+    const look = recordOf(element, 'data-look');
+    return {
+        ...chartParts(recordOf(element, 'data-chart')),
+        ...Object.fromEntries(CHART_LOOK_FIELDS.map((field) => [field, look[field] ?? null])),
+    };
 }
 
 // An inline atom like a figure, sharing its frame. A chart has no intrinsic aspect ratio, so it stores both sides.
@@ -105,35 +119,22 @@ export const ChartNode = Node.create({
 
     draggable: true,
 
+    // getAttrs reads the parts and the look, each attribute once, so a foreign attribute of the same name never reaches
+    // the doc.
     addAttributes() {
+        const pasted = { default: null, parseHTML: () => null };
         return {
-            ...Object.fromEntries(
-                CHART_SPEC_PART_KEYS.map((key) => [
-                    key,
-                    {
-                        default: null,
-                        parseHTML: (element: HTMLElement) => chartParts(recordOf(element, 'data-chart'))[key],
-                    },
-                ]),
-            ),
+            ...Object.fromEntries(CHART_SPEC_PART_KEYS.map((key) => [key, pasted])),
             width: { default: null, parseHTML: (element: HTMLElement) => sideOf(element, 'data-width') },
             height: { default: null, parseHTML: (element: HTMLElement) => sideOf(element, 'data-height') },
-            ...Object.fromEntries(
-                CHART_LOOK_FIELDS.map((field) => [
-                    field,
-                    {
-                        default: null,
-                        parseHTML: (element: HTMLElement) => recordOf(element, 'data-look')[field] ?? null,
-                    },
-                ]),
-            ),
+            ...Object.fromEntries(CHART_LOOK_FIELDS.map((field) => [field, pasted])),
             ...figureFrameAttributes(),
         };
     },
 
     // Above the figure's span.figure, so the image inside never parses as a figure.
     parseHTML() {
-        return [{ tag: 'span.chart[data-chart]', priority: 70 }];
+        return [{ tag: 'span.chart[data-chart]', priority: 70, getAttrs: pastedChartAttrs }];
     },
 
     // The image is for an app that doesn't know the node; this schema reads the data attributes and skips it.
