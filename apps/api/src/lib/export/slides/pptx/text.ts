@@ -6,6 +6,7 @@ import { canvasTextValue } from '../../../document/prose-css';
 import { ALGN_BY_ALIGN, ANCHOR_BY_ALIGN, solidFillXml } from '../../../ooxml/drawingml';
 import { AHYP_NS } from '../../../ooxml/ooxml';
 import { uriReference } from '../../../ooxml/opc';
+import { MAX_SLIDE_EMU } from '../../../ooxml/presentationml';
 import { isElement } from '../../sanitize';
 import type { Slide } from './package';
 import { toEmu } from './shapes';
@@ -115,9 +116,9 @@ const QUOTE_INDENT_EM = canvasTextLength('.eigen-canvas-text blockquote', 'paddi
 const QUOTE_BAR_PX = canvasTextLength('.eigen-canvas-text blockquote', 'border-left', 'px');
 const QUOTE_OPACITY = Number(canvasTextValue('.eigen-canvas-text blockquote', 'opacity'));
 const PARAGRAPH_GAP_EM = canvasTextLength('.eigen-canvas-text p + p', 'margin-top', 'em');
-// The schema's ceilings, ST_TextSpacingPoint's and ST_TextMargin's, which a tall line or a deep nesting passes.
+// The schema's ceilings, ST_TextSpacingPoint's and ST_TextMargin's (MAX_SLIDE_EMU), which a tall line or a deep
+// nesting passes.
 const MAX_SPACING = 158_400;
-const MAX_MARGIN = 51_206_400;
 // ST_TextIndentLevelType's deepest level, and ST_TextFontSize's range.
 const MAX_LEVEL = 8;
 const MIN_FONT_SIZE = 100;
@@ -131,7 +132,7 @@ export function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox)
     const lineSpacing = `<a:lnSpc><a:spcPts val="${pitch}"/></a:lnSpc>`;
     const body = paragraphs.map((paragraph) => {
         const margin = Math.min(
-            MAX_MARGIN,
+            MAX_SLIDE_EMU,
             em(paragraph.depth * LIST_INDENT_EM) +
                 paragraph.quotes * (em(QUOTE_INDENT_EM) + toEmu(slide, QUOTE_BAR_PX)),
         );

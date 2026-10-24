@@ -8,6 +8,10 @@ import { UNSTORED_SLIDE_WIDTH } from '@workspace/lib/vector';
 export const PML = 'application/vnd.openxmlformats-officedocument.presentationml';
 export const PRESENTATION_TYPE = `${PML}.presentation.main+xml`;
 
+// ST_SlideSizeCoordinate's range in EMU, 1 to 56 inches; ST_TextMargin stops at the same 56.
+export const MIN_SLIDE_EMU = 914_400;
+export const MAX_SLIDE_EMU = 51_206_400;
+
 // The on-screen show sizes ST_SlideSizeType names, both 10 in wide, as a deck that stores no width is; a deck of
 // another width, a new one's 13.33 in among them, is custom, the attribute's default, which the writer leaves out.
 export const SCREEN_SLIDE_WIDTH = UNSTORED_SLIDE_WIDTH;

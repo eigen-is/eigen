@@ -6,6 +6,7 @@ import type { XmlElement } from '../../core/xml';
 import { xmlAttr } from '../../core/xml';
 import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
 import { EMU_PER_POINT, P_NS } from '../../ooxml/ooxml';
+import { MAX_SLIDE_EMU, MIN_SLIDE_EMU } from '../../ooxml/presentationml';
 import type { ImportedMedia } from '../image-types';
 import { importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError } from '../messages';
@@ -40,9 +41,7 @@ export type PptxOptions = { deck?: SlidePage; maxMediaBytes: number };
 // this. Over ten times the corpus's most, 260,005 in a 369-slide deck.
 export const MAX_PPTX_WORK = 3_000_000;
 
-// ST_SlideSizeCoordinate's range, 1 to 56 inches; PowerPoint's 4:3, 10 by 7.5 in, where the file states none.
-const MIN_SLIDE_EMU = 72 * EMU_PER_POINT;
-const MAX_SLIDE_EMU = MAX_SLIDE_WIDTH * EMU_PER_POINT;
+// PowerPoint's 4:3, 10 by 7.5 in, where the file states none.
 const DEFAULT_SLIDE_EMU = { cx: 9_144_000, cy: 6_858_000 };
 
 export function readPptx(bytes: Uint8Array, options: PptxOptions): PptxDeck {
