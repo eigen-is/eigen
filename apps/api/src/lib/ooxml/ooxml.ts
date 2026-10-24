@@ -1,6 +1,6 @@
 import { MARKUP_COMPATIBILITY_NAMESPACE, OMML_NAMESPACE, WORDML_NAMESPACE } from '@workspace/math';
 import type { XmlElement } from '../core/xml';
-import { hasXmlName, parseXml, xmlElements } from '../core/xml';
+import { hasXmlName, parseXml, xmlAttr, xmlElements } from '../core/xml';
 
 // The OOXML every format's reader and writer share: namespaces, Strict read as transitional, markup compatibility and
 // the units. Word's own vocabulary is ooxml/wordml.ts.
@@ -131,4 +131,9 @@ export function isOn(value: string | undefined): boolean | undefined {
     if (trimmed === undefined) return undefined;
     if (['1', 'true', 'on'].includes(trimmed)) return true;
     return ['0', 'false', 'off'].includes(trimmed) ? false : undefined;
+}
+
+// CT_OnOff and CT_Boolean: a bare element is on; no element is no answer. WordprocessingML puts its val in its namespace.
+export function isOnElement(element: XmlElement | undefined, ns = ''): boolean | undefined {
+    return element ? (isOn(xmlAttr(element, ns, 'val')) ?? true) : undefined;
 }

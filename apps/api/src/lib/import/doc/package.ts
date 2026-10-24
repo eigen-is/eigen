@@ -3,7 +3,7 @@ import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspa
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
-import { alternativeFor, isOn, measure, R_NS, W_NS } from '../../ooxml/ooxml';
+import { alternativeFor, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
 import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType } from '../../ooxml/opc';
 import type { ZipReader } from '../../ooxml/zip';
@@ -172,10 +172,8 @@ export function wChild(element: XmlElement | undefined, local: string): XmlEleme
     return element && xmlChild(element, W_NS, local);
 }
 
-// A bare element is on.
 export function onOff(element: XmlElement | undefined): boolean | undefined {
-    if (!element) return undefined;
-    return isOn(w(element, 'val')) ?? true;
+    return isOnElement(element, W_NS);
 }
 
 export function int(value: string | undefined): number | undefined {
