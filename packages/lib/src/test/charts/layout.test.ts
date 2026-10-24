@@ -32,7 +32,7 @@ const PAINT: ChartPaint = {
 const style = { markers: false, smooth: false };
 
 function series(name: string, values: (number | null)[], color: string | null = '#2a78d6') {
-    return { ...style, color, name, values };
+    return { ...style, id: name, color, name, values };
 }
 
 // The sample without its axis titles, for tests that measure the room left to the plot and its labels.

@@ -40,6 +40,7 @@ const chart: SheetChart = {
             categories: ref([1, 2], [0, 0]),
             series: [
                 {
+                    id: 's-1',
                     name: ref([0, 0], [1, 1]),
                     values: ref([1, 2], [1, 1]),
                     color: '#2a78d6',

@@ -29,7 +29,11 @@ const chart: SheetChart = {
     height: 200,
     spec: JSON.stringify({
         ...sampleChartSpec('column'),
-        data: { source: 'inline', categories: ['A', 'B'], series: [{ name: 'S', values: [1, 2], color: null }] },
+        data: {
+            source: 'inline',
+            categories: ['A', 'B'],
+            series: [{ id: 's-1', name: 'S', values: [1, 2], color: null }],
+        },
     }),
 };
 const PATH = drivePath({ name: 'cat.png', mimeType: 'image/png' });

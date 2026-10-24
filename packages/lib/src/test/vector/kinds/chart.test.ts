@@ -28,6 +28,7 @@ const RANGE_SPEC = specJson({
         categories: { sheetId: 's1', row: [1, 4], column: [0, 0] },
         series: [
             {
+                id: 's-1',
                 name: 'Sales',
                 values: { sheetId: 's1', row: [1, 4], column: [1, 1] },
                 color: '#2a78d6',

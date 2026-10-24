@@ -85,7 +85,16 @@ describe('sheet/core/api/sheet', () => {
             data: {
                 source: 'range',
                 categories: ref('id_2'),
-                series: [{ name: ref('id_1'), values: ref('id_1'), color: '#2a78d6', markers: false, smooth: false }],
+                series: [
+                    {
+                        id: 's-1',
+                        name: ref('id_1'),
+                        values: ref('id_1'),
+                        color: '#2a78d6',
+                        markers: false,
+                        smooth: false,
+                    },
+                ],
             },
         };
         const chart = { id: 'c1', index: 'a0', x: 0, y: 0, width: 400, height: 300, spec: JSON.stringify(spec) };

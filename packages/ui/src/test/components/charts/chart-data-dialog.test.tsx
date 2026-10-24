@@ -25,8 +25,8 @@ type InlineSpec = ChartSpec & { data: InlineChartData };
 // down column A, A1 empty. A pie keeps the first series, as a new pie does.
 function scores(type: 'column' | 'pie' = 'column'): InlineSpec {
     const periods = [
-        { ...DEFAULT_CHART_SERIES_STYLE, name: 'Period 1', values: [42, 65, 38, 80] },
-        { ...DEFAULT_CHART_SERIES_STYLE, name: 'Period 2', values: [58, 47, 71, 63] },
+        { ...DEFAULT_CHART_SERIES_STYLE, id: 's-1', name: 'Period 1', values: [42, 65, 38, 80] },
+        { ...DEFAULT_CHART_SERIES_STYLE, id: 's-2', name: 'Period 2', values: [58, 47, 71, 63] },
     ];
     return {
         ...defaultChartPresentation(type),
@@ -48,6 +48,7 @@ function grid(seriesCount: number, rows: number): InlineSpec {
             categories: Array.from({ length: rows }, (_, i) => `C${i}`),
             series: Array.from({ length: seriesCount }, (_, j) => ({
                 ...style,
+                id: `s-${j}`,
                 color: chartColor(j),
                 name: `S${j}`,
                 values: Array.from({ length: rows }, (_, i) => i),
@@ -445,18 +446,16 @@ describe('ChartDataDialog: growing the grid', () => {
         expect(spec.sliceColors).toEqual([null, null, null, null, null]);
     });
 
-    test('typing in the trailing column adds a series in an automatic color', async () => {
+    test('typing in the trailing column adds a series in an automatic color, under a new id', async () => {
         const dialog = await open(scores());
         await dialog.select(2, 3);
         await dialog.type('5');
         await dialog.key('Enter');
         const spec = await dialog.save();
-        expect(spec.data.series[2]).toEqual({
-            ...style,
-            color: null,
-            name: '',
-            values: [null, 5, null, null],
-        });
+        const { id, ...added } = spec.data.series[2];
+        expect(added).toEqual({ ...style, color: null, name: '', values: [null, 5, null, null] });
+        expect(id).toMatch(/^s-[A-Za-z0-9_-]{10}$/);
+        expect(spec.data.series.slice(0, 2).map((series) => series.id)).toEqual(['s-1', 's-2']);
     });
 
     test('a trailing cell left empty adds nothing', async () => {

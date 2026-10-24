@@ -77,13 +77,12 @@ export function insertChartFromSelection(ctx: Context, id: string): ChartRangeRe
     selectFloatingObject(ctx, { kind: 'chart', id });
 }
 
-// A typed data range is set up the way Insert sets up a selection, each series keeping its style.
+// A typed data range is set up the way Insert sets up a selection, each series keeping its id and style.
 export function setChartDataRange(ctx: Context, id: string, ref: CellRangeRef) {
     const chart = editableCurrentSheet(ctx)?.charts?.[id];
     const spec = chart ? parseChartSpec(chart.spec) : null;
     if (!spec) return;
-    const styles = spec.data.series.map(({ color, markers, smooth }) => ({ color, markers, smooth }));
-    const setup = setUpChartRange(ref, createContextResolver(ctx), styles);
+    const setup = setUpChartRange(ref, createContextResolver(ctx), spec.data);
     if (typeof setup !== 'string') setChartSpec(ctx, id, { ...spec, data: setup.data });
 }
 

@@ -11,6 +11,7 @@ import {
     MAX_CHART_POINTS,
     MAX_CHART_SERIES,
     MAX_CHART_SPEC_BYTES,
+    newChartSeriesId,
     parseChartSpec,
     sampleChartSpec,
 } from '../../charts';
@@ -29,6 +30,7 @@ function inlineData(seriesCount: number, pointCount: number): InlineChartData {
         categories: Array.from({ length: pointCount }, (_, i) => `C${i}`),
         series: Array.from({ length: seriesCount }, (_, i) => ({
             ...style,
+            id: `s-${i}`,
             name: `S${i}`,
             values: Array.from({ length: pointCount }, (_, j) => j),
         })),
@@ -50,10 +52,11 @@ const rangeData: RangeChartData = {
     series: [
         {
             ...style,
+            id: 's-1',
             name: { sheetId: 'sheet-1', row: [0, 0], column: [1, 1] },
             values: { sheetId: 'sheet-1', row: [1, 4], column: [1, 1] },
         },
-        { ...style, color: '#eb6834', markers: true, smooth: true, name: 'Literal', values: null },
+        { ...style, id: 's-2', color: '#eb6834', markers: true, smooth: true, name: 'Literal', values: null },
     ],
 };
 
@@ -194,7 +197,7 @@ describe('parseChartSpec', () => {
 
     test('a non-number value in an inline series rejects the spec, since values are data', () => {
         const values = (v: unknown) =>
-            stored({ data: { ...inlineData(1, 1), series: [{ ...style, name: 'S', values: [v] }] } });
+            stored({ data: { ...inlineData(1, 1), series: [{ ...style, id: 's-1', name: 'S', values: [v] }] } });
         expect(parseChartSpec(values('NaN'))).toBeNull();
         // JSON.parse reads an overflowing literal as Infinity
         expect(parseChartSpec(values('INF').replace('"INF"', '1e999'))).toBeNull();
@@ -204,7 +207,7 @@ describe('parseChartSpec', () => {
         const data: InlineChartData = {
             source: 'inline',
             categories: ['a', 'b'],
-            series: [{ ...style, name: 'S', values: [1, null] }],
+            series: [{ ...style, id: 's-1', name: 'S', values: [1, null] }],
         };
         expect(parseChartSpec(JSON.stringify(chart({ data })))?.data).toEqual(data);
     });
@@ -213,7 +216,7 @@ describe('parseChartSpec', () => {
         const data: InlineChartData = {
             source: 'inline',
             categories: ['a'],
-            series: [{ ...style, name: 'S', values: [1, 2, 3] }],
+            series: [{ ...style, id: 's-1', name: 'S', values: [1, 2, 3] }],
         };
         expect(parseChartSpec(JSON.stringify(chart({ data })))?.data).toEqual(data);
     });
@@ -232,8 +235,8 @@ describe('parseChartSpec', () => {
                     data: {
                         ...inlineData(2, 1),
                         series: [
-                            { ...style, name: 'A', values: [1] },
-                            { ...style, color, name: 'B', values: [1] },
+                            { ...style, id: 's-1', name: 'A', values: [1] },
+                            { ...style, id: 's-2', color, name: 'B', values: [1] },
                         ],
                     },
                 }),
@@ -245,9 +248,10 @@ describe('parseChartSpec', () => {
         expect(series('transparent')?.color).toBe('transparent');
         const { color, markers, smooth, ...rest } = style;
         expect(
-            parseChartSpec(stored({ data: { ...inlineData(1, 1), series: [{ ...rest, name: 7, values: [1] }] } }))?.data
-                .series[0],
-        ).toEqual({ color: null, markers: false, smooth: false, name: '', values: [1] });
+            parseChartSpec(
+                stored({ data: { ...inlineData(1, 1), series: [{ ...rest, id: 's-1', name: 7, values: [1] }] } }),
+            )?.data.series[0],
+        ).toEqual({ color: null, markers: false, smooth: false, id: 's-1', name: '', values: [1] });
         expect(parseChartSpec(stored({ sliceColors: ['#fff', 'blue', null] }))?.sliceColors).toEqual([
             '#fff',
             null,
@@ -263,7 +267,11 @@ describe('parseChartSpec', () => {
                 chart({
                     title: long,
                     categoryAxis: { ...chart().categoryAxis, title: long },
-                    data: { source: 'inline', categories: [long], series: [{ ...style, name: long, values: [1] }] },
+                    data: {
+                        source: 'inline',
+                        categories: [long],
+                        series: [{ ...style, id: 's-1', name: long, values: [1] }],
+                    },
                 }),
             ),
         );
@@ -273,7 +281,7 @@ describe('parseChartSpec', () => {
         expect(spec?.data).toEqual({
             source: 'inline',
             categories: [capped],
-            series: [{ ...style, name: capped, values: [1] }],
+            series: [{ ...style, id: 's-1', name: capped, values: [1] }],
         });
     });
 
@@ -341,7 +349,9 @@ describe('parseChartSpec', () => {
     test('a range ref with a negative, fractional or unordered bound, or an empty sheet id, rejects the spec', () => {
         const ref = { sheetId: 'sheet-1', row: [0, 3], column: [1, 1] };
         const withValues = (values: unknown) =>
-            stored({ data: { source: 'range', categories: null, series: [{ ...style, name: 'S', values }] } });
+            stored({
+                data: { source: 'range', categories: null, series: [{ ...style, id: 's-1', name: 'S', values }] },
+            });
         expect(parseChartSpec(withValues(ref))).not.toBeNull();
         expect(parseChartSpec(withValues({ ...ref, row: [-1, 3] }))).toBeNull();
         expect(parseChartSpec(withValues({ ...ref, row: [3, 0] }))).toBeNull();
@@ -354,10 +364,50 @@ describe('parseChartSpec', () => {
     test("a range ref past Excel's grid rejects the spec", () => {
         const ref = { sheetId: 'sheet-1', row: [0, REFERENCE_ROW_COUNT - 1], column: [0, REFERENCE_COLUMN_COUNT - 1] };
         const withValues = (values: unknown) =>
-            stored({ data: { source: 'range', categories: null, series: [{ ...style, name: 'S', values }] } });
+            stored({
+                data: { source: 'range', categories: null, series: [{ ...style, id: 's-1', name: 'S', values }] },
+            });
         expect(parseChartSpec(withValues(ref))).not.toBeNull();
         expect(parseChartSpec(withValues({ ...ref, row: [0, REFERENCE_ROW_COUNT] }))).toBeNull();
         expect(parseChartSpec(withValues({ ...ref, column: [0, REFERENCE_COLUMN_COUNT] }))).toBeNull();
+    });
+});
+
+describe('series ids', () => {
+    const withIds = (...ids: unknown[]) =>
+        stored({
+            data: {
+                ...inlineData(ids.length, 1),
+                series: ids.map((id, i) => ({ ...style, id, name: `S${i}`, values: [1] })),
+            },
+        });
+
+    test('every series has a string id of up to 64 letters, digits, - or _, unique in its chart', () => {
+        expect(parseChartSpec(withIds('s-1', 'x-0', `A_${'z'.repeat(62)}`))?.data.series.map((s) => s.id)).toEqual([
+            's-1',
+            'x-0',
+            `A_${'z'.repeat(62)}`,
+        ]);
+        for (const id of [undefined, 7, null, '', 'x'.repeat(65), 's 1', 's/1', 'é']) {
+            expect(parseChartSpec(withIds(id))).toBeNull();
+        }
+        expect(parseChartSpec(withIds('s-1', 's-1'))).toBeNull();
+    });
+
+    test("a name a plain object inherits is no id, so a record keyed by ids can't reach a prototype", () => {
+        for (const id of ['__proto__', 'constructor', 'prototype']) expect(parseChartSpec(withIds(id))).toBeNull();
+    });
+
+    test('a range series needs one too', () => {
+        const series = rangeData.series.map(({ id, ...rest }) => rest);
+        expect(parseChartSpec(stored({ data: { ...rangeData, series } }))).toBeNull();
+    });
+
+    test('a new id is s- and ten of nanoid, and the sample numbers its series', () => {
+        expect(newChartSeriesId()).toMatch(/^s-[A-Za-z0-9_-]{10}$/);
+        expect(newChartSeriesId()).not.toBe(newChartSeriesId());
+        expect(sampleChartSpec('column').data.series.map((s) => s.id)).toEqual(['s-1', 's-2', 's-3']);
+        expect(sampleChartSpec('pie').data.series.map((s) => s.id)).toEqual(['s-1']);
     });
 });
 
@@ -370,7 +420,7 @@ describe('exceedsInlineGridLimits', () => {
         const ragged: InlineChartData = {
             source: 'inline',
             categories: [],
-            series: [{ ...style, name: 'S', values: Array(INLINE_GRID_MAX_CATEGORIES + 1).fill(1) }],
+            series: [{ ...style, id: 's-1', name: 'S', values: Array(INLINE_GRID_MAX_CATEGORIES + 1).fill(1) }],
         };
         expect(exceedsInlineGridLimits(ragged)).toBe(true);
     });
@@ -386,8 +436,13 @@ describe('exceedsInlineGridLimits', () => {
             source: 'inline',
             categories: [],
             series: [
-                { ...style, name: 'Long', values: Array(INLINE_GRID_MAX_CATEGORIES).fill(1) },
-                ...Array.from({ length: INLINE_GRID_MAX_SERIES - 1 }, () => ({ ...style, name: 'Short', values: [1] })),
+                { ...style, id: 's-0', name: 'Long', values: Array(INLINE_GRID_MAX_CATEGORIES).fill(1) },
+                ...Array.from({ length: INLINE_GRID_MAX_SERIES - 1 }, (_, i) => ({
+                    ...style,
+                    id: `s-${i + 1}`,
+                    name: 'Short',
+                    values: [1],
+                })),
             ],
         };
         expect(exceedsInlineGridLimits(ragged)).toBe(true);

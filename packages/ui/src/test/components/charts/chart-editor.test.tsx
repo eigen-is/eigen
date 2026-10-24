@@ -419,14 +419,14 @@ describe('ChartEditor', () => {
 
     test('range data has no Edit data, as its grid is the sheet', async () => {
         const ref = { sheetId: 's1', row: [1, 3] as [number, number], column: [1, 1] as [number, number] };
-        const series = { name: 'Points', values: ref, color: chartColor(0), markers: false, smooth: false };
+        const series = { id: 's-1', name: 'Points', values: ref, color: chartColor(0), markers: false, smooth: false };
         const range: ChartSpec = { ...sample('column'), data: { source: 'range', categories: null, series: [series] } };
         expect((await mount(range)).button('Edit data')).toBeUndefined();
     });
 
     test("a range chart's slices take the categories its sheet resolved", async () => {
         const ref = { sheetId: 's1', row: [1, 3] as [number, number], column: [1, 1] as [number, number] };
-        const series = { name: 'Points', values: ref, color: chartColor(0), markers: false, smooth: false };
+        const series = { id: 's-1', name: 'Points', values: ref, color: chartColor(0), markers: false, smooth: false };
         const range: ChartSpec = { ...sample('column'), data: { source: 'range', categories: null, series: [series] } };
         const editor = await mount(range, undefined, { categories: ['Ajax', 'PSV', ''] });
         await editor.choose('Type', 'Pie');
@@ -501,9 +501,9 @@ describe('ChartEditor', () => {
                 source: 'range',
                 categories: null,
                 series: [
-                    { ...style(0), name: name(1), values: ref(1) },
-                    { ...style(1), name: '', values: null },
-                    { ...style(2), name: name(2), values: ref(2) },
+                    { ...style(0), id: 's-1', name: name(1), values: ref(1) },
+                    { ...style(1), id: 's-2', name: '', values: null },
+                    { ...style(2), id: 's-3', name: name(2), values: ref(2) },
                 ],
             },
         };

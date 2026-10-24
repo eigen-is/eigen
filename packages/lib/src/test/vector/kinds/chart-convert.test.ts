@@ -24,6 +24,7 @@ const CROWDED = specJson('column', {
         categories: Array.from({ length: 12 }, (_, i) => `Category number ${i + 1}`),
         series: [
             {
+                id: 's-1',
                 name: 'Sales',
                 values: Array.from({ length: 12 }, (_, i) => i + 1),
                 color: '#2a78d6',

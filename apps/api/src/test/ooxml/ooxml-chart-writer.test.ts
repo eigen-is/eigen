@@ -15,6 +15,7 @@ import { IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
 import { A_NS, C_NS, parseOoxml } from '../../lib/ooxml/ooxml';
 import { readChart } from '../../lib/ooxml/ooxml-chart';
 import { writeChart } from '../../lib/ooxml/ooxml-chart-writer';
+import { seriesIdsByPlace } from '../fixtures/chart-spec';
 
 // A ChartSpec written as a c:chartSpace and read back by Eigen's own reader: the same spec, its ranges by the names the
 // workbook writes and its numbers inline as literals.
@@ -56,8 +57,8 @@ function rangeSpec(
 }
 
 const RANGE_SERIES: RangeChartSeries[] = [
-    { ...DEFAULT_CHART_SERIES_STYLE, name: ref([0, 0], [1, 1]), values: ref([1, 3], [1, 1]) },
-    { ...DEFAULT_CHART_SERIES_STYLE, color: '#112233', name: 'Plan', values: ref([1, 3], [2, 2], 's2') },
+    { ...DEFAULT_CHART_SERIES_STYLE, id: 's-1', name: ref([0, 0], [1, 1]), values: ref([1, 3], [1, 1]) },
+    { ...DEFAULT_CHART_SERIES_STYLE, id: 's-2', color: '#112233', name: 'Plan', values: ref([1, 3], [2, 2], 's2') },
 ];
 
 function root(xml: string): XmlElement {
@@ -69,7 +70,7 @@ function root(xml: string): XmlElement {
 function read(xml: string, data: Parameters<typeof readChart>[1]['data']): ChartSpec {
     const result = readChart(root(xml), { theme, data });
     if (!('spec' in result)) throw new Error(`unsupported: ${JSON.stringify(result.unsupported)}`);
-    return result.spec;
+    return seriesIdsByPlace(result.spec);
 }
 
 const throughRanges = (spec: ChartSpec, cache?: ChartData) =>
@@ -133,7 +134,9 @@ describe('writeChart with range data', () => {
         const spec = rangeSpec('pie', { sliceColors: [null, '#abcdef'] }, RANGE_SERIES.slice(0, 1));
         const cache: ChartData = {
             categories: ['North', 'South', 'East'],
-            series: [{ ...DEFAULT_CHART_SERIES_STYLE, color: chartColor(0), name: 'Sales', values: [1, 2, 3] }],
+            series: [
+                { ...DEFAULT_CHART_SERIES_STYLE, id: 's-1', color: chartColor(0), name: 'Sales', values: [1, 2, 3] },
+            ],
         };
         const xml = writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK });
         expect(throughRanges(spec, cache)).toEqual(axesOf(spec));
@@ -166,7 +169,7 @@ describe('writeChart with range data', () => {
         const series = [
             RANGE_SERIES[0],
             { ...RANGE_SERIES[1], color: '#11223380' },
-            { ...RANGE_SERIES[1], color: null },
+            { ...RANGE_SERIES[1], id: 's-3', color: null },
         ];
         const spec = rangeSpec('column', {}, series);
         const xml = writeChart(spec, { ranges, look: FLAT_CHART_LOOK });
@@ -219,13 +222,13 @@ describe('writeChart with range data', () => {
         const spec = rangeSpec('column', {}, [
             RANGE_SERIES[0],
             { ...RANGE_SERIES[1], values: null },
-            { ...RANGE_SERIES[1], name: 'Actual' },
+            { ...RANGE_SERIES[1], id: 's-3', name: 'Actual' },
         ]);
         const cache: ChartData = {
             categories: ['North', 'South', 'East'],
             series: [
-                { ...DEFAULT_CHART_SERIES_STYLE, color: chartColor(0), name: 'Sales', values: [1, null, 3] },
-                { ...DEFAULT_CHART_SERIES_STYLE, color: '#112233', name: 'Actual', values: [4.5, 5, -6e-7] },
+                { ...DEFAULT_CHART_SERIES_STYLE, id: 's-1', color: chartColor(0), name: 'Sales', values: [1, null, 3] },
+                { ...DEFAULT_CHART_SERIES_STYLE, id: 's-3', color: '#112233', name: 'Actual', values: [4.5, 5, -6e-7] },
             ],
         };
         const inline = read(writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK }), 'cache');
@@ -233,9 +236,9 @@ describe('writeChart with range data', () => {
             source: 'inline',
             categories: ['North', 'South', 'East'],
             series: [
-                { ...DEFAULT_CHART_SERIES_STYLE, name: 'Sales', values: [1, null, 3] },
-                { ...DEFAULT_CHART_SERIES_STYLE, color: '#112233', name: 'Plan', values: [] },
-                { ...DEFAULT_CHART_SERIES_STYLE, color: '#112233', name: 'Actual', values: [4.5, 5, -6e-7] },
+                { ...DEFAULT_CHART_SERIES_STYLE, id: 's-1', name: 'Sales', values: [1, null, 3] },
+                { ...DEFAULT_CHART_SERIES_STYLE, id: 's-2', color: '#112233', name: 'Plan', values: [] },
+                { ...DEFAULT_CHART_SERIES_STYLE, id: 's-3', color: '#112233', name: 'Actual', values: [4.5, 5, -6e-7] },
             ],
         });
         expect(throughRanges(spec, cache)).toEqual(spec);
@@ -270,8 +273,8 @@ describe('writeChart with inline data', () => {
                 source: 'inline',
                 categories: [],
                 series: [
-                    { ...DEFAULT_CHART_SERIES_STYLE, name: '', values: [1, null, 3, null] },
-                    { ...DEFAULT_CHART_SERIES_STYLE, name: 'Two', values: [] },
+                    { ...DEFAULT_CHART_SERIES_STYLE, id: 's-1', name: '', values: [1, null, 3, null] },
+                    { ...DEFAULT_CHART_SERIES_STYLE, id: 's-2', name: 'Two', values: [] },
                 ],
             },
         });

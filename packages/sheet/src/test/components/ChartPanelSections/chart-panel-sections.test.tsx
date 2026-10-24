@@ -41,6 +41,7 @@ const rangeChart = (): SheetChart => ({
             categories: ref([1, 3], [0, 0]),
             series: [
                 {
+                    id: 's-1',
                     name: ref([0, 0], [1, 1]),
                     values: ref([1, 3], [1, 1]),
                     color: '#000000',
@@ -308,6 +309,7 @@ test('a range chart past the sketch cap says so under Sketch', async () => {
             categories: null,
             series: [
                 {
+                    id: 's-1',
                     name: 'Points',
                     values: ref([1, MAX_SKETCH_POINTS + 1], [1, 1]),
                     color: null,

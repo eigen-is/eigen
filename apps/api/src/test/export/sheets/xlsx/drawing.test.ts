@@ -15,6 +15,7 @@ import { CHART_CONTENT_TYPE } from '../../../../lib/ooxml/ooxml-chart';
 import type { PackagePart } from '../../../../lib/ooxml/opc';
 import { pxToColumnWidth } from '../../../../lib/ooxml/spreadsheetml';
 import { MAX_DECOMPRESSED_BYTES, openZip } from '../../../../lib/ooxml/zip';
+import { seriesIdsByPlace } from '../../../fixtures/chart-spec';
 import { PIXEL_PNG } from '../../../fixtures/pptx';
 import { exportXlsx, xlsxFixture } from '../../../fixtures/xlsx';
 
@@ -35,7 +36,14 @@ const RANGE_SPEC = JSON.stringify({
         source: 'range',
         categories: range([1, 3], [0, 0]),
         series: [
-            { name: range([0, 0], [1, 1]), values: range([1, 3], [1, 1]), color: null, markers: false, smooth: false },
+            {
+                id: 's-1',
+                name: range([0, 0], [1, 1]),
+                values: range([1, 3], [1, 1]),
+                color: null,
+                markers: false,
+                smooth: false,
+            },
         ],
     },
 });
@@ -147,7 +155,7 @@ describe('drawingOf', () => {
         const charts = Object.values(sheets[0].charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
         const written = [INLINE, RANGED];
         expect(charts.map(boxOf)).toEqual(written.map(boxOf));
-        expect(charts.map((chart) => parseChartSpec(chart.spec))).toEqual(
+        expect(charts.map((chart) => parseChartSpec(chart.spec)).map((spec) => spec && seriesIdsByPlace(spec))).toEqual(
             written.map((chart) => parseChartSpec(chart.spec)),
         );
     });
@@ -208,7 +216,7 @@ describe('drawingOf', () => {
             data: {
                 source: 'range',
                 categories: null,
-                series: [{ name: 'Sales', values, color: null, markers: false, smooth: false }],
+                series: [{ id: 's-1', name: 'Sales', values, color: null, markers: false, smooth: false }],
             },
         });
         const pie: Sheet = { ...SUMMARY, charts: byId({ ...RANGED, spec }) };
@@ -335,7 +343,7 @@ describe('the workbook', () => {
         const charts = Object.values(read.charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
         expect(charts.map(boxOf)).toEqual([INLINE, turned].map(boxOf));
         expect(charts.map((chart) => chart.angle ?? 0)).toEqual([0, 0]);
-        expect(charts.map((chart) => parseChartSpec(chart.spec))).toEqual(
+        expect(charts.map((chart) => parseChartSpec(chart.spec)).map((spec) => spec && seriesIdsByPlace(spec))).toEqual(
             [INLINE, turned].map((chart) => parseChartSpec(chart.spec)),
         );
     });

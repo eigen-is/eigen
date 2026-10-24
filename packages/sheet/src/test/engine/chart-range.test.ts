@@ -119,10 +119,21 @@ describe('chartRangeData', () => {
         expect(data?.series[0]).toMatchObject({ name: '', values: ref([0, 3], [0, 0]) });
     });
 
-    test('keeps the series styles it is given, and a new series takes the palette color at its index', () => {
-        const data = chartRangeData(range, [{ color: '#000000', markers: true, smooth: false }]);
-        expect(data?.series[0]).toMatchObject({ color: '#000000', markers: true });
-        expect(data?.series[1].color).toBeNull();
+    test("keeps the previous data's series ids and styles by index, and a series past them is new and automatic", () => {
+        const previous = chartRangeData({ ...range, ref: ref([0, 3], [0, 1]) });
+        if (!previous) throw new Error('no data');
+        const kept = { ...previous.series[0], id: 's-kept', color: '#000000', markers: true };
+        const data = chartRangeData(range, { ...previous, series: [kept] });
+        expect(data?.series[0]).toMatchObject({ id: 's-kept', color: '#000000', markers: true });
+        expect(data?.series[1]).toMatchObject({ color: null, markers: false });
+        expect(data?.series.map(({ id }) => id.startsWith('s-'))).toEqual([true, true, true]);
+        expect(new Set(data?.series.map(({ id }) => id)).size).toBe(3);
+    });
+
+    test('a block set up again keeps its series ids by index', () => {
+        const before = chartRangeData(range);
+        const after = chartRangeData({ ...range, seriesInRows: true }, before ?? undefined);
+        expect(after?.series.map(({ id }) => id)).toEqual(before?.series.map(({ id }) => id));
     });
 
     test('a range with no values or more series than a chart holds has no data', () => {

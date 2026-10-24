@@ -423,8 +423,8 @@ describe('charts', () => {
                 source: 'inline',
                 categories: ['North', 'South'],
                 series: [
-                    { name: 'Plan', values: [1, 2], color: '#c00000', markers: false, smooth: false },
-                    { name: 'Actual', values: [3, 4], color: '#00b050', markers: false, smooth: false },
+                    { id: 'x-0', name: 'Plan', values: [1, 2], color: '#c00000', markers: false, smooth: false },
+                    { id: 'x-1', name: 'Actual', values: [3, 4], color: '#00b050', markers: false, smooth: false },
                 ],
             },
         ]);

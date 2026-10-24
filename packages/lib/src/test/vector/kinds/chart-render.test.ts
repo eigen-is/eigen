@@ -24,6 +24,7 @@ const RANGE_SPEC: ChartSpec = {
         categories: { sheetId: 's1', row: [1, 2], column: [0, 0] },
         series: [
             {
+                id: 's-1',
                 name: 'Sales',
                 values: { sheetId: 's1', row: [1, 2], column: [1, 1] },
                 color: '#2a78d6',
@@ -36,7 +37,7 @@ const RANGE_SPEC: ChartSpec = {
 
 const RESOLVED: ChartData = {
     categories: ['North', 'South'],
-    series: [{ name: 'Sales', values: [3, 5], color: '#2a78d6', markers: false, smooth: false }],
+    series: [{ id: 's-1', name: 'Sales', values: [3, 5], color: '#2a78d6', markers: false, smooth: false }],
 };
 
 const svgOf = (spec: ChartSpec | null, data?: ChartData | 'ref' | 'too-many-points'): string =>

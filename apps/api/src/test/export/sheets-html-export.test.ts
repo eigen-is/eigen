@@ -1206,6 +1206,7 @@ describe('Sheets HTML export — charts', () => {
                     categories: ref(sheetId, [1, 2], [0, 0]),
                     series: [
                         {
+                            id: 's-1',
                             name: ref(sheetId, [0, 0], [1, 1]),
                             values: ref(sheetId, [1, 2], [1, 1]),
                             color: '#2a78d6',

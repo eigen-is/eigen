@@ -104,8 +104,15 @@ describe('a bar chart', () => {
                 source: 'inline',
                 categories: CATEGORIES,
                 series: [
-                    { name: 'Plan', color: ACCENTS[0], markers: false, smooth: false, values: [1, 2, 3] },
-                    { name: 'Actual', color: ACCENTS[1], markers: false, smooth: false, values: [4.5, 5, 6] },
+                    { id: 'x-0', name: 'Plan', color: ACCENTS[0], markers: false, smooth: false, values: [1, 2, 3] },
+                    {
+                        id: 'x-1',
+                        name: 'Actual',
+                        color: ACCENTS[1],
+                        markers: false,
+                        smooth: false,
+                        values: [4.5, 5, 6],
+                    },
                 ],
             },
         });
@@ -225,6 +232,38 @@ describe('a bar chart', () => {
     });
 });
 
+describe('series ids', () => {
+    const C16 = 'http://schemas.microsoft.com/office/drawing/2014/chart';
+    const unique = (val: string) =>
+        `<c:extLst><c:ext uri="{C3380CC4-5D6E-409C-BE32-E72D297353CC}" xmlns:c16="${C16}"><c16:uniqueId val="${val}"/></c:ext></c:extLst>`;
+    const ids = (series: Series[]) => spec(space(bar(series) + AXES)).data.series.map(({ id }) => id);
+
+    test("Office's c16:uniqueId is the id without its GUID's braces", () => {
+        expect(
+            ids([
+                { ...TWO_SERIES[0], extra: unique('{00000000-0001-0000-0000-000000000000}') },
+                { ...TWO_SERIES[1], extra: unique('{0000000A-0002-0000-0000-00000000BEEF}') },
+            ]),
+        ).toEqual(['00000000-0001-0000-0000-000000000000', '0000000A-0002-0000-0000-00000000BEEF']);
+    });
+
+    test('without one, or with one that is no id or another series took, a series is x- and its c:idx', () => {
+        const shared = unique('{00000000-0001-0000-0000-000000000000}');
+        expect(ids(TWO_SERIES)).toEqual(['x-0', 'x-1']);
+        expect(ids([{ ...TWO_SERIES[0], extra: unique('{not an id}') }, TWO_SERIES[1]])).toEqual(['x-0', 'x-1']);
+        expect(
+            ids([
+                { ...TWO_SERIES[0], extra: shared },
+                { ...TWO_SERIES[1], extra: shared },
+            ]),
+        ).toEqual(['00000000-0001-0000-0000-000000000000', 'x-1']);
+    });
+
+    test('a repeated c:idx adds the series place', () => {
+        expect(ids([TWO_SERIES[0], { ...TWO_SERIES[1], idx: 0 }])).toEqual(['x-0', 'x-0-1']);
+    });
+});
+
 describe('a line chart', () => {
     const line = (grouping: string, extra: string, group = '') =>
         `<c:lineChart><c:grouping val="${grouping}"/>${ser({ idx: 0, name: 'Trend', values: [1, 2, 3], extra })}${group}<c:axId val="1"/><c:axId val="2"/></c:lineChart>`;
@@ -265,7 +304,9 @@ describe('a pie chart', () => {
         expect(read.data).toEqual({
             source: 'inline',
             categories: CATEGORIES,
-            series: [{ name: 'Share', color: ACCENTS[0], markers: false, smooth: false, values: [10, 20, 30] }],
+            series: [
+                { id: 'x-0', name: 'Share', color: ACCENTS[0], markers: false, smooth: false, values: [10, 20, 30] },
+            ],
         });
     });
 
@@ -420,7 +461,16 @@ describe('the data from the caches', () => {
         expect(spec(space(sparse + AXES)).data).toEqual({
             source: 'inline',
             categories: ['1', '2', '3', '4'],
-            series: [{ name: 'Series1', color: ACCENTS[0], markers: false, smooth: false, values: [1, null, null, 4] }],
+            series: [
+                {
+                    id: 'x-0',
+                    name: 'Series1',
+                    color: ACCENTS[0],
+                    markers: false,
+                    smooth: false,
+                    values: [1, null, null, 4],
+                },
+            ],
         });
     });
 
@@ -654,6 +704,7 @@ describe('range data for a workbook', () => {
             categories: { sheetId: 's1', row: [1, 3], column: [0, 0] },
             series: [
                 {
+                    id: 'x-0',
                     name: { sheetId: 's1', row: [0, 0], column: [1, 1] },
                     values: { sheetId: 's1', row: [1, 3], column: [1, 1] },
                     color: ACCENTS[0],
@@ -661,6 +712,7 @@ describe('range data for a workbook', () => {
                     smooth: false,
                 },
                 {
+                    id: 'x-1',
                     name: { sheetId: 's1', row: [0, 0], column: [2, 2] },
                     values: { sheetId: 's1', row: [1, 3], column: [2, 2] },
                     color: ACCENTS[1],

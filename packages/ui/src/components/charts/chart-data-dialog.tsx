@@ -12,6 +12,7 @@ import {
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     MAX_CHART_POINTS,
+    newChartSeriesId,
 } from '@workspace/lib/charts';
 import { cellsToHtmlTable, cellsToTsv, htmlTableCells, parseTsv } from '@workspace/lib/clipboard';
 import {
@@ -40,7 +41,7 @@ import { fromPercent } from './percent';
 type InlineChartSpec = ChartSpec & { data: InlineChartData };
 
 // A cell holds what was typed, so a value that isn't a number stays on screen, flagged, instead of vanishing.
-type GridColumn = { name: string; style: ChartSeriesStyle };
+type GridColumn = { id: string; name: string; style: ChartSeriesStyle };
 // A row carries its slice color, so a removed row takes its pie slice's color with it. New series and rows
 // are automatic (null), so the palette colors them by position.
 type GridRow = { category: string; color: string | null; cells: string[] };
@@ -56,14 +57,14 @@ type GridSelection = { anchor: CellRef; focus: CellRef; whole?: 'rows' | 'column
 // where an arrow moves the caret. As in Sheets.
 type Editing = { mode: 'replace' | 'in-place'; text: string };
 
-const newColumn = (): GridColumn => ({ name: '', style: DEFAULT_CHART_SERIES_STYLE });
+const newColumn = (): GridColumn => ({ id: newChartSeriesId(), name: '', style: DEFAULT_CHART_SERIES_STYLE });
 const newRow = (columns: number): GridRow => ({ category: '', color: null, cells: Array(columns).fill('') });
 
 function gridOf({ data, sliceColors, categoryAxis }: InlineChartSpec): Grid {
     const count = Math.max(data.categories.length, ...data.series.map((series) => series.values.length));
     return {
         corner: categoryAxis.title,
-        columns: data.series.map(({ name, values, ...style }) => ({ name, style })),
+        columns: data.series.map(({ id, name, values, ...style }) => ({ id, name, style })),
         rows: Array.from({ length: count }, (_, i) => ({
             category: data.categories[i] ?? '',
             color: sliceColors[i] ?? null,
@@ -491,8 +492,9 @@ function EditableGrid({
             data: {
                 source: 'inline',
                 categories: final.rows.map((row) => row.category),
-                series: final.columns.map(({ name, style }, j) => ({
+                series: final.columns.map(({ id, name, style }, j) => ({
                     ...style,
+                    id,
                     name,
                     values: final.rows.map((row) => numberOf(row.cells[j])),
                 })),

@@ -29,8 +29,13 @@ export type CellRangeRef = { sheetId: string; row: [number, number]; column: [nu
 // (chartColor), so a palette change reaches it and deleting a series shifts the ones after it.
 export type ChartSeriesStyle = { color: string | null; markers: boolean; smooth: boolean };
 
-export type InlineChartSeries = ChartSeriesStyle & { name: string; values: (number | null)[] };
-export type RangeChartSeries = ChartSeriesStyle & { name: string | CellRangeRef; values: CellRangeRef | null };
+// id is stable across a delete or a reorder and unique in its chart, so what keys by it follows its series.
+export type InlineChartSeries = ChartSeriesStyle & { id: string; name: string; values: (number | null)[] };
+export type RangeChartSeries = ChartSeriesStyle & {
+    id: string;
+    name: string | CellRangeRef;
+    values: CellRangeRef | null;
+};
 
 export type InlineChartData = { source: 'inline'; categories: string[]; series: InlineChartSeries[] };
 export type RangeChartData = { source: 'range'; categories: CellRangeRef | null; series: RangeChartSeries[] };

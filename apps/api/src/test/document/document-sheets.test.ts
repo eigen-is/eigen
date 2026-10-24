@@ -764,7 +764,11 @@ describe('document/sheets — appendSheetsToYjs', () => {
     const spec = JSON.stringify({
         type: 'bar',
         title: 'Totals',
-        data: { source: 'range', categories: range('sheet-0'), series: [{ name: 'Sum', values: range('sheet-1') }] },
+        data: {
+            source: 'range',
+            categories: range('sheet-0'),
+            series: [{ id: 's-1', name: 'Sum', values: range('sheet-1') }],
+        },
     });
 
     // What a file brings: "Data", whose name the workbook holds, and "Summary", which names it in a formula, a

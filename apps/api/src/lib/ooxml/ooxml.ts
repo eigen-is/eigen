@@ -29,6 +29,8 @@ export const W14_NS = 'http://schemas.microsoft.com/office/word/2010/wordml';
 export const MC_NS = MARKUP_COMPATIBILITY_NAMESPACE;
 export const ASVG_NS = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main';
 export const AHYP_NS = 'http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor';
+// Office 2016's chart extensions, among them a series' c16:uniqueId.
+export const C16_NS = 'http://schemas.microsoft.com/office/drawing/2014/chart';
 export const V_NS = 'urn:schemas-microsoft-com:vml';
 export const O_NS = 'urn:schemas-microsoft-com:office:office';
 export const W10_NS = 'urn:schemas-microsoft-com:office:word';

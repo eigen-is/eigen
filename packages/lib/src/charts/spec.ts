@@ -2,6 +2,7 @@
 // node attribute, a SheetChart), and parseChartSpec is the one reader every surface and importer runs.
 // Malformed structure or a hard limit reads as null, never a throw; a presentation field reads its default.
 
+import { nanoid } from 'nanoid';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '../constants/colors';
 import { DOCUMENT_FONT } from '../constants/fonts';
 import { isRecord } from '../core/guards';
@@ -74,6 +75,19 @@ export function defaultChartPresentation(type: ChartType): Omit<ChartSpec, 'type
     };
 }
 
+// Ids are the grammar of nanoid's alphabet, and never a name a plain object inherits, so a record keyed by them is
+// safe to build.
+const CHART_SERIES_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const INHERITED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+export function isChartSeriesId(id: string): boolean {
+    return CHART_SERIES_ID.test(id) && !INHERITED_KEYS.has(id);
+}
+
+export function newChartSeriesId(): string {
+    return `s-${nanoid(10)}`;
+}
+
 // A new series, made in Eigen: its color automatic, so the palette colors it by position.
 export const DEFAULT_CHART_SERIES_STYLE: ChartSeriesStyle = { color: null, markers: false, smooth: false };
 
@@ -97,9 +111,10 @@ export function sampleChartSpec(type: ChartType): ChartSpec {
         data: {
             source: 'inline',
             categories,
-            series: (type === 'pie' ? sources.slice(0, 1) : sources).map((source) => ({
+            series: (type === 'pie' ? sources.slice(0, 1) : sources).map((source, i) => ({
                 ...source,
                 ...DEFAULT_CHART_SERIES_STYLE,
+                id: `s-${i + 1}`,
             })),
         },
     };
@@ -186,7 +201,7 @@ function chartData(v: unknown): InlineChartData | RangeChartData {
     if (series.length > MAX_CHART_SERIES) invalid();
     if (source === 'inline') {
         const categories = list(prop(data, 'categories')).map(text);
-        const inline = series.map(inlineSeries);
+        const inline = uniqueIds(series.map(inlineSeries));
         const points = inline.reduce((sum, { values }) => sum + values.length, 0);
         if (points > MAX_CHART_POINTS || categories.length > MAX_CHART_POINTS) invalid();
         return { source, categories, series: inline };
@@ -196,7 +211,7 @@ function chartData(v: unknown): InlineChartData | RangeChartData {
         return {
             source,
             categories: categories === null ? null : cellRange(categories),
-            series: series.map(rangeSeries),
+            series: uniqueIds(series.map(rangeSeries)),
         };
     }
     return invalid();
@@ -206,6 +221,7 @@ function inlineSeries(v: unknown): InlineChartSeries {
     const series = record(v);
     return {
         ...seriesStyle(series),
+        id: seriesId(prop(series, 'id')),
         name: text(str(prop(series, 'name'), '')),
         values: list(prop(series, 'values')).map(finiteOrNull),
     };
@@ -217,6 +233,7 @@ function rangeSeries(v: unknown): RangeChartSeries {
     const values = prop(series, 'values');
     return {
         ...seriesStyle(series),
+        id: seriesId(prop(series, 'id')),
         name: typeof name === 'string' ? text(name) : cellRange(name),
         values: values === null ? null : cellRange(values),
     };
@@ -228,6 +245,14 @@ function seriesStyle(series: object): ChartSeriesStyle {
         markers: bool(prop(series, 'markers'), DEFAULT_CHART_SERIES_STYLE.markers),
         smooth: bool(prop(series, 'smooth'), DEFAULT_CHART_SERIES_STYLE.smooth),
     };
+}
+
+function seriesId(v: unknown): string {
+    return typeof v === 'string' && isChartSeriesId(v) ? v : invalid();
+}
+
+function uniqueIds<S extends { id: string }>(series: S[]): S[] {
+    return new Set(series.map(({ id }) => id)).size === series.length ? series : invalid();
 }
 
 function cellRange(v: unknown): CellRangeRef {

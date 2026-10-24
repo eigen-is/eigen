@@ -75,7 +75,7 @@ function DataRangeRows({ panel, spec, data, workbook, onChange }: DataRangeRowsP
     // The three toggles re-derive the refs from the same block, each series keeping its style.
     const setup = (patch: Partial<ChartRange>) => {
         if (!range) return;
-        const next = chartRangeData({ ...range, ...patch }, data.series);
+        const next = chartRangeData({ ...range, ...patch }, data);
         if (next) onChange({ ...spec, data: next });
     };
 

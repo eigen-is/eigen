@@ -41,7 +41,7 @@ const ref = (sheetId: string, row: [number, number], column: [number, number] = 
 });
 
 function rangeSpec(values: CellRangeRef, categories: CellRangeRef | null = null): ChartSpec {
-    const series = { name: 'Points', values, color: '#2a78d6', markers: false, smooth: false };
+    const series = { id: 's-1', name: 'Points', values, color: '#2a78d6', markers: false, smooth: false };
     return { ...sampleChartSpec('column'), data: { source: 'range', categories, series: [series] } };
 }
 

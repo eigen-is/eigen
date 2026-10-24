@@ -2,6 +2,7 @@ import {
     chartColor,
     chartLabel,
     DEFAULT_CHART_FONT,
+    isChartSeriesId,
     MAX_CHART_POINTS,
     MAX_CHART_SERIES,
     parseChartSpec,
@@ -21,10 +22,10 @@ import { CHART_BLANKS } from '@workspace/lib/types/chart';
 import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
 import { numberDisplay } from '@workspace/sheet/engine/format';
 import type { XmlElement } from '../core/xml';
-import { hasXmlName, xmlAttr, xmlChild, xmlElements, xmlText, xmlTrimmedText } from '../core/xml';
+import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText, xmlTrimmedText } from '../core/xml';
 import type { DrawingTheme } from './drawingml';
 import { drawingColor, drawingLines, readColorMap } from './drawingml';
-import { A_NS, alternativeFor, C_NS, isAlternateContent, isOn } from './ooxml';
+import { A_NS, alternativeFor, C_NS, C16_NS, isAlternateContent, isOn } from './ooxml';
 import type { OoxmlPackage, Relationship } from './opc';
 import { optional, relTarget } from './opc';
 
@@ -185,6 +186,7 @@ function chartSpec(
         .sort((a, b) => a.order - b.order)
         .map(({ ser }) => ser);
     const series = type === 'pie' ? ordered.slice(0, 1) : ordered;
+    const ids = seriesIds(series);
     const accent = (index: number) => {
         const slot = index < 6 ? colors.map.get(`accent${index + 1}`) : undefined;
         return (slot && colors.scheme.get(slot)) ?? chartColor(index);
@@ -270,6 +272,7 @@ function chartSpec(
                 categories: categories ? labels : Array.from({ length }, (_, i) => String(i + 1)),
                 series: series.map((ser, i) => ({
                     ...style(ser, i),
+                    id: ids[i],
                     name: seriesName(ser),
                     values: values[i],
                 })),
@@ -310,12 +313,30 @@ function chartSpec(
                 const name = child(ser, 'tx');
                 return {
                     ...style(ser, i),
+                    id: ids[i],
                     name: (child(name, 'strRef') && range(name)) ?? seriesName(ser),
                     values: line(range(child(ser, 'val'))),
                 };
             }),
         },
     };
+}
+
+// Office's c16:uniqueId without its GUID's braces where it is a series id no series before took, else x- and the
+// c:idx, else that and the series' place. A forged file whose last fallback is taken reads as unsupported.
+function seriesIds(series: XmlElement[]): string[] {
+    const ids: string[] = [];
+    for (const [i, ser] of series.entries()) {
+        const [unique] = elements(child(ser, 'extLst'))
+            .flatMap((ext) => xmlChildren(ext, C16_NS, 'uniqueId'))
+            .map((element) => xmlAttr(element, '', 'val')?.replace(/^\{(.*)\}$/, '$1'));
+        const index = count(val(child(ser, 'idx'))) ?? i;
+        const id = [unique, `x-${index}`].find(
+            (candidate) => candidate !== undefined && isChartSeriesId(candidate) && !ids.includes(candidate),
+        );
+        ids.push(id ?? `x-${index}-${i}`);
+    }
+    return ids;
 }
 
 const GROUPINGS = new Map([

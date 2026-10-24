@@ -25,14 +25,16 @@ const ref = (row: [number, number], column: [number, number], sheetId = 's1'): C
 
 const series = (values: CellRangeRef | null, name: string | CellRangeRef = 'Points'): RangeChartSeries => ({
     ...STYLE,
+    id: 's-0',
     name,
     values,
 });
 
+// Each series' id is its place.
 const data = (categories: CellRangeRef | null, ...list: RangeChartSeries[]): RangeChartData => ({
     source: 'range',
     categories,
-    series: list,
+    series: list.map((s, i) => ({ ...s, id: `s-${i}` })),
 });
 
 //      A          B           C
@@ -72,8 +74,8 @@ describe('resolveRangeChartData', () => {
         ).toEqual({
             categories: ['Ajax', 'PSV', ''],
             series: [
-                { ...STYLE, name: 'Points', values: [42, null, null] },
-                { ...STYLE, name: 'Points', values: [3, 1000, 7] },
+                { ...STYLE, id: 's-0', name: 'Points', values: [42, null, null] },
+                { ...STYLE, id: 's-1', name: 'Points', values: [3, 1000, 7] },
             ],
         });
     });
@@ -89,8 +91,8 @@ describe('resolveRangeChartData', () => {
         ).toEqual({
             categories: ['1', '2'],
             series: [
-                { ...STYLE, name: 'Points', values: [null, 7] },
-                { ...STYLE, name: 'Points', values: [42] },
+                { ...STYLE, id: 's-0', name: 'Points', values: [null, 7] },
+                { ...STYLE, id: 's-1', name: 'Points', values: [42] },
             ],
         });
     });
@@ -131,7 +133,7 @@ describe('resolveRangeChartData', () => {
         const red = { ...series(ref([1, 3], [2, 2]), ref([0, 0], [2, 2])), color: '#ff0000' };
         expect(resolveRangeChartData(data(ref([1, 3], [0, 0]), series(null), red), resolver)).toEqual({
             categories: ['Ajax', 'PSV', ''],
-            series: [{ ...STYLE, color: '#ff0000', name: 'Goals', values: [3, 1000, 7] }],
+            series: [{ ...STYLE, id: 's-1', color: '#ff0000', name: 'Goals', values: [3, 1000, 7] }],
         });
     });
 
@@ -262,7 +264,9 @@ describe('inlineChartSpec', () => {
             data: {
                 source: 'inline',
                 categories: ['Ajax', 'PSV', ''],
-                series: [{ color: null, markers: false, smooth: false, name: 'Points', values: [3, 1000, 7] }],
+                series: [
+                    { color: null, markers: false, smooth: false, id: 's-0', name: 'Points', values: [3, 1000, 7] },
+                ],
             },
         });
     });

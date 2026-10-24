@@ -3,15 +3,10 @@ import {
     defaultChartPresentation,
     MAX_CHART_POINTS,
     MAX_CHART_SERIES,
+    newChartSeriesId,
 } from '@workspace/lib/charts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import type {
-    CellRangeRef,
-    ChartSeriesStyle,
-    ChartSpec,
-    RangeChartData,
-    RangeChartSeries,
-} from '@workspace/lib/types/chart';
+import type { CellRangeRef, ChartSpec, RangeChartData, RangeChartSeries } from '@workspace/lib/types/chart';
 import { parseA1Range, rangeToA1, sheetRefName } from './a1-notation';
 import { cellLabel, resolveRangeChartData } from './chart-data';
 import type { Cell, CellResolver } from './types';
@@ -57,11 +52,11 @@ export function suggestChartRange(ref: CellRangeRef, resolver: CellResolver): Ch
     return { ref, seriesInRows: dataColumns > dataRows, headerRow, headerColumn };
 }
 
-// The refs a block derives, each series keeping the style at its index. Null when the block has no values
-// or more series than a stored chart holds.
+// The refs a block derives, each series keeping the id and style of the previous data's series at its index, and a
+// series past them a new id. Null when the block has no values or more series than a stored chart holds.
 export function chartRangeData(
     { ref, seriesInRows, headerRow, headerColumn }: ChartRange,
-    styles: ChartSeriesStyle[] = [],
+    previous?: ChartSpec['data'],
 ): RangeChartData | null {
     const { sheetId, row, column } = ref;
     const top = row[0] + (headerRow ? 1 : 0);
@@ -69,7 +64,10 @@ export function chartRangeData(
     const count = seriesInRows ? row[1] - top + 1 : column[1] - left + 1;
     if (top > row[1] || left > column[1] || count > MAX_CHART_SERIES) return null;
     const series: RangeChartSeries[] = Array.from({ length: count }, (_, i) => {
-        const style = styles[i] ?? DEFAULT_CHART_SERIES_STYLE;
+        const kept = previous?.series[i];
+        const style = kept
+            ? { id: kept.id, color: kept.color, markers: kept.markers, smooth: kept.smooth }
+            : { ...DEFAULT_CHART_SERIES_STYLE, id: newChartSeriesId() };
         if (seriesInRows) {
             const r = top + i;
             const values: CellRangeRef = { sheetId, row: [r, r], column: [left, column[1]] };
@@ -100,11 +98,11 @@ function fewestPoints({ row, column }: CellRangeRef): number {
 export function setUpChartRange(
     ref: CellRangeRef,
     resolver: CellResolver,
-    styles: ChartSeriesStyle[] = [],
+    previous?: ChartSpec['data'],
 ): { range: ChartRange; data: RangeChartData } | ChartRangeRefusal {
     if (fewestPoints(ref) > MAX_CHART_POINTS) return 'too-many-points';
     const range = suggestChartRange(ref, resolver);
-    const data = chartRangeData(range, styles);
+    const data = chartRangeData(range, previous);
     if (!data) return 'too-many-series';
     if (resolveRangeChartData(data, resolver) === 'too-many-points') return 'too-many-points';
     return { range, data };

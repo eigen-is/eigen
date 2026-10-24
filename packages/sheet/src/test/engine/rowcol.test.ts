@@ -664,6 +664,7 @@ describe('applySheetsInsertRowCol/Delete — chart refs', () => {
         return { id, index: 'a0', x: 0, y: 0, width: 400, height: 300, spec: JSON.stringify(spec) };
     }
     const series = (values: CellRangeRef | null, name: string | CellRangeRef = 'Points') => ({
+        id: 's-1',
         name,
         values,
         color: '#2a78d6',
