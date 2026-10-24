@@ -117,7 +117,7 @@ async function render(html: string | Uint8Array, zoom: number, timeout: number, 
     return { exitCode, signalCode: proc.signalCode, stdout, stderr };
 }
 
-// Accepts the UTF-8 bytes the transform Worker returns as well as a plain string —
+// Accepts the UTF-8 bytes the transform process returns as well as a plain string —
 // Bun's stdin sink writes both, and the render script reads stdin as UTF-8. `zoom` scales the
 // laid-out pages onto their sheets: at 0.5 a 1920 px page prints 960 px, 254 mm, wide. `signal` is the request's: a
 // client that is gone kills its render, or leaves the queue of renders waiting their turn.

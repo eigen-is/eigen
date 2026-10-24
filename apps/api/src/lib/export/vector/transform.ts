@@ -11,7 +11,7 @@ import { sanitizeSceneHtml } from '../sanitize';
 const PDF_PAPER = '#ffffff';
 
 // Materialized doc + prepared media → the PDF's HTML document: the drawing as compositor layers on a page sized to
-// the artwork, rich text printing because it is an HTML div here. Runs inside the transform Worker (worker.ts owns
+// the artwork, rich text printing because it is an HTML div here. Runs inside the transform process (child.ts owns
 // execution; the main-thread orchestration lives in export-document.ts). This module must not reach the Mount or the
 // preview cache — the Worker imports it. A drawing's SVG is the editor's own (packages/ui's canvas image writer).
 export async function renderEigenvectorExport(

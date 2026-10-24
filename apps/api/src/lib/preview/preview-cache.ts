@@ -56,7 +56,7 @@ export const TEXT_FORMAT = 'f8';
 // does not answer for them.) A cached body is JSON this process wrote from a value it built, so the read
 // back is a typed assignment nothing else checks: change one of the payload types and bump its format
 // here, or a restored previewsDir serves the old shape. The payloads are built inside the transform
-// Worker (worker.ts owns execution, this module the main-thread orchestration), which is why no builder
+// process (child.ts owns execution, this module the main-thread orchestration), which is why no builder
 // may reach the Mount or the transform seam.
 export const VCARD_FORMAT = 'vcard-f1';
 

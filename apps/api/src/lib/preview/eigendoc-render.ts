@@ -7,8 +7,8 @@ import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-m
 
 const PREVIEW_MAX_BLOCKS = 20;
 
-// Materialized doc → sanitized preview body. Runs inside the transform Worker
-// (worker.ts owns execution; the main-thread orchestration lives in preview-document.ts).
+// Materialized doc → sanitized preview body. Runs inside the transform process
+// (child.ts owns execution; the main-thread orchestration lives in preview-document.ts).
 // This module must not reach the Mount or the transform seam — the Worker imports it,
 // and the static renderer plus lowlight grammars it pulls in must stay out of the main
 // process. Media resolves through the URL map the main thread prepared — the Worker has

@@ -4,7 +4,7 @@ import type { ExportMedia, TransformMedia } from './transform/protocol';
 
 // Media helpers for eigen documents, shared by the main-thread transform wrappers
 // and the Worker-side converters. This module must stay light: the modules the
-// transform Worker imports (preview/export renderers) import it, so a static edge
+// transform process imports (preview/export renderers) import it, so a static edge
 // from here into the preview cache would drag the whole screen-preview pipeline —
 // and the sheet engine behind it — into every document Worker.
 

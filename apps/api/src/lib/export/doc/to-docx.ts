@@ -101,7 +101,7 @@ import {
 } from '../office-image';
 import { absoluteHref, type HastNode, highlightCode } from './render';
 
-// ProseMirror JSON -> hand-written WordprocessingML, in the transform Worker, so it never reaches the Mount or the
+// ProseMirror JSON -> hand-written WordprocessingML, in the transform process, so it never reaches the Mount or the
 // preview cache. Every look comes from eigen-prose.css; no schema checked the CRDT's JSON, so attrs are checked at use.
 export async function eigendocToDocx(
     json: JSONContent,

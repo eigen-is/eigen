@@ -21,7 +21,7 @@ import { type CanvasPage, framePages, renderFittedPage, renderPrintPage, sceneMe
 
 // Standalone HTML for a page of compositor layers — the deck's HTML and PDF exports and the drawing's
 // PDF all leave through here, so there is one @page rule, one font block and one reset instead of a
-// copy per document type. Runs inside the transform Worker (worker.ts owns execution; the main-thread
+// copy per document type. Runs inside the transform process (child.ts owns execution; the main-thread
 // orchestration lives in export-document.ts): no Mount, no preview cache.
 
 // A screen document scales its pages; a PDF document has no scale to take, because it lays each page out

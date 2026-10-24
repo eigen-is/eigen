@@ -11,7 +11,7 @@ import {
 } from '../../document/transform/protocol';
 import { withSvgFallbacks } from '../office-image';
 
-// Materialized doc → export bytes. Runs inside the transform Worker (worker.ts owns
+// Materialized doc → export bytes. Runs inside the transform process (child.ts owns
 // execution; the format logic stays here in export/, pure over Sheet[] + title).
 // Per-format renderers load lazily so an HTML export never evaluates the xlsx writer.
 // Recalc failure serves replayed values with a warning — an export must never fail

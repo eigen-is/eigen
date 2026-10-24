@@ -197,7 +197,7 @@ export function toXmlDocument(svg: string): string {
     return stripNonXmlChars(new dom.window.XMLSerializer().serializeToString(root));
 }
 
-// SVG media is the file's own bytes (an uploaded or pasted drawing) and reaches the transform Worker as such. A docx
+// SVG media is the file's own bytes (an uploaded or pasted drawing) and reaches the transform process as such. A docx
 // carries it as a part of its own, and WeasyPrint and librsvg draw its every <use>, so every export arm takes it through
 // the data-only pass here, off the event loop, written as XML, which a docx part must be and an .svg data: URI is read
 // as. One with no <svg> in it is no drawing, and is dropped like a failed preview.

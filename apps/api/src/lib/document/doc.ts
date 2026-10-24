@@ -19,7 +19,7 @@ import { docSchema } from './doc-schema';
 import { readStoredEquation } from './equation';
 
 // Materialized Yjs doc → ProseMirror JSON. Media-free, so it runs identically on the
-// main thread and inside the document-transform Worker (which has no Mount). Every
+// main thread and inside the document-transform process (which has no Mount). Every
 // consumer of a persisted eigendoc reads it in the Worker, so the Mount-side loader is
 // gone: capture (collab-source.ts) + materialize (yjs-loader.ts) is the only path in.
 export function readEigendocFromDoc(doc: Y.Doc): JSONContent {

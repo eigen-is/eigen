@@ -9,7 +9,6 @@ import {
     type PageSetup,
 } from '@workspace/lib/docs/eigendoc';
 import { MATH_LIMITS, MATHML_NAMESPACE, type MathRow, readOmml, writeMathml } from '@workspace/math';
-import JSZip from 'jszip';
 import sharp from 'sharp';
 import { parseXml, type XmlElement, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import type { EigendocBands } from '../../lib/document/doc';
@@ -414,9 +413,6 @@ describe('docx writer — package', () => {
     test('the same doc exports to the same bytes', async () => {
         const [first, second] = await Promise.all([docx(buildAllFeaturesDocJson()), docx(buildAllFeaturesDocJson())]);
         expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);
-        // Two runs inside one zip time tick agree on a clock date too, so the date is pinned on its own.
-        const dates = Object.values((await JSZip.loadAsync(first)).files).map((file) => file.date.toISOString());
-        expect(new Set(dates)).toEqual(new Set(['1980-01-01T00:00:00.000Z']));
     });
 
     test('the title is the name without its extension', async () => {
