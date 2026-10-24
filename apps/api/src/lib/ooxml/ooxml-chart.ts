@@ -5,6 +5,8 @@ import {
     chartColor,
     chartLabel,
     DEFAULT_CHART_FONT,
+    DEFAULT_CHART_SERIES_STYLE,
+    defaultChartSpec,
     isChartSeriesId,
     MAX_CHART_POINTS,
     MAX_CHART_SERIES,
@@ -174,12 +176,8 @@ function chartSpec(
     if (!stacking) unsupported();
     const valueAxes = children(plotArea, 'valAx');
     const categoryAxes = [...children(plotArea, 'catAx'), ...children(plotArea, 'dateAx')];
-    // The group names its axes by c:axId; a file whose ids don't match draws on the plot area's own.
-    const axisIds = children(group, 'axId').map(val);
-    const groupAxis = (axes: XmlElement[]) =>
-        axes.find((axis) => axisIds.includes(val(child(axis, 'axId')))) ?? axes[0];
-    const valueAxis = groupAxis(valueAxes);
-    const categoryAxis = groupAxis(categoryAxes);
+    const [valueAxis] = valueAxes;
+    const [categoryAxis] = categoryAxes;
     const scaling = child(valueAxis, 'scaling');
     const orientation = (axis: XmlElement | undefined) => val(child(child(axis, 'scaling'), 'orientation'));
     if (valueAxes.length > 1 || categoryAxes.length > 1 || child(scaling, 'logBase')) unsupported();
@@ -214,8 +212,7 @@ function chartSpec(
         return fillColor(fill) ?? accent(count(val(child(ser, 'idx'))) ?? 0);
     };
     const style = (ser: XmlElement, index: number): ChartSeriesStyle => ({
-        plot: null,
-        yAxis: 'y',
+        ...DEFAULT_CHART_SERIES_STYLE,
         color: automatic(seriesColor(ser), index),
         line: { smooth: type === 'line' && flag(child(ser, 'smooth')) === true },
         marker: { visible: markers && val(child(child(ser, 'marker'), 'symbol')) !== 'none' },
@@ -231,7 +228,8 @@ function chartSpec(
             : undefined
         : xmlAttr(numFmt, '', 'formatCode');
     const blanks = child(chart, 'dispBlanksAs');
-    const none = { stacking: 'none' } as const;
+    const defaults = defaultChartSpec(type, { source: 'inline', categories: [], series: [] });
+    const { x, y } = defaults.axes;
     const presentation: Omit<ChartSpec, 'title' | 'points' | 'data'> = {
         chart: {
             type,
@@ -242,15 +240,13 @@ function chartSpec(
         legend: { position: legendPosition(child(chart, 'legend')) },
         axes: {
             x: {
-                kind: 'category',
+                ...x,
                 title: { text: axisTitle(categoryAxis) },
                 visible: visible(categoryAxis),
-                gridlines: { visible: false },
-                labels: { format: null },
-                scale: { min: null, max: null, reversed },
+                scale: { ...x.scale, reversed },
             },
             y: {
-                kind: 'value',
+                ...y,
                 title: { text: axisTitle(valueAxis) },
                 visible: visible(valueAxis),
                 gridlines: { visible: child(valueAxis, 'majorGridlines') !== undefined },
@@ -261,13 +257,13 @@ function chartSpec(
                             : null,
                 },
                 scale: {
+                    ...y.scale,
                     min: numberOf(val(child(scaling, 'min'))),
                     max: numberOf(val(child(scaling, 'max'))),
-                    reversed: false,
                 },
             },
         },
-        plots: { column: none, bar: none, line: none, pie: none, [type]: { stacking } },
+        plots: { ...defaults.plots, [type]: { stacking } },
         series: Object.fromEntries(series.map((ser, i) => [ids[i], style(ser, i)])),
     };
     // A pie's slices are its first series' points: each c:dPt's colour, else the palette's or the series' as
