@@ -1,7 +1,6 @@
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ExportMedia } from '../document/transform/protocol';
 import { toTransferableBuffer } from '../document/transform/protocol';
-import { ASVG_NS } from '../ooxml/ooxml';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../shared/thumbnail-timeout';
 import type { ImageResult, WorkerInput } from '../shared/thumbnail-worker';
 
@@ -116,13 +115,4 @@ export function officeImageParts(media: OfficeMedia, n: number): OfficeImagePart
     const extension = svg ? 'png' : RASTER_EXTENSIONS.get(media.contentType);
     if (!raster || !extension) return undefined;
     return { part: `image${n}.${extension}`, ...(svg && { svgPart: `image${n}.svg` }), raster };
-}
-
-// A picture's blip: its raster, and an SVG's own file as the svgBlip Word, PowerPoint and LibreOffice draw in its place;
-// effects go first, as CT_Blip orders them before its extensions.
-export function blipXml(rId: string, svgRId: string | undefined, effects = ''): string {
-    const svg = svgRId
-        ? `<a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="${ASVG_NS}" r:embed="${svgRId}"/></a:ext></a:extLst>`
-        : '';
-    return effects || svg ? `<a:blip r:embed="${rId}">${effects}${svg}</a:blip>` : `<a:blip r:embed="${rId}"/>`;
 }

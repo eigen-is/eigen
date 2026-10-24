@@ -5,7 +5,7 @@ import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from
 import { A_NS, ASVG_NS, R_NS } from './ooxml';
 
 // DrawingML, the drawing vocabulary docx, xlsx and pptx share: a theme's colours, a colour element with its
-// transforms, a text body's plain text, and the theme the writers write.
+// transforms, a picture's blip both ways, a text body's plain text, and the theme the writers write.
 
 // A theme's colours by slot name (dk1, lt1, accent1…), each '#rrggbb'.
 export type ColorScheme = ReadonlyMap<string, string>;
@@ -285,6 +285,15 @@ function fromHsl(hue: number, sat: number, lum: number): [number, number, number
                     ? [x, 0, chroma]
                     : [chroma, 0, x];
     return [r + m, g + m, b + m];
+}
+
+// A picture's blip: its raster, and an SVG's own file as the svgBlip Word, PowerPoint and LibreOffice draw in its place;
+// effects go first, as CT_Blip orders them before its extensions.
+export function blipXml(rId: string, svgRId: string | undefined, effects = ''): string {
+    const svg = svgRId
+        ? `<a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="${ASVG_NS}" r:embed="${svgRId}"/></a:ext></a:extLst>`
+        : '';
+    return effects || svg ? `<a:blip r:embed="${rId}">${effects}${svg}</a:blip>` : `<a:blip r:embed="${rId}"/>`;
 }
 
 // The parts an a:blip names, best first: its svgBlip extension's, which Office draws in its place, then its own. A
