@@ -735,12 +735,12 @@ describe('chartPointMoves', () => {
     const points = (colors: Record<number, string>) => ({
         points: { 's-1': Object.fromEntries(Object.entries(colors).map(([i, color]) => [i, { color, future: i }])) },
     });
-    const moved = (before: Record<number, string>, indexes: number[], target: (index: number) => number | null) =>
-        JSON.parse(JSON.stringify(applyChartSpecChange(points(before), chartPointMoves('s-1', indexes, target))))
+    const moved = (before: Record<number, string>, target: (index: number) => number | null) =>
+        JSON.parse(JSON.stringify(applyChartSpecChange(points(before), chartPointMoves(points(before), target))))
             .points['s-1'];
 
     test('a delete removes its points and moves the ones after it down, unknown keys with them', () => {
-        const after = moved({ 0: '#000000', 1: '#000001', 2: '#000002', 3: '#000003' }, [0, 1, 2, 3], (i) =>
+        const after = moved({ 0: '#000000', 1: '#000001', 2: '#000002', 3: '#000003' }, (i) =>
             i === 1 ? null : i > 1 ? i - 1 : i,
         );
         expect(after).toEqual({
@@ -751,7 +751,7 @@ describe('chartPointMoves', () => {
     });
 
     test('an insert moves the points after it up, from the highest, leaving the inserted ones automatic', () => {
-        const after = moved({ 0: '#000000', 1: '#000001', 2: '#000002' }, [0, 1, 2], (i) => (i >= 1 ? i + 1 : i));
+        const after = moved({ 0: '#000000', 1: '#000001', 2: '#000002' }, (i) => (i >= 1 ? i + 1 : i));
         expect(after).toEqual({
             0: { color: '#000000', future: '0' },
             2: { color: '#000001', future: '1' },
@@ -759,8 +759,8 @@ describe('chartPointMoves', () => {
         });
     });
 
-    test('a move from an index with no point clears its target, and an index that stays writes nothing', () => {
-        expect(moved({ 1: '#000001' }, [0, 1], (i) => (i === 0 ? 1 : null))).toEqual({});
-        expect(chartPointMoves('s-1', [0, 1, 2], (i) => i)).toEqual([]);
+    test('only a stored point moves, and an index that stays writes nothing', () => {
+        expect(moved({ 1: '#000001' }, (i) => (i === 0 ? 1 : null))).toEqual({});
+        expect(chartPointMoves(points({ 0: '#000000', 1: '#000001', 2: '#000002' }), (i) => i)).toEqual([]);
     });
 });

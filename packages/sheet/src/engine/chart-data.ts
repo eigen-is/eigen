@@ -5,7 +5,6 @@ import {
     applyChartSpecChange,
     chartColor,
     chartLabel,
-    chartPointIndex,
     chartPointMoves,
     chartSeriesStyle,
     exceedsChartSpecBytes,
@@ -167,21 +166,8 @@ export function mapChartRefs(
     const series = Array.isArray(before['series']) ? before['series'] : [];
     const along = [before['categories'], ...series.map((s) => (isRecord(s) ? s['values'] : null))].find(isRef);
     const target = along && points?.(along);
-    if (target) change.push(...pointMovesOf(stored['points'], target));
+    if (target) change.push(...chartPointMoves(stored, target));
     return { ...chart, spec: JSON.stringify(applyChartSpecChange(stored, change)) };
-}
-
-// The moves of every stored series' points, the ones this build reads and the ones it doesn't.
-function pointMovesOf(points: unknown, target: (index: number) => number | null): ChartSpecChange {
-    if (!isRecord(points)) return [];
-    return Object.entries(points).flatMap(([id, entries]) => {
-        if (!isRecord(entries)) return [];
-        const indexes = Object.keys(entries).flatMap((key) => {
-            const index = chartPointIndex(key);
-            return index === null ? [] : [index];
-        });
-        return chartPointMoves(id, indexes, target);
-    });
 }
 
 // A record shaped as a CellRangeRef. A key beside its three is accepted, as the reader accepts it.

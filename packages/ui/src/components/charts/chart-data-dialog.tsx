@@ -88,13 +88,6 @@ function specOf({ corner, columns, rows }: Grid, spec: InlineChartSpec): ChartSp
     };
 }
 
-// Every series' points follow their rows: a deleted row's go, and the rows after it take theirs along.
-function pointMoves(opened: Grid, final: Grid): ChartSpecChange {
-    const target = new Map(final.rows.flatMap((row, i) => (row.origin === null ? [] : [[row.origin, i]])));
-    const indexes = opened.rows.map((_, i) => i);
-    return opened.columns.flatMap(({ id }) => chartPointMoves(id, indexes, (index) => target.get(index) ?? null));
-}
-
 // A number as Sheets shows one in the en convention: grouped (1,234), after a currency symbol ($1,234.00,
 // -€5) or a percent (12% is 0.12). An empty cell is a gap; anything else is NaN, and flagged.
 const NUMBER_TEXT = /^([-+]?)[$€£¥]?(\d{1,3}(?:,\d{3})+(?:\.\d*)?|\d*\.?\d+(?:e[-+]?\d+)?)(%?)$/i;
@@ -257,6 +250,7 @@ export function ChartDataDialog({ spec, stored, open, onOpenChange, onSave }: Ch
                 ) : (
                     <EditableGrid
                         spec={spec}
+                        stored={stored}
                         onCancel={() => onOpenChange(false)}
                         onSave={(next) => {
                             onSave(next);
@@ -320,10 +314,12 @@ const HIGHLIGHT = 'bg-linear-to-r from-(--sheet-header-highlight) to-(--sheet-he
 // it, and a canvas host's clipboard and keys stand down for a focused input.
 function EditableGrid({
     spec,
+    stored,
     onCancel,
     onSave,
 }: {
     spec: InlineChartSpec;
+    stored: StoredChartSpec;
     onCancel: () => void;
     onSave: (change: ChartSpecChange) => void;
 }) {
@@ -515,7 +511,14 @@ function EditableGrid({
             setEditing(null);
             return;
         }
-        onSave([...chartSpecChange(specOf(opened, spec), specOf(final, spec)), ...pointMoves(opened, final)]);
+        // Every stored point follows its row: a deleted row's go, and the rows after it, past the data too, take
+        // theirs along.
+        const target = new Map(final.rows.flatMap((row, i) => (row.origin === null ? [] : [[row.origin, i]])));
+        const deleted = opened.rows.length - target.size;
+        const moves = chartPointMoves(stored, (index) =>
+            index < opened.rows.length ? (target.get(index) ?? null) : index - deleted,
+        );
+        onSave([...chartSpecChange(specOf(opened, spec), specOf(final, spec)), ...moves]);
     };
 
     const activeText = cellText(grid, active);

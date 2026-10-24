@@ -419,6 +419,15 @@ describe('ChartDataDialog: Save is a change', () => {
         expect(spec.data.categories).toEqual(['Team 2', 'Team 3', 'Team 4']);
         expect(spec.points).toEqual({ 's-1': { 2: { color: '#000004' } } });
     });
+
+    test('a stored point past the rows, or on a series the data does not name, moves with a deleted row', async () => {
+        const pie = scores('pie');
+        const dialog = await open(pie, { ...pie, points: { 's-1': { 9: { color: '#000009' } }, other: { 1: {} } } });
+        await dialog.mouseDown(dialog.rowHeader('2'));
+        await dialog.key('Delete');
+        await dialog.save();
+        expect(dialog.stored().points).toEqual({ 's-1': { 8: { color: '#000009' } }, other: { 0: {} } });
+    });
 });
 
 describe('ChartDataDialog: the keyboard is Sheets', () => {

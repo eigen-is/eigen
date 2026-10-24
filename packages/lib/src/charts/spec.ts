@@ -146,30 +146,34 @@ export function chartPointIndex(key: string): number | null {
     return /^(0|[1-9]\d*)$/.test(key) && Number(key) < MAX_CHART_POINTS ? Number(key) : null;
 }
 
-// The ops that take one series' points from each index to target(index), null removing it, for a remap that keeps
-// their order (a row op, Edit data's deleted rows). The moves down run first from the lowest target, those up last from
-// the highest, so none lands on a point still to move.
-export function chartPointMoves(
-    id: string,
-    indexes: readonly number[],
-    target: (index: number) => number | null,
-): ChartSpecOp[] {
-    const path = (index: number) => ['points', id, String(index)];
-    const removes: ChartSpecOp[] = [];
-    const down: [number, number][] = [];
-    const up: [number, number][] = [];
-    for (const index of indexes) {
-        const to = target(index);
-        if (to === null) removes.push({ op: 'remove', path: path(index) });
-        else if (to < index) down.push([index, to]);
-        else if (to > index) up.push([index, to]);
-    }
-    down.sort((a, b) => a[1] - b[1]);
-    up.sort((a, b) => b[1] - a[1]);
-    return [
-        ...removes,
-        ...[...down, ...up].map(([from, to]): ChartSpecOp => ({ op: 'move', from: path(from), path: path(to) })),
-    ];
+// The ops that take every stored point, of the series this build reads and the ones it doesn't, from its index to
+// target(index), null removing it, for a remap that keeps their order (a row op, Edit data's deleted rows). Per series
+// the moves down run first from the lowest target, those up last from the highest, so none lands on a point still to
+// move.
+export function chartPointMoves(stored: StoredChartSpec, target: (index: number) => number | null): ChartSpecOp[] {
+    const points = stored['points'];
+    if (!isRecord(points)) return [];
+    return Object.entries(points).flatMap(([id, entries]) => {
+        if (!isRecord(entries)) return [];
+        const path = (index: number) => ['points', id, String(index)];
+        const removes: ChartSpecOp[] = [];
+        const down: [number, number][] = [];
+        const up: [number, number][] = [];
+        for (const key of Object.keys(entries)) {
+            const index = chartPointIndex(key);
+            if (index === null) continue;
+            const to = target(index);
+            if (to === null) removes.push({ op: 'remove', path: path(index) });
+            else if (to < index) down.push([index, to]);
+            else if (to > index) up.push([index, to]);
+        }
+        down.sort((a, b) => a[1] - b[1]);
+        up.sort((a, b) => b[1] - a[1]);
+        return [
+            ...removes,
+            ...[...down, ...up].map(([from, to]): ChartSpecOp => ({ op: 'move', from: path(from), path: path(to) })),
+        ];
+    });
 }
 
 // Insert → Chart's sample, one dataset for every type since the Type switch keeps the data: the share of a source's
