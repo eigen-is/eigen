@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { readChartLook, readChartSpec } from '@workspace/lib/charts';
+import { readChartSpec } from '@workspace/lib/charts';
 import { chartSvg, readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { BODY, boxSide, cssPt, twips } from '../../../document/looks';
@@ -23,16 +23,27 @@ import { TABLE_BORDER_SIDES } from './tables';
 // Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback.
 
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
-// under that src, as it draws a chart under its size, look and parts. A media name holds no `/`, so no two keys meet.
+// under that src, as it draws a chart under its drawing's hash. A media name holds no `/`, so no two keys meet.
 function figureMediaKey(node: JSONContent): string | null {
-    if (node.type === 'chart') {
-        const attrs = node.attrs ?? {};
-        const { width, height } = readChartAttrs(attrs);
-        const parts = JSON.stringify(readChartSpec(attrs).stored);
-        return `chart/${width}/${height}/${JSON.stringify(readChartLook(attrs))}/${parts}`;
-    }
+    if (node.type === 'chart') return chartDrawing(node)?.name ?? null;
     const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
     return mediaName ?? (src && splitDataUri(src) ? src : null);
+}
+
+// A chart's SVG, named for what it draws, so two charts that draw the same, a chart repeated or two whose ids differ,
+// are one picture. A docx holds each SVG in a file of its own, so every drawing takes one id. Drawn once per node,
+// though the media and the writer both ask; a spec that doesn't parse draws nothing.
+const drawings = new WeakMap<JSONContent, { name: string; svg: string } | null>();
+
+function chartDrawing(node: JSONContent): { name: string; svg: string } | null {
+    const known = drawings.get(node);
+    if (known !== undefined) return known;
+    const attrs = node.attrs ?? {};
+    const { spec } = readChartSpec(attrs);
+    const svg = spec && chartSvg(spec, readChartAttrs(attrs), 'chart');
+    const drawing = svg ? { name: `chart/${Bun.CryptoHasher.hash('sha256', svg, 'hex')}`, svg } : null;
+    drawings.set(node, drawing);
+    return drawing;
 }
 
 // A chart has no media file either: it draws as the SVG the HTML export inlines, through the sanitizer a pasted SVG
@@ -40,12 +51,8 @@ function figureMediaKey(node: JSONContent): string | null {
 export async function chartFigureMedia(roots: JSONContent[]): Promise<ExportMedia[]> {
     const charts = new Map<string, string>();
     const visit = (node: JSONContent) => {
-        const key = node.type === 'chart' ? figureMediaKey(node) : null;
-        if (key && !charts.has(key)) {
-            const attrs = readChartAttrs(node.attrs ?? {});
-            const { spec } = readChartSpec(attrs);
-            if (spec) charts.set(key, chartSvg(spec, attrs));
-        }
+        const drawing = node.type === 'chart' ? chartDrawing(node) : null;
+        if (drawing) charts.set(drawing.name, drawing.svg);
         for (const child of node.content ?? []) visit(child);
     };
     for (const root of roots) visit(root);

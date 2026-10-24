@@ -65,10 +65,15 @@ export function readChartAttrs(attrs: Record<string, unknown>): ChartAttrs & Cha
 }
 
 // The chart drawn in its look at its stored size, or the placeholder for a spec that doesn't parse. Its id is new on
-// every draw, so no two charts on a page, or in a copy beside it, share a gradient's id.
-export function chartSvg(spec: ChartSpec | null, { width, height, ...look }: ChartAttrs): string {
+// every draw, so no two charts on a page, or in a copy beside it, share a gradient's id; a drawing in a file of its own
+// names one, so a chart drawn twice is the same SVG.
+export function chartSvg(
+    spec: ChartSpec | null,
+    { width, height, ...look }: ChartAttrs,
+    id = `chart-${nanoid(10)}`,
+): string {
     return renderChartSpecSvg({
-        id: `chart-${nanoid(10)}`,
+        id,
         spec,
         width: width ?? CHART_DEFAULT_SIZE.width,
         height: height ?? CHART_DEFAULT_SIZE.height,
