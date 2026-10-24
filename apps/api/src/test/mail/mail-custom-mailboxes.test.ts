@@ -11,9 +11,18 @@ import {
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { evictHome } from '../../lib/home/get-home';
+import { evictHome, getHome } from '../../lib/home/get-home';
 import { boxDir, maildirOf, makeEml, seedMaildirFile, seedMaildirFolder } from '../mail-test-helpers';
-import { app, assertJson, authedRequest, collectSSE, createTestUser, ensureServer, findOrFail } from '../setup';
+import {
+    app,
+    assertJson,
+    authedRequest,
+    collectSSE,
+    createTestUser,
+    ensureServer,
+    eventually,
+    findOrFail,
+} from '../setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -501,5 +510,31 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
             { dir: 'new' },
         );
         expect((await mailboxWhenCounting(token, userId, MAILBOX_ARCHIVE, 1)).total).toBe(1);
+    });
+
+    test("a folder's new/ missing when the watchers start is watched once it exists", async () => {
+        await evictHome(userId);
+        const home = await getHome(userId);
+        rmSync(join(boxDir(userId, MAILBOX_INBOX), 'new'), { recursive: true });
+        await home.mail.watchFolders();
+        mkdirSync(join(boxDir(userId, MAILBOX_INBOX), 'new'));
+        await home.mail.watchFolders();
+
+        // Listings index no standard folder, so only a watcher on new/ can sync what lands there.
+        const sse = await collectSSE(userId);
+        try {
+            await eventually(async () => {
+                seedMaildirFile(userId, MAILBOX_INBOX, `${Date.now()}.late`, makeEml('Into the late new/'), {
+                    dir: 'new',
+                });
+                return (
+                    sse.events.some(
+                        (event) => event.type === SSEventType.MAIL_RECEIVED && event.mail.mailbox === MAILBOX_INBOX,
+                    ) || undefined
+                );
+            }, 'the inbox synced');
+        } finally {
+            sse.stop();
+        }
     });
 });
