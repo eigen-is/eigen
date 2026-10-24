@@ -115,6 +115,27 @@ describe('chart read', () => {
         expect(readChart({ ...parts(), specChart: 42 }).specChart).toBe('');
     });
 
+    test('a forged million keys stop the read at the byte limit, and the chart reads as empty', () => {
+        const fields = new Map<string, unknown>(Object.entries({ id: 'c1', type: 'chart', ...parts() }));
+        let visited = 0;
+        const el = readElementFromFields({
+            get: (key: string) => fields.get(key) ?? (key.startsWith('specX') ? 'x' : undefined),
+            *keys() {
+                yield* fields.keys();
+                for (let i = 0; i < 1_000_000; i++) {
+                    visited += 1;
+                    yield `specX${i}`;
+                }
+            },
+        });
+        // Each forged key costs its name and a byte of text, 'specX0' and up.
+        expect(visited).toBeLessThan(MAX_CHART_SPEC_BYTES / 'specX0x'.length);
+        expect(el?.type === 'chart' && CHART_SPEC_PART_KEYS.map((key) => el[key])).toEqual(
+            CHART_SPEC_PART_KEYS.map(() => ''),
+        );
+        expect(Object.keys(el ?? {}).some((key) => key.startsWith('specX'))).toBe(false);
+    });
+
     test('color and background go through the shared field readers; the font is the spec’s, not a field', () => {
         const el = readChart({ ...parts(), fontFamily: 'Inter', color: 'url(#x)', fill: 'nope' });
         expect(el.color).toBe(DEFAULT_ELEMENT_PROPS.strokeColor);
@@ -141,6 +162,16 @@ describe('chart placeholder', () => {
         expect(svg).toContain('This chart can&apos;t be shown');
         expect(textCount(svg)).toBe(1);
         expect(svg).not.toContain('Sales');
+    });
+
+    test('an element with only the one-string chart field draws the placeholder', () => {
+        const el = readChart({ chart: JSON.stringify(specOf()) });
+        expect(CHART_SPEC_PART_KEYS.map((key) => el[key])).toEqual(CHART_SPEC_PART_KEYS.map(() => ''));
+        expect('chart' in el).toBe(false);
+        const svg = svgOf(el);
+        expect(svg).toContain('This chart can&apos;t be shown');
+        expect(textCount(svg)).toBe(1);
+        expect(ELEMENT_KINDS.chart.searchText(el)).toBe('');
     });
 
     test('the message fits the box or is left out', () => {
