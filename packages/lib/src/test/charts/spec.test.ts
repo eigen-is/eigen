@@ -782,7 +782,7 @@ describe('chartPointMoves', () => {
                     return performance.now() - start;
                 }),
             );
-        // Against a tenth of the points on the same machine, so load scales both: linear is about 10x, a copy per move 100x.
+        // Timed against a tenth of the points, so load slows both: linear is about 10x, a copy per move 100x.
         expect(fastest(applying(MAX_CHART_POINTS))).toBeLessThan(30 * fastest(applying(MAX_CHART_POINTS / 10)));
         const after = moved(
             Object.fromEntries(Array.from({ length: MAX_CHART_POINTS }, (_, i) => [i, '#000000'])),
