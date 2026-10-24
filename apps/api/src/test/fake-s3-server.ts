@@ -31,24 +31,24 @@ const SLOW_PUT_MS = 500;
 
 export class FakeS3Server {
     // Keyed by object key.
-    readonly faults = new Map<string, S3Fault>();
-    readonly gets = new Map<string, number>();
-    readonly heads = new Map<string, number>();
-    readonly deletes = new Map<string, number>();
+    public readonly faults = new Map<string, S3Fault>();
+    public readonly gets = new Map<string, number>();
+    public readonly heads = new Map<string, number>();
+    public readonly deletes = new Map<string, number>();
     // How many of a key's next HEADs and GETs answer 503 SlowDown, as Hetzner sheds load.
-    readonly slowDowns = new Map<string, number>();
+    public readonly slowDowns = new Map<string, number>();
     // Held requests whose client closed the connection itself.
-    abandoned = 0;
+    public abandoned = 0;
     // Answer a GET without a signature, as a bucket anyone may read does.
-    publicRead = false;
+    public publicRead = false;
     // The bucket's configurations as a GET answers them and a PUT stores them; a null lifecycle is a 404, an empty
     // string an empty 200.
-    versioning = '<VersioningConfiguration/>';
-    lifecycle: string | null = null;
-    lifecyclePuts = 0;
+    public versioning = '<VersioningConfiguration/>';
+    public lifecycle: string | null = null;
+    public lifecyclePuts = 0;
     // Multipart uploads begun and neither completed nor aborted, by upload id.
-    readonly openUploads = new Map<string, { key: string; parts: Map<number, Buffer> }>();
-    abortedUploads = 0;
+    public readonly openUploads = new Map<string, { key: string; parts: Map<number, Buffer> }>();
+    public abortedUploads = 0;
     // What a list answers: every key written through this server and not deleted since.
     private readonly listed = new Set<string>();
     private nextUploadId = 1;
@@ -56,21 +56,21 @@ export class FakeS3Server {
     private readonly sockets = new Set<net.Socket>();
     private readonly server = net.createServer((socket) => this.accept(socket));
 
-    constructor(readonly store: StorageBackend) {}
+    public constructor(public readonly store: StorageBackend) {}
 
-    get heldCount(): number {
+    public get heldCount(): number {
         return this.held.size;
     }
 
     // The returned config points an S3Storage or an s3 mount at this server.
-    async start(): Promise<S3Config> {
+    public async start(): Promise<S3Config> {
         await new Promise<void>((resolve) => this.server.listen(0, '127.0.0.1', resolve));
         const { port } = this.server.address() as net.AddressInfo;
         return { ...DUMMY_S3, endpoint: `http://127.0.0.1:${port}`, bucket: 'eigen' };
     }
 
     // Clear every fault and answer every held request in full, as a provider recovering would.
-    heal(): void {
+    public heal(): void {
         this.faults.clear();
         this.slowDowns.clear();
         const resumes = [...this.held.values()];
@@ -78,7 +78,7 @@ export class FakeS3Server {
         for (const resume of resumes) resume();
     }
 
-    async stop(): Promise<void> {
+    public async stop(): Promise<void> {
         this.held.clear();
         const closed = new Promise<void>((resolve) => this.server.close(() => resolve()));
         for (const socket of this.sockets) socket.destroy();

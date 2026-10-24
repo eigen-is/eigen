@@ -15,10 +15,10 @@ import { TEST_DATA_DIR } from '../test-env';
 // only AFTER drive.init() finished (the allSettled-before-teardown invariant: a regression back to
 // Promise.all would tear down while the peer is still mid-init).
 class LeakProbeHome extends Home {
-    driveInitCompleted = false;
-    driveInitCompletedWhenDestructRan: boolean | undefined;
+    private driveInitCompleted = false;
+    public driveInitCompletedWhenDestructRan: boolean | undefined;
 
-    constructor(driveInitGate: Promise<void>) {
+    public constructor(driveInitGate: Promise<void>) {
         super({ id: 'leak-probe' } as User, join(TEST_DATA_DIR, 'leak-probe'));
 
         this.settings = { load: async () => {} } as unknown as JsonStore<HomeSettings>;
@@ -45,9 +45,9 @@ class LeakProbeHome extends Home {
 // P2 batch review: settings.load() runs BEFORE the subsystem allSettled block — its throw must take
 // the same failure path (shutdown + waiter rejection) instead of stranding queued init() callers.
 class CorruptSettingsHome extends Home {
-    driveDestructRan = false;
+    public driveDestructRan = false;
 
-    constructor() {
+    public constructor() {
         super({ id: 'corrupt-settings-probe' } as User, join(TEST_DATA_DIR, 'corrupt-settings-probe'));
 
         this.settings = {
