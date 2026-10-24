@@ -768,10 +768,26 @@ describe('chartPointMoves', () => {
 
     // An xlsx pie can store a point on every slice, and each row op moves them all.
     test('applies a move of every point in linear time', () => {
-        const colors = Object.fromEntries(Array.from({ length: MAX_CHART_POINTS }, (_, i) => [i, '#000000']));
-        const start = performance.now();
-        const after = moved(colors, (i) => (i === 0 ? null : i - 1));
-        expect(performance.now() - start).toBeLessThan(25);
+        const shift = (i: number) => (i === 0 ? null : i - 1);
+        const applying = (count: number) => {
+            const stored = points(Object.fromEntries(Array.from({ length: count }, (_, i) => [i, '#000000'])));
+            const change = chartPointMoves(stored, shift);
+            return () => applyChartSpecChange(stored, change);
+        };
+        const fastest = (run: () => unknown) =>
+            Math.min(
+                ...[1, 2, 3].map(() => {
+                    const start = performance.now();
+                    run();
+                    return performance.now() - start;
+                }),
+            );
+        // Against a tenth of the points on the same machine, so load scales both: linear is about 10x, a copy per move 100x.
+        expect(fastest(applying(MAX_CHART_POINTS))).toBeLessThan(30 * fastest(applying(MAX_CHART_POINTS / 10)));
+        const after = moved(
+            Object.fromEntries(Array.from({ length: MAX_CHART_POINTS }, (_, i) => [i, '#000000'])),
+            shift,
+        );
         expect(Object.keys(after)).toHaveLength(MAX_CHART_POINTS - 1);
         expect(after[MAX_CHART_POINTS - 2]).toEqual({ color: '#000000', future: String(MAX_CHART_POINTS - 1) });
     });
