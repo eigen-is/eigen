@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import { DEFAULT_CHART_SERIES_STYLE, parseChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
+import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { ChartType } from '@workspace/lib/types/chart';
 import type { StyleDefaults, VectorChartElement, VectorElement } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
+    prop,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
     VECTOR_STYLE_DEFAULTS,
@@ -14,12 +15,55 @@ import { installHappyDom } from '../../../happy-dom';
 
 installHappyDom();
 
-const { act, createElement } = await import('react');
+const { WebsocketProvider } = await import('y-websocket');
+const { act, createElement, useEffect, useRef, useState } = await import('react');
+const realCollab = await import('@workspace/lib/collab');
+type UseCollabDocOptions = Parameters<typeof realCollab.useCollabDoc>[0];
+
+// Each peer's canvas reads its own doc, by mount, with the canvas's own undo scope and no server behind it.
+const peerDocs = new Map<string, Y.Doc>();
+mock.module('@workspace/lib/collab', () => ({
+    ...realCollab,
+    useCollabDoc: (options: UseCollabDocOptions) => {
+        const doc = peerDocs.get(options.mountId) ?? new Y.Doc();
+        const docRef = useRef(doc);
+        const [provider] = useState(() => new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false }));
+        const [undoManager] = useState(() => {
+            const scope = options.undoScope?.(doc);
+            return scope ? new Y.UndoManager(scope) : null;
+        });
+        const onInit = useRef(options.onInit);
+        useEffect(() => {
+            const cleanup = onInit.current?.({ doc, provider, undoManager });
+            return () => {
+                cleanup?.();
+                provider.destroy();
+            };
+        }, []);
+        return {
+            doc,
+            docRef,
+            provider,
+            undoManager,
+            synced: true,
+            offline: false,
+            loaded: true,
+            storageUnavailable: false,
+            storageGone: false,
+            unsyncedEdits: false,
+        };
+    },
+}));
+afterAll(() => {
+    mock.module('@workspace/lib/collab', () => realCollab);
+});
+
 const { createRoot } = await import('react-dom/client');
 const { holdCapture, PropertyGestureContext, sealed } = await import('../../../../components/properties-panel');
 const { ChartEditDialog, ChartPanelSection, newChartElement } = await import(
     '../../../../components/vector/kinds/chart'
 );
+const { CanvasPropertiesPanel, useCanvasDoc } = await import('../../../../components/vector');
 
 const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
@@ -34,7 +78,7 @@ function chart(id: string, type: ChartType = 'column'): VectorChartElement {
         height: 400,
         angle: 0,
         index: 'a0',
-        chart: JSON.stringify(sampleChartSpec(type)),
+        ...newChartSpecParts(sampleChartSpec(type)),
         fill: '{"type":"solid","color":"#ffffff","style":"solid"}',
         color: '#1e1e1e',
     };
@@ -96,7 +140,7 @@ describe('newChartElement', () => {
         expect(inserted).toHaveLength(1);
         const [el] = inserted;
         expect(el).toMatchObject({ type: 'chart', x: 640, y: 340, width: 640, height: 400 });
-        expect(el.type === 'chart' && parseChartSpec(el.chart)).toEqual(sampleChartSpec('bar', 'Excalifont'));
+        expect(readChartSpec(el).spec).toEqual(sampleChartSpec('bar', 'Excalifont'));
         expect(el.roughness).toBe(VECTOR_STYLE_DEFAULTS.roughness);
         expect(undoManager.undoStack).toHaveLength(1);
         undoManager.undo();
@@ -107,7 +151,7 @@ describe('newChartElement', () => {
         const { inserted } = insert('pie', 'frame', SLIDES_STYLE_DEFAULTS);
         const [el] = inserted;
         expect(el).toMatchObject({ type: 'chart', x: 360, y: 202.5, width: 1200, height: 675 });
-        expect(el.type === 'chart' && parseChartSpec(el.chart)).toEqual(sampleChartSpec('pie', 'Inter'));
+        expect(readChartSpec(el).spec).toEqual(sampleChartSpec('pie', 'Inter'));
         expect(el.roughness).toBe(SLIDES_STYLE_DEFAULTS.roughness);
     });
 });
@@ -145,25 +189,19 @@ describe('ChartPanelSection', () => {
 
     test('two charts, or one whose spec does not parse, show no chart rows', async () => {
         expect((await section([chart('c1'), chart('c2')])).container.textContent).toBe('');
-        expect((await section([{ ...chart('c1'), chart: '{' }])).container.textContent).toBe('');
+        expect((await section([{ ...chart('c1'), specData: '{' }])).container.textContent).toBe('');
     });
 
-    test("an edit writes the element's chart field as the next spec", async () => {
+    test('an edit writes the one part it changed', async () => {
         const { container, writes } = await section([chart('c1')]);
         await type(container.querySelector('input[placeholder="Chart title"]'), 'Goals');
-        expect(writes).toHaveLength(1);
-        const written = writes[0].chart;
-        expect(typeof written === 'string' && parseChartSpec(written)?.title.text).toBe('Goals');
+        expect(writes).toEqual([{ specTitle: '{"text":"Goals"}' }]);
     });
 
-    test("a title edit keeps what this build doesn't know: a key on the spec, on an axis and an unknown legend", async () => {
-        const spec = sampleChartSpec('column');
-        const axes = { ...spec.axes, y: { ...spec.axes.y, logBase: 10 } };
-        const raw = { ...spec, legend: { position: 'inside' }, future: 1, axes };
-        const { container, writes } = await section([{ ...chart('c1'), chart: JSON.stringify(raw) }]);
+    test("a title edit keeps what this build doesn't know in its part", async () => {
+        const { container, writes } = await section([{ ...chart('c1'), specTitle: '{"text":"","future":1}' }]);
         await type(container.querySelector('input[placeholder="Chart title"]'), 'Goals');
-        const written = writes[0].chart;
-        expect(typeof written === 'string' && JSON.parse(written)).toEqual({ ...raw, title: { text: 'Goals' } });
+        expect(writes).toEqual([{ specTitle: '{"text":"Goals","future":1}' }]);
     });
 
     test('Edit data saves the grid as one write; Cancel writes nothing', async () => {
@@ -171,9 +209,8 @@ describe('ChartPanelSection', () => {
         await click(buttonIn(container, 'Edit data'));
         await typeInB2('7');
         await click(buttonIn(dialog(), 'Save'));
-        expect(writes).toHaveLength(1);
-        const written = writes[0].chart;
-        const spec = typeof written === 'string' ? parseChartSpec(written) : null;
+        expect(writes.map(Object.keys)).toEqual([['specData']]);
+        const { spec } = readChartSpec({ ...chart('c1'), ...writes[0] });
         expect(spec?.data.source === 'inline' && spec.data.series[0].values[0]).toBe(7);
 
         await click(buttonIn(container, 'Edit data'));
@@ -242,11 +279,11 @@ describe('ChartEditDialog', () => {
             series: { ...spec.series, 's-2': { ...DEFAULT_CHART_SERIES_STYLE, color: '#00ff00' } },
             points: { 's-1': { 1: { color: '#000002' } } },
         };
-        await show({ ...chart('c1'), chart: JSON.stringify(peer) });
+        const peerParts = { ...chart('c1'), ...newChartSpecParts(peer) };
+        await show(peerParts);
         await typeInB2('7');
         await click(buttonIn(dialog(), 'Save'));
-        const written = writes[0]?.chart;
-        const saved = typeof written === 'string' ? parseChartSpec(written) : null;
+        const saved = readChartSpec({ ...peerParts, ...writes[0] }).spec;
         expect(saved?.title.text).toBe('Peer title');
         expect(saved?.points).toEqual({ 's-1': { 1: { color: '#000002' } } });
         expect(['s-1', 's-2', 's-3'].map((id) => saved?.series[id].color)).toEqual([null, '#00ff00', null]);
@@ -256,7 +293,7 @@ describe('ChartEditDialog', () => {
 
 test('a font picked in the panel is one write of the spec and one undo step', async () => {
     const doc = new Y.Doc();
-    const element = doc.getMap<string>('element');
+    const element = doc.getMap('element');
     const undoManager = new Y.UndoManager(element);
     const el = chart('c1');
     const panel = createElement(ChartPanelSection, {
@@ -264,7 +301,7 @@ test('a font picked in the panel is one write of the spec and one undo step', as
         scene: new Map([[el.id, el]]),
         onChange: (fields: Record<string, unknown>) =>
             sealed(undoManager, () => {
-                if (typeof fields.chart === 'string') element.set('chart', fields.chart);
+                for (const [key, value] of Object.entries(fields)) element.set(key, value);
             }),
         onChangeEach: () => {},
         onReplace: () => {},
@@ -282,15 +319,16 @@ test('a font picked in the panel is one write of the spec and one undo step', as
         (item) => item.textContent === 'Source Serif 4',
     );
     await click(serif);
-    expect(parseChartSpec(element.get('chart') ?? '')?.chart.fontFamily).toBe('Source Serif 4');
+    expect(readChartSpec({ ...el, ...element.toJSON() }).spec?.chart.fontFamily).toBe('Source Serif 4');
+    expect([...element.keys()]).toEqual(['specChart']);
     expect(undoManager.undoStack).toHaveLength(1);
     undoManager.undo();
-    expect(element.get('chart')).toBeUndefined();
+    expect(element.get('specChart')).toBeUndefined();
 });
 
 test('a typed chart title through the panel is one undo step', async () => {
     const doc = new Y.Doc();
-    const element = doc.getMap<string>('element');
+    const element = doc.getMap('element');
     const undoManager = new Y.UndoManager(element);
     const el = chart('c1');
     const panel = createElement(ChartPanelSection, {
@@ -298,7 +336,7 @@ test('a typed chart title through the panel is one undo step', async () => {
         scene: new Map([[el.id, el]]),
         onChange: (fields: Record<string, unknown>) =>
             sealed(undoManager, () => {
-                if (typeof fields.chart === 'string') element.set('chart', fields.chart);
+                for (const [key, value] of Object.entries(fields)) element.set(key, value);
             }),
         onChangeEach: () => {},
         onReplace: () => {},
@@ -309,6 +347,130 @@ test('a typed chart title through the panel is one undo step', async () => {
     const input = container.querySelector<HTMLInputElement>('input[placeholder="Chart title"]');
     for (const typed of ['G', 'Go', 'Goa', 'Goal']) await type(input, typed);
     await act(async () => input?.dispatchEvent(new Event('focusout', { bubbles: true })));
-    expect(parseChartSpec(element.get('chart') ?? '')?.title.text).toBe('Goal');
+    expect(readChartSpec({ ...el, ...element.toJSON() }).spec?.title.text).toBe('Goal');
     expect(undoManager.undoStack).toHaveLength(1);
+});
+
+describe('two peers on one chart, through the panel and the canvas writer', () => {
+    const REMOTE = 'remote';
+    type Canvas = ReturnType<typeof useCanvasDoc>;
+
+    // Two docs that start in step, each with a canvas and its panel over the chart; neither hears the other until
+    // sync, so both edit the chart as it was.
+    const peers = async () => {
+        const a = new Y.Doc();
+        const b = new Y.Doc();
+        writeElementInDoc(a, { type: 'chart', width: 640, height: 400 }, 'a0', VECTOR_STYLE_DEFAULTS, 'c1');
+        Y.applyUpdate(b, Y.encodeStateAsUpdate(a), REMOTE);
+        peerDocs.set('a', a);
+        peerDocs.set('b', b);
+        const canvases = new Map<string, Canvas>();
+        function Peer({ mountId }: { mountId: string }) {
+            const canvas = useCanvasDoc('owner', mountId, 'drawing', VECTOR_STYLE_DEFAULTS);
+            canvases.set(mountId, canvas);
+            return createElement(CanvasPropertiesPanel, {
+                elements: canvas.elements,
+                selectedElements: canvas.elements,
+                updateElements: canvas.updateElements,
+                reorderElements: canvas.reorderElements,
+                replaceElement: canvas.replaceElement,
+                setSelectedIds: () => {},
+                undoManager: canvas.undoManager,
+                aspectLocked: false,
+                onAspectLockChange: () => {},
+            });
+        }
+        const panelA = await render(createElement(Peer, { mountId: 'a' }));
+        const panelB = await render(createElement(Peer, { mountId: 'b' }));
+        const sync = () =>
+            act(async () => {
+                Y.applyUpdate(b, Y.encodeStateAsUpdate(a, Y.encodeStateVector(b)), REMOTE);
+                Y.applyUpdate(a, Y.encodeStateAsUpdate(b, Y.encodeStateVector(a)), REMOTE);
+            });
+        const specIn = (doc: Y.Doc) => {
+            const [el] = readVectorFromDoc(doc).elements;
+            return el ? readChartSpec(el).spec : null;
+        };
+        const undo = (mountId: string) => act(async () => canvases.get(mountId)?.undoManager?.undo());
+        return { a, b, panelA, panelB, sync, specIn, undo };
+    };
+
+    const setTitle = async (panel: HTMLElement, value: string) => {
+        const input = panel.querySelector<HTMLInputElement>('input[placeholder="Chart title"]');
+        await type(input, value);
+        await act(async () => input?.dispatchEvent(new Event('focusout', { bubbles: true })));
+    };
+    // The first palette swatch other than the series' own, so the pick is a change.
+    const recolor = async (panel: HTMLElement, series: string) => {
+        const span = [...panel.querySelectorAll('span.w-14')].find((s) => s.textContent?.trim() === series);
+        const trigger = span?.nextElementSibling?.querySelector('button');
+        await act(async () => trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        const swatch = [
+            ...document.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button[title^="#"]'),
+        ].at(-1);
+        if (!swatch) throw new Error('the color popover has no swatch');
+        await click(swatch);
+        return swatch.title;
+    };
+
+    test('a title on one and a series colour on the other: both kept on both', async () => {
+        const { a, b, panelA, panelB, sync, specIn } = await peers();
+        await setTitle(panelA, 'Goals');
+        const color = await recolor(panelB, 'Bulb (incandescent)');
+        await sync();
+        for (const doc of [a, b]) {
+            expect(specIn(doc)?.title.text).toBe('Goals');
+            expect(specIn(doc)?.series['s-2'].color).toBe(color);
+        }
+    });
+
+    // The colour lands after the title, on the chart the title is in, so one field would hold both and ⌘Z couldn't
+    // take the title back without the colour.
+    test('⌘Z of the title through the canvas undo scope leaves the colour a peer set after it', async () => {
+        const { a, b, panelA, panelB, sync, specIn, undo } = await peers();
+        await setTitle(panelA, 'Goals');
+        await sync();
+        const color = await recolor(panelB, 'Bulb (incandescent)');
+        await sync();
+        await undo('a');
+        await sync();
+        for (const doc of [a, b]) {
+            expect(specIn(doc)?.title.text).toBe(sampleChartSpec('column').title.text);
+            expect(specIn(doc)?.series['s-2'].color).toBe(color);
+        }
+    });
+
+    test("a newer build's part stays on the element through an edit, and the canvas reads it", async () => {
+        const { a, panelA } = await peers();
+        const stored = a.getMap('elements').get('c1');
+        if (!(stored instanceof Y.Map)) throw new Error('no chart');
+        await act(async () => stored.set('specFuture', '{"a":1}'));
+        await setTitle(panelA, 'Goals');
+        expect(stored.get('specFuture')).toBe('{"a":1}');
+        const [el] = readVectorFromDoc(a).elements;
+        expect(el && prop(el, 'specFuture')).toBe('{"a":1}');
+    });
+
+    test("Edit data's series delete on one and a recolour on the other: both kept on both", async () => {
+        const { a, b, panelA, panelB, sync, specIn } = await peers();
+        await click(buttonIn(panelA, 'Edit data'));
+        const header = [...(dialog()?.querySelectorAll<HTMLElement>('[role="columnheader"]') ?? [])].find(
+            (el) => el.textContent === 'B',
+        );
+        await act(async () =>
+            header?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, buttons: 1 })),
+        );
+        const editor = dialog()?.querySelector('input[data-cell-editor]');
+        await act(async () =>
+            editor?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true })),
+        );
+        await click(buttonIn(dialog(), 'Save'));
+        const color = await recolor(panelB, 'Bulb (incandescent)');
+        await sync();
+        for (const doc of [a, b]) {
+            const spec = specIn(doc);
+            expect(spec?.data.series.map((series) => series.id)).toEqual(['s-2', 's-3']);
+            expect(spec?.series['s-2'].color).toBe(color);
+        }
+    });
 });

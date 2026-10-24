@@ -14,11 +14,10 @@ import { chart, shape } from '../element-factories';
 
 const SOLID = serializeFill({ type: 'solid', color: '#fffbe6', style: 'cross-hatch' });
 
-const specJson = (type: ChartType, over: Partial<ChartSpec> = {}): string =>
-    JSON.stringify({ ...sampleChartSpec(type), ...over });
+const specOf = (type: ChartType, over: Partial<ChartSpec> = {}): ChartSpec => ({ ...sampleChartSpec(type), ...over });
 
 // Crowded enough that the category labels turn -45°.
-const CROWDED = specJson('column', {
+const CROWDED = specOf('column', {
     data: {
         source: 'inline',
         categories: Array.from({ length: 12 }, (_, i) => `Category number ${i + 1}`),
@@ -70,7 +69,7 @@ describe('chartToElements', () => {
     });
 
     test('a bar chart draws its bars as rectangles too', () => {
-        const elements = chartToElements(chart({ id: 'c1', chart: specJson('bar') }));
+        const elements = chartToElements(chart({ id: 'c1' }, specOf('bar')));
         expect(typesById(elements, 'bar:')).toEqual(Array(21).fill('rectangle'));
     });
 
@@ -79,13 +78,13 @@ describe('chartToElements', () => {
         const series = Object.fromEntries(
             spec.data.series.map(({ id }) => [id, { ...DEFAULT_CHART_SERIES_STYLE, marker: { visible: true } }]),
         );
-        const elements = chartToElements(chart({ id: 'c1', chart: specJson('line', { series }) }));
+        const elements = chartToElements(chart({ id: 'c1' }, specOf('line', { series })));
         expect(typesById(elements, 'line:')).toEqual(['line', 'line', 'line']);
         expect(typesById(elements, 'marker:')).toEqual(Array(21).fill('ellipse'));
     });
 
     test('a pie chart: one pie element per slice', () => {
-        const elements = chartToElements(chart({ id: 'c1', chart: specJson('pie') }));
+        const elements = chartToElements(chart({ id: 'c1' }, specOf('pie')));
         expect(typesById(elements, 'slice:')).toEqual(Array(7).fill('pie'));
         expect(labelsOf(elements).length).toBeGreaterThan(4);
     });
@@ -101,11 +100,11 @@ describe('chartToElements', () => {
     });
 
     test('a chart that does not draw converts to nothing', () => {
-        expect(chartToElements(chart({ id: 'c1', chart: '{"chart":{"type":"column"}' }))).toEqual([]);
-        const range = specJson('column', {
+        expect(chartToElements(chart({ id: 'c1', specData: '{"source":"inline"' }))).toEqual([]);
+        const range = specOf('column', {
             data: { source: 'range', categories: null, series: [] },
         });
-        expect(chartToElements(chart({ id: 'c1', chart: range }))).toEqual([]);
+        expect(chartToElements(chart({ id: 'c1' }, range))).toEqual([]);
     });
 
     test('a rotated, framed, half-transparent chart: centers turn about the chart center, angle and opacity compose', () => {
@@ -136,7 +135,7 @@ describe('chartToElements', () => {
     });
 
     test('a label box keeps the text anchor where the painter put it, turned labels and a turned chart included', () => {
-        const el = chart({ id: 'c1', chart: CROWDED, x: 40, y: -20, angle: 30 });
+        const el = chart({ id: 'c1', x: 40, y: -20, angle: 30 }, CROWDED);
         const { labels } = layoutOf(el);
         const boxes = labelsOf(chartToElements(el));
         expect(labels.some((label) => label.rotate === -45)).toBe(true);
@@ -155,10 +154,10 @@ describe('chartToElements', () => {
     });
 
     test('a label box is rich text in the spec font, aligned by its anchor, with no paint of its own', () => {
-        const el = chart({
-            id: 'c1',
-            chart: JSON.stringify({ ...sampleChartSpec('column', 'Source Serif 4'), title: { text: 'A < B & "C"' } }),
-        });
+        const el = chart(
+            { id: 'c1' },
+            { ...sampleChartSpec('column', 'Source Serif 4'), title: { text: 'A < B & "C"' } },
+        );
         const title = labelsOf(chartToElements(el)).find((box) => box.fontWeight === 'bold');
         if (!title) throw new Error('expected a bold title');
         expect(title).toMatchObject({
@@ -175,7 +174,7 @@ describe('chartToElements', () => {
 
     test('the converted shapes draw exactly what the painter drew, the labels aside', () => {
         for (const type of ['column', 'bar', 'line', 'pie'] as const) {
-            const el = chart({ id: 'c1', fill: SOLID, chart: specJson(type) });
+            const el = chart({ id: 'c1', fill: SOLID }, specOf(type));
             const elements = chartToElements(el);
             const shapes = shapesOf(elements)
                 .map((converted) => {
@@ -190,7 +189,7 @@ describe('chartToElements', () => {
 
     test('the registry offers Convert to shapes for a chart that draws, and nothing else', () => {
         expect(convertToShapes(chart({ id: 'c1' })).length).toBeGreaterThan(0);
-        expect(convertToShapes(chart({ id: 'c1', chart: '' }))).toEqual([]);
+        expect(convertToShapes(chart({ id: 'c1', specData: '' }))).toEqual([]);
         expect(convertToShapes(shape({ id: 'r1', type: 'rectangle' }))).toEqual([]);
     });
 });

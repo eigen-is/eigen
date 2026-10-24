@@ -14,7 +14,7 @@ const { WebsocketProvider } = await import('y-websocket');
 const { act, createElement, useEffect, useRef, useState } = await import('react');
 const realCollab = await import('@workspace/lib/collab');
 const download = await import('@workspace/lib/download');
-const { sampleChartSpec } = await import('@workspace/lib/charts');
+const { newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
 const { generateNKeysBetween, VECTOR_STYLE_DEFAULTS, writeElementInDoc } = await import('@workspace/lib/vector');
 const { drivePath } = await import('../../drive-path');
@@ -74,7 +74,7 @@ afterAll(() => {
     Object.defineProperty(window.Range.prototype, 'getClientRects', { configurable: true, value: getClientRects });
 });
 
-const chartSpec = JSON.stringify({ ...sampleChartSpec('column'), title: { text: 'Light' } });
+const chartParts = newChartSpecParts({ ...sampleChartSpec('column'), title: { text: 'Light' } });
 const ELEMENTS: (NewVectorElement & { id: string })[] = [
     { id: 'r', type: 'rectangle', x: 0, y: 0, width: 100, height: 100 },
     {
@@ -87,7 +87,7 @@ const ELEMENTS: (NewVectorElement & { id: string })[] = [
         html: '<p>Hi there</p>',
         fontFamily: 'Inter',
     },
-    { id: 'c', type: 'chart', x: 0, y: 200, width: 300, height: 200, chart: chartSpec },
+    { id: 'c', type: 'chart', x: 0, y: 200, width: 300, height: 200, ...chartParts },
     { id: 'i', type: 'image', x: 400, y: 200, width: 100, height: 100, mediaName: 'cat.png' },
 ];
 const POINT = { r: [50, 50], t: [250, 20], c: [150, 300], i: [450, 250] } as const;

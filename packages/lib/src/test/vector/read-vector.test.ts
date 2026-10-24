@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import * as Y from 'yjs';
+import { newChartSpecParts, sampleChartSpec } from '../../charts';
 import { escapeHtml } from '../../core/html';
+import { CHART_SPEC_PART_KEYS } from '../../types/chart';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
 import {
     MAX_FONT_SIZE_PX,
@@ -734,7 +736,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         type: 'chart',
         ...paint,
         ...sketch,
-        chart: '{"chart":{"type":"pie"},"data":{"source":"inline","categories":[],"series":[]}}',
+        ...newChartSpecParts({ ...sampleChartSpec('pie'), title: { text: 'Drift' } }),
         fontFamily: 'JetBrains Mono',
         color: '#0a0b0c',
     });
@@ -804,7 +806,10 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         { record: rect, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'corners'] },
         { record: pie, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'startAngle', 'sweepAngle'] },
         { record: path, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'path', 'closed'] },
-        { record: chart, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'chart', 'color'] },
+        {
+            record: chart,
+            fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, ...CHART_SPEC_PART_KEYS, 'color'],
+        },
         {
             record: richtext,
             fields: [

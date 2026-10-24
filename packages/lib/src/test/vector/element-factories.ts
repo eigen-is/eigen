@@ -1,6 +1,8 @@
 // The shared element fixtures for the vector suites. A row is the base fields plus the kind's own
 // style defaults, so a fixture never re-lists what the registry already owns.
 
+import { newChartSpecParts } from '../../charts/spec';
+import type { ChartSpec } from '../../types/chart';
 import { serializePoints } from '../../vector/geometry';
 import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import type {
@@ -69,12 +71,17 @@ export function path(over: Partial<VectorPathElement> & Pick<VectorPathElement, 
     return { ...BASE, ...ELEMENT_KINDS.path.defaults(VECTOR_STYLE_DEFAULTS), type: 'path', ...over };
 }
 
-export function chart(over: Partial<VectorChartElement> & Pick<VectorChartElement, 'id'>): VectorChartElement {
+// The kind's sample chart, or the spec given stored as a new chart's parts.
+export function chart(
+    over: Partial<VectorChartElement> & Pick<VectorChartElement, 'id'>,
+    spec?: ChartSpec,
+): VectorChartElement {
     return {
         ...BASE,
         width: 640,
         height: 400,
         ...ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS),
+        ...(spec && newChartSpecParts(spec)),
         type: 'chart',
         ...over,
     };

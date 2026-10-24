@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { VectorElement } from '@workspace/lib/vector';
 import { convertToShapes, readVectorFromDoc, serializeBinding, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import * as Y from 'yjs';
@@ -80,7 +80,7 @@ const CHART = {
     height: 400,
     index: 'a1',
     seed: 5,
-    chart: JSON.stringify(sampleChartSpec('column')),
+    ...newChartSpecParts(sampleChartSpec('column')),
 };
 
 function shapesOfChart(doc: Y.Doc): VectorElement[] {

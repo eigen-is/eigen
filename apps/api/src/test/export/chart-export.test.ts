@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { StyleDefaults, VectorChartElement, VectorScene } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
@@ -39,7 +39,7 @@ function chartElement(style: StyleDefaults, over: Partial<VectorChartElement> = 
         index: 'a0',
         seed: 7,
         // A turned axis title, a bold title and escaped text all reach the export.
-        chart: JSON.stringify({
+        ...newChartSpecParts({
             ...spec,
             title: { text: TITLE },
             axes: { ...spec.axes, y: { ...spec.axes.y, title: { text: 'Points' } } },

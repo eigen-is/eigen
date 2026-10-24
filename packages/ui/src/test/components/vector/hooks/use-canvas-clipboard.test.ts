@@ -12,7 +12,7 @@ installHappyDom();
 (window.HTMLCanvasElement.prototype as any).getContext = () => ({ font: '', measureText: () => ({ width: 40 }) });
 
 const { createElement } = await import('react');
-const { sampleChartSpec } = await import('@workspace/lib/charts');
+const { newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
 const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
 const {
     buildElementsClipboardItem,
@@ -160,7 +160,7 @@ describe("⌘V of another app's items", () => {
                 width: 600.5,
                 height: 371,
                 angle: 0,
-                chart: spec,
+                ...newChartSpecParts(sampleChartSpec('bar')),
                 ...look,
             },
         ]);
@@ -197,12 +197,19 @@ describe("⌘V of another app's items", () => {
             width: 640,
             height: 400,
             angle: 0,
-            chart: spec,
+            ...newChartSpecParts(sampleChartSpec('bar')),
         };
         const elements = buildElementsClipboardItem([record], 'f2');
         if (!elements) throw new Error('no elements item');
         const added = await pasteOnCanvas([elements, { type: 'chart', spec, width: 640, height: 400, look }]);
         expect(added).toHaveLength(1);
-        expect(added[0]).toMatchObject({ type: 'chart', x: 10, y: 20, width: 640, height: 400, chart: spec });
+        expect(added[0]).toMatchObject({
+            type: 'chart',
+            x: 10,
+            y: 20,
+            width: 640,
+            height: 400,
+            ...newChartSpecParts(sampleChartSpec('bar')),
+        });
     });
 });

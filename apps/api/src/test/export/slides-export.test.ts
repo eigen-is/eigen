@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorRichTextElement } from '@workspace/lib/vector';
@@ -207,7 +207,7 @@ describe('deck export — pptx', () => {
             );
             writeElementInDoc(
                 collab.doc,
-                { type: 'chart', ...on, chart: JSON.stringify(sampleChartSpec('pie')) },
+                { type: 'chart', ...on, ...newChartSpecParts(sampleChartSpec('pie')) },
                 'a3',
                 SLIDES_STYLE_DEFAULTS,
             );

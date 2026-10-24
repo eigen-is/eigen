@@ -1,9 +1,9 @@
 // The chart's UI entry: the shared chart editor as the panel's Chart section, the Edit data dialog a
 // double-click opens, Convert to shapes, and the element Insert → Chart places. Every edit is a change applied
-// onto the `chart` field as stored, so a key this build doesn't know stays, and written as that one field.
+// onto the parts as stored, so a key this build doesn't know stays, and writes only the parts it changed.
 
-import { applyChartSpecChange, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
-import type { ChartSpecChange, ChartType, StoredChartSpec } from '@workspace/lib/types/chart';
+import { chartSpecWrites, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import type { ChartType } from '@workspace/lib/types/chart';
 import type { NewVectorElement, Point, StyleDefaults, VectorElement } from '@workspace/lib/vector';
 import { convertToShapes } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
@@ -28,14 +28,11 @@ export function newChartElement(
         y: center.y - height / 2,
         width,
         height,
-        chart: JSON.stringify(sampleChartSpec(type, style.fontFamily)),
+        ...newChartSpecParts(sampleChartSpec(type, style.fontFamily)),
     };
 }
 
-const chartOf = (el: VectorElement | undefined) => readChartSpec(el?.type === 'chart' ? el.chart : '');
-const write = (stored: StoredChartSpec, change: ChartSpecChange) => ({
-    chart: JSON.stringify(applyChartSpecChange(stored, change)),
-});
+const chartOf = (el: VectorElement | undefined) => readChartSpec(el?.type === 'chart' ? el : {});
 
 // One chart only: a spec doesn't merge across charts the way a color does.
 export function ChartPanelSection({ elements, onChange, onReplace }: KindPanelSectionProps) {
@@ -43,7 +40,7 @@ export function ChartPanelSection({ elements, onChange, onReplace }: KindPanelSe
     const { stored, spec } = chartOf(elements.length === 1 ? el : undefined);
     if (!spec) return null;
     return (
-        <ChartEditor spec={spec} stored={stored} onChange={(change) => onChange(write(stored, change))}>
+        <ChartEditor spec={spec} stored={stored} onChange={(change) => onChange(chartSpecWrites(stored, change))}>
             {spec.data.source === 'inline' && (
                 // Laid out on the click, not on every render of the panel.
                 <Button
@@ -69,7 +66,7 @@ export function ChartEditDialog({ element, onChange, onClose }: KindEditDialogPr
         <InlineChartDataDialog
             spec={spec}
             stored={stored}
-            onSave={(change) => onChange(write(stored, change))}
+            onSave={(change) => onChange(chartSpecWrites(stored, change))}
             onClose={onClose}
         />
     );

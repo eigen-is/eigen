@@ -4,25 +4,30 @@ import {
     formatTickValue,
     layoutChart,
     MAX_CHART_SPEC_BYTES,
-    parseChartSpec,
+    newChartSpecParts,
+    readChartSpec,
     sampleChartSpec,
 } from '../../../charts';
 import { getFontFamily } from '../../../constants/fonts';
 import { escapeXml } from '../../../core/xml';
 import type { ChartLayout, ChartSpec, ChartType } from '../../../types/chart';
+import { CHART_SPEC_PART_KEYS } from '../../../types/chart';
 import { parseFill, serializeFill, TRANSPARENT_FILL } from '../../../vector/fill';
-import { ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../../vector/kinds';
+import { ELEMENT_FIELDS, ELEMENT_KINDS, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from '../../../vector/kinds';
 import { svgTextLine } from '../../../vector/kinds/render-utils';
 import { readElementFromFields } from '../../../vector/read-vector';
 import { elementToSvg } from '../../../vector/scene-to-svg';
 import type { VectorChartElement, VectorElement } from '../../../vector/types';
-import { DEFAULT_ELEMENT_PROPS } from '../../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, prop } from '../../../vector/types';
 import { chart, richtext } from '../element-factories';
 
-const specJson = (over: Partial<ChartSpec> = {}, type: ChartType = 'column'): string =>
-    JSON.stringify({ ...sampleChartSpec(type), ...over });
+const specOf = (over: Partial<ChartSpec> = {}, type: ChartType = 'column'): ChartSpec => ({
+    ...sampleChartSpec(type),
+    ...over,
+});
+const parts = (spec = specOf()) => newChartSpecParts(spec);
 
-const RANGE_SPEC = specJson({
+const RANGE_SPEC = specOf({
     data: {
         source: 'range',
         categories: { sheetId: 's1', row: [1, 4], column: [0, 0] },
@@ -75,29 +80,43 @@ function layoutOf(el: VectorChartElement, spec: ChartSpec): ChartLayout {
 const textCount = (svg: string): number => svg.split('<text ').length - 1;
 
 describe('chart read', () => {
-    test('a malformed spec stays stored as it is and draws the placeholder', () => {
-        const broken = '{"chart":{"type":"column"},"data":';
-        const el = readChart({ chart: broken });
-        expect(el.chart).toBe(broken);
+    test('every part is a stored field of its own, and the one-string field is gone', () => {
+        expect(ELEMENT_FIELDS).toEqual(expect.arrayContaining([...CHART_SPEC_PART_KEYS]));
+        expect(ELEMENT_KINDS.chart.fields).toEqual(expect.arrayContaining([...CHART_SPEC_PART_KEYS]));
+        expect(ELEMENT_FIELDS).not.toContain('chart');
+    });
+
+    test('a part that does not parse stays stored as it is and draws the placeholder', () => {
+        const broken = '{"source":"inline","categories":';
+        const el = readChart({ ...parts(), specData: broken });
+        expect(el.specData).toBe(broken);
         const svg = svgOf(el);
         expect(svg).toContain('stroke-dasharray');
         expect(svg).toContain('This chart can&apos;t be shown');
         expect(textCount(svg)).toBe(1);
     });
 
-    test('a valid spec is kept byte for byte, unknown fields and key order included', () => {
-        const stored = `{"future":1,${specJson().slice(1)}`;
-        expect(readChart({ chart: stored }).chart).toBe(stored);
+    test('each part is kept byte for byte, unknown keys and key order included', () => {
+        const title = '{"future":1,"text":"Light"}';
+        expect(readChart({ ...parts(), specTitle: title }).specTitle).toBe(title);
     });
 
-    test('a spec over the byte limit reads as empty', () => {
-        const padded = specJson() + ' '.repeat(MAX_CHART_SPEC_BYTES);
-        expect(readChart({ chart: padded }).chart).toBe('');
-        expect(readChart({ chart: 42 }).chart).toBe('');
+    test("a newer build's part is kept as stored; one that is no string, and any other unknown key, is not", () => {
+        const el = readChart({ ...parts(), specFuture: '{"a":1}', specOther: 42, future: '1' });
+        expect(prop(el, 'specFuture')).toBe('{"a":1}');
+        expect('specOther' in el).toBe(false);
+        expect('future' in el).toBe(false);
+    });
+
+    test('past the byte limit every part reads as empty and no newer part is kept', () => {
+        const el = readChart({ ...parts(), specFuture: ' '.repeat(MAX_CHART_SPEC_BYTES) });
+        expect(CHART_SPEC_PART_KEYS.map((key) => el[key])).toEqual(CHART_SPEC_PART_KEYS.map(() => ''));
+        expect('specFuture' in el).toBe(false);
+        expect(readChart({ ...parts(), specChart: 42 }).specChart).toBe('');
     });
 
     test('color and background go through the shared field readers; the font is the spec’s, not a field', () => {
-        const el = readChart({ chart: specJson(), fontFamily: 'Inter', color: 'url(#x)', fill: 'nope' });
+        const el = readChart({ ...parts(), fontFamily: 'Inter', color: 'url(#x)', fill: 'nope' });
         expect(el.color).toBe(DEFAULT_ELEMENT_PROPS.strokeColor);
         expect(el.fill).toBe(serializeFill(TRANSPARENT_FILL));
         expect('fontFamily' in el).toBe(false);
@@ -106,11 +125,11 @@ describe('chart read', () => {
 
     test('a new chart is the column sample in the host font, color and fill', () => {
         const el = chart({ id: 'c1' });
-        expect(el.chart).toBe(JSON.stringify(sampleChartSpec('column', 'Excalifont')));
+        expect(readChartSpec(el).spec).toEqual(sampleChartSpec('column', 'Excalifont'));
         expect(parseFill(el.fill).style).toBe('cross-hatch');
         const slide = ELEMENT_KINDS.chart.defaults(SLIDES_STYLE_DEFAULTS);
-        expect(parseChartSpec(slide.chart)?.chart.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
-        expect(parseChartSpec(ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS).chart)?.chart.fontFamily).toBe(
+        expect(readChartSpec(slide).spec?.chart.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
+        expect(readChartSpec(ELEMENT_KINDS.chart.defaults(VECTOR_STYLE_DEFAULTS)).spec?.chart.fontFamily).toBe(
             'Excalifont',
         );
     });
@@ -118,16 +137,16 @@ describe('chart read', () => {
 
 describe('chart placeholder', () => {
     test('range data draws the placeholder, since a canvas has no sheet to read', () => {
-        const svg = svgOf(chart({ id: 'c1', chart: RANGE_SPEC }));
+        const svg = svgOf(chart({ id: 'c1' }, RANGE_SPEC));
         expect(svg).toContain('This chart can&apos;t be shown');
         expect(textCount(svg)).toBe(1);
         expect(svg).not.toContain('Sales');
     });
 
     test('the message fits the box or is left out', () => {
-        const narrow = svgOf(chart({ id: 'c1', chart: '', width: 90, height: 60 }));
+        const narrow = svgOf(chart({ id: 'c1', specData: '', width: 90, height: 60 }));
         expect(narrow).toContain('…');
-        const tiny = svgOf(chart({ id: 'c1', chart: '', width: 4, height: 4 }));
+        const tiny = svgOf(chart({ id: 'c1', specData: '', width: 4, height: 4 }));
         expect(textCount(tiny)).toBe(0);
         expect(tiny).toContain('stroke-dasharray');
     });
@@ -145,7 +164,7 @@ describe('chart painter', () => {
     test('the labels are SVG text, one per layout label', () => {
         const sample = sampleChartSpec('column');
         const spec = { ...sample, axes: { ...sample.axes, y: { ...sample.axes.y, title: { text: 'Points' } } } };
-        const el = chart({ id: 'c1', chart: JSON.stringify(spec) });
+        const el = chart({ id: 'c1' }, spec);
         const { labels } = layoutOf(el, spec);
         const svg = svgOf(el);
         expect(textCount(svg)).toBe(labels.length);
@@ -171,13 +190,13 @@ describe('chart painter', () => {
     });
 
     test('every label draws in the spec font', () => {
-        const svg = svgOf(chart({ id: 'c1', chart: JSON.stringify(sampleChartSpec('column', 'JetBrains Mono')) }));
+        const svg = svgOf(chart({ id: 'c1' }, sampleChartSpec('column', 'JetBrains Mono')));
         const fonts = new Set(Array.from(svg.matchAll(/font-family="([^"]*)"/g), (m) => m[1]));
         expect(fonts).toEqual(new Set([escapeXml(getFontFamily('JetBrains Mono'))]));
     });
 
     test('label text is escaped', () => {
-        const svg = svgOf(chart({ id: 'c1', chart: specJson({ title: { text: 'A < B & "C"' } }) }));
+        const svg = svgOf(chart({ id: 'c1' }, specOf({ title: { text: 'A < B & "C"' } })));
         expect(svg).toContain('A &lt; B &amp; &quot;C&quot;');
         expect(svg).not.toContain('A < B');
     });
@@ -198,7 +217,7 @@ describe('chart painter', () => {
     test('the fill style hatches the bars and the slices', () => {
         const hatched = serializeFill({ ...TRANSPARENT_FILL, style: 'hachure' });
         for (const type of ['column', 'pie'] as const) {
-            const el = chart({ id: 'c1', fill: hatched, chart: specJson({}, type) });
+            const el = chart({ id: 'c1', fill: hatched }, specOf({}, type));
             const marks = layoutOf(el, sampleChartSpec(type)).shapes.filter(
                 (shape) => shape.id.includes(':bar:') || shape.id.includes(':slice:'),
             );
@@ -221,7 +240,7 @@ describe('chart painter', () => {
 
 describe('chart text', () => {
     test('searchText is the title, axis titles, series names and categories', () => {
-        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: specJson() })).split('\n')).toEqual([
+        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1' })).split('\n')).toEqual([
             "Where a star's light goes",
             'Wavelength (nm)',
             'Share of light, 300–1000 nm (%)',
@@ -236,18 +255,18 @@ describe('chart text', () => {
             '800–900',
             '900–1000',
         ]);
-        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: 'nope' }))).toBe('');
-        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', chart: RANGE_SPEC }))).toBe(
+        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1', specData: 'nope' }))).toBe('');
+        expect(ELEMENT_KINDS.chart.searchText(chart({ id: 'c1' }, RANGE_SPEC))).toBe(
             "Where a star's light goes\nWavelength (nm)\nShare of light, 300–1000 nm (%)\nSales",
         );
     });
 
     test('a chart draws its labels in the font of its spec, and none for a placeholder', () => {
-        const serif = chart({ id: 'c1', chart: JSON.stringify(sampleChartSpec('column', 'Source Serif 4')) });
+        const serif = chart({ id: 'c1' }, sampleChartSpec('column', 'Source Serif 4'));
         const families = (el: VectorElement) => new Set(ELEMENT_KINDS[el.type].fontFamilies(el));
         expect(families(serif)).toEqual(new Set(['Source Serif 4']));
-        expect(families(chart({ id: 'c2', chart: 'nope' }))).toEqual(new Set());
-        expect(families(chart({ id: 'c3', chart: RANGE_SPEC }))).toEqual(new Set());
+        expect(families(chart({ id: 'c2', specData: 'nope' }))).toEqual(new Set());
+        expect(families(chart({ id: 'c3' }, RANGE_SPEC))).toEqual(new Set());
         expect(families(richtext({ id: 't1', html: '<p>Hi</p>', fontFamily: 'JetBrains Mono' }))).toEqual(
             new Set(['JetBrains Mono']),
         );

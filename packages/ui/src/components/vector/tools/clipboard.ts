@@ -4,6 +4,7 @@
 // per-image and per-rich-text items every other app reads, plus the self-contained SVG flavor. The
 // paste CONSUMER is tools/paste-elements.ts.
 
+import { readChartSpec } from '@workspace/lib/charts';
 import {
     buildChartClipboardItem,
     buildImageClipboardItem,
@@ -35,7 +36,8 @@ function foreignItems(
             const source = resolveMediaPath(el.mediaName);
             if (source) items.push(buildImageClipboardItem({ mediaName: el.mediaName, source, box }));
         } else if (el.type === 'chart') {
-            const item = buildChartClipboardItem({ spec: el.chart, box, look: el });
+            // The item carries one string, the stored parts joined.
+            const item = buildChartClipboardItem({ spec: JSON.stringify(readChartSpec(el).stored), box, look: el });
             if (item) items.push(item);
         } else if (el.type === 'richtext') {
             items.push(
