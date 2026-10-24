@@ -63,13 +63,13 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 
 ## [0.3.3] - 2026-10-13
 
-Eigen reads and writes Word files itself, and Docs gets Google Docs' menus: page breaks, Title and Subtitle, small caps, word count and resizable table columns. The update migrates each user's mail index, `mail.db`, which an older version refuses to open: to go back, restore the backup the update made, with `./eigen rollback` right after it or later with `./eigen restore` and the `server-pre-update-` backup that `./eigen rollback --help` lists. Reload open documents after the update: a tab from 0.3.2 deletes the page breaks, titles and subtitles it receives.
+Eigen reads and writes Word files itself, and Docs gets Google Docs' menus, with page breaks, Title and Subtitle, small caps, word count and resizable table columns. The update migrates each user's mail index, `mail.db`, and an older version can't open the migrated one. To go back, restore the backup the update made: run `./eigen rollback` right after the update, or later `./eigen restore` with the `server-pre-update-` backup that `./eigen rollback --help` lists. Reload open documents after the update: a tab still on 0.3.2 deletes the page breaks, titles and subtitles it receives.
 
 ### Added
 
-- **Docs menus** — Format and Insert are always there for writers, with Google's submenus, and Edit and Tools join them
+- **Docs menus** — Format and Insert are always on screen when you can edit, with the submenus Google Docs has. Edit and Tools join them
 - **Page break** — Insert → **Page break** or ⌘Enter starts a new page in print, PDF and Word, and a Word file's page breaks come in
-- **Paragraph styles** — Title, Subtitle and Heading 5 and 6, which go to Word and come back
+- **Paragraph styles** — Title, Subtitle, Heading 5 and Heading 6. They survive a trip to Word and back
 - **All caps and Small caps** — under Format → Text, ⌘⇧A for all caps. PDF, Word and paste keep them
 - **Word count** — Tools → **Word count** or ⌘⇧C, for viewers too
 - **Lists and alignment** — five numbered styles and **Restart numbering** under Format → Bullets and numbering, and **Justified** in the Align menu (⌘⇧J)
@@ -81,8 +81,8 @@ Eigen reads and writes Word files itself, and Docs gets Google Docs' menus: page
 
 ### Changed
 
-- **Word export** — Eigen writes the `.docx` itself: fonts embedded, figures with their wrap and caption, lists with their start and style, task boxes, code blocks, quotes, page breaks and pasted images. Images go as PNG or JPEG, without EXIF
-- **Word import** — Eigen reads the `.docx` itself instead of through mammoth. SmartArt text and chart titles come in, East Asian and right-to-left text gets its fonts, wide tables fit the page, and a password-protected file says so. Imported images count toward the drive's storage
+- **Word export** — Eigen writes the `.docx` itself: fonts embedded, figures with their wrap and caption, lists with their start and style, task boxes, code blocks, quotes, page breaks and pasted images. Images go in as PNG or JPEG, without their EXIF data
+- **Word import** — Eigen reads the `.docx` itself instead of through a third-party library. SmartArt text and chart titles come in, East Asian and right-to-left text gets its fonts, wide tables fit the page, and a password-protected file says so. Imported images count toward the drive's storage
 - **Docs toolbar** — the icon row folds into the menus as the window narrows. Strikethrough, code, superscript, subscript, quote, line and table live in the menus
 - **Docs look** — Heading 5 and 6 draw in Google's grey at body size, Heading 6 in italics. The page stays light in dark mode, in quick look and thumbnails too
 - **Copy and paste in Docs** — a paste from another document keeps its formatting and images and drops its comments. A pasted font like Georgia becomes the bundled one
@@ -115,7 +115,7 @@ Eigen reads and writes Word files itself, and Docs gets Google Docs' menus: page
 - **Lists** — dragging a row that is not selected drags that row, and Space and Enter after Select All act on the top selected row
 - **Previews** — an image no longer flashes a checkerboard before the full image, an `.eml` quick look keeps the message's layout, and an `.ics` with too many events is refused
 - **Images** — an image in a document or sheet whose file is gone shows as missing, and a Word import's images load on S3 without a reload
-- **Small fixes** — Escape in a suggestion list inside a dialog closes only the list, ⌘P with nothing to print prints the page, `./eigen restart` repairs the launcher after an interrupted update, a WebDAV PROPPATCH with a refused change saves nothing, a CalDAV query for one UID answers that event, a guest who opens a file they cannot see is told to ask the owner, an access request mails the owner at most once an hour, an older spreadsheet version is refused instead of locking its editors, chat pages back past messages sent in the same second, an imported vCard with your address no longer becomes your own card, a malformed stickies column no longer breaks the board, edits recovered after an unclean shutdown get a version, with mail turned off a user's kept mail still counts toward their storage, Finder can save into a full drive over WebDAV, and an HTML mail's preview line no longer shows a tracking-pixel address
+- **Small fixes** — Escape in a suggestion list inside a dialog closes only the list. ⌘P with nothing to print prints the page. `./eigen restart` repairs the launcher after an interrupted update. A WebDAV PROPPATCH with a refused change saves nothing. A CalDAV query for one UID answers with that event. A guest who opens a file they cannot see is told to ask the owner. An access request mails the owner at most once an hour. Restoring a spreadsheet version saved in an older format is refused instead of locking its editors. Scrolling back in chat no longer skips messages sent in the same second. An imported vCard with your address no longer becomes your own card. A malformed stickies column no longer breaks the board. Edits recovered after an unclean shutdown get a version. With mail turned off, a user's kept mail still counts toward their storage. Finder can save into a full drive over WebDAV. An HTML mail's preview line no longer shows a tracking-pixel address
 
 ### Security
 
@@ -128,22 +128,22 @@ Eigen reads and writes Word files itself, and Docs gets Google Docs' menus: page
 
 ## [0.3.2] - 2026-10-05
 
-Fixes from a restore drill, and one inset across the apps. An install still on 0.3.0 updates to 0.3.1 first: `./eigen update 0.3.1`, then `./eigen update`.
+Fixes from a restore drill, and the same edge spacing across the apps. An install still on 0.3.0 updates to 0.3.1 first: `./eigen update 0.3.1`, then `./eigen update`.
 
 ### Changed
 
-- **Layout** — lists, toolbars and panes share one inset, wider from tablet size up, so dates and menus clear the scrollbar. The sidebar and the app switcher keep a narrower one, and Contacts' letters sit over the avatars
+- **Layout** — lists, toolbars and panes keep the same space at their edges, more of it from tablet size up, so dates and menus clear the scrollbar. The sidebar and the app switcher keep less, and Contacts' letters sit over the avatars
 - **Setup** — **Complete Setup** stays clickable, so the browser names a missing field. Each storage choice says what it means, and the sender name shows the organization name until you type one
 - **Admin** — a user created on the Users page joins the team named after the organization and gets what was shared with it. The create button is labelled **Create User**
 - **`.env.production`** — `./eigen restart` picks up an edit made while Eigen runs. Until then, `./eigen update` and `./eigen backup` refuse, since the backup would hold the old file
 
 ### Fixed
 
-- **Mail** — Enter in To, Cc, Bcc or Subject no longer sends the mail; in Subject it moves on to the message
+- **Mail** — Enter in To, Cc, Bcc or Subject no longer sends the mail. In Subject it moves on to the message
 - **Drive** — opening a document without editing it leaves its Modified time alone
-- **Setup** — the S3 prefix is kept, where files went to the bucket's root, and **Go to Login** opens the sign-in page
+- **Setup** — files go under the S3 prefix you set instead of the bucket's root, and **Go to Login** opens the sign-in page
 - **Rollback** — the backup `./eigen rollback` restores is kept when it was made with warnings
-- **Restore** — it offers to delete what it kept aside only when it kept something, and the installer, run with `restore` in a folder that has an install, says to run `./eigen restore` there
+- **Restore** — it offers to delete what it kept aside only when it kept something. The installer, run with `restore` in a folder that already has an install, tells you to run `./eigen restore` there
 - **Small fixes** — the landing page no longer logs a Content-Security-Policy error, an IMAP or DAV sign-in with the account password no longer logs an API key error, and update notes show links as text
 
 ## [0.3.1] - 2026-10-02
@@ -155,7 +155,7 @@ Whole-server backup and restore. Eigen backs up the whole server every night whi
 - **Nightly whole-server backup** — the owner turns it on in Settings → Backups: every user and team, the settings and databases, `.env.production` and the mail keys, newest seven kept. **Back up now** makes one by hand
 - **Backup bucket** — each backup can also go to a private S3 bucket of its own. Keep its keys off the server: a new machine starts from them
 - **Backup alerts** — the owner is notified, and `./eigen status` shows it, when a backup fails, misses the bucket or has warnings. A user or team with files gone from storage is backed up without them
-- **Restore** — `./eigen restore <backup>` puts a server backup back and keeps the old data aside. On a new machine, run `curl -fsSL https://eigen.is/install | sh -s -- restore <backup>`. Settings → Backups shows both
+- **Restore** — `./eigen restore <backup>` puts a server backup back and keeps the old data aside. On a new machine, run `curl -fsSL https://eigen.is/install | sh -s -- restore <backup>`. Settings → Backups shows both commands
 - **One user or team** — restores from their Admin page out of a server backup
 - **Download original image** — on every image in docs, sheets, slides and vector, for viewers too. Images in documents take comments
 - **Font licenses** — the licenses page lists the bundled fonts with their OFL 1.1 text
@@ -174,7 +174,7 @@ Whole-server backup and restore. Eigen backs up the whole server every night whi
 
 ### Fixed
 
-- **Backups** — a file renamed, moved, trashed or deleted during a backup no longer fails it, nor does a trashed file on a drive that stores files by name. **Verify** now passes such a backup
+- **Backups** — a file renamed, moved, trashed or deleted during a backup no longer fails it, nor does a trashed file on a drive that stores files by name. **Verify** passes such a backup
 - **Storage** — a save that races a folder rename is no longer lost, a stalled S3 bucket times out, and a document whose stored data is gone says so and offers version history
 - **Mail** — a send with no recipients says "Add at least one recipient" and keeps the draft open. A link to a deleted mail says "Email not found"
 - **Copy and paste** — a pasted image loads in docs and sheets, a vector or slides text box keeps its fonts in docs, and a refused copy says why
@@ -184,24 +184,24 @@ Whole-server backup and restore. Eigen backs up the whole server every night whi
 
 ## [0.3.0] - 2026-09-25
 
-Self-hosting release. Eigen now installs from prebuilt images with one line, and the `./eigen` launcher updates, rolls back and backs up the server. Slides run on the canvas engine behind eigen|vector>. Mail, calendar and contacts store what a client wrote as the truth, and `.eml`, `.ics` and `.vcf` files open and import everywhere a file shows up. The findings of the September security audit are fixed.
+Self-hosting release. Eigen now installs from prebuilt images with one line, and the `./eigen` launcher updates, rolls back and backs up the server. Slides use the same canvas as eigen|vector>. Mail, calendar and contacts keep exactly what your mail, calendar and contacts apps write, and `.eml`, `.ics` and `.vcf` files open and import everywhere a file shows up. The findings of the September security audit are fixed.
 
-**Breaking** — calendars, contacts, slides and vector do not carry data over from 0.2.0 (breaking): events and contact books are dropped, decks open empty, and drawings lose their plain text and fills.
+**Breaking** — calendars, contacts, slides and vector drawings don't carry their data over from 0.2.0 (breaking). Events and contact books are dropped, decks open empty, and drawings lose their plain text and fills.
 
 ### Added
 
 - **One-line install** — `curl -fsSL https://eigen.is/install | sh` downloads the `./eigen` launcher and runs setup. The host needs Docker and Compose, nothing else. Setup explains its questions, lists the DNS records you need, and ends with a one-time link to the wizard
 - **Release images** — five images on GHCR, for amd64 and arm64, pinned by digest in `.env.production`. The resolver is Eigen's own unbound image
-- **`./eigen` launcher** — `update` downloads while Eigen runs, takes a snapshot and switches; it shows the notes of a breaking release and asks first. `rollback` goes back one update. `status`, `logs`, `restart`, `stop` and `reset-password` do what they say. `update main` follows the main branch for people who develop Eigen
+- **`./eigen` launcher** — `update` downloads while Eigen runs, takes a snapshot and switches. For a breaking release it shows the notes and asks first. `rollback` goes back one update. `status`, `logs`, `restart`, `stop` and `reset-password` do what they say. `update main` follows the main branch for people who develop Eigen
 - **Whole-server snapshots** — `./eigen backup` saves the server to `snapshots/`, in full or light (databases and settings only), and keeps the last three of each. `./eigen restore` swaps one in and keeps the old data aside
-- **Per-home backup and restore** — a Backup section on the admin Users and Teams pages backs up one user or team to a verified archive with no downtime. Verify, download, upload and restore from there; a restore keeps the old home as a safety copy
+- **Backup per user or team** — a Backup section on the admin Users and Teams pages backs up one user or team to a verified archive, without downtime. Verify, download, upload and restore from there. A restore keeps the old data as a safety copy
 - **Admin settings** — the organization name, a Server section with version, disk and certificate, and a Mail section with the system sender, **Relay sends as users** and **Send test mail**. Admin Users lists past 100 members
 - **Slides on the canvas engine** — every drawing element works on a slide: shapes, images, rich text, freehand, lines and arrows. Text is edited in place, and a box grows with its text. The properties panel offers gradient fills, corners, padding, typography and opacity, and with nothing selected it edits the slide background for this slide, this and following, or all. The slide always fits the window. Comments anchor to elements, `⌘F` searches text, and presence shows which slide each person is on. Links in present mode open in a new tab without advancing the deck
 - **Quick look for every file** — Drive items and the attachments in mail, chat and cards open in the same quick look with the same action menu. Clicking an attachment chip previews it next to the message's other parts, and a mailed video seeks
 - **`.eml`, `.ics` and `.vcf` files** — an `.eml` opens as the message it holds and imports into the inbox. An `.ics` opens as its events and imports into a calendar you own or a team calendar, from Drive, from a mail or from the calendar sidebar; each calendar exports as one `.ics`. A `.vcf` previews as its contacts and imports into Contacts. All three carry their app's icon in Drive
 - **Contacts** — Export vCard on any selection, and Import contacts and Export all contacts in the toolbar
 - **Mail** — folders an IMAP client created appear under Folders. A lone `from:` or `to:` filter searches on its own. `postmaster@`, `abuse@` and `noreply@` deliver to the org admins instead of bouncing
-- **Calendar (CalDAV)** — a calendar collection can be deleted, and Integrations lists one address per calendar, because Thunderbird subscribes per calendar. CalDAV is verified end-to-end against Thunderbird
+- **Calendar (CalDAV)** — a calendar app can delete a calendar, and Integrations lists one address per calendar, because Thunderbird subscribes per calendar. CalDAV is tested end to end against Thunderbird
 - **Offline indicator** — every collaborative editor shows when you are offline or the server's storage is out, and asks before you leave with edits that have not reached the server
 - **Sheets** — floating images appear in exports and previews. A progress dialog stays up while an Excel or Word file imports
 - **Canvas** — image and text boxes draw in the same hand-drawn style as shapes
@@ -214,13 +214,13 @@ Self-hosting release. Eigen now installs from prebuilt images with one line, and
 - **Calendar and contacts storage (breaking)** — events and cards are stored exactly as a client wrote them and served back byte for byte. Calendar data counts toward the storage budget. Existing data is not converted
 - **Mail off is a complete product** — without hosted mail the Mail app and its settings disappear, and one `SMTP_RELAY_*` key set serves both modes: Postfix relays through it, or the API sends through it itself
 - **Owner-only administration** — only the owner sees server settings, onboarding, guest access, the waitlist and the S3 secret. The owner cannot be deleted. The wizard no longer asks for a domain
-- **eigen|vector>** — text elements are rich text; shapes get gradient fills, true rounded corners and an optional border; arrows dock on a shape's real outline; phones open a drawing view-only
+- **eigen|vector>** — text elements are rich text. Shapes get gradient fills, true rounded corners and an optional border. Arrows dock on a shape's real outline. Phones open a drawing view-only
 - **Canvas editing** — a run of nudges is one undo step, and so is a typed panel value. The aspect-ratio lock is remembered per element. Copy and paste between apps keep text as text
 - **Sheets numbers** — every number shows the way Excel's General format shows it: no rounding noise, long values cut to 11 characters, scientific notation past that. A typed number is stored as a number, and a copy keeps full precision
 - **Sheets** — pasted text is read like typed input, `Ctrl+D` and `Ctrl+R` copy the whole source cell, conditional-format rules follow Excel on case and blanks, and an imported Excel rule stays one rule. Exports lay out exactly as the screen does
 - **Sharing** — deleting an item shared directly with you leaves the share instead of trashing the owner's copy
 - **Activity** — a team shows its name instead of an id, links inside content open a new tab, and a file's creation and share rows are kept without an age cap
-- **Mail** — the linkifier is a single pass, so a body with thousands of addresses links instantly. Every Maildir write is fsynced. Junk is labeled Spam
+- **Mail** — a message with thousands of addresses gets its links instantly. Every mail is flushed to disk as it is written. Junk is labeled Spam
 - **Copy** — American English, and dates read day-month-year
 
 ### Fixed
@@ -233,7 +233,7 @@ Self-hosting release. Eigen now installs from prebuilt images with one line, and
 - **Sheets formulas** — inserting or deleting rows in one sheet no longer shifts formulas on the others, whole-column ranges survive a shift, errors propagate through operators and comparisons, an overflow is `#NUM!`, `TEXT` works, dates no longer land a day early west of Greenwich, and every edit recalculates its dependents
 - **Sheets editing** — fills shift formulas correctly and never write into a merged cell, switching sheets closes the editor, and the row and column limits match their message
 - **Canvas** — moving a shape re-docks both ends of its arrows, and a missing image draws a placeholder
-- **Collaboration** — opening a document on slow storage says so and retries calmly, and large documents sync over slow links because frames are compressed
+- **Collaboration** — opening a document on slow storage says so and retries calmly, and large documents sync over slow links because Eigen compresses what it sends
 - **Drive** — a copy keeps its thumbnail, a read-only shared folder no longer offers actions it cannot do, and long copies no longer time out and duplicate the tree on retry
 - **WebDAV** — moving an item onto itself is refused instead of deleting it, and malformed requests get a 400
 - **Export** — a PDF render that hits its time limit returns an error instead of an empty reply
@@ -249,54 +249,54 @@ Self-hosting release. Eigen now installs from prebuilt images with one line, and
 
 ## [0.2.0] - 2026-09-02
 
-Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector>, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are now stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor now shares one document lifecycle, clipboard, presence layer, and canvas toolkit.
+Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector>, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are now stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor shares one way to load and save, copy and paste, show live cursors and draw.
 
 ### Added
 
-- **eigen|vector>** — a new collaborative whiteboard app. Shapes, freehand strokes with pen pressure, lines, text, and images; arrows that stay bound to the shapes they connect, curved by default, with elbow routing, pinnable segments, heads, and labels; an eraser; snap lines with align and distribute; live cursors and presence; comments and an activity panel; touch and stylus tuning. Drawings export to SVG and PDF, show up in Drive previews and search, and paste into other apps as real images
+- **eigen|vector>** — a new collaborative whiteboard app. Shapes, freehand strokes with pen pressure, lines, text and images. Arrows stay bound to the shapes they connect, curved by default, with elbow routing, pinnable segments, heads and labels. There's an eraser, snap lines with align and distribute, live cursors, comments, an activity panel, and tuning for touch and stylus. Drawings export to SVG and PDF, show up in Drive previews and search, and paste into other apps as real images
 - **Contacts over CardDAV** — contacts are stored as vCard files and served under `/dav/addressbooks`, so iOS, macOS, Thunderbird, and other clients sync them two-way. Apple clients edit in place, vCard 4.0 uploads are accepted, labels round-trip as categories, and contact photos become avatars. The Integrations page shows a CardDAV card next to CalDAV, a device setup article walks through each client, and the setup guide documents the `_carddavs._tcp` / `_caldavs._tcp` autodiscovery DNS records
-- **Contacts** — edit a card straight from the context menu, select several contacts and email or chat with them at once, and see visible validation errors with honest required markers on the form
-- **Mail: send a document link** — the share-and-send dialog lists the referenced files, grants read access at send time, and prefills each recipient with a personal link; failed recipients are reported after a partial send
-- **Mail** — outbound messages carry a proper envelope, a pinned Message-ID, and reply threading headers, so replies thread correctly in every client
+- **Contacts** — edit a card straight from the context menu, select several contacts and email or chat with them at once, and the form shows what's wrong and marks only the fields that are required
+- **Mail: send a document link** — the share-and-send dialog lists the linked files, gives the recipients read access when you send, and writes each recipient a personal link. When some recipients fail, Eigen tells you which
+- **Mail** — outgoing mail carries the envelope, Message-ID and reply headers that other mail apps need, so replies thread correctly everywhere
 - **Admin: Users** — a full-width responsive table with per-user storage usage, last sign-in, a guests-only filter, drag-to-team and multi-select, and orphaned accounts merged into the same list
 - **Admin: S3 bucket safety** — one click on the S3 storage card enables bucket versioning and a lifecycle rule with safe defaults; the retention period stays editable afterwards
-- **Drive** — sortable column headers for name, date, and size; real sizes for folders and containers; folder grouping only when sorting by name
-- **Sheets** — tick-box cells from the Insert menu and the cell context menu, including whole-column tick boxes bound to the rows that hold data; `Alt+Down` opens a cell's dropdown list; the data-validation hint is a proper card; imported Excel booleans display as `TRUE`/`FALSE`
+- **Drive** — sort by name, date or size from the column headers. Folders and documents show their real size. Folders group at the top only when you sort by name
+- **Sheets** — tick boxes from the Insert menu and the cell's right-click menu, also for a whole column, limited to the rows that hold data. `Alt+Down` opens a cell's dropdown list. The data-validation hint shows as a card. Imported Excel booleans show as `TRUE` and `FALSE`
 - **Slides** — live cursors and presence on the canvas, a right-click object menu, an aspect-ratio lock and W×H resize pill, and Alt-drag to duplicate
 - **Demo** — the demo instance ships a hand-drawn festival site plan in the vector app
 
 ### Changed
 
 - **Sheets border storage (breaking)** — cell borders are stored per cell, so two people bordering different cells converge instead of disagreeing forever, and toolbar-drawn borders now survive HTML export and previews. There is no migration: a sheet saved with toolbar-range borders before this release opens blank and read-only with an error banner instead of being overwritten. Sheets without such borders, and sheets whose borders were set per cell, open as before
-- **Canvas editors share one toolkit** — docs, slides, stickies, and vector use the same document lifecycle, undo sealing, marquee selection, keymap, presence rings, file-drop overlay, properties-panel sections, and clipboard contract. Elements and images copy and paste between apps at their real aspect ratio, with one undo step per paste
+- **Canvas editors work alike** — docs, slides, stickies and vector share undo, box selection, keyboard shortcuts, live cursors, dropping files, the properties panel, and copy and paste. Elements and images copy and paste between apps at their real aspect ratio, with one undo step per paste
 - **Selection chrome** — a thinner selection ring and dashed group bounds across all canvas apps, matching the remote presence rings
-- **Mail parser** — the ported nodemailer parser is replaced by our own, pinned by a golden corpus of real-world emails, and three dependencies are gone. Address groups are flattened in reply-all and in the header rows, and the message body reads left-aligned at one unified width
-- **Mail** — an empty message is refused instead of going out as "(No subject)", cleared recipients stay cleared when a draft is reopened, and the send button shows busy during the access probe
+- **Mail parser** — Eigen reads mail with its own parser instead of a port of nodemailer's, tested against a set of real-world emails. Three dependencies are gone. Address groups are flattened in reply-all and in the header rows, and the message body reads left-aligned at one unified width
+- **Mail** — an empty message is refused instead of going out as "(No subject)", cleared recipients stay cleared when a draft is reopened, and the send button shows it's busy while Eigen checks who can open the linked files
 - **Sheets** — conditional-format rules have human names and dialog titles, row and column resize is exact, the range picker sits under its cell at its old width, the dropdown chevron is always painted, the selection's move band and fill handle are easier to grab, and the sheet no longer carries a locale layer
-- **Calendar (CalDAV)** — clients see write privileges and ownership on the calendar home, so Apple clients edit events in place instead of creating duplicates; MKCALENDAR honors the client-chosen URL; a sync token ahead of the calendar is refused; the well-known DAV redirects actually fire
-- **Thumbnails** — animated images take their first frame, oversized images are skipped instead of exhausting the worker, and scratch files are isolated per job
+- **Calendar (CalDAV)** — calendar apps see that you own your calendars and can write to them, so Apple's apps edit events in place instead of creating duplicates. MKCALENDAR uses the URL the app chose. A sync token ahead of the calendar is refused. The well-known DAV redirects work
+- **Thumbnails** — animated images take their first frame, oversized images are skipped instead of exhausting the server, and thumbnail jobs no longer share temporary files
 - **Docs** — pasted prose keeps its alignment, and the toolbar menus share one shell with slides and vector
 - **Server** — a database newer than the running binary's schema is refused instead of opened, and a wrong data-dir argument fails with a clear error
 
 ### Fixed
 
-- **Sheets** — cell text, rich-text runs, formula tokens, and referenced sheet names no longer reach the grid unescaped; `IFERROR` traps errors raised by our own operators; `TRUE`/`FALSE`/`NULL` resolve case-insensitively; `F4` keeps cycling on absolute whole-row ranges; `Ctrl+Shift+F` stays on the workbook that owns the keypress; hidden columns no longer get filter buttons; formula conditional-format rules stop at the last row; a tick box no longer hides values it does not recognize or toggles while a formula is being composed; an invalid data-validation rule is rejected instead of applied; a failed snapshot load is shown instead of a blank grid
-- **Mail** — `&amp;` is decoded last when stripping tags; space freed by deleting mail reaches the quota check immediately; the draft stays editable when share-and-send is canceled; the email header stays full width on wide screens
-- **Calendar** — a recreated event syncs once instead of staying tombstoned, re-received invitations and moved-back events clear their stale tombstones, receiving an invitation bumps the ctag atomically, and a single-event PROPFIND answers on the event's own href
-- **Contacts** — birthdays keep the picked date in every timezone, the edit form submits the etag it loaded so a stale form gets a 412 instead of clobbering, a duplicate label name returns 409, a lost staged avatar fails the save instead of clearing the photo, and the fallback avatar is served for an empty id
+- **Sheets** — text in cells, formulas and sheet names is escaped before the grid draws it. `IFERROR` catches errors from operators too, as in `IFERROR(1/0, 0)`. `TRUE`, `FALSE` and `NULL` work in any case. `F4` keeps cycling on absolute whole-row ranges. `Ctrl+Shift+F` stays in the workbook you pressed it in. Hidden columns no longer get filter buttons. Formula conditional-format rules stop at the last row. A tick box no longer hides values it doesn't recognize, and doesn't toggle while you type a formula. An invalid data-validation rule is refused instead of applied. A sheet that fails to load says so instead of showing a blank grid
+- **Mail** — escaped characters in a mail's plain text decode correctly. Space freed by deleting mail counts toward your quota right away. The draft stays editable when you cancel share-and-send. The email header stays full width on wide screens
+- **Calendar** — a deleted event that's created again syncs instead of staying deleted. An invitation received again and an event moved back show up again. Calendar apps notice a received invitation, and an app asking for one event gets it
+- **Contacts** — birthdays keep the picked date in every timezone. Saving a form that someone else changed meanwhile is refused instead of overwriting their change. A duplicate label name is refused. A photo that fails to upload fails the save instead of clearing the photo
 - **Drive** — copying to a media folder keeps its partial successes, and a missing app URL no longer white-screens the app
-- **Stickies** — the description area keeps a minimum height on title-only cards, and the light card chrome shows only where the card is visible
+- **Stickies** — a card with only a title keeps room for a description, and a card's light edge shows only where the card is visible
 - **Admin** — long names and emails truncate in person lists instead of overflowing
-- **Server** — the outgoing Home closes before its replacement opens, atomic writes sweep their temp file on failure and fsync the parent directory, and database statements are finalized as they run so a database closes strictly
+- **Server** — a failed write leaves no temporary file behind, a finished write survives a crash, and databases close cleanly
 - **Docker** — a host dev API on port 8000 no longer conflicts with the docker stack
 
 ### Security
 
-- **Outbound mail relay** — hardened after the 2026-08-31 abuse incident: an authenticated sender may only send as its own identity, failed logins count toward the per-IP limiter and exit as auth failures for fail2ban, a fail2ban filter and jail ship with the docker stack and `update.sh` re-arms them after a rebuild, and a queue-size monitor notifies the org owner of a backlog
-- **Input bounds** — CalDAV and CardDAV request bodies are bounded before buffering with a 5 MiB card ceiling, the last unbounded email inputs are capped, reference ids on send are capped and deduped, and C0 control bytes are rejected at the vCard and DAV seams
-- **SVG serving** — container SVGs are served with their media inlined, the inliner is hardened, and name-referenced media only resolves for the document that owns it
-- **Access checks** — the per-email access check for shared links skips addresses that cannot hold an ACL and signals guest admission, and self-link claims are ranked so a user's own record cannot be stolen by an email twin
-- **Conditional REST writes** — stale contact forms get a 412 instead of clobbering a newer version
+- **Outbound mail relay** — hardened after the abuse incident of 2026-08-31. A signed-in sender may only send as themselves. Failed logins count toward the per-IP limit and show up as auth failures for fail2ban. A fail2ban filter and jail ship with the Docker stack, and `update.sh` turns them back on after a rebuild. The organization owner is notified when outgoing mail backs up in the queue
+- **Input limits** — CalDAV and CardDAV requests have a size limit, 5 MiB for a card. The last email fields without a limit have one. The files linked in a sent mail are capped and counted once. Control characters are refused in vCards and DAV requests
+- **SVG serving** — a drawing's SVG carries its images inside it, safely, and an image named in a document only loads for the document it belongs to
+- **Access checks** — the access check for a link shared by email skips addresses that can't be given access. A user's own account can't be claimed by another account with the same email
+- **Conditional writes** — a contact form opened before someone else's change can't overwrite it
 
 ## [0.1.1] - 2026-08-13
 
