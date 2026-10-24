@@ -318,7 +318,7 @@ export class S3Storage implements StorageBackend {
     private client: S3Client;
     private prefix: string;
 
-    constructor(config: S3Config) {
+    public constructor(config: S3Config) {
         this.client = new S3Client({
             endpoint: config.endpoint,
             bucket: config.bucket,
@@ -329,7 +329,7 @@ export class S3Storage implements StorageBackend {
         this.prefix = config.prefix;
     }
 
-    getKey(key: string): string {
+    public getKey(key: string): string {
         // Why: S3 keys are not filesystem paths, so `resolveWithinBase` (core/path-utils.ts) doesn't apply;
         // this segment check is the intentional distinct traversal guard for the S3 backend.
         const segments = key.split('/');
@@ -343,15 +343,15 @@ export class S3Storage implements StorageBackend {
         return this.prefix ? `${this.prefix}/${key}` : key;
     }
 
-    read(key: string): S3File {
+    public read(key: string): S3File {
         return this.client.file(this.getKey(key));
     }
 
-    write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    public write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         return this.read(key).write(data);
     }
 
-    async delete(key: string): Promise<boolean> {
+    public async delete(key: string): Promise<boolean> {
         try {
             await withStorageDeadline(() => this.read(key).delete());
             return true;
@@ -362,7 +362,7 @@ export class S3Storage implements StorageBackend {
         }
     }
 
-    async exists(key: string): Promise<boolean> {
+    public async exists(key: string): Promise<boolean> {
         // A missing object resolves false; a throw is the provider failing. 503 is the shape the
         // create (rollback) and open (1013 close) paths speak, so the outage reads as one and not as a 500.
         try {
@@ -374,7 +374,7 @@ export class S3Storage implements StorageBackend {
     }
 
     // Every key under the prefix, relative to it.
-    async list(): Promise<string[]> {
+    public async list(): Promise<string[]> {
         const base = this.prefix ? `${this.prefix}/` : '';
         const keys: string[] = [];
         let continuationToken: string | undefined;
@@ -386,7 +386,7 @@ export class S3Storage implements StorageBackend {
         return keys;
     }
 
-    async size(key: string): Promise<number | null> {
+    public async size(key: string): Promise<number | null> {
         // A missing object is null, like LocalStorage; any other failure is the provider failing, as in exists().
         try {
             return (await storageRead('size', key, () => this.read(key).stat())).size;

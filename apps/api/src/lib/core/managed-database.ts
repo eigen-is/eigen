@@ -72,14 +72,14 @@ export class ManagedDatabase<S extends SchemaType> {
     // known to exist (metadata.db has its row), so a fresh empty db here means lost data, not a new doc.
     private mustExist: boolean;
 
-    constructor(config: DatabaseConfig<S>, localPath: string, callbacks: SyncCallbacks = {}, mustExist = false) {
+    public constructor(config: DatabaseConfig<S>, localPath: string, callbacks: SyncCallbacks = {}, mustExist = false) {
         this.config = config;
         this.localPath = localPath;
         this.callbacks = callbacks;
         this.mustExist = mustExist;
     }
 
-    async open(autoSyncMs = 30000): Promise<BunSQLiteDatabase<S>> {
+    public async open(autoSyncMs = 30000): Promise<BunSQLiteDatabase<S>> {
         if (this.drizzleDb) return this.drizzleDb;
         return time(`ManagedDatabase.open ${this.config.name}`, () => this.openCold(autoSyncMs));
     }
@@ -205,7 +205,7 @@ export class ManagedDatabase<S extends SchemaType> {
     // unclean shutdown, but total_changes() resets to 0 on the fresh connection, so
     // isDirty would read false and the close-time cleanupTemp would silently drop the
     // unsynced bytes. Marking dirty guarantees they re-reach storage. Cleared on sync.
-    markDirty(): void {
+    public markDirty(): void {
         this.forceDirty = true;
         this.forceSnapshot = true;
     }
@@ -260,7 +260,7 @@ export class ManagedDatabase<S extends SchemaType> {
     // Serialized against every other sync but NOT against the lifecycle op, so the re-entrant
     // flush from onSnapshot can't wedge (see lifecycleLock). Once close() has started this is a
     // no-op: close ran its own final sync, and nothing may touch the db it is tearing down.
-    async flush(): Promise<void> {
+    public async flush(): Promise<void> {
         await this.syncLock.run(async () => {
             if (!this.closed) await this.sync();
         });
@@ -269,7 +269,7 @@ export class ManagedDatabase<S extends SchemaType> {
     // The write-behind upload pipeline uploads the VACUUM INTO copy, not the live file (which keeps
     // mutating as the user edits); VACUUM INTO captures committed-but-uncheckpointed WAL frames, so
     // the copy is complete without a prior checkpoint.
-    stageCopy(destPath: string): void {
+    public stageCopy(destPath: string): void {
         if (!this.rawDb) throw new Error('Database not open');
         this.rawDb.run('VACUUM INTO ?', [destPath]);
     }
@@ -277,7 +277,7 @@ export class ManagedDatabase<S extends SchemaType> {
     // skipFinalSnapshot: callers about to discard the on-disk file (eviction
     // inside Drive.restoreContainer) opt out so the close-time snapshot can't
     // prune the snapshot the restore is about to read from.
-    async close(opts: { skipFinalSnapshot?: boolean } = {}): Promise<void> {
+    public async close(opts: { skipFinalSnapshot?: boolean } = {}): Promise<void> {
         if (!this.rawDb) return;
 
         // Stop scheduling and disarm queued flushes BEFORE waiting for the in-flight lifecycle op:
@@ -326,7 +326,7 @@ export class ManagedDatabase<S extends SchemaType> {
         });
     }
 
-    get db(): BunSQLiteDatabase<S> {
+    public get db(): BunSQLiteDatabase<S> {
         if (!this.drizzleDb) throw new Error('Database not open');
         return this.drizzleDb;
     }

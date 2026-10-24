@@ -1,7 +1,7 @@
 import type { Context } from 'elysia';
 
 export class ApiError extends Error {
-    constructor(
+    public constructor(
         public status: number,
         message: string,
         options?: ErrorOptions,
@@ -36,7 +36,7 @@ export function isOutOfMemory(error: unknown): error is RangeError {
 
 // An overwrite whose base updatedAt the file no longer carries; the inline editor answers it as a conflict.
 export class StaleWriteError extends ApiError {
-    constructor(readonly currentUpdatedAt: Date) {
+    public constructor(public readonly currentUpdatedAt: Date) {
         super(409, 'File changed since it was loaded');
     }
 }

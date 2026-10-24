@@ -78,16 +78,16 @@ export class BroadcastBatch {
     private depth = 0;
     private held = false;
 
-    constructor(private readonly flush: () => void) {}
+    public constructor(private readonly flush: () => void) {}
 
     // True when the caller's event was held for the batch, false when it is the caller's to broadcast now.
-    hold(): boolean {
+    public hold(): boolean {
         if (this.depth === 0) return false;
         this.held = true;
         return true;
     }
 
-    async run<T>(fn: () => Promise<T>): Promise<T> {
+    public async run<T>(fn: () => Promise<T>): Promise<T> {
         this.depth++;
         try {
             return await fn();

@@ -20,7 +20,7 @@ type XmlContent = string | XmlElement | XML.Comment | XML.ProcessingInstruction;
 
 // Every refusal of parseXml (malformed, DOCTYPE, too deep, a namespace rule) and of serializeXmlChildren is this 400.
 export class XmlError extends ApiError {
-    constructor(message: string, options?: ErrorOptions) {
+    public constructor(message: string, options?: ErrorOptions) {
         super(400, message, options);
     }
 }
