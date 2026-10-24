@@ -1,7 +1,6 @@
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
-import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { BandRoot, FigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
@@ -29,6 +28,7 @@ import { toTransferableText } from '../../lib/document/transform/protocol';
 import type { OfficeMedia } from '../../lib/export/office-image';
 import type { Mount } from '../../lib/mount';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
+import { sampleChartParts } from './chart-parts';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
 // (preview/export golden tests and the responsiveness benchmark). Everything is
@@ -531,7 +531,7 @@ export function buildAllFeaturesDocJson(): JSONContent {
                     { type: 'text', text: 'After the tables.' },
                     {
                         type: 'chart',
-                        attrs: { ...newChartSpecParts(sampleChartSpec('column')), width: 480, height: 297 },
+                        attrs: { ...sampleChartParts('column'), width: 480, height: 297 },
                     },
                 ],
             },

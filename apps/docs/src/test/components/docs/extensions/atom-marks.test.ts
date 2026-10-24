@@ -1,10 +1,10 @@
 import { expect, test } from 'bun:test';
 import { Editor } from '@tiptap/core';
-import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { writeMathml } from '@workspace/math';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { AtomMarks } from '../../../../components/docs/extensions/atom-marks';
+import { sampleChartParts } from '../../../fixtures/chart-parts';
 
 // An equation reads its stored MathML with DOMParser.
 installHappyDom();
@@ -151,7 +151,7 @@ test('bold over a range containing a page number marks the text, and one inserte
 });
 
 test('bold and a comment over a range containing a chart mark the text, and one inserted with a mark loses it', () => {
-    const chart = { type: 'chart', attrs: newChartSpecParts(sampleChartSpec('bar')) };
+    const chart = { type: 'chart', attrs: sampleChartParts('bar') };
     const editor = editorWith([{ type: 'text', text: 'a ' }, chart, { type: 'text', text: ' b' }]);
     editor.chain().selectAll().setBold().setComment('card-1').run();
     editor.commands.insertContentAt(3, { ...chart, marks: [{ type: 'italic' }] });

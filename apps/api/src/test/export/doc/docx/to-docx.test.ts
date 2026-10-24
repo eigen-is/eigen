@@ -23,6 +23,7 @@ import { withSvgFallbacks } from '../../../../lib/export/office-image';
 import { A_NS, parseOoxml } from '../../../../lib/ooxml/ooxml';
 import type { ZipReader } from '../../../../lib/ooxml/zip';
 import { openZip } from '../../../../lib/ooxml/zip';
+import { sampleChartParts } from '../../../fixtures/chart-parts';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,
@@ -1970,7 +1971,7 @@ function figure(attrs: Record<string, unknown>): JSONContent {
     return { type: 'figure', attrs };
 }
 
-const PARTS_OF_COLUMN = newChartSpecParts(sampleChartSpec('column'));
+const PARTS_OF_COLUMN = sampleChartParts('column');
 
 function chartNode(attrs: Record<string, unknown>): JSONContent {
     return { type: 'chart', attrs };
@@ -2399,7 +2400,7 @@ describe('docx writer — figures', () => {
 
     test("a chart is a picture of its SVG beside the SVG's PNG, at its width, its caption kept", async () => {
         const sample = sampleChartSpec('column');
-        const json = doc(p(chartNode({ ...newChartSpecParts(sample), width: 480, height: 300, caption: 'Points' })));
+        const json = doc(p(chartNode({ ...PARTS_OF_COLUMN, width: 480, height: 300, caption: 'Points' })));
         const media = await chartMedia(json);
         expect(await blocksOf(json, media)).toEqual([
             imageParagraph(
@@ -2426,7 +2427,7 @@ describe('docx writer — figures', () => {
     });
 
     test('two charts of one spec and size but different looks draw two pictures, each in its own look', async () => {
-        const parts = newChartSpecParts(sampleChartSpec('column'));
+        const parts = sampleChartParts('column');
         const json = doc(p(chartNode(parts), chartNode({ ...parts, roughness: 2, seed: 5, strokeColor: '#336699' })));
         const media = await chartMedia(json);
         const svgs = media.filter((item) => item.contentType === 'image/svg+xml');
@@ -2449,10 +2450,7 @@ describe('docx writer — figures', () => {
         const fill = serializeFill({ type: 'gradient', from: '#ffeeaa', to: '#ffffff', angle: 90, style: 'solid' });
         const look = { fill };
         const json = doc(
-            p(
-                chartNode({ ...newChartSpecParts(sample), ...look }),
-                chartNode({ ...newChartSpecParts(other), ...look }),
-            ),
+            p(chartNode({ ...PARTS_OF_COLUMN, ...look }), chartNode({ ...newChartSpecParts(other), ...look })),
         );
         const media = await chartMedia(json);
         expect(media.filter((item) => item.contentType === 'image/svg+xml')).toHaveLength(1);

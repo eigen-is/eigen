@@ -9,12 +9,13 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 installHappyDom();
 
 const { buildTextClipboardItem, classifyPaste } = await import('@workspace/lib/clipboard');
-const { FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
+const { FLAT_CHART_LOOK, sampleChartSpec } = await import('@workspace/lib/charts');
 const { DOCUMENT_FONT, EIGEN_FONTS } = await import('@workspace/lib/constants/fonts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
 const { insertEigenItems, writeDocsClipboard } = await import('../../../components/docs/clipboard');
 const { cleanPastedHTML } = await import('../../../components/docs/paste');
+const { sampleChartParts } = await import('../../fixtures/chart-parts');
 
 const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
 const text = (t: string, ...marks: object[]) => ({ type: 'text', text: t, ...(marks.length > 0 ? { marks } : {}) });
@@ -320,7 +321,7 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
     const chart = {
         type: 'chart',
         attrs: {
-            ...newChartSpecParts(sampleChartSpec('pie')),
+            ...sampleChartParts('pie'),
             width: 300,
             height: 200,
             caption: 'Share',
@@ -360,7 +361,7 @@ test('a chart copies and pastes back whole within Docs, alone or beside a figure
 // with its shape kept, and its sizes otherwise as they came.
 test('a chart item from another app pastes as a chart, capped at the column', async () => {
     const spec = JSON.stringify(sampleChartSpec('line'));
-    const parts = newChartSpecParts(sampleChartSpec('line'));
+    const parts = sampleChartParts('line');
     const items = [
         { type: 'chart' as const, spec, width: 400.5, height: 250.25, look: LOOK },
         { type: 'chart' as const, spec, width: 1200, height: 675, look: FLAT_CHART_LOOK },

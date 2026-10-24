@@ -22,6 +22,7 @@ import renderScript from '../../lib/export/weasyprint-render.py' with { type: 'f
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { openZip } from '../../lib/ooxml/zip';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
+import { sampleChartParts } from '../fixtures/chart-parts';
 import { corpusEquations, equation, seedBand, seedEigendoc } from '../fixtures/golden-documents';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
@@ -297,7 +298,7 @@ describe('doc export — fonts', () => {
                             {
                                 type: 'chart',
                                 attrs: {
-                                    ...newChartSpecParts(sampleChartSpec('column', fontFamily)),
+                                    ...sampleChartParts('column', fontFamily),
                                     width: 400,
                                     height: 240,
                                 },
@@ -399,7 +400,7 @@ describe('doc export — figures', () => {
 });
 
 describe('doc export — charts', () => {
-    const PARTS = newChartSpecParts(sampleChartSpec('column'));
+    const PARTS = sampleChartParts('column');
     const chartDoc = (attrs: Record<string, unknown>, spec = sampleChartSpec('column')): JSONContent => ({
         type: 'doc',
         content: [{ type: 'paragraph', content: [{ type: 'chart', attrs: { ...newChartSpecParts(spec), ...attrs } }] }],

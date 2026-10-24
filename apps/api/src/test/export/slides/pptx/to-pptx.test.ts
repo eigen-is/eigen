@@ -24,6 +24,7 @@ import { writePptx } from '../../../../lib/export/slides/pptx/to-pptx';
 import { parseOoxml } from '../../../../lib/ooxml/ooxml';
 import type { ZipReader } from '../../../../lib/ooxml/zip';
 import { openZip } from '../../../../lib/ooxml/zip';
+import { sampleChartParts } from '../../../fixtures/chart-parts';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
@@ -787,7 +788,7 @@ describe('pptx shapes', () => {
         const chart = element('chart', {
             width: 640,
             height: 400,
-            ...newChartSpecParts(sampleChartSpec('pie')),
+            ...sampleChartParts('pie'),
         });
         const scene = sceneOf([chart]);
         const expected = convertToShapes(scene.elements[0]);

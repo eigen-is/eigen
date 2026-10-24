@@ -8,15 +8,15 @@ installHappyDom();
 
 const { act, createElement } = await import('react');
 const { Editor, EditorContent } = await import('@tiptap/react');
-const { newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Chart } = await import('../../../../components/docs/extensions/chart');
 const { commentAnchorText, nodeCommentCardId } = await import('../../../../components/docs/extensions/comment-mark');
+const { sampleChartParts } = await import('../../../fixtures/chart-parts');
 
 let unmount = async () => {};
 afterEach(() => unmount());
 
-const PARTS = newChartSpecParts(sampleChartSpec('column'));
+const PARTS = sampleChartParts('column');
 const chart = (attrs: object = {}) => ({ type: 'chart', attrs: { ...PARTS, width: 400, height: 250, ...attrs } });
 
 // "a" at 1, the chart at 2, on a page whose text column is 600 px.

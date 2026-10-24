@@ -1,5 +1,4 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorRichTextElement } from '@workspace/lib/vector';
@@ -19,6 +18,7 @@ import { exportDocument } from '../../lib/export/export-document';
 import { getHome } from '../../lib/home/get-home';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
 import { openZip } from '../../lib/ooxml/zip';
+import { sampleChartParts } from '../fixtures/chart-parts';
 import { seedDocumentMedia, seedVectorDoc } from '../fixtures/golden-documents';
 import { driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
@@ -207,7 +207,7 @@ describe('deck export — pptx', () => {
             );
             writeElementInDoc(
                 collab.doc,
-                { type: 'chart', ...on, ...newChartSpecParts(sampleChartSpec('pie')) },
+                { type: 'chart', ...on, ...sampleChartParts('pie') },
                 'a3',
                 SLIDES_STYLE_DEFAULTS,
             );
