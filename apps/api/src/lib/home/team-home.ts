@@ -5,7 +5,7 @@ import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings'
 import { Calendar } from '../calendar/calendar';
 import { getTeamDataPath } from '../config/paths';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
-import { ApiError, JsonStore, LocalFilesystem, PATHS } from '../core';
+import { ApiError, JsonStore, PATHS } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig } from '../mount';
 import { checkS3Connection } from '../storage/s3-storage';
@@ -22,26 +22,22 @@ export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
 }
 
 export class TeamHome extends Home {
-    public teamId: string;
+    public readonly teamId: string;
     public declare settings: JsonStore<TeamSettings>;
 
     // Team homes have no SSE keep-alive pin (only an open collab socket's keepalive pins one), so they get a longer idle window.
     protected override idleMs = Number(process.env['TEAM_HOME_IDLE_MS']) || 1000 * 60 * 30;
 
-    constructor(syntheticUser: User, cleanUp?: () => void) {
-        super(syntheticUser, cleanUp);
-
-        const parsed = parseOwnerId(syntheticUser.id);
-        this.teamId = parsed.id;
-        this.homeDir = getTeamDataPath(parsed.id);
-        this.fs = new LocalFilesystem(this.homeDir);
-
+    public constructor(syntheticUser: User, onClosed?: () => void) {
+        const teamId = parseOwnerId(syntheticUser.id).id;
+        super(syntheticUser, getTeamDataPath(teamId), onClosed);
+        this.teamId = teamId;
         this.settings = new JsonStore<TeamSettings>(this.fs, PATHS.SETTINGS, { calendar: { enabled: false } });
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
     }
 
-    override get calendar(): Calendar {
+    public override get calendar(): Calendar {
         this.touch();
         if (this.settings.get().calendar?.enabled === false) {
             throw new ApiError(404, 'Team calendar is disabled');
@@ -50,7 +46,7 @@ export class TeamHome extends Home {
     }
 
     // A team home has no notification center, so a notification relayed to it goes to these members instead.
-    async membersToNotify(actorEmail?: string | null): Promise<User[]> {
+    public async membersToNotify(actorEmail?: string | null): Promise<User[]> {
         if (this.settings.get().notifyMembers === false) return [];
         const members = await getTeamMembers(this.teamId);
         return members
@@ -58,7 +54,7 @@ export class TeamHome extends Home {
             .filter((member) => member.email.toLowerCase() !== actorEmail?.toLowerCase());
     }
 
-    async addMount(input: {
+    public async addMount(input: {
         name: string;
         storageType?: MountSettings['storageType'];
         maxSizeMB?: number;
@@ -89,7 +85,7 @@ export class TeamHome extends Home {
         return { id: mountId, ...mountSettings };
     }
 
-    async updateMount(
+    public async updateMount(
         mountId: string,
         update: Partial<Pick<MountSettings, 'enabled' | 'maxSizeMB' | 'name' | 's3Config'>>,
     ): Promise<MountSettings> {

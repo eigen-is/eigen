@@ -144,7 +144,7 @@ export class MaildirStore implements MailStore {
             // Read before the watch attaches, so a dir replaced in between costs a spare re-attach, never a dead watcher.
             const identity = await this.dirIdentity(dir);
             // A listing still in flight during teardown would re-attach what unwatch() just closed.
-            if (identity === null || this.home.destructing || this.watchers.has(dir)) continue;
+            if (identity === null || this.home.closing || this.watchers.has(dir)) continue;
             try {
                 const watcher = this.storage.watch(dir, () => {
                     this.reconcileMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err));
@@ -414,7 +414,7 @@ export class MaildirStore implements MailStore {
 
     private async reconcileMailbox(mailbox: string): Promise<void> {
         // A watcher's fire-and-forget sync started during teardown would query a closed db.
-        if (this.home.destructing) return;
+        if (this.home.closing) return;
         this.lastReconcileStartedAt.set(mailbox, Date.now());
         const running = this.reconcilingMailboxes.get(mailbox);
         if (running) return running;

@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
 import type { JsonStore } from '../../lib/core';
 import type { Drive } from '../../lib/drive';
 import { Home, type HomeSettings } from '../../lib/home/home';
 import type { Mail } from '../../lib/mail/mail-domain';
 import type { User } from '../../lib/user';
+import { TEST_DATA_DIR } from '../test-env';
 
 // AUDIT 13: Home.init() opens subsystem DBs + starts upload/reindex timers in parallel. If one
 // subsystem's init() throws, the peers that already initialized must be torn down — otherwise their
@@ -16,7 +18,9 @@ class LeakProbeHome extends Home {
     driveInitCompletedWhenDestructRan: boolean | undefined;
 
     constructor(driveInitGate: Promise<void>) {
-        super({ id: 'leak-probe' } as User);
+        super({ id: 'leak-probe' } as User, join(TEST_DATA_DIR, 'leak-probe'));
+
+        this.settings = { load: async () => {} } as unknown as JsonStore<HomeSettings>;
 
         this._drive = {
             init: async () => {
@@ -43,7 +47,7 @@ class CorruptSettingsHome extends Home {
     driveDestructRan = false;
 
     constructor() {
-        super({ id: 'corrupt-settings-probe' } as User);
+        super({ id: 'corrupt-settings-probe' } as User, join(TEST_DATA_DIR, 'corrupt-settings-probe'));
 
         this.settings = {
             load: async () => {

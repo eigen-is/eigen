@@ -289,7 +289,7 @@ describe('A stalled GET and the Home', () => {
         const open = home.drive.getCollabDocument(homeMount.id, doc.id);
         open.catch(() => {});
         await waitFor(() => fake.heldCount > 0);
-        const shutdown = home.shutdown();
+        const shutdown = home.close();
         const next = getHome(ownerId);
         next.catch(() => {});
         try {

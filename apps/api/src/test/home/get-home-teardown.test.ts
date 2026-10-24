@@ -3,10 +3,9 @@ import { auth } from '../../lib/auth/auth';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { getTestContext } from '../setup';
 
-// Regression tests for the Home teardown race (AUDIT 2d): getHome must not open a replacement Home on
-// the same DB files while the outgoing home's destruct() is still checkpointing + unlinking journals.
-// It now awaits shutdown() (as evictHome does) before installing the replacement, and destruct() runs
-// its teardown once so the idle timer and an explicit shutdown() can't close the DBs twice.
+// getHome must not open a replacement Home on the same database files while the outgoing home is
+// still closing them. It awaits close() before installing the replacement, and close() runs once, so
+// the idle timer and an explicit close() can't close the databases twice.
 describe('getHome teardown race', () => {
     beforeAll(async () => {
         await getTestContext();
@@ -17,26 +16,26 @@ describe('getHome teardown race', () => {
         return signUp.user.id;
     }
 
-    test('awaits the outgoing home shutdown() before producing a replacement', async () => {
+    test('awaits the outgoing home close() before producing a replacement', async () => {
         const userId = await createHomeUser('race-order@test.eigen.is');
         const home1 = await getHome(userId);
 
-        // Gate the ordering: stub the signal getHome branches on (destructing) and hold the call it
-        // must await (shutdown) behind a gate, then prove it parks on that call. The gated shutdown
+        // Gate the ordering: stub the signal getHome branches on (closing) and hold the call it
+        // must await (close) behind a gate, then prove it parks on that call. The gated close
         // runs the REAL teardown once released, so home1's DB handles are closed before getHome opens
         // the replacement — the same non-overlap production relies on. Skipping the real teardown here
         // would leave home1's connections open alongside home2's on the same files.
-        Object.defineProperty(home1, 'destructing', { configurable: true, get: () => true });
-        let releaseShutdown!: () => void;
+        Object.defineProperty(home1, 'closing', { configurable: true, get: () => true });
+        let releaseClose!: () => void;
         const gate = new Promise<void>((resolve) => {
-            releaseShutdown = resolve;
+            releaseClose = resolve;
         });
-        let shutdownResolved = false;
-        const origShutdown = home1.shutdown.bind(home1);
-        home1.shutdown = async () => {
+        let closeResolved = false;
+        const origClose = home1.close.bind(home1);
+        home1.close = async () => {
             await gate;
-            await origShutdown();
-            shutdownResolved = true;
+            await origClose();
+            closeResolved = true;
         };
 
         let replacementResolved = false;
@@ -47,21 +46,21 @@ describe('getHome teardown race', () => {
 
         // Flush the event loop; the gate — not this delay — is what keeps getHome parked.
         await new Promise((resolve) => setTimeout(resolve, 25));
-        expect(shutdownResolved).toBe(false);
-        // The fix: getHome must NOT have installed/returned a replacement while shutdown() is pending.
+        expect(closeResolved).toBe(false);
+        // The fix: getHome must NOT have installed/returned a replacement while close() is pending.
         expect(replacementResolved).toBe(false);
 
-        releaseShutdown();
+        releaseClose();
         const home2 = await getPromise;
 
-        expect(shutdownResolved).toBe(true); // shutdown() completed before the replacement was produced
+        expect(closeResolved).toBe(true); // close() completed before the replacement was produced
         expect(replacementResolved).toBe(true);
         expect(home2).not.toBe(home1);
 
-        await evictHome(userId); // close the real replacement; home1 was already torn down by shutdown()
+        await evictHome(userId); // close the real replacement; home1 was already closed
     });
 
-    test('destruct() runs teardown once under concurrent shutdown() calls', async () => {
+    test('close() runs once under concurrent calls', async () => {
         const userId = await createHomeUser('race-idempotent@test.eigen.is');
         const home = await getHome(userId);
 
@@ -72,7 +71,7 @@ describe('getHome teardown race', () => {
             return origContactsDestruct();
         };
 
-        await Promise.all([home.shutdown(), home.shutdown(), home.shutdown()]);
+        await Promise.all([home.close(), home.close(), home.close()]);
         expect(contactsDestructCalls).toBe(1);
 
         await evictHome(userId);

@@ -19,7 +19,7 @@ export function atHome(ownerId: string): boolean {
 // Loaded and staying: a home tearing down is gone to whoever asks next.
 export function isHomeOpen(ownerId: string): boolean {
     const home = homeFactories.get(ownerId)?.peek();
-    return !!home && !home.destructing;
+    return !!home && !home.closing;
 }
 
 // Resets the idle timer on an already-loaded home. peek() never triggers the factory,
@@ -58,32 +58,25 @@ export async function getHomeForBackup(ownerId: string): Promise<Home> {
     if (restoringHomes.has(ownerId)) {
         throw new ApiError(503, 'Restore in progress');
     }
-    // Retry to resolve races with a concurrently-destructing home or a competing installer. This
+    // Retry to resolve races with a concurrently closing home or a competing installer. This
     // settles in one or two iterations in practice; the bound is only a runaway safety net.
     for (let attempt = 0; attempt < 100; attempt++) {
         const existing = homeFactories.get(ownerId);
         if (existing) {
             const home = await existing();
-            if (!home.destructing) {
+            if (!home.closing) {
                 return home.touch();
             }
-            // The cached home is tearing down. Await its teardown to completion (the same shutdown()
-            // path evictHome uses) BEFORE dropping it, so the replacement can't open the same DB files
-            // while close() is still checkpointing and closing them. shutdown() is
-            // idempotent with the in-flight destruct(), so this just awaits the outgoing teardown.
-            await home.shutdown();
-            // Evict only if it is still the current entry — a concurrent caller may already have
-            // installed a replacement we must not clobber.
-            if (homeFactories.get(ownerId) === existing) {
-                homeFactories.delete(ownerId);
-            }
+            // The cached home is closing. Wait until it has closed, and its onClosed has dropped it,
+            // so the replacement can't open the same database files while they are still being closed.
+            await home.close();
             continue;
         }
 
         const factory: AsyncSingleton<Home> = createAsyncSingleton(async () => {
-            // Identity-checked cleanup: evict only while we are still the installed factory, so a
-            // superseded/orphaned home's teardown cannot evict a live successor for the same owner.
-            const cleanUp = () => {
+            // Evict only while we are still the installed factory, so an old home that closes late
+            // cannot evict its successor for the same owner.
+            const onClosed = () => {
                 if (homeFactories.get(ownerId) === factory) {
                     homeFactories.delete(ownerId);
                 }
@@ -100,7 +93,7 @@ export async function getHomeForBackup(ownerId: string): Promise<Home> {
                         console.error(`[getHome] User not found for id=${parsed.id}, ownerId=${ownerId}`);
                         throw new ApiError(404, 'User not found');
                     }
-                    home = user.role === 'guest' ? new GuestHome(user, cleanUp) : new UserHome(user, cleanUp);
+                    home = user.role === 'guest' ? new GuestHome(user, onClosed) : new UserHome(user, onClosed);
                     break;
                 }
                 case 'team': {
@@ -108,7 +101,7 @@ export async function getHomeForBackup(ownerId: string): Promise<Home> {
                     if (!teamData) {
                         throw new ApiError(404, 'Team not found');
                     }
-                    home = new TeamHome(getSyntheticTeamUser(ownerId, teamData.name), cleanUp);
+                    home = new TeamHome(getSyntheticTeamUser(ownerId, teamData.name), onClosed);
                     break;
                 }
                 case 'external':
@@ -117,7 +110,7 @@ export async function getHomeForBackup(ownerId: string): Promise<Home> {
                     if (!(await getOrgExists(parsed.id))) {
                         throw new ApiError(404, 'Organization not found');
                     }
-                    home = new OrgHome(getSyntheticOrgUser(ownerId), cleanUp);
+                    home = new OrgHome(getSyntheticOrgUser(ownerId), onClosed);
                     break;
                 }
             }
@@ -159,7 +152,7 @@ export async function evictHome(ownerId: string): Promise<void> {
     if (!factory) return;
     try {
         const home = await factory();
-        await home.shutdown();
+        await home.close();
     } catch {
         /* Home may not be initialized */
     }
@@ -176,7 +169,7 @@ export async function shutdownAllHomes(): Promise<void> {
     await Promise.allSettled(
         entries.map(async ([, factory]) => {
             const home = await factory();
-            await home.shutdown();
+            await home.close();
         }),
     );
 }

@@ -13,8 +13,8 @@ import type { Calendar } from '../calendar/calendar';
 import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
 import type { Contacts } from '../contacts/contacts';
-import type { DatabaseConfig, JsonStore, LocalFilesystem, ManagedDatabase, SchemaType } from '../core';
-import { openLocalDatabase } from '../core';
+import type { DatabaseConfig, JsonStore, ManagedDatabase, SchemaType } from '../core';
+import { LocalFilesystem, openLocalDatabase } from '../core';
 import type { Drive } from '../drive';
 import type { Mail } from '../mail/mail-domain';
 import type { NotificationCenter } from '../notification-center/notification-center';
@@ -23,9 +23,9 @@ import type { User } from '../user';
 export type HomeSettings = Pick<UserSettings, 'mounts'>;
 
 export class Home {
-    public user: User;
-    public homeDir!: string;
-    public fs!: LocalFilesystem;
+    public readonly user: User;
+    public readonly homeDir: string;
+    public readonly fs: LocalFilesystem;
     public settings!: JsonStore<HomeSettings>;
 
     // Which parts exist depends on the kind of home. A part the home doesn't have stays undefined.
@@ -42,15 +42,17 @@ export class Home {
 
     private idleTimer: Timer | undefined;
     private initPromise: Promise<this> | null = null;
-    private destructPromise: Promise<void> | null = null;
-    private _destructing = false;
-    private readonly cleanUp: (() => void) | undefined;
+    private closePromise: Promise<void> | null = null;
+    private _closing = false;
+    private readonly onClosed: (() => void) | undefined;
     private readonly managedDatabases = new Map<string, () => Promise<ManagedDatabase<SchemaType>>>();
     private readonly sseListeners = new Set<(event: SSEvent) => void>();
 
-    public constructor(user: User, cleanUp?: () => void) {
+    public constructor(user: User, homeDir: string, onClosed?: () => void) {
         this.user = user;
-        this.cleanUp = cleanUp;
+        this.homeDir = homeDir;
+        this.fs = new LocalFilesystem(homeDir);
+        this.onClosed = onClosed;
     }
 
     public get drive(): Drive {
@@ -82,8 +84,8 @@ export class Home {
         return !!this._calendar;
     }
 
-    public get destructing(): boolean {
-        return this._destructing;
+    public get closing(): boolean {
+        return this._closing;
     }
 
     public init(autoCreateDefaultMount = false): Promise<this> {
@@ -92,8 +94,7 @@ export class Home {
 
     private async runInit(autoCreateDefaultMount: boolean): Promise<this> {
         try {
-            // An org home has no settings.
-            await time('Home.init.settings', async () => this.settings?.load());
+            await time('Home.init.settings', () => this.settings.load());
 
             // allSettled waits for every part. Promise.all would return at the first failure while
             // the other parts are still opening databases and starting timers, and those would leak.
@@ -111,7 +112,7 @@ export class Home {
             return this;
         } catch (err) {
             // Rethrow, so getHome drops this half-built Home instead of keeping it.
-            await this.shutdown();
+            await this.close();
             throw err;
         }
     }
@@ -119,29 +120,26 @@ export class Home {
     // Every use restarts the idle timer. A backup passes a short idleMs, so a home it woke up
     // only for the backup closes again soon.
     public touch(idleMs = this.idleMs): this {
-        if (this._destructing) return this;
+        if (this._closing) return this;
         clearTimeout(this.idleTimer);
         this.idleTimer = setTimeout(() => {
-            console.log(`[Home] Idle timeout for ${this.user.id}, destructing`);
-            this.destruct()
-                .catch((e) => console.error(`[Home] Destruct failed for ${this.user.id}:`, e))
-                .finally(() => this.cleanUp?.());
+            console.log(`[Home] Idle timeout for ${this.user.id}, closing`);
+            this.close().catch((e) => console.error(`[Home] Close failed for ${this.user.id}:`, e));
         }, idleMs);
         return this;
     }
 
-    public async shutdown(): Promise<void> {
-        clearTimeout(this.idleTimer);
-        await this.destruct();
+    // Runs once, however often it is called: closing the same database files twice is unsafe.
+    public close(): Promise<void> {
+        if (!this.closePromise) {
+            this._closing = true;
+            clearTimeout(this.idleTimer);
+            this.closePromise = this.runClose();
+        }
+        return this.closePromise;
     }
 
-    // Runs once, even when the idle timer and shutdown() both call it: closing the same database files twice is unsafe.
-    protected destruct(): Promise<void> {
-        this._destructing = true;
-        return (this.destructPromise ??= this.runDestruct());
-    }
-
-    private async runDestruct(): Promise<void> {
+    private async runClose(): Promise<void> {
         const logFailure = (part: string) => (err: unknown) =>
             console.error(`[Home] Failed to close ${part} for ${this.user.id}:`, err);
 
@@ -161,6 +159,7 @@ export class Home {
             ),
         );
         this.managedDatabases.clear();
+        this.onClosed?.();
     }
 
     // One shared connection per database file under the home, closed when the home goes idle.

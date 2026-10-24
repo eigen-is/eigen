@@ -1,7 +1,8 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import { getOrgDataPath } from '../config/paths';
-import { ApiError, LocalFilesystem } from '../core';
+import { ApiError, JsonStore, PATHS } from '../core';
 import { makeSyntheticUser, type User } from '../user';
+import type { HomeSettings } from './home';
 import { Home } from './home';
 
 export function getSyntheticOrgUser(ownerId: string): User {
@@ -13,14 +14,12 @@ export function getSyntheticOrgUser(ownerId: string): User {
 }
 
 export class OrgHome extends Home {
-    public orgId: string;
+    public readonly orgId: string;
 
-    constructor(syntheticUser: User, cleanUp?: () => void) {
-        super(syntheticUser, cleanUp);
-
-        const parsed = parseOwnerId(syntheticUser.id);
-        this.orgId = parsed.id;
-        this.homeDir = getOrgDataPath(parsed.id);
-        this.fs = new LocalFilesystem(this.homeDir);
+    public constructor(syntheticUser: User, onClosed?: () => void) {
+        const orgId = parseOwnerId(syntheticUser.id).id;
+        super(syntheticUser, getOrgDataPath(orgId), onClosed);
+        this.orgId = orgId;
+        this.settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
     }
 }

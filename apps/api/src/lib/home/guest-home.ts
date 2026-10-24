@@ -1,6 +1,6 @@
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { getGuestHomePath } from '../config/paths';
-import { JsonStore, LocalFilesystem, PATHS } from '../core';
+import { JsonStore, PATHS } from '../core';
 import { Drive } from '../drive';
 import { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
@@ -8,16 +8,14 @@ import type { HomeSettings } from './home';
 import { Home, homeSize } from './home';
 
 export class GuestHome extends Home {
-    constructor(user: User, cleanUp?: () => void) {
-        super(user, cleanUp);
-        this.homeDir = getGuestHomePath(user.id);
-        this.fs = new LocalFilesystem(this.homeDir);
+    public constructor(user: User, onClosed?: () => void) {
+        super(user, getGuestHomePath(user.id), onClosed);
         this.settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
         this._drive = new Drive(this);
         this._notifications = new NotificationCenter(this);
     }
 
-    override async size(): Promise<HomeSizeResponse> {
+    public override async size(): Promise<HomeSizeResponse> {
         return homeSize();
     }
 }
