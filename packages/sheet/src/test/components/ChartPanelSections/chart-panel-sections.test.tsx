@@ -16,6 +16,7 @@ const { Workbook } = await import('../../../components/Workbook');
 const { PropertyGestureContext } = await import('@workspace/ui/components/properties-panel');
 const { ChartPanelSections } = await import('../../../components/ChartPanelSections');
 const { CHART_RANGE_REFUSALS } = await import('../../../engine/chart-range');
+const { NEWER_CHART_DATA_NOTICE } = await import('@workspace/ui/components/charts');
 type Sheet = import('../../../state').Sheet;
 type ChartPanelState = import('../../../state').ChartPanelState;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
@@ -251,17 +252,31 @@ test('Switch rows/columns re-derives the refs from the block, one undo step', as
     expect(spec()).toEqual(before);
 });
 
-test("a Setup toggle keeps what this build doesn't know: a key on the spec, the data and a series, and a legend", async () => {
+test("a Setup toggle keeps what this build doesn't know beside the data: a key on the spec and a legend", async () => {
     const chart = rangeChart();
-    const raw = JSON.parse(chart.spec);
-    const series = raw.data.series.map((s: object) => ({ ...s, dash: 'dot' }));
-    const newer = { ...raw, future: 1, legend: 'inside', data: { ...raw.data, future: 2, series } };
+    const newer = { ...JSON.parse(chart.spec), future: 1, legend: 'inside' };
     const { stored, toggle } = await mount({ ...chart, spec: JSON.stringify(newer) });
     await act(async () => toggle('Switch rows/columns')?.click());
     const written = JSON.parse(stored()?.spec ?? '{}');
     expect(written.data.categories).toEqual(ref([0, 0], [1, 1]));
-    expect([written.future, written.legend, written.data.future]).toEqual([1, 'inside', 2]);
-    expect(written.data.series[0]).toMatchObject({ id: 's-1', dash: 'dot', color: '#000000' });
+    expect([written.future, written.legend]).toEqual([1, 'inside']);
+    expect(written.data.series[0]).toMatchObject({ id: 's-1', color: '#000000' });
+});
+
+// Rebuilt values would fall out of step with an array a newer build keeps beside them, as in Edit data.
+test("Setup shows data holding a key this build doesn't know, says to reload, and writes nothing", async () => {
+    const chart = rangeChart();
+    const raw = JSON.parse(chart.spec);
+    const series = raw.data.series.map((s: object) => ({ ...s, errors: ref([1, 3], [2, 2]) }));
+    const newer = { ...raw, data: { ...raw.data, series } };
+    const { container, field, toggle, type, stored } = await mount({ ...chart, spec: JSON.stringify(newer) });
+    const before = stored()?.spec;
+    expect(container.textContent).toContain(NEWER_CHART_DATA_NOTICE);
+    expect(field('input[aria-label="Data range"]').disabled).toBe(true);
+    expect(toggle('Switch rows/columns')?.disabled).toBe(true);
+    await act(async () => toggle('Switch rows/columns')?.click());
+    await type('input[aria-label="Data range"]', 'A1:C4', 'Enter');
+    expect(stored()?.spec).toBe(before);
 });
 
 test('a title typed letter by letter is one undo step', async () => {

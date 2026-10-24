@@ -217,6 +217,9 @@ function removeWhole(grid: Grid, whole: 'rows' | 'columns', range: Range): Grid 
     };
 }
 
+// Shown wherever a chart's data can't be edited because it holds a key this build doesn't know.
+export const NEWER_CHART_DATA_NOTICE = 'This chart was made in a newer version of Eigen. Reload to edit its data.';
+
 const plural = (n: number, noun: string) => `${n.toLocaleString('en')} ${noun}${n === 1 ? '' : 's'}`;
 
 type ChartDataDialogProps = {
@@ -247,7 +250,7 @@ export function ChartDataDialog({ spec, stored, open, onOpenChange, onSave }: Ch
                     <DialogTitle>Edit data</DialogTitle>
                     <DialogDescription>
                         {unknown
-                            ? 'This chart was made in a newer version of Eigen. Reload to edit its data.'
+                            ? NEWER_CHART_DATA_NOTICE
                             : readOnly
                               ? 'This chart has more data than the editor holds, so it opens read-only.'
                               : 'Categories go down column A and series across row 1. Type in an empty row or column to add one, and paste cells from a spreadsheet to fill several at once.'}

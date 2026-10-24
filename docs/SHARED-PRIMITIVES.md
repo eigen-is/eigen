@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1961 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1962 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -984,7 +984,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1013)
+## Utilities & constants (1014)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1944,6 +1944,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ATTENDEE_STATUS_LABEL` | `@workspace/ui/components/calendar` | packages/ui/src/components/calendar/attendee-list.tsx |
 | `CHART_TYPE_OPTIONS` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-types.ts |
 | `downloadChartImage` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/download-chart-image.ts |
+| `NEWER_CHART_DATA_NOTICE` | `@workspace/ui/components/charts` | packages/ui/src/components/charts/chart-data-dialog.tsx |
 | `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |

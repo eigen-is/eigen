@@ -246,14 +246,24 @@ describe('a chart edit keeps what this build does not know', () => {
         expect(kept(next)).toEqual([1, 'inside', 10, 2, 'dot']);
     });
 
-    test('a typed range, its first series keeping its id and its keys', () => {
-        const { next } = author(newer(), (ctx) => setChartDataRange(ctx, 'c1', ref(S, [2, 5], [1, 2])));
+    test('a typed range, its first series keeping its id and the keys beside the data', () => {
+        const known = produce(newer(), (ctx: Context) => {
+            const c1 = ctx.sheets[0].charts!.c1;
+            c1.spec = JSON.stringify({ ...JSON.parse(c1.spec), data: rangeSpec(ref(S, [2, 5])).data });
+        });
+        const { next } = author(known, (ctx) => setChartDataRange(ctx, 'c1', ref(S, [2, 5], [1, 2])));
         expect(rangeData(next.sheets, 0, 'c1')?.series.map((s) => s.values?.column)).toEqual([
             [1, 1],
             [2, 2],
         ]);
         expect(stored(next).data.series[0].id).toBe('s-1');
-        expect(kept(next)).toEqual([1, 'inside', 10, 2, 'dot']);
+        expect(kept(next).slice(0, 3)).toEqual([1, 'inside', 10]);
+    });
+
+    // Rebuilt values would fall out of step with an array a newer build keeps beside them.
+    test("a typed range writes nothing on data holding a key this build doesn't know", () => {
+        const { ops } = author(newer(), (ctx) => setChartDataRange(ctx, 'c1', ref(S, [2, 5], [1, 2])));
+        expect(ops).toEqual([]);
     });
 
     test('a row insert', () => {

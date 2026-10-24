@@ -35,7 +35,7 @@ An editor never writes the spec it resolved. It hands its host a `ChartSpecChang
 
 Each host applies the change onto the stored spec it has at that moment. Sheets applies it inside the recipe onto the chart as the workbook then stores it, so a panel that rendered before a peer's edit can't revert that edit. A canvas and a doc apply it onto the element or node as last rendered. Edit data is the one editor that diffs (`chartSpecChange`), [§ Edit data](#edit-data-is-a-grid-over-inline-data-and-save-is-one-write).
 
-Structural writers walk `stored` too. A row op and a copied sheet (`mapChartRefs`, `packages/sheet/src/engine/chart-data.ts`) move every record shaped as a `CellRangeRef` under `data`, under any key, so a ref a newer build stores moves as well, even in a chart this build can't draw. A copy to a host without cells (`inlineChartSpec`) reads the known ranges into numbers and leaves out every other ref, which would name cells the host doesn't have.
+Structural writers walk `stored` too. A row op and a copied sheet (`mapChartRefs`, `packages/sheet/src/engine/chart-data.ts`) move every record shaped as a `CellRangeRef` on `data` or on one of its series, under any key, so a ref a newer build stores moves as well, even in a chart this build can't draw. Nothing deeper is walked, since no ref lives there, so a forged spec nested deep can't throw out of a row op. A copy to a host without cells (`inlineChartSpec`) reads the known ranges into numbers and leaves out every other ref, which would name cells the host doesn't have.
 
 ## Every series has an id that follows it
 
@@ -46,7 +46,7 @@ Each series in `data.series` has an `id`, unique in its chart, of 1 to 64 letter
 A build keeps what it doesn't know, so a newer field must be one an older build can carry without misreading:
 
 - A record grows by a key. A scalar never becomes a record. A new collection is a record keyed by id or index, never an array that grows by position.
-- The positional arrays a build rebuilds are `data.categories`, each series' `values` and `sliceColors`. Per-point data that must run parallel to the values (a scatter's x, a bubble's sizes) is a sibling array in its `data.series` item. Edit data opens read-only when `data` or a series holds a key this build doesn't read (`holdsUnknownChartData`), so it never rebuilds the values without the array beside them.
+- The positional arrays a build rebuilds are `data.categories`, each series' `values` and `sliceColors`. Per-point data that must run parallel to the values (a scatter's x, a bubble's sizes) is a sibling array in its `data.series` item. Edit data opens read-only when `data` or a series holds a key this build doesn't read (`holdsUnknownChartData`), so it never rebuilds the values without the array beside them. A sheet's Setup and typed range leave such data as it is: the panel shows their rows disabled, with Edit data's notice to reload.
 - An enum may gain members. An older build keeps the stored value and draws its key's default; an unknown chart type draws the placeholder.
 - A value's type and unit never change. A changed meaning is a new sibling key with a precedence rule. A number's unit is in its name (`widthPx`, `holePercent`) unless it is an axis value, a count or a base.
 - Every cell ref lives in `data`, shaped as a `CellRangeRef`, which never grows a field, so a row op moves it by its shape.

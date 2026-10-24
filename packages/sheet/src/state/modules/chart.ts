@@ -1,6 +1,7 @@
 import {
     applyChartSpecChange,
     CHART_DEFAULT_SIZE,
+    holdsUnknownChartData,
     parseChartSpec,
     readChartLook,
     readChartSpec,
@@ -85,11 +86,13 @@ export function insertChartFromSelection(ctx: Context, id: string): ChartRangeRe
     selectFloatingObject(ctx, { kind: 'chart', id });
 }
 
-// A typed data range is set up the way Insert sets up a selection, each series keeping its id and style.
+// A typed data range is set up the way Insert sets up a selection, each series keeping its id and style. Data holding
+// a key this build doesn't know is left as it is, as Setup and Edit data leave it.
 export function setChartDataRange(ctx: Context, id: string, ref: CellRangeRef) {
     const chart = editableCurrentSheet(ctx)?.charts?.[id];
-    const spec = chart ? parseChartSpec(chart.spec) : null;
-    if (!spec) return;
+    if (!chart) return;
+    const { stored, spec } = readChartSpec(chart.spec);
+    if (!spec || holdsUnknownChartData(stored, spec)) return;
     const setup = setUpChartRange(ref, createContextResolver(ctx), spec.data);
     if (typeof setup !== 'string') setChartSpec(ctx, id, chartRangeChange(setup.data));
 }
