@@ -46,6 +46,9 @@ export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+x
 // DrawingML counts an angle in 60,000ths of a degree.
 export const DEGREE = 60_000;
 
+// And a share of a whole (ST_Percentage) in 100,000ths, 1,000ths of a percent.
+export const HUNDRED_PERCENT = 100_000;
+
 // A stored colour token (#rgb, #rrggbb, #rrggbbaa) as an a:srgbClr, its alpha times `opacity` beside it; null for
 // transparent or anything else.
 export function colorXml(color: string, opacity = 1): string | null {
@@ -53,7 +56,7 @@ export function colorXml(color: string, opacity = 1): string | null {
     if (!digits || isTransparentColor(color)) return null;
     const rgb = digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits.slice(0, 6);
     const alpha = (digits.length === 8 ? Number.parseInt(digits.slice(6), 16) / 255 : 1) * opacity;
-    const share = alpha < 1 ? `<a:alpha val="${Math.round(alpha * 100_000)}"/>` : '';
+    const share = alpha < 1 ? `<a:alpha val="${Math.round(alpha * HUNDRED_PERCENT)}"/>` : '';
     return `<a:srgbClr val="${rgb.toUpperCase()}">${share}</a:srgbClr>`;
 }
 
@@ -206,7 +209,7 @@ function presetRgba(name: string | undefined): Rgba | undefined {
 export function percent(value: string | undefined): number | undefined {
     const trimmed = value?.trim();
     if (!trimmed) return undefined;
-    const fraction = trimmed.endsWith('%') ? Number(trimmed.slice(0, -1)) / 100 : Number(trimmed) / 100000;
+    const fraction = trimmed.endsWith('%') ? Number(trimmed.slice(0, -1)) / 100 : Number(trimmed) / HUNDRED_PERCENT;
     return Number.isFinite(fraction) ? fraction : undefined;
 }
 

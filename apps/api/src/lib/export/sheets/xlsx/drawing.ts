@@ -133,12 +133,12 @@ function anchorXml(sheet: Sheet, { x, y, width, height }: Placed, content: strin
     const corner = (tag: string, left: number, top: number) => {
         const column = sheetTrackAt(sheet, 'column', left);
         const row = sheetTrackAt(sheet, 'row', top);
-        return `<xdr:${tag}><xdr:col>${column.index}</xdr:col><xdr:colOff>${emu(column.offsetPx)}</xdr:colOff><xdr:row>${row.index}</xdr:row><xdr:rowOff>${emu(row.offsetPx)}</xdr:rowOff></xdr:${tag}>`;
+        return `<xdr:${tag}><xdr:col>${column.index}</xdr:col><xdr:colOff>${toEmu(column.offsetPx)}</xdr:colOff><xdr:row>${row.index}</xdr:row><xdr:rowOff>${toEmu(row.offsetPx)}</xdr:rowOff></xdr:${tag}>`;
     };
     return `<xdr:twoCellAnchor editAs="oneCell">${corner('from', x, y)}${corner('to', x + width, y + height)}${content}<xdr:clientData/></xdr:twoCellAnchor>`;
 }
 
-function emu(px: number): number {
+function toEmu(px: number): number {
     return Math.round(px * EMU_PER_PX);
 }
 
@@ -157,6 +157,6 @@ function pictureXml({ x, y, width, height, angle }: Placed, id: number, blip: st
     return [
         `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${id}" name="Picture ${id - 1}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>`,
         `<xdr:blipFill>${blip}<a:stretch><a:fillRect/></a:stretch></xdr:blipFill>`,
-        `<xdr:spPr><a:xfrm${rot ? ` rot="${rot}"` : ''}><a:off x="${emu(x)}" y="${emu(y)}"/><a:ext cx="${emu(width)}" cy="${emu(height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>`,
+        `<xdr:spPr><a:xfrm${rot ? ` rot="${rot}"` : ''}><a:off x="${toEmu(x)}" y="${toEmu(y)}"/><a:ext cx="${toEmu(width)}" cy="${toEmu(height)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>`,
     ].join('');
 }

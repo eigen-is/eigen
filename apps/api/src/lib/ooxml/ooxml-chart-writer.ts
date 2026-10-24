@@ -13,7 +13,7 @@ import type {
 import { parseFill } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import { quoteSheetName, rangeToA1 } from '@workspace/sheet/engine/a1-notation';
-import { solidFillXml } from './drawingml';
+import { DEGREE, solidFillXml } from './drawingml';
 import { A_NS, C_NS, EMU_PER_PX, R_NS } from './ooxml';
 import { LEGEND_BY_POSITION, PERCENT_AXIS_FORMAT, STACKING_BY_GROUPING } from './ooxml-chart';
 
@@ -222,7 +222,7 @@ function axisTitleXml(title: string, upright: boolean): string {
 function titleXml(title: string, { bold, turned = false }: { bold: boolean; turned?: boolean }): string {
     const weight = bold ? 1 : 0;
     return [
-        `<c:title><c:tx><c:rich><a:bodyPr${turned ? ' rot="-5400000" vert="horz"' : ''}/><a:lstStyle/>`,
+        `<c:title><c:tx><c:rich><a:bodyPr${turned ? ` rot="${-90 * DEGREE}" vert="horz"` : ''}/><a:lstStyle/>`,
         `<a:p><a:pPr><a:defRPr b="${weight}"/></a:pPr><a:r><a:rPr lang="en-US" b="${weight}"/><a:t>${escapeXml(title)}</a:t></a:r></a:p>`,
         '</c:rich></c:tx><c:overlay val="0"/></c:title>',
     ].join('');

@@ -49,7 +49,7 @@ import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import { ApiError } from '../../core/errors';
 import { canvasTextValue } from '../../document/prose-css';
-import { colorXml, DEGREE, solidFillXml, THEME_TYPE, themeXml } from '../../ooxml/drawingml';
+import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml, THEME_TYPE, themeXml } from '../../ooxml/drawingml';
 import { A_NS, AHYP_NS, EMU_PER_POINT, P_NS, R_NS } from '../../ooxml/ooxml';
 import { type PackagePart, type Relationship, relationshipsXml, uriReference, writePackage } from '../../ooxml/opc';
 import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../ooxml/presentationml';
@@ -215,13 +215,13 @@ function relate(slide: Slide, type: string, target: string, external?: true): st
 // ST_Coordinate's bound, which every offset, extent and path point stays within.
 const MAX_COORDINATE = 27_273_042_316_900;
 
-function emu(slide: Slide, px: number): number {
+function toEmu(slide: Slide, px: number): number {
     return Math.min(MAX_COORDINATE, Math.max(-MAX_COORDINATE, Math.round(px * slide.deck.scale)));
 }
 
 // 1000ths of a percent, DrawingML's share of a whole.
 function share(value: number): number {
-    return Math.round(value * 100_000);
+    return Math.round(value * HUNDRED_PERCENT);
 }
 
 function degrees(radians: number): number {
@@ -354,7 +354,7 @@ function spXml(slide: Slide, name: string, box: Box, geometry: string, fill: str
 function xfrmXml(slide: Slide, box: Box, flipH = false, flipV = false): string {
     const rot = angle(box.angle);
     const attrs = `${rot ? ` rot="${rot}"` : ''}${flipH ? ' flipH="1"' : ''}${flipV ? ' flipV="1"' : ''}`;
-    return `<a:xfrm${attrs}><a:off x="${emu(slide, box.x)}" y="${emu(slide, box.y)}"/><a:ext cx="${emu(slide, box.width)}" cy="${emu(slide, box.height)}"/></a:xfrm>`;
+    return `<a:xfrm${attrs}><a:off x="${toEmu(slide, box.x)}" y="${toEmu(slide, box.y)}"/><a:ext cx="${toEmu(slide, box.width)}" cy="${toEmu(slide, box.height)}"/></a:xfrm>`;
 }
 
 function presetXml(preset: string, guides: Record<string, number> = {}): string {
@@ -372,10 +372,10 @@ function boxGeometry(el: Box & { corners: Corners }): string {
 
 // A rounded outline is its core's edges pushed out by the radius, joined by arcs about the core's corners.
 function outlineGeometry(core: Point[], radius: number, box: Box, slide: Slide): string {
-    const pt = (p: Point) => `<a:pt x="${emu(slide, p.x)}" y="${emu(slide, p.y)}"/>`;
-    const r = emu(slide, radius);
+    const pt = (p: Point) => `<a:pt x="${toEmu(slide, p.x)}" y="${toEmu(slide, p.y)}"/>`;
+    const r = toEmu(slide, radius);
     if (core.length === 1) {
-        const circle = `<a:moveTo>${pt({ x: core[0].x + radius, y: core[0].y })}</a:moveTo><a:arcTo wR="${r}" hR="${r}" stAng="0" swAng="21600000"/>`;
+        const circle = `<a:moveTo>${pt({ x: core[0].x + radius, y: core[0].y })}</a:moveTo><a:arcTo wR="${r}" hR="${r}" stAng="0" swAng="${360 * DEGREE}"/>`;
         return customXml(slide, box, `${circle}<a:close/>`, true);
     }
     // The core winds clockwise (y down), so v→w's outward normal is (dy, -dx), and its angle is where the arc starts.
@@ -397,8 +397,8 @@ function outlineGeometry(core: Point[], radius: number, box: Box, slide: Slide):
 }
 
 function customXml(slide: Slide, box: { width: number; height: number }, path: string, filled: boolean): string {
-    const w = Math.max(1, emu(slide, box.width));
-    const h = Math.max(1, emu(slide, box.height));
+    const w = Math.max(1, toEmu(slide, box.width));
+    const h = Math.max(1, toEmu(slide, box.height));
     return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="${w}" h="${h}"${filled ? '' : ' fill="none"'}>${path}</a:path></a:pathLst></a:custGeom>`;
 }
 
@@ -446,7 +446,7 @@ function lineXml(
     const end = (tag: string, head: Arrowhead) =>
         LINE_ENDS[head] ? `<a:${tag} type="${LINE_ENDS[head]}" w="lg" len="lg"/>` : '';
     return [
-        `<a:ln w="${emu(slide, stroke.strokeWidth)}" cap="rnd"><a:solidFill>${color}</a:solidFill>`,
+        `<a:ln w="${toEmu(slide, stroke.strokeWidth)}" cap="rnd"><a:solidFill>${color}</a:solidFill>`,
         dash ? `<a:prstDash val="${dash}"/>` : '',
         `<a:round/>${end('headEnd', ends[0])}${end('tailEnd', ends[1])}</a:ln>`,
     ].join('');
@@ -466,7 +466,7 @@ function pathXml(el: VectorPathElement, slide: Slide): string {
         .map(({ op, points }) => {
             const tag = PATH_COMMANDS[op];
             if (points.length === 0) return `<a:${tag}/>`;
-            const pts = points.map((p) => `<a:pt x="${emu(slide, p.x)}" y="${emu(slide, p.y)}"/>`);
+            const pts = points.map((p) => `<a:pt x="${toEmu(slide, p.x)}" y="${toEmu(slide, p.y)}"/>`);
             return `<a:${tag}>${pts.join('')}</a:${tag}>`;
         })
         .join('');
@@ -559,7 +559,7 @@ function pathFrame(el: Box, points: Point[], slide: Slide): { box: Box; pt: (p: 
     const top = el.height / 2 - ry;
     return {
         box: { x: el.x + left, y: el.y + top, width: 2 * rx, height: 2 * ry, angle: el.angle },
-        pt: (p) => `<a:pt x="${emu(slide, p.x - left)}" y="${emu(slide, p.y - top)}"/>`,
+        pt: (p) => `<a:pt x="${toEmu(slide, p.x - left)}" y="${toEmu(slide, p.y - top)}"/>`,
     };
 }
 
@@ -812,15 +812,16 @@ const MIN_FONT_SIZE = 100;
 const MAX_FONT_SIZE = 400_000;
 
 function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): string {
-    const em = (n: number) => emu(slide, n * box.fontSize);
-    const inset = emu(slide, box.inset);
+    const em = (n: number) => toEmu(slide, n * box.fontSize);
+    const inset = toEmu(slide, box.inset);
     // An exact pitch, CSS's: what a consumer takes as a single line varies (LibreOffice draws 1.2em for every face).
     const pitch = Math.min(MAX_SPACING, centipoints(slide, box.lineHeight * box.fontSize));
     const lineSpacing = `<a:lnSpc><a:spcPts val="${pitch}"/></a:lnSpc>`;
     const body = paragraphs.map((paragraph) => {
         const margin = Math.min(
             MAX_MARGIN,
-            em(paragraph.depth * LIST_INDENT_EM) + paragraph.quotes * (em(QUOTE_INDENT_EM) + emu(slide, QUOTE_BAR_PX)),
+            em(paragraph.depth * LIST_INDENT_EM) +
+                paragraph.quotes * (em(QUOTE_INDENT_EM) + toEmu(slide, QUOTE_BAR_PX)),
         );
         const indent = paragraph.marker ? -em(MARKER_EM[paragraph.marker]) : 0;
         const level = Math.min(MAX_LEVEL, Math.max(0, paragraph.depth - 1));
