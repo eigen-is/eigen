@@ -240,7 +240,7 @@ export function exceedsChartSpecBytes(value: string | Readonly<Record<string, un
 
 // The same count one prefixed key at a time, for a host that collects its keys in the pass that counts them: true once
 // the keys so far are past the limit.
-export function chartSpecByteCounter(): (key: string, part: unknown) => boolean {
+function chartSpecByteCounter(): (key: string, part: unknown) => boolean {
     const spend = byteBudget();
     return (key, part) => {
         if (spend(key)) return true;

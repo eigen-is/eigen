@@ -1,7 +1,6 @@
 import { toast } from 'sonner';
 import { readChartLook } from '../../charts/look';
 import {
-    chartSpecByteCounter,
     chartSpecTexts,
     exceedsChartSpecBytes,
     exceedsChartSpecDepth,
@@ -82,17 +81,20 @@ export function buildTextClipboardItem(args: {
     };
 }
 
+// A key that names a part, under its text.
+const isPartText = (entry: [string, unknown]): entry is [string, string] =>
+    isChartSpecKey(entry[0]) && typeof entry[1] === 'string';
+
 // The one test of a chart item's parts, the builder's and the reader's: a text under each key and every key a part's,
 // within the spec's byte and depth limits as the item carries them, and inline data that reads. What a host stores can
 // be larger, so a paste counts that again (pastedChartFields).
 function isInlineChartParts(parts: unknown): parts is ChartSpecTexts {
     if (!isRecord(parts)) return false;
-    const exceeds = chartSpecByteCounter();
-    const fits = Object.keys(parts).every((key) => {
-        const text = parts[key];
-        return isChartSpecKey(key) && typeof text === 'string' && !exceeds(key, text) && !exceedsChartSpecDepth(text);
-    });
-    return fits && readChartSpec(parts).spec?.data.source === 'inline';
+    const texts = Object.entries(parts);
+    if (!texts.every(isPartText)) return false;
+    // readChartSpec counts the bytes, so only a chart within them is walked for its depth.
+    if (readChartSpec(parts).spec?.data.source !== 'inline') return false;
+    return !texts.some(([, text]) => exceedsChartSpecDepth(text));
 }
 
 // A chart item, or null for parts no consumer could draw (range data, unreadable, over a limit). The parts ride as
