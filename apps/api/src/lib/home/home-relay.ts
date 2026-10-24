@@ -28,7 +28,7 @@ import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
-import { atHome, getHome, getHomeForBackup, getTeamHome, isHomeOpen } from './get-home';
+import { atHome, getHome, getTeamHome, isHomeOpen, openHome, requestedSince } from './get-home';
 import { homeSize } from './home';
 import { TeamHome } from './team-home';
 
@@ -242,16 +242,15 @@ export async function pullHomeSnapshot(
     options: { level?: BackupLevel; onProgress?: SnapshotProgress },
 ): Promise<BackupManifest> {
     const startedAt = Date.now();
-    const wasLoaded = isHomeOpen(ownerId);
-    const home = await getHomeForBackup(ownerId);
-    // A capture can outlast the idle with nobody connected, as one big file at 02:00 does: the timer would close
-    // the databases it reads.
-    const keepAlive = setInterval(() => home.touch(), 60_000);
+    const wasOpen = isHomeOpen(ownerId);
+    const home = await openHome(ownerId);
+    // A capture can outlast the idle with nobody connected, as one big file at 02:00 does, so the
+    // hold keeps the databases it reads open.
+    const release = home.hold();
     try {
         return await snapshotHome(home, targetDir, options);
     } finally {
-        clearInterval(keepAlive);
-        if (!wasLoaded) home.touch(home.requestedAt < startedAt ? BACKUP_RELEASE_MS : undefined);
+        release(!wasOpen && !requestedSince(ownerId, startedAt) ? BACKUP_RELEASE_MS : undefined);
     }
 }
 

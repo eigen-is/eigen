@@ -35,12 +35,10 @@ export class Home {
     protected _calendar?: Calendar;
     protected _notifications?: NotificationCenter;
 
-    // The last time a request or a keepalive reached this home. A backup does not update it,
-    // so after a backup we can tell whether someone else opened the home in the meantime.
-    public requestedAt = 0;
     protected idleMs = 1000 * 60 * 5;
 
     private idleTimer: Timer | undefined;
+    private holds = 0;
     private initPromise: Promise<this> | null = null;
     private closePromise: Promise<void> | null = null;
     private _closing = false;
@@ -117,16 +115,33 @@ export class Home {
         }
     }
 
-    // Every use restarts the idle timer. A backup passes a short idleMs, so a home it woke up
-    // only for the backup closes again soon.
-    public touch(idleMs = this.idleMs): this {
-        if (this._closing) return this;
+    // Every use restarts the idle timer.
+    public touch(): this {
+        this.startIdleTimer(this.idleMs);
+        return this;
+    }
+
+    // Keeps the home open, however long the work takes, until the returned release is called.
+    // A holder that opened the home only for itself may ask for a shorter idle when it lets go.
+    public hold(): (idleMs?: number) => void {
+        this.holds++;
+        clearTimeout(this.idleTimer);
+        let released = false;
+        return (idleMs = this.idleMs) => {
+            if (released) return;
+            released = true;
+            this.holds--;
+            this.startIdleTimer(idleMs);
+        };
+    }
+
+    private startIdleTimer(idleMs: number): void {
+        if (this._closing || this.holds > 0) return;
         clearTimeout(this.idleTimer);
         this.idleTimer = setTimeout(() => {
             console.log(`[Home] Idle timeout for ${this.user.id}, closing`);
             this.close().catch((e) => console.error(`[Home] Close failed for ${this.user.id}:`, e));
         }, idleMs);
-        return this;
     }
 
     // Runs once, however often it is called: closing the same database files twice is unsafe.

@@ -12,6 +12,9 @@ import { UserHome } from './user-home';
 
 const homeFactories: Map<string, AsyncSingleton<Home>> = new Map();
 
+// When a request last reached each loaded home, through getHome or a keepalive of an open connection.
+const lastRequestAt = new Map<string, number>();
+
 export function atHome(ownerId: string): boolean {
     return homeFactories.has(ownerId);
 }
@@ -27,8 +30,13 @@ export function isHomeOpen(ownerId: string): boolean {
 export function touchHomeIfLoaded(ownerId: string): void {
     const home = homeFactories.get(ownerId)?.peek();
     if (!home) return;
-    home.requestedAt = Date.now();
+    lastRequestAt.set(ownerId, Date.now());
     home.touch();
+}
+
+// Tells work that opened a home for itself whether anybody else has used it since.
+export function requestedSince(ownerId: string, time: number): boolean {
+    return (lastRequestAt.get(ownerId) ?? 0) >= time;
 }
 
 // Homes whose folder is being replaced by a restore. Every surface that resolves a home per request
@@ -48,13 +56,13 @@ export function clearHomeRestoring(ownerId: string): void {
 }
 
 export async function getHome(ownerId: string): Promise<Home> {
-    const home = await getHomeForBackup(ownerId);
-    home.requestedAt = Date.now();
+    const home = await openHome(ownerId);
+    lastRequestAt.set(ownerId, Date.now());
     return home;
 }
 
-// getHome without recording a request: a backup reaching a home is nobody opening it (pullHomeSnapshot).
-export async function getHomeForBackup(ownerId: string): Promise<Home> {
+// getHome without counting as a request, for background work such as a backup.
+export async function openHome(ownerId: string): Promise<Home> {
     if (restoringHomes.has(ownerId)) {
         throw new ApiError(503, 'Restore in progress');
     }
@@ -79,6 +87,7 @@ export async function getHomeForBackup(ownerId: string): Promise<Home> {
             const onClosed = () => {
                 if (homeFactories.get(ownerId) === factory) {
                     homeFactories.delete(ownerId);
+                    lastRequestAt.delete(ownerId);
                 }
             };
             const parsed = parseOwnerId(ownerId);
@@ -166,6 +175,7 @@ export async function evictHome(ownerId: string): Promise<void> {
 export async function shutdownAllHomes(): Promise<void> {
     const entries = [...homeFactories.entries()];
     homeFactories.clear();
+    lastRequestAt.clear();
     await Promise.allSettled(
         entries.map(async ([, factory]) => {
             const home = await factory();
