@@ -379,3 +379,42 @@ describe("a shape's overlapping paths imported, exported and read back", () => {
             expect(parseFill(String(found.fill))).toMatchObject({ type: 'solid', color: '#993300' });
     });
 });
+
+// A picture's border is its own a:ln, as PowerPoint writes one, so it comes back on the picture and not as a shape.
+describe('a bordered picture exported and read back', () => {
+    test('is one picture with its border', () => {
+        const picture: NewVectorElement = {
+            type: 'image',
+            x: 100,
+            y: 100,
+            width: 320,
+            height: 180,
+            angle: 0,
+            mediaName: 'pic.png',
+            objectFit: 'fill',
+            strokeColor: '#c0504d',
+            strokeWidth: 4,
+            strokeStyle: 'dashed',
+        };
+        const back = roundTrip([picture]).deck.slides[0].elements;
+        expect(back.map((found) => found.type)).toEqual(['image']);
+        expect(back[0]).toMatchObject({ strokeColor: '#c0504d', strokeWidth: 4, strokeStyle: 'dashed' });
+    });
+
+    // PowerPoint keeps a line's colour at 0 wide; the canvas draws none, and the writer writes none.
+    test('a line 0 wide reads as none, and comes back as none', () => {
+        const shapes = sp({
+            xfrm: box(100, 100, 200, 100),
+            geom: 'rect',
+            spPr: `${solidFill('993300')}<a:ln w="0">${solidFill('00305e')}</a:ln>`,
+        });
+        const [first] = readPptx(buildPptx({ slides: [{ shapes }] }), { maxMediaBytes: 1024 * 1024 }).slides[0]
+            .elements;
+        const [back] = roundTrip([first]).deck.slides[0].elements;
+        expect([first.strokeColor, back.strokeColor, back.strokeWidth]).toEqual([
+            'transparent',
+            'transparent',
+            first.strokeWidth,
+        ]);
+    });
+});

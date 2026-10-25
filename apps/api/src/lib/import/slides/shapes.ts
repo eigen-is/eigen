@@ -495,7 +495,8 @@ function linesOf(chain: ShapeProperties[], walk: Walk, style: XmlElement | undef
     return { lns: entry ? [...lns, entry] : lns, entry, reference };
 }
 
-// No a:ln and no lnRef, or neither stating a colour, is no stroke. A gradient line strokes in its first colour.
+// No a:ln and no lnRef, or neither stating a colour, is no stroke, and so is a 0 wide one. A gradient line strokes in
+// its first colour.
 function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     const ln = lines.lns.find((found) => fillIn(found) !== undefined);
     const fill = fillIn(ln);
@@ -505,11 +506,13 @@ function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     const color = paint?.type === 'gradient' ? paint.from : paint?.color;
     if (!color || color === TRANSPARENT_COLOR) return NO_STROKE;
     const width = lines.lns.map((found) => emu(xmlAttr(found, '', 'w'))).find((found) => found !== undefined);
+    // The canvas draws no stroke 0 wide, and the writer writes none.
+    if (width !== undefined && width <= 0) return NO_STROKE;
     const preset = lines.lns.map((found) => childOf(found, A_NS, 'prstDash')).find((found) => found !== undefined);
     const dash = preset && xmlAttr(preset, '', 'val');
     return {
         strokeColor: color,
-        strokeWidth: Math.max(0, width ?? DEFAULT_LINE_EMU) * walk.deck.scale,
+        strokeWidth: (width ?? DEFAULT_LINE_EMU) * walk.deck.scale,
         strokeStyle: strokeStyleOf(dash),
     };
 }
