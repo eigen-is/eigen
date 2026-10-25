@@ -309,7 +309,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
-    const context: RunContext = { scope: runScope, paraStyle: styleId, role, pieces: [], pending: [] };
+    const context: RunContext = { scope: runScope, paraStyle: styleId, role, pieces: [], pending: [], leftOut: [] };
     walkInline(
         reader,
         xmlElements(p).filter((child) => child.ns !== W_NS || child.local !== 'pPr'),
@@ -332,6 +332,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const breakOnly = halves.length > 1 && !halves.some(isShown);
     const list = listed && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
     const props = mergePara(styled, list?.pPr ?? {}, direct);
+    const textAlign = textAlignOf(props.jc, props.bidi);
 
     // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light
     // grey of any shade, as other editors shade code.
@@ -483,7 +484,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             // draws it at the title's height.
             role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
             inlines: content,
-            textAlign: textAlignOf(props.jc, props.bidi),
+            textAlign,
             continued: numbered,
             indLeft,
             quote,
@@ -534,6 +535,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         } else if (item.kind === 'table') item.indent += indLeft;
         items.push(item);
     }
+    for (const line of context.leftOut) line.textAlign = textAlign;
     if (props.sectionBreak && scope.story === 'body') items.push({ kind: 'break' });
     return items;
 }

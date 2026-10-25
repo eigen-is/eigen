@@ -65,12 +65,14 @@ function pictureLeftOut(reader: Reader, context: RunContext, alt: string | null)
     leaveLines(context, alt ? [PICTURE_NOT_IMPORTED, alt] : [PICTURE_NOT_IMPORTED]);
 }
 
-// What a drawing left out says in its place, a paragraph after the one it stood in.
+// What a drawing left out says in its place, a paragraph after the one it stood in, aligned as that one is.
 function leaveLines(context: RunContext, lines: string[]): void {
     if (lines.length === 0) return;
-    context.pending.push(
-        paraOf(lines.flatMap((text, index) => [...(index > 0 ? [{ type: 'hardBreak' }] : []), { type: 'text', text }])),
+    const line = paraOf(
+        lines.flatMap((text, index) => [...(index > 0 ? [{ type: 'hardBreak' }] : []), { type: 'text', text }]),
     );
+    context.pending.push(line);
+    context.leftOut.push(line);
 }
 
 function partPath(id: string | undefined, scope: Scope): string | undefined {

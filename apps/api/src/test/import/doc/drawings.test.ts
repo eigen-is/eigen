@@ -115,6 +115,24 @@ describe('media', () => {
         expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
     });
 
+    test("the line a picture left out leaves keeps its paragraph's alignment, a text box's paragraph its own", async () => {
+        const box = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Box"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const { json } = await importDocxBody(
+            `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${picture('rId9')}${box}</w:p>`,
+            { rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/gone.png"/>` },
+        );
+        expect(
+            nodesOfType(json, 'paragraph').map((node) => [
+                lines({ type: 'doc', content: [node] }),
+                node.attrs?.['textAlign'],
+            ]),
+        ).toEqual([
+            [[], 'center'],
+            [[PICTURE_NOT_IMPORTED], 'center'],
+            [['Boxed'], null],
+        ]);
+    });
+
     test('an SVG wins over its PNG fallback', async () => {
         const svg = GOLDEN_DOCX_IMAGE_RUN.replace(
             '<a:blip r:embed="rId4"/>',

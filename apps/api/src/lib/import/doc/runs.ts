@@ -12,7 +12,7 @@ import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElement
 import { LINK_LOOK } from '../../document/looks';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../ooxml/ooxml';
 import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../ooxml/wordml';
-import type { Item } from './assemble';
+import type { Item, Para } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, onOff, w, wChild } from './package';
@@ -56,6 +56,8 @@ export type RunContext = {
     pieces: Piece[];
     // What a text box anchored here holds, which follows the paragraph.
     pending: Item[];
+    // The lines of those standing in for what a drawing left out, which the paragraph aligns as its own.
+    leftOut: Para[];
 };
 
 // Content that doesn't show: a tracked deletion, and properties. Markers such as bookmarks and comment ranges hold
