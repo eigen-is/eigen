@@ -39,14 +39,14 @@ function makeSpyConn(): SpyConn {
 
 function syncUpdateMessage(doc: Y.Doc): Uint8Array {
     const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collabDocument.ts)
+    encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collab-document.ts)
     syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(doc));
     return encoding.toUint8Array(encoder);
 }
 
 function awarenessMessage(awareness: awarenessProtocol.Awareness, clientId: number): Uint8Array {
     const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, 1); // MESSAGE_AWARENESS (mirrors collabDocument.ts)
+    encoding.writeVarUint(encoder, 1); // MESSAGE_AWARENESS (mirrors collab-document.ts)
     encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(awareness, [clientId]));
     return encoding.toUint8Array(encoder);
 }

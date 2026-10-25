@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { ServerWebSocket } from 'elysia/ws/bun';
-import CollabDocument from '../../lib/collab/collabDocument';
+import { CollabDocument } from '../../lib/collab/collab-document';
 import { ApiError } from '../../lib/core/errors';
 import { getSyntheticTeamUser, TeamHome } from '../../lib/home/team-home';
 import { waitFor } from '../fault-storage-helpers';

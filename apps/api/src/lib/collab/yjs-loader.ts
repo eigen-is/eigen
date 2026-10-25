@@ -29,7 +29,7 @@ function copyBlob(stored: Uint8Array): ArrayBuffer {
 //
 // Pruning invariant this capture relies on: DbProvider.createSnapshot inserts the
 // snapshot row and deletes every update with id <= lastUpdateId in the SAME
-// transaction (collabDocument.ts). So when a snapshot blob later turns out to be
+// transaction (collab-document.ts). So when a snapshot blob later turns out to be
 // corrupt, "the captured updates" and "all updates" are the same set, and
 // materializeYjsState replays exactly what the pre-split loader replayed via its
 // re-select-everything fallback. Pinned by the corrupt-snapshot equivalence test.

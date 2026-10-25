@@ -4,7 +4,7 @@
 
 import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
 import { createAsyncSingleton } from '../../utils/singleton';
-import CollabDocument from '../collab/collabDocument';
+import { CollabDocument } from '../collab/collab-document';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
 import type { Drive } from './drive';

@@ -14,7 +14,7 @@ import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import { getCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
-import type CollabDocument from '../lib/collab/collabDocument';
+import type { CollabDocument } from '../lib/collab/collab-document';
 import { registerCollabConnection, unregisterCollabConnection } from '../lib/collab/connections';
 import { collabEpochMessage } from '../lib/collab/epoch';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';

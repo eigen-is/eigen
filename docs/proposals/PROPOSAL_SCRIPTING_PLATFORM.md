@@ -37,7 +37,7 @@ This proposal lets a user automate their own work across Eigen's apps with scrip
 | Document readers | `readEigendocFromDoc` (`lib/document/doc.ts`), `readSheetsFromDoc` / `replaySheetsOps` (`lib/document/sheets.ts`), `readVectorFromDoc` | Current content decoders for Docs, Sheets and the shared canvas model ([DOCUMENT-CONTENT-LAYER.md](../DOCUMENT-CONTENT-LAYER.md)) |
 | Sheet ops | `opToPatchOnSheets`, `packages/lib/src/sheets/yjs-ops.ts` | Op semantics shared by the editor and the server replay |
 | Off-thread transforms | `DocumentTransformRunner`, `lib/document/transform/runner.ts` | Closed protocol, bounded admission ([DOCUMENT-TRANSFORMS.md](../DOCUMENT-TRANSFORMS.md)) |
-| Live documents | `CollabDocument`, `lib/collab/collabDocument.ts` | Owns the live Y.Doc, persistence and broadcast. Has no revision a writer can check against |
+| Live documents | `CollabDocument`, `lib/collab/collab-document.ts` | Owns the live Y.Doc, persistence and broadcast. Has no revision a writer can check against |
 | Scheduler | `scheduleInterval`, `lib/scheduler/scheduler.ts` | Interval wake-ups only; no cron |
 | Code editor | CodeMirror, `apps/drive/src/components/editor/code-editor.tsx` | Reusable for the script editor |
 | Shutdown | `apps/api/src/index.ts` | Bounded, ordered shutdown the runner slots into |

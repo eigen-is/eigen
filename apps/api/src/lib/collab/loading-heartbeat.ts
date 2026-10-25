@@ -1,6 +1,6 @@
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as encoding from 'lib0/encoding';
-import { MESSAGE_AWARENESS } from './collabDocument';
+import { MESSAGE_AWARENESS } from './collab-document';
 
 // y-websocket hard-closes a connection that stays silent for 30s (a hardcoded
 // client constant) and reconnects on a ~2.5s backoff. A cold open of a large doc

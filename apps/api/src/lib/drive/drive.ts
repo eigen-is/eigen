@@ -43,7 +43,7 @@ import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validat
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ChatRoom } from '../chat';
 import { assertCommentChatExists, getCommentIndex, openCommentIndex } from '../chat/comment-index';
-import CollabDocument from '../collab/collabDocument';
+import { CollabDocument } from '../collab/collab-document';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';

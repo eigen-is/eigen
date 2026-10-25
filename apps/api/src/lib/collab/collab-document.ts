@@ -175,7 +175,7 @@ function awarenessIdentityMatches(state: unknown, userId: string): boolean {
     return isRecord(identity) && identity['userId'] === userId;
 }
 
-export default class CollabDocument {
+export class CollabDocument {
     private drive: Drive;
     private path: DrivePath;
     // Exposed for server-side import/export dispatchers that write directly into the Yjs doc.

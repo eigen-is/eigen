@@ -489,7 +489,7 @@ describe('File events: collab edits, client posts, comments', () => {
 
     function syncUpdateMessage(doc: Y.Doc): Uint8Array {
         const encoder = encoding.createEncoder();
-        encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collabDocument.ts)
+        encoding.writeVarUint(encoder, 0); // MESSAGE_SYNC (mirrors collab-document.ts)
         syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(doc));
         return encoding.toUint8Array(encoder);
     }
