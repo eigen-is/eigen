@@ -83,7 +83,7 @@ describe('importSummary', () => {
     test("a docx's losses have their nouns", () => {
         expect(
             importSummary([
-                { code: 'graphics-dropped', count: 2 },
+                { code: 'diagrams-dropped', count: 2 },
                 { code: 'section-pages-dropped', count: 1 },
                 { code: 'even-bands-dropped', count: 2 },
                 { code: 'band-content-dropped', count: 1 },
@@ -103,14 +103,5 @@ describe('importSummary', () => {
                 { code: 'charts-dropped', count: 1 },
             ]),
         ).toBe('1 chart and 4 conditional formats were not imported.');
-    });
-
-    test("SmartArt is one kind, whether a deck's or a document's", () => {
-        expect(
-            importSummary([
-                { code: 'diagrams-dropped', count: 1 },
-                { code: 'graphics-dropped', count: 1 },
-            ]),
-        ).toBe('2 SmartArt graphics were not imported.');
     });
 });

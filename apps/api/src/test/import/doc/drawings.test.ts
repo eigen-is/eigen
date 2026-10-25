@@ -404,7 +404,7 @@ describe('SmartArt', () => {
             },
         );
         expect(lines(json)).toEqual(['Before', 'foo', 'bar\nbaz', 'qux', 'After']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+        expect(warnings).toEqual([{ code: 'diagrams-dropped', count: 1 }]);
     });
 
     test('without a drawing part its data model gives the text of its points', async () => {

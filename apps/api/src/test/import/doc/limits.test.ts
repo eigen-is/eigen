@@ -863,7 +863,7 @@ describe('structure', () => {
         const { json, warnings } = await importDocxBody(paragraph(smartArt.repeat(1000)), smartArtData(points));
         expect(performance.now() - started).toBeLessThan(1000);
         expect(texts(json)).toHaveLength(1000);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1000 }]);
+        expect(warnings).toEqual([{ code: 'diagrams-dropped', count: 1000 }]);
     }, 60_000);
 
     test('12,000 notes stay linear', async () => {

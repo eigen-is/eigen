@@ -163,7 +163,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
 function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
     const lines: JSONContent[][] = [];
     for (const diagram of descendants(frame, DGM_NS, 'relIds')) {
-        reader.lost('graphics-dropped');
+        reader.lost('diagrams-dropped');
         const data = readOnce(reader, partPath(xmlAttr(diagram, R_NS, 'dm'), scope));
         if (!data) continue;
         const [ext] = descendants(data, DSP_NS, 'dataModelExt');

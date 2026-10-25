@@ -67,11 +67,7 @@ type Noun = readonly [one: string, many: string];
 const LOSSES: { codes: readonly CountedWarningCode[]; noun: Noun; what: 'not imported' | 'simplified' }[] = [
     { codes: ['tables-dropped'], noun: ['table', 'tables'], what: 'not imported' },
     { codes: ['charts-dropped'], noun: ['chart', 'charts'], what: 'not imported' },
-    {
-        codes: ['diagrams-dropped', 'graphics-dropped'],
-        noun: ['SmartArt graphic', 'SmartArt graphics'],
-        what: 'not imported',
-    },
+    { codes: ['diagrams-dropped'], noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'not imported' },
     { codes: ['objects-dropped'], noun: ['embedded object', 'embedded objects'], what: 'not imported' },
     { codes: ['images-dropped', 'images-unshown'], noun: ['picture', 'pictures'], what: 'not imported' },
     {
