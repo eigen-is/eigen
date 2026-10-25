@@ -55,7 +55,7 @@ The item returns to `trashedFrom` if that folder exists and no folder from it up
 
 ## Permanent delete takes the separately trashed descendants with it
 
-A folder's permanent delete first removes every trash root whose `trashedFrom` lies inside the folder. Those items hang under the mount root, and once the folder is gone they could never be restored to it. The delete itself is `Mount.deletePath`: rows first, then storage ([STORAGE.md](STORAGE.md)). A permanent delete holds the item's path lock, the lock trash and restore take, and reads the row under it. So a restore that got there first keeps the item, and one that waited answers 404. Each separately trashed descendant is deleted the same way, under its own lock.
+A folder's permanent delete first removes every trash root whose `trashedFrom` lies inside the folder. Those items hang under the mount root, and once the folder is gone they could never be restored to it. The delete itself is `Mount.deletePath`: rows first, then storage ([STORAGE.md](STORAGE.md)). A permanent delete holds the item's path lock, the lock trash and restore take, and reads the row under it. So a restore that got there first keeps the item, and one that waited answers 404. Each separately trashed descendant is deleted the same way, under its own lock. Permanent deletes on one mount run one at a time, because two whose trash roots each hold the other's original folder would each hold one lock and wait on the other.
 
 ## Only the drive owner sees and manages trash
 

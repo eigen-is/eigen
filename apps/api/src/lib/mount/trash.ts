@@ -286,14 +286,14 @@ export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void
 
 // Runs under the item's path lock, which trash and restore take too, and reads the row inside it. So a
 // restore that got the lock first is never undone. It returns false when the item is gone or not in trash.
-// A mount can still hold a trashedFrom that points back into the folder being deleted, written by a
-// move or restore from before those checked for a trashed target. Path locks are not reentrant, so the
-// delete skips every item it has already taken on (`seen`).
-export async function permanentlyDeleteFromTrash(
-    mount: Mount,
-    pathId: string,
-    seen = new Set<string>(),
-): Promise<boolean> {
+// A legacy trashedFrom can point back into the folder being deleted. Path locks are not reentrant, so the
+// delete skips every item it has already taken on (`seen`). Two deletes of trash roots that point into
+// each other would each hold one root and wait on the other, so a mount runs one delete at a time.
+export async function permanentlyDeleteFromTrash(mount: Mount, pathId: string): Promise<boolean> {
+    return mount.withPathLock('trash/permanent-delete', () => deleteTrashRoot(mount, pathId, new Set()));
+}
+
+async function deleteTrashRoot(mount: Mount, pathId: string, seen: Set<string>): Promise<boolean> {
     seen.add(pathId);
     return mount.withPathLock(pathId, async () => {
         const row = await mount.db
@@ -317,7 +317,7 @@ export async function permanentlyDeleteFromTrash(
                 .all();
             // Each one is a trash root of its own, so a restore may race it too.
             for (const orphan of orphans) {
-                if (!seen.has(orphan.id)) await permanentlyDeleteFromTrash(mount, orphan.id, seen);
+                if (!seen.has(orphan.id)) await deleteTrashRoot(mount, orphan.id, seen);
             }
         }
 

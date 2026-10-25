@@ -1816,6 +1816,30 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         }
     });
 
+    // Each delete would hold its own root and wait on the other's, as emptyTrash beside the purge at open can.
+    test('two permanent deletes of trash roots that point into each other both end', async () => {
+        const moveRow = (id: string, parentId: string) =>
+            mount.db.update(paths).set({ parentId }).where(eq(paths.id, id));
+        const pId = await mount.createFolder(rootId, 'MutualP');
+        const xId = await mount.createFolder(pId, 'MutualX');
+        const qId = await mount.createFolder(rootId, 'MutualQ');
+        const yId = await mount.createFolder(qId, 'MutualY');
+        await mount.trashPath(xId);
+        await mount.trashPath(yId);
+        await moveRow(pId, yId);
+        await moveRow(qId, xId);
+
+        const deleted = (id: string) =>
+            Promise.race([
+                mount.permanentlyDeleteFromTrash(id).then((deleted) => (deleted ? 'deleted' : 'kept')),
+                Bun.sleep(1000).then(() => 'timed out'),
+            ]);
+        expect(await Promise.all([deleted(xId), deleted(yId)])).toEqual(['deleted', 'kept']);
+        for (const id of [pId, xId, qId, yId]) {
+            expect(await mount.getPath(id)).toBeNull();
+        }
+    });
+
     test('permanentlyDeleteFromTrash keeps an item that is not in trash', async () => {
         const fileId = await mount.createFile(rootId, 'not-trashed2.txt', 'text/plain', 3, Buffer.from('nop'));
         expect(await mount.permanentlyDeleteFromTrash(fileId)).toBe(false);
