@@ -2140,10 +2140,11 @@ export function asWritten(
                     out.push(piece);
                     continue;
                 }
-                // No space at a split, so the pieces draw as one paragraph: a 0 where the node draws one, else none.
+                // No space at a split, so the pieces draw as one paragraph: a 0 where the node draws one, else none, as in
+                // a list, a quote or a cell, which owns the spacing of what it holds.
                 const attrs = { ...piece.attrs };
                 const level = typeof attrs['level'] === 'number' ? attrs['level'] : 1;
-                const look = ownTextLook(piece.type ?? '', level, imported.style, false);
+                const look = at.includes('.') ? undefined : ownTextLook(piece.type ?? '', level, imported.style, false);
                 if (i > 0) attrs['spaceBefore'] = look?.before ? 0 : null;
                 if (i < pieces.length - 1) attrs['spaceAfter'] = look?.after ? 0 : null;
                 out.push({ ...piece, attrs, content: piece.content?.length ? piece.content : undefined });
