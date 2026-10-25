@@ -51,8 +51,8 @@ const TEXT_SCALE = 0.035;
 const MIN_FONT_SIZE = 9;
 const MAX_FONT_SIZE = 64;
 const TITLE_SCALE = 1.3;
-// Observable Plot's band padding, inner and outer.
-const BAND_PADDING = 0.1;
+// Share of its category's band a category's bars fill, side by side or stacked: Google's bar.groupWidth, the golden ratio.
+const BAR_GROUP_WIDTH = 0.618;
 // Ems between value ticks: vertical axes stack one-line labels, horizontal ones sit numbers side by side.
 const VERTICAL_TICK_SPACING = 4;
 const HORIZONTAL_TICK_SPACING = 6;
@@ -73,6 +73,9 @@ const MAX_VALUE = 1e100;
 // d3 ticks a step under one by its inverse, which overflows near the smallest double, so a span under
 // this lays out as a zero span.
 const MIN_SPAN = 1e-300;
+// A line's axis takes in zero when its smallest magnitude is under this share of its largest, LibreOffice's
+// ScaleAutomatism rule, which mirrors Excel's: the spread is then over a sixth of the largest magnitude.
+const WIDE_SPREAD = 5 / 6;
 const ELLIPSIS = '…';
 
 type Frame = { left: number; top: number; right: number; bottom: number };
@@ -362,7 +365,8 @@ function layoutCartesian(
             ? frame.left + sideReserve + Math.max(0, ...fitted.map((name) => measure(ctx, name))) + gap
             : frame.left + sideReserve;
         // Fewer ticks until their labels stop touching, each try as many as the last one's widest pair has
-        // room for; the end labels overhang the plot by half a label.
+        // room for; the end labels overhang the plot by half a label. Two is the fewest asked, and d3 can answer
+        // it with four, so the labels that still touch hide below.
         let n = Math.min(
             MAX_TICK_COUNT,
             Math.max(2, Math.floor((frame.right - left) / (fontSize * HORIZONTAL_TICK_SPACING))),
@@ -436,10 +440,11 @@ function layoutCartesian(
     const zero = Math.min(hi, Math.max(lo, 0));
     const shapes: ChartShape[] = [];
 
+    const tickLabels: ChartLabel[] = [];
     axis.ticks.forEach((t, i) => {
         const at = scale(t);
         if (showTicks) {
-            ctx.labels.push(
+            tickLabels.push(
                 horizontal
                     ? label(ctx, axis.texts[i], at, plot.bottom + gap, 'middle')
                     : label(ctx, axis.texts[i], plot.left - gap, at - lh / 2, 'end'),
@@ -448,6 +453,7 @@ function layoutCartesian(
         // The baseline draws zero's line; without it a gridline does, as Office keeps its 0 line.
         if (y.gridlines.visible && (t !== zero || !showNames)) shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
     });
+    ctx.labels.push(...parity(ctx, tickLabels, Math.max(0, axis.ticks.indexOf(zero))));
     if (type === 'line') shapes.push(...lineMarks(marks, spec, series, values, band, scale));
     else shapes.push(...barMarks(marks, spec, series, values, band, scale, horizontal, stacked));
     if (showNames) shapes.push(rule('baseline', scale(zero)));
@@ -460,8 +466,22 @@ function layoutCartesian(
     return shapes;
 }
 
-// The data's range, zero included for bars, which grow from it; a line's axis fits its data, as Excel's
-// and Google's do, unless the line is flat. Stacks sum positives and negatives apart.
+// Every other label hides until none touch, Vega's parity rule, keeping the one at `keep` (zero's, when the axis
+// has it); every tick keeps its gridline.
+function parity(ctx: Context, labels: ChartLabel[], keep: number): ChartLabel[] {
+    let kept = labels;
+    let at = keep;
+    const crowded = () =>
+        kept.some((next, i) => i > 0 && touches(ctx, labelBox(ctx, kept[i - 1]), labelBox(ctx, next)));
+    while (kept.length > 1 && crowded()) {
+        kept = kept.filter((_, i) => (i - at) % 2 === 0);
+        at = Math.floor(at / 2);
+    }
+    return kept;
+}
+
+// The data's range, zero included for bars, which grow from it; a line's axis takes in zero when the line is flat
+// or spreads wide, else fits its data. Stacks sum positives and negatives apart.
 function valueExtent(
     values: (number | null)[][],
     stacked: boolean,
@@ -490,6 +510,8 @@ function valueExtent(
             lo = Math.min(lo, down);
         }
     }
+    if (lo > 0 && lo / hi < WIDE_SPREAD) lo = 0;
+    if (hi < 0 && hi / lo < WIDE_SPREAD) hi = 0;
     if (!(hi - lo >= MIN_SPAN)) {
         lo = Math.min(lo, 0);
         hi = Math.max(hi, 0);
@@ -542,19 +564,16 @@ type Band = {
     center: (i: number) => number;
 };
 
-// Bands from `from` to `to`, the first at `from` unless reversed. The end bands' centers keep at least `edge` in
-// from the ends, the range inset where thin bands would put them closer.
+// One band per category tiling `from` to `to`, as Office and Google lay out a category axis, the first at `from`
+// unless reversed; `width` is the bars' share, centered. The end bands' centers keep at least `edge` in from the
+// ends, the range inset where thin bands would put them closer.
 function bandScale(count: number, from: number, to: number, reversed = false, edge = 0): Band {
-    const span = Math.max(1, count - BAND_PADDING + 2 * BAND_PADDING);
-    // The first band's center, in steps from the range's start.
-    const first = (1 + BAND_PADDING) / 2;
     const length = to - from;
-    const inset =
-        span > 2 * first && (first * length) / span < edge ? (edge * span - first * length) / (span - 2 * first) : 0;
-    const step = (length - 2 * inset) / span;
-    const width = step * (1 - BAND_PADDING);
-    const start = (i: number) => from + inset + step * BAND_PADDING + (reversed ? count - 1 - i : i) * step;
-    return { step, width, reversed, start, center: (i) => start(i) + width / 2 };
+    const inset = count > 1 && length / count / 2 < edge ? (edge * count - length / 2) / (count - 1) : 0;
+    const step = (length - 2 * inset) / count;
+    const width = step * BAR_GROUP_WIDTH;
+    const center = (i: number) => from + inset + ((reversed ? count - 1 - i : i) + 0.5) * step;
+    return { step, width, reversed, start: (i) => center(i) - width / 2, center };
 }
 
 // Upright and centered under their bands while they fit; else turned -45° and ellipsized to the room
@@ -725,7 +744,7 @@ function layoutPie(
             const anchor: Anchor = cos > 0.2 ? 'start' : cos < -0.2 ? 'end' : 'middle';
             const width = measure(ctx, text);
             const left = anchor === 'start' ? 0 : anchor === 'middle' ? -width / 2 : -width;
-            return { text, cos, sin, anchor, left, right: left + width };
+            return { text, share: slice.share, cos, sin, anchor, left, right: left + width };
         })
         .filter((entry) => entry.text !== '');
 
@@ -758,10 +777,17 @@ function layoutPie(
         );
     });
     if (labeled) {
-        for (const entry of placed) {
+        // Largest slices first, as Highcharts ranks its data labels, and a label that would touch one already
+        // placed hides, so the biggest slices keep theirs.
+        const boxes: Frame[] = [];
+        for (const entry of [...placed].sort((a, b) => b.share - a.share)) {
             const x = cx + (radius + gap) * entry.cos;
             const y = cy + (radius + gap) * entry.sin - lh / 2 + (lh / 2) * entry.sin;
-            ctx.labels.push(label(ctx, entry.text, x, y, entry.anchor));
+            const sliceLabel = label(ctx, entry.text, x, y, entry.anchor);
+            const box = labelBox(ctx, sliceLabel);
+            if (boxes.some((other) => touches(ctx, other, box))) continue;
+            boxes.push(box);
+            ctx.labels.push(sliceLabel);
         }
     }
     return shapes;
@@ -782,6 +808,18 @@ function isOutlined(ctx: Context): boolean {
 
 function outlineOf(ctx: Context, color: string): string {
     return isOutlined(ctx) ? color : TRANSPARENT_COLOR;
+}
+
+// An upright label's line box at the chart's text size.
+function labelBox(ctx: Context, { text, x, y, anchor }: ChartLabel): Frame {
+    const width = measure(ctx, text);
+    const left = anchor === 'start' ? x : anchor === 'middle' ? x - width / 2 : x - width;
+    return { left, top: y, right: left + width, bottom: y + ctx.lineHeight };
+}
+
+// Side by side two labels keep a gap apart, as the bar chart's ticks are spaced; stacked lines may meet.
+function touches(ctx: Context, a: Frame, b: Frame): boolean {
+    return a.left < b.right + ctx.gap && b.left < a.right + ctx.gap && a.top < b.bottom && b.top < a.bottom;
 }
 
 function measure(ctx: Context, text: string, fontSize = ctx.fontSize, bold = false): number {

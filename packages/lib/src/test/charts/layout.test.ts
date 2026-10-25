@@ -337,6 +337,35 @@ describe('column and bar', () => {
         expect(axis.width).toBe(0);
     });
 
+    test("a category's bars fill 61.8% of its band, Google's group width, centered in bands that tile the plot", () => {
+        const three = {
+            categories: ['A', 'B', 'C', 'D'],
+            series: [series('S1', [3, 5, 2, 4]), series('S2', [1, 2, 3, 4]), series('S3', [4, 3, 2, 1])],
+        };
+        for (const type of ['column', 'bar'] as const) {
+            for (const stacking of ['none', 'stacked'] as const) {
+                for (const chartData of [data, three]) {
+                    const out = layout(type, { plots: plots(stacking) }, { data: chartData });
+                    const across = (bar: VectorRectangleElement) =>
+                        type === 'column' ? [bar.x, bar.x + bar.width] : [bar.y, bar.y + bar.height];
+                    const group = (c: number) => {
+                        const spans = rects(out, 'bar')
+                            .filter((bar) => bar.id.endsWith(`:${c}`))
+                            .map(across);
+                        return [Math.min(...spans.map(([from]) => from)), Math.max(...spans.map(([, to]) => to))];
+                    };
+                    const [first, second] = [group(0), group(1)];
+                    const step = Math.abs(second[0] - first[0]);
+                    expect(first[1] - first[0]).toBeCloseTo(0.618 * step, 6);
+                    // The plot's edge, where a gridline ends, is half a band from the first group's center.
+                    const [gridline] = lines(out, 'gridline');
+                    const edge = type === 'column' ? gridline.x : gridline.y;
+                    expect(Math.abs((first[0] + first[1]) / 2 - edge)).toBeCloseTo(step / 2, 6);
+                }
+            }
+        }
+    });
+
     test('bars run top to bottom in category order', () => {
         const bars = rects(layout('bar', {}, { data }), 'bar').filter((bar) => bar.id.startsWith('c1:bar:0:'));
         expect(bars.map((bar) => bar.y)).toEqual([...bars.map((bar) => bar.y)].sort((x, y) => x - y));
@@ -490,6 +519,38 @@ describe('column and bar', () => {
             expect(ticks.length).toBeGreaterThanOrEqual(2);
             for (let i = 1; i < ticks.length; i++) expect(overlaps(ticks[i - 1], ticks[i])).toBe(false);
         }
+    });
+
+    // The fewest ticks d3 gives can still be too many: four on a narrow bar chart, three under turned names
+    // on a short column chart. Every other label hides then, and every tick keeps its gridline.
+    test('value labels never touch, even at the fewest ticks', () => {
+        const isTick = (label: ChartLabel) => label.rotate === 0 && /^-?[\d,]+$/.test(label.text);
+        const untitled: SpecPatch = { ...UNTITLED, title: { text: '' } };
+        const narrow = layout('bar', untitled, {
+            data: { categories: ['North', 'South', 'East'], series: [series('Revenue', [12.5e6, 38e6, -15e6])] },
+            width: 200,
+            height: 220,
+        });
+        const short = layout(
+            'column',
+            { ...untitled, axes: { x: { title: { text: 'Teams' } }, y: {} } },
+            {
+                data: {
+                    categories: ['North', 'Total operating costs', 'Total operating costs', '2019'],
+                    series: [series('Revenue', [-75054, -37087, 74996, -127040])],
+                },
+                width: 318,
+                height: 80,
+            },
+        );
+        for (const out of [narrow, short]) {
+            const ticks = out.labels.filter(isTick);
+            expect(ticks.length).toBeGreaterThanOrEqual(1);
+            expect(ticks.length).toBeLessThan(lines(out, 'gridline').length + lines(out, 'baseline').length);
+            const bounds = ticks.map(labelBounds);
+            for (let i = 1; i < bounds.length; i++) expect(overlaps(bounds[i - 1], bounds[i])).toBe(false);
+        }
+        expect(narrow.labels.filter(isTick).map((label) => label.text)).toContain('0');
     });
 
     test('the caller formats the ticks', () => {
@@ -902,6 +963,31 @@ describe('pie', () => {
         expect(rest?.anchor).toBe('end');
     });
 
+    // Two small neighbors near 6 o'clock put their middle-anchored labels on one line, closer than a label's width.
+    test('a label that would touch one already placed hides, the largest slices placed first', () => {
+        const out = layout(
+            'pie',
+            { title: { text: '' } },
+            {
+                data: {
+                    categories: ['Delta', 'Alpha region', 'Beta region', 'Gamma region', 'Eps'],
+                    series: [series('S', [44, 6, 6, 6, 38])],
+                },
+                width: 400,
+                height: 300,
+            },
+        );
+        const texts = out.labels.map((label) => label.text);
+        expect(texts).toContain('Delta 44%');
+        expect(texts).toContain('Eps 38%');
+        expect(texts).toContain('Alpha region 6%');
+        expect(texts).not.toContain('Beta region 6%');
+        const bounds = out.labels.map(labelBounds);
+        for (let i = 0; i < bounds.length; i++) {
+            for (let j = i + 1; j < bounds.length; j++) expect(overlaps(bounds[i], bounds[j])).toBe(false);
+        }
+    });
+
     test('one slice of 100% sweeps the full circle', () => {
         const out = layout('pie', {}, { data: { categories: ['All', 'None'], series: [series('S', [5, 0])] } });
         const pie = slices(out);
@@ -1049,6 +1135,27 @@ describe('edge cases', () => {
         // A flat line has no span of its own, so its axis starts at zero.
         expect(valueTicks(layout('line', {}, { data: one([7]) }))[0]).toBe('0');
         expect(valueTicks(layout('line', {}, { data: one([-5, -5]) })).at(-1)).toBe('0');
+    });
+
+    test("a line axis takes in zero once the data spreads over a sixth of its largest magnitude, as Excel's does", () => {
+        // The line's lowest point sits as far above the baseline at zero as it sits below its highest point.
+        const wide = layout('line', {}, { data: one([50, 70, 100]) });
+        expect(valueTicks(wide)[0]).toBe('0');
+        const [line] = lines(wide, 'line');
+        expect(lines(wide, 'baseline')[0].y - (line.y + line.height)).toBeCloseTo(line.height, 6);
+        expect(valueTicks(layout('line', {}, { data: one([-50, -70, -100]) })).at(-1)).toBe('0');
+        // 49 is under 5/6 of 60; 50 is exactly 5/6 and still fits.
+        expect(valueTicks(layout('line', {}, { data: one([49, 60]) }))[0]).toBe('0');
+        for (const values of [
+            [90, 95, 100],
+            [50, 60],
+        ]) {
+            expect(Number(valueTicks(layout('line', {}, { data: one(values) }))[0])).toBeGreaterThan(0);
+            expect(Number(valueTicks(layout('line', {}, { data: one(values.map((v) => -v)) })).at(-1))).toBeLessThan(0);
+        }
+        // A pinned min still wins.
+        const pinned = layout('line', { axes: { y: { scale: { min: 40, max: null } } } }, { data: one([50, 70, 100]) });
+        expect(valueTicks(pinned)[0]).toBe('40');
     });
 
     test('no plottable value says No data for every type', () => {
