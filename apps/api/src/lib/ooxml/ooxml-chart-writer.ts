@@ -37,13 +37,6 @@ const VALUE_AXIS = 2;
 const GROUPING = turned(STACKING_BY_GROUPING);
 const LEGEND = turned(LEGEND_BY_POSITION);
 
-// Whether a chart part paints the look as Eigen does: flat, a solid or no background, solid marks and lines. A docx or
-// pptx writes a chart in any other look as its own drawing, a picture or shapes, which keep it.
-export function officeDrawsChartLook(look: ChartLook): boolean {
-    const fill = parseFill(look.fill);
-    return look.roughness === 0 && look.strokeStyle === 'solid' && fill.type === 'solid' && fill.style === 'solid';
-}
-
 // A frame's graphic showing the chart part its relationship names; the frame's part declares the c: prefix.
 export function chartGraphicXml(rId: string): string {
     return `<a:graphic><a:graphicData uri="${C_NS}"><c:chart r:id="${rId}"/></a:graphicData></a:graphic>`;

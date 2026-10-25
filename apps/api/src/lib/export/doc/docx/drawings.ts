@@ -1,16 +1,16 @@
 import type { JSONContent } from '@tiptap/core';
-import { CHART_DEFAULT_SIZE, readChartLook, readChartSpec } from '@workspace/lib/charts';
-import { chartSvg, readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
+import { readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { BODY, boxSide, cssPt, twips } from '../../../document/looks';
 import { sanitizeMedia } from '../../../document/media';
 import { proseValue } from '../../../document/prose-css';
 import type { ExportMedia } from '../../../document/transform/protocol';
-import { toTransferableBuffer, toTransferableText } from '../../../document/transform/protocol';
+import { toTransferableBuffer } from '../../../document/transform/protocol';
 import { blipXml } from '../../../ooxml/drawingml';
 import { C_NS, EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
-import { chartGraphicXml, officeDrawsChartLook, writeChart } from '../../../ooxml/ooxml-chart-writer';
+import { chartGraphicXml, writeChart } from '../../../ooxml/ooxml-chart-writer';
 import { BORDER_SIDES, EMU_PER_TWIP, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { splitDataUri } from '../../../shared/data-uri';
 import type { OfficeImage } from '../../office-image';
@@ -22,53 +22,13 @@ import { indentOf, paragraphXml, quoteBar, styleSpacing } from './paragraphs';
 import { textXml } from './runs';
 import { TABLE_BORDER_SIDES } from './tables';
 
-// Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback, and charts, each a Word chart, or a
-// picture of its SVG in a look a chart part can't paint.
+// Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback, and charts, each a Word chart.
 
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
-// under that src, as it draws a chart under its drawing's hash. A media name holds no `/`, so no two keys meet.
+// under that src.
 function figureMediaKey(node: JSONContent): string | null {
-    if (node.type === 'chart') return chartDrawing(node)?.name ?? null;
     const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
     return mediaName ?? (src && splitDataUri(src) ? src : null);
-}
-
-// A chart's SVG, named for what it draws, so two charts that draw the same, a chart repeated or two whose ids differ,
-// are one picture. A docx holds each SVG in a file of its own, so every drawing takes one id. Drawn once per node,
-// though the media and the writer both ask; a spec that doesn't parse draws nothing, and a Word chart needs no picture.
-// The alt text is the one its HTML gives its image.
-type ChartDrawing = { name: string; svg: string; alt: string };
-
-const drawings = new WeakMap<JSONContent, ChartDrawing | null>();
-
-function chartDrawing(node: JSONContent): ChartDrawing | null {
-    const known = drawings.get(node);
-    if (known !== undefined) return known;
-    const attrs = node.attrs ?? {};
-    const { spec } = readChartSpec(attrs);
-    const svg = spec && !officeDrawsChartLook(readChartLook(attrs)) && chartSvg(spec, readChartAttrs(attrs), 'chart');
-    const drawing = svg
-        ? { name: `chart/${Bun.CryptoHasher.hash('sha256', svg, 'hex')}`, svg, alt: spec.title.text || 'Chart' }
-        : null;
-    drawings.set(node, drawing);
-    return drawing;
-}
-
-// A chart has no media file either: it draws as the SVG the HTML export inlines, through the sanitizer a pasted SVG
-// takes. A spec that doesn't parse draws nothing, so its caption stands alone.
-export async function chartFigureMedia(roots: JSONContent[]): Promise<ExportMedia[]> {
-    const charts = new Map<string, string>();
-    const visit = (node: JSONContent) => {
-        const drawing = node.type === 'chart' ? chartDrawing(node) : null;
-        if (drawing) charts.set(drawing.name, drawing.svg);
-        for (const child of node.content ?? []) visit(child);
-    };
-    for (const root of roots) visit(root);
-    if (charts.size === 0) return [];
-    const { sanitizeExportMedia } = await import('../../sanitize');
-    return sanitizeExportMedia(
-        Array.from(charts, ([name, svg]) => ({ name, contentType: 'image/svg+xml', data: toTransferableText(svg) })),
-    );
 }
 
 // A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
@@ -131,9 +91,8 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         runs: `<w:r>${captionRuns}</w:r>`,
         inset,
     });
-    const chart = node.type === 'chart' ? wordChartOf(node, context.pkg) : undefined;
-    const key = chart ? null : figureMediaKey(node);
-    const image = chart ?? (key ? imageOf(key, context.pkg) : undefined);
+    const key = node.type === 'chart' ? null : figureMediaKey(node);
+    const image = node.type === 'chart' ? wordChartOf(node, context.pkg) : key ? imageOf(key, context.pkg) : undefined;
     // The caption alone is the figure's box, as the HTML's.
     if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
     const columnPx = Math.floor((context.column - context.indent) / TWIPS_PER_PX);
@@ -145,7 +104,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         cx,
         // Observed in Word: a fractional-twip height refits the width (a 1204×4 px divider drew 466.5 pt wide), so the height is whole.
         Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
-        chart?.alt ?? (node.type === 'chart' ? chartDrawing(node)?.alt : alt) ?? '',
+        'alt' in image ? image.alt : (alt ?? ''),
         context.pkg,
     );
     if (!side) {
@@ -220,12 +179,14 @@ function imageOf(name: string, pkg: Package): Image | undefined {
     };
 }
 
-// The chart's labels draw in the spec's font, embedded as a run's is, its title in the bold. Word draws the numbers the
-// part holds inline: a docx embeds no workbook for Edit Data to open.
+// Drawn plain, as a chart part paints no sketch, hatch, gradient or dash. A doc has no sheet, so a spec that doesn't
+// parse or holds range data draws nothing, and its caption stands alone. The labels draw in the spec's font, embedded as
+// a run's is, the title in the bold. Word draws the numbers the part holds inline: a docx embeds no workbook for Edit
+// Data to open.
 function wordChartOf(node: JSONContent, pkg: Package): WordChart | undefined {
     const attrs = readChartAttrs(node.attrs ?? {});
     const { spec } = readChartSpec(node.attrs ?? {});
-    if (!spec || !officeDrawsChartLook(attrs)) return undefined;
+    if (spec?.data.source !== 'inline') return undefined;
     const path = `charts/chart${pkg.charts.length + 1}.xml`;
     pkg.charts.push([`word/${path}`, writeChart(spec, { ranges: () => undefined, look: attrs }), CHART_CONTENT_TYPE]);
     const font = spec.chart.fontFamily;

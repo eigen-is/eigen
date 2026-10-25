@@ -3,7 +3,6 @@ import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { FillPaint } from '@workspace/lib/types/background';
 import type { Box, Corners, Point, VectorChartElement, VectorElement } from '@workspace/lib/vector';
 import {
-    convertToShapes,
     cornerRadius,
     diamondOutline,
     isBordered,
@@ -16,7 +15,7 @@ import {
 import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
 import { C_NS } from '../../../ooxml/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
-import { chartGraphicXml, officeDrawsChartLook, writeChart } from '../../../ooxml/ooxml-chart-writer';
+import { chartGraphicXml, writeChart } from '../../../ooxml/ooxml-chart-writer';
 import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';
 import type { Slide } from './package';
 import { pictureXml } from './pictures';
@@ -152,27 +151,20 @@ export function elementXml(el: VectorElement, slide: Slide): string {
             return spXml(slide, 'Freeform', el, geometry, fill, lineXml(slide, el, opacity));
         }
         case 'chart':
-            return chartXml(el, slide, opacity);
+            return chartXml(el, slide);
     }
 }
 
-// A chart part PowerPoint draws as a chart, unless a frame can't carry the element's turn or fade or the part its look:
-// then the shapes Convert to shapes makes, which keep them. PowerPoint draws the numbers the part holds inline, as a pptx
-// embeds no workbook for Edit Data to open.
-function chartXml(el: VectorChartElement, slide: Slide, opacity: number): string {
+// A graphic frame showing the chart's own part, drawn plain, upright and opaque: a frame turns and fades no chart, and a
+// chart part paints no sketch, hatch, gradient or dash. A spec that doesn't parse or holds range data draws nothing, as
+// on the canvas it draws only its placeholder. PowerPoint draws the numbers the part holds inline: a pptx embeds no
+// workbook for Edit Data to open.
+function chartXml(el: VectorChartElement, slide: Slide): string {
     const { spec } = readChartSpec(el);
-    const look = readChartLook(el);
-    if (!spec || angle(el.angle) !== 0 || opacity < 1 || !officeDrawsChartLook(look)) {
-        return convertToShapes(el)
-            .map((shape) => elementXml(shape, slide))
-            .join('');
-    }
+    if (spec?.data.source !== 'inline') return '';
     const name = `chart${slide.deck.charts.length + 1}.xml`;
-    slide.deck.charts.push([
-        `ppt/charts/${name}`,
-        writeChart(spec, { ranges: () => undefined, look }),
-        CHART_CONTENT_TYPE,
-    ]);
+    const part = writeChart(spec, { ranges: () => undefined, look: readChartLook(el) });
+    slide.deck.charts.push([`ppt/charts/${name}`, part, CHART_CONTENT_TYPE]);
     const rId = slide.part.relate('chart', `../charts/${name}`);
     const id = ++slide.shapes;
     const offset = `<a:off x="${toEmu(slide, el.x)}" y="${toEmu(slide, el.y)}"/>`;

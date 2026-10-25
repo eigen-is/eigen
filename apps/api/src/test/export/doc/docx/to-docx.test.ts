@@ -1,13 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import type { JSONContent } from '@tiptap/core';
-import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { sampleChartSpec } from '@workspace/lib/charts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { serializeFill } from '@workspace/lib/vector';
 import type { MathRow } from '@workspace/math';
 import { MATH_LIMITS, MATHML_NAMESPACE, readOmml, writeMathml } from '@workspace/math';
-import sharp from 'sharp';
 import type { XmlElement } from '../../../../lib/core/xml';
 import { parseXml, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../../../lib/core/xml';
 import type { EigendocBands } from '../../../../lib/document/doc';
@@ -16,10 +15,8 @@ import { cssPt, QUOTE_LOOK, twips } from '../../../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../../../lib/document/prose-css';
 import type { ExportMedia } from '../../../../lib/document/transform/protocol';
 import { toTransferableText } from '../../../../lib/document/transform/protocol';
-import { chartFigureMedia } from '../../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/fonts';
-import { withSvgFallbacks } from '../../../../lib/export/office-image';
 import type { DrawingTheme } from '../../../../lib/ooxml/drawingml';
 import { IDENTITY_COLOR_MAP } from '../../../../lib/ooxml/drawingml';
 import { A_NS, C_NS, parseOoxml } from '../../../../lib/ooxml/ooxml';
@@ -2409,17 +2406,12 @@ describe('docx writer — figures', () => {
         ]);
     });
 
-    // The media the transform process draws for a doc's charts, as the export hands it to the writer.
-    const chartMedia = async (json: JSONContent) => withSvgFallbacks(await chartFigureMedia([json]));
-
     test('a chart is a Word chart, its part drawn from the spec with its numbers inline, at its width, its caption kept', async () => {
         const sample = sampleChartSpec('column');
         const json = doc(p(chartNode({ ...PARTS_OF_COLUMN, width: 480, height: 300, caption: 'Points' })));
-        const media = await chartMedia(json);
-        expect(media).toEqual([]);
         const cx = 480 * 9525;
         const cy = 300 * 9525;
-        expect(await blocksOf(json, media)).toEqual([
+        expect(await blocksOf(json)).toEqual([
             imageParagraph(
                 `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="1" name="Chart 1" descr="Where a star's light goes"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="${C_NS}"><c:chart r:id="rId5"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
                 'center',
@@ -2427,7 +2419,7 @@ describe('docx writer — figures', () => {
             ),
             `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="23" w:after="385"/><w:jc w:val="center"/></w:pPr>${run('Points')}</w:p>`,
         ]);
-        const zip = await unzip(json, undefined, media);
+        const zip = await unzip(json);
         expect((await relationshipsOf(zip)).slice(4)).toEqual([['rId5', `${R}/chart`, 'charts/chart1.xml']]);
         expect(zip.names().filter((name) => name.startsWith('word/media/'))).toEqual([]);
         const overrides = xmlChildren(await part(zip, '[Content_Types].xml'), CONTENT_TYPES, 'Override');
@@ -2442,85 +2434,27 @@ describe('docx writer — figures', () => {
 
     test("a chart's font is embedded as its text's is", async () => {
         const json = doc(p(chartNode({ ...sampleChartParts('column', 'Source Serif 4'), width: 480, height: 300 })));
-        const zip = await unzip(json, undefined, await chartMedia(json));
+        const zip = await unzip(json);
         const fonts = xmlChildren(await part(zip, 'word/fontTable.xml'), W, 'font');
         const serif = fonts.find((font) => xmlAttr(font, W, 'name') === 'Source Serif 4');
         expect(serif && xmlElements(serif).map((element) => element.local)).toContain('embedRegular');
         expect(serif && xmlElements(serif).map((element) => element.local)).toContain('embedBold');
     });
 
-    test("a sketched chart, a look a chart part can't paint, is a picture of its SVG beside the SVG's PNG", async () => {
-        const json = doc(
-            p(chartNode({ ...PARTS_OF_COLUMN, width: 480, height: 300, roughness: 1, caption: 'Points' })),
-        );
-        const media = await chartMedia(json);
-        expect(await blocksOf(json, media)).toEqual([
-            imageParagraph(
-                drawing({
-                    id: 1,
-                    px: 480,
-                    ratio: 300 / 480,
-                    part: 'image1.png',
-                    embed: 'rId5',
-                    svg: 'rId6',
-                    descr: "Where a star's light goes",
-                }),
-                'center',
-                23,
-            ),
-            `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="23" w:after="385"/><w:jc w:val="center"/></w:pPr>${run('Points')}</w:p>`,
-        ]);
-        const zip = await unzip(json, undefined, media);
-        expect(zip.names().filter((name) => name.startsWith('word/charts/'))).toEqual([]);
-        const svg = await part(zip, 'word/media/image1.svg');
-        expect([xmlAttr(svg, '', 'width'), xmlAttr(svg, '', 'height')]).toEqual(['480', '300']);
-        const { format, width, height } = await sharp(zip.read('word/media/image1.png')).metadata();
-        expect([format, width, height]).toEqual(['png', 480, 300]);
+    test('a sketched, hatched, dashed chart on a gradient is a Word chart all the same, drawn plain', async () => {
+        const fill = serializeFill({ type: 'gradient', from: '#ffeeaa', to: '#ffffff', angle: 90, style: 'hachure' });
+        const look = { roughness: 2, seed: 5, strokeStyle: 'dashed', strokeColor: '#336699', fill };
+        const json = doc(p(chartNode({ ...PARTS_OF_COLUMN, ...look })));
+        const zip = await unzip(json);
+        expect(zip.names().filter((name) => name.startsWith('word/charts/'))).toEqual(['word/charts/chart1.xml']);
+        expect(zip.names().filter((name) => name.startsWith('word/media/'))).toEqual([]);
+        const chart = await part(zip, 'word/charts/chart1.xml');
+        expect(descendants(chart, A_NS, 'prstDash')).toEqual([]);
+        expect(descendants(chart, A_NS, 'gradFill')).toEqual([]);
     });
 
-    test('two charts of one spec and size but different looks draw two pictures, each in its own look', async () => {
-        const parts = sampleChartParts('column');
-        const json = doc(
-            p(
-                chartNode({ ...parts, roughness: 1 }),
-                chartNode({ ...parts, roughness: 2, seed: 5, strokeColor: '#336699' }),
-            ),
-        );
-        const media = await chartMedia(json);
-        const svgs = media.filter((item) => item.contentType === 'image/svg+xml');
-        expect(svgs).toHaveLength(2);
-        const texts = svgs.map((item) => new TextDecoder().decode(item.data));
-        expect(texts.filter((svg) => svg.includes('stroke="#336699"'))).toHaveLength(1);
-    });
-
-    // A picture is named by what it draws: series ids and a gradient's id draw nothing of their own.
-    test('two charts that draw the same picture share one, though their stored parts differ', async () => {
-        const sample = sampleChartSpec('column');
-        const { data } = sample;
-        if (data.source !== 'inline') throw new Error('the sample is inline');
-        const renamed = (id: string) => id.replace('s-', 'x-');
-        const other = {
-            ...sample,
-            series: Object.fromEntries(Object.entries(sample.series).map(([id, style]) => [renamed(id), style])),
-            data: { ...data, series: data.series.map((series) => ({ ...series, id: renamed(series.id) })) },
-        };
-        const fill = serializeFill({ type: 'gradient', from: '#ffeeaa', to: '#ffffff', angle: 90, style: 'solid' });
-        const look = { fill };
-        const json = doc(
-            p(chartNode({ ...PARTS_OF_COLUMN, ...look }), chartNode({ ...newChartSpecParts(other), ...look })),
-        );
-        const media = await chartMedia(json);
-        expect(media.filter((item) => item.contentType === 'image/svg+xml')).toHaveLength(1);
-        const zip = await unzip(json, undefined, media);
-        expect(zip.names().filter((name) => name.startsWith('word/media/'))).toEqual([
-            'word/media/image1.png',
-            'word/media/image1.svg',
-        ]);
-        const blips = descendants(await part(zip, 'word/document.xml'), A_NS, 'blip');
-        expect(new Set(blips.map((blip) => xmlAttr(blip, R, 'embed')))).toEqual(new Set(['rId5']));
-    });
-
-    test("a chart whose spec doesn't parse keeps its caption alone, as a figure without media does", async () => {
+    test("a chart whose spec doesn't parse, or holds range data a doc can't read, keeps its caption alone, as a figure without media does", async () => {
+        const range = { source: 'range', categories: null, series: [] };
         const charts = doc(
             p(
                 text('a'),
@@ -2528,14 +2462,15 @@ describe('docx writer — figures', () => {
                 text('b'),
             ),
             p(chartNode({ caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
+            p(chartNode({ ...PARTS_OF_COLUMN, specData: JSON.stringify(range), caption: 'Lost' })),
         );
         const figures = doc(
             p(text('a'), figure({ mediaName: 'gone', caption: 'Lost', alignment: 'right' }), text('b')),
             p(figure({ mediaName: 'gone', caption: 'Lost', layout: 'wrap-left', alignment: 'right' })),
+            p(figure({ mediaName: 'gone', caption: 'Lost' })),
         );
-        const media = await chartMedia(charts);
-        expect(media).toEqual([]);
-        expect(await blocksOf(charts, media)).toEqual(await blocksOf(figures));
+        expect(await blocksOf(charts)).toEqual(await blocksOf(figures));
+        expect((await unzip(charts)).names().filter((name) => name.startsWith('word/charts/'))).toEqual([]);
     });
 
     test('an SVG is its PNG blip with the SVG beside it, each a part and an image relationship', async () => {

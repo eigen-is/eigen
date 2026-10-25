@@ -60,9 +60,8 @@ export async function renderEigendocExport(
     const media = await loadMedia(mediaNamesIn([json, bands]));
     if (format === 'docx') {
         const { writeDocx } = await import('./docx/to-docx');
-        const { chartFigureMedia, pastedFigureMedia } = await import('./docx/drawings');
-        const roots = [json, ...Object.values(bands)];
-        const drawn = [...(await pastedFigureMedia(roots)), ...(await chartFigureMedia(roots))];
+        const { pastedFigureMedia } = await import('./docx/drawings');
+        const drawn = await pastedFigureMedia([json, ...Object.values(bands)]);
         const docxMedia = await withSvgFallbacks([...media, ...drawn]);
         return {
             data: toTransferableBuffer(

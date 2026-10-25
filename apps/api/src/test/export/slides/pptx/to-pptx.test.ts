@@ -5,7 +5,6 @@ import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { SlideSize, VectorElementType, VectorScene } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
-    convertToShapes,
     ELEMENT_KINDS,
     FRAME_FIELDS,
     readVectorFromDoc,
@@ -465,24 +464,6 @@ describe('pptx shapes', () => {
         expect(shapes(thin)).toHaveLength(0);
         const full = only(pptx(sceneOf([element('pie', { startAngle: 30, sweepAngle: 360 - 1e-7 })])));
         expect(geometry(full)).toBe('ellipse');
-
-        const spec = sampleChartSpec('pie');
-        if (spec.data.source !== 'inline') throw new Error('expected inline data');
-        const series = spec.data.series.map((s) => ({ ...s, values: [1.4e9, 3, 65, 80] }));
-        // Sketched, so it is written as its shapes.
-        const chart = element('chart', {
-            width: 640,
-            height: 400,
-            roughness: 1,
-            ...newChartSpecParts({ ...spec, data: { ...spec.data, series } }),
-        });
-        const scene = sceneOf([chart]);
-        const all = shapes(pptx(scene));
-        // The 3's slice is the one under a 60,000th of a degree.
-        expect(all).toHaveLength(convertToShapes(scene.elements[0]).length - 1);
-        const pies = all.filter((shape) => geometry(shape) === 'pie');
-        expect(pies).toHaveLength(3);
-        for (const pie of pies) expect(guides(pie)['adj1']).not.toBe(guides(pie)['adj2']);
     });
 
     test('a fill, a #rrggbbaa stroke, opacity and dashes', () => {
@@ -795,8 +776,8 @@ describe('pptx shapes', () => {
         const zip = pptx(sceneOf([chart, { ...chart, id: 'chart-a1', index: 'a1' }]));
         const frames = shapes(zip);
         expect(frames.map((frame) => frame.local)).toEqual(['graphicFrame', 'graphicFrame']);
-        const transform = xmlChild(frames[0], P, 'xfrm');
-        expect([xmlChild(transform, A, 'off'), xmlChild(transform, A, 'ext')].map((e) => e?.attributes)).toEqual([
+        const transform = first(frames[0], P, 'xfrm');
+        expect([first(transform, A, 'off'), first(transform, A, 'ext')].map((e) => e.attributes)).toEqual([
             { x: String(100 * EMU), y: String(50 * EMU) },
             { cx: String(640 * EMU), cy: String(400 * EMU) },
         ]);
@@ -818,24 +799,30 @@ describe('pptx shapes', () => {
         expect('spec' in read && seriesIdsByPlace(read.spec).data).toEqual(seriesIdsByPlace(sample).data);
     });
 
-    // A graphic frame turns no chart and fades none, and a chart part paints no sketch.
+    // A graphic frame turns no chart and fades none, and a chart part paints no sketch, hatch or dash.
     test.each([
-        ['turned', { angle: 0.5 }],
+        ['turned', { angle: 30 }],
         ['faded', { opacity: 50 }],
-        ['sketched', { roughness: 1 }],
+        ['sketched and dashed', { roughness: 1, strokeStyle: 'dashed' }],
         ['hatched', { fill: serializeFill({ type: 'solid', color: '#ffffff', style: 'hachure' }) }],
-    ])('a %s chart is the shapes Convert to shapes makes, each with its own id', (_, look) => {
+    ])('a %s chart is a PowerPoint chart all the same, upright and plain', (_, look) => {
         const chart = element('chart', { width: 640, height: 400, ...sampleChartParts('pie'), ...look });
-        const scene = sceneOf([chart]);
-        const expected = convertToShapes(scene.elements[0]);
-        expect(expected.length).toBeGreaterThan(3);
-        const zip = pptx(scene);
-        const all = shapes(zip);
-        expect(all).toHaveLength(expected.length);
-        expect(all.some((shape) => geometry(shape) === 'pie')).toBe(true);
-        const ids = all.map((shape) => attr(first(shape, P, 'cNvPr'), 'id'));
-        expect(new Set(ids).size).toBe(ids.length);
-        expect(ids).not.toContain('1');
+        const zip = pptx(sceneOf([chart]));
+        const frame = only(zip);
+        expect(frame.local).toBe('graphicFrame');
+        expect(attr(first(frame, P, 'xfrm'), 'rot')).toBeUndefined();
+        expect(descendants(part(zip, 'ppt/charts/chart1.xml'), A, 'prstDash')).toEqual([]);
+    });
+
+    test("a chart whose spec doesn't parse, or holds range data a deck can't read, writes nothing, as it draws only its placeholder", () => {
+        const range = JSON.stringify({ source: 'range', categories: null, series: [] });
+        const zip = pptx(
+            sceneOf([
+                element('chart', { ...sampleChartParts('pie'), specData: '{' }),
+                element('chart', { ...sampleChartParts('pie'), specData: range, index: 'a1', id: 'chart-a1' }),
+            ]),
+        );
+        expect(shapes(zip)).toEqual([]);
         expect(zip.names().filter((name) => name.startsWith('ppt/charts/'))).toEqual([]);
     });
 });

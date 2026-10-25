@@ -424,14 +424,12 @@ describe('doc export — charts', () => {
         },
     );
 
-    test('docx draws a chart as a picture of its SVG beside its PNG', async () => {
+    test('docx writes a chart as a Word chart, its own part, with no picture', async () => {
         const doc = seededDoc(chartDoc({ width: 480, height: 300 }));
         const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => [], undefined);
-        expect(
-            openZip(new Uint8Array(data))
-                .names()
-                .filter((name) => name.startsWith('word/media/')),
-        ).toEqual(['word/media/image1.png', 'word/media/image1.svg']);
+        const names = openZip(new Uint8Array(data)).names();
+        expect(names.filter((name) => name.startsWith('word/media/'))).toEqual([]);
+        expect(names.filter((name) => name.startsWith('word/charts/'))).toEqual(['word/charts/chart1.xml']);
     });
 
     test("every label draws in the spec's font", () => {

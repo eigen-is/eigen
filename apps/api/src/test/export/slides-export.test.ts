@@ -241,8 +241,9 @@ describe('deck export — pptx', () => {
         const slide = new TextDecoder().decode(zip.read('ppt/slides/slide1.xml'));
         const rels = new TextDecoder().decode(zip.read('ppt/slides/_rels/slide1.xml.rels'));
         expect(slide).toContain('Quarter');
-        // The chart arrives as its shapes, a pie's slices among them.
-        expect(slide).toContain('prst="pie"');
+        // The chart arrives as a PowerPoint chart, its own part.
+        expect(slide).toContain('<p:graphicFrame');
+        expect(zip.names()).toContain('ppt/charts/chart1.xml');
         // The scene's rich-text filter keeps a javascript: link out of the file.
         expect(rels).toContain('https://example.com/q');
         expect(`${slide}${rels}`).not.toMatch(/javascript:/i);

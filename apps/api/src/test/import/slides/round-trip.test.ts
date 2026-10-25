@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { defaultChartSpec, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { ChartStacking } from '@workspace/lib/types/chart';
 import type { NewVectorElement, VectorElement } from '@workspace/lib/vector';
@@ -21,7 +21,7 @@ import { sanitizeSceneHtml } from '../../../lib/export/sanitize';
 import { writePptx } from '../../../lib/export/slides/pptx/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { seriesIdsByPlace } from '../../../scripts/office-audit';
-import { sampleChartParts } from '../../fixtures/chart-parts';
+import { axesOf, sampleChartParts } from '../../fixtures/chart-parts';
 import { box, buildPptx, PIXEL_PNG, solid as solidFill, sp } from '../../fixtures/pptx';
 
 // A deck exported to .pptx and read back: what the writer states, the reader reads the same.
@@ -269,7 +269,7 @@ describe('charts exported and read back', () => {
     const { sent, deck } = roundTrip(CHARTS);
     const found = deck.slides[0].elements;
     // A series id is identity, not content, and the writer writes none.
-    const specOf = (element: object) => {
+    const specOf = (element: Record<string, unknown>) => {
         const { spec } = readChartSpec(element);
         return spec && seriesIdsByPlace(spec);
     };
@@ -280,10 +280,7 @@ describe('charts exported and read back', () => {
         for (const [i, element] of sent.entries()) {
             const back = found[i];
             const spec = specOf(element);
-            // A pie has no axes in Office, so its axis fields come back as Excel's pie's: no titles, no gridlines.
-            const { x, y } = defaultChartSpec('pie', { source: 'inline', categories: [], series: [] }).axes;
-            const axes = spec?.chart.type === 'pie' ? { x, y: { ...y, gridlines: { visible: false } } } : spec?.axes;
-            expect(specOf(back)).toEqual(spec && { ...spec, axes });
+            expect(specOf(back)).toEqual(spec && axesOf(spec));
             for (const field of ['x', 'y', 'width', 'height'] as const) expectPx(back[field], element[field]);
             if (element.type === 'chart') expect(back).toMatchObject({ color: element.color, fill: element.fill });
         }

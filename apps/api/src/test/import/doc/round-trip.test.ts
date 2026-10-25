@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { defaultChartSpec, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import type { ChartStacking } from '@workspace/lib/types/chart';
 import { readOmml, writeMathml } from '@workspace/math';
@@ -10,15 +10,13 @@ import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
 import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
-import { chartFigureMedia } from '../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
-import { withSvgFallbacks } from '../../../lib/export/office-image';
 import type { DocxImage } from '../../../lib/import/doc/from-docx';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
 import { seriesIdsByPlace } from '../../../scripts/office-audit';
-import { sampleChartParts } from '../../fixtures/chart-parts';
+import { axesOf, sampleChartParts } from '../../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 import { importDocxBody } from '../../fixtures/golden-docx';
 
@@ -173,10 +171,9 @@ describe('the all-features doc', () => {
 describe('a chart', () => {
     const exported = async (chart: JSONContent) => {
         const source = { type: 'doc', content: [{ type: 'paragraph', content: [chart] }] };
-        const media = await withSvgFallbacks(await chartFigureMedia([source]));
         const docx = writeDocx(
             { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-            { title: 'Chart', media, publicOrigin: ORIGIN },
+            { title: 'Chart', media: [], publicOrigin: ORIGIN },
         );
         return docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
     };
@@ -206,43 +203,17 @@ describe('a chart', () => {
         const [back] = json.content?.[0]?.content ?? [];
         expect(back?.type).toBe('chart');
         const sent = specOf(chart.attrs);
-        // A pie has no axes in Office, so its axis fields come back as Excel's pie's: no titles, no gridlines.
-        const { x, y } = defaultChartSpec('pie', { source: 'inline', categories: [], series: [] }).axes;
-        const axes = sent?.chart.type === 'pie' ? { x, y: { ...y, gridlines: { visible: false } } } : sent?.axes;
-        expect(specOf(back?.attrs)).toEqual(sent && { ...sent, axes });
+        expect(specOf(back?.attrs)).toEqual(sent && axesOf(sent));
         expect(back?.attrs).toMatchObject({ width: 480, height: 300, caption: 'Points', layout: 'wrap-left' });
         expect(images).toEqual([]);
     });
 
-    test("a sketched one, which a chart part can't paint, comes back as an image of its SVG, its title its alt", async () => {
-        const chart = {
-            type: 'chart',
-            attrs: {
-                ...sampleChartParts('column'),
-                roughness: 1,
-                width: 480,
-                height: 300,
-                caption: 'Points',
-                layout: 'wrap-left',
-            },
-        };
-        const { json, images } = await exported(chart);
-        expect(json.content?.[0]?.content).toEqual([
-            {
-                type: 'figure',
-                attrs: {
-                    mediaName: expect.stringMatching(/^docx-[0-9a-f-]{36}-image-1\.svg$/),
-                    src: null,
-                    alt: "Where a star's light goes",
-                    caption: 'Points',
-                    commentCardId: null,
-                    width: 480,
-                    alignment: 'center',
-                    layout: 'wrap-left',
-                },
-            },
-        ]);
-        expect(images.map((image) => image.contentType)).toEqual(['image/svg+xml']);
+    test('a sketched one comes back as the same chart, flat, as a chart part paints no sketch', async () => {
+        const chart = { type: 'chart', attrs: { ...sampleChartParts('column'), roughness: 1, strokeStyle: 'dashed' } };
+        const { json } = await exported(chart);
+        const [back] = json.content?.[0]?.content ?? [];
+        expect(specOf(back?.attrs)).toEqual(specOf(chart.attrs));
+        expect(back?.attrs).toMatchObject({ roughness: null, strokeStyle: null });
     });
 });
 

@@ -25,6 +25,7 @@ import { A_NS, C_NS, parseOoxml } from '../../lib/ooxml/ooxml';
 import { readChart } from '../../lib/ooxml/ooxml-chart';
 import { writeChart } from '../../lib/ooxml/ooxml-chart-writer';
 import { seriesIdsByPlace } from '../../scripts/office-audit';
+import { axesOf } from '../fixtures/chart-parts';
 
 // A ChartSpec written as a c:chartSpace and read back by Eigen's own reader: the same spec, its ranges by the names the
 // workbook writes and its numbers inline as literals.
@@ -101,13 +102,6 @@ function read(xml: string, data: Parameters<typeof readChart>[1]['data']): Chart
 
 const throughRanges = (spec: ChartSpec, cache?: ChartData) =>
     read(writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK }), { ranges: ids });
-
-// A pie has no axes, so the axis fields a Type switch would show read as an Excel pie's: no titles, no gridlines.
-function axesOf(spec: ChartSpec): ChartSpec {
-    if (spec.chart.type !== 'pie') return spec;
-    const { x, y } = DEFAULT_AXES;
-    return { ...spec, axes: { x, y: { ...y, gridlines: { visible: false } } } };
-}
 
 // Every element named `local` in the chart namespace, depth first.
 function find(element: XmlElement, local: string, ns = C_NS): XmlElement[] {
