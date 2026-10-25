@@ -445,12 +445,13 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (piece.node.type !== 'text' || !piece.node.text || piece.size === undefined) return [];
         return [{ family: fontMark(piece.font, reader.fontTable, normal.font) ?? normal.font, size: piece.size }];
     });
-    // An at-least Normal reads as single, so the Normal's own line is the one to compare with.
+    // An at-least Normal reads as single, so the Normal's own line is the one to compare with. A style draws its line in
+    // its own font, which is the mark's, so a heading at its style's line reads as none in any theme.
     const baseSpacing = normalBase
         ? normal.lineSpacing
         : baseLine === undefined
           ? undefined
-          : multipleOf(baseLine, normal.font);
+          : multipleOf(baseLine, mark.family);
     const multiple = line === undefined ? undefined : multipleOf(line / familyLineScale(mark, faces), mark.family);
     const lineSpacing =
         multiple !== undefined &&
@@ -513,6 +514,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (own) for (const node of content) dropOwn(node, 'fontSize', own.sizePt);
         const unlessOwn = (pt: number | undefined, ownTwips: number | undefined) =>
             pt !== undefined && ownTwips !== undefined && pt === twipsToPt(ownTwips) ? undefined : pt;
+        // The writer's styles write a node's own line in the Normal's font.
         const ownLine = own && Math.round(multipleOf(own.line, normal.font) * 100);
         const lineSpacing =
             format.lineSpacing !== undefined && Math.round(format.lineSpacing * 100) === ownLine

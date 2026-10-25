@@ -1240,6 +1240,26 @@ describe('a Word file, imported, written and imported again', () => {
         expect(stored(second.json)).toEqual(stored(first.json));
     });
 
+    // Office 2007's theme: Calibri body, Cambria headings. A heading at its own style's line is the node's look, whatever
+    // family its style's font maps to.
+    test.each<[string, string, string, string]>([
+        ['Cambria headings over a Calibri Normal', 'minor', 'major', '<w:spacing w:line="240" w:lineRule="auto"/>'],
+        ['Calibri headings over a Cambria Normal', 'major', 'minor', '<w:spacing w:line="240" w:lineRule="auto"/>'],
+        ['Cambria headings at the defaults line', 'minor', 'major', ''],
+    ])('a heading at its style line keeps no line spacing: %s', async (_name, body, heading, spacing) => {
+        const theme =
+            '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Cambria"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>';
+        const fonts = (scheme: string) => `<w:rFonts w:asciiTheme="${scheme}HAnsi" w:hAnsiTheme="${scheme}HAnsi"/>`;
+        const styles = `<w:docDefaults><w:rPrDefault><w:rPr>${fonts(body)}<w:sz w:val="22"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="200" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:keepNext/>${spacing}<w:outlineLvl w:val="0"/></w:pPr><w:rPr>${fonts(heading)}<w:b/><w:sz w:val="28"/></w:rPr></w:style>`;
+        const { first, second } = await twice(
+            paragraph(run('Plan'), '<w:pStyle w:val="Heading1"/>') + paragraph(run('Body')),
+            { styles, theme },
+        );
+        const [found] = nodesOfType(first.json, 'heading');
+        expect(found?.attrs?.['lineSpacing']).toBeNull();
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
     // A table without widths, and a row run past its grid: the editor sizes those columns, and so do Word's.
     test('a column without a width comes back without one, beside one with a width', async () => {
         const cell = (inner: string) => `<w:tc>${paragraph(run(inner))}</w:tc>`;
