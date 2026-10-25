@@ -343,6 +343,13 @@ describe('writeChart with inline data', () => {
         // A slide's px is half a page's: 1920 px across 720 pt.
         expect(at({ ...FRAME, emuPerPx: EMU_PER_PX / 2 })).toContain(String(Math.round(label / 2)));
     });
+
+    test("a chart drawn tiny keeps its text at Office's smallest size, 1 pt", () => {
+        const chart = root(
+            writeChart(sampleChartSpec('column'), { look: FLAT_CHART_LOOK, frame: { ...FRAME, emuPerPx: 100 } }),
+        );
+        expect(new Set(find(chart, 'defRPr', A_NS).map((run) => xmlAttr(run, '', 'sz')))).toEqual(new Set(['100']));
+    });
 });
 
 describe('readChartPartLook', () => {

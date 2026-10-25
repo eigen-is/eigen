@@ -111,10 +111,12 @@ export function writeChart(
 
 type Ranges = NonNullable<ChartWriteOptions['ranges']>;
 
-// Office's text sizes in hundredths of a point: Eigen's label and title sizes for the box, at the file's scale.
+// Office's text sizes in hundredths of a point: Eigen's label and title sizes for the box, at the file's scale, within
+// the 1 to 4000 pt ST_TextFontSize allows.
 function textSizes({ width, height, emuPerPx }: ChartFrame): { text: number; title: number } {
     const points = (chartFontSize(width, height) * emuPerPx) / EMU_PER_POINT;
-    return { text: Math.round(points * 100), title: Math.round(points * CHART_TITLE_SCALE * 100) };
+    const size = (scale: number) => Math.min(400_000, Math.max(100, Math.round(points * scale * 100)));
+    return { text: size(1), title: size(CHART_TITLE_SCALE) };
 }
 
 // width is every line's, in EMU.

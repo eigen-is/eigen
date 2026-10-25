@@ -1,6 +1,6 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { chartFontSize, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { DEFAULT_PAGE_SETUP, PAGE_NUMBER_TEXT, PAGE_ROOT, pageRecord, STYLE_ROOT } from '@workspace/lib/docs/eigendoc';
@@ -20,6 +20,7 @@ import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
 import renderScript from '../../lib/export/weasyprint-render.py' with { type: 'file' };
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import { EMU_PER_POINT, EMU_PER_PX } from '../../lib/ooxml/ooxml';
 import { openZip } from '../../lib/ooxml/zip';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
 import { sampleChartParts } from '../fixtures/chart-parts';
@@ -430,6 +431,21 @@ describe('doc export — charts', () => {
         const names = openZip(new Uint8Array(data)).names();
         expect(names.filter((name) => name.startsWith('word/media/'))).toEqual([]);
         expect(names.filter((name) => name.startsWith('word/charts/'))).toEqual(['word/charts/chart1.xml']);
+    });
+
+    test("a chart wider than the column shrinks to it, its text and lines with it, at Eigen's size for its box", async () => {
+        const doc = seededDoc(chartDoc({ width: 1600, height: 800 }));
+        const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => [], undefined);
+        const zip = openZip(new Uint8Array(data));
+        const read = (name: string) => new TextDecoder().decode(zip.read(name));
+        const [, cx = '0', cy = '0'] = read('word/document.xml').match(/<wp:extent cx="(\d+)" cy="(\d+)"\/>/) ?? [];
+        const emuPerPx = Number(cx) / 1600;
+        expect(emuPerPx).toBeLessThan(EMU_PER_PX / 2);
+        expect(Number(cy) / Number(cx)).toBeCloseTo(0.5, 3);
+        const chart = read('word/charts/chart1.xml');
+        const size = Math.round(((chartFontSize(1600, 800) * emuPerPx) / EMU_PER_POINT) * 100);
+        expect(chart).toContain(`<a:defRPr sz="${size}">`);
+        expect(chart).toContain(`<a:ln w="${Math.round(FLAT_CHART_LOOK.strokeWidth * emuPerPx)}">`);
     });
 
     test("every label draws in the spec's font", () => {
