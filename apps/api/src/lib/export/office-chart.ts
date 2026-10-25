@@ -1,5 +1,6 @@
 // The charts a docx and a pptx write: each chart's part with its inline numbers in a workbook of its own beside it, as
-// desktop Office writes one, so Word's and PowerPoint's Edit Data opens them. An xlsx's charts name its own cells.
+// desktop Office writes one, for Word's and PowerPoint's Edit Data to open; not yet verified in desktop Office. An
+// xlsx's charts name its own cells.
 
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import type { ChartSpec } from '@workspace/lib/types/chart';
@@ -12,9 +13,9 @@ import type { ZipWriteEntry } from '../ooxml/zip';
 import { writeXlsx } from './sheets/xlsx/to-xlsx';
 
 // One package's charts under its folder, word or ppt: each part and its relationships, and each chart's workbook.
-export type OfficeCharts = { folder: string; parts: PackagePart[]; files: ZipWriteEntry[] };
+export type OfficeCharts = { folder: 'word' | 'ppt'; parts: PackagePart[]; files: ZipWriteEntry[] };
 
-export function officeCharts(folder: string): OfficeCharts {
+export function officeCharts(folder: 'word' | 'ppt'): OfficeCharts {
     return { folder, parts: [], files: [] };
 }
 
