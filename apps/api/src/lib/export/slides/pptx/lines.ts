@@ -83,9 +83,11 @@ export function linearXml(
 ): string {
     if (points.length === 0) return '';
     const line = lineXml(slide, el, opacity, ends);
+    // A two-point line keeps the fill it holds, which the line preset's area of nothing never paints.
     if (points.length === 2) {
         const [from, to] = points.map((p) => ({ x: el.x + p.x, y: el.y + p.y }));
-        return segmentXml(slide, from, to, el.angle, line);
+        const fill = el.type === 'line' ? fillXml(parseFill(el.fill), opacity, el) : '<a:noFill/>';
+        return segmentXml(slide, from, to, el.angle, fill, line);
     }
     const curved = el.roundness === 'round' && !(el.type === 'arrow' && el.elbow);
     const { box, pt } = pathFrame(el, points, slide);
@@ -104,7 +106,7 @@ export function linearXml(
 }
 
 // A segment of the slide, turned by angle about its middle.
-function segmentXml(slide: Slide, from: Point, to: Point, angle: number, line: string): string {
+function segmentXml(slide: Slide, from: Point, to: Point, angle: number, fill: string, line: string): string {
     const bounds = pointsBounds([from, to]);
     const box = {
         x: bounds.minX,
@@ -114,7 +116,7 @@ function segmentXml(slide: Slide, from: Point, to: Point, angle: number, line: s
         angle,
     };
     const id = ++slide.shapes;
-    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Line ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrmXml(slide, box, to.x < from.x, to.y < from.y)}${presetXml('line')}<a:noFill/>${line}</p:spPr></p:cxnSp>`;
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Line ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr>${xfrmXml(slide, box, to.x < from.x, to.y < from.y)}${presetXml('line')}${fill}${line}</p:spPr></p:cxnSp>`;
 }
 
 // A freehand stroke is ink, not a line: perfect-freehand's outline filled in the stroke color, its curve drawn as the
@@ -171,7 +173,7 @@ export function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number):
         const bar = head === 'bar' ? arrowheadGeometry(el, points, position, head) : null;
         if (bar?.kind !== 'barbs') continue;
         const [a, b] = [linearLocalToScene(el, bar.barb1), linearLocalToScene(el, bar.barb2)];
-        xml += segmentXml(slide, a, b, 0, lineXml(slide, el, opacity));
+        xml += segmentXml(slide, a, b, 0, '<a:noFill/>', lineXml(slide, el, opacity));
     }
     const label = arrowLabelBox(el, points);
     if (!label) return xml;

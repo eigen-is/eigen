@@ -418,3 +418,24 @@ describe('a bordered picture exported and read back', () => {
         ]);
     });
 });
+
+// The canvas fills only a looping line, but a two-point one keeps the fill it holds, as a connector's spPr does.
+describe('a two-point line exported and read back', () => {
+    test('keeps its fill', () => {
+        const line: NewVectorElement = {
+            type: 'line',
+            x: 100,
+            y: 100,
+            width: 300,
+            height: 200,
+            angle: 0,
+            points: twoPoints(300, 200),
+            strokeColor: '#233a75',
+            fill: serializeFill({ type: 'solid', color: '#70ad47', style: 'solid' }),
+        };
+        const back = roundTrip([line]).deck.slides[0].elements;
+        expect(back.map((found) => [found.type, parseFill(String(found.fill))])).toEqual([
+            ['line', { type: 'solid', color: '#70ad47', style: 'solid' }],
+        ]);
+    });
+});
