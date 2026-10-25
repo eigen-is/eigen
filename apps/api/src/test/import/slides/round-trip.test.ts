@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { FLAT_CHART_LOOK, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { ChartStacking } from '@workspace/lib/types/chart';
 import type { NewVectorElement, VectorElement } from '@workspace/lib/vector';
@@ -11,6 +11,7 @@ import {
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
     serializeFill,
+    solidFill,
     TRANSPARENT_FILL,
     writeElementInDoc,
     writeFrameInDoc,
@@ -22,7 +23,7 @@ import { writePptx } from '../../../lib/export/slides/pptx/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
 import { seriesIdsByPlace } from '../../../scripts/office-audit';
 import { axesOf, sampleChartParts } from '../../fixtures/chart-parts';
-import { box, buildPptx, PIXEL_PNG, solid as solidFill, sp } from '../../fixtures/pptx';
+import { box, buildPptx, PIXEL_PNG, solid, sp } from '../../fixtures/pptx';
 
 // A deck exported to .pptx and read back: what the writer states, the reader reads the same.
 
@@ -266,6 +267,15 @@ describe('charts exported and read back', () => {
         sampleChartParts('line'),
         sampleChartParts('pie', 'Source Serif 4'),
     ].map((parts, i) => ({ type: 'chart', x: 40 + i * 300, y: 100, width: 280, height: 200, angle: 0, ...parts }));
+    // A look of its own, every field off the Slides default.
+    CHARTS.push({
+        ...CHARTS[0],
+        y: 400,
+        fill: solidFill('#fafaf0'),
+        color: '#112233',
+        strokeColor: '#44556680',
+        strokeWidth: 3,
+    });
     const { sent, deck } = roundTrip(CHARTS);
     const found = deck.slides[0].elements;
     // A series id is identity, not content, and the writer writes none.
@@ -274,7 +284,7 @@ describe('charts exported and read back', () => {
         return spec && seriesIdsByPlace(spec);
     };
 
-    test('come back as the same charts, at their boxes, in their text colour', () => {
+    test('come back as the same charts, at their boxes, in their look', () => {
         expect(found.map((element) => element.type)).toEqual(sent.map(() => 'chart'));
         expect(deck.warnings).toEqual([]);
         for (const [i, element] of sent.entries()) {
@@ -282,7 +292,11 @@ describe('charts exported and read back', () => {
             const spec = specOf(element);
             expect(specOf(back)).toEqual(spec && axesOf(spec));
             for (const field of ['x', 'y', 'width', 'height'] as const) expectPx(back[field], element[field]);
-            if (element.type === 'chart') expect(back).toMatchObject({ color: element.color, fill: element.fill });
+            if (element.type !== 'chart') continue;
+            expect(back).toMatchObject({ color: element.color, fill: element.fill });
+            // A pie has no axis line to carry the stroke, so it comes back flat.
+            const stroke = spec?.chart.type === 'pie' ? FLAT_CHART_LOOK : element;
+            expect(back).toMatchObject({ strokeColor: stroke.strokeColor, strokeWidth: stroke.strokeWidth });
         }
     });
 });
@@ -404,7 +418,7 @@ describe("a shape's overlapping paths imported, exported and read back", () => {
         const rect = (from: number, to: number) =>
             `<a:path w="10" h="10"><a:moveTo><a:pt x="${from}" y="${from}"/></a:moveTo><a:lnTo><a:pt x="${to}" y="${from}"/></a:lnTo><a:lnTo><a:pt x="${to}" y="${to}"/></a:lnTo><a:lnTo><a:pt x="${from}" y="${to}"/></a:lnTo><a:close/></a:path>`;
         const geometry = `<a:custGeom><a:avLst/><a:gdLst/><a:pathLst>${rect(0, 10)}${rect(2, 4)}</a:pathLst></a:custGeom>`;
-        const shapes = sp({ xfrm: box(100, 100, 200, 200), spPr: `${geometry}${solidFill('993300')}` });
+        const shapes = sp({ xfrm: box(100, 100, 200, 200), spPr: `${geometry}${solid('993300')}` });
         const imported = readPptx(buildPptx({ slides: [{ shapes }] }), { maxMediaBytes: 1024 * 1024 });
         const { deck } = roundTrip(imported.slides[0].elements);
         const back = deck.slides[0].elements;

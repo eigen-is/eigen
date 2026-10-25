@@ -1,3 +1,6 @@
+// Each element as the DrawingML shape that draws it, its box, geometry and fill, each length in the deck's EMU; a chart
+// as a graphic frame showing its own chart part.
+
 import { gradientStops } from '@workspace/lib/background';
 import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { FillPaint } from '@workspace/lib/types/background';
@@ -13,16 +16,11 @@ import {
     rectOutline,
 } from '@workspace/lib/vector';
 import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
-import { C_NS } from '../../../ooxml/ooxml';
-import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
-import { chartGraphicXml, writeChart } from '../../../ooxml/ooxml-chart-writer';
+import { addChartPart, chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';
 import type { Slide } from './package';
 import { pictureXml } from './pictures';
 import { paragraphsOf, textBodyXml } from './text';
-
-// Each element as the DrawingML shape that draws it, its box, geometry and fill, each length in the deck's EMU; a chart
-// as a graphic frame showing its own chart part.
 
 // ST_Coordinate's bound, which every offset, extent and path point stays within.
 const MAX_COORDINATE = 27_273_042_316_900;
@@ -162,15 +160,19 @@ export function elementXml(el: VectorElement, slide: Slide): string {
 function chartXml(el: VectorChartElement, slide: Slide): string {
     const { spec } = readChartSpec(el);
     if (spec?.data.source !== 'inline') return '';
-    const name = `chart${slide.deck.charts.length + 1}.xml`;
-    const part = writeChart(spec, { ranges: () => undefined, look: readChartLook(el) });
-    slide.deck.charts.push([`ppt/charts/${name}`, part, CHART_CONTENT_TYPE]);
-    const rId = slide.part.relate('chart', `../charts/${name}`);
+    const parts = {
+        parts: slide.deck.charts,
+        path: 'ppt/charts/chart',
+        target: '../charts/chart',
+        relate: slide.part.relate,
+    };
+    const frame = { width: el.width, height: el.height, emuPerPx: slide.deck.scale };
+    const rId = addChartPart(parts, spec, { look: readChartLook(el), frame });
     const id = ++slide.shapes;
     const offset = `<a:off x="${toEmu(slide, el.x)}" y="${toEmu(slide, el.y)}"/>`;
     const extent = `<a:ext cx="${toEmu(slide, el.width)}" cy="${toEmu(slide, el.height)}"/>`;
     return [
-        `<p:graphicFrame xmlns:c="${C_NS}"><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Chart ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>`,
+        `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Chart ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>`,
         `<p:xfrm>${offset}${extent}</p:xfrm>${chartGraphicXml(rId)}</p:graphicFrame>`,
     ].join('');
 }

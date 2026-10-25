@@ -50,7 +50,7 @@ export const MAX_SKETCH_POINTS = 200;
 const TEXT_SCALE = 0.035;
 const MIN_FONT_SIZE = 9;
 const MAX_FONT_SIZE = 64;
-const TITLE_SCALE = 1.3;
+export const CHART_TITLE_SCALE = 1.3;
 // Observable Plot's band padding, inner and outer.
 const BAND_PADDING = 0.1;
 // Ems between value ticks: vertical axes stack one-line labels, horizontal ones sit numbers side by side.
@@ -169,10 +169,16 @@ export function layoutChartMessage(box: ChartBox, text: string, fontFamily: stri
     return { shapes: backgroundShapes(ctx), labels: messageLabel(ctx, text) };
 }
 
+// A label's size in a box of these sides, the title CHART_TITLE_SCALE times it: what an Office chart part writes as its
+// text size, so Office draws the labels at the size Eigen does.
+export function chartFontSize(width: number, height: number): number {
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, TEXT_SCALE * Math.min(width, height)));
+}
+
 function context({ id, width: w, height: h, paint }: ChartBox, fontFamily: string): Context {
     const width = Math.max(0, w);
     const height = Math.max(0, h);
-    const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, TEXT_SCALE * Math.min(width, height)));
+    const fontSize = chartFontSize(width, height);
     return {
         id,
         paint,
@@ -208,7 +214,7 @@ function messageLabel(ctx: Context, text: string): ChartLabel[] {
 
 function placeTitle(ctx: Context, title: string): Frame {
     const frame = { left: ctx.pad, top: ctx.pad, right: ctx.width - ctx.pad, bottom: ctx.height - ctx.pad };
-    const size = ctx.fontSize * TITLE_SCALE;
+    const size = ctx.fontSize * CHART_TITLE_SCALE;
     const text = fit(ctx, title, frame.right - frame.left, size, true);
     if (text === '') return frame;
     ctx.labels.push(label(ctx, text, ctx.width / 2, frame.top, 'middle', { fontSize: size, bold: true }));

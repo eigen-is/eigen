@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { gradientStops } from '@workspace/lib/background';
 import {
+    CHART_TITLE_SCALE,
     chartColor,
+    chartFontSize,
     DEFAULT_CHART_SERIES_STYLE,
     defaultChartSpec,
     FLAT_CHART_LOOK,
@@ -10,6 +13,7 @@ import {
 import type {
     CellRangeRef,
     ChartData,
+    ChartLook,
     ChartSeriesStyle,
     ChartSpec,
     ChartStacking,
@@ -17,13 +21,14 @@ import type {
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
+import { serializeFill, solidFill } from '@workspace/lib/vector';
 import type { XmlElement } from '../../lib/core/xml';
 import { hasXmlName, xmlAttr, xmlElements, xmlTrimmedText } from '../../lib/core/xml';
 import type { DrawingTheme } from '../../lib/ooxml/drawingml';
 import { IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
-import { A_NS, C_NS, parseOoxml } from '../../lib/ooxml/ooxml';
-import { readChart } from '../../lib/ooxml/ooxml-chart';
-import { writeChart } from '../../lib/ooxml/ooxml-chart-writer';
+import { A_NS, C_NS, EMU_PER_PX, parseOoxml, R_NS } from '../../lib/ooxml/ooxml';
+import { readChart, readChartPartLook } from '../../lib/ooxml/ooxml-chart';
+import { chartGraphicXml, writeChart } from '../../lib/ooxml/ooxml-chart-writer';
 import { seriesIdsByPlace } from '../../scripts/office-audit';
 import { axesOf } from '../fixtures/chart-parts';
 
@@ -36,8 +41,10 @@ const NAMES = new Map([
     ['s2', "Bob's <sheet>"],
 ]);
 const ranges = (sheetId: string) => NAMES.get(sheetId);
+// The sample's box on a page, where one px is EMU_PER_PX.
+const FRAME = { width: 600, height: 371, emuPerPx: EMU_PER_PX };
 // Inline data names no sheet.
-const INLINE = { ranges: () => undefined, look: FLAT_CHART_LOOK };
+const INLINE = { look: FLAT_CHART_LOOK, frame: FRAME };
 const ids = (name: string) => [...NAMES].find(([, written]) => written === name)?.[0];
 
 const ref = (row: [number, number], column: [number, number], sheetId = 's1'): CellRangeRef => ({
@@ -101,7 +108,7 @@ function read(xml: string, data: Parameters<typeof readChart>[1]['data']): Chart
 }
 
 const throughRanges = (spec: ChartSpec, cache?: ChartData) =>
-    read(writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK }), { ranges: ids });
+    read(writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK, frame: FRAME }), { ranges: ids });
 
 // Every element named `local` in the chart namespace, depth first.
 function find(element: XmlElement, local: string, ns = C_NS): XmlElement[] {
@@ -129,7 +136,7 @@ describe('writeChart with range data', () => {
 
     test('a percent-stacked chart labels its value axis 0%, which reads back as no format', () => {
         const spec = rangeSpec('column', stacked('column', 'percent'));
-        const [axis] = find(root(writeChart(spec, { ranges, look: FLAT_CHART_LOOK })), 'valAx');
+        const [axis] = find(root(writeChart(spec, { ranges, look: FLAT_CHART_LOOK, frame: FRAME })), 'valAx');
         const [numFmt] = find(axis, 'numFmt');
         expect([xmlAttr(numFmt, '', 'formatCode'), xmlAttr(numFmt, '', 'sourceLinked')]).toEqual(['0%', '0']);
         expect(throughRanges(spec).axes.y.labels.format).toBeNull();
@@ -156,7 +163,7 @@ describe('writeChart with range data', () => {
             categories: ['North', 'South', 'East'],
             series: [{ id: 's-1', name: 'Sales', values: [1, 2, 3] }],
         };
-        const xml = writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK });
+        const xml = writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK, frame: FRAME });
         expect(throughRanges(spec, cache)).toEqual(axesOf(spec));
         expect(throughRanges(spec, cache).points).toEqual({ 's-1': { 1: { color: '#abcdef' } } });
         // Excel draws the palette's colour for the automatic slices, explicitly.
@@ -197,7 +204,7 @@ describe('writeChart with range data', () => {
     test('a picked colour keeps its alpha, and an automatic one is written as its palette colour', () => {
         const series = [RANGE_SERIES[0], RANGE_SERIES[1], { ...RANGE_SERIES[1], id: 's-3' }];
         const spec = rangeSpec('column', { series: { 's-2': styled('#11223380') } }, series);
-        const xml = writeChart(spec, { ranges, look: FLAT_CHART_LOOK });
+        const xml = writeChart(spec, { ranges, look: FLAT_CHART_LOOK, frame: FRAME });
         const back = throughRanges(spec);
         expect(back.data.series.map(({ id }) => back.series[id]?.color)).toEqual([null, '#11223380', null]);
         const fills = find(root(xml), 'ser').map((ser) => xmlAttr(find(ser, 'srgbClr', A_NS)[0], '', 'val'));
@@ -207,7 +214,7 @@ describe('writeChart with range data', () => {
     // CHARTS.md: c:orientation is maxMin when (type === 'bar') !== reversed, and the value axis crosses at that end.
     test("the category axis runs as Google's unless reversed, the value axis staying at its start", () => {
         const orientation = (spec: ChartSpec) => {
-            const chart = root(writeChart(spec, { ranges, look: FLAT_CHART_LOOK }));
+            const chart = root(writeChart(spec, { ranges, look: FLAT_CHART_LOOK, frame: FRAME }));
             return [val(find(chart, 'catAx')[0], 'orientation'), val(find(chart, 'valAx')[0], 'crosses')];
         };
         expect(orientation(rangeSpec('column'))).toEqual(['minMax', 'autoZero']);
@@ -219,7 +226,7 @@ describe('writeChart with range data', () => {
     });
 
     test("refs name the workbook's sheets quoted, and a sheet it doesn't write is #REF!", () => {
-        const xml = writeChart(rangeSpec('column'), { ranges, look: FLAT_CHART_LOOK });
+        const xml = writeChart(rangeSpec('column'), { ranges, look: FLAT_CHART_LOOK, frame: FRAME });
         expect(find(root(xml), 'f').map(xmlTrimmedText)).toEqual([
             "'Data'!$B$1",
             "'Data'!$A$2:$A$4",
@@ -231,6 +238,7 @@ describe('writeChart with range data', () => {
             writeChart(rangeSpec('column'), {
                 ranges: (id) => (id === 's1' ? 'Data' : undefined),
                 look: FLAT_CHART_LOOK,
+                frame: FRAME,
             }),
             {
                 ranges: ids,
@@ -259,7 +267,7 @@ describe('writeChart with range data', () => {
                 { id: 's-3', name: 'Actual', values: [4.5, 5, -6e-7] },
             ],
         };
-        const inline = read(writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK }), 'cache');
+        const inline = read(writeChart(spec, { ranges, cache, look: FLAT_CHART_LOOK, frame: FRAME }), 'cache');
         expect(inline.data).toEqual({
             source: 'inline',
             categories: ['North', 'South', 'East'],
@@ -274,15 +282,15 @@ describe('writeChart with range data', () => {
     });
 
     test('without caches the refs go alone, and the chart still reads back', () => {
-        const xml = writeChart(rangeSpec('column'), { ranges, look: FLAT_CHART_LOOK });
+        const xml = writeChart(rangeSpec('column'), { ranges, look: FLAT_CHART_LOOK, frame: FRAME });
         expect(find(root(xml), 'numCache')).toEqual([]);
         expect(throughRanges(rangeSpec('column'))).toEqual(rangeSpec('column'));
     });
 
     test('the same spec writes the same bytes', () => {
         const spec = rangeSpec('pie', {}, RANGE_SERIES.slice(0, 1));
-        expect(writeChart(spec, { ranges, look: FLAT_CHART_LOOK })).toBe(
-            writeChart(parsed(spec), { ranges, look: FLAT_CHART_LOOK }),
+        expect(writeChart(spec, { ranges, look: FLAT_CHART_LOOK, frame: FRAME })).toBe(
+            writeChart(parsed(spec), { ranges, look: FLAT_CHART_LOOK, frame: FRAME }),
         );
         expect(throughRanges(spec)).toEqual(axesOf(spec));
     });
@@ -311,5 +319,81 @@ describe('writeChart with inline data', () => {
     test('a literal read through ranges reads as its literals', () => {
         const spec = sampleChartSpec('column');
         expect(read(writeChart(spec, INLINE), { ranges: ids })).toEqual(spec);
+    });
+
+    test("a pie keeps its values' format and its type's gridlines, losing only the axis titles it has no axes for", () => {
+        const sample = sampleChartSpec('pie');
+        const spec = { ...sample, axes: { ...sample.axes, y: { ...sample.axes.y, labels: { format: '0.0' } } } };
+        const back = read(writeChart(spec, INLINE), 'cache');
+        expect(back).toEqual(axesOf(spec));
+        expect(back.axes.y).toMatchObject({ labels: { format: '0.0' }, gridlines: sample.axes.y.gridlines });
+    });
+
+    test("the text is the size Eigen draws it in the box, at the file's scale", () => {
+        const spec = { ...sampleChartSpec('column'), title: { text: 'Sales' } };
+        const at = (frame: typeof FRAME) => {
+            const chart = root(writeChart(spec, { look: FLAT_CHART_LOOK, frame }));
+            return [...find(chart, 'defRPr', A_NS), ...find(chart, 'rPr', A_NS)].map((run) => xmlAttr(run, '', 'sz'));
+        };
+        // 0.035 of the 371 px side is 12.985 px, 9.74 pt on a page; the title 1.3 times it.
+        const label = Math.round(chartFontSize(600, 371) * 75);
+        const title = Math.round(chartFontSize(600, 371) * CHART_TITLE_SCALE * 75);
+        expect(new Set(at(FRAME))).toEqual(new Set([String(label), String(title)]));
+        // A slide's px is half a page's: 1920 px across 720 pt.
+        expect(at({ ...FRAME, emuPerPx: EMU_PER_PX / 2 })).toContain(String(Math.round(label / 2)));
+    });
+});
+
+describe('readChartPartLook', () => {
+    const LOOK: ChartLook = {
+        ...FLAT_CHART_LOOK,
+        fill: solidFill('#fafaf0'),
+        color: '#112233',
+        strokeColor: '#44556680',
+        strokeWidth: 3,
+    };
+    const lookOf = (spec: ChartSpec, look: ChartLook, emuPerPx: number) =>
+        readChartPartLook(root(writeChart(spec, { look, frame: { ...FRAME, emuPerPx } })), { theme, emuPerPx });
+
+    test.each(['column', 'bar', 'line'] as const)(
+        "a %s chart's background, label colour and stroke read back at any scale",
+        (type) => {
+            for (const emuPerPx of [EMU_PER_PX, 6350]) {
+                expect(lookOf(sampleChartSpec(type), LOOK, emuPerPx)).toEqual({
+                    fill: LOOK.fill,
+                    color: LOOK.color,
+                    strokeColor: LOOK.strokeColor,
+                    strokeWidth: LOOK.strokeWidth,
+                });
+            }
+        },
+    );
+
+    test('no background and no label colour read back as themselves; a pie has no stroke to read', () => {
+        const look = { ...LOOK, fill: FLAT_CHART_LOOK.fill, color: 'transparent' };
+        expect(lookOf(sampleChartSpec('pie'), look, EMU_PER_PX)).toEqual({
+            fill: FLAT_CHART_LOOK.fill,
+            color: 'transparent',
+        });
+    });
+
+    test('a gradient background is written as its middle colour', () => {
+        const fill = serializeFill({ type: 'gradient', from: '#000000', to: '#ffffff', angle: 0, style: 'solid' });
+        const [, middle] = gradientStops('#000000', '#ffffff', 3);
+        expect(lookOf(sampleChartSpec('column'), { ...LOOK, fill }, EMU_PER_PX).fill).toBe(solidFill(middle.color));
+    });
+
+    test("a label without a colour of its own takes the theme's tx1, as Office draws it", () => {
+        const dark: DrawingTheme = { scheme: new Map([['lt1', '#fefefe']]), map: new Map([['tx1', 'lt1']]) };
+        const chart = root(`<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}"><c:chart/></c:chartSpace>`);
+        expect(readChartPartLook(chart, { theme: dark, emuPerPx: EMU_PER_PX })).toEqual({ color: '#fefefe' });
+    });
+});
+
+describe('chartGraphicXml', () => {
+    test('declares the chart prefixes on c:chart, so any host part can hold it', () => {
+        const frame = root(`<a:graphicFrame xmlns:a="${A_NS}">${chartGraphicXml('rId7')}</a:graphicFrame>`);
+        const [chart] = find(frame, 'chart');
+        expect(chart && xmlAttr(chart, R_NS, 'id')).toBe('rId7');
     });
 });

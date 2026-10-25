@@ -619,6 +619,8 @@ describe('a chart sheet', () => {
                 width: 977,
                 height: 638,
                 angle: 0,
+                // The theme's tx1, as Excel draws a label without a colour of its own.
+                color: '#000000',
                 specChart: expect.any(String),
                 specTitle: expect.any(String),
                 specLegend: expect.any(String),

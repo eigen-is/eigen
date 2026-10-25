@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import { FLAT_CHART_LOOK, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import type { ChartStacking } from '@workspace/lib/types/chart';
+import { solidFill } from '@workspace/lib/vector';
 import { readOmml, writeMathml } from '@workspace/math';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { docSchema } from '../../../lib/document/doc-schema';
@@ -49,6 +50,7 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // paragraph. (12) A header cell beside a body cell is marked by the Table Header style on its plain paragraphs, so
 // one holding none, only quotes, code, headings, rules or done tasks, comes back a body cell in the header's grey.
 // (13) A paragraph's format is what it sets apart from the Normal, so a value equal to the Normal's comes back as none.
+// (14) The chart part holds the look it draws, so a chart's unset background, label colour and stroke come back flat.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -60,6 +62,9 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
         if (attrs['textAlign'] === 'left') attrs['textAlign'] = null;
         if (source.type === 'equation') attrs['mathml'] = writeMathml(readStoredEquation(attrs).row);
+        if (source.type === 'chart')
+            for (const name of ['fill', 'color', 'strokeColor', 'strokeWidth'] as const)
+                attrs[name] ??= FLAT_CHART_LOOK[name];
     }
     const small = source.marks?.some((mark) => mark.type === 'small');
     const styled = source.marks?.some((mark) => mark.type === 'textStyle');
@@ -214,6 +219,14 @@ describe('a chart', () => {
         const [back] = json.content?.[0]?.content ?? [];
         expect(specOf(back?.attrs)).toEqual(specOf(chart.attrs));
         expect(back?.attrs).toMatchObject({ roughness: null, strokeStyle: null });
+    });
+
+    test('its background, label colour and stroke come back as they were', async () => {
+        const look = { fill: solidFill('#fafaf0'), color: '#112233', strokeColor: '#44556680', strokeWidth: 3 };
+        const chart = { type: 'chart', attrs: { ...sampleChartParts('line'), ...look, width: 480, height: 300 } };
+        const { json } = await exported(chart);
+        const [back] = json.content?.[0]?.content ?? [];
+        expect(back?.attrs).toMatchObject(look);
     });
 });
 

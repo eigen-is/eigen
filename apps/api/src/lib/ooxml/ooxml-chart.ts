@@ -1,5 +1,7 @@
-// Reads a DrawingML chart part, the same in a docx, an xlsx and a pptx, into a ChartSpec. Each format's importer
-// calls it for the charts its drawings name, and the chart writer shares its tables of OOXML names.
+// Reads a DrawingML chart part, the same in a docx, an xlsx and a pptx, into a ChartSpec and the look the chart writer
+// maps onto it. Each format's importer calls it for the charts its drawings name, and the writer shares its tables of
+// OOXML names. A chart the spec can't draw as the file does is no spec, with its title for the caller to show instead:
+// never a different chart.
 
 import {
     chartColor,
@@ -16,6 +18,7 @@ import { bundledFont } from '@workspace/lib/constants/fonts';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
+    ChartLook,
     ChartPoint,
     ChartSeriesStyle,
     ChartSpec,
@@ -24,6 +27,7 @@ import type {
     LegendPosition,
 } from '@workspace/lib/types/chart';
 import { CHART_BLANKS } from '@workspace/lib/types/chart';
+import { solidFill, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 // The two engine modules a chart reads, not the engine: a docx or pptx import never evaluates the formula engine.
 import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
 import { numberDisplay } from '@workspace/sheet/engine/format';
@@ -34,9 +38,6 @@ import { drawingColor, drawingLines, readColorMap } from './drawingml';
 import { A_NS, alternativeFor, C_NS, C16_NS, isOn, isOnElement, ooxmlElements } from './ooxml';
 import type { OoxmlPackage, Relationship } from './opc';
 import { optional, relTarget } from './opc';
-
-// A DrawingML chart part, c:chartSpace, the same in a docx, an xlsx and a pptx, read into a ChartSpec. A chart the spec
-// can't draw as the file does is no spec, with its title for the caller to show instead: never a different chart.
 
 // docx and pptx draw from the caches, which hold every value; an xlsx's refs name its own sheets, by the importer's ids,
 // and a ref they can't follow (a literal, a defined name, several areas, an area, a sheet not in the workbook, a pie's
@@ -154,6 +155,40 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
     return { unsupported: { title, name: chartName(groups) } };
 }
 
+// The look writeChart maps onto the part, read back: the background from c:chartSpace's c:spPr, the label colour from
+// its c:txPr, else the theme's tx1 as Office draws a label without one, and the stroke's colour and width from the
+// category axis's line, as the writer strokes every axis and gridline with it. emuPerPx is the EMU one px of the
+// chart's own box is in the file. A field the part doesn't say, a pie's stroke among them, is left out, for the host's.
+export function readChartPartLook(
+    root: XmlElement,
+    { theme, emuPerPx }: { theme: DrawingTheme; emuPerPx: number },
+): Partial<ChartLook> {
+    const colors = chartColors(root, theme);
+    const drawn = (shape: XmlElement | undefined): string | undefined => {
+        if (!shape) return undefined;
+        if (xmlChild(shape, A_NS, 'noFill')) return TRANSPARENT_COLOR;
+        return drawingColor(xmlChild(shape, A_NS, 'solidFill'), colors);
+    };
+    let text = child(root, 'txPr');
+    for (const local of ['p', 'pPr', 'defRPr']) text = text && xmlChild(text, A_NS, local);
+    const tx1 = colors.map.get('tx1');
+    const color = drawn(text) ?? (tx1 && colors.scheme.get(tx1));
+    const background = drawn(child(root, 'spPr'));
+    const plotArea = child(child(root, 'chart'), 'plotArea');
+    const axis = child(child(plotArea, 'catAx') ?? child(plotArea, 'dateAx'), 'spPr');
+    const line = axis && xmlChild(axis, A_NS, 'ln');
+    const strokeColor = drawn(line);
+    const width = Number(line && xmlAttr(line, '', 'w'));
+    return {
+        ...(background && { fill: solidFill(background) }),
+        ...(color && { color }),
+        ...(strokeColor && { strokeColor }),
+        ...(line &&
+            Number.isFinite(width) &&
+            width >= 0 && { strokeWidth: Math.round((width / emuPerPx) * 100) / 100 }),
+    };
+}
+
 // The host's colours through the part's own c:clrMapOvr, which replaces the host's map.
 export function chartColors(root: XmlElement, theme: DrawingTheme): DrawingTheme {
     const override = child(root, 'clrMapOvr');
@@ -249,7 +284,10 @@ function chartSpec(
                 ...y,
                 title: { text: axisTitle(valueAxis) },
                 visible: visible(valueAxis),
-                gridlines: { visible: child(valueAxis, 'majorGridlines') !== undefined },
+                // A pie has no value axis, so it keeps its type's.
+                gridlines: {
+                    visible: valueAxis ? child(valueAxis, 'majorGridlines') !== undefined : y.gridlines.visible,
+                },
                 labels: {
                     format:
                         format && format !== 'General' && !(stacking === 'percent' && format === PERCENT_AXIS_FORMAT)

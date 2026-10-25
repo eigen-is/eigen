@@ -1,3 +1,5 @@
+// A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
+
 import { escapeHtml } from '@workspace/lib/html';
 import type {
     Arrowhead,
@@ -25,7 +27,7 @@ import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, 
 import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
 import type { Part } from '../../ooxml/opc';
 import { IMPORT_MESSAGES } from '../messages';
-import { CHART_PAINT, frameChart } from './chart';
+import { frameChart } from './chart';
 import type { CustomGeometry } from './custom-geometry';
 import { closedPath, customGeometry } from './custom-geometry';
 import type { Guides } from './guides';
@@ -54,8 +56,6 @@ import type { DeckWalk, Lost } from './package';
 import { alternative, blipMedia } from './package';
 import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
-
-// A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
 
 export const MAX_ELEMENTS = 20_000;
 export const MAX_GROUP_DEPTH = 32;
@@ -606,10 +606,8 @@ function readGraphicFrame(walk: Walk, shape: XmlElement, box: Box): void {
     const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
     const chart =
         kind === 'chart' && data ? frameChart(walk.deck, walk.part, data, walk.inheritance.theme.colors) : undefined;
-    if (chart && 'parts' in chart) {
-        const { parts, ...colors } = chart;
-        push(walk, { type: 'chart', ...box, ...CHART_PAINT, ...parts, ...colors });
-    } else placeholderBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
+    if (chart && 'parts' in chart) push(walk, { type: 'chart', ...box, ...chart.look, ...chart.parts });
+    else placeholderBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
 }
 
 // Q5: a loss the user can see on the slide, saying what was there.

@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_CHART_POINTS, newSheetChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
+import {
+    FLAT_CHART_LOOK,
+    MAX_CHART_POINTS,
+    newSheetChartSpecParts,
+    readChartSpec,
+    sampleChartSpec,
+} from '@workspace/lib/charts';
 import type { Cell, Sheet, SheetChart, SheetFloatingObject, SheetImage } from '@workspace/lib/sheets';
 import { floatingItems, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { solidFill } from '@workspace/lib/vector';
 import type { XmlElement } from '../../../../lib/core/xml';
 import { hasXmlName, xmlElements, xmlTrimmedText } from '../../../../lib/core/xml';
 import type { CountedWarningCode, TransformWarning } from '../../../../lib/document/transform/protocol';
@@ -145,6 +152,16 @@ describe('drawingOf', () => {
         expect(charts.map((chart) => readChartSpec(chart).spec).map((spec) => spec && seriesIdsByPlace(spec))).toEqual(
             written.map((chart) => readChartSpec(chart).spec),
         );
+    });
+
+    test("a chart's background, label colour and stroke read back as they were; one without a look reads flat", () => {
+        const look = { fill: solidFill('#fafaf0'), color: '#112233', strokeColor: '#44556680', strokeWidth: 3 };
+        const styled: Sheet = { ...SUMMARY, charts: byId(INLINE, { ...RANGED, ...look }) };
+        const { sheets } = roundTrip([styled, MY_DATA]);
+        const [inline, ranged] = Object.values(sheets[0].charts ?? {}).sort((a, b) => a.index.localeCompare(b.index));
+        expect(ranged).toMatchObject(look);
+        const { fill, color, strokeColor, strokeWidth } = FLAT_CHART_LOOK;
+        expect(inline).toMatchObject({ fill, color, strokeColor, strokeWidth });
     });
 
     test('a two-cell anchor names the cells its corners land in, past hidden tracks', () => {

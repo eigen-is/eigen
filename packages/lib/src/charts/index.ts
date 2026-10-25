@@ -1,5 +1,7 @@
 export {
     CHART_MESSAGES,
+    CHART_TITLE_SCALE,
+    chartFontSize,
     chartPointCount,
     GRIDLINE_OPACITY,
     isInlineSketchCapped,

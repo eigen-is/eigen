@@ -278,9 +278,9 @@ describe('the export keeps what a plain writer loses', () => {
     });
 });
 
-// Re-recorded when the writer's bytes change on purpose. Last: the workbook gained a rule, a validation and a chart, so
-// the hash pins the rules' and the drawing's parts as the sheet part wires them in.
-const GOLDEN_XLSX_SHA256 = '7896dcf9ac4abb356254193f22b0eb343e99e6804dc9bcca15c44ea109bd9d11';
+// Re-recorded when the writer's bytes change on purpose. Last: the chart part writes its text sizes and the values'
+// format, and c:chart declares its own prefixes, so the drawing part no longer does.
+const GOLDEN_XLSX_SHA256 = '454922939086c8cf9906d9ed0622650c6a38ae5ffd8c8a06bee7ebcb554988dc';
 
 describe('the package', () => {
     test("declares Excel's parts and their types", async () => {
