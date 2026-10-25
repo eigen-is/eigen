@@ -414,6 +414,25 @@ describe('writeChart with an embedded workbook', () => {
         expect(formulas.slice(-3)).toEqual(['Sheet1!$AE$1', 'Sheet1!$A$2:$A$3', 'Sheet1!$AE$2:$AE$3']);
     });
 
+    test('a control character is dropped from a label in the cache and in the cell alike', () => {
+        const made = inline('column', [], [{ id: 's-1', name: '', values: [1] }]);
+        // Set after the parse, which already drops them: a spec built in code keeps them.
+        const spec = {
+            ...made,
+            data: {
+                source: 'inline' as const,
+                categories: ['ct\u0001l'],
+                series: [{ id: 's-1', name: 'na\u0002me', values: [1] }],
+            },
+        };
+        const sheet = embeddedChartSheet(spec);
+        if (!sheet) throw new Error('no sheet');
+        expect(sheet.celldata?.map(({ v }) => v?.v)).toEqual(['name', 'ctl', 1]);
+        for (const { formula, cache, cells } of refsAgainstCells(root(writeChart(spec, EMBEDDED)), sheet)) {
+            expect({ formula, cells }).toEqual({ formula, cells: cache });
+        }
+    });
+
     test('the values keep their format in the cells, and the part names its workbook after its text, never to refresh', () => {
         const [, spec] = SPECS[0];
         const value = embeddedChartSheet(spec)?.celldata?.find(({ r, c }) => r === 1 && c === 1)?.v;

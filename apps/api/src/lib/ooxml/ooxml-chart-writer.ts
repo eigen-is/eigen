@@ -25,7 +25,7 @@ import type {
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
 import { parseFill } from '@workspace/lib/vector';
-import { escapeXml } from '@workspace/lib/xml';
+import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { rangeToA1, sheetRefName } from '@workspace/sheet/engine/a1-notation';
 import { DEGREE, solidFillXml } from './drawingml';
 import { A_NS, C_NS, EMU_PER_POINT, R_NS } from './ooxml';
@@ -231,7 +231,8 @@ function embeddedSource(
 }
 
 // The sheet a docx's or pptx's chart embeds as its workbook, laid out as embeddedSource's refs name it: each value in
-// the format its cache carries, a gap no cell. Range data names a workbook's own cells, so it embeds none.
+// the format its cache carries, a gap no cell. A label drops the characters XML can't hold, as its cache does, so the
+// two can't disagree. Range data names a workbook's own cells, so it embeds none.
 export function embeddedChartSheet(spec: ChartSpec): Sheet | undefined {
     if (spec.data.source !== 'inline') return undefined;
     const { categories, series } = spec.data;
@@ -240,8 +241,8 @@ export function embeddedChartSheet(spec: ChartSpec): Sheet | undefined {
     return {
         name: EMBEDDED_SHEET,
         celldata: [
-            ...series.map(({ name }, i) => ({ r: 0, c: seriesColumn(i), v: { v: name } })),
-            ...categories.map((category, r) => ({ r: r + 1, c: 0, v: { v: category } })),
+            ...series.map(({ name }, i) => ({ r: 0, c: seriesColumn(i), v: { v: stripNonXmlChars(name) } })),
+            ...categories.map((category, r) => ({ r: r + 1, c: 0, v: { v: stripNonXmlChars(category) } })),
             ...series.flatMap(({ values }, i) =>
                 values.flatMap((value, r) =>
                     value === null ? [] : [{ r: r + 1, c: seriesColumn(i), v: { v: value, ...number } }],
