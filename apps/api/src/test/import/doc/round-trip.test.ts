@@ -7,7 +7,7 @@ import { readOmml, writeMathml } from '@workspace/math';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
-import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
+import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK, textMetrics } from '../../../lib/document/looks';
 import { chartFigureMedia } from '../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
 import { withSvgFallbacks } from '../../../lib/export/office-image';
@@ -17,7 +17,8 @@ import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
 import { sampleChartParts } from '../../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
-import { importDocxBody } from '../../fixtures/golden-docx';
+import type { DocxParts } from '../../fixtures/golden-docx';
+import { importDocxBody, marksOfType } from '../../fixtures/golden-docx';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
 
@@ -1111,3 +1112,37 @@ function isValid(content: JSONContent[]): boolean {
         return false;
     }
 }
+
+// A Word file imported, written and imported again comes back as the first import read it: what the first import holds
+// is what the docx carries.
+describe('a Word file, imported, written and imported again', () => {
+    const run = (text: string, rPr = '') =>
+        `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t xml:space="preserve">${text}</w:t></w:r>`;
+    const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
+    const twice = async (body: string, parts: DocxParts = {}) => {
+        const first = await importDocxBody(body, parts);
+        const second = docxToPmJson(Buffer.from(writeDocx(first, { title: 'Word', media: [] })));
+        return { first, second };
+    };
+
+    // A size, a heading's style or a note's FootnoteText unlike Eigen's, the runs at the size the node draws in Eigen.
+    test('a run at the size its node draws keeps no size, in a heading, an empty heading and a note', async () => {
+        const h2 = textMetrics('.eigen-prose h2', 10).sizePt;
+        const { first, second } = await twice(
+            [
+                paragraph(
+                    run(`Plan`, `<w:sz w:val="${h2 * 2}"/>`) + run(' big', '<w:sz w:val="40"/>'),
+                    '<w:pStyle w:val="Heading2"/>',
+                ),
+                paragraph('<w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:tab/></w:r>', '<w:pStyle w:val="Heading2"/>'),
+                paragraph(`${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r>`),
+            ].join(''),
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:rPr><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:rPr><w:sz w:val="24"/></w:rPr></w:style>',
+                footnotes: `<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' Small', '<w:sz w:val="20"/>')}${run(' big', '<w:sz w:val="28"/>')}`, '<w:pStyle w:val="FootnoteText"/>')}</w:footnote>`,
+            },
+        );
+        expect(marksOfType(first.json, 'textStyle').map(({ attrs }) => attrs['fontSize'])).toEqual([20, 14]);
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+});

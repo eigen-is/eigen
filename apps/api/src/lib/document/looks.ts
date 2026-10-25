@@ -1,5 +1,5 @@
 import { EIGEN_FONT_NAMES, FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
-import type { TitleType } from '@workspace/lib/docs/eigendoc';
+import type { NormalStyle, TitleType } from '@workspace/lib/docs/eigendoc';
 import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips } from '@workspace/lib/docs/eigendoc';
 import { LIST_FORMATS, LIST_LEVELS } from '../ooxml/wordml';
 import { cssColorToHex } from './colors';
@@ -131,7 +131,8 @@ export const CAPTION_LOOK = {
 
 // A note's text at Google's and Word's footnote size, which eigen-prose.css can't give: the editor lists its notes off
 // the page's prose.
-export const FOOTNOTE_LOOK = { sizePt: FOOTNOTE_FONT_SIZE };
+// Word's FootnoteText, which Google's notes take too: 10 pt, no space after.
+export const FOOTNOTE_LOOK = { sizePt: FOOTNOTE_FONT_SIZE, after: 0 };
 
 type TextLook = { color?: string; italic?: true };
 
@@ -162,6 +163,46 @@ export const TITLE_LOOKS: Record<TitleType, TextLook> = {
 export function nodeLook(type: string, level = 1): TextLook {
     if (type === 'heading') return HEADING_LOOKS[Math.min(level, HEADING_LOOKS.length) - 1] ?? {};
     return type === 'title' || type === 'subtitle' ? TITLE_LOOKS[type] : {};
+}
+
+export function lineHeightPt(value: string, sizePt: number): number {
+    return /^[\d.]+$/.test(value) ? Number(value) * sizePt : cssPt(value, sizePt);
+}
+
+// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do: its size the
+// Normal's.
+export function textMetrics(selector: string, normalPt: number) {
+    const size = proseValueIfSet(selector, 'font-size');
+    const sizePt = size === undefined ? normalPt : cssPt(size, BODY.sizePt);
+    const line = proseValueIfSet(selector, 'line-height') ?? proseValue('.eigen-prose', 'line-height');
+    const tracking = proseValueIfSet(selector, 'letter-spacing');
+    return {
+        sizePt,
+        before: twips(cssPt(proseValue(selector, 'margin-top'), sizePt)),
+        after: twips(cssPt(proseValue(selector, 'margin-bottom'), sizePt)),
+        line: lineHeightPt(line, sizePt),
+        tracking: tracking === undefined ? undefined : twips(cssPt(tracking, sizePt)),
+    };
+}
+
+// What a text node draws with no mark or format of its own, as the docx writer's styles write it: its size in points,
+// its space before and after in twips. A note's paragraph draws Word's FootnoteText over the Normal.
+export function ownTextLook(
+    type: string,
+    level: number,
+    normal: NormalStyle,
+    inNote: boolean,
+): { sizePt: number; before: number; after: number } | undefined {
+    if (inNote) return { sizePt: FOOTNOTE_LOOK.sizePt, before: twips(normal.spaceBefore), after: FOOTNOTE_LOOK.after };
+    if (type === 'paragraph')
+        return { sizePt: normal.size, before: twips(normal.spaceBefore), after: twips(normal.spaceAfter) };
+    const selector =
+        type === 'heading'
+            ? `.eigen-prose h${Math.min(level, HEADING_LOOKS.length)}`
+            : type === 'title' || type === 'subtitle'
+              ? TITLE_SELECTORS[type]
+              : undefined;
+    return selector === undefined ? undefined : textMetrics(selector, normal.size);
 }
 
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };

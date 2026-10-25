@@ -10,6 +10,7 @@ import {
     proseTextLook,
     QUOTE_LOOK,
     TITLE_SELECTORS,
+    textMetrics,
     twips,
     untypedListFormat,
 } from '../../../document/looks';
@@ -27,7 +28,7 @@ import type { Context, Package } from './package';
 import type { RunProps } from './runs';
 import { INLINES, LINE_BREAK, rPrXml, runsXml, textXml } from './runs';
 import type { Styles } from './styles';
-import { HAIRLINE_TWIPS, normalLine, proseTwips, textMetrics } from './styles';
+import { HAIRLINE_TWIPS, normalLine, proseTwips } from './styles';
 import { TABLE_LOOK, tableOf } from './tables';
 
 // Each block as paragraphs and tables, a paragraph's properties written in the ECMA-376 sequence: Word reports a

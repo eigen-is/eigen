@@ -12,15 +12,17 @@ import {
     HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
+    lineHeightPt,
     proseBorder,
     proseColor,
     QUOTE_LOOK,
     TASK_DONE_LOOK,
     TITLE_LOOKS,
     TITLE_SELECTORS,
+    textMetrics,
     twips,
 } from '../../../document/looks';
-import { proseValue, proseValueIfSet } from '../../../document/prose-css';
+import { proseValue } from '../../../document/prose-css';
 import { W_NS } from '../../../ooxml/ooxml';
 import type { StyleId } from '../../../ooxml/wordml';
 import { codeBlockStyle, headingStyleName, JUSTIFICATION, STYLE_NAMES } from '../../../ooxml/wordml';
@@ -31,10 +33,6 @@ import type { RunProps } from './runs';
 import { rPrXml } from './runs';
 
 // Styles, every value from eigen-prose.css.
-
-function lineHeightPt(value: string, sizePt: number): number {
-    return /^[\d.]+$/.test(value) ? Number(value) * sizePt : cssPt(value, sizePt);
-}
 
 // A multiple of the font's own line height, so the pitch is the CSS one: Google Docs reads every atLeast as single.
 function autoLine(linePt: number, sizePt: number, font: string): number {
@@ -49,22 +47,6 @@ export function normalLine(lineSpacing: number, normal: NormalStyle): number {
 // A length an element in the body text takes, in twips.
 export function proseTwips(selector: string, property: string): number {
     return twips(cssPt(proseValue(selector, property), BODY.sizePt));
-}
-
-// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do: its size the
-// Normal's.
-export function textMetrics(selector: string, normalPt: number) {
-    const size = proseValueIfSet(selector, 'font-size');
-    const sizePt = size === undefined ? normalPt : cssPt(size, BODY.sizePt);
-    const line = proseValueIfSet(selector, 'line-height') ?? proseValue('.eigen-prose', 'line-height');
-    const tracking = proseValueIfSet(selector, 'letter-spacing');
-    return {
-        sizePt,
-        before: twips(cssPt(proseValue(selector, 'margin-top'), sizePt)),
-        after: twips(cssPt(proseValue(selector, 'margin-bottom'), sizePt)),
-        line: lineHeightPt(line, sizePt),
-        tracking: tracking === undefined ? undefined : twips(cssPt(tracking, sizePt)),
-    };
 }
 
 export type Styles = Map<StyleId, StyleDef>;
@@ -327,7 +309,7 @@ export function styleDefinitions(normal: NormalStyle): StyleDef[] {
             uiPriority: 99,
             semiHidden: true,
             unhideWhenUsed: true,
-            pPr: { spacing: { after: 0, line: 240 } },
+            pPr: { spacing: { after: FOOTNOTE_LOOK.after, line: 240 } },
             rPr: { size: halfPoints(FOOTNOTE_LOOK.sizePt) },
         },
         {

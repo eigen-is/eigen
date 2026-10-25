@@ -16,7 +16,7 @@ import {
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
+import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, ownTextLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
@@ -485,11 +485,21 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         const halfTexts = half.filter(
             (piece) => piece.kind === 'node' && piece.node.type === 'text' && piece.node.text?.trim(),
         );
+        // An empty heading is the blank line Word shows, not a heading's height; an empty title stays one, as Word
+        // draws it at the title's height.
+        const kind: Role = visible
+            ? role
+            : isRule
+              ? { kind: 'hr' }
+              : role.kind === 'heading'
+                ? { kind: 'paragraph' }
+                : role;
+        // A size the node draws in Eigen is no mark: the writer's style holds it, so it would come back as none.
+        const own = ownTextLook(kind.kind, kind.kind === 'heading' ? kind.level : 1, normal, scope.story === 'note');
+        if (own) for (const node of content) dropOwn(node, 'fontSize', own.sizePt);
         const para: Para = {
             kind: 'para',
-            // An empty heading is the blank line Word shows, not a heading's height; an empty title stays one, as Word
-            // draws it at the title's height.
-            role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
+            role: kind,
             inlines: content,
             textAlign: textAlignOf(props.jc, props.bidi),
             continued: numbered,
@@ -629,15 +639,20 @@ function trimStart(inlines: JSONContent[]): void {
 }
 
 function stripLook(pieces: Piece[], toggle: string | undefined, color: string): void {
-    const hex = markColor(color);
     for (const piece of pieces) {
-        if (piece.kind !== 'node' || !piece.node.marks) continue;
-        piece.node.marks = piece.node.marks.flatMap((mark) => {
-            if (mark.type === toggle) return [];
-            if (mark.type !== 'textStyle' || mark.attrs?.['color'] !== hex) return [mark];
-            const attrs = { ...mark.attrs, color: null };
-            return Object.values(attrs).some((value) => value !== null) ? [{ ...mark, attrs }] : [];
-        });
-        if (piece.node.marks.length === 0) delete piece.node.marks;
+        if (piece.kind !== 'node') continue;
+        if (piece.node.marks && toggle) piece.node.marks = piece.node.marks.filter((mark) => mark.type !== toggle);
+        dropOwn(piece.node, 'color', markColor(color));
     }
+}
+
+// A font mark's value the node draws itself goes, and the mark with it when nothing else is left.
+function dropOwn(node: JSONContent, key: 'color' | 'fontSize', value: string | number): void {
+    if (!node.marks) return;
+    node.marks = node.marks.flatMap((mark) => {
+        if (mark.type !== 'textStyle' || mark.attrs?.[key] !== value) return [mark];
+        const attrs = { ...mark.attrs, [key]: null };
+        return Object.values(attrs).some((held) => held !== null) ? [{ ...mark, attrs }] : [];
+    });
+    if (node.marks.length === 0) delete node.marks;
 }
