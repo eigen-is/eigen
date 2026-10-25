@@ -1,4 +1,5 @@
-import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES, SHEET_CHART_KEYED_PART_KEYS } from '../charts/spec';
+import { CHART_MAX_SIDE, MAX_CHART_SPEC_ENTRIES } from '../charts/limits';
+import { SHEET_CHART_KEYED_PART_KEYS } from '../charts/spec';
 import { isRecord } from '../core/guards';
 import { generateKeyBetween, orderByFractionalIndex, syncInvalidIndices } from '../vector/fractional-index';
 import type { Box } from '../vector/geometry';

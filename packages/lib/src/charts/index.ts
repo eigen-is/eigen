@@ -1,36 +1,31 @@
+export { GRIDLINE_OPACITY } from './cartesian';
+export { applyChartSpecChange, chartPointMoves, chartSpecChange } from './change';
+export {
+    CHART_DEFAULT_SIZE,
+    chartColor,
+    chartPointColor,
+    chartSeriesStyle,
+    DEFAULT_CHART_FONT,
+    DEFAULT_CHART_SERIES_STYLE,
+    defaultChartSpec,
+    sampleChartSpec,
+} from './defaults';
 export {
     CHART_MESSAGES,
     chartPointCount,
-    GRIDLINE_OPACITY,
     isInlineSketchCapped,
     isSketchCapped,
     layoutChart,
     layoutChartMessage,
     MAX_SKETCH_POINTS,
 } from './layout';
-export { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from './look';
 export {
-    applyChartSpecChange,
-    CHART_DEFAULT_SIZE,
     CHART_MAX_SIDE,
-    chartColor,
-    chartLabel,
-    chartPointColor,
     chartPointIndex,
-    chartPointMoves,
-    chartSearchText,
-    chartSeriesStyle,
-    chartSpecChange,
-    chartSpecTexts,
-    chartSpecWrites,
-    DEFAULT_CHART_FONT,
-    DEFAULT_CHART_SERIES_STYLE,
-    defaultChartSpec,
     exceedsChartSpecBytes,
     exceedsChartSpecDepth,
     exceedsInlineGridLimits,
     fitsInlineGrid,
-    holdsUnknownChartData,
     INLINE_GRID_MAX_CATEGORIES,
     INLINE_GRID_MAX_SERIES,
     isChartSeriesId,
@@ -41,13 +36,18 @@ export {
     MAX_CHART_SPEC_BYTES,
     MAX_CHART_SPEC_DEPTH,
     MAX_CHART_SPEC_ENTRIES,
-    mapChartSpecParts,
     newChartSeriesId,
+} from './limits';
+export { chartPaintOf, FLAT_CHART_LOOK, readChartLook } from './look';
+export { chartLabel, chartSearchText, holdsUnknownChartData } from './resolve';
+export {
+    chartSpecTexts,
+    chartSpecWrites,
+    mapChartSpecParts,
     newChartSpecParts,
     newSheetChartSpecParts,
     parseChartSpec,
     readChartSpec,
-    sampleChartSpec,
     sheetChartSpecWrites,
 } from './spec';
 export { formatTickValue } from './ticks';
