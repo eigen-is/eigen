@@ -451,6 +451,20 @@ function readPictures(bytes: Uint8Array, maxMediaBytes = 1024 * 1024) {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 describe('a worksheet picture', () => {
+    // As the docx reader reads one, the branch the reader understands, here the fallback.
+    test('a blipFill in mc:AlternateContent is the branch the reader understands', () => {
+        const wrapped = pic('rIdP').replace(
+            /<xdr:blipFill>.*<\/xdr:blipFill>/,
+            (blipFill) =>
+                `<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" Requires="a14">${blipFill.replace('rIdP', 'rIdX')}</mc:Choice><mc:Fallback>${blipFill}</mc:Fallback></mc:AlternateContent>`,
+        );
+        const { images, media, warnings } = readPictures(
+            pictures(twoCell([0, 0, 1, 0], [2, 0, 5, 0], wrapped), [['rIdP', '../media/image1.png', PIXEL_PNG]]),
+        );
+        expect([images.length, media.length]).toEqual([1, 1]);
+        expect(warnings).toEqual([]);
+    });
+
     test('a two-cell, a one-cell and an absolute anchor each place it, painted in file order among the charts', () => {
         const { sheet, images, media, warnings } = readPictures(
             pictures(
