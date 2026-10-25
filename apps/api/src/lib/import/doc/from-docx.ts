@@ -1,3 +1,5 @@
+// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform process.
+
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
@@ -7,18 +9,17 @@ import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import type { TransformWarning } from '../../document/transform/protocol';
 import { lossCounter } from '../../document/transform/protocol';
+import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
+import type { ImportedMedia } from '../image-types';
+import { importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { CHARS_PER_UNIT, MAX_DOCX_WEIGHT, readPackage } from './package';
 import { createReader, readBand, readDocument } from './paragraphs';
 
-// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform process.
-
-export type DocxImage = {
-    name: string;
-    data: Buffer;
-    contentType: string;
-};
+// The upload cap, which bounds the pictures' bytes as an upload of each would be bounded; links into this instance
+// come back root-relative with the public origin.
+export type DocxOptions = { publicOrigin: string | undefined; maxMediaBytes: number };
 
 // The update holds every character, a string attribute's too (a link's href is spelled out for every text node it
 // marks), and a client opens it in one WebSocket message of at most 128 MB: three bytes a character at most. The
@@ -28,38 +29,43 @@ export const MAX_DOCX_TEXT = 16_000_000;
 // A TableMap slot, a column of a row however spanned or padded, costs about 16 bytes, a unit 1.3 KB and more.
 const SLOTS_PER_UNIT = 64;
 
-// The doc as JSON, for the audit and the tests; the import encodes the doc itself, with no copy between.
+// The doc as JSON, for the audit and the tests, its pictures bounded by the zip cap alone; the import encodes the doc
+// itself, with no copy between.
 export function docxToPmJson(
     buffer: Buffer,
-    options: { publicOrigin?: string } = {},
+    { publicOrigin }: { publicOrigin?: string } = {},
 ): {
     json: JSONContent;
     bands: Partial<Record<BandRoot, JSONContent>>;
     page: PageSetup;
     style: NormalStyle;
-    images: DocxImage[];
+    images: ImportedMedia[];
     warnings: TransformWarning[];
 } {
-    const { doc, bands, page, style, images, warnings } = readDocx(buffer, options);
+    const { doc, bands, page, style, images, warnings } = readDocx(buffer, {
+        publicOrigin,
+        maxMediaBytes: MAX_DECOMPRESSED_BYTES,
+    });
     const json = Object.fromEntries(Object.entries(bands).map(([root, band]) => [root, band.toJSON()]));
     return { json: doc.toJSON(), bands: json, page, style, images, warnings };
 }
 
 export function readDocx(
     buffer: Buffer,
-    options: { publicOrigin?: string } = {},
+    options: DocxOptions,
 ): {
     doc: Node;
     bands: Partial<Record<BandRoot, Node>>;
     page: PageSetup;
     style: NormalStyle;
-    images: DocxImage[];
+    images: ImportedMedia[];
     warnings: TransformWarning[];
 } {
     try {
         const losses = lossCounter();
         const pkg = readPackage(buffer, losses.lost);
-        const reader = createReader(pkg, losses.lost, options.publicOrigin);
+        const files = importMedia('docx', pkg.readMedia, options.maxMediaBytes);
+        const reader = createReader(pkg, files, losses.lost, options.publicOrigin);
         const content = readDocument(reader);
         // A band's schema holds none of BAND_EXCLUDED_NODES: each keeps its text.
         const withoutExcluded = (node: JSONContent): JSONContent[] => {
@@ -106,16 +112,9 @@ export function readDocx(
             node.descendants((child) => {
                 if (child.type.name === 'figure') named.add(child.attrs['mediaName']);
             });
-        const kept = reader.images.filter((image) => named.has(image.name));
-        const images = kept.flatMap(({ name, path, contentType }): DocxImage[] => {
-            const data = pkg.readMedia(path);
-            // A part that doesn't read, or one no browser draws, is a figure showing its alt text in a broken image.
-            if (!data || UNSHOWN_IMAGE_TYPES.has(contentType)) losses.lost('images-unshown');
-            // A view of the bytes read, not a copy of them: a file may hold 200 MB of media.
-            return data
-                ? [{ name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) }]
-                : [];
-        });
+        const images = files.media.filter((image) => named.has(image.name));
+        // No browser draws these: the figure shows its alt text in a broken image.
+        for (const image of images) if (UNSHOWN_IMAGE_TYPES.has(image.contentType)) losses.lost('images-unshown');
         return { doc, bands, page: reader.page, style: reader.normal, images, warnings: losses.warnings() };
     } catch (error) {
         throw importError(error, 'docx');

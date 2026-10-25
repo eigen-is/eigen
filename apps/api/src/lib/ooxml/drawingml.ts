@@ -1,13 +1,13 @@
+// DrawingML, the drawing vocabulary docx, xlsx and pptx share: a theme's colours, a colour element with its
+// transforms, a picture's blip both ways and its part's extension, text and line vocabulary both ways, a text body's
+// plain text, and the theme the writers write.
+
 import type { Arrowhead, StrokeStyle, TextAlign, VerticalAlign } from '@workspace/lib/vector';
 import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
 import type { XmlElement } from '../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../core/xml';
 import { A_NS, ASVG_NS, R_NS } from './ooxml';
-
-// DrawingML, the drawing vocabulary docx, xlsx and pptx share: a theme's colours, a colour element with its
-// transforms, a picture's blip both ways, text and line vocabulary both ways, a text body's plain text, and the theme
-// the writers write.
 
 // A theme's colours by slot name (dk1, lt1, accent1…), each '#rrggbb'.
 export type ColorScheme = ReadonlyMap<string, string>;
@@ -288,6 +288,23 @@ function fromHsl(hue: number, sat: number, lum: number): [number, number, number
                     : [chroma, 0, x];
     return [r + m, g + m, b + m];
 }
+
+// The image types a picture part is read or written as, each under its own part extension. WMF and EMF are among them
+// though no browser or sharp draws them: a docx import keeps its figure, with its alt text in a broken image.
+export const IMAGE_EXTENSION_BY_MIME = new Map([
+    ['image/png', 'png'],
+    ['image/jpeg', 'jpeg'],
+    ['image/gif', 'gif'],
+    ['image/webp', 'webp'],
+    ['image/svg+xml', 'svg'],
+    ['image/tiff', 'tiff'],
+    ['image/bmp', 'bmp'],
+    ['image/x-wmf', 'wmf'],
+    ['image/x-emf', 'emf'],
+]);
+
+// image/jpg is a common misspelling of a part's declared type.
+export const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
 
 // A picture's blip: its raster, and an SVG's own file as the svgBlip Word, PowerPoint and LibreOffice draw in its place;
 // effects go first, as CT_Blip orders them before its extensions.

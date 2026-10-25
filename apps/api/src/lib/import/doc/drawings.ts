@@ -1,10 +1,14 @@
+// A docx's drawings as the doc holds them: pictures as figures, placed and sized as Word places them, charts as chart
+// nodes or the words for one left out, and SmartArt as its text. The paragraph walk calls it for each w:drawing and
+// VML shape it meets.
+
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
 import { isFigureFrameNode, pageTwips, ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
-import { blipEmbeds } from '../../ooxml/drawingml';
+import { blipEmbeds, IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../../ooxml/drawingml';
 import {
     A_NS,
     C_NS,
@@ -22,7 +26,7 @@ import {
 } from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, chartCost, chartPart, droppedChart, readChart } from '../../ooxml/ooxml-chart';
 import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
-import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS, MIME_ALIASES } from '../image-types';
+import { IMAGE_TYPES, mediaPart } from '../image-types';
 import type { Item, Para } from './assemble';
 import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
 import { descendants, int } from './package';
@@ -48,20 +52,13 @@ function imageType(reader: Reader, path: string): string | undefined {
 // sharp has no loader for these, so no screen preview shows them.
 export const UNSHOWN_IMAGE_TYPES = new Set(['image/bmp', 'image/x-wmf', 'image/x-emf']);
 
-export type DocxImagePart = { name: string; path: string; contentType: string };
-
-// One media file per image part, named in encounter order; a part past MAX_MEDIA_PARTS is left out, as a missing one is.
+// One media file per image part, named in encounter order. A part that isn't there or of no image type is no picture;
+// one whose bytes don't read, or past the pictures' caps, is left out and counted.
 function mediaName(reader: Reader, path: string): string | undefined {
-    const known = reader.imageNames.get(path);
-    if (known) return known;
-    if (reader.images.length >= MAX_MEDIA_PARTS) return undefined;
-    const contentType = imageType(reader, path);
-    const extension = contentType && IMAGE_EXTENSION_BY_MIME.get(contentType);
-    if (!contentType || !extension || !reader.pkg.zip.entry(path)) return undefined;
-    const name = reader.nameMedia(reader.images.length + 1, extension);
-    reader.images.push({ name, path, contentType });
-    reader.imageNames.set(path, name);
-    return name;
+    const part = mediaPart(reader.pkg.zip, path, imageType(reader, path), IMAGE_TYPES);
+    const name = part && reader.files.name(part);
+    if (part && !name) reader.lost('images-dropped');
+    return name ?? undefined;
 }
 
 function partPath(id: string | undefined, scope: Scope): string | undefined {

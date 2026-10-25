@@ -2,13 +2,14 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
-import { docxToPmJson } from '../../../lib/import/doc/from-docx';
+import { docxToPmJson, readDocx } from '../../../lib/import/doc/from-docx';
 import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { C_NS } from '../../../lib/ooxml/ooxml';
 import * as ooxmlChart from '../../../lib/ooxml/ooxml-chart';
 import { CHART_CONTENT_TYPE, CHART_NOT_IMPORTED } from '../../../lib/ooxml/ooxml-chart';
 import {
     buildDocxWithBands,
+    buildDocxWithBody,
     chartParts,
     chartRun,
     GOLDEN_DOCX_IMAGE_RUN,
@@ -64,7 +65,7 @@ describe('media', () => {
         ]);
     });
 
-    test(`past ${MAX_MEDIA_PARTS} parts a picture is left out, as a missing part is`, async () => {
+    test(`past ${MAX_MEDIA_PARTS} parts a picture is left out and counted`, async () => {
         const count = MAX_MEDIA_PARTS + 2;
         const ids = Array.from({ length: count }, (_, i) => i + 1);
         const { json, images, warnings } = await importDocxBody(
@@ -77,7 +78,22 @@ describe('media', () => {
             },
         );
         expect([images.length, nodesOfType(json, 'figure').length]).toEqual([MAX_MEDIA_PARTS, MAX_MEDIA_PARTS]);
-        expect(warnings).toEqual([]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
+    });
+
+    test('past the upload cap in bytes a picture is left out and counted, the ones before it kept', async () => {
+        const { doc, images, warnings } = readDocx(
+            Buffer.from(
+                await buildDocxWithBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
+                    rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/a.png"/><Relationship Id="rId10" Type="${IMAGE_REL}" Target="media/b.png"/>`,
+                    media: { 'word/media/a.png': BYTES, 'word/media/b.png': BYTES },
+                }),
+            ),
+            { publicOrigin: undefined, maxMediaBytes: BYTES.length + 1 },
+        );
+        expect(images.map(({ name }) => unprefixed(name))).toEqual(['image-1.png']);
+        expect(nodesOfType(doc.toJSON(), 'figure')).toHaveLength(1);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 
     test('an SVG wins over its PNG fallback', async () => {

@@ -67,6 +67,7 @@ function makeDocImportRequest(directive: TestDirective = {}): TestRequest {
         sourceFormat: 'docx',
         targetType: 'eigendoc',
         publicOrigin: undefined,
+        maxMediaBytes: 0,
         data: new ArrayBuffer(0),
         test: directive,
     };

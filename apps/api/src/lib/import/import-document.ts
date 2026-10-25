@@ -1,3 +1,7 @@
+// Import into an open document and Convert to a new one, for xlsx, docx and pptx files: the main thread's half, which
+// admits the job, hands the bytes to the transform process, then writes the pictures and commits what came back.
+// The upload routes call it.
+
 import type { ConvertTarget, DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
 import {
     CONVERT_SOURCES,
@@ -18,6 +22,7 @@ import { commitEigendocImport } from '../document/doc';
 import { appendSheetsToYjs, writeSheetsSnapshotToYjs } from '../document/sheets';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
 import type {
+    DocImportJob,
     DocImportWorkerResult,
     ImportTransformJob,
     SheetsImportJob,
@@ -65,11 +70,14 @@ function importDocxUpdate(
 ): Promise<DocImportWorkerResult & { warnings: TransformWarning[] }> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'docx');
-    return runImportToDocumentUpdate(
-        { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', publicOrigin: getPublicOrigin() },
-        toTransferableBuffer(buffer),
-        { signal },
-    );
+    const job: DocImportJob = {
+        kind: 'import',
+        sourceFormat: 'docx',
+        targetType: 'eigendoc',
+        publicOrigin: getPublicOrigin(),
+        maxMediaBytes: getMaxUploadSize(),
+    };
+    return runImportToDocumentUpdate(job, toTransferableBuffer(buffer), { signal });
 }
 
 // The upload cap bounds the pictures' inflated bytes too, as an upload of each would be bounded.

@@ -11,8 +11,8 @@ import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK } from '../../../lib/docume
 import { chartFigureMedia } from '../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
 import { withSvgFallbacks } from '../../../lib/export/office-image';
-import type { DocxImage } from '../../../lib/import/doc/from-docx';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
+import type { ImportedMedia } from '../../../lib/import/image-types';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
 import { sampleChartParts } from '../../fixtures/chart-parts';
@@ -28,7 +28,7 @@ const ORIGIN = 'https://eigen.example';
 type Mark = NonNullable<JSONContent['marks']>[number];
 
 // Each imported media name is the source's whose bytes it holds.
-function sourceNames(images: DocxImage[]): Map<string, string> {
+function sourceNames(images: ImportedMedia[]): Map<string, string> {
     const media = buildAllFeaturesDocMedia();
     return new Map(
         images.flatMap((image) => {

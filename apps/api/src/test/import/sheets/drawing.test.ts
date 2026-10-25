@@ -10,12 +10,12 @@ import {
     SHEET_DEFAULT_COL_WIDTH,
 } from '@workspace/lib/sheets';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
-import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
+import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { IMPORT_MESSAGES } from '../../../lib/import/messages';
 import { CHART_SHEET_SIZE, partsText, placeDrawings, readDrawing } from '../../../lib/import/sheets/drawing';
 import { readXlsx } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
-import { drawingTheme } from '../../../lib/ooxml/drawingml';
+import { drawingTheme, IMAGE_EXTENSION_BY_MIME } from '../../../lib/ooxml/drawingml';
 import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
 import { openPackage, optional } from '../../../lib/ooxml/opc';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';

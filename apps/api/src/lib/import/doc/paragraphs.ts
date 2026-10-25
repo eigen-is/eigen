@@ -1,3 +1,6 @@
+// The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
+// text boxes and notes; assemble.ts turns the items into blocks.
+
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
 import { DOCUMENT_FONT, EIGEN_FONT_NAMES, fontLineHeight, readFontSize } from '@workspace/lib/constants/fonts';
@@ -23,13 +26,13 @@ import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES, textAlignOf } from '../../ooxml/wordml';
-import { mediaNamer } from '../image-types';
+import type { MediaFiles } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import type { Item, Para } from './assemble';
 import { build, isFigureOnly, isWhitespace } from './assemble';
 import type { FontTable, Theme } from './docx-fonts';
 import { byFace, fontMark, isMonospaceFont, readFontTable, readTheme } from './docx-fonts';
-import type { DocxChart, DocxImagePart } from './drawings';
+import type { DocxChart } from './drawings';
 import type { Numbering } from './numbering';
 import { readNumbering } from './numbering';
 import type { DocxPackage } from './package';
@@ -40,19 +43,14 @@ import type { DocxRunProps, ParaProps, Role } from './styles';
 import { isFill, isLightNeutral, markColor, mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
 import { readTable } from './tables';
 
-// The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
-// text boxes and notes; assemble.ts turns the items into blocks.
-
 export type Reader = {
     pkg: DocxPackage;
     theme: Theme;
     fontTable: FontTable;
     styles: Styles;
     numbering: Numbering;
-    // A random prefix per import, so a replace's pictures land beside the ones a restored version names.
-    nameMedia: (index: number, extension: string) => string;
-    images: DocxImagePart[];
-    imageNames: Map<string, string>;
+    // Named per import, so a replace's pictures land beside the ones a restored version names.
+    files: MediaFiles;
     // Each note by type and id, its part beside it, and each as read at its depth: a note is read once per depth
     // however often it is referenced. The notes being read, outermost first.
     noteElements: Map<string, { part: Part; note: XmlElement }>;
@@ -94,7 +92,12 @@ export type Scope = {
     fill?: string;
 };
 
-export function createReader(pkg: DocxPackage, lost: LossCounter['lost'], publicOrigin: string | undefined): Reader {
+export function createReader(
+    pkg: DocxPackage,
+    files: MediaFiles,
+    lost: LossCounter['lost'],
+    publicOrigin: string | undefined,
+): Reader {
     const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
     const lang = wChild(defaults, 'lang');
     const theme = readTheme(pkg.theme, { bidi: w(lang, 'bidi'), eastAsia: w(lang, 'eastAsia') });
@@ -120,9 +123,7 @@ export function createReader(pkg: DocxPackage, lost: LossCounter['lost'], public
         fontTable,
         styles,
         numbering: readNumbering(pkg.numbering, styles),
-        nameMedia: mediaNamer('docx'),
-        images: [],
-        imageNames: new Map(),
+        files,
         noteElements: noteElements(pkg),
         notes: new Map(),
         openNotes: [],

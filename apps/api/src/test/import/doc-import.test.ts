@@ -11,7 +11,7 @@ import { getHome } from '../../lib/home/get-home';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { importDocxToEigendocUpdate } from '../../lib/import/doc/transform';
 import { importIntoDocument } from '../../lib/import/import-document';
-import { openZip, writeZip } from '../../lib/ooxml/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../lib/ooxml/zip';
 import { getUserById } from '../../lib/user';
 import { seedEigendoc } from '../fixtures/golden-documents';
 import {
@@ -536,7 +536,10 @@ describe('docx import resource guards', () => {
 
         let error: unknown;
         try {
-            importDocxToEigendocUpdate(toTransferableBuffer(bomb), undefined);
+            importDocxToEigendocUpdate(toTransferableBuffer(bomb), {
+                publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
+            });
         } catch (e) {
             error = e;
         }
@@ -559,7 +562,7 @@ describe('docx import errors', () => {
     async function importError(data: ArrayBuffer): Promise<[number, string]> {
         let error: unknown;
         try {
-            importDocxToEigendocUpdate(data, undefined);
+            importDocxToEigendocUpdate(data, { publicOrigin: undefined, maxMediaBytes: MAX_DECOMPRESSED_BYTES });
         } catch (e) {
             error = e;
         }

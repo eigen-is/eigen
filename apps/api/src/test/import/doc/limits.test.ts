@@ -17,12 +17,11 @@ import { C_NS, M_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/ooxml/ooxml-chart';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
 import { LIST_LEVELS } from '../../../lib/ooxml/wordml';
-import { openZip, ZipReader } from '../../../lib/ooxml/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip, ZipReader } from '../../../lib/ooxml/zip';
 import {
     buildDocxWithBody,
     chartParts,
     chartRun,
-    GOLDEN_DOCX_IMAGE_NAME,
     GOLDEN_DOCX_IMAGE_RUN,
     importDocxBody,
     marksOfType,
@@ -117,7 +116,7 @@ function measuredImport(
         let result;
         try {
             if (process.env.THROUGH === 'transform') {
-                importDocxToEigendocUpdate(data, undefined);
+                importDocxToEigendocUpdate(data, { publicOrigin: undefined, maxMediaBytes: 200 * 1024 * 1024 });
                 result = {};
             } else {
                 const { json } = docxToPmJson(Buffer.from(data));
@@ -1065,7 +1064,7 @@ describe('figures and media', () => {
     });
 
     // As a damaged optional part costs only its looks.
-    test('a damaged image entry is not stored and counts as unshown; the figure and the rest import', async () => {
+    test('a damaged image entry is left out and counted as dropped; the rest imports', async () => {
         const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)))));
         const input = build(
             golden.names().map((name) => {
@@ -1075,10 +1074,8 @@ describe('figures and media', () => {
         );
         const { json, images, warnings } = docxToPmJson(input);
         expect(images).toEqual([]);
-        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual([
-            expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME),
-        ]);
-        expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+        expect(nodesOfType(json, 'figure')).toEqual([]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 
     test("a figure in a block the schema refuses goes with it, and its media isn't stored", async () => {
@@ -1208,6 +1205,7 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
                 sourceFormat: 'docx',
                 targetType: 'eigendoc',
                 publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
                 data: await buildDocxWithBody(body),
             },
             { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
@@ -1258,6 +1256,7 @@ describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the m
                 sourceFormat: 'docx',
                 targetType: 'eigendoc',
                 publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
             } as const;
             const error = await runImportToDocumentUpdate(job, docx, {}).catch((reason: unknown) => reason);
             expect(error).toBeInstanceOf(ApiError);
@@ -1285,6 +1284,7 @@ describe.skipIf(!runSlow)('the Yjs conversion in the Worker', () => {
                 sourceFormat: 'docx',
                 targetType: 'eigendoc',
                 publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
                 data: await buildDocxWithBody(body),
             },
             { ...TRANSFORM_LIMITS.import, priority: 'foreground' },

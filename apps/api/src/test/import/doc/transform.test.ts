@@ -10,7 +10,10 @@ import * as Y from 'yjs';
 import { ApiError } from '../../../lib/core/errors';
 import { docExtensions, docSchema } from '../../../lib/document/doc-schema';
 import { asOpened, importDocxToEigendocUpdate, MAX_TABLE_REPAIRS } from '../../../lib/import/doc/transform';
+import { MAX_DECOMPRESSED_BYTES } from '../../../lib/ooxml/zip';
 import { buildDocxWithBands, buildDocxWithBody, nodesOfType } from '../../fixtures/golden-docx';
+
+const JOB = { publicOrigin: undefined, maxMediaBytes: MAX_DECOMPRESSED_BYTES };
 
 // An imported doc is stored as the editor leaves it on open: a first open that pads a table or appends a paragraph
 // writes Yjs updates nobody typed, and two people opening it together write them twice.
@@ -19,7 +22,7 @@ const editor = new Editor({ extensions: docExtensions(), content: { type: 'doc',
 
 function stored(data: ArrayBuffer): JSONContent {
     const ydoc = new Y.Doc();
-    Y.applyUpdate(ydoc, new Uint8Array(importDocxToEigendocUpdate(data, undefined).update));
+    Y.applyUpdate(ydoc, new Uint8Array(importDocxToEigendocUpdate(data, JOB).update));
     return yXmlFragmentToProseMirrorRootNode(ydoc.getXmlFragment('default'), editor.schema).toJSON();
 }
 
@@ -44,7 +47,7 @@ describe('an imported doc is stored as the editor leaves it on open', () => {
             { id: 'h1', kind: 'header', xml: table([cell('A') + cell('B') + cell('C')]) },
         ]);
         const ydoc = new Y.Doc();
-        Y.applyUpdate(ydoc, new Uint8Array(importDocxToEigendocUpdate(data, undefined).update));
+        Y.applyUpdate(ydoc, new Uint8Array(importDocxToEigendocUpdate(data, JOB).update));
         const header = yXmlFragmentToProseMirrorRootNode(ydoc.getXmlFragment('header'), editor.schema).toJSON();
         expect((header.content ?? []).map((node: JSONContent) => node.type)).toEqual(['table', 'paragraph']);
         expect(opened(header)).toEqual(header);
@@ -175,7 +178,7 @@ describe('a slip converting the doc is refused as the reader refuses one', () =>
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
             const error = await Promise.resolve()
-                .then(() => importDocxToEigendocUpdate(docx, undefined))
+                .then(() => importDocxToEigendocUpdate(docx, JOB))
                 .catch((reason: unknown) => reason);
             expect(error).toBeInstanceOf(ApiError);
             expect(error).toMatchObject({ status, message });
@@ -195,7 +198,7 @@ describe('a slip converting the doc is refused as the reader refuses one', () =>
         });
         try {
             const error = await Promise.resolve()
-                .then(() => importDocxToEigendocUpdate(docx, undefined))
+                .then(() => importDocxToEigendocUpdate(docx, JOB))
                 .catch((reason: unknown) => reason);
             expect(error).toBe(outOfMemory);
         } finally {
@@ -212,7 +215,7 @@ describe('a slip converting the doc is refused as the reader refuses one', () =>
         });
         try {
             const error = await Promise.resolve()
-                .then(() => importDocxToEigendocUpdate(docx, undefined))
+                .then(() => importDocxToEigendocUpdate(docx, JOB))
                 .catch((reason: unknown) => reason);
             expect(error).toBe(outOfMemory);
         } finally {

@@ -1,3 +1,6 @@
+// The docx import's step in the transform process: the reader's doc and bands to one Yjs update, as the editor
+// leaves them on open.
+
 import type { Node } from '@tiptap/pm/model';
 import { EditorState } from '@tiptap/pm/state';
 import { fixTables, TableMap } from '@tiptap/pm/tables';
@@ -5,7 +8,7 @@ import { prosemirrorToYDoc, prosemirrorToYXmlFragment } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
-import type { DocImportWorkerResult, TransformWarning } from '../../document/transform/protocol';
+import type { DocImportJob, DocImportWorkerResult, TransformWarning } from '../../document/transform/protocol';
 import { toTransferableBuffer, toTransferableMedia } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { readDocx } from './from-docx';
@@ -14,9 +17,9 @@ import { readDocx } from './from-docx';
 // commits the update and writes the images through Mount.
 export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
-    publicOrigin: string | undefined,
+    job: Pick<DocImportJob, 'publicOrigin' | 'maxMediaBytes'>,
 ): DocImportWorkerResult & { warnings: TransformWarning[] } {
-    const { doc, bands, page, style, images, warnings } = readDocx(Buffer.from(data), { publicOrigin });
+    const { doc, bands, page, style, images, warnings } = readDocx(Buffer.from(data), job);
     let update: Uint8Array;
     try {
         // The bands ride in the update beside the body; the commit clears every root before it applies.
