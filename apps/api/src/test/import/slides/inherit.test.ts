@@ -530,7 +530,7 @@ describe('backgrounds', () => {
         );
         expect(deck.slides.map((slide) => slide.background)).toEqual([null, null]);
         expect(deck.media).toEqual([]);
-        expect(deck.warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+        expect(deck.warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 
     test("a background picture the deck can't show is none, and counted; a bgRef's picture is named by the theme", () => {
@@ -545,7 +545,7 @@ describe('backgrounds', () => {
         });
         expect(emf.slides[0].background).toBeNull();
         expect(emf.media).toEqual([]);
-        expect(emf.warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+        expect(emf.warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
 
         const theme = THEME.replace(
             '<a:bgFillStyleLst>',
@@ -578,7 +578,7 @@ describe('backgrounds', () => {
             const deck = themed(target);
             expect(deck.slides[0].background).toBeNull();
             expect(deck.media).toEqual([]);
-            expect(deck.warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+            expect(deck.warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
         }
     });
 });

@@ -1,13 +1,14 @@
+// The Open Packaging Conventions every OOXML format shares: the package, a part's relationships and the part names they
+// resolve to, read and written.
+
 import { escapeXml } from '@workspace/lib/xml';
 import { ApiError } from '../core/errors';
 import type { XmlElement } from '../core/xml';
 import { hasXmlName, XmlError, xmlElements } from '../core/xml';
+import { budget } from './budget';
 import { CONTENT_TYPES_NS, CORE_PROPERTIES_NS, DC_NS, PACKAGE_RELATIONSHIPS_NS, parseOoxml, R_NS } from './ooxml';
 import type { ZipReader, ZipWriteEntry } from './zip';
 import { openZip, writeZip, ZipError } from './zip';
-
-// The Open Packaging Conventions every OOXML format shares: the package, a part's relationships and the part names they
-// resolve to, read and written.
 
 // Read, an internal target is the part name it resolves to; written, it is the target as the source part names it.
 export type Relationship = { type: string; target: string; external?: boolean };
@@ -125,7 +126,8 @@ export function isEncryptedPackage(bytes: Uint8Array): boolean {
 export function openPackage(bytes: Uint8Array, messages: PackageMessages): OoxmlPackage {
     if (isEncryptedPackage(bytes)) throw new ApiError(400, messages.passwordProtected);
     const zip = openZip(bytes);
-    const budget = { bytes: MAX_PACKAGE_XML_BYTES, tags: MAX_PACKAGE_XML_TAGS };
+    const parsedBytes = budget(MAX_PACKAGE_XML_BYTES, messages.tooLarge);
+    const parsedTags = budget(MAX_PACKAGE_XML_TAGS, messages.tooLarge);
     const parsed = new Map<string, XmlElement | undefined>();
     const failed = new Map<string, unknown>();
     const part = (path: string): XmlElement | undefined => {
@@ -133,12 +135,11 @@ export function openPackage(bytes: Uint8Array, messages: PackageMessages): Ooxml
         if (failed.has(path)) throw failed.get(path);
         try {
             const size = zip.entry(path)?.size ?? 0;
-            if (size > budget.bytes) throw new ApiError(413, messages.tooLarge);
+            if (!parsedBytes.affords(size)) throw new ApiError(413, messages.tooLarge);
             const data = zip.read(path);
-            const tags = data ? tagsIn(data) : 0;
-            if (tags > budget.tags) throw new ApiError(413, messages.tooLarge);
-            budget.bytes -= size;
-            budget.tags -= tags;
+            // A part whose bytes don't inflate spends nothing.
+            parsedBytes.charge(size);
+            parsedTags.charge(data ? tagsIn(data) : 0);
             const root = (data && parseOoxml(data)) ?? undefined;
             parsed.set(path, root);
             return root;

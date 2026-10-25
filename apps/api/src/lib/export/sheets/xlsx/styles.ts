@@ -1,10 +1,13 @@
+// The xlsx writer's styles: the workbook's looks, each interned once by its canonical key as the sheets are written,
+// then written as styles.xml after them.
+
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import type { BorderSide, Cell, CellBorderSides, CellStyle, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
 import { BORDER_STYLES, cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { is_date, isValidNumberFormat } from '@workspace/sheet/engine';
 import { cssColorToHex } from '../../../document/colors';
-import type { CountedWarningCode } from '../../../document/transform/protocol';
+import type { Lost } from '../../../document/transform/protocol';
 import { SML_NS } from '../../../ooxml/ooxml';
 import {
     BUILTIN_NUMBER_FORMATS,
@@ -15,8 +18,7 @@ import {
 } from '../../../ooxml/spreadsheetml';
 import { HORIZONTAL_ALIGN, isNumericRotation, VERTICAL_ALIGN } from '../cell-style';
 
-// The workbook's looks, each interned once by its canonical key as the sheets are written, then written as styles.xml
-// after them. The rules of a sheet take their dxfs through it.
+// The rules of a sheet take their dxfs through it.
 export type StyleRegistry = {
     // The cellXfs index of a cell's look with its own borders: 0, the workbook's default, for none.
     xf(cell: Cell | undefined, border: CellBorderSides | undefined): number;
@@ -84,7 +86,7 @@ function hasLook(cell: Cell): boolean {
     return false;
 }
 
-export function styleRegistry(lost: (code: CountedWarningCode) => void): StyleRegistry {
+export function styleRegistry(lost: Lost): StyleRegistry {
     const intern = (map: Map<string, number>, xml: string) => {
         let id = map.get(xml);
         if (id === undefined) {

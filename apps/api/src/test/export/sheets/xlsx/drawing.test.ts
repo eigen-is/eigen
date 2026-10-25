@@ -102,9 +102,8 @@ function roundTrip(sheets: Sheet[]): { sheets: Sheet[]; warnings: TransformWarni
             ...drawing.parts.map((part) => ({ name: part[0], data: xml(part) })),
         ],
     });
-    const warnings: TransformWarning[] = [];
-    const read = readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, warnings);
-    return { sheets: read.sheets, warnings, lost };
+    const read = readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES });
+    return { sheets: read.sheets, warnings: read.warnings, lost };
 }
 
 const boxOf = ({ x, y, width, height }: SheetFloatingObject) => ({ x, y, width, height });
@@ -366,7 +365,7 @@ describe('pictures read back by the import', () => {
         const warnings: TransformWarning[] = [];
         const bytes = exportXlsx([summary, MY_DATA], { media: [PNG, SVG], warnings });
         expect(warnings).toEqual([]);
-        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 }, []);
+        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 });
         const items = floatingItems(sheets[0]);
         expect(items.map(({ kind, object }) => [kind, boxOf(object), object.angle ?? 0])).toEqual([
             ['chart', boxOf(INLINE), 0],

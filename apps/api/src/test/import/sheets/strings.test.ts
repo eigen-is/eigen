@@ -83,7 +83,7 @@ describe('a shared string', () => {
     // 40 million empty strings, never shown, were a 1 MB file read for 14 s into 4.2 GB.
     test('are charged their elements before any is read', () => {
         const budget = readBudget();
-        budget.chargeElements(MAX_XLSX_ELEMENTS - 1);
+        budget.elements.charge(MAX_XLSX_ELEMENTS - 1);
         expect(() => readSharedStrings(sst(['', '']), PALETTE, budget)).toThrow(
             'This spreadsheet is too large to import',
         );

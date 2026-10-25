@@ -17,6 +17,7 @@ import {
     pointsBounds,
     slidePxToPt,
 } from '@workspace/lib/vector';
+import type { TransformWarning } from '../lib/document/transform/protocol';
 import type { writePptx } from '../lib/export/slides/pptx/to-pptx';
 import type { ImportedMedia } from '../lib/import/image-types';
 import { EMU_PER_POINT } from '../lib/ooxml/ooxml';
@@ -30,6 +31,7 @@ import type {
 } from './office-audit';
 import {
     canonical,
+    chartsNotImported,
     classify,
     officeMedia,
     roundtripChild,
@@ -383,12 +385,12 @@ async function pptxRoundtripChild(
     const module: unknown = await import(options.writer);
     const write = typeof module === 'object' && module !== null && 'writePptx' in module && module.writePptx;
     if (!isWriter(write)) throw new Error(`${options.writer} exports no writePptx`);
-    const read = async (data: ArrayBuffer): Promise<Deck> => {
-        const { update, images } = importPptxToSlidesUpdate(data, { maxMediaBytes: MAX_DECOMPRESSED_BYTES });
+    const read = async (data: ArrayBuffer): Promise<Deck & { warnings: TransformWarning[] }> => {
+        const { update, images, warnings } = importPptxToSlidesUpdate(data, { maxMediaBytes: MAX_DECOMPRESSED_BYTES });
         const doc = new Y.Doc();
         Y.applyUpdate(doc, new Uint8Array(update));
         const media = images.map(({ name, contentType, data }) => ({ name, contentType, data: Buffer.from(data) }));
-        return { scene: readVectorFromDoc(doc), media, pictures: new Map() };
+        return { scene: readVectorFromDoc(doc), media, pictures: new Map(), warnings };
     };
     await roundtripChild(options, async (step) => {
         const data = await Bun.file(file).arrayBuffer();
@@ -408,7 +410,7 @@ async function pptxRoundtripChild(
                 ),
             }),
         );
-        return { warnings: new Map(), groups };
+        return { warnings: new Map(), groups, charts: chartsNotImported(a.warnings, a.scene.elements) };
     });
 }
 

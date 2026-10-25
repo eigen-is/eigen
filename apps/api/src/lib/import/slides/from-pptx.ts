@@ -1,10 +1,13 @@
+// pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
+// process; the import's transform step writes the result as a Yjs update.
+
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
 import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, nearestSlideSize, SLIDE_SIZES } from '@workspace/lib/vector';
-import { ApiError } from '../../core/errors';
-import type { XmlElement } from '../../core/xml';
 import { xmlAttr } from '../../core/xml';
-import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
+import type { TransformWarning } from '../../document/transform/protocol';
+import { lossCounter } from '../../document/transform/protocol';
+import { budget } from '../../ooxml/budget';
 import { EMU_PER_POINT, P_NS } from '../../ooxml/ooxml';
 import { MAX_SLIDE_EMU, MIN_SLIDE_EMU } from '../../ooxml/presentationml';
 import type { ImportedMedia } from '../image-types';
@@ -14,10 +17,7 @@ import { backgroundOf, createInheritance } from './inherit';
 import { childOf, withWorkBudget } from './lookup';
 import type { DeckWalk } from './package';
 import { readPackage } from './package';
-import { readSlideShapes } from './shapes';
-
-// pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
-// process; transform.ts writes the result as a Yjs update.
+import { MAX_ELEMENTS, MAX_PPTX_WEIGHT, readSlideShapes } from './shapes';
 
 export type PptxSlide = { name: string; background: BackgroundFill | null; elements: NewVectorElement[] };
 
@@ -79,24 +79,20 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     // Named per import, so an Import into a deck that holds an earlier one's pictures overwrites none. The upload cap
     // bounds the pictures' bytes, as an upload of each would be bounded.
     const files = importMedia('pptx', pkg.readMedia, options.maxMediaBytes);
-    const losses = new Map<CountedWarningCode, Set<XmlElement>>();
+    const losses = lossCounter();
     const deck: DeckWalk = {
         pkg,
         scale,
         slideWidth: page.slideWidth,
         offset: { x: (frame.width - cx * scale) / 2, y: (frame.height - cy * scale) / 2 },
         slide: { width: cx * scale, height: cy * scale },
-        shapes: 0,
-        elements: 0,
-        weight: 0,
+        shapes: budget(MAX_ELEMENTS, IMPORT_MESSAGES.pptx.tooLarge),
+        elements: budget(MAX_ELEMENTS, IMPORT_MESSAGES.pptx.tooLarge),
+        weight: budget(MAX_PPTX_WEIGHT, IMPORT_MESSAGES.pptx.tooLarge),
         decorations: new Map(),
-        lost: (code, source) => losses.set(code, (losses.get(code) ?? new Set()).add(source)),
-        // Read as it is named, so a picture whose bytes don't read is dropped where it is shown.
-        mediaName: (part) => {
-            const name = files.name(part);
-            if (name === null) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
-            return name;
-        },
+        lost: losses.lost,
+        // Read as it is named, so a picture past the caps or whose bytes don't read is dropped where it is shown.
+        mediaName: files.name,
     };
 
     const inheritance = createInheritance(pkg);
@@ -108,6 +104,5 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         return [{ name: title, background: backgroundOf(slide, deck), elements }];
     });
 
-    const warnings: TransformWarning[] = [...losses].map(([code, sources]) => ({ code, count: sources.size }));
-    return { slides, media: files.media, warnings, page };
+    return { slides, media: files.media, warnings: losses.warnings(), page };
 }

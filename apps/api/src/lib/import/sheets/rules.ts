@@ -1,3 +1,7 @@
+// A worksheet's conditional formats and data validations, read from the part beside its grid. Excel 2010 writes what
+// the 2007 schema can't hold, a rule or a list over another sheet, into the extension list, read here too. What a rule
+// emits is charged before it is built: the ranges a format holds, the cells a validation keys and their text.
+
 import { formatInputDate } from '@workspace/lib/date';
 import type {
     ConditionalFormatConditionName,
@@ -11,6 +15,7 @@ import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/shee
 import { iscelldata, parseA1Range, toA1 } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
+import type { Lost } from '../../document/transform/protocol';
 import { isOn, SML_NS, X14_NS, XM_NS } from '../../ooxml/ooxml';
 import {
     CF_CELL_IS_CONDITION,
@@ -30,10 +35,6 @@ import type { DxfLook, ThemePalette } from './styles';
 import { colorOf, dxfLook, resolveColor } from './styles';
 import { cellKey } from './worksheet';
 
-// A worksheet's conditional formats and data validations, read from the part beside its grid. Excel 2010 writes what
-// the 2007 schema can't hold, a rule or a list over another sheet, into the extension list, read here too. What a rule
-// emits is charged before it is built: the ranges a format holds, the cells a validation keys and their text.
-
 export type RulesContext = {
     dxfs: DxfLook[];
     palette: ThemePalette;
@@ -47,6 +48,9 @@ export type RulesContext = {
     charge(cells: number, text: number): void;
     // Called with each reference of a sqref before it is parsed, whatever it emits; throws past the budget.
     chargeElements(count: number): void;
+    // Counts a rule left out: a conditional format or a validation the engine has no rule for, or a conditional format
+    // over no range of the grid.
+    lost: Lost;
 };
 
 export function readRules(
@@ -92,7 +96,10 @@ export function readRules(
                 context.charge(rules.length, 0);
                 ranges.push(range);
             }
-            if (ranges.length === 0) continue;
+            if (ranges.length === 0) {
+                for (const _ of rules) context.lost('conditional-formats-dropped');
+                continue;
+            }
             for (const rule of rules) {
                 const formulas = formulasOf(rule).map((formula) => withoutFuturePrefixes(xmlText(formula)));
                 context.charge(
@@ -104,6 +111,7 @@ export function readRules(
                 const format = mapCfRule(rule, formulas, lookOf(rule), ranges, context.palette, days);
                 if (format)
                     formats.push({ priority: Number.parseInt(xmlAttr(rule, '', 'priority') ?? '', 10), format });
+                else context.lost('conditional-formats-dropped');
             }
         }
     }
@@ -137,7 +145,11 @@ export function readRules(
                 formulaOf(validation, 'formula2'),
                 context.date1904,
             );
-            if (!rule) continue;
+            if (!rule) {
+                // Excel's "Any value" lets everything in, so there is no rule to lose; its prompt alone goes.
+                if ((xmlAttr(validation, '', 'type') ?? 'none') !== 'none') context.lost('validations-dropped');
+                continue;
+            }
             const text = rule.value1.length + rule.value2.length + (rule.hintValue ?? '').length;
             for (const { row, column } of rangesOf(sqrefOf(validation) ?? '', context)) {
                 const bottom = Math.min(row[1], context.rows + DV_ROW_MARGIN - 1);

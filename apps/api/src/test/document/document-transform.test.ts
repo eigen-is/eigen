@@ -49,8 +49,8 @@ import { exportDocument, runDocumentExport } from '../../lib/export/export-docum
 import { collectExportMedia } from '../../lib/export/media';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { getHome } from '../../lib/home/get-home';
-import type { DocxImage } from '../../lib/import/doc/from-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
+import type { ImportedMedia } from '../../lib/import/image-types';
 import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
 import { IMPORT_MESSAGES } from '../../lib/import/messages';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
@@ -1338,7 +1338,10 @@ describe('document transform (eigendoc)', () => {
 
 describe('document transform (docx round trip)', () => {
     // The docx export as the Download menu runs it (the media prep, the Worker), read back as an import reads it.
-    async function roundTrip(fileName: string, json: JSONContent): Promise<{ json: JSONContent; images: DocxImage[] }> {
+    async function roundTrip(
+        fileName: string,
+        json: JSONContent,
+    ): Promise<{ json: JSONContent; media: ImportedMedia[] }> {
         const created = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -1472,17 +1475,17 @@ describe('document transform (docx round trip)', () => {
             .toJSON();
         const imported = await roundTrip('kept', json);
         expect(numberMedia(imported.json)).toEqual(numberMedia(json));
-        expect(imported.images.map((image) => image.contentType)).toEqual(['image/png']);
+        expect(imported.media.map((image) => image.contentType)).toEqual(['image/png']);
     }, 120_000);
 
     // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
     test('the all-features doc comes back with all its text, its links into Eigen root-relative', async () => {
         const original = buildAllFeaturesDocJson();
-        const { json, images } = await roundTrip('all-features', original);
+        const { json, media } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);
         // One media file per image part, an SVG as itself rather than its PNG fallback; the chart comes back as its SVG.
-        expect(images.map((image) => image.contentType)).toEqual([
+        expect(media.map((image) => image.contentType)).toEqual([
             'image/svg+xml',
             'image/png',
             'image/jpeg',
@@ -1653,7 +1656,14 @@ const GOLDEN_DOCX_DOCUMENT_SHA256 = '9f8f4cf82dfe57e683d68d449cf1cf65158ee2bfde5
 describe('document transform (docx import)', () => {
     async function runDocxImport(data: ArrayBuffer): Promise<DocumentTransformResponse> {
         return documentTransformRunner.run(
-            { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', publicOrigin: undefined, data },
+            {
+                kind: 'import',
+                sourceFormat: 'docx',
+                targetType: 'eigendoc',
+                publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
+                data,
+            },
             EXPORT_OPTIONS,
         );
     }
@@ -1670,12 +1680,12 @@ describe('document transform (docx import)', () => {
     }
 
     test('the reference parse + Yjs commit pipeline matches the pinned goldens', async () => {
-        const { json, images } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
+        const { json, media } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
         expect(sha256(unprefixed(JSON.stringify(json)))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
-        expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
+        expect(media.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
             { name: expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME), contentType: 'image/png' },
         ]);
-        expect(images[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
+        expect(media[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
 
         const doc = new Y.Doc();
         seedEigendoc(doc, json);

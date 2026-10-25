@@ -10,12 +10,12 @@ import {
     SHEET_DEFAULT_COL_WIDTH,
 } from '@workspace/lib/sheets';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
-import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
+import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { IMPORT_MESSAGES } from '../../../lib/import/messages';
 import { CHART_SHEET_SIZE, partsText, placeDrawings, readDrawing } from '../../../lib/import/sheets/drawing';
 import { readXlsx } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_XLSX_ELEMENTS } from '../../../lib/import/sheets/package';
-import { drawingTheme } from '../../../lib/ooxml/drawingml';
+import { drawingTheme, IMAGE_EXTENSION_BY_MIME } from '../../../lib/ooxml/drawingml';
 import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
 import { openPackage, optional } from '../../../lib/ooxml/opc';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
@@ -123,8 +123,8 @@ function workbook({
 }
 
 function read(bytes: Uint8Array): { sheets: Sheet[]; warnings: TransformWarning[] } {
-    const warnings: TransformWarning[] = [];
-    return { sheets: readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, warnings).sheets, warnings };
+    const { sheets, warnings } = readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES });
+    return { sheets, warnings };
 }
 
 const chartsOf = (sheet: Sheet) => Object.values(sheet.charts ?? {});
@@ -442,8 +442,7 @@ const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]);
 const SVG_BYTES = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
 
 function readPictures(bytes: Uint8Array, maxMediaBytes = 1024 * 1024) {
-    const warnings: TransformWarning[] = [];
-    const { sheets, media } = readXlsx(bytes, { maxMediaBytes }, warnings);
+    const { sheets, media, warnings } = readXlsx(bytes, { maxMediaBytes });
     const images = Object.values(sheets[0].images ?? {});
     return { sheet: sheets[0], images, media, warnings };
 }
@@ -541,8 +540,7 @@ describe('a worksheet picture', () => {
         const bytes = readFileSync(
             join(import.meta.dir, '../../fixtures/workbooks/markitdown-xlsx_multiple_images.xlsx'),
         );
-        const warnings: TransformWarning[] = [];
-        const { sheets, media } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 }, warnings);
+        const { sheets, media, warnings } = readXlsx(bytes, { maxMediaBytes: 1024 * 1024 });
         expect(warnings).toEqual([]);
         const placed = sheets.map((sheet) =>
             floatingItems(sheet).map(({ object }) => [object.x, object.y, object.width, object.height]),

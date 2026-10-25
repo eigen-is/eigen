@@ -1,3 +1,6 @@
+// The xlsx import's step in the transform process: the reader's sheets recalculated and encoded as the snapshot the
+// main thread commits.
+
 import type { Sheet } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
@@ -14,13 +17,12 @@ export function importXlsxToSheetsSnapshot(
     data: ArrayBuffer,
     job: Pick<SheetsImportJob, 'maxMediaBytes'>,
 ): SheetsImportWorkerResult & { warnings: TransformWarning[] } {
-    const warnings: TransformWarning[] = [];
-    const read = readXlsx(new Uint8Array(data), job, warnings);
-    const { sheets, computed } = recalcImportedSheets(read.sheets, warnings);
+    const read = readXlsx(new Uint8Array(data), job);
+    const { sheets, computed } = recalcImportedSheets(read.sheets, read.warnings);
     return {
         snapshotJson: toTransferableText(encodeSheetsSnapshot(sheets, { computed })),
         images: toTransferableMedia(read.media),
-        warnings,
+        warnings: read.warnings,
     };
 }
 

@@ -1,3 +1,5 @@
+// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform process.
+
 import type { JSONContent } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
@@ -6,18 +8,18 @@ import { ApiError, isOutOfMemory } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import type { TransformWarning } from '../../document/transform/protocol';
+import { lossCounter } from '../../document/transform/protocol';
+import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
+import type { ImportedMedia } from '../image-types';
+import { importMedia } from '../image-types';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { CHARS_PER_UNIT, MAX_DOCX_WEIGHT, readPackage } from './package';
 import { createReader, readBand, readDocument } from './paragraphs';
 
-// docx bytes → eigendoc JSON, straight from the WordprocessingML with no HTML between. Runs in the transform process.
-
-export type DocxImage = {
-    name: string;
-    data: Buffer;
-    contentType: string;
-};
+// The upload cap, which bounds the pictures' bytes as an upload of each would be bounded; links into this instance
+// come back root-relative with the public origin.
+export type DocxOptions = { publicOrigin: string | undefined; maxMediaBytes: number };
 
 // The update holds every character, a string attribute's too (a link's href is spelled out for every text node it
 // marks), and a client opens it in one WebSocket message of at most 128 MB: three bytes a character at most. The
@@ -27,45 +29,50 @@ export const MAX_DOCX_TEXT = 16_000_000;
 // A TableMap slot, a column of a row however spanned or padded, costs about 16 bytes, a unit 1.3 KB and more.
 const SLOTS_PER_UNIT = 64;
 
-// The doc as JSON, for the audit and the tests; the import encodes the doc itself, with no copy between.
+// The doc as JSON, for the audit and the tests, its pictures bounded by the zip cap alone; the import encodes the doc
+// itself, with no copy between.
 export function docxToPmJson(
     buffer: Buffer,
-    options: { publicOrigin?: string } = {},
+    { publicOrigin }: { publicOrigin?: string } = {},
 ): {
     json: JSONContent;
     bands: Partial<Record<BandRoot, JSONContent>>;
     page: PageSetup;
     style: NormalStyle;
-    images: DocxImage[];
+    media: ImportedMedia[];
     warnings: TransformWarning[];
 } {
-    const { doc, bands, page, style, images, warnings } = readDocx(buffer, options);
+    const { doc, bands, page, style, media, warnings } = readDocx(buffer, {
+        publicOrigin,
+        maxMediaBytes: MAX_DECOMPRESSED_BYTES,
+    });
     const json = Object.fromEntries(Object.entries(bands).map(([root, band]) => [root, band.toJSON()]));
-    return { json: doc.toJSON(), bands: json, page, style, images, warnings };
+    return { json: doc.toJSON(), bands: json, page, style, media, warnings };
 }
 
 export function readDocx(
     buffer: Buffer,
-    options: { publicOrigin?: string } = {},
+    options: DocxOptions,
 ): {
     doc: Node;
     bands: Partial<Record<BandRoot, Node>>;
     page: PageSetup;
     style: NormalStyle;
-    images: DocxImage[];
+    media: ImportedMedia[];
     warnings: TransformWarning[];
 } {
     try {
-        const pkg = readPackage(buffer);
-        const reader = createReader(pkg, options.publicOrigin);
+        const losses = lossCounter();
+        const pkg = readPackage(buffer, losses.lost);
+        const files = importMedia('docx', pkg.readMedia, options.maxMediaBytes);
+        const reader = createReader(pkg, files, losses.lost, options.publicOrigin);
         const content = readDocument(reader);
-        let refused = 0;
         // A band's schema holds none of BAND_EXCLUDED_NODES: each keeps its text.
         const withoutExcluded = (node: JSONContent): JSONContent[] => {
             if (!BAND_EXCLUDED_NODES.has(node.type ?? '')) {
                 return [node.content ? { ...node, content: node.content.flatMap(withoutExcluded) } : node];
             }
-            refused++;
+            losses.lost('blocks-flattened');
             return asParagraphs(node);
         };
         // A part several references name is read once, and each copy weighed.
@@ -83,7 +90,7 @@ export function readDocx(
         const checked = (blocks: JSONContent[]) => {
             const kept = blocks.flatMap((block) => {
                 if (fits(block)) return [block];
-                refused++;
+                losses.lost('blocks-flattened');
                 return asParagraphs(block);
             });
             const node = docSchema().nodeFromJSON({
@@ -99,33 +106,20 @@ export function readDocx(
             const band = checked(blocks);
             if (bandHasContent(band, readStoredEquation)) bands[root] = band;
         }
-        // Only the media a kept figure names: a flattened block's figures went with it.
+        // Only the media a kept figure names: a flattened block's figures went with it. No browser draws an unshown type:
+        // each figure of one shows its alt text in a broken image.
+        const unshown = new Set(
+            files.media.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).map((image) => image.name),
+        );
         const named = new Set<string>();
         for (const node of [doc, ...Object.values(bands)])
             node.descendants((child) => {
-                if (child.type.name === 'figure') named.add(child.attrs['mediaName']);
+                if (child.type.name !== 'figure') return;
+                named.add(child.attrs['mediaName']);
+                if (unshown.has(child.attrs['mediaName'])) losses.lost('images-unshown');
             });
-        const kept = reader.images.filter((image) => named.has(image.name));
-        const images = kept.flatMap(({ name, path, contentType }): DocxImage[] => {
-            const data = pkg.readMedia(path);
-            // A view of the bytes read, not a copy of them: a file may hold 200 MB of media.
-            return data
-                ? [{ name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) }]
-                : [];
-        });
-        const warnings: TransformWarning[] = [];
-        if (refused > 0) warnings.push({ code: 'blocks-flattened', count: refused });
-        const damaged = kept.length - images.length;
-        const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
-        if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
-        if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
-        if (reader.chartsDropped > 0) warnings.push({ code: 'charts-dropped', count: reader.chartsDropped });
-        if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
-        if (pkg.evenBands > 0) warnings.push({ code: 'even-bands-dropped', count: pkg.evenBands });
-        if (reader.bandAnchors > 0) warnings.push({ code: 'band-images-unanchored', count: reader.bandAnchors });
-        const bandDropped = reader.bandDropped + pkg.damagedBands;
-        if (bandDropped > 0) warnings.push({ code: 'band-content-dropped', count: bandDropped });
-        return { doc, bands, page: reader.page, style: reader.normal, images, warnings };
+        const media = files.media.filter((image) => named.has(image.name));
+        return { doc, bands, page: reader.page, style: reader.normal, media, warnings: losses.warnings() };
     } catch (error) {
         throw importError(error, 'docx');
     }

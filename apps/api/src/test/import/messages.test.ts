@@ -38,7 +38,7 @@ describe("an import's error", () => {
     });
 });
 
-// The toast after a pptx Convert or Import: one short line per kind of loss, from the counted warnings.
+// The toast after an Import…: one short line per kind of loss, from the counted warnings of any format's reader.
 describe('importSummary', () => {
     test('nothing lost says nothing', () => {
         expect(importSummary([])).toBeNull();
@@ -59,7 +59,7 @@ describe('importSummary', () => {
         ).toBe('2 tables and 1 SmartArt graphic were not imported; 5 shapes were simplified.');
     });
 
-    test('a picture that is not shown and one that is not imported are one kind', () => {
+    test('a picture left out is not imported, and one kept that no browser shows is said apart', () => {
         expect(
             importSummary([
                 { code: 'images-dropped', count: 1 },
@@ -67,7 +67,7 @@ describe('importSummary', () => {
                 { code: 'charts-dropped', count: 1 },
                 { code: 'objects-dropped', count: 3 },
             ]),
-        ).toBe('1 chart, 3 embedded objects and 3 pictures were not imported.');
+        ).toBe("1 chart, 3 embedded objects and 1 picture were not imported; 2 pictures can't be shown.");
     });
 
     test('every simplification has its noun', () => {
@@ -78,5 +78,40 @@ describe('importSummary', () => {
                 { code: 'fills-simplified', count: 396 },
             ]),
         ).toBe('396 fills, 1 text box and 2 flipped pictures were simplified.');
+    });
+
+    test("a docx's losses have their nouns", () => {
+        expect(
+            importSummary([
+                { code: 'diagrams-dropped', count: 2 },
+                { code: 'section-pages-dropped', count: 1 },
+                { code: 'even-bands-dropped', count: 2 },
+                { code: 'band-content-dropped', count: 1 },
+                { code: 'blocks-flattened', count: 3 },
+                { code: 'band-images-unanchored', count: 1 },
+            ]),
+        ).toBe(
+            "2 SmartArt graphics, 1 section's page setup, 2 even-page headers or footers and 1 header or footer item " +
+                'were not imported; 1 header or footer picture was simplified; 3 parts of the document lost their layout.',
+        );
+    });
+
+    test('a clause says its verb of one as of one', () => {
+        expect(
+            importSummary([
+                { code: 'images-unshown', count: 1 },
+                { code: 'blocks-flattened', count: 1 },
+            ]),
+        ).toBe("1 part of the document lost its layout; 1 picture can't be shown.");
+    });
+
+    test("an xlsx's dropped conditional formats and validations have their nouns", () => {
+        expect(
+            importSummary([
+                { code: 'validations-dropped', count: 1 },
+                { code: 'conditional-formats-dropped', count: 4 },
+                { code: 'charts-dropped', count: 1 },
+            ]),
+        ).toBe('1 chart, 4 conditional formats and 1 data validation rule were not imported.');
     });
 });

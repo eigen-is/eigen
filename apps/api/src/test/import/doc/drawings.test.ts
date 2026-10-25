@@ -2,13 +2,14 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
-import { docxToPmJson } from '../../../lib/import/doc/from-docx';
-import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
+import { docxToPmJson, readDocx } from '../../../lib/import/doc/from-docx';
+import { MAX_MEDIA_PARTS, PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
 import { C_NS } from '../../../lib/ooxml/ooxml';
 import * as ooxmlChart from '../../../lib/ooxml/ooxml-chart';
 import { CHART_CONTENT_TYPE, CHART_NOT_IMPORTED } from '../../../lib/ooxml/ooxml-chart';
 import {
     buildDocxWithBands,
+    buildDocxWithBody,
     chartParts,
     chartRun,
     GOLDEN_DOCX_IMAGE_RUN,
@@ -25,49 +26,56 @@ const HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relatio
 const paragraph = (inner: string) => `<w:p>${inner}</w:p>`;
 const picture = (rid: string) => GOLDEN_DOCX_IMAGE_RUN.replace('r:embed="rId4"', `r:embed="${rid}"`);
 const BYTES = new Uint8Array([1, 2, 3]);
+// Each paragraph's text, a break as a newline; empty ones left out.
+const lines = (json: JSONContent) =>
+    nodesOfType(json, 'paragraph')
+        .map((node) =>
+            (node.content ?? []).map((child) => child.text ?? (child.type === 'hardBreak' ? '\n' : '')).join(''),
+        )
+        .filter(Boolean);
 
 describe('media', () => {
     // Decision 1: kept under its real name, though no browser draws it; the import logs it.
-    test('a WMF part is image-N.wmf, image/x-wmf, and counts as unshown', async () => {
-        const { json, images, warnings } = await importDocxBody(paragraph(picture('rId9')), {
+    test('a WMF part is image-N.wmf, image/x-wmf, and counts as unshown once for every figure that shows it', async () => {
+        const { json, media, warnings } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId9')}`), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.wmf"/>`,
             contentTypes: '<Default Extension="wmf" ContentType="image/x-wmf"/>',
             media: { 'word/media/image1.wmf': BYTES },
         });
-        expect(images.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+        expect(media.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
             ['image-1.wmf', 'image/x-wmf'],
         ]);
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(
-            images.map(({ name }) => name),
+            media.flatMap(({ name }) => [name, name]),
         );
-        expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+        expect(warnings).toEqual([{ code: 'images-unshown', count: 2 }]);
     });
 
     test('an undeclared part takes its extension, and image/jpg reads as image/jpeg', async () => {
-        const { images } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
+        const { media } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/a.gif"/><Relationship Id="rId10" Type="${IMAGE_REL}" Target="media/b.jpg"/>`,
             contentTypes: '<Override PartName="/word/media/b.jpg" ContentType="image/jpg"/>',
             media: { 'word/media/a.gif': BYTES, 'word/media/b.jpg': BYTES },
         });
-        expect(images.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+        expect(media.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
             ['image-1.gif', 'image/gif'],
             ['image-2.jpeg', 'image/jpeg'],
         ]);
     });
 
     test('a part shown twice is stored once', async () => {
-        const { json, images } = await importDocxBody(paragraph(`${picture('rId4')}${picture('rId4')}`));
-        expect(images).toHaveLength(1);
+        const { json, media } = await importDocxBody(paragraph(`${picture('rId4')}${picture('rId4')}`));
+        expect(media).toHaveLength(1);
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual([
-            images[0]?.name,
-            images[0]?.name,
+            media[0]?.name,
+            media[0]?.name,
         ]);
     });
 
-    test(`past ${MAX_MEDIA_PARTS} parts a picture is left out, as a missing part is`, async () => {
+    test(`past ${MAX_MEDIA_PARTS} parts a picture is left out and counted`, async () => {
         const count = MAX_MEDIA_PARTS + 2;
         const ids = Array.from({ length: count }, (_, i) => i + 1);
-        const { json, images, warnings } = await importDocxBody(
+        const { json, media, warnings } = await importDocxBody(
             ids.map((i) => paragraph(picture(`rIdP${i}`))).join(''),
             {
                 rels: ids
@@ -76,8 +84,53 @@ describe('media', () => {
                 media: Object.fromEntries(ids.map((i) => [`word/media/p${i}.png`, BYTES])),
             },
         );
-        expect([images.length, nodesOfType(json, 'figure').length]).toEqual([MAX_MEDIA_PARTS, MAX_MEDIA_PARTS]);
-        expect(warnings).toEqual([]);
+        expect([media.length, nodesOfType(json, 'figure').length]).toEqual([MAX_MEDIA_PARTS, MAX_MEDIA_PARTS]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
+    });
+
+    test('past the upload cap in bytes a picture is left out and counted, the ones before it kept', async () => {
+        const { doc, media, warnings } = readDocx(
+            Buffer.from(
+                await buildDocxWithBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
+                    rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/a.png"/><Relationship Id="rId10" Type="${IMAGE_REL}" Target="media/b.png"/>`,
+                    media: { 'word/media/a.png': BYTES, 'word/media/b.png': BYTES },
+                }),
+            ),
+            { publicOrigin: undefined, maxMediaBytes: BYTES.length + 1 },
+        );
+        expect(media.map(({ name }) => unprefixed(name))).toEqual(['image-1.png']);
+        expect(nodesOfType(doc.toJSON(), 'figure')).toHaveLength(1);
+        expect(lines(doc.toJSON())).toEqual([PICTURE_NOT_IMPORTED]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
+    });
+
+    test('a picture whose part is missing, or not of an image type, is left out and counted', async () => {
+        const { json, media, warnings } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/gone.png"/><Relationship Id="rId10" Type="${IMAGE_REL}" Target="media/a.bin"/>`,
+            contentTypes: '<Override PartName="/word/media/a.bin" ContentType="application/octet-stream"/>',
+            media: { 'word/media/a.bin': BYTES },
+        });
+        expect([media.length, nodesOfType(json, 'figure').length]).toEqual([0, 0]);
+        expect(lines(json)).toEqual([PICTURE_NOT_IMPORTED, PICTURE_NOT_IMPORTED]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
+    });
+
+    test("the line a picture left out leaves keeps its paragraph's alignment, a text box's paragraph its own", async () => {
+        const box = `<w:r><w:drawing><wp:inline><wp:extent cx="100" cy="100"/><wp:docPr id="2" name="Box"/><a:graphic><a:graphicData><wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:txbx><w:txbxContent><w:p><w:r><w:t>Boxed</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const { json } = await importDocxBody(
+            `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${picture('rId9')}${box}</w:p>`,
+            { rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/gone.png"/>` },
+        );
+        expect(
+            nodesOfType(json, 'paragraph').map((node) => [
+                lines({ type: 'doc', content: [node] }),
+                node.attrs?.['textAlign'],
+            ]),
+        ).toEqual([
+            [[], 'center'],
+            [[PICTURE_NOT_IMPORTED], 'center'],
+            [['Boxed'], null],
+        ]);
     });
 
     test('an SVG wins over its PNG fallback', async () => {
@@ -85,14 +138,49 @@ describe('media', () => {
             '<a:blip r:embed="rId4"/>',
             '<a:blip r:embed="rId4"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="rId9"/></a:ext></a:extLst></a:blip>',
         );
-        const { images } = await importDocxBody(paragraph(svg), {
+        const { media } = await importDocxBody(paragraph(svg), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.svg"/>`,
             contentTypes: '<Default Extension="svg" ContentType="image/svg+xml"/>',
             media: { 'word/media/pixel.png': BYTES, 'word/media/image1.svg': new TextEncoder().encode('<svg/>') },
         });
-        expect(images.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+        expect(media.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
             ['image-1.svg', 'image/svg+xml'],
         ]);
+    });
+
+    // Word for Mac's logo: a PDF for Mac Office (ma) first, the PNG every other Word draws as the fallback.
+    test("a picture's blip is the branch Word reads, a choice for a namespace the reader doesn't know left for its fallback", async () => {
+        const blipFill = (rid: string) =>
+            `<pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`;
+        const logo = GOLDEN_DOCX_IMAGE_RUN.replace(
+            /<pic:blipFill>.*<\/pic:blipFill>/,
+            `<ve:AlternateContent xmlns:ve="http://schemas.openxmlformats.org/markup-compatibility/2006"><ve:Choice xmlns:ma="http://schemas.microsoft.com/office/mac/drawingml/2008/main" Requires="ma">${blipFill('rId1')}</ve:Choice><ve:Fallback>${blipFill('rId2')}</ve:Fallback></ve:AlternateContent>`,
+        );
+        const { bands, media, warnings } = docxToPmJson(
+            Buffer.from(
+                await buildDocxWithBands(
+                    [
+                        {
+                            id: 'h1',
+                            kind: 'header',
+                            xml: paragraph(logo),
+                            rels: `<Relationship Id="rId1" Type="${IMAGE_REL}" Target="media/image1.pdf"/><Relationship Id="rId2" Type="${IMAGE_REL}" Target="media/image2.png"/>`,
+                        },
+                    ],
+                    {
+                        contentTypes: '<Default Extension="pdf" ContentType="application/pdf"/>',
+                        media: { 'word/media/image1.pdf': BYTES, 'word/media/image2.png': BYTES },
+                    },
+                ),
+            ),
+        );
+        expect(media.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+            ['image-1.png', 'image/png'],
+        ]);
+        expect(nodesOfType(bands.header ?? {}, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(
+            media.map(({ name }) => name),
+        );
+        expect([bands.header && lines(bands.header), warnings]).toEqual([[], []]);
     });
 });
 
@@ -103,7 +191,7 @@ describe('relationship targets', () => {
                 rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="${target}"${mode}/>`,
                 media: { [path]: BYTES },
             })
-        ).images.map(({ name, contentType }) => [unprefixed(name), contentType]);
+        ).media.map(({ name, contentType }) => [unprefixed(name), contentType]);
 
     test("a target with '..' resolves against the part's folder", async () => {
         expect(await imageAt('../media/x.png', 'media/x.png')).toEqual([['image-1.png', 'image/png']]);
@@ -356,10 +444,6 @@ describe('SmartArt', () => {
     const shape = (paragraphs: string) => `<dsp:sp><dsp:txBody><a:bodyPr/>${paragraphs}</dsp:txBody></dsp:sp>`;
     const drawing = `<dsp:drawing xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram" xmlns:a="${A}"><dsp:spTree>${shape('<a:p><a:r><a:t>foo</a:t></a:r></a:p>')}${shape('<a:p><a:endParaRPr/></a:p>')}${shape('<a:p><a:r><a:t>bar</a:t></a:r><a:br/><a:fld type="slidenum"><a:t>baz</a:t></a:fld></a:p><a:p><a:r><a:t>qux</a:t></a:r></a:p>')}</dsp:spTree></dsp:drawing>`;
     const diagramRels = `<Relationship Id="rId20" Type="${RELS}/diagramData" Target="diagrams/data1.xml"/><Relationship Id="rId24" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing" Target="diagrams/drawing1.xml"/>`;
-    const lines = (json: Parameters<typeof nodesOfType>[0]) =>
-        nodesOfType(json, 'paragraph')
-            .map((node) => (node.content ?? []).map((child) => child.text ?? '\n').join(''))
-            .filter(Boolean);
 
     test("a SmartArt's shapes read as paragraphs in place, from its drawing part", async () => {
         const { json, warnings } = await importDocxBody(
@@ -373,7 +457,7 @@ describe('SmartArt', () => {
             },
         );
         expect(lines(json)).toEqual(['Before', 'foo', 'bar\nbaz', 'qux', 'After']);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1 }]);
+        expect(warnings).toEqual([{ code: 'diagrams-dropped', count: 1 }]);
     });
 
     test('without a drawing part its data model gives the text of its points', async () => {
@@ -403,12 +487,6 @@ describe('charts', () => {
     const THEME = `<a:theme xmlns:a="${A}" name="Office"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:accent1><a:srgbClr val="C00000"/></a:accent1><a:accent2><a:srgbClr val="00B050"/></a:accent2></a:clrScheme></a:themeElements></a:theme>`;
     const imported = (body: string, parts: string[]) => importDocxBody(body, { ...chartParts(parts), theme: THEME });
     const charts = (json: Parameters<typeof nodesOfType>[0]) => nodesOfType(json, 'chart');
-    const lines = (json: Parameters<typeof nodesOfType>[0]) =>
-        nodesOfType(json, 'paragraph')
-            .map((node) =>
-                (node.content ?? []).map((child) => child.text ?? (child.type === 'hardBreak' ? '\n' : '')).join(''),
-            )
-            .filter(Boolean);
 
     test("a column chart is a chart node at its extent in px, its series in the theme's colours, aligned as its paragraph", async () => {
         const centered = `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${chartRun('rId20')}</w:p>`;

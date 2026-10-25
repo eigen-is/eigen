@@ -88,7 +88,7 @@ describe('docx fixtures', () => {
     });
 
     test('docx4j load-and-save: notes, a table, the SVG as itself, majorBidi as the Arabic face and its chart', async () => {
-        const { json, images, warnings } = await imported('docx4j-loadAndSave.docx');
+        const { json, media, warnings } = await imported('docx4j-loadAndSave.docx');
         // Its footnote and its endnote, each a note at its reference.
         expect(nodesOfType(json, 'footnote').map((note) => texts(note).join(''))).toEqual(['Footnote', 'Endnote']);
         // G11: majorBidi with an empty a:cs is the theme's Arab face, Times New Roman, as the default bidi language is ar-SA.
@@ -97,7 +97,7 @@ describe('docx fixtures', () => {
             .map((node) => node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily']);
         expect(fonts).toEqual(['Source Serif 4']);
         expect(nodesOfType(json, 'table').length).toBeGreaterThan(0);
-        expect(images.map((image) => image.contentType)).toContain('image/svg+xml');
+        expect(media.map((image) => image.contentType)).toContain('image/svg+xml');
         // Its pie chart is a chart, and its header's text watermark goes.
         const charts = nodesOfType(json, 'chart').map((chart) => readChartSpec(chart.attrs ?? {}).spec);
         expect([charts.map((spec) => [spec?.chart.type, spec?.title.text]), warnings]).toEqual([

@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit, docs/page-setup]
 order: 100
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, charts, and equations.
@@ -58,6 +58,8 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 
 ## What doesn't come across
 
+After an import into an open document, a message counts what didn't come across, for example "1 chart and 2 SmartArt graphics were not imported."
+
 - Comments aren't imported. The commented text stays.
 - A Word file with different headers or footers for even and odd pages comes in with the odd pages' ones on every page.
 - A watermark, or a picture that sits behind the text from the header, such as a full-page letterhead, is left out. So is a footnote mark in a header or footer.
@@ -67,6 +69,8 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - A chart Eigen can't draw the way Word does, such as an area, scatter, doughnut, or combo chart, becomes a line that names the kind of chart and its title, for example **Scatter chart not imported**.
 - A chart in a header, footer, or footnote comes in as its title only.
 - An equation takes the size of the text around it, so a size set inside a Word equation doesn't come across.
-- A WMF or EMF picture, a format older Office files often use, shows as a broken image with its description. You can delete it. When you download the document, it's left out.
+- A picture Eigen can't read is left out, and so is every picture after the first 1,000, or once the pictures add up to more than the largest file you can upload (35 MB unless your administrator changed it). A line that says **Picture not imported** takes its place.
+- A picture linked to a file outside the Word document, rather than saved in it, is left out too. Its description follows the **Picture not imported** line.
+- A WMF, EMF, or BMP picture, a format older Office files often use, comes in but can't be shown: it shows as a broken image with its description, and the message counts it among the pictures that can't be shown. You can delete it. When you download the document, it's left out.
 
 A password-protected Word file can't be imported. Open it in Word, remove the password, save it, and import it again.

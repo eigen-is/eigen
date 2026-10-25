@@ -782,7 +782,7 @@ describe('runs', () => {
     test('a reply that is no eigendoc is a crash', async () => {
         const dir = await corpus('malformed', { 'a.docx': await buildDocxWithBody(paragraph('first')) });
         const stub = path.join(fs.mkdtempSync(path.join(scratch, 'importer-')), 'malformed.ts');
-        await Bun.write(stub, 'export async function docxToPmJson() { return { json: null, images: [] }; }');
+        await Bun.write(stub, 'export async function docxToPmJson() { return { json: null, media: [] }; }');
         const out = path.join(scratch, 'out-malformed');
         const meta = await runAudit({ corpus: dir, out, importer: stub, name: 'malformed', timeoutMs: 5000 });
         const result = JSON.parse(fs.readFileSync(path.join(out, 'files/a.docx.json'), 'utf8'));
@@ -808,7 +808,7 @@ describe('runs', () => {
     test('a run is named after its importer module, the reader by default', async () => {
         const dir = await corpus('named', { 'a.docx': await buildDocxWithBody(paragraph('named')) });
         const stub = path.join(fs.mkdtempSync(path.join(scratch, 'importer-')), 'foreign.ts');
-        await Bun.write(stub, 'export async function docxToPmJson() { return { json: { type: "doc" }, images: [] }; }');
+        await Bun.write(stub, 'export async function docxToPmJson() { return { json: { type: "doc" }, media: [] }; }');
         const script = fileURLToPath(new URL('../../scripts/docx-audit.ts', import.meta.url));
         const names = await Promise.all(
             [[], ['--importer', stub]].map(async (args, index) => {
@@ -954,7 +954,7 @@ describe('round trip', () => {
             bands: {},
             page: DEFAULT_PAGE_SETUP,
             style: DEFAULT_NORMAL_STYLE,
-            images: [],
+            media: [],
             warnings: [],
         });
         const chart = { type: 'chart', attrs: { width: 200, height: 100 } };

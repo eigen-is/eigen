@@ -1,6 +1,10 @@
-import { ApiError } from '../../core/errors';
+// The pptx reader's lookups into an element, each scan of many children done once, and the work budget a read
+// charges, so whatever a file repeats or keys a cache by costs the read no more than its cap.
+
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
+import type { Budget } from '../../ooxml/budget';
+import { budget } from '../../ooxml/budget';
 import { IMPORT_MESSAGES } from '../messages';
 
 // Every lookup the reader makes into an element goes through here. An element of a layout, master, theme or the
@@ -12,34 +16,31 @@ const SCANNED_BELOW = 16;
 // What the read under way may still do, in children scanned, colours resolved, characters, shapes and charts read. The
 // caches here are keyed by element and live past a read, so the budget is the module's while a read runs; a read is
 // synchronous, so no other read charges it meanwhile.
-let workLeft = Number.POSITIVE_INFINITY;
+let work: Budget = budget(Number.POSITIVE_INFINITY, IMPORT_MESSAGES.pptx.tooLarge);
 
 export function withWorkBudget<T>(units: number, read: () => T): T {
-    const outer = workLeft;
-    workLeft = units;
+    const outer = work;
+    work = budget(units, IMPORT_MESSAGES.pptx.tooLarge);
     try {
         return read();
     } finally {
-        workLeft = outer;
+        work = outer;
     }
 }
 
 // Whatever a file repeats or keys a cache by, each unit of work proportional to it is charged here before it is done.
 export function charge(units: number): void {
-    workLeft -= units;
-    if (workLeft < 0) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
+    work.charge(units);
 }
 
 // Whether the read under way can still do this much, charging nothing: what may be left out, a chart, asks first.
 export function affords(units: number): boolean {
-    return workLeft >= units;
+    return work.affords(units);
 }
 
 // Charges this much only when the read can still do it: work that may be left out asks before it begins.
 export function spend(units: number): boolean {
-    if (!affords(units)) return false;
-    charge(units);
-    return true;
+    return work.spend(units);
 }
 
 // A value derived from an element once for each key.

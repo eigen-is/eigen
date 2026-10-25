@@ -1,17 +1,18 @@
+// What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
+// map, the background, and the shapes the layout and master draw beneath the slide's own.
+
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
 import { normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
+import type { Lost } from '../../document/transform/protocol';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { DEGREE, drawingColor, NO_DRAWING_THEME, percent, readColorMap, readColorScheme } from '../../ooxml/drawingml';
 import { A_NS, emu, isOn, P_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf } from './lookup';
-import type { DeckWalk, Lost, PptxPackage } from './package';
+import type { DeckWalk, PptxPackage } from './package';
 import { blipMedia } from './package';
-
-// What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
-// map, the background, and the shapes the layout and master draw beneath the slide's own.
 
 export type SlideTheme = {
     colors: DrawingTheme;
@@ -403,7 +404,7 @@ export function paintOf(fill: XmlElement | undefined, theme: SlideTheme, options
         case 'grpFill':
             return options.group?.(lost) ?? TRANSPARENT_PAINT;
         case 'blipFill':
-            lost('images-unshown');
+            lost('images-dropped');
             return TRANSPARENT_PAINT;
         default:
             return TRANSPARENT_PAINT;
@@ -529,7 +530,7 @@ function pictureBackground(blipFill: XmlElement, owner: Part, deck: DeckWalk, lo
     const media = blipMedia(deck.pkg, owner, blip);
     const mediaName = media && deck.mediaName(media);
     if (!blip || !mediaName) {
-        if (blip) lost('images-unshown');
+        if (blip) lost('images-dropped');
         return null;
     }
     if (firstChildOf(blip, isEffect) || childOf(blipFill, A_NS, 'tile')) lost('fills-simplified');

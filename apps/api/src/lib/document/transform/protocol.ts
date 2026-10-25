@@ -1,16 +1,14 @@
+// The closed request and response unions that cross into the document-transform process, such as a preview, an export,
+// an import or a search extract, and the helpers both sides share. Only serializable values ride here: primitives,
+// ArrayBuffers and Maps of primitives, never a Mount, a database, a Y.Doc or another class instance, and never a module
+// or function name user input could influence.
+
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import type { SlidePage } from '@workspace/lib/vector';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError, isOutOfMemory } from '../../core/errors';
-
-// Closed request/response unions crossing the boundary to the document-transform process.
-// Only serializable primitives, ArrayBuffers and Maps of primitives ride here — never
-// Mount, database, Y.Doc, or other class instances, and never module/function names
-// user input could influence. Every eigensheets/eigendoc/eigenslides/eigenvector preview,
-// every vCard, message and calendar preview, every HTML/PDF/XLSX/DOCX/PPTX export, the xlsx, docx and pptx imports
-// and the search content extraction ride these unions.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
 // subprocess, so the transform returns the document it renders from.
@@ -31,7 +29,7 @@ export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
 }
 
 // Document media crossing the boundary: prepared on the main thread for an export
-// (Mount I/O + screen previews), extracted from the upload by a docx import.
+// (Mount I/O + screen previews), extracted from the upload by an import.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
 // An export's media; only an Office format's raster carries the thumbnail Worker's width and height. Their arms add an
@@ -113,6 +111,8 @@ export type DocImportJob = {
     targetType: 'eigendoc';
     // Links into this instance come back root-relative with it; the transform reads no config.
     publicOrigin: string | undefined;
+    // The upload cap, which bounds the pictures' inflated bytes too; the transform reads no config.
+    maxMediaBytes: number;
 };
 export type SlidesImportJob = {
     kind: 'import';
@@ -142,7 +142,6 @@ export const COUNTED_WARNING_CODES = [
     'images-unshown',
     'images-dropped',
     'mirrors-dropped',
-    'graphics-dropped',
     'tables-dropped',
     'charts-dropped',
     'diagrams-dropped',
@@ -172,6 +171,33 @@ export type TransformWarning =
     | { code: 'recalc-failed'; message: string }
     | { code: 'byte-guard-truncated'; bytes: number }
     | { code: CountedWarningCode; count: number };
+
+export type LossCounter = {
+    // One loss of this kind; with a source, once per source, so a master's fill is one loss however many slides show it.
+    lost(code: CountedWarningCode, source?: object): void;
+    // The counts, in the order their codes were first met.
+    warnings(): TransformWarning[];
+};
+
+// Counts one loss of this kind, where the caller has no source to count it once for.
+export type Lost = (code: CountedWarningCode) => void;
+
+// What a reader or a writer left out, counted by kind as it goes.
+export function lossCounter(): LossCounter {
+    const losses = new Map<CountedWarningCode, { count: number; sources: Set<object> }>();
+    return {
+        lost: (code, source) => {
+            const loss = losses.get(code) ?? { count: 0, sources: new Set() };
+            losses.set(code, loss);
+            if (source) {
+                if (loss.sources.has(source)) return;
+                loss.sources.add(source);
+            }
+            loss.count++;
+        },
+        warnings: () => [...losses].map(([code, { count }]) => ({ code, count })),
+    };
+}
 
 // Small stable codes; `status` carries an HTTP status for controlled document
 // errors. Never ApiError/Error instances across the boundary. `out-of-memory`: the
@@ -212,6 +238,8 @@ export type DocImportWorkerResult = {
     style: NormalStyle;
     images: TransformMedia[];
 };
+// The same with the warnings the reader counted, which the import's summary phrases.
+export type DocImportResult = DocImportWorkerResult & { warnings: TransformWarning[] };
 // A pptx's update plus its pictures: the main thread only applies the update and writes the media through Mount.
 export type SlidesImportWorkerResult = { update: ArrayBuffer; images: TransformMedia[] };
 

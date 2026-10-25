@@ -1,3 +1,7 @@
+// A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
+// font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and
+// highlight.
+
 import { bundledFont } from '@workspace/lib/constants/fonts';
 import { escapeHtml, LIGHT_EDITOR_HREF } from '@workspace/lib/html';
 import type { VectorRichTextElement } from '@workspace/lib/vector';
@@ -10,18 +14,15 @@ import {
 } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlText } from '../../core/xml';
+import type { Lost } from '../../document/transform/protocol';
 import { ALIGN_BY_ALGN, ALIGN_BY_ANCHOR, percent } from '../../ooxml/drawingml';
 import { A_NS, EMU_PER_POINT, emu, isOn, ooxmlElements, R_NS } from '../../ooxml/ooxml';
 import type { Relationship } from '../../ooxml/opc';
 import type { ShapeProperties, SlideTheme } from './inherit';
 import { colorOf, fillIn, paintOf } from './inherit';
 import { charge, childOf, childrenOf, firstChildOf, prefixedAttrOf } from './lookup';
-import type { DeckWalk, Lost } from './package';
+import type { DeckWalk } from './package';
 import { alternative } from './package';
-
-// A text body → one rich-text box (SPEC X-D6): its HTML and the box's typography. Lost (Q2): per-run size, colour and
-// font, per-paragraph size and indents, stacked and East Asian vertical text, columns, superscript, subscript and
-// highlight.
 
 // What a text body inherits from, nearest first (SPEC X-D4).
 export type TextSource = {

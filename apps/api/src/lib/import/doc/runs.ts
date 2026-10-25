@@ -1,3 +1,6 @@
+// A docx paragraph's inline content, run by run: text with its marks and fonts, breaks, fields, checkboxes, notes and
+// equations, which the paragraph walk turns into blocks.
+
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { readFontSize } from '@workspace/lib/constants/fonts';
@@ -9,7 +12,7 @@ import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElement
 import { LINK_LOOK } from '../../document/looks';
 import { isAlternateContent, isOn, M_NS, R_NS, W_NS, W14_NS } from '../../ooxml/ooxml';
 import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../ooxml/wordml';
-import type { Item } from './assemble';
+import type { Item, Para } from './assemble';
 import { byFace, fontMark, isMonospaceFont, symbolOf } from './docx-fonts';
 import { readDrawing, readVml } from './drawings';
 import { alternative, onOff, w, wChild } from './package';
@@ -53,6 +56,8 @@ export type RunContext = {
     pieces: Piece[];
     // What a text box anchored here holds, which follows the paragraph.
     pending: Item[];
+    // The lines of those standing in for what a drawing left out, which the paragraph aligns as its own.
+    leftOut: Para[];
 };
 
 // Content that doesn't show: a tracked deletion, and properties. Markers such as bookmarks and comment ranges hold
@@ -127,7 +132,7 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
 function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, context: RunContext): void {
     try {
         const mathml = writeMathml(readOmml(oMath));
-        reader.pkg.chargeMathml(mathml.length);
+        reader.pkg.mathml.charge(mathml.length);
         context.pieces.push({ kind: 'node', node: { type: 'equation', attrs: { mathml, display } } });
     } catch (error) {
         if (!(error instanceof MathError)) throw error;
@@ -205,7 +210,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
             case 'endnoteReference': {
                 // A band's schema holds no note: the note is the body's text's.
                 if (context.scope.story === 'band') {
-                    reader.bandDropped++;
+                    reader.lost('band-content-dropped');
                     break;
                 }
                 const content = readNote(
@@ -382,7 +387,7 @@ function marksOf(
     const full = mergeRun(styles.docRun, paraRun, charRun, direct);
     if (full.vanish) return [];
     if (absorbed === 'all') {
-        const faces = byFace(text, full.fonts, full, false, reader.pkg.chargePiece);
+        const faces = byFace(text, full.fonts, full, false, () => reader.pkg.pieces.charge(1));
         return faces.map((face) => ({ ...face, marks: [], small: false }));
     }
     const own = { ...paraRun };
@@ -415,7 +420,7 @@ function marksOf(
         !!props.boldCs !== !!props.bold ||
         !!props.italicCs !== !!props.italic ||
         fontSizeOf(true) !== fontSizeOf(false);
-    const faces = byFace(text, full.fonts, full, complexLook, reader.pkg.chargePiece);
+    const faces = byFace(text, full.fonts, full, complexLook, () => reader.pkg.pieces.charge(1));
 
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];

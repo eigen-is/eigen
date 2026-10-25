@@ -13,16 +13,16 @@ import { docxToPmJson, MAX_DOCX_TEXT } from '../../../lib/import/doc/from-docx';
 import { CHARS_PER_UNIT, MAX_DOCX_CHART_WORK, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
+import { PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
 import { C_NS, M_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/ooxml/ooxml-chart';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
 import { LIST_LEVELS } from '../../../lib/ooxml/wordml';
-import { openZip, ZipReader } from '../../../lib/ooxml/zip';
+import { MAX_DECOMPRESSED_BYTES, openZip, ZipReader } from '../../../lib/ooxml/zip';
 import {
     buildDocxWithBody,
     chartParts,
     chartRun,
-    GOLDEN_DOCX_IMAGE_NAME,
     GOLDEN_DOCX_IMAGE_RUN,
     importDocxBody,
     marksOfType,
@@ -117,7 +117,7 @@ function measuredImport(
         let result;
         try {
             if (process.env.THROUGH === 'transform') {
-                importDocxToEigendocUpdate(data, undefined);
+                importDocxToEigendocUpdate(data, { publicOrigin: undefined, maxMediaBytes: ${MAX_DECOMPRESSED_BYTES} });
                 result = {};
             } else {
                 const { json } = docxToPmJson(Buffer.from(data));
@@ -863,7 +863,7 @@ describe('structure', () => {
         const { json, warnings } = await importDocxBody(paragraph(smartArt.repeat(1000)), smartArtData(points));
         expect(performance.now() - started).toBeLessThan(1000);
         expect(texts(json)).toHaveLength(1000);
-        expect(warnings).toEqual([{ code: 'graphics-dropped', count: 1000 }]);
+        expect(warnings).toEqual([{ code: 'diagrams-dropped', count: 1000 }]);
     }, 60_000);
 
     test('12,000 notes stay linear', async () => {
@@ -1048,24 +1048,24 @@ describe('figures and media', () => {
     const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 
     test('a figure names its media and carries no src', async () => {
-        const { json, images } = await importDocxBody(paragraph(picture(381000)));
-        expect(images.map((image) => unprefixed(image.name))).toEqual(['image-1.png']);
+        const { json, media } = await importDocxBody(paragraph(picture(381000)));
+        expect(media.map((image) => unprefixed(image.name))).toEqual(['image-1.png']);
         expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['mediaName'], node.attrs?.['src']])).toEqual([
-            [images[0]?.name, null],
+            [media[0]?.name, null],
         ]);
     });
 
     // A file may hold 200 MB of media; each image is the bytes the zip read, not a copy of them.
     test('an image is a view of the bytes read, not a copy', async () => {
-        const media = { 'word/media/pixel.png': new Uint8Array(64 * 1024).fill(1) };
-        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)), { media })));
+        const parts = { 'word/media/pixel.png': new Uint8Array(64 * 1024).fill(1) };
+        const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)), { media: parts })));
         const input = build(golden.names().map((name) => stored(name, golden.read(name) ?? new Uint8Array())));
-        const { images } = docxToPmJson(input);
-        expect(images[0]?.data.buffer).toBe(input.buffer);
+        const { media } = docxToPmJson(input);
+        expect(media[0]?.data.buffer).toBe(input.buffer);
     });
 
     // As a damaged optional part costs only its looks.
-    test('a damaged image entry is not stored and counts as unshown; the figure and the rest import', async () => {
+    test('a damaged image entry is left out and counted as dropped; the rest imports', async () => {
         const golden = openZip(new Uint8Array(await buildDocxWithBody(paragraph(picture(381000)))));
         const input = build(
             golden.names().map((name) => {
@@ -1073,12 +1073,11 @@ describe('figures and media', () => {
                 return name.startsWith('word/media/') ? { ...part, crc: part.crc ^ 1 } : part;
             }),
         );
-        const { json, images, warnings } = docxToPmJson(input);
-        expect(images).toEqual([]);
-        expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual([
-            expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME),
-        ]);
-        expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+        const { json, media, warnings } = docxToPmJson(input);
+        expect(media).toEqual([]);
+        expect(nodesOfType(json, 'figure')).toEqual([]);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toContain(PICTURE_NOT_IMPORTED);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 
     test("a figure in a block the schema refuses goes with it, and its media isn't stored", async () => {
@@ -1086,11 +1085,11 @@ describe('figures and media', () => {
             throw new RangeError('refused');
         });
         try {
-            const { json, images, warnings } = await importDocxBody(
+            const { json, media, warnings } = await importDocxBody(
                 `${paragraph(picture(381000))}${paragraph(run('After.'))}`,
             );
             expect(nodesOfType(json, 'figure')).toEqual([]);
-            expect(images).toEqual([]);
+            expect(media).toEqual([]);
             expect(warnings).toEqual([{ code: 'blocks-flattened', count: 1 }]);
         } finally {
             refuses.mockRestore();
@@ -1113,9 +1112,9 @@ describe('figures and media', () => {
         }
     });
 
-    test('a part of a type no image has is not stored: the figure goes, its caption stays', async () => {
+    test('a part of a type no image has is not stored: the figure goes, a line saying so and its caption stay', async () => {
         const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
-        const { json, images } = await importDocxBody(
+        const { json, media } = await importDocxBody(
             `${paragraph(GOLDEN_DOCX_IMAGE_RUN.replace('rId4', 'rId9'))}${paragraph(run('Figure 1'), '<w:pStyle w:val="Caption"/>')}`,
             {
                 styles,
@@ -1124,19 +1123,20 @@ describe('figures and media', () => {
                 media: { 'word/media/page.png': new TextEncoder().encode('<script>alert(1)</script>') },
             },
         );
-        expect(images).toEqual([]);
+        expect(media).toEqual([]);
         expect(nodesOfType(json, 'figure')).toEqual([]);
-        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Figure 1']);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([PICTURE_NOT_IMPORTED, 'Figure 1']);
     });
 
-    test('a linked picture is dropped, its alt text kept as text', async () => {
+    test('a linked picture is left out and counted as a pptx and an xlsx count theirs, its alt text after the line', async () => {
         const linked = GOLDEN_DOCX_IMAGE_RUN.replace('r:embed="rId4"', 'r:link="rId9"');
-        const { json, images } = await importDocxBody(paragraph(linked), {
+        const { json, media, warnings } = await importDocxBody(paragraph(linked), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="https://example.com/chart.png" TargetMode="External"/>`,
         });
-        expect(images).toEqual([]);
+        expect(media).toEqual([]);
         expect(nodesOfType(json, 'figure')).toEqual([]);
-        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['A pixel']);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([PICTURE_NOT_IMPORTED, 'A pixel']);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 });
 
@@ -1208,6 +1208,7 @@ describe.skipIf(!runSlow)('an honest document just under the budget', () => {
                 sourceFormat: 'docx',
                 targetType: 'eigendoc',
                 publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
                 data: await buildDocxWithBody(body),
             },
             { ...TRANSFORM_LIMITS.import, priority: 'foreground' },
@@ -1258,6 +1259,7 @@ describe.skipIf(!runSlow || process.platform !== 'linux')('a document past the m
                 sourceFormat: 'docx',
                 targetType: 'eigendoc',
                 publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
             } as const;
             const error = await runImportToDocumentUpdate(job, docx, {}).catch((reason: unknown) => reason);
             expect(error).toBeInstanceOf(ApiError);
@@ -1285,6 +1287,7 @@ describe.skipIf(!runSlow)('the Yjs conversion in the Worker', () => {
                 sourceFormat: 'docx',
                 targetType: 'eigendoc',
                 publicOrigin: undefined,
+                maxMediaBytes: MAX_DECOMPRESSED_BYTES,
                 data: await buildDocxWithBody(body),
             },
             { ...TRANSFORM_LIMITS.import, priority: 'foreground' },

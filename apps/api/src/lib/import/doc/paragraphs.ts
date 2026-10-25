@@ -1,3 +1,6 @@
+// The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
+// text boxes and notes; the assembly step turns the items into blocks.
+
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
 import { DOCUMENT_FONT, EIGEN_FONT_NAMES, fontLineHeight, readFontSize } from '@workspace/lib/constants/fonts';
@@ -17,18 +20,19 @@ import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
+import type { Lost } from '../../document/transform/protocol';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
 import { CHECKBOX_GLYPHS, LIST_LEVELS, NOTE_SEPARATORS, STYLE_NAMES, textAlignOf } from '../../ooxml/wordml';
-import { mediaNamer } from '../image-types';
+import type { MediaFiles } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import type { Item, Para } from './assemble';
 import { build, isFigureOnly, isWhitespace } from './assemble';
 import type { FontTable, Theme } from './docx-fonts';
 import { byFace, fontMark, isMonospaceFont, readFontTable, readTheme } from './docx-fonts';
-import type { DocxChart, DocxImagePart } from './drawings';
+import type { DocxChart } from './drawings';
 import type { Numbering } from './numbering';
 import { readNumbering } from './numbering';
 import type { DocxPackage } from './package';
@@ -39,33 +43,25 @@ import type { DocxRunProps, ParaProps, Role } from './styles';
 import { isFill, isLightNeutral, markColor, mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
 import { readTable } from './tables';
 
-// The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
-// text boxes and notes; assemble.ts turns the items into blocks.
-
 export type Reader = {
     pkg: DocxPackage;
     theme: Theme;
     fontTable: FontTable;
     styles: Styles;
     numbering: Numbering;
-    // A random prefix per import, so a replace's pictures land beside the ones a restored version names.
-    nameMedia: (index: number, extension: string) => string;
-    images: DocxImagePart[];
-    imageNames: Map<string, string>;
+    // Named per import, so a replace's pictures land beside the ones a restored version names.
+    files: MediaFiles;
     // Each note by type and id, its part beside it, and each as read at its depth: a note is read once per depth
     // however often it is referenced. The notes being read, outermost first.
     noteElements: Map<string, { part: Part; note: XmlElement }>;
     notes: Map<string, { content: JSONContent[]; weight: number }>;
     openNotes: string[];
     fields: Field[];
-    // SmartArt, whose graphic the schema can't hold, and the parts of a SmartArt's or a band's chart read: each is read
-    // once.
-    graphicsDropped: number;
+    // The parts of a SmartArt's or a band's chart read: each is read once.
     graphicParts: Set<string>;
-    // The theme's colours a chart's series take, each chart part as read, and the charts that came in as words.
+    // The theme's colours a chart's series take, and each chart part as read.
     colors: DrawingTheme;
     charts: Map<XmlElement, DocxChart>;
-    chartsDropped: number;
     // The body's size in half-points, its complex script's, and its color, which no run needs a mark for.
     bodySize: number;
     bodySizeCs: number;
@@ -76,13 +72,10 @@ export type Reader = {
     page: PageSetup;
     columnTwips: number;
     columnPx: number;
-    // Earlier sections whose page differs from it.
-    pagesDropped: number;
-    // Pictures a band anchored, which it holds as block figures.
-    bandAnchors: number;
-    // What a band drops: a picture behind the text or a VML one, a letterhead or a watermark, a text watermark, and a
-    // note reference.
-    bandDropped: number;
+    // What the doc can't hold, by kind: SmartArt, whose graphic the schema can't hold, a chart that came in as words, an
+    // earlier section whose page differs from the doc's, a picture a band anchored, which it holds as a block figure,
+    // and what a band drops (a picture behind the text or a VML one, a letterhead or a watermark, a note reference).
+    lost: Lost;
     publicOrigin: string | undefined;
 };
 
@@ -99,7 +92,12 @@ export type Scope = {
     fill?: string;
 };
 
-export function createReader(pkg: DocxPackage, publicOrigin: string | undefined): Reader {
+export function createReader(
+    pkg: DocxPackage,
+    files: MediaFiles,
+    lost: Lost,
+    publicOrigin: string | undefined,
+): Reader {
     const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
     const lang = wChild(defaults, 'lang');
     const theme = readTheme(pkg.theme, { bidi: w(lang, 'bidi'), eastAsia: w(lang, 'eastAsia') });
@@ -117,24 +115,22 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
     // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
     const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) / 240 : 1;
+    for (const section of descendants(pkg.document.root, W_NS, 'sectPr'))
+        if (section !== sectPr && !isDeepStrictEqual(sectionPage(section), size)) lost('section-pages-dropped');
     return {
         pkg,
         theme,
         fontTable,
         styles,
         numbering: readNumbering(pkg.numbering, styles),
-        nameMedia: mediaNamer('docx'),
-        images: [],
-        imageNames: new Map(),
+        files,
         noteElements: noteElements(pkg),
         notes: new Map(),
         openNotes: [],
         fields: [],
-        graphicsDropped: 0,
         graphicParts: new Set(),
         colors: drawingTheme(pkg.theme),
         charts: new Map(),
-        chartsDropped: 0,
         bodySize,
         bodySizeCs: 2 * (readFontSize((body.sizeCs ?? body.size ?? 20) / 2) ?? 10),
         baseColor: body.color?.hex,
@@ -149,11 +145,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         page,
         columnTwips: twips.width - twips.margin.left - twips.margin.right,
         columnPx: Math.floor(px.width - px.margin.left - px.margin.right),
-        pagesDropped: descendants(pkg.document.root, W_NS, 'sectPr').filter(
-            (section) => section !== sectPr && !isDeepStrictEqual(sectionPage(section), size),
-        ).length,
-        bandAnchors: 0,
-        bandDropped: 0,
+        lost,
         publicOrigin,
     };
 }
@@ -232,7 +224,7 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     const key = `${note}@${reader.openNotes.length}`;
     const read = reader.notes.get(key);
     if (read) {
-        reader.pkg.chargePiece(read.weight);
+        reader.pkg.pieces.charge(read.weight);
         return read.content;
     }
     const found = reader.noteElements.get(note);
@@ -317,7 +309,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
 
     // No fill of its own is transparent: a cell's shows through.
     const runScope = isFill(direct.shading ?? styled.shading) ? { ...scope, onFill: true } : scope;
-    const context: RunContext = { scope: runScope, paraStyle: styleId, role, pieces: [], pending: [] };
+    const context: RunContext = { scope: runScope, paraStyle: styleId, role, pieces: [], pending: [], leftOut: [] };
     walkInline(
         reader,
         xmlElements(p).filter((child) => child.ns !== W_NS || child.local !== 'pPr'),
@@ -340,6 +332,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const breakOnly = halves.length > 1 && !halves.some(isShown);
     const list = listed && !breakOnly && !direct.markDeleted ? reader.numbering.next(numId, ilvl) : undefined;
     const props = mergePara(styled, list?.pPr ?? {}, direct);
+    const textAlign = textAlignOf(props.jc, props.bidi);
 
     // Google Docs flattens the Code Block style: every run holding text monospace on the writer's fill, or on a light
     // grey of any shade, as other editors shade code.
@@ -491,7 +484,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             // draws it at the title's height.
             role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
             inlines: content,
-            textAlign: textAlignOf(props.jc, props.bidi),
+            textAlign,
             continued: numbered,
             indLeft,
             quote,
@@ -542,6 +535,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         } else if (item.kind === 'table') item.indent += indLeft;
         items.push(item);
     }
+    for (const line of context.leftOut) line.textAlign = textAlign;
     if (props.sectionBreak && scope.story === 'body') items.push({ kind: 'break' });
     return items;
 }
@@ -553,7 +547,7 @@ function textFaces(reader: Reader, p: XmlElement, paraRun: DocxRunProps) {
         const props = mergeRun(paraRun, reader.styles.run(direct.style), direct);
         return xmlElements(run)
             .filter((child) => hasXmlName(child, W_NS, 't'))
-            .flatMap((t) => byFace(xmlText(t), props.fonts, props, true, reader.pkg.chargePiece))
+            .flatMap((t) => byFace(xmlText(t), props.fonts, props, true, () => reader.pkg.pieces.charge(1)))
             .filter((face) => face.text.trim())
             .map((face) => ({ ...face, direct }));
     });

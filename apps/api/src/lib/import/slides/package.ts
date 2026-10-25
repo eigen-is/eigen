@@ -1,7 +1,11 @@
+// A pptx as the deck reader opens it: the presentation, its slides in order and the layouts, masters, themes, charts and
+// pictures they name, each read only through its relationships; and what one walk over the deck shares.
+
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
+import type { Budget } from '../../ooxml/budget';
 import { THEME_TYPE } from '../../ooxml/drawingml';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../ooxml/ooxml';
 import { chartPart } from '../../ooxml/ooxml-chart';
@@ -59,11 +63,11 @@ export type DeckWalk = {
     slideWidth: number;
     offset: { x: number; y: number };
     slide: Frame;
-    // Children walked and elements written, each capped: a master's shapes count again for every slide.
-    shapes: number;
-    elements: number;
-    // The update's weight so far, charged as each frame and element is written.
-    weight: number;
+    // Children walked and elements written, each a budget: a master's shapes count again for every slide.
+    shapes: Budget;
+    elements: Budget;
+    // The update's weight, charged as each frame and element is written.
+    weight: Budget;
     // A layout's or master's elements and the children walked for them, by part and colour map: read once, copied onto
     // every slide that shows them.
     decorations: Map<string, { elements: NewVectorElement[]; shapes: number }>;
@@ -73,9 +77,6 @@ export type DeckWalk = {
     // however many slides show that shape.
     lost(code: CountedWarningCode, source: XmlElement): void;
 };
-
-// A loss in the shape or background being drawn.
-export type Lost = (code: CountedWarningCode) => void;
 
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
 export function readPackage(bytes: Uint8Array): PptxPackage {

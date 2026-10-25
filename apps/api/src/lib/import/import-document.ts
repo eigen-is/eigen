@@ -1,3 +1,7 @@
+// Import into an open document and Convert to a new one, for xlsx, docx and pptx files: the main thread's half, which
+// admits the job, hands the bytes to the transform process, then writes the pictures and commits what came back.
+// The upload routes call it.
+
 import type { ConvertTarget, DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
 import {
     CONVERT_SOURCES,
@@ -18,7 +22,8 @@ import { commitEigendocImport } from '../document/doc';
 import { appendSheetsToYjs, writeSheetsSnapshotToYjs } from '../document/sheets';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
 import type {
-    DocImportWorkerResult,
+    DocImportJob,
+    DocImportResult,
     ImportTransformJob,
     SheetsImportJob,
     SlidesImportJob,
@@ -59,14 +64,17 @@ function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<Sheet
     return runImportToSnapshotJson(job, toTransferableBuffer(buffer), { signal });
 }
 
-function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
+function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportResult> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'docx');
-    return runImportToDocumentUpdate(
-        { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', publicOrigin: getPublicOrigin() },
-        toTransferableBuffer(buffer),
-        { signal },
-    );
+    const job: DocImportJob = {
+        kind: 'import',
+        sourceFormat: 'docx',
+        targetType: 'eigendoc',
+        publicOrigin: getPublicOrigin(),
+        maxMediaBytes: getMaxUploadSize(),
+    };
+    return runImportToDocumentUpdate(job, toTransferableBuffer(buffer), { signal });
 }
 
 // The upload cap bounds the pictures' inflated bytes too, as an upload of each would be bounded.
@@ -235,7 +243,7 @@ export async function importIntoDocument(
     if (containerMime === DRIVE_MIME_DOC) {
         // The file's page setup, Normal style and bands can't sit beside the doc's, so a docx only ever replaces.
         if (mode !== 'replace') throw new ApiError(400, 'A document import replaces the document');
-        const { update, page, style, images } = await importDocxUpdate(buffer, signal);
+        const { update, page, style, images, warnings } = await importDocxUpdate(buffer, signal);
         // Media before the update that names it: an open tab looks each name up once, as the update arrives. The open
         // and the abort check come before the version and the write check that guards the save.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
@@ -245,7 +253,7 @@ export async function importIntoDocument(
         await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
         commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page, style });
-        return null;
+        return importSummary(warnings);
     }
 
     if (containerMime === DRIVE_MIME_SLIDES) {

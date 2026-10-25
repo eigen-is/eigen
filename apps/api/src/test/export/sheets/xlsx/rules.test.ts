@@ -30,6 +30,7 @@ function roundTrip(sheet: Partial<Sheet>) {
         columns: 26,
         charge: () => {},
         chargeElements: () => {},
+        lost: () => {},
         dates: new Set(),
     });
     return { xml, lost, looks, ...read };

@@ -1,11 +1,11 @@
+// What an import answers in the format's words: past a cap or the memory of the transform process, for a file it
+// can't read, and for an encrypted one, naming the application that removes the password; and the toast's summary of
+// what it left out. Light on purpose: the transform runner maps an out-of-memory with these, and must not load a reader.
+
 import { ApiError, isOutOfMemory } from '../core/errors';
 import { XmlError } from '../core/xml';
 import type { CountedWarningCode, ImportTransformJob, TransformWarning } from '../document/transform/protocol';
 import { ZipError } from '../ooxml/zip';
-
-// What an import answers in the format's words: past a cap or the memory of the transform process, for a file it can't
-// read, and for an encrypted one, naming the application that removes the password. Light on purpose: run-transform.ts
-// maps an out-of-memory with these, and must not load a reader to do it.
 
 type ImportFormat = ImportTransformJob['sourceFormat'];
 
@@ -61,41 +61,66 @@ export const SAVE_AS_PPTX =
 
 type Noun = readonly [one: string, many: string];
 
-// What a pptx import left out, per kind, for the toast after Import…: each warning counts source shapes,
-// so a master's background is one fill however many slides show it.
-const NOT_IMPORTED: [readonly CountedWarningCode[], Noun][] = [
-    [['tables-dropped'], ['table', 'tables']],
-    [['charts-dropped'], ['chart', 'charts']],
-    [['diagrams-dropped'], ['SmartArt graphic', 'SmartArt graphics']],
-    [['objects-dropped'], ['embedded object', 'embedded objects']],
-    [
-        ['images-dropped', 'images-unshown'],
-        ['picture', 'pictures'],
-    ],
-];
-const SIMPLIFIED: [readonly CountedWarningCode[], Noun][] = [
-    [['shapes-simplified'], ['shape', 'shapes']],
-    [['fills-simplified'], ['fill', 'fills']],
-    [['text-simplified'], ['text box', 'text boxes']],
-    [['mirrors-dropped'], ['flipped picture', 'flipped pictures']],
+// What happened to a kind, one clause each, in this order.
+const OUTCOMES = ['dropped', 'simplified', 'flattened', 'unshown'] as const;
+type Outcome = (typeof OUTCOMES)[number];
+
+// Each outcome said of one and of more.
+const PREDICATES: Record<Outcome, readonly [one: string, many: string]> = {
+    dropped: ['was not imported', 'were not imported'],
+    simplified: ['was simplified', 'were simplified'],
+    flattened: ['lost its layout', 'lost their layout'],
+    unshown: ["can't be shown", "can't be shown"],
+};
+
+// What an import left out or drew simpler, per kind, for the toast after Import…, whichever format's reader counted it.
+// Each kind lists in this order within its clause. A pptx's warnings count source shapes, so a master's background is
+// one fill however many slides show it.
+const LOSSES: { code: CountedWarningCode; noun: Noun; what: Outcome }[] = [
+    { code: 'tables-dropped', noun: ['table', 'tables'], what: 'dropped' },
+    { code: 'charts-dropped', noun: ['chart', 'charts'], what: 'dropped' },
+    { code: 'diagrams-dropped', noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'dropped' },
+    { code: 'objects-dropped', noun: ['embedded object', 'embedded objects'], what: 'dropped' },
+    { code: 'images-dropped', noun: ['picture', 'pictures'], what: 'dropped' },
+    { code: 'conditional-formats-dropped', noun: ['conditional format', 'conditional formats'], what: 'dropped' },
+    { code: 'validations-dropped', noun: ['data validation rule', 'data validation rules'], what: 'dropped' },
+    { code: 'section-pages-dropped', noun: ["section's page setup", "sections' page setups"], what: 'dropped' },
+    {
+        code: 'even-bands-dropped',
+        noun: ['even-page header or footer', 'even-page headers or footers'],
+        what: 'dropped',
+    },
+    { code: 'band-content-dropped', noun: ['header or footer item', 'header or footer items'], what: 'dropped' },
+    { code: 'shapes-simplified', noun: ['shape', 'shapes'], what: 'simplified' },
+    { code: 'fills-simplified', noun: ['fill', 'fills'], what: 'simplified' },
+    { code: 'text-simplified', noun: ['text box', 'text boxes'], what: 'simplified' },
+    { code: 'mirrors-dropped', noun: ['flipped picture', 'flipped pictures'], what: 'simplified' },
+    {
+        code: 'band-images-unanchored',
+        noun: ['header or footer picture', 'header or footer pictures'],
+        what: 'simplified',
+    },
+    { code: 'blocks-flattened', noun: ['part of the document', 'parts of the document'], what: 'flattened' },
+    { code: 'images-unshown', noun: ['picture', 'pictures'], what: 'unshown' },
 ];
 
 // "2 tables and 1 SmartArt graphic were not imported", or nothing when no kind was met.
-function clause(warnings: TransformWarning[], kinds: [readonly CountedWarningCode[], Noun][], what: string): string[] {
+function clause(warnings: TransformWarning[], what: Outcome): string[] {
     const items: string[] = [];
     let total = 0;
-    for (const [codes, [one, many]] of kinds) {
+    for (const { code, noun, what: outcome } of LOSSES) {
+        if (outcome !== what) continue;
         let count = 0;
-        for (const warning of warnings) if ('count' in warning && codes.includes(warning.code)) count += warning.count;
-        if (count > 0) items.push(`${count} ${count === 1 ? one : many}`);
+        for (const warning of warnings) if ('count' in warning && warning.code === code) count += warning.count;
+        if (count > 0) items.push(`${count} ${count === 1 ? noun[0] : noun[1]}`);
         total += count;
     }
     if (items.length === 0) return [];
     const list = items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
-    return [`${list} ${total === 1 ? 'was' : 'were'} ${what}`];
+    return [`${list} ${PREDICATES[what][total === 1 ? 0 : 1]}`];
 }
 
 export function importSummary(warnings: TransformWarning[]): string | null {
-    const clauses = [...clause(warnings, NOT_IMPORTED, 'not imported'), ...clause(warnings, SIMPLIFIED, 'simplified')];
+    const clauses = OUTCOMES.flatMap((what) => clause(warnings, what));
     return clauses.length > 0 ? `${clauses.join('; ')}.` : null;
 }

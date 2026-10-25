@@ -1,6 +1,9 @@
+// The xlsx writer's entry: an export's sheets to the bytes of a workbook, run in the transform process.
+
 import type { Sheet } from '@workspace/lib/sheets';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-import type { CountedWarningCode, TransformWarning } from '../../../document/transform/protocol';
+import type { TransformWarning } from '../../../document/transform/protocol';
+import { lossCounter } from '../../../document/transform/protocol';
 import type { OfficeMedia } from '../../office-image';
 import { writeWorkbook } from './package';
 
@@ -11,10 +14,8 @@ export function writeXlsx(
     sheets: Sheet[],
     { title, media, warnings }: { title: string; media: OfficeMedia[]; warnings: TransformWarning[] },
 ): Uint8Array {
-    const losses = new Map<CountedWarningCode, number>();
-    const bytes = writeWorkbook(sheets, stripEigenExtension(title), media, (code) =>
-        losses.set(code, (losses.get(code) ?? 0) + 1),
-    );
-    for (const [code, count] of losses) warnings.push({ code, count });
+    const losses = lossCounter();
+    const bytes = writeWorkbook(sheets, stripEigenExtension(title), media, losses.lost);
+    warnings.push(...losses.warnings());
     return bytes;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { CountedWarningCode } from '../../../lib/document/transform/protocol';
 import { readRules } from '../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../lib/import/sheets/styles';
 import { cellKey } from '../../../lib/import/sheets/worksheet';
@@ -31,6 +32,7 @@ type Options = {
     date1904?: boolean;
     charge?: (cells: number, text: number) => void;
     chargeElements?: (count: number) => void;
+    lost?: (code: CountedWarningCode) => void;
     dates?: number[][];
 };
 
@@ -44,6 +46,7 @@ function read(after: string, options: Options = {}) {
         columns: options.columns ?? 5,
         charge: options.charge ?? ((cells, text) => charged.push({ cells, text })),
         chargeElements: options.chargeElements ?? (() => {}),
+        lost: options.lost ?? (() => {}),
         dates: new Set((options.dates ?? []).map(([r, c]) => cellKey(r, c))),
     });
     return { ...rules, charged };
@@ -245,6 +248,24 @@ describe('a conditional format', () => {
         ]);
     });
 
+    test('each rule left out is counted, one the engine has none for or one over no range', () => {
+        const lost: CountedWarningCode[] = [];
+        read(
+            cf(
+                'A1:A3',
+                '<cfRule type="iconSet" priority="1"><iconSet iconSet="3Arrows"/></cfRule>',
+                '<cfRule type="cellIs" dxfId="0" priority="2" operator="equal"><formula>1</formula></cfRule>',
+            ) +
+                cf(
+                    'nowhere',
+                    '<cfRule type="cellIs" dxfId="0" priority="3" operator="equal"><formula>1</formula></cfRule>',
+                    '<cfRule type="expression" dxfId="0" priority="4"><formula>A1</formula></cfRule>',
+                ),
+            { lost: (code) => lost.push(code) },
+        );
+        expect(lost).toEqual(Array(3).fill('conditional-formats-dropped'));
+    });
+
     test('a range is cut to the grid, and one starting past it dropped', () => {
         const { conditionalFormatRules } = read(
             cf(
@@ -412,6 +433,21 @@ describe('a data validation', () => {
         expect(dataVerification?.['1_0'].value1).toBe('$C$1:$C$3');
     });
 
+    test('each validation the engine has no rule for is counted; one that allows any value holds no rule', () => {
+        const lost: CountedWarningCode[] = [];
+        read(
+            dv(
+                list('A1', '=$C$1:$C$3'),
+                list('A2', 'MyNamedRange'),
+                '<dataValidation type="custom" sqref="A3"><formula1>A3&gt;0</formula1></dataValidation>',
+                '<dataValidation type="whole" operator="greaterThan" sqref="A4"><formula1>$B$1</formula1></dataValidation>',
+                '<dataValidation sqref="A5" showInputMessage="1" prompt="Any"/>',
+            ),
+            { lost: (code) => lost.push(code) },
+        );
+        expect(lost).toEqual(Array(3).fill('validations-dropped'));
+    });
+
     test('numbers, lengths and dates map onto the engine types and operators', () => {
         const { dataVerification } = read(
             dv(
@@ -533,6 +569,7 @@ test('a sheet without rules has none', () => {
             columns: 0,
             charge: () => {},
             chargeElements: () => {},
+            lost: () => {},
             dates: new Set(),
         }),
     ).toEqual({});

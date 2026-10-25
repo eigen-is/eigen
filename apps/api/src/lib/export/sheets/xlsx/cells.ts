@@ -1,22 +1,22 @@
+// A worksheet's grid as <sheetData>'s rows, handed over a batch at a time so a sheet of millions of cells is never one
+// string: each cell's value, type, formula and look with its own borders, and each row's height and hidden flag. The
+// cells and the borders are walked in order, merged, never the row or column numbers between them.
+
 import { pxToPt } from '@workspace/lib/docs/eigendoc';
 import type { Cell, CellBorderSides, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
 import { columnIndexToLabel, parseCellKey, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { rangeToA1, valueIsError } from '@workspace/sheet/engine';
-import type { CountedWarningCode } from '../../../document/transform/protocol';
+import type { Lost } from '../../../document/transform/protocol';
 import { MAX_FORMULA_LENGTH, withFuturePrefixes } from '../../../ooxml/spreadsheetml';
 import type { SharedStringTable } from './strings';
 import { BATCH_CHARS, cutText } from './strings';
 import type { StyleRegistry } from './styles';
 
-// A worksheet's grid as <sheetData>'s rows, handed over a batch at a time so a sheet of millions of cells is never one
-// string: each cell's value, type, formula and look with its own borders, and each row's height and hidden flag. The
-// cells and the borders are walked in order, merged, never the row or column numbers between them.
-
 export type GridContext = {
     styles: StyleRegistry;
     strings: SharedStringTable;
-    lost: (code: CountedWarningCode) => void;
+    lost: Lost;
 };
 
 export type Grid = {

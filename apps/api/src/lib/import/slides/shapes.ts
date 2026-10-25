@@ -1,3 +1,5 @@
+// A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
+
 import { escapeHtml } from '@workspace/lib/html';
 import type {
     Arrowhead,
@@ -19,11 +21,12 @@ import {
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
-import type { CountedWarningCode } from '../../document/transform/protocol';
+import type { CountedWarningCode, Lost } from '../../document/transform/protocol';
 import { ARROWHEAD_BY_LINE_END, DEGREE, drawingLines, isSideways, strokeStyleOf } from '../../ooxml/drawingml';
 import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
 import type { Part } from '../../ooxml/opc';
+import { PICTURE_NOT_IMPORTED } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
 import type { CustomGeometry } from './custom-geometry';
@@ -50,12 +53,10 @@ import {
     textColorOf,
 } from './inherit';
 import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
-import type { DeckWalk, Lost } from './package';
+import type { DeckWalk } from './package';
 import { alternative, blipMedia } from './package';
 import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
-
-// A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
 
 export const MAX_ELEMENTS = 20_000;
 export const MAX_GROUP_DEPTH = 32;
@@ -81,7 +82,7 @@ const DROPPED = {
     diagram: { label: 'SmartArt not imported', code: 'diagrams-dropped' },
     ole: { label: 'Embedded object not imported', code: 'objects-dropped' },
     object: { label: 'Object not imported', code: 'objects-dropped' },
-    picture: { label: 'Picture not imported', code: 'images-dropped' },
+    picture: { label: PICTURE_NOT_IMPORTED, code: 'images-dropped' },
 } satisfies Record<string, { label: string; code: CountedWarningCode }>;
 type Dropped = keyof typeof DROPPED;
 
@@ -203,12 +204,14 @@ type Walk = {
     // A layout's or master's shapes: its placeholders are prompts, never drawn on a slide.
     copied: boolean;
     out: SlideShapes;
+    // The children this walk has walked, which a layout's or master's cached elements charge again on every slide.
+    walked: number;
 };
 
 export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): SlideShapes {
     const out: SlideShapes = { elements: [], title: '' };
     // The frame: its name, a title of at most 100 characters, weighs nothing besides.
-    weigh(deck, 1);
+    deck.weight.charge(1);
     const root: Place = (shape) => ({
         ...shape,
         x: shape.x * deck.scale + deck.offset.x,
@@ -217,23 +220,22 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): 
         height: shape.height * deck.scale,
     });
     for (const part of decorationsOf(inheritance)) {
-        const walk: Walk = { deck, inheritance, part, copied: true, out };
+        const walk: Walk = { deck, inheritance, part, copied: true, out, walked: 0 };
         // A slide's clrMapOvr repaints them.
         const key = `${part.path} ${JSON.stringify([...inheritance.theme.colors.map])}`;
         const known = deck.decorations.get(key);
         if (known) {
-            deck.shapes += known.shapes;
-            if (deck.shapes > MAX_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
+            deck.shapes.charge(known.shapes);
             for (const element of known.elements) push(walk, { ...element });
             continue;
         }
-        const [elements, shapes] = [out.elements.length, deck.shapes];
+        const elements = out.elements.length;
         const tree = spTreeOf(part.root);
         if (tree) readTree(walk, xmlElements(tree), root, 0, undefined);
-        deck.decorations.set(key, { elements: out.elements.slice(elements), shapes: deck.shapes - shapes });
+        deck.decorations.set(key, { elements: out.elements.slice(elements), shapes: walk.walked });
     }
     const tree = spTreeOf(inheritance.slide.root);
-    const walk: Walk = { deck, inheritance, part: inheritance.slide, copied: false, out };
+    const walk: Walk = { deck, inheritance, part: inheritance.slide, copied: false, out, walked: 0 };
     if (tree) readTree(walk, xmlElements(tree), root, 0, undefined);
     // A slide without a title keeps the name its cSld gives it, which the writer writes a frame's name to.
     const cSld = childOf(inheritance.slide.root, P_NS, 'cSld');
@@ -246,7 +248,8 @@ export function readSlideShapes(deck: DeckWalk, inheritance: SlideInheritance): 
 function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: number, group: GroupFill | undefined): void {
     if (depth > MAX_GROUP_DEPTH) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
     for (const shape of shapes) {
-        if (++walk.deck.shapes > MAX_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
+        walk.deck.shapes.charge(1);
+        walk.walked++;
         charge(1);
         if (isAlternateContent(shape)) {
             readTree(walk, alternative(shape), placeIn, depth + 1, group);
@@ -289,17 +292,12 @@ function readTree(walk: Walk, shapes: XmlElement[], placeIn: Place, depth: numbe
 const DRAWN = new Set(['sp', 'pic', 'cxnSp', 'grpSp', 'graphicFrame', 'contentPart']);
 
 function push(walk: Walk, element: NewVectorElement): void {
-    if (++walk.deck.elements > MAX_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
+    walk.deck.elements.charge(1);
     let weight = 1;
     for (const value of Object.values(element))
         if (typeof value === 'string') weight += Math.floor(value.length / CHARS_PER_UNIT);
-    weigh(walk.deck, weight);
+    walk.deck.weight.charge(weight);
     walk.out.elements.push(element);
-}
-
-function weigh(deck: DeckWalk, weight: number): void {
-    deck.weight += weight;
-    if (deck.weight > MAX_PPTX_WEIGHT) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
 }
 
 // A drawn shape and what it inherits: its placeholder, what it and the layout's and master's placeholders it takes from

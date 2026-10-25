@@ -1,12 +1,13 @@
+// The images the docx, pptx and xlsx writers embed: the PNG or JPEG a source becomes, the PNG an SVG falls back to, and
+// the media parts of one package.
+
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ExportMedia } from '../document/transform/protocol';
 import { toTransferableBuffer } from '../document/transform/protocol';
+import { IMAGE_EXTENSION_BY_MIME } from '../ooxml/drawingml';
 import type { ZipWriteEntry } from '../ooxml/zip';
 import { THUMBNAIL_TIMEOUT_SECONDS } from '../shared/thumbnail-timeout';
 import type { ImageResult, WorkerInput } from '../shared/thumbnail-worker';
-
-// The images the docx, pptx and xlsx writers embed: the PNG or JPEG a source becomes, the PNG an SVG falls back to, and
-// the media parts of one package.
 
 // An image in a docx, pptx or xlsx: the media item, and for an SVG the PNG a reader without SVG draws. The PNG is drawn and
 // read inside the transform process, so it never crosses the boundary on ExportMedia.
@@ -16,10 +17,10 @@ export type OfficeMedia = ExportMedia & { png?: ArrayBuffer };
 export const OFFICE_IMAGE_MAX_SIZE = 2560;
 
 // The part extension of each type encodeOfficeImage writes, which an Office package embeds as is.
-export const RASTER_EXTENSIONS = new Map([
-    ['image/png', 'png'],
-    ['image/jpeg', 'jpeg'],
-]);
+const RASTER_TYPES = new Set(['image/png', 'image/jpeg']);
+const RASTER_EXTENSIONS = new Map(
+    [...IMAGE_EXTENSION_BY_MIME].filter(([contentType]) => RASTER_TYPES.has(contentType)),
+);
 
 // The [Content_Types].xml Defaults of an Office image's parts: its raster, and an SVG's own beside its PNG.
 export const OFFICE_IMAGE_CONTENT_TYPES: Record<string, string> = {
