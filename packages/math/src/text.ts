@@ -58,7 +58,7 @@ function nodeText(node: MathNode): string {
             return `${node.open}${node.parts.map(rowText).join(node.separator)}${node.close}`;
         case 'function': {
             const [body] = node.body;
-            const space = node.body.length === 1 && body.kind === 'fenced' ? '' : ' ';
+            const space = node.body.length === 0 || (node.body.length === 1 && body.kind === 'fenced') ? '' : ' ';
             return `${rowText(node.name)}${space}${rowText(node.body)}`;
         }
         case 'accent':
