@@ -7,16 +7,17 @@ import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, nearestSlideSize, SLIDE_SIZES } from 
 import { xmlAttr } from '../../core/xml';
 import type { TransformWarning } from '../../document/transform/protocol';
 import { lossCounter } from '../../document/transform/protocol';
+import { budget } from '../../ooxml/budget';
 import { EMU_PER_POINT, P_NS } from '../../ooxml/ooxml';
 import { MAX_SLIDE_EMU, MIN_SLIDE_EMU } from '../../ooxml/presentationml';
 import type { ImportedMedia } from '../image-types';
 import { importMedia } from '../image-types';
-import { importError } from '../messages';
+import { IMPORT_MESSAGES, importError } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
 import { childOf, withWorkBudget } from './lookup';
 import type { DeckWalk } from './package';
 import { readPackage } from './package';
-import { readSlideShapes } from './shapes';
+import { MAX_ELEMENTS, MAX_PPTX_WEIGHT, readSlideShapes } from './shapes';
 
 export type PptxSlide = { name: string; background: BackgroundFill | null; elements: NewVectorElement[] };
 
@@ -85,9 +86,9 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         slideWidth: page.slideWidth,
         offset: { x: (frame.width - cx * scale) / 2, y: (frame.height - cy * scale) / 2 },
         slide: { width: cx * scale, height: cy * scale },
-        shapes: 0,
-        elements: 0,
-        weight: 0,
+        shapes: budget(MAX_ELEMENTS, IMPORT_MESSAGES.pptx.tooLarge),
+        elements: budget(MAX_ELEMENTS, IMPORT_MESSAGES.pptx.tooLarge),
+        weight: budget(MAX_PPTX_WEIGHT, IMPORT_MESSAGES.pptx.tooLarge),
         decorations: new Map(),
         lost: losses.lost,
         // Read as it is named, so a picture past the caps or whose bytes don't read is dropped where it is shown.

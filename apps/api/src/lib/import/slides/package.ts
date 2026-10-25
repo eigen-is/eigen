@@ -2,6 +2,7 @@ import type { NewVectorElement } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import type { CountedWarningCode } from '../../document/transform/protocol';
+import type { Budget } from '../../ooxml/budget';
 import { THEME_TYPE } from '../../ooxml/drawingml';
 import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../ooxml/ooxml';
 import { chartPart } from '../../ooxml/ooxml-chart';
@@ -59,11 +60,11 @@ export type DeckWalk = {
     slideWidth: number;
     offset: { x: number; y: number };
     slide: Frame;
-    // Children walked and elements written, each capped: a master's shapes count again for every slide.
-    shapes: number;
-    elements: number;
-    // The update's weight so far, charged as each frame and element is written.
-    weight: number;
+    // Children walked and elements written, each a budget: a master's shapes count again for every slide.
+    shapes: Budget;
+    elements: Budget;
+    // The update's weight, charged as each frame and element is written.
+    weight: Budget;
     // A layout's or master's elements and the children walked for them, by part and colour map: read once, copied onto
     // every slide that shows them.
     decorations: Map<string, { elements: NewVectorElement[]; shapes: number }>;
