@@ -99,12 +99,13 @@ describe('importSummary', () => {
         );
     });
 
-    test("an xlsx's dropped conditional formats have their noun", () => {
+    test("an xlsx's dropped conditional formats and validations have their nouns", () => {
         expect(
             importSummary([
+                { code: 'validations-dropped', count: 1 },
                 { code: 'conditional-formats-dropped', count: 4 },
                 { code: 'charts-dropped', count: 1 },
             ]),
-        ).toBe('1 chart and 4 conditional formats were not imported.');
+        ).toBe('1 chart, 4 conditional formats and 1 data validation rule were not imported.');
     });
 });

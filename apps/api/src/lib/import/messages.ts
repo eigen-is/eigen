@@ -75,6 +75,7 @@ const LOSSES: { code: CountedWarningCode; noun: Noun; what: Outcome }[] = [
     { code: 'objects-dropped', noun: ['embedded object', 'embedded objects'], what: 'not imported' },
     { code: 'images-dropped', noun: ['picture', 'pictures'], what: 'not imported' },
     { code: 'conditional-formats-dropped', noun: ['conditional format', 'conditional formats'], what: 'not imported' },
+    { code: 'validations-dropped', noun: ['data validation rule', 'data validation rules'], what: 'not imported' },
     { code: 'section-pages-dropped', noun: ["section's page setup", "sections' page setups"], what: 'not imported' },
     {
         code: 'even-bands-dropped',

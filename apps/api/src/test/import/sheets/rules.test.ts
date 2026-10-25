@@ -433,6 +433,21 @@ describe('a data validation', () => {
         expect(dataVerification?.['1_0'].value1).toBe('$C$1:$C$3');
     });
 
+    test('each validation the engine has no rule for is counted; one that allows any value holds no rule', () => {
+        const lost: CountedWarningCode[] = [];
+        read(
+            dv(
+                list('A1', '=$C$1:$C$3'),
+                list('A2', 'MyNamedRange'),
+                '<dataValidation type="custom" sqref="A3"><formula1>A3&gt;0</formula1></dataValidation>',
+                '<dataValidation type="whole" operator="greaterThan" sqref="A4"><formula1>$B$1</formula1></dataValidation>',
+                '<dataValidation sqref="A5" showInputMessage="1" prompt="Any"/>',
+            ),
+            { lost: (code) => lost.push(code) },
+        );
+        expect(lost).toEqual(Array(3).fill('validations-dropped'));
+    });
+
     test('numbers, lengths and dates map onto the engine types and operators', () => {
         const { dataVerification } = read(
             dv(

@@ -48,7 +48,8 @@ export type RulesContext = {
     charge(cells: number, text: number): void;
     // Called with each reference of a sqref before it is parsed, whatever it emits; throws past the budget.
     chargeElements(count: number): void;
-    // Counts a rule left out: one the engine has no rule for, or one over no range of the grid.
+    // Counts a rule left out: a conditional format or a validation the engine has no rule for, or a conditional format
+    // over no range of the grid.
     lost(code: CountedWarningCode): void;
 };
 
@@ -144,7 +145,11 @@ export function readRules(
                 formulaOf(validation, 'formula2'),
                 context.date1904,
             );
-            if (!rule) continue;
+            if (!rule) {
+                // Excel's "Any value" lets everything in, so there is no rule to lose; its prompt alone goes.
+                if ((xmlAttr(validation, '', 'type') ?? 'none') !== 'none') context.lost('validations-dropped');
+                continue;
+            }
             const text = rule.value1.length + rule.value2.length + (rule.hintValue ?? '').length;
             for (const { row, column } of rangesOf(sqrefOf(validation) ?? '', context)) {
                 const bottom = Math.min(row[1], context.rows + DV_ROW_MARGIN - 1);
