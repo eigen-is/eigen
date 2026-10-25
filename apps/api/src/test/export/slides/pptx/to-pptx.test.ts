@@ -21,9 +21,12 @@ import { toTransferableText } from '../../../../lib/document/transform/protocol'
 import type { OfficeMedia } from '../../../../lib/export/office-image';
 import { sanitizeSceneHtml } from '../../../../lib/export/sanitize';
 import { writePptx } from '../../../../lib/export/slides/pptx/to-pptx';
-import { parseOoxml } from '../../../../lib/ooxml/ooxml';
+import { IDENTITY_COLOR_MAP } from '../../../../lib/ooxml/drawingml';
+import { C_NS, parseOoxml } from '../../../../lib/ooxml/ooxml';
+import { CHART_CONTENT_TYPE, readChart } from '../../../../lib/ooxml/ooxml-chart';
 import type { ZipReader } from '../../../../lib/ooxml/zip';
 import { openZip } from '../../../../lib/ooxml/zip';
+import { seriesIdsByPlace } from '../../../../scripts/office-audit';
 import { sampleChartParts } from '../../../fixtures/chart-parts';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
@@ -466,9 +469,11 @@ describe('pptx shapes', () => {
         const spec = sampleChartSpec('pie');
         if (spec.data.source !== 'inline') throw new Error('expected inline data');
         const series = spec.data.series.map((s) => ({ ...s, values: [1.4e9, 3, 65, 80] }));
+        // Sketched, so it is written as its shapes.
         const chart = element('chart', {
             width: 640,
             height: 400,
+            roughness: 1,
             ...newChartSpecParts({ ...spec, data: { ...spec.data, series } }),
         });
         const scene = sceneOf([chart]);
@@ -784,21 +789,54 @@ describe('pptx shapes', () => {
         expect(srgb(first(first(ground, P, 'spPr'), A, 'solidFill')).val).toBe('FFFFFF');
     });
 
-    test('a chart is written as the shapes Convert to shapes makes, each with its own id', () => {
-        const chart = element('chart', {
-            width: 640,
-            height: 400,
-            ...sampleChartParts('pie'),
+    test('a chart is a PowerPoint chart: a graphic frame at its box naming its own chart part, the spec read back', () => {
+        const sample = sampleChartSpec('pie');
+        const chart = element('chart', { width: 640, height: 400, ...newChartSpecParts(sample) });
+        const zip = pptx(sceneOf([chart, { ...chart, id: 'chart-a1', index: 'a1' }]));
+        const frames = shapes(zip);
+        expect(frames.map((frame) => frame.local)).toEqual(['graphicFrame', 'graphicFrame']);
+        const transform = xmlChild(frames[0], P, 'xfrm');
+        expect([xmlChild(transform, A, 'off'), xmlChild(transform, A, 'ext')].map((e) => e?.attributes)).toEqual([
+            { x: String(100 * EMU), y: String(50 * EMU) },
+            { cx: String(640 * EMU), cy: String(400 * EMU) },
+        ]);
+        const ids = frames.map((frame) => attr(first(frame, P, 'cNvPr'), 'id'));
+        expect(ids).toEqual(['2', '3']);
+        const rels = relationships(zip, 'ppt/slides/slide1.xml');
+        const targets = frames.map((frame) => rels.get(String(xmlAttr(first(frame, C_NS, 'chart'), R, 'id'))));
+        expect(targets).toEqual([
+            { type: `${R}/chart`, target: '../charts/chart1.xml', mode: undefined },
+            { type: `${R}/chart`, target: '../charts/chart2.xml', mode: undefined },
+        ]);
+        const overrides = descendants(part(zip, '[Content_Types].xml'), CONTENT_TYPES, 'Override');
+        const typeOf = (name: string) => overrides.find((o) => attr(o, 'PartName') === name)?.attributes['ContentType'];
+        expect(typeOf('/ppt/charts/chart2.xml')).toBe(CHART_CONTENT_TYPE);
+        const read = readChart(part(zip, 'ppt/charts/chart1.xml'), {
+            theme: { scheme: new Map(), map: IDENTITY_COLOR_MAP },
+            data: 'cache',
         });
+        expect('spec' in read && seriesIdsByPlace(read.spec).data).toEqual(seriesIdsByPlace(sample).data);
+    });
+
+    // A graphic frame turns no chart and fades none, and a chart part paints no sketch.
+    test.each([
+        ['turned', { angle: 0.5 }],
+        ['faded', { opacity: 50 }],
+        ['sketched', { roughness: 1 }],
+        ['hatched', { fill: serializeFill({ type: 'solid', color: '#ffffff', style: 'hachure' }) }],
+    ])('a %s chart is the shapes Convert to shapes makes, each with its own id', (_, look) => {
+        const chart = element('chart', { width: 640, height: 400, ...sampleChartParts('pie'), ...look });
         const scene = sceneOf([chart]);
         const expected = convertToShapes(scene.elements[0]);
         expect(expected.length).toBeGreaterThan(3);
-        const all = shapes(pptx(scene));
+        const zip = pptx(scene);
+        const all = shapes(zip);
         expect(all).toHaveLength(expected.length);
         expect(all.some((shape) => geometry(shape) === 'pie')).toBe(true);
         const ids = all.map((shape) => attr(first(shape, P, 'cNvPr'), 'id'));
         expect(new Set(ids).size).toBe(ids.length);
         expect(ids).not.toContain('1');
+        expect(zip.names().filter((name) => name.startsWith('ppt/charts/'))).toEqual([]);
     });
 });
 

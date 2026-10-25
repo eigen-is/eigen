@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { defaultChartSpec, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import type { BackgroundFill } from '@workspace/lib/types/background';
+import type { ChartStacking } from '@workspace/lib/types/chart';
 import type { NewVectorElement, VectorElement } from '@workspace/lib/vector';
 import {
     generateNKeysBetween,
@@ -18,6 +20,8 @@ import { toTransferableBuffer } from '../../../lib/document/transform/protocol';
 import { sanitizeSceneHtml } from '../../../lib/export/sanitize';
 import { writePptx } from '../../../lib/export/slides/pptx/to-pptx';
 import { readPptx } from '../../../lib/import/slides/from-pptx';
+import { seriesIdsByPlace } from '../../../scripts/office-audit';
+import { sampleChartParts } from '../../fixtures/chart-parts';
 import { box, buildPptx, PIXEL_PNG, solid as solidFill, sp } from '../../fixtures/pptx';
 
 // A deck exported to .pptx and read back: what the writer states, the reader reads the same.
@@ -247,6 +251,42 @@ describe('a deck exported and read back', () => {
         expect(deck.media).toHaveLength(1);
         expect(new Uint8Array(deck.media[0].data)).toEqual(PIXEL_PNG);
         expect(slide.elements.at(-1)).toMatchObject({ mediaName: deck.media[0].name, objectFit: 'fill' });
+    });
+});
+
+describe('charts exported and read back', () => {
+    const stacked = (type: 'column' | 'bar', stacking: ChartStacking) => {
+        const spec = sampleChartSpec(type);
+        return newChartSpecParts({ ...spec, plots: { ...spec.plots, [type]: { stacking } } });
+    };
+    const CHARTS: NewVectorElement[] = [
+        sampleChartParts('column'),
+        stacked('bar', 'normal'),
+        stacked('column', 'percent'),
+        sampleChartParts('line'),
+        sampleChartParts('pie', 'Source Serif 4'),
+    ].map((parts, i) => ({ type: 'chart', x: 40 + i * 300, y: 100, width: 280, height: 200, angle: 0, ...parts }));
+    const { sent, deck } = roundTrip(CHARTS);
+    const found = deck.slides[0].elements;
+    // A series id is identity, not content, and the writer writes none.
+    const specOf = (element: object) => {
+        const { spec } = readChartSpec(element);
+        return spec && seriesIdsByPlace(spec);
+    };
+
+    test('come back as the same charts, at their boxes, in their text colour', () => {
+        expect(found.map((element) => element.type)).toEqual(sent.map(() => 'chart'));
+        expect(deck.warnings).toEqual([]);
+        for (const [i, element] of sent.entries()) {
+            const back = found[i];
+            const spec = specOf(element);
+            // A pie has no axes in Office, so its axis fields come back as Excel's pie's: no titles, no gridlines.
+            const { x, y } = defaultChartSpec('pie', { source: 'inline', categories: [], series: [] }).axes;
+            const axes = spec?.chart.type === 'pie' ? { x, y: { ...y, gridlines: { visible: false } } } : spec?.axes;
+            expect(specOf(back)).toEqual(spec && { ...spec, axes });
+            for (const field of ['x', 'y', 'width', 'height'] as const) expectPx(back[field], element[field]);
+            if (element.type === 'chart') expect(back).toMatchObject({ color: element.color, fill: element.fill });
+        }
     });
 });
 

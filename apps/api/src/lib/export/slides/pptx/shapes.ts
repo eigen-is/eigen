@@ -1,6 +1,7 @@
 import { gradientStops } from '@workspace/lib/background';
+import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { FillPaint } from '@workspace/lib/types/background';
-import type { Box, Corners, Point, VectorElement } from '@workspace/lib/vector';
+import type { Box, Corners, Point, VectorChartElement, VectorElement } from '@workspace/lib/vector';
 import {
     convertToShapes,
     cornerRadius,
@@ -13,12 +14,16 @@ import {
     rectOutline,
 } from '@workspace/lib/vector';
 import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
+import { C_NS } from '../../../ooxml/ooxml';
+import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
+import { chartGraphicXml, officeDrawsChartLook, writeChart } from '../../../ooxml/ooxml-chart-writer';
 import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';
 import type { Slide } from './package';
 import { pictureXml } from './pictures';
 import { paragraphsOf, textBodyXml } from './text';
 
-// Each element as the DrawingML shape that draws it: its box, geometry and fill, each length in the deck's EMU.
+// Each element as the DrawingML shape that draws it, its box, geometry and fill, each length in the deck's EMU; a chart
+// as a graphic frame showing its own chart part.
 
 // ST_Coordinate's bound, which every offset, extent and path point stays within.
 const MAX_COORDINATE = 27_273_042_316_900;
@@ -147,10 +152,35 @@ export function elementXml(el: VectorElement, slide: Slide): string {
             return spXml(slide, 'Freeform', el, geometry, fill, lineXml(slide, el, opacity));
         }
         case 'chart':
-            return convertToShapes(el)
-                .map((shape) => elementXml(shape, slide))
-                .join('');
+            return chartXml(el, slide, opacity);
     }
+}
+
+// A chart part PowerPoint draws as a chart, unless a frame can't carry the element's turn or fade or the part its look:
+// then the shapes Convert to shapes makes, which keep them. PowerPoint draws the numbers the part holds inline, as a pptx
+// embeds no workbook for Edit Data to open.
+function chartXml(el: VectorChartElement, slide: Slide, opacity: number): string {
+    const { spec } = readChartSpec(el);
+    const look = readChartLook(el);
+    if (!spec || angle(el.angle) !== 0 || opacity < 1 || !officeDrawsChartLook(look)) {
+        return convertToShapes(el)
+            .map((shape) => elementXml(shape, slide))
+            .join('');
+    }
+    const name = `chart${slide.deck.charts.length + 1}.xml`;
+    slide.deck.charts.push([
+        `ppt/charts/${name}`,
+        writeChart(spec, { ranges: () => undefined, look }),
+        CHART_CONTENT_TYPE,
+    ]);
+    const rId = slide.part.relate('chart', `../charts/${name}`);
+    const id = ++slide.shapes;
+    const offset = `<a:off x="${toEmu(slide, el.x)}" y="${toEmu(slide, el.y)}"/>`;
+    const extent = `<a:ext cx="${toEmu(slide, el.width)}" cy="${toEmu(slide, el.height)}"/>`;
+    return [
+        `<p:graphicFrame xmlns:c="${C_NS}"><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Chart ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>`,
+        `<p:xfrm>${offset}${extent}</p:xfrm>${chartGraphicXml(rId)}</p:graphicFrame>`,
+    ].join('');
 }
 
 export function spXml(

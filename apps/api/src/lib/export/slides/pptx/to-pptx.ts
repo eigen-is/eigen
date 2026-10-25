@@ -26,6 +26,7 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
         scale: slidePxToPt(1, slideWidth) * EMU_PER_POINT,
         slideWidth,
         images: officeImages(media, 'ppt/media'),
+        charts: [],
         byId: new Map(scene.elements.map((el) => [el.id, el])),
     };
     const slides = scene.frames.map((frame) => slideXml(frame, elementsInFrame(scene.elements, frame.id), deck));
@@ -73,6 +74,7 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
                 [`ppt/slides/slide${i + 1}.xml`, xml, `${PML}.slide+xml`],
                 [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
             ]),
+            ...deck.charts,
         ],
         files: deck.images.files,
     });
