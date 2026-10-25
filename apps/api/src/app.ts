@@ -1,3 +1,7 @@
+// The one Elysia app behind the API: every router, mounted together with what all of them share, such
+// as CORS, rate limits, the error handler and the WebSocket options. The server listens with it, tests
+// send requests to it directly, and its type is what the Eden clients are built from.
+
 import cors from '@elysiajs/cors';
 import { serverTiming } from '@elysiajs/server-timing';
 import swagger from '@elysiajs/swagger';

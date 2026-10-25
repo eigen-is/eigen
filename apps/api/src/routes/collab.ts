@@ -1,3 +1,7 @@
+// The collab routes: a document's access info and comment index over HTTP, and the WebSocket each
+// editor opens to sync a document. The socket checks read once when it opens and write on every
+// message, and it hands the frames to the CollabDocument the Drive keeps open for that document.
+
 import {
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,

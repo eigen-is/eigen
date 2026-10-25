@@ -1,3 +1,7 @@
+// Reads the Yjs state stored in a data.db: the newest snapshot and the updates after it. A live
+// document loads through it when it opens, and readers such as the document transforms capture it to
+// work off the main thread. readYjsStateFromFile reads a data.db nobody serves, such as a saved version.
+
 import { Database as BunDatabase } from 'bun:sqlite';
 import { asc, desc, gt } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -29,7 +33,7 @@ function copyBlob(stored: Uint8Array): ArrayBuffer {
 //
 // Pruning invariant this capture relies on: DbProvider.createSnapshot inserts the
 // snapshot row and deletes every update with id <= lastUpdateId in the SAME
-// transaction (collab-document.ts). So when a snapshot blob later turns out to be
+// transaction. So when a snapshot blob later turns out to be
 // corrupt, "the captured updates" and "all updates" are the same set, and
 // materializeYjsState replays exactly what the pre-split loader replayed via its
 // re-select-everything fallback. Pinned by the corrupt-snapshot equivalence test.
