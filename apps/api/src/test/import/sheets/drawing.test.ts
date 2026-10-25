@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CHART_MAX_SIDE, FLAT_CHART_LOOK, readChartSpec } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, readChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import {
     floatingItems,
@@ -9,6 +9,7 @@ import {
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_COL_WIDTH,
 } from '@workspace/lib/sheets';
+import { solidFill } from '@workspace/lib/vector';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { IMAGE_EXTENSION_BY_MIME, MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { IMPORT_MESSAGES } from '../../../lib/import/messages';
@@ -619,11 +620,12 @@ describe('a chart sheet', () => {
                 width: 977,
                 height: 638,
                 angle: 0,
-                // The theme's tx1, as Excel draws a label without a colour of its own; the rest flat.
-                fill: FLAT_CHART_LOOK.fill,
+                // Excel's automatic look where the part states none: the theme's bg1, its tx1 for the labels, and
+                // a 0.75 pt line of tx1 at a 75% tint.
+                fill: solidFill('#ffffff'),
                 color: '#000000',
-                strokeColor: FLAT_CHART_LOOK.strokeColor,
-                strokeWidth: FLAT_CHART_LOOK.strokeWidth,
+                strokeColor: '#8c8c8c',
+                strokeWidth: 1,
                 specChart: expect.any(String),
                 specTitle: expect.any(String),
                 specLegend: expect.any(String),

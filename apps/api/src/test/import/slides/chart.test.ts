@@ -126,11 +126,12 @@ describe('a chart', () => {
         );
     });
 
-    test("its stroke is the category axis's line at the slide's scale and its background the chart's; one the part doesn't say is flat", () => {
+    test("its stroke is the category axis's line at the slide's scale and its background the chart's; one the part doesn't say is PowerPoint's", () => {
+        // No background on a slide, and a 0.75 pt line of tx1 at a 75% tint.
         expect(chartOf(COLUMN).element).toMatchObject({
             fill: FLAT_CHART_LOOK.fill,
-            strokeColor: FLAT_CHART_LOOK.strokeColor,
-            strokeWidth: FLAT_CHART_LOOK.strokeWidth,
+            strokeColor: '#8c8c8c',
+            strokeWidth: Math.round((9525 / PX) * 100) / 100,
         });
         // PowerPoint's own: tx1 at 15% lightened by 85%, three quarters of a point, on a white chart.
         const styled = COLUMN.replace(

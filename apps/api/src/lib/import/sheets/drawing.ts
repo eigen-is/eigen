@@ -127,7 +127,7 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
             }
             const parts = newSheetChartSpecParts(spec);
             context.charge(0, partsText(parts));
-            const look = readChartPartLook(root, { theme: context.theme, emuPerPx: EMU_PER_PX });
+            const look = readChartPartLook(root, { theme: context.theme, emuPerPx: EMU_PER_PX, host: 'xlsx' });
             const chart: SheetChart = { id: `chart-${placed++}`, index: paint(), ...box, ...look, ...parts };
             (sheet.charts ??= {})[chart.id] = chart;
             if (chartSheet) break;

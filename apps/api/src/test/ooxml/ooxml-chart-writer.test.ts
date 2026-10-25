@@ -21,12 +21,13 @@ import type {
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
-import { serializeFill, solidFill } from '@workspace/lib/vector';
+import { serializeFill, solidFill, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import type { XmlElement } from '../../lib/core/xml';
 import { hasXmlName, xmlAttr, xmlElements, xmlTrimmedText } from '../../lib/core/xml';
 import type { DrawingTheme } from '../../lib/ooxml/drawingml';
 import { IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
 import { A_NS, C_NS, EMU_PER_PX, parseOoxml, R_NS } from '../../lib/ooxml/ooxml';
+import type { ChartHost } from '../../lib/ooxml/ooxml-chart';
 import { readChart, readChartPartLook } from '../../lib/ooxml/ooxml-chart';
 import { chartGraphicXml, writeChart } from '../../lib/ooxml/ooxml-chart-writer';
 import { seriesIdsByPlace } from '../../scripts/office-audit';
@@ -353,7 +354,11 @@ describe('readChartPartLook', () => {
         strokeWidth: 3,
     };
     const lookOf = (spec: ChartSpec, look: ChartLook, emuPerPx: number) =>
-        readChartPartLook(root(writeChart(spec, { look, frame: { ...FRAME, emuPerPx } })), { theme, emuPerPx });
+        readChartPartLook(root(writeChart(spec, { look, frame: { ...FRAME, emuPerPx } })), {
+            theme,
+            emuPerPx,
+            host: 'xlsx',
+        });
 
     test.each(['column', 'bar', 'line'] as const)(
         "a %s chart's background, label colour and stroke read back at any scale",
@@ -385,16 +390,72 @@ describe('readChartPartLook', () => {
         expect(lookOf(sampleChartSpec('column'), { ...LOOK, fill }, EMU_PER_PX).fill).toBe(solidFill(middle.color));
     });
 
-    test("a label without a colour of its own takes the theme's tx1, as Office draws it, and the rest reads flat", () => {
+    // Office's default theme: black text on white.
+    const office: DrawingTheme = {
+        scheme: new Map([
+            ['dk1', '#000000'],
+            ['lt1', '#ffffff'],
+        ]),
+        map: IDENTITY_COLOR_MAP,
+    };
+    // tx1 at a 75% tint, in linear light.
+    const AUTOMATIC_LINE = '#8c8c8c';
+    const part = (plot: string, shape = '') =>
+        root(
+            `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}"><c:chart><c:plotArea>${plot}</c:plotArea></c:chart>${shape}</c:chartSpace>`,
+        );
+    const AXES = '<c:barChart/><c:catAx/><c:valAx/>';
+    const look = (chart: XmlElement, host: ChartHost = 'xlsx', emuPerPx = EMU_PER_PX) =>
+        readChartPartLook(chart, { theme: office, emuPerPx, host });
+
+    test("a label without a colour of its own takes the theme's tx1, as Office draws it, and a pie's stroke reads flat", () => {
         const dark: DrawingTheme = { scheme: new Map([['lt1', '#fefefe']]), map: new Map([['tx1', 'lt1']]) };
         const chart = root(`<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}"><c:chart/></c:chartSpace>`);
         const { fill, strokeColor, strokeWidth } = FLAT_CHART_LOOK;
-        expect(readChartPartLook(chart, { theme: dark, emuPerPx: EMU_PER_PX })).toEqual({
+        expect(readChartPartLook(chart, { theme: dark, emuPerPx: EMU_PER_PX, host: 'pptx' })).toEqual({
             fill,
             color: '#fefefe',
             strokeColor,
             strokeWidth,
         });
+    });
+
+    test("a part that states no background takes the theme's bg1 in a docx and an xlsx, and none on a slide", () => {
+        for (const shape of ['', '<c:spPr><a:ln><a:noFill/></a:ln></c:spPr>']) {
+            expect(look(part(AXES, shape), 'docx').fill).toBe(solidFill('#ffffff'));
+            expect(look(part(AXES, shape), 'xlsx').fill).toBe(solidFill('#ffffff'));
+            expect(look(part(AXES, shape), 'pptx').fill).toBe(FLAT_CHART_LOOK.fill);
+        }
+    });
+
+    test("an axis without a line of its own draws Office's automatic one, 0.75 pt of tx1 at a 75% tint", () => {
+        for (const axis of ['<c:catAx/>', '<c:catAx><c:spPr><a:noFill/></c:spPr></c:catAx>']) {
+            const chart = part(`<c:barChart/>${axis}<c:valAx/>`);
+            expect(look(chart)).toMatchObject({ strokeColor: AUTOMATIC_LINE, strokeWidth: 1 });
+            expect(look(chart, 'pptx', 6350).strokeWidth).toBe(1.5);
+        }
+        const widthOnly = part('<c:barChart/><c:catAx><c:spPr><a:ln w="19050"/></c:spPr></c:catAx><c:valAx/>');
+        expect(look(widthOnly)).toMatchObject({ strokeColor: AUTOMATIC_LINE, strokeWidth: 2 });
+    });
+
+    test('an axis drawn without a line keeps its gridlines, which the stroke draws then', () => {
+        const hidden = '<c:catAx><c:spPr><a:ln><a:noFill/></a:ln></c:spPr></c:catAx>';
+        const gridlines = (shape: string) =>
+            part(`<c:barChart/>${hidden}<c:valAx><c:majorGridlines>${shape}</c:majorGridlines></c:valAx>`);
+        const own = '<c:spPr><a:ln w="12700"><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill></a:ln></c:spPr>';
+        expect(look(gridlines(own))).toMatchObject({ strokeColor: '#d9d9d9', strokeWidth: 1.33 });
+        expect(look(gridlines(''))).toMatchObject({ strokeColor: AUTOMATIC_LINE, strokeWidth: 1 });
+        expect(look(part(`<c:barChart/>${hidden}<c:valAx/>`)).strokeColor).toBe(TRANSPARENT_COLOR);
+    });
+
+    test('a gradient background reads as its middle colour, its stops by position, and a pattern as its foreground', () => {
+        const gradient =
+            '<c:spPr><a:gradFill><a:gsLst><a:gs pos="100000"><a:srgbClr val="FFFFFF"/></a:gs><a:gs pos="0"><a:srgbClr val="000000"/></a:gs></a:gsLst></a:gradFill></c:spPr>';
+        const [, middle] = gradientStops('#000000', '#ffffff', 3);
+        expect(look(part(AXES, gradient)).fill).toBe(solidFill(middle.color));
+        const pattern =
+            '<c:spPr><a:pattFill prst="pct5"><a:fgClr><a:srgbClr val="FF0000"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill></c:spPr>';
+        expect(look(part(AXES, pattern)).fill).toBe(solidFill('#ff0000'));
     });
 });
 

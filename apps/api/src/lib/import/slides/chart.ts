@@ -42,7 +42,7 @@ export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors:
             charge(cost);
             const answer = readChart(root, { theme: colors, data: 'cache' });
             if (!('spec' in answer)) return answer;
-            const look = readChartPartLook(root, { theme: colors, emuPerPx: 1 / deck.scale });
+            const look = readChartPartLook(root, { theme: colors, emuPerPx: 1 / deck.scale, host: 'pptx' });
             return { parts: newChartSpecParts(answer.spec), look: { ...look, ...SKETCH } };
         })
     );

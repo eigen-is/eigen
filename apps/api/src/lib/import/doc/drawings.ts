@@ -123,7 +123,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const chart = readDocxChart(reader, reference, context.scope);
             if (inBody && 'parts' in chart) {
                 const { emuPerPx, ...size } = chartSize(ext, reader.columnPx);
-                const look = readChartPartLook(chart.root, { theme: reader.colors, emuPerPx });
+                const look = readChartPartLook(chart.root, { theme: reader.colors, emuPerPx, host: 'docx' });
                 figures.push({ type: 'chart', attrs: { ...chart.parts, ...look, ...size, ...layout } });
                 continue;
             }

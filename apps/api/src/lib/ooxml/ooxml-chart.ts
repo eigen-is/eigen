@@ -3,6 +3,7 @@
 // OOXML names. A chart the spec can't draw as the file does is no spec, with its title for the caller to show instead:
 // never a different chart.
 
+import { gradientStops } from '@workspace/lib/background';
 import {
     chartColor,
     chartLabel,
@@ -33,7 +34,16 @@ import { solidFill, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import { parseA1Range, unquoteSheetName } from '@workspace/sheet/engine/a1-notation';
 import { numberDisplay } from '@workspace/sheet/engine/format';
 import type { XmlElement } from '../core/xml';
-import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText, xmlTrimmedText } from '../core/xml';
+import {
+    hasXmlName,
+    parseXml,
+    xmlAttr,
+    xmlChild,
+    xmlChildren,
+    xmlElements,
+    xmlText,
+    xmlTrimmedText,
+} from '../core/xml';
 import type { DrawingTheme } from './drawingml';
 import { drawingColor, drawingLines, readColorMap } from './drawingml';
 import { A_NS, alternativeFor, C_NS, C16_NS, isOn, isOnElement, ooxmlElements } from './ooxml';
@@ -47,6 +57,9 @@ export type ChartSource = 'cache' | { ranges: (sheetName: string) => string | un
 
 // name is PowerPoint's for the chart's type, as Insert Chart lists it (Clustered Column, Pie of Pie, Combo), or none.
 export type ChartRead = { spec: ChartSpec } | { unsupported: { title: string; name: string } };
+
+// The package a chart part sits in, whose application draws what the part doesn't state.
+export type ChartHost = 'docx' | 'xlsx' | 'pptx';
 
 export const CHART_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
 
@@ -156,38 +169,85 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
     return { unsupported: { title, name: chartName(groups) } };
 }
 
+// Where a part states no look of its own, Office draws chart style 2's automatic one. LibreOffice's oox chart
+// ObjectFormatter reads it so (spChartSpaceFill, spAxisLines, spMajorGridLines, PptGraphicHelper): the background bg1,
+// but none on a slide, and every line tx1 at a 75% tint, 9525 EMU wide.
+const BG1 = automatic('<a:solidFill><a:schemeClr val="bg1"/></a:solidFill>');
+const AUTOMATIC_BACKGROUND: Record<ChartHost, XmlElement | undefined> = {
+    docx: BG1,
+    xlsx: BG1,
+    pptx: automatic('<a:noFill/>'),
+};
+const AUTOMATIC_LINE = automatic(
+    '<a:solidFill><a:schemeClr val="tx1"><a:tint val="75000"/></a:schemeClr></a:solidFill>',
+);
+const AUTOMATIC_LINE_WIDTH = 9525;
+
+function automatic(fill: string): XmlElement | undefined {
+    return parseXml(`<a:spPr xmlns:a="${A_NS}">${fill}</a:spPr>`) ?? undefined;
+}
+
 // The look writeChart maps onto the part, read back: the background from c:chartSpace's c:spPr, the label colour from
 // its c:txPr, else the theme's tx1 as Office draws a label without one, and the stroke's colour and width from the
-// category axis's line, as the writer strokes every axis and gridline with it. emuPerPx is the EMU one px of the
-// chart's own box is in the file. What the part doesn't say, a pie's stroke among them, reads flat, so every host
-// stores the same four fields and a re-import reads what the first import stored.
+// category axis's line, as the writer strokes every axis and gridline with it. An axis Office draws no line along
+// still shows its gridlines, so the stroke is theirs then. A gradient reads as its middle colour and a pattern as its
+// foreground, as the writer writes one colour. emuPerPx is the EMU one px of the chart's own box is in the file. A pie
+// has no stroke to read, so it reads flat.
 export function readChartPartLook(
     root: XmlElement,
-    { theme, emuPerPx }: { theme: DrawingTheme; emuPerPx: number },
+    { theme, emuPerPx, host }: { theme: DrawingTheme; emuPerPx: number; host: ChartHost },
 ): Pick<ChartLook, 'fill' | 'color' | 'strokeColor' | 'strokeWidth'> {
     const colors = chartColors(root, theme);
     const drawn = (shape: XmlElement | undefined): string | undefined => {
         if (!shape) return undefined;
         if (xmlChild(shape, A_NS, 'noFill')) return TRANSPARENT_COLOR;
-        return drawingColor(xmlChild(shape, A_NS, 'solidFill'), colors);
+        const gradient = xmlChild(shape, A_NS, 'gradFill');
+        if (gradient) return gradientMiddle(gradient, colors);
+        const pattern = xmlChild(shape, A_NS, 'pattFill');
+        return drawingColor(pattern ? xmlChild(pattern, A_NS, 'fgClr') : xmlChild(shape, A_NS, 'solidFill'), colors);
     };
     let text = child(root, 'txPr');
     for (const local of ['p', 'pPr', 'defRPr']) text = text && xmlChild(text, A_NS, local);
     const tx1 = colors.map.get('tx1');
-    const background = drawn(child(root, 'spPr'));
-    const plotArea = child(child(root, 'chart'), 'plotArea');
-    const axis = child(child(plotArea, 'catAx') ?? child(plotArea, 'dateAx'), 'spPr');
-    const line = axis && xmlChild(axis, A_NS, 'ln');
-    const width = Number(line && xmlAttr(line, '', 'w'));
-    return {
+    const background = drawn(child(root, 'spPr')) ?? drawn(AUTOMATIC_BACKGROUND[host]);
+    const look = {
         fill: background ? solidFill(background) : FLAT_CHART_LOOK.fill,
         color: drawn(text) ?? (tx1 && colors.scheme.get(tx1)) ?? FLAT_CHART_LOOK.color,
-        strokeColor: drawn(line) ?? FLAT_CHART_LOOK.strokeColor,
-        strokeWidth:
-            line && Number.isFinite(width) && width >= 0
-                ? Math.round((width / emuPerPx) * 100) / 100
-                : FLAT_CHART_LOOK.strokeWidth,
     };
+    const plotArea = child(child(root, 'chart'), 'plotArea');
+    const axis = child(plotArea, 'catAx') ?? child(plotArea, 'dateAx');
+    if (!axis) return { ...look, strokeColor: FLAT_CHART_LOOK.strokeColor, strokeWidth: FLAT_CHART_LOOK.strokeWidth };
+    const lineOf = (owner: XmlElement | undefined) => {
+        const shape = child(owner, 'spPr');
+        return shape && xmlChild(shape, A_NS, 'ln');
+    };
+    const gridlines = child(child(plotArea, 'valAx'), 'majorGridlines');
+    const axisLine = lineOf(axis);
+    const line = gridlines && drawn(axisLine) === TRANSPARENT_COLOR ? lineOf(gridlines) : axisLine;
+    const width = Number(line && xmlAttr(line, '', 'w'));
+    return {
+        ...look,
+        strokeColor: drawn(line) ?? drawn(AUTOMATIC_LINE) ?? FLAT_CHART_LOOK.strokeColor,
+        strokeWidth:
+            Math.round(((Number.isFinite(width) && width >= 0 ? width : AUTOMATIC_LINE_WIDTH) / emuPerPx) * 100) / 100,
+    };
+}
+
+// The colour halfway along a gradient's stops that show one, by position, as the writer writes a gradient background.
+function gradientMiddle(gradient: XmlElement, colors: DrawingTheme): string | undefined {
+    const list = xmlChild(gradient, A_NS, 'gsLst');
+    const stops = (list ? xmlChildren(list, A_NS, 'gs') : [])
+        .map((stop) => ({ color: drawingColor(stop, colors), at: Number(xmlAttr(stop, '', 'pos')) || 0 }))
+        .filter((stop) => stop.color !== undefined)
+        .sort((a, b) => a.at - b.at);
+    const from = stops[0]?.color;
+    const to = stops.at(-1)?.color;
+    if (!from || !to) return undefined;
+    const { color, opacity } = gradientStops(from, to, 3)[1];
+    const alpha = Math.round(opacity * 255)
+        .toString(16)
+        .padStart(2, '0');
+    return opacity < 1 ? `${color}${alpha}` : color;
 }
 
 // The host's colours through the part's own c:clrMapOvr, which replaces the host's map.
