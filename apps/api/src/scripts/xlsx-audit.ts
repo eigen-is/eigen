@@ -51,6 +51,7 @@ import type {
 import {
     canonical,
     cellText,
+    chartsNotImported,
     classify,
     DEFAULT_MAX_RSS_MB,
     listCorpus,
@@ -1205,7 +1206,7 @@ async function xlsxRoundtripChild(
             const media = { a: await mediaFacts(prepared), b: await mediaFacts(b.media) };
             return classifyDifferences({ warnings, a: a.sheets, b: b.sheets, media });
         });
-        return { warnings, groups };
+        return { warnings, groups, charts: chartsNotImported(a.warnings, a.sheets) };
     });
 }
 

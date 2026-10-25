@@ -2,15 +2,17 @@
 // gate, which imports a file, writes it with our writer, imports that again and compares the two imports. Each format's
 // script brings its own reader, writer, comparison and LISTED table, the differences it explains; a difference none
 // explains is unlisted, and the run passes with no crash, no cut and no unlisted difference.
+
 import * as fs from 'node:fs';
 import path from 'node:path';
 import type { ChartSpec } from '@workspace/lib/types/chart';
 import { peakRss } from '../lib/core/peak-rss';
-import type { ExportMedia } from '../lib/document/transform/protocol';
+import type { ExportMedia, TransformWarning } from '../lib/document/transform/protocol';
 import { toTransferableBuffer } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/office-image';
 import type { ImportedMedia } from '../lib/import/image-types';
+import { CHART_NOT_IMPORTED } from '../lib/ooxml/ooxml-chart';
 
 export const MB = 1024 * 1024;
 
@@ -169,6 +171,35 @@ export function classify<D extends RoundtripDifference, C>(
     return [...groups.values()].sort((x, y) => y.count - x.count);
 }
 
+// The charts the first import left out: as many as its reader counted, and how many placeholders name each kind, the
+// kind the reader can't draw ("Scatter") or none for a part missing, damaged or past the budget. A chart that leaves no
+// placeholder (an xlsx's, a docx's in a header, footer or note) counts under no kind.
+export type ChartsNotImported = { count: number; kinds: Record<string, number> };
+
+const NO_KIND = '(none named)';
+const NO_PLACEHOLDER = '(no placeholder)';
+const PLACEHOLDER = new RegExp(`(?:^|>)([^<>]*?) chart not imported(?=<|$)|(?:^|>)${CHART_NOT_IMPORTED}(?=<|$)`, 'g');
+
+// From the import's warnings and its output, whose strings the placeholders' text is in.
+export function chartsNotImported(warnings: TransformWarning[], output: unknown): ChartsNotImported {
+    let count = 0;
+    for (const warning of warnings) if (warning.code === 'charts-dropped') count += warning.count;
+    const kinds: Record<string, number> = {};
+    let named = 0;
+    const visit = (value: unknown) => {
+        if (typeof value === 'string')
+            for (const [, kind] of value.matchAll(PLACEHOLDER)) {
+                kinds[kind ?? NO_KIND] = (kinds[kind ?? NO_KIND] ?? 0) + 1;
+                named++;
+            }
+        else if (Array.isArray(value)) for (const item of value) visit(item);
+        else if (value && typeof value === 'object') for (const item of Object.values(value)) visit(item);
+    };
+    if (count > 0) visit(output);
+    if (count > named) kinds[NO_PLACEHOLDER] = count - named;
+    return { count, kinds };
+}
+
 type RoundtripOutcome = 'ok' | 'skipped' | 'crash' | 'timeout' | 'memory';
 const STAGES = ['import', 'export', 'reimport', 'compare'] as const;
 type Stage = (typeof STAGES)[number];
@@ -177,7 +208,13 @@ type Stage = (typeof STAGES)[number];
 type RoundtripReport =
     | { kind: 'stage'; stage: Stage; ms: number }
     | { kind: 'failed'; stage: Stage; status?: number; error: string }
-    | { kind: 'done'; warnings: Record<string, number>; groups: DifferenceGroup[]; rssMb: number };
+    | {
+          kind: 'done';
+          warnings: Record<string, number>;
+          groups: DifferenceGroup[];
+          charts: ChartsNotImported;
+          rssMb: number;
+      };
 
 export type RoundtripResult = {
     file: string;
@@ -191,6 +228,8 @@ export type RoundtripResult = {
     rssMb: number;
     warnings: Record<string, number>;
     groups: DifferenceGroup[];
+    // Only where the first import left a chart out.
+    charts?: ChartsNotImported;
 };
 
 export type RoundtripMeta = {
@@ -227,11 +266,13 @@ export type RoundtripOptions = {
 export type Step = <T>(name: Stage, run: () => T | Promise<T>) => Promise<T>;
 
 // The round trip's child: `run` takes each stage through `step`, which reports it, and returns the writer's warnings,
-// by code, and the differences classified; a stage that throws is reported with it. With `dump`, the bytes the export
-// stage returns are written there.
+// by code, the differences classified and the charts the first import left out; a stage that throws is reported with
+// it. With `dump`, the bytes the export stage returns are written there.
 export async function roundtripChild(
     { reports, dump }: { reports: string; dump?: string },
-    run: (step: Step) => Promise<{ warnings: ReadonlyMap<string, number>; groups: DifferenceGroup[] }>,
+    run: (
+        step: Step,
+    ) => Promise<{ warnings: ReadonlyMap<string, number>; groups: DifferenceGroup[]; charts: ChartsNotImported }>,
 ): Promise<void> {
     const report = (line: RoundtripReport) => fs.appendFileSync(reports, `${JSON.stringify(line)}\n`);
     let stage: Stage = 'import';
@@ -248,8 +289,8 @@ export async function roundtripChild(
         return value;
     };
     try {
-        const { warnings, groups } = await run(step);
-        report({ kind: 'done', warnings: Object.fromEntries(warnings), groups, rssMb: peakRss() / MB });
+        const { warnings, groups, charts } = await run(step);
+        report({ kind: 'done', warnings: Object.fromEntries(warnings), groups, charts, rssMb: peakRss() / MB });
     } catch (error) {
         const status = typeof error === 'object' && error !== null && 'status' in error ? error.status : undefined;
         report({
@@ -308,6 +349,7 @@ async function roundtripOne(
         rssMb: Math.round(done?.rssMb ?? observedMb),
         warnings: done?.warnings ?? {},
         groups: done?.groups ?? [],
+        ...(done && done.charts.count > 0 && { charts: done.charts }),
     };
 }
 
@@ -386,6 +428,16 @@ function roundtripMarkdown(gate: RoundtripGate, meta: RoundtripMeta, results: Ro
         }
     }
     const why = new Map(gate.listed.map((entry) => [entry.kind, entry.why]));
+    const charts = new Map<string, { count: number; files: number }>();
+    for (const result of results)
+        for (const [kind, count] of Object.entries(result.charts?.kinds ?? {})) {
+            const entry = charts.get(kind) ?? { count: 0, files: 0 };
+            charts.set(kind, entry);
+            entry.count += count;
+            entry.files++;
+        }
+    const chartFiles = results.filter((result) => result.charts);
+    const chartCount = chartFiles.reduce((sum, result) => sum + (result.charts?.count ?? 0), 0);
     const failed = results.filter((result) => result.outcome !== 'ok' && result.outcome !== 'skipped');
     const differing = results.filter((result) => result.groups.length > 0);
     const examples = (examples: DifferenceExample[]) =>
@@ -411,6 +463,16 @@ function roundtripMarkdown(gate: RoundtripGate, meta: RoundtripMeta, results: Ro
                 ([kind, entry]) =>
                     `| ${kind} | ${entry.listed ? 'listed' : '**unlisted**'} | ${entry.count} | ${entry.files} | ${why.get(kind) ?? ''} |`,
             ),
+        '',
+        '## Charts not imported',
+        '',
+        `**${chartCount} charts in ${chartFiles.length} files**, as the first import's reader counted them, by the kind each placeholder names.`,
+        '',
+        '| Kind | Charts | Files |',
+        '|---|---:|---:|',
+        ...[...charts]
+            .sort(([, x], [, y]) => y.count - x.count)
+            .map(([kind, entry]) => `| ${cellText(kind)} | ${entry.count} | ${entry.files} |`),
         '',
         '## Crashed or cut',
         '',

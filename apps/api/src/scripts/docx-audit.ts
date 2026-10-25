@@ -76,6 +76,7 @@ import type {
 } from './office-audit';
 import {
     canonical,
+    chartsNotImported,
     classify,
     message,
     officeMedia,
@@ -2299,7 +2300,7 @@ async function docxRoundtripChild(
                 prepared: await picturesOf(media),
             }),
         );
-        return { warnings: new Map(), groups };
+        return { warnings: new Map(), groups, charts: chartsNotImported(a.warnings, [a.json, a.bands]) };
     });
 }
 
