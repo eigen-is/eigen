@@ -1,8 +1,8 @@
 // Drive is one owner's file tree, spread over the owner's mounts. It does the work behind every file
 // action, such as upload, move, trash, sharing and history, and tells open tabs what changed. A home
-// with files builds one Drive and destructs it when the home closes. Routes reach it through
-// getSharedDrive, so a route can only call a method that SharedDrive also wraps with an access check.
-// The other public methods serve server code, such as chat, collab and the home relay.
+// with files builds one Drive and destructs it when the home closes. Most routes reach it through
+// getSharedDrive, which checks access. The few owner-only routes check the owner themselves. Other
+// public methods serve server code, such as chat, collab and the home relay.
 
 import { randomUUID } from 'node:crypto';
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
@@ -326,7 +326,8 @@ export class Drive {
         for (const mount of this.mounts.values()) {
             merged.push(...mount.searchPaths(opts));
         }
-        // Each mount ranks its own results, and those scores can't be compared, so recent wins across mounts.
+        // Each mount ranks its own results, and the scores of two mounts can't be compared. So across
+        // mounts, the most recent wins.
         merged.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
         return merged.slice(0, opts.limit);
     }
@@ -661,7 +662,8 @@ export class Drive {
     }
 
     // The folder new chats go in. It is looked up by name every time, so the user may rename, move or
-    // delete it. An old `Chats` folder gets the new name. A file with that name means the mount root.
+    // delete it. An old `Chats` folder gets the new name. When a file has that name, new chats go in
+    // the mount root.
     // SharedDrive has no wrapper for it: the route checks that the caller owns the drive, or is in its team.
     public async ensureChatsFolder(mountId: string): Promise<string> {
         const mount = this.getMount(mountId);
@@ -1103,8 +1105,9 @@ export class Drive {
         return this.getMount(mountId).history.list(pathId, opts);
     }
 
-    // Writes the history row of a change to a live path and tells its watchers. A change that moves a
-    // path between folders, such as a move or a trash, walks two parent chains and does this itself.
+    // Writes the history row of a change to a live path and tells its watchers. A few changes do this
+    // themselves. A move or a trash must also reach the folders the path left. A copy gets its row from
+    // the mount, which knows where it was copied from.
     public async recordFileEvent(
         mountId: string,
         pathId: string,
@@ -1190,9 +1193,7 @@ export class Drive {
     }
 
     // Creates the database files of a new document, such as its data.db and comments.db. When one
-    // fails, the rows created so far go again. Left behind, a row would make every later open fail.
-    // Nobody has seen the rows yet, so mount.deletePath removes them without the trash, sharing and
-    // SSE work that Drive.deletePath does.
+    // fails, the rows created so far go again, for the same reason Drive.create removes its row.
     public async provisionManagedDbs(
         mountId: string,
         parentId: string,
@@ -1222,6 +1223,8 @@ export class Drive {
     public async withPathLock<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
         return this.getMount(mountId).withPathLock(pathId, fn);
     }
+
+    // ---- Open tabs ----
 
     // Tells the open tabs of this owner that a path changed.
     public emit(type: SSEventDrive['type'], path: DrivePath, oldParentId?: string): void {

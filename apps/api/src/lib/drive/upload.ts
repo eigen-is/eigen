@@ -1,6 +1,6 @@
-// The last steps of an upload, shared by Drive.uploadFiles and Drive.createFileFromData. They turn a
-// temp file into a file in the tree, tell open tabs and write the history row, and then make a
-// thumbnail in the background.
+// The last steps of a new file, such as an upload or a copy from another drive. They turn a temp
+// file into a file in the tree, tell open tabs and write the history row. A thumbnail is then made in
+// the background, by a helper that an overwrite of a file uses too.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';

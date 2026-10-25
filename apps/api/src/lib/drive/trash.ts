@@ -1,6 +1,6 @@
 // The drive side of the trash: moving a path to the trash, back out of it, and deleting it for good.
-// Drive's deletePath, restorePath and permanentlyDelete check the path and then call these. They
-// close open documents, take away sharing, tell open tabs and write the history.
+// Drive methods such as deletePath check the path and then call these. They close open documents,
+// take away sharing, tell open tabs and write the history.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
