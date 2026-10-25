@@ -1,16 +1,11 @@
 // The chart kind: one chart's spec stored on the element as a JSON string per part, drawn as the canvas's own shapes
 // plus SVG text. Its look is the element's paint fields; the panel section and Edit data are the ui kind's.
 
-// spec, not the barrel: the barrel's layout reaches this kind through geometry, and defineKind calls
+// The spec modules, not the barrel: the barrel's layout reaches this kind through geometry, and defineKind calls
 // defaults while the module loads.
-import {
-    chartSearchText,
-    chartSpecTexts,
-    mapChartSpecParts,
-    newChartSpecParts,
-    readChartSpec,
-    sampleChartSpec,
-} from '../../charts/spec';
+import { sampleChartSpec } from '../../charts/defaults';
+import { chartSearchText } from '../../charts/resolve';
+import { chartSpecTexts, mapChartSpecParts, newChartSpecParts, readChartSpec } from '../../charts/spec';
 import { CHART_SPEC_PART_KEY, CHART_SPEC_PART_KEYS } from '../../types/chart';
 import { hitTestBox } from '../geometry';
 import { rectOutline } from '../outline';

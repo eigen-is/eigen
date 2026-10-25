@@ -27,7 +27,7 @@ import type {
     VectorPieElement,
     VectorRectangleElement,
 } from '../vector/types';
-import { chartColor, chartPointColor, chartSeriesStyle } from './spec';
+import { chartColor, chartPointColor, chartSeriesStyle } from './defaults';
 import { formatPercentTick, nice, tickStep, ticks } from './ticks';
 
 // Every line a chart draws in place of a plot.

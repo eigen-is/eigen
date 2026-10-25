@@ -1,12 +1,7 @@
 import { toast } from 'sonner';
+import { exceedsChartSpecBytes, exceedsChartSpecDepth, isChartSpecKey } from '../../charts/limits';
 import { readChartLook } from '../../charts/look';
-import {
-    chartSpecTexts,
-    exceedsChartSpecBytes,
-    exceedsChartSpecDepth,
-    isChartSpecKey,
-    readChartSpec,
-} from '../../charts/spec';
+import { chartSpecTexts, readChartSpec } from '../../charts/spec';
 import type { ChartSpecTexts } from '../../types/chart';
 import type {
     EigenClipboardChartItem,
