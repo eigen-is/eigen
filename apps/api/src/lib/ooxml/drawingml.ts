@@ -1,6 +1,7 @@
-// DrawingML, the drawing vocabulary docx, xlsx and pptx share: a theme's colours, a colour element with its
-// transforms, a picture's blip both ways and its part's extension, text and line vocabulary both ways, a text body's
-// plain text, and the theme the writers write.
+// DrawingML, the drawing vocabulary docx, xlsx and pptx share, both ways. It resolves a colour element and its
+// transforms through a theme's colours, and writes a colour and a plain theme. It names a picture's parts in its blip,
+// maps text alignment, line ends and dashes onto the canvas's own, reads a text body's plain text, and anchors a
+// turned picture over a spreadsheet's cells.
 
 import type { Arrowhead, StrokeStyle, TextAlign, VerticalAlign } from '@workspace/lib/vector';
 import { isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
@@ -9,11 +10,15 @@ import type { XmlElement } from '../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../core/xml';
 import { A_NS, ASVG_NS, R_NS } from './ooxml';
 
+// ── Colours ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
 // A theme's colours by slot name (dk1, lt1, accent1…), each '#rrggbb'.
-export type ColorScheme = ReadonlyMap<string, string>;
-// What a schemeClr names to the slot it shows: bg1, tx1, bg2 and tx2 are mapped, the slots name themselves.
-export type ColorMap = ReadonlyMap<string, string>;
-// phClr: the colour the fillRef, lnRef or bgRef supplies when a style matrix entry is painted, '#rrggbb' or '#rrggbbaa'.
+type ColorScheme = ReadonlyMap<string, string>;
+// Maps each name a schemeClr may use onto the slot it shows. bg1, tx1, bg2 and tx2 each name a slot, and every slot
+// names itself.
+type ColorMap = ReadonlyMap<string, string>;
+// phClr is the colour a style matrix entry is painted in, which the shape's fillRef, lnRef or bgRef supplies. It is
+// '#rrggbb' or '#rrggbbaa'.
 export type DrawingTheme = { scheme: ColorScheme; map: ColorMap; phClr?: string };
 
 // A theme's slots in a:clrScheme's order.
@@ -32,7 +37,8 @@ export const SCHEME_SLOTS: readonly string[] = [
     'folHlink',
 ];
 
-// What a part without a clrMap of its own shows: an xlsx, and a chart without c:clrMapOvr in a pptx or docx with none.
+// The map a part without a clrMap of its own shows its colours through: every xlsx part, and a docx's or pptx's chart
+// without a c:clrMapOvr.
 export const IDENTITY_COLOR_MAP: ColorMap = new Map([
     ['bg1', 'lt1'],
     ['tx1', 'dk1'],
@@ -41,66 +47,16 @@ export const IDENTITY_COLOR_MAP: ColorMap = new Map([
     ...SCHEME_SLOTS.map((slot): [string, string] => [slot, slot]),
 ]);
 
-// A part without a theme: no scheme colours, the identity map.
+// A part without a theme: no scheme colours, and the identity map.
 export const NO_DRAWING_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
-
-export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
 
 // DrawingML counts an angle in 60,000ths of a degree.
 export const DEGREE = 60_000;
 
-// And a share of a whole (ST_Percentage) in 100,000ths, 1,000ths of a percent.
+// DrawingML counts a share of a whole (ST_Percentage) in 100,000ths, so 1,000 is one percent.
 export const HUNDRED_PERCENT = 100_000;
 
-// A stored colour token (#rgb, #rrggbb, #rrggbbaa) as an a:srgbClr, its alpha times `opacity` beside it; null for
-// transparent or anything else.
-export function colorXml(color: string, opacity = 1): string | null {
-    const digits = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
-    if (!digits || isTransparentColor(color)) return null;
-    const rgb = digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits.slice(0, 6);
-    const alpha = (digits.length === 8 ? Number.parseInt(digits.slice(6), 16) / 255 : 1) * opacity;
-    const share = alpha < 1 ? `<a:alpha val="${Math.round(alpha * HUNDRED_PERCENT)}"/>` : '';
-    return `<a:srgbClr val="${rgb.toUpperCase()}">${share}</a:srgbClr>`;
-}
-
-export function solidFillXml(color: string, opacity = 1): string {
-    const rgb = colorXml(color, opacity);
-    return rgb ? `<a:solidFill>${rgb}</a:solidFill>` : '<a:noFill/>';
-}
-
-// Every shape and cell the writers write holds its own colours and fonts, so their theme only has to be valid: plain
-// colours, and the document's font.
-const THEME_COLORS: Record<string, string> = {
-    dk1: '000000',
-    lt1: 'FFFFFF',
-    dk2: '1E1E1E',
-    lt2: 'F5F5F5',
-    accent1: '1971C2',
-    accent2: 'E03131',
-    accent3: '2F9E44',
-    accent4: 'F08C00',
-    accent5: '6741D9',
-    accent6: '0C8599',
-    hlink: '1971C2',
-    folHlink: '6741D9',
-};
-
-export function themeXml(font: string): string {
-    const colors = SCHEME_SLOTS.map((slot) => `<a:${slot}><a:srgbClr val="${THEME_COLORS[slot]}"/></a:${slot}>`);
-    const typefaces = `<a:latin typeface="${escapeXml(font)}"/><a:ea typeface=""/><a:cs typeface=""/>`;
-    const placeholder = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
-    const three = (xml: string) => xml.repeat(3);
-    return [
-        `<a:theme xmlns:a="${A_NS}" name="Eigen"><a:themeElements><a:clrScheme name="Eigen">${colors.join('')}</a:clrScheme>`,
-        `<a:fontScheme name="Eigen"><a:majorFont>${typefaces}</a:majorFont><a:minorFont>${typefaces}</a:minorFont></a:fontScheme>`,
-        `<a:fmtScheme name="Eigen"><a:fillStyleLst>${three(placeholder)}</a:fillStyleLst>`,
-        `<a:lnStyleLst>${three(`<a:ln w="6350">${placeholder}</a:ln>`)}</a:lnStyleLst>`,
-        `<a:effectStyleLst>${three('<a:effectStyle><a:effectLst/></a:effectStyle>')}</a:effectStyleLst>`,
-        `<a:bgFillStyleLst>${three(placeholder)}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`,
-    ].join('');
-}
-
-// A theme part's a:clrScheme; a slot with no colour is left out.
+// A theme part's a:clrScheme. A slot without a colour is left out.
 export function readColorScheme(theme: XmlElement | undefined): ColorScheme {
     const elements = theme && hasXmlName(theme, A_NS, 'theme') ? xmlChild(theme, A_NS, 'themeElements') : undefined;
     const scheme = elements && xmlChild(elements, A_NS, 'clrScheme');
@@ -112,12 +68,12 @@ export function readColorScheme(theme: XmlElement | undefined): ColorScheme {
     return colors;
 }
 
-// A theme part with no colour map over it, as a docx's and an xlsx's charts read theirs: the slots name themselves.
+// A theme part with no colour map over it, so every slot shows itself, as docx and xlsx charts read their theme.
 export function drawingTheme(theme: XmlElement | undefined): DrawingTheme {
     return { scheme: readColorScheme(theme), map: IDENTITY_COLOR_MAP };
 }
 
-// An a:clrMap, p:clrMap or c:clrMapOvr: its attributes over the identity, each naming a slot.
+// An a:clrMap, p:clrMap or c:clrMapOvr: each attribute that names a slot replaces the identity map's entry.
 export function readColorMap(element: XmlElement): ColorMap {
     const map = new Map(IDENTITY_COLOR_MAP);
     for (const name of IDENTITY_COLOR_MAP.keys()) {
@@ -130,7 +86,8 @@ export function readColorMap(element: XmlElement): ColorMap {
 // sRGB components and alpha, each 0–1.
 type Rgba = [r: number, g: number, b: number, a: number];
 
-// The colour a fill (a:solidFill, a scheme slot, a gradient stop) holds: '#rrggbb', or '#rrggbbaa' when not opaque.
+// The colour a fill holds, such as an a:solidFill, a scheme slot or a gradient stop. It is '#rrggbb', or '#rrggbbaa'
+// when not opaque.
 export function drawingColor(fill: XmlElement | undefined, theme: DrawingTheme): string | undefined {
     for (const element of fill ? xmlElements(fill) : []) {
         if (element.ns !== A_NS) continue;
@@ -149,7 +106,7 @@ export function drawingColor(fill: XmlElement | undefined, theme: DrawingTheme):
     return undefined;
 }
 
-// null: no colour element; undefined: a colour element naming nothing this theme holds.
+// null when the element is no colour element. undefined when it is one but names nothing this theme holds.
 function baseColor(element: XmlElement, theme: DrawingTheme): Rgba | null | undefined {
     const attr = (name: string) => xmlAttr(element, '', name);
     switch (element.local) {
@@ -189,17 +146,17 @@ function hexRgba(hex: string | undefined): Rgba | undefined {
     return [(value >> 16) / 255, ((value >> 8) & 0xff) / 255, (value & 0xff) / 255, 1];
 }
 
-// The placeholder keeps its alpha, which the entry's own alpha replaces.
+// The placeholder keeps its alpha, which the entry's own alpha then replaces.
 function placeholderRgba(color: string | undefined): Rgba | undefined {
     const [, rgb, alpha] = color?.match(/^#([0-9a-f]{6})([0-9a-f]{2})?$/i) ?? [];
     const rgba = hexRgba(rgb);
     return rgba && alpha ? [rgba[0], rgba[1], rgba[2], Number.parseInt(alpha, 16) / 255] : rgba;
 }
 
-// CSS colour keywords ECMA-376 has no preset for.
+// CSS colour keywords that ECMA-376 has no preset for.
 const NOT_PRESETS = new Set(['transparent', 'rebeccapurple']);
 
-// ECMA-376's preset names are CSS's colour keywords, dark, light and medium shortened.
+// ECMA-376's preset names are CSS's colour keywords, with dark, light and medium shortened to dk, lt and med.
 function presetRgba(name: string | undefined): Rgba | undefined {
     if (!name || !/^[a-z]+$/i.test(name) || NOT_PRESETS.has(name.toLowerCase())) return undefined;
     const keyword = name.replace(/^(dk|lt|med)(?=[A-Z])/, (prefix) =>
@@ -208,7 +165,7 @@ function presetRgba(name: string | undefined): Rgba | undefined {
     return hexRgba(Bun.color(keyword.toLowerCase(), 'hex')?.slice(1));
 }
 
-// ST_Percentage: thousandths of a percent, or Strict's '50%'; as a fraction.
+// An ST_Percentage as a fraction. Transitional writes thousandths of a percent, and Strict writes '50%'.
 export function percent(value: string | undefined): number | undefined {
     const trimmed = value?.trim();
     if (!trimmed) return undefined;
@@ -242,7 +199,7 @@ function transformed(rgba: Rgba, transform: string, value: number): Rgba {
     }
 }
 
-// Office's tint, shade and scRGB work in linear light; LibreOffice matches Office with a plain 2.3 gamma.
+// Office's tint, shade and scRGB work in linear light. LibreOffice matches Office with a plain 2.3 gamma.
 const GAMMA = 2.3;
 
 function toLinear(component: number): number {
@@ -289,8 +246,62 @@ function fromHsl(hue: number, sat: number, lum: number): [number, number, number
     return [r + m, g + m, b + m];
 }
 
-// The image types a picture part is read or written as, each under its own part extension. WMF and EMF are among them
-// though no browser or sharp draws them: a docx import keeps its figure, with its alt text in a broken image.
+// A stored colour token (#rgb, #rrggbb or #rrggbbaa) as an a:srgbClr. Its alpha, times `opacity`, goes inside as an
+// a:alpha. Transparent and anything else is null.
+export function colorXml(color: string, opacity = 1): string | null {
+    const digits = color.match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1];
+    if (!digits || isTransparentColor(color)) return null;
+    const rgb = digits.length === 3 ? [...digits].map((digit) => digit + digit).join('') : digits.slice(0, 6);
+    const alpha = (digits.length === 8 ? Number.parseInt(digits.slice(6), 16) / 255 : 1) * opacity;
+    const share = alpha < 1 ? `<a:alpha val="${Math.round(alpha * HUNDRED_PERCENT)}"/>` : '';
+    return `<a:srgbClr val="${rgb.toUpperCase()}">${share}</a:srgbClr>`;
+}
+
+export function solidFillXml(color: string, opacity = 1): string {
+    const rgb = colorXml(color, opacity);
+    return rgb ? `<a:solidFill>${rgb}</a:solidFill>` : '<a:noFill/>';
+}
+
+// ── Theme ───────────────────────────────────────────────────────────────────────────────────────────────────────
+
+export const THEME_TYPE = 'application/vnd.openxmlformats-officedocument.theme+xml';
+
+// Every shape and cell the writers write holds its own colours and fonts, so the theme they package only has to be
+// valid: plain colours, and the document's font.
+const THEME_COLORS: Record<string, string> = {
+    dk1: '000000',
+    lt1: 'FFFFFF',
+    dk2: '1E1E1E',
+    lt2: 'F5F5F5',
+    accent1: '1971C2',
+    accent2: 'E03131',
+    accent3: '2F9E44',
+    accent4: 'F08C00',
+    accent5: '6741D9',
+    accent6: '0C8599',
+    hlink: '1971C2',
+    folHlink: '6741D9',
+};
+
+export function themeXml(font: string): string {
+    const colors = SCHEME_SLOTS.map((slot) => `<a:${slot}><a:srgbClr val="${THEME_COLORS[slot]}"/></a:${slot}>`);
+    const typefaces = `<a:latin typeface="${escapeXml(font)}"/><a:ea typeface=""/><a:cs typeface=""/>`;
+    const placeholder = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
+    const three = (xml: string) => xml.repeat(3);
+    return [
+        `<a:theme xmlns:a="${A_NS}" name="Eigen"><a:themeElements><a:clrScheme name="Eigen">${colors.join('')}</a:clrScheme>`,
+        `<a:fontScheme name="Eigen"><a:majorFont>${typefaces}</a:majorFont><a:minorFont>${typefaces}</a:minorFont></a:fontScheme>`,
+        `<a:fmtScheme name="Eigen"><a:fillStyleLst>${three(placeholder)}</a:fillStyleLst>`,
+        `<a:lnStyleLst>${three(`<a:ln w="6350">${placeholder}</a:ln>`)}</a:lnStyleLst>`,
+        `<a:effectStyleLst>${three('<a:effectStyle><a:effectLst/></a:effectStyle>')}</a:effectStyleLst>`,
+        `<a:bgFillStyleLst>${three(placeholder)}</a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`,
+    ].join('');
+}
+
+// ── Pictures ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// The image types a picture part is read or written as, each with its part's extension. WMF and EMF are among them,
+// though no browser or sharp draws them, so a docx import keeps such a figure, with its alt text, as a broken image.
 export const IMAGE_EXTENSION_BY_MIME = new Map([
     ['image/png', 'png'],
     ['image/jpeg', 'jpeg'],
@@ -306,8 +317,8 @@ export const IMAGE_EXTENSION_BY_MIME = new Map([
 // image/jpg is a common misspelling of a part's declared type.
 export const MIME_ALIASES = new Map([['image/jpg', 'image/jpeg']]);
 
-// A picture's blip: its raster, and an SVG's own file as the svgBlip Word, PowerPoint and LibreOffice draw in its place;
-// effects go first, as CT_Blip orders them before its extensions.
+// A picture's blip: its raster, and for an SVG the SVG's own part as the svgBlip extension, which Word, PowerPoint and
+// LibreOffice draw instead. Effects go first, as CT_Blip puts them before its extensions.
 export function blipXml(rId: string, svgRId: string | undefined, effects = ''): string {
     const svg = svgRId
         ? `<a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="${ASVG_NS}" r:embed="${svgRId}"/></a:ext></a:extLst>`
@@ -315,8 +326,8 @@ export function blipXml(rId: string, svgRId: string | undefined, effects = ''): 
     return effects || svg ? `<a:blip r:embed="${rId}">${effects}${svg}</a:blip>` : `<a:blip r:embed="${rId}"/>`;
 }
 
-// The parts an a:blip names, best first: its svgBlip extension's, which Office draws in its place, then its own. A
-// reader takes the raster when the SVG's part is none it can show.
+// The parts an a:blip names, best first: its svgBlip extension's SVG, which Office draws instead, then its own raster.
+// A reader falls back to the raster when it can't show the SVG's part.
 export function blipEmbeds(blip: XmlElement | undefined): [svg: string | undefined, raster: string | undefined] {
     if (!blip) return [undefined, undefined];
     const extensions = xmlChild(blip, A_NS, 'extLst');
@@ -326,7 +337,9 @@ export function blipEmbeds(blip: XmlElement | undefined): [svg: string | undefin
     return [svg && xmlAttr(svg, R_NS, 'embed'), xmlAttr(blip, R_NS, 'embed')];
 }
 
-// A paragraph's a:pPr algn for each canvas alignment, and back; the reader takes every justified kind as justify.
+// ── Text and lines ──────────────────────────────────────────────────────────────────────────────────────────────
+
+// A paragraph's a:pPr algn for each canvas alignment, and back. The reader takes every justified kind as justify.
 export const ALGN_BY_ALIGN: Record<TextAlign, string> = { left: 'l', center: 'ctr', right: 'r', justify: 'just' };
 export const ALIGN_BY_ALGN = new Map<string, TextAlign>([
     ['l', 'left'],
@@ -365,7 +378,7 @@ export const ARROWHEAD_BY_LINE_END = new Map<string, Arrowhead>([
     ['diamond', 'circle'],
 ]);
 
-// An a:ln's a:prstDash for each stroke style; a solid line writes none.
+// An a:ln's a:prstDash for each stroke style. A solid line writes none.
 export const PRESET_DASH_BY_STYLE: Record<StrokeStyle, string> = { solid: '', dashed: 'dash', dotted: 'dot' };
 
 // A preset dash as the stroke style that draws closest: the dots dotted, every other dash dashed.
@@ -373,8 +386,8 @@ export function strokeStyleOf(dash: string | undefined): StrokeStyle {
     return !dash || dash === 'solid' ? 'solid' : dash === 'dot' || dash === 'sysDot' ? 'dotted' : 'dashed';
 }
 
-// A text body's (c:rich, a:txBody) plain text: a line per paragraph and per break, runs and fields joined.
-// The docx import's drawingLine (import/doc/drawings.ts) walks runs the same way into rich text; to unify later.
+// A text body's plain text, such as a c:rich or an a:txBody: a line per paragraph and per break, its runs and fields
+// joined.
 export function drawingLines(body: XmlElement): string[] {
     const lines: string[] = [];
     for (const paragraph of xmlElements(body)) {
@@ -394,8 +407,10 @@ export function drawingLines(body: XmlElement): string[] {
     return lines;
 }
 
-// A shape turned within 45° of a quarter turn: a group scales it along its swapped axes, and a spreadsheet anchors it by
-// its box turned that quarter.
+// ── Spreadsheet anchors ─────────────────────────────────────────────────────────────────────────────────────────
+
+// Whether a shape turned this far is within 45° of a quarter turn. A group scales such a shape along its swapped axes,
+// and a spreadsheet anchors it by its box turned a quarter.
 export function isSideways(degrees: number): boolean {
     const turn = normalizeAngle(degrees);
     return (turn >= 45 && turn < 135) || (turn >= 225 && turn < 315);
@@ -403,8 +418,9 @@ export function isSideways(degrees: number): boolean {
 
 export type Box = { x: number; y: number; width: number; height: number };
 
-// The cells Excel and LibreOffice place a picture turned `degrees` over: its box, or, sideways, its box turned a quarter
-// about its centre, its sides swapped. Its own inverse, so the reader takes the picture's box back from its anchor.
+// The cells Excel and LibreOffice place a picture turned `degrees` over: its box, or for a sideways one its box turned
+// a quarter about its centre, so its sides swap. The mapping is its own inverse, so a reader takes the picture's box
+// back from its anchor with it.
 export function anchoredBox(box: Box, degrees: number): Box {
     if (!isSideways(degrees)) return box;
     const { x, y, width, height } = box;
