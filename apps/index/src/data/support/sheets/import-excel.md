@@ -64,12 +64,13 @@ Fonts from Excel are mapped to the four fonts Sheets supports. Common sans-serif
 
 ## What does not carry over
 
-After an import into an open spreadsheet, a message counts the charts, images, and conditional formatting rules that didn't come across, for example "2 charts and 1 conditional format were not imported."
+After an import into an open spreadsheet, a message counts the charts, images, conditional formatting rules, and data validation rules that didn't come across, for example "2 charts and 1 conditional format were not imported."
 
 The following are not imported:
 
 - Charts Sheets can't draw the way Excel does, such as area, scatter, doughnut, combo, and waterfall charts. A chart sheet holding one comes in as an empty sheet.
 - Conditional formatting rules Sheets has no rule for, such as icon sets
+- Data validation rules Sheets has no rule for, such as a custom formula or a list that comes from a named range
 - Images placed inside cells, and shapes such as text boxes
 - Comments and notes
 

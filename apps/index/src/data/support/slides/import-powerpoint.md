@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, import, powerpoint, pptx]
 related: [slides/export-slides, slides/add-slides]
 order: 100
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in Drive into a new presentation, or import its slides into a presentation you already have open, next to your own slides or in their place. Its slides come across with their text, shapes, pictures, charts, and backgrounds.
@@ -50,7 +50,7 @@ After an import into an open presentation, a message counts what didn't come acr
 - A table, SmartArt graphic, or embedded object becomes a box that says what was there, so you can see the gap and rebuild it. The box is see-through, so a title behind it stays readable.
 - A chart Slides can't draw the way PowerPoint does, such as an area, scatter, doughnut, or combo chart, becomes a box that names the kind of chart and its title, for example **Scatter chart not imported**.
 - A bent or curved connector, an arc, or a freeform line that isn't closed comes in without its arrowheads. Shadows, glows, and 3-D effects are left out.
-- Pictures come in uncropped and unflipped. A TIFF, EMF, or WMF picture becomes a box that says **Picture not imported**.
+- Pictures come in uncropped and unflipped. A TIFF, EMF, or WMF picture becomes a box that says **Picture not imported**. So does every picture after the first 1,000, or once the pictures add up to more than the largest file you can upload (35 MB unless your administrator changed it).
 - A pattern fill becomes a plain color, a gradient keeps its first and last color, and a picture used to fill a shape is left out.
 - Within one text box, every line takes the font, size, and color used most in that box.
 - Speaker notes, animations, and transitions aren't imported.
