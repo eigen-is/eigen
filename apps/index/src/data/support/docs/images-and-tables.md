@@ -82,7 +82,7 @@ You can copy a chart from Sheets, Slides, or Vector and paste it into a document
 
 Right-click a chart and choose **Download image** to save it as an SVG picture on a white background, named after its title. This works with view access too. The same menu has **Cut**, **Copy**, and **Delete**, and with view access **Copy**.
 
-A chart prints and downloads as a PDF or a web page in its look. In a Word file it is a Word chart with its numbers, but you can't change its data in Word, and a sketched or hatched look is drawn plain. See [Export to Word, PDF, or HTML](/support/docs/export).
+A chart prints and downloads as a PDF or a web page in its look. In a Word file it is a Word chart with its numbers, kept the way Word keeps a chart's data, and a sketched or hatched look is drawn plain. See [Export to Word, PDF, or HTML](/support/docs/export).
 
 ## Insert a table
 
