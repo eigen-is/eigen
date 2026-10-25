@@ -2,7 +2,8 @@
 // ooxml-chart.ts, which reads it back as the same spec and look. Office draws what Eigen draws: an automatic colour is
 // written as the palette's at its place, which the reader reads back as automatic, and the look as Office's shape
 // properties, its text at the size Eigen's layout gives the chart's box. A docx's or pptx's inline numbers go as refs
-// into the workbook embedded beside the part, whose sheet embeddedChartSheet lays out, so Office's Edit Data opens them.
+// into the workbook embedded beside the part, whose sheet embeddedChartSheet lays out as desktop Office writes one, for
+// its Edit Data to open; not yet verified in desktop Office.
 
 import { gradientStops } from '@workspace/lib/background';
 import {
