@@ -192,7 +192,7 @@ describe('a chart', () => {
 
     test.each([
         ['column', sampleChartParts('column')],
-        ['stacked bar', stacked('bar', 'normal')],
+        ['stacked bar', stacked('bar', 'stacked')],
         ['100% stacked column', stacked('column', 'percent')],
         ['line', sampleChartParts('line')],
         ['pie', sampleChartParts('pie')],

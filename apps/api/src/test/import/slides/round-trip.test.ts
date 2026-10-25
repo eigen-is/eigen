@@ -261,7 +261,7 @@ describe('charts exported and read back', () => {
     };
     const CHARTS: NewVectorElement[] = [
         sampleChartParts('column'),
-        stacked('bar', 'normal'),
+        stacked('bar', 'stacked'),
         stacked('column', 'percent'),
         sampleChartParts('line'),
         sampleChartParts('pie', 'Source Serif 4'),
