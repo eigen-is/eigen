@@ -1911,7 +1911,7 @@ describe('the trash purge at mount open', () => {
     });
 });
 
-describe('a create under a folder deleted meanwhile (local-key storage)', () => {
+describe('a write under a folder deleted meanwhile (local-key storage)', () => {
     let mount: Mount;
     let rootId: string;
 
@@ -1964,6 +1964,41 @@ describe('a create under a folder deleted meanwhile (local-key storage)', () => 
         const err = await mount.createFolder('no-such-folder', 'Child').catch((e: unknown) => e);
         expect(err).toBeInstanceOf(ApiError);
         expect((err as ApiError).status).toBe(404);
+    });
+
+    // Drive checked the folder before the move. It was trashed and deleted after that check.
+    test('a move answers 404', async () => {
+        const folderId = await mount.createFolder(rootId, 'GoneBeforeMove');
+        const fileId = await mount.createFile(rootId, 'moved.txt', 'text/plain', 1, Buffer.from('m'));
+        await mount.trashPath(folderId);
+        await mount.permanentlyDeleteFromTrash(folderId);
+
+        const err = await mount.updatePath(fileId, { parentId: folderId }).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(404);
+        expect((await mount.getPath(fileId))?.parentId).toBe(rootId);
+    });
+
+    // The restore picked the original folder, and the folder is deleted before the restore writes the row.
+    test('a restore answers 404', async () => {
+        const folderId = await mount.createFolder(rootId, 'GoneBeforeRestore');
+        const fileId = await mount.createFile(folderId, 'restored.txt', 'text/plain', 1, Buffer.from('r'));
+        await mount.trashPath(fileId);
+
+        const getChildByName = mount.getChildByName.bind(mount);
+        const spy = spyOn(mount, 'getChildByName').mockImplementation(async (parentId, name) => {
+            if (parentId === folderId) await mount.deletePath(folderId);
+            return getChildByName(parentId, name);
+        });
+        let err: unknown;
+        try {
+            err = await mount.restorePath(fileId).catch((e: unknown) => e);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(404);
+        expect((await mount.getPath(fileId))?.trashedAt).not.toBeNull();
     });
 });
 

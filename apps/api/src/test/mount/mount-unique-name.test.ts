@@ -333,7 +333,7 @@ describe('concurrent same-name create → exactly one 409', () => {
         await mount.closeAllDatabases();
     });
 
-    // Pins the translation's precision: rethrowDuplicateActiveName must map ONLY the
+    // Pins the translation's precision: rethrowPathWriteError must map ONLY the
     // idx_paths_unique_active_name violation to 409. A duplicate paths.id (PRIMARY KEY) through the
     // same insert seam is a real bug, not a name race — it must re-throw raw, not become a 409.
     test('a duplicate paths.id violation re-throws raw instead of mapping to 409', async () => {

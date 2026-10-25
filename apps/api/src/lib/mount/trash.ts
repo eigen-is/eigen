@@ -10,7 +10,7 @@ import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
-import { renameThenWriteRow, rethrowDuplicateActiveName } from './helpers';
+import { renameThenWriteRow, rethrowPathWriteError } from './helpers';
 import type { Mount } from './mount';
 import { isReservedName, trashStorageKey } from './names';
 import { paths } from './schema';
@@ -145,7 +145,7 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                         })
                         .where(eq(paths.id, pathId));
                 } catch (e) {
-                    rethrowDuplicateActiveName(e, restoreName);
+                    rethrowPathWriteError(e, restoreName);
                 }
             };
 

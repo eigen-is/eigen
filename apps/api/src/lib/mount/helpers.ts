@@ -42,14 +42,17 @@ export function ancestorIds(...pathIds: string[]): SQL {
     `;
 }
 
-// The v7 partial unique index (parentId, LOWER(name)) WHERE trashedAt IS NULL closes the concurrent
-// same-name races the create INSERTs and rename/move/restore UPDATEs can't; translate its violation
-// into the SAME 409 assertUniqueName raises (single-threaded callers pass that SELECT first, so only
-// the race tail lands here). Match on the index name bun:sqlite puts in the message so an unrelated
-// UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
-export function rethrowDuplicateActiveName(e: unknown, name: string): never {
+// What a write to a paths row throws when it raced another write. The v7 partial unique index (parentId,
+// LOWER(name)) WHERE trashedAt IS NULL refuses a second live sibling of one name, and that is the same
+// 409 assertUniqueName gives. The message names the index, so the id PRIMARY KEY stays a real error.
+// The one foreign key, on parentId, refuses a row under a folder that was deleted meanwhile, and that
+// is a 404.
+export function rethrowPathWriteError(e: unknown, name: string): never {
     if (e instanceof Error && e.message.includes(`index 'idx_paths_unique_active_name'`)) {
         throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+    }
+    if (e instanceof Error && e.message.includes('FOREIGN KEY constraint failed')) {
+        throw new ApiError(404, 'Folder not found');
     }
     throw e;
 }

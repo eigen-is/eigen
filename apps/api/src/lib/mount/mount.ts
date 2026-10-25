@@ -39,7 +39,7 @@ import {
     createMountStorage,
     docContainerDescendantIds,
     renameThenWriteRow,
-    rethrowDuplicateActiveName,
+    rethrowPathWriteError,
 } from './helpers';
 import { buildStorageKey, foldName, isReservedName, trashStorageKey, validateName } from './names';
 import type * as schema from './schema';
@@ -648,17 +648,12 @@ export class Mount {
     }
 
     // assertUniqueName's SELECT leaves a race open: two creates can both pass it before either inserts.
-    // The unique index on the active names then refuses the second INSERT, and the loser gets the same
-    // 409 the SELECT gives. Off `local` no lock keeps a folder's permanent delete out of a create
-    // either. The foreign key on parentId then refuses the INSERT, and that is a 404.
+    // Off `local` no lock keeps a folder's permanent delete out of a create either.
     private async insertPathRow(values: typeof paths.$inferInsert): Promise<void> {
         try {
             await this.db.insert(paths).values(values);
         } catch (e) {
-            if (e instanceof Error && e.message.includes('FOREIGN KEY constraint failed')) {
-                throw new ApiError(404, 'Folder not found');
-            }
-            rethrowDuplicateActiveName(e, values.name);
+            rethrowPathWriteError(e, values.name);
         }
     }
 
@@ -738,7 +733,7 @@ export class Mount {
                     });
                 }
             } catch (e) {
-                rethrowDuplicateActiveName(e, targetName);
+                rethrowPathWriteError(e, targetName);
             }
         };
 
