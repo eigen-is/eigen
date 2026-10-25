@@ -268,13 +268,14 @@ export const PPTX_LISTED: Listed<RoundtripDifference, PptxRoundtripContext>[] = 
     },
     {
         kind: "a line's box is its points' box",
-        why: 'A line or an arrow is written from its points, which a deck stores to the hundredth of a pixel, so its box comes back as their box',
+        why: 'A line or an arrow is written from its points, which a deck stores to the hundredth of a pixel, so its box comes back as their box, within the EMU its two ends round to apart',
         matches: ({ feature, at, b }, context) => {
             const element = elementAt(context.a, at);
             if (!element || !('points' in element) || !/^(?:line|arrow|freedraw) (?:width|height)$/.test(feature))
                 return false;
             const { minX, minY, maxX, maxY } = pointsBounds(parsePoints(element.points));
-            return b === unitsOf(context.a.scene).emu(feature.endsWith('width') ? maxX - minX : maxY - minY);
+            const box = unitsOf(context.a.scene).emu(feature.endsWith('width') ? maxX - minX : maxY - minY);
+            return typeof b === 'number' && Math.abs(b - box) <= 1;
         },
     },
     {

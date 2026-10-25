@@ -175,4 +175,31 @@ describe('round trip', () => {
             ['richtext html', false],
         ]);
     });
+
+    // The writer rounds a line's two ends to the EMU apart, so its box can come back an EMU off its points' box.
+    test("a line's box within an EMU of its points' box is the same box", () => {
+        const scene = (height: number) => {
+            const doc = new Y.Doc();
+            writeFrameInDoc(doc, { id: 'f1', index: 'a0', name: '', width: 1920, height: 1080, background: '' });
+            const points = JSON.stringify([
+                [0, 0],
+                [100, 0.6047],
+            ]);
+            writeElementInDoc(
+                doc,
+                { type: 'line', x: 0, y: 0, width: 100, height, angle: 0, points, frameId: 'f1' },
+                'a0',
+                SLIDES_STYLE_DEFAULTS,
+                'el-0',
+            );
+            return { scene: readVectorFromDoc(doc), media: [], pictures: new Map() };
+        };
+        const groups = (height: number) =>
+            classifyPptx({ a: scene(0.6047), b: scene(height), prepared: new Map() }).map(({ kind, listed }) => [
+                kind,
+                listed,
+            ]);
+        expect(groups(0.5999)).toEqual([["a line's box is its points' box", true]]);
+        expect(groups(0.59)).toEqual([['line height', false]]);
+    });
 });
