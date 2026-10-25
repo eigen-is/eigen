@@ -174,6 +174,10 @@ export const PAGE_NUMBER_FIELDS: Record<PageNumberKind, string> = { page: 'PAGE'
 // Word's widest table. The reader and the writer cap the grid at it, so no row walks or fills a column past it.
 export const MAX_TABLE_COLUMNS = 63;
 
+// Eigen's spelling of a column with no stored width, ECMA's No Width on its cells' w:tcW: the grid holds only its
+// layout. Word's own auto is laid out by Word, so it reads as a width.
+export const NO_STORED_WIDTH = 'nil';
+
 // The notes a notes part holds that no reference names: the rule above the notes, the one above a note a page break
 // continues, and the notice under one. Word writes the first two as notes -1 and 0 and names them in its settings.
 export const NOTE_SEPARATORS = ['separator', 'continuationSeparator', 'continuationNotice'] as const;

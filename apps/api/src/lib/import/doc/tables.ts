@@ -9,7 +9,7 @@ import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
 import { HEADER_CELL_LOOK, TABLE_CELL_PADDING } from '../../document/looks';
 import { isOn, W_NS } from '../../ooxml/ooxml';
-import { MAX_TABLE_COLUMNS, STYLE_NAMES, TWIPS_PER_PX } from '../../ooxml/wordml';
+import { MAX_TABLE_COLUMNS, NO_STORED_WIDTH, STYLE_NAMES, TWIPS_PER_PX } from '../../ooxml/wordml';
 import type { Item, Para } from './assemble';
 import { build, inlineText, isWhitespace } from './assemble';
 import { int, onOff, twipsOf, w, wChild } from './package';
@@ -298,8 +298,7 @@ function withCellWidths(declared: number[], rows: Row[]): number[] {
     return Array.from(grid, (width) => width ?? 0);
 }
 
-// The columns whose cells over them alone all have no width (nil), as the writer writes a column the editor gives none:
-// the grid's width there is only its layout.
+// The columns whose cells over them alone all have no stored width, as the writer writes a column the editor gives none.
 function unsizedColumns(rows: Row[]): Set<number> {
     const sized = new Set<number>();
     const unsized = new Set<number>();
@@ -309,7 +308,7 @@ function unsizedColumns(rows: Row[]): Set<number> {
             if (column >= MAX_TABLE_COLUMNS) break;
             const tcPr = wChild(cell, 'tcPr');
             const span = Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1);
-            if (span === 1) (w(wChild(tcPr, 'tcW'), 'type') === 'nil' ? unsized : sized).add(column);
+            if (span === 1) (w(wChild(tcPr, 'tcW'), 'type') === NO_STORED_WIDTH ? unsized : sized).add(column);
             column += span;
         }
     }
