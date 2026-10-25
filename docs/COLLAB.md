@@ -78,6 +78,10 @@ One mount closes the same way. When a team mount gets new storage or is turned o
 
 A trash closes the documents under a path, then the databases, and only then marks the path trashed. A document opened in between would save its edits into a closed `data.db`. So while `Drive.deletePath` runs, the registry answers an open of the path or of anything under it with a 503 ([SOFT-DELETE.md](SOFT-DELETE.md#trash-closes-what-is-open-under-the-item-first)). A document created inside the folder during the trash is not covered, because the registry collects the ids before the trash starts ([ROADMAP.md](ROADMAP.md)).
 
+## An open waits for data.db and never makes one
+
+`Drive.create` makes a document's `data.db` and `comments.db` together with its container. A copy makes the container first and copies the files into it after, so an open in between finds no `data.db`. `CollabDocument.init` answers that open with a 503, and the socket gets the storage-unavailable close and retries until the copy is done. An open that made an empty `data.db` instead would stop the copy with a 409 and leave half a container with an empty document. A container whose copy stopped before its `data.db` landed never opens ([ROADMAP.md](ROADMAP.md)). `apps/api/src/test/collab/collab-open-during-copy.test.ts` pins it.
+
 ## Modified moves for an update, never for an open or a close
 
 The `update` handler stamps the container's Modified time at most once a minute (`TOUCH_THROTTLE_MS`), since typing fires many updates a second. An update the throttle skips is stamped when the document closes, with its own time. So a document that was only read keeps its Modified time, and the last edit is not dated a linger after the last viewer left. `apps/api/src/test/collab/collab-modified-touch.test.ts` pins it.

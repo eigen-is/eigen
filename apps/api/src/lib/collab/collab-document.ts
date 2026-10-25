@@ -114,17 +114,13 @@ export class CollabDocument {
     }
 
     public async init(): Promise<CollabDocument> {
-        const findDatabases = () =>
-            Promise.all([
-                this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db'),
-                this.drive.getChildByName(this.path.mountId, this.path.id, 'comments.db'),
-            ]);
-        let [dataDbPath, commentsDbPath] = await findDatabases();
-        if (!dataDbPath) {
-            await CollabDocument.create(this.drive, this.path.mountId, this.path.id);
-            [dataDbPath, commentsDbPath] = await findDatabases();
-            if (!dataDbPath) throw new ApiError(500, `Failed to create data.db in ${this.path.name}`);
-        }
+        const [dataDbPath, commentsDbPath] = await Promise.all([
+            this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db'),
+            this.drive.getChildByName(this.path.mountId, this.path.id, 'comments.db'),
+        ]);
+        // A copy makes the container before it copies data.db into it. A socket that opens the copy in
+        // between gets a 503 and tries again, so it never makes a data.db the copy then can't write.
+        if (!dataDbPath) throw new ApiError(503, `${this.path.name} has no data.db yet`);
 
         // comments.db opens now, so the editor's first comments request finds it ready. Nothing waits for
         // it, because that request reports any real problem itself.
