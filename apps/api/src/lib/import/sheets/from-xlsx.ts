@@ -8,7 +8,9 @@ import {
     DEFAULT_SHEET_ROW_COUNT,
 } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
-import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
+import type { TransformWarning } from '../../document/transform/protocol';
+import { lossCounter } from '../../document/transform/protocol';
+import { budget } from '../../ooxml/budget';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { optional } from '../../ooxml/opc';
 import { MAX_DECOMPRESSED_BYTES } from '../../ooxml/zip';
@@ -50,39 +52,40 @@ export type XlsxOptions = {
 
 // The sheets alone, their pictures' media names left unresolved: the shape the tests and the audit compare.
 export function xlsxToSheets(bytes: Uint8Array): Sheet[] {
-    return readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }, []).sheets;
+    return readXlsx(bytes, { maxMediaBytes: MAX_DECOMPRESSED_BYTES }).sheets;
 }
 
 // Every worksheet's grid and what lies past it, charged against the output budget as it is read. The cells count what
 // they emit, a value, a rich string's run, a border, a row's height or hidden flag, a merged or linked cell, a column's
 // width, a rule's range or a validated cell, and the grids recalc materialises; the text counts every value, display,
 // run, formula, link and rule text, each shared string and shared formula once per copy. A chart sheet is a sheet
-// without a grid. The pictures come back beside the sheets as the media files their images name. What was left out is
-// counted in `warnings`.
+// without a grid. The pictures come back beside the sheets as the media files their images name, and what was left out
+// as warnings that count it.
 export function readXlsx(
     bytes: Uint8Array,
     options: XlsxOptions,
-    warnings: TransformWarning[],
-): { sheets: Sheet[]; media: ImportedMedia[] } {
+): { sheets: Sheet[]; media: ImportedMedia[]; warnings: TransformWarning[] } {
     try {
         const book = readPackage(bytes);
-        const budget = readBudget();
+        const reads = readBudget();
         const palette = themePalette(book.theme);
         const looks = readLooks(book.styles, palette);
-        const strings = readSharedStrings(book.sharedStrings, palette, budget);
+        const strings = readSharedStrings(book.sharedStrings, palette, reads);
         const dxfs = readDxfs(book.styles, palette);
         const digitWidth = defaultFontDigitWidth(book.styles);
-        const emitted = { cells: 0, text: 0, span: 0, slots: 0, translated: 0 };
+        const { tooLarge } = IMPORT_MESSAGES.xlsx;
+        const emitted = {
+            cells: budget(MAX_CELLS, TOO_MANY_CELLS),
+            text: budget(MAX_TEXT, tooLarge),
+            span: budget(MAX_CELLS, TOO_MANY_CELLS),
+            slots: budget(MAX_GRID_SLOTS, tooLarge),
+            translated: budget(MAX_SHARED_FORMULA_TEXT, tooLarge),
+        };
         const charge = (cells: number, text: number) => {
-            emitted.cells += cells;
-            emitted.text += text;
-            if (emitted.cells > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
-            if (emitted.text > MAX_TEXT) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+            emitted.cells.charge(cells);
+            emitted.text.charge(text);
         };
-        const chargeCopy = (chars: number) => {
-            emitted.translated += chars;
-            if (emitted.translated > MAX_SHARED_FORMULA_TEXT) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
-        };
+        const losses = lossCounter();
         const sheets: Sheet[] = [];
         // Excel refuses two sheets of one name, in any case: the first keeps it, so a formula naming it means that one,
         // and a later one is numbered as Excel numbers a copy, past every name the workbook holds.
@@ -104,7 +107,7 @@ export function readXlsx(
             named.add(name.toLowerCase());
             taken.add(name.toLowerCase());
             // The rest is parsed before the rows, so the merges and links are placed when the grid reads its cells.
-            const { rest, children } = readInBatches(part, 'sheetData', 'row', budget);
+            const { rest, children } = readInBatches(part, 'sheetData', 'row', reads);
             // A damaged rels part costs the external links, not the workbook.
             const rels = optional(() => book.pkg.relationships(path)) ?? new Map();
             const worksheet = readWorksheet(rest, { id, digitWidth, rels, palette, charge });
@@ -114,16 +117,17 @@ export function readXlsx(
                 date1904: book.date1904,
                 palette,
                 charge,
-                chargeCopy,
+                chargeCopy: emitted.translated.charge,
                 placed: worksheet.placed,
             });
             // The cells' span, at least a default grid's so empty sheets add up; and the grid recalc materialises from it,
             // at least a default grid deep and wide, so a narrow sheet builds far more slots than it spans.
-            emitted.span += Math.max(grid.rows * grid.columns, DEFAULT_SHEET_ROW_COUNT * DEFAULT_SHEET_COLUMN_COUNT);
-            if (emitted.span > MAX_CELLS) throw new ApiError(413, TOO_MANY_CELLS);
-            emitted.slots +=
-                Math.max(grid.rows, DEFAULT_SHEET_ROW_COUNT) * Math.max(grid.columns, DEFAULT_SHEET_COLUMN_COUNT);
-            if (emitted.slots > MAX_GRID_SLOTS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+            emitted.span.charge(
+                Math.max(grid.rows * grid.columns, DEFAULT_SHEET_ROW_COUNT * DEFAULT_SHEET_COLUMN_COUNT),
+            );
+            emitted.slots.charge(
+                Math.max(grid.rows, DEFAULT_SHEET_ROW_COUNT) * Math.max(grid.columns, DEFAULT_SHEET_COLUMN_COUNT),
+            );
             const { merge = {}, columnlen = {} } = worksheet.config;
             const columnWidth = sheetDefaultColWidth(worksheet.sheet);
             const rowHeight = sheetDefaultRowHeight(worksheet.sheet);
@@ -159,7 +163,7 @@ export function readXlsx(
                     columns: grid.columns,
                     dates: grid.dates,
                     charge,
-                    chargeElements: budget.chargeElements,
+                    chargeElements: reads.chargeElements,
                 }),
             };
             sheets.push(sheet);
@@ -169,20 +173,18 @@ export function readXlsx(
         // An import replaces the document's sheets: none read is a file it can't read, never an empty spreadsheet.
         if (sheets.length === 0) throw new ApiError(400, IMPORT_MESSAGES.xlsx.invalid);
         const files = importMedia('xlsx', book.pkg.readMedia, options.maxMediaBytes);
-        const losses = new Map<CountedWarningCode, number>();
         placeDrawings(drawings, {
             pkg: book.pkg,
             theme: drawingTheme(book.theme),
             sheetIds,
-            spend: budget.spendElements,
+            spend: reads.spendElements,
             charge,
             mediaName: files.name,
-            lost: (code) => losses.set(code, (losses.get(code) ?? 0) + 1),
+            lost: losses.lost,
         });
-        for (const [code, count] of losses) warnings.push({ code, count });
         // Excel refuses to hide every sheet, and the editor opens on one it shows.
         if (sheets.every((sheet) => sheet.hide === 1)) delete sheets[0].hide;
-        return { sheets, media: files.media };
+        return { sheets, media: files.media, warnings: losses.warnings() };
     } catch (error) {
         throw importError(error, 'xlsx');
     }

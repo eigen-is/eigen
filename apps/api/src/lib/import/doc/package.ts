@@ -3,6 +3,8 @@ import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspa
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
+import type { LossCounter } from '../../document/transform/protocol';
+import { budget } from '../../ooxml/budget';
 import { alternativeFor, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
 import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType } from '../../ooxml/opc';
@@ -37,10 +39,6 @@ export type DocxPackage = {
     // The final section's headers and footers, a first-page one only with w:titlePg, which makes page 1 different.
     bands: Partial<Record<BandRoot, Part>>;
     titlePg: boolean;
-    // Even pages' bands the final section names, which Word draws only with evenAndOddHeaders.
-    evenBands: number;
-    // Bands the final section names in a part that is missing or damaged.
-    damagedBands: number;
     contentTypeOf: OoxmlPackage['contentTypeOf'];
     // A part a drawing names, read when met; a damaged one is no part.
     part(path: string): XmlElement | undefined;
@@ -56,11 +54,14 @@ export type DocxPackage = {
     spendChart(cost: number): boolean;
 };
 
-export function readPackage(bytes: Uint8Array): DocxPackage {
+// Counts in `lost` the bands the file names that no doc holds: an even page's, which Word draws only with
+// evenAndOddHeaders, and one in a part that is missing or damaged.
+export function readPackage(bytes: Uint8Array, lost: LossCounter['lost']): DocxPackage {
     const pkg = openPackage(bytes, IMPORT_MESSAGES.docx);
-    let pieces = MAX_DOCX_PIECES;
-    let mathml = MAX_DOCX_WEIGHT * CHARS_PER_UNIT;
-    let charts = MAX_DOCX_CHART_WORK;
+    const { tooLarge } = IMPORT_MESSAGES.docx;
+    const pieces = budget(MAX_DOCX_PIECES, tooLarge);
+    const mathml = budget(MAX_DOCX_WEIGHT * CHARS_PER_UNIT, tooLarge);
+    const charts = budget(MAX_DOCX_CHART_WORK, tooLarge);
     const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
     const documentRels = pkg.relationships(documentPath);
     // By relationship, else where Word puts the part.
@@ -85,7 +86,6 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         }
     const titlePg = onOff(wChild(wChild(wChild(document, 'body'), 'sectPr'), 'titlePg')) === true;
     const bands: Partial<Record<BandRoot, Part>> = {};
-    let damagedBands = 0;
     for (const root of BAND_ROOTS) {
         const edge = bandEdge(root);
         const first = root === FIRST_PAGE_BAND[edge];
@@ -97,10 +97,11 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
             return tree && { path: rel.target, root: tree, rels: pkg.relationships(rel.target) };
         });
         if (band) bands[root] = band;
-        else damagedBands++;
+        else lost('band-content-dropped');
     }
-    const even = ['header:even', 'footer:even'].filter((key) => references.has(key)).length;
-    const evenAndOdd = even > 0 && onOff(wChild(xml('settings'), 'evenAndOddHeaders')) === true;
+    const even = ['header:even', 'footer:even'].filter((key) => references.has(key));
+    if (even.length > 0 && onOff(wChild(xml('settings'), 'evenAndOddHeaders')) === true)
+        for (const _ of even) lost('even-bands-dropped');
     return {
         zip: pkg.zip,
         document: { path: documentPath, root: document, rels: documentRels },
@@ -112,24 +113,12 @@ export function readPackage(bytes: Uint8Array): DocxPackage {
         endnotes: part('endnotes'),
         bands,
         titlePg,
-        evenBands: evenAndOdd ? even : 0,
-        damagedBands,
         contentTypeOf: pkg.contentTypeOf,
         part: (path) => optional(() => pkg.part(path)),
         readMedia: pkg.readMedia,
-        chargePiece: (count = 1) => {
-            pieces -= count;
-            if (pieces < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
-        },
-        chargeMathml: (length) => {
-            mathml -= length;
-            if (mathml < 0) throw new ApiError(413, IMPORT_MESSAGES.docx.tooLarge);
-        },
-        spendChart: (cost) => {
-            if (cost > charts) return false;
-            charts -= cost;
-            return true;
-        },
+        chargePiece: (count = 1) => pieces.charge(count),
+        chargeMathml: mathml.charge,
+        spendChart: charts.spend,
     };
 }
 

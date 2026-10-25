@@ -6,6 +6,7 @@ import { ApiError, isOutOfMemory } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
 import { readStoredEquation } from '../../document/equation';
 import type { TransformWarning } from '../../document/transform/protocol';
+import { lossCounter } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { UNSHOWN_IMAGE_TYPES } from './drawings';
 import { CHARS_PER_UNIT, MAX_DOCX_WEIGHT, readPackage } from './package';
@@ -56,16 +57,16 @@ export function readDocx(
     warnings: TransformWarning[];
 } {
     try {
-        const pkg = readPackage(buffer);
-        const reader = createReader(pkg, options.publicOrigin);
+        const losses = lossCounter();
+        const pkg = readPackage(buffer, losses.lost);
+        const reader = createReader(pkg, losses.lost, options.publicOrigin);
         const content = readDocument(reader);
-        let refused = 0;
         // A band's schema holds none of BAND_EXCLUDED_NODES: each keeps its text.
         const withoutExcluded = (node: JSONContent): JSONContent[] => {
             if (!BAND_EXCLUDED_NODES.has(node.type ?? '')) {
                 return [node.content ? { ...node, content: node.content.flatMap(withoutExcluded) } : node];
             }
-            refused++;
+            losses.lost('blocks-flattened');
             return asParagraphs(node);
         };
         // A part several references name is read once, and each copy weighed.
@@ -83,7 +84,7 @@ export function readDocx(
         const checked = (blocks: JSONContent[]) => {
             const kept = blocks.flatMap((block) => {
                 if (fits(block)) return [block];
-                refused++;
+                losses.lost('blocks-flattened');
                 return asParagraphs(block);
             });
             const node = docSchema().nodeFromJSON({
@@ -108,24 +109,14 @@ export function readDocx(
         const kept = reader.images.filter((image) => named.has(image.name));
         const images = kept.flatMap(({ name, path, contentType }): DocxImage[] => {
             const data = pkg.readMedia(path);
+            // A part that doesn't read, or one no browser draws, is a figure showing its alt text in a broken image.
+            if (!data || UNSHOWN_IMAGE_TYPES.has(contentType)) losses.lost('images-unshown');
             // A view of the bytes read, not a copy of them: a file may hold 200 MB of media.
             return data
                 ? [{ name, contentType, data: Buffer.from(data.buffer, data.byteOffset, data.byteLength) }]
                 : [];
         });
-        const warnings: TransformWarning[] = [];
-        if (refused > 0) warnings.push({ code: 'blocks-flattened', count: refused });
-        const damaged = kept.length - images.length;
-        const unshown = damaged + images.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).length;
-        if (unshown > 0) warnings.push({ code: 'images-unshown', count: unshown });
-        if (reader.graphicsDropped > 0) warnings.push({ code: 'graphics-dropped', count: reader.graphicsDropped });
-        if (reader.chartsDropped > 0) warnings.push({ code: 'charts-dropped', count: reader.chartsDropped });
-        if (reader.pagesDropped > 0) warnings.push({ code: 'section-pages-dropped', count: reader.pagesDropped });
-        if (pkg.evenBands > 0) warnings.push({ code: 'even-bands-dropped', count: pkg.evenBands });
-        if (reader.bandAnchors > 0) warnings.push({ code: 'band-images-unanchored', count: reader.bandAnchors });
-        const bandDropped = reader.bandDropped + pkg.damagedBands;
-        if (bandDropped > 0) warnings.push({ code: 'band-content-dropped', count: bandDropped });
-        return { doc, bands, page: reader.page, style: reader.normal, images, warnings };
+        return { doc, bands, page: reader.page, style: reader.normal, images, warnings: losses.warnings() };
     } catch (error) {
         throw importError(error, 'docx');
     }

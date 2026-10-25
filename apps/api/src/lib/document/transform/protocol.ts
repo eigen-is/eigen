@@ -173,6 +173,30 @@ export type TransformWarning =
     | { code: 'byte-guard-truncated'; bytes: number }
     | { code: CountedWarningCode; count: number };
 
+export type LossCounter = {
+    // One loss of this kind; with a source, once per source, so a master's fill is one loss however many slides show it.
+    lost(code: CountedWarningCode, source?: object): void;
+    // The counts, in the order their codes were first met.
+    warnings(): TransformWarning[];
+};
+
+// What a reader or a writer left out, counted by kind as it goes.
+export function lossCounter(): LossCounter {
+    const losses = new Map<CountedWarningCode, { count: number; sources: Set<object> }>();
+    return {
+        lost: (code, source) => {
+            const loss = losses.get(code) ?? { count: 0, sources: new Set() };
+            losses.set(code, loss);
+            if (source) {
+                if (loss.sources.has(source)) return;
+                loss.sources.add(source);
+            }
+            loss.count++;
+        },
+        warnings: () => [...losses].map(([code, { count }]) => ({ code, count })),
+    };
+}
+
 // Small stable codes; `status` carries an HTTP status for controlled document
 // errors. Never ApiError/Error instances across the boundary. `out-of-memory`: the
 // child caught one, or died of one after it took the job.

@@ -1192,14 +1192,14 @@ async function xlsxRoundtripChild(
     const limits = { maxMediaBytes: MAX_DECOMPRESSED_BYTES };
     await roundtripChild(options, async (step) => {
         const data = new Uint8Array(await Bun.file(file).arrayBuffer());
-        const a = await step('import', () => readXlsx(data, limits, []));
+        const a = await step('import', () => readXlsx(data, limits));
         const exported: TransformWarning[] = [];
         let prepared: OfficeMedia[] = [];
         const bytes = await step('export', async () => {
             prepared = await officeMedia(a.media);
             return write(a.sheets, { title: '', media: prepared, warnings: exported });
         });
-        const b = await step('reimport', () => readXlsx(bytes, limits, []));
+        const b = await step('reimport', () => readXlsx(bytes, limits));
         const warnings = new Map(exported.map((warning) => [warning.code, 'count' in warning ? warning.count : 1]));
         const groups = await step('compare', async () => {
             const media = { a: await mediaFacts(prepared), b: await mediaFacts(b.media) };

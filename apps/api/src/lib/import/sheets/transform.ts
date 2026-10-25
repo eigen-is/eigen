@@ -14,13 +14,12 @@ export function importXlsxToSheetsSnapshot(
     data: ArrayBuffer,
     job: Pick<SheetsImportJob, 'maxMediaBytes'>,
 ): SheetsImportWorkerResult & { warnings: TransformWarning[] } {
-    const warnings: TransformWarning[] = [];
-    const read = readXlsx(new Uint8Array(data), job, warnings);
-    const { sheets, computed } = recalcImportedSheets(read.sheets, warnings);
+    const read = readXlsx(new Uint8Array(data), job);
+    const { sheets, computed } = recalcImportedSheets(read.sheets, read.warnings);
     return {
         snapshotJson: toTransferableText(encodeSheetsSnapshot(sheets, { computed })),
         images: toTransferableMedia(read.media),
-        warnings,
+        warnings: read.warnings,
     };
 }
 

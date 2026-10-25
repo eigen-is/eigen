@@ -2,9 +2,9 @@ import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
 import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, nearestSlideSize, SLIDE_SIZES } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
-import type { XmlElement } from '../../core/xml';
 import { xmlAttr } from '../../core/xml';
-import type { CountedWarningCode, TransformWarning } from '../../document/transform/protocol';
+import type { TransformWarning } from '../../document/transform/protocol';
+import { lossCounter } from '../../document/transform/protocol';
 import { EMU_PER_POINT, P_NS } from '../../ooxml/ooxml';
 import { MAX_SLIDE_EMU, MIN_SLIDE_EMU } from '../../ooxml/presentationml';
 import type { ImportedMedia } from '../image-types';
@@ -79,7 +79,7 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
     // Named per import, so an Import into a deck that holds an earlier one's pictures overwrites none. The upload cap
     // bounds the pictures' bytes, as an upload of each would be bounded.
     const files = importMedia('pptx', pkg.readMedia, options.maxMediaBytes);
-    const losses = new Map<CountedWarningCode, Set<XmlElement>>();
+    const losses = lossCounter();
     const deck: DeckWalk = {
         pkg,
         scale,
@@ -90,7 +90,7 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         elements: 0,
         weight: 0,
         decorations: new Map(),
-        lost: (code, source) => losses.set(code, (losses.get(code) ?? new Set()).add(source)),
+        lost: losses.lost,
         // Read as it is named, so a picture whose bytes don't read is dropped where it is shown.
         mediaName: (part) => {
             const name = files.name(part);
@@ -108,6 +108,5 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         return [{ name: title, background: backgroundOf(slide, deck), elements }];
     });
 
-    const warnings: TransformWarning[] = [...losses].map(([code, sources]) => ({ code, count: sources.size }));
-    return { slides, media: files.media, warnings, page };
+    return { slides, media: files.media, warnings: losses.warnings(), page };
 }

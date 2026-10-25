@@ -17,6 +17,7 @@ import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
+import type { LossCounter } from '../../document/transform/protocol';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
@@ -58,14 +59,11 @@ export type Reader = {
     notes: Map<string, { content: JSONContent[]; weight: number }>;
     openNotes: string[];
     fields: Field[];
-    // SmartArt, whose graphic the schema can't hold, and the parts of a SmartArt's or a band's chart read: each is read
-    // once.
-    graphicsDropped: number;
+    // The parts of a SmartArt's or a band's chart read: each is read once.
     graphicParts: Set<string>;
-    // The theme's colours a chart's series take, each chart part as read, and the charts that came in as words.
+    // The theme's colours a chart's series take, and each chart part as read.
     colors: DrawingTheme;
     charts: Map<XmlElement, DocxChart>;
-    chartsDropped: number;
     // The body's size in half-points, its complex script's, and its color, which no run needs a mark for.
     bodySize: number;
     bodySizeCs: number;
@@ -76,13 +74,10 @@ export type Reader = {
     page: PageSetup;
     columnTwips: number;
     columnPx: number;
-    // Earlier sections whose page differs from it.
-    pagesDropped: number;
-    // Pictures a band anchored, which it holds as block figures.
-    bandAnchors: number;
-    // What a band drops: a picture behind the text or a VML one, a letterhead or a watermark, a text watermark, and a
-    // note reference.
-    bandDropped: number;
+    // What the doc can't hold, by kind: SmartArt, whose graphic the schema can't hold, a chart that came in as words, an
+    // earlier section whose page differs from the doc's, a picture a band anchored, which it holds as a block figure,
+    // and what a band drops (a picture behind the text or a VML one, a letterhead or a watermark, a note reference).
+    lost: LossCounter['lost'];
     publicOrigin: string | undefined;
 };
 
@@ -99,7 +94,7 @@ export type Scope = {
     fill?: string;
 };
 
-export function createReader(pkg: DocxPackage, publicOrigin: string | undefined): Reader {
+export function createReader(pkg: DocxPackage, lost: LossCounter['lost'], publicOrigin: string | undefined): Reader {
     const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
     const lang = wChild(defaults, 'lang');
     const theme = readTheme(pkg.theme, { bidi: w(lang, 'bidi'), eastAsia: w(lang, 'eastAsia') });
@@ -117,6 +112,8 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
     // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
     const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) / 240 : 1;
+    for (const section of descendants(pkg.document.root, W_NS, 'sectPr'))
+        if (section !== sectPr && !isDeepStrictEqual(sectionPage(section), size)) lost('section-pages-dropped');
     return {
         pkg,
         theme,
@@ -130,11 +127,9 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         notes: new Map(),
         openNotes: [],
         fields: [],
-        graphicsDropped: 0,
         graphicParts: new Set(),
         colors: drawingTheme(pkg.theme),
         charts: new Map(),
-        chartsDropped: 0,
         bodySize,
         bodySizeCs: 2 * (readFontSize((body.sizeCs ?? body.size ?? 20) / 2) ?? 10),
         baseColor: body.color?.hex,
@@ -149,11 +144,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         page,
         columnTwips: twips.width - twips.margin.left - twips.margin.right,
         columnPx: Math.floor(px.width - px.margin.left - px.margin.right),
-        pagesDropped: descendants(pkg.document.root, W_NS, 'sectPr').filter(
-            (section) => section !== sectPr && !isDeepStrictEqual(sectionPage(section), size),
-        ).length,
-        bandAnchors: 0,
-        bandDropped: 0,
+        lost,
         publicOrigin,
     };
 }

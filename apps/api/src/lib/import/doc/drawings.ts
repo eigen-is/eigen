@@ -81,7 +81,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         // letterhead or a watermark, it drops, as a block it would push the body off the page.
         const inBand = context.scope.story === 'band';
         if (anchored && inBand && isOn(frame.attributes['behindDoc'])) {
-            reader.bandDropped++;
+            reader.lost('band-content-dropped');
             continue;
         }
         const layout = anchored ? anchorLayout(frame, reader, inBand) : {};
@@ -104,7 +104,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const cx = int(ext?.attributes['cx']);
             const width = cx ? widthPx(cx / EMU_PER_PX, reader.columnPx) : null;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, width, ...layout } });
-            if (anchored && inBand) reader.bandAnchors++;
+            if (anchored && inBand) reader.lost('band-images-unanchored');
         }
         // Only the body holds a chart: a band's schema has none and a note's Insert leaves it out, so there it keeps its
         // title.
@@ -118,7 +118,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
                 });
                 continue;
             }
-            reader.chartsDropped++;
+            reader.lost('charts-dropped');
             const lines = inBody && 'dropped' in chart ? chart.dropped : [chart.title].filter(Boolean);
             if (lines.length > 0)
                 context.pending.push(
@@ -164,7 +164,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
 function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
     const lines: JSONContent[][] = [];
     for (const diagram of descendants(frame, DGM_NS, 'relIds')) {
-        reader.graphicsDropped++;
+        reader.lost('graphics-dropped');
         const data = readOnce(reader, partPath(xmlAttr(diagram, R_NS, 'dm'), scope));
         if (!data) continue;
         const [ext] = descendants(data, DSP_NS, 'dataModelExt');
@@ -264,11 +264,12 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
         }
         // A band's VML text is Word's text watermark, its text a path no node holds; a shapetype only defines one.
         const textPath = descendants(shape, V_NS, 'textpath').some((path) => path.attributes['string']);
-        if (context.scope.story === 'band' && shape.local !== 'shapetype' && textPath) reader.bandDropped++;
+        if (context.scope.story === 'band' && shape.local !== 'shapetype' && textPath)
+            reader.lost('band-content-dropped');
         for (const data of descendants(shape, V_NS, 'imagedata')) {
             // A band's VML picture is Word's picture watermark, laid over the page.
             if (context.scope.story === 'band') {
-                reader.bandDropped++;
+                reader.lost('band-content-dropped');
                 continue;
             }
             const path = partPath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);

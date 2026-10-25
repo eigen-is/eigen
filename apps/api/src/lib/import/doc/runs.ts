@@ -205,7 +205,7 @@ function readRunContent(reader: Reader, children: XmlElement[], direct: DocxRunP
             case 'endnoteReference': {
                 // A band's schema holds no note: the note is the body's text's.
                 if (context.scope.story === 'band') {
-                    reader.bandDropped++;
+                    reader.lost('band-content-dropped');
                     break;
                 }
                 const content = readNote(

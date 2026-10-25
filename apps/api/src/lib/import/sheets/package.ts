@@ -1,6 +1,7 @@
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import { budget } from '../../ooxml/budget';
 import { isOn, parseOoxml, R_NS, SML_NS } from '../../ooxml/ooxml';
 import type { OoxmlPackage } from '../../ooxml/opc';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS, openPackage, optional, relOfType, tagsIn } from '../../ooxml/opc';
@@ -83,22 +84,16 @@ export type ReadBudget = {
 };
 
 export function readBudget(): ReadBudget {
-    const spent = { elements: 0, wholeBytes: 0, wholeTags: 0 };
+    const { tooLarge } = IMPORT_MESSAGES.xlsx;
+    const elements = budget(MAX_XLSX_ELEMENTS, tooLarge);
+    const wholeBytes = budget(MAX_PACKAGE_XML_BYTES, tooLarge);
+    const wholeTags = budget(MAX_PACKAGE_XML_TAGS, tooLarge);
     return {
-        chargeElements(count) {
-            spent.elements += count;
-            if (spent.elements > MAX_XLSX_ELEMENTS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
-        },
-        spendElements(count) {
-            if (spent.elements + count > MAX_XLSX_ELEMENTS) return false;
-            spent.elements += count;
-            return true;
-        },
+        chargeElements: elements.charge,
+        spendElements: elements.spend,
         chargeWhole(text) {
-            spent.wholeBytes += text.length;
-            if (spent.wholeBytes > MAX_PACKAGE_XML_BYTES) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
-            spent.wholeTags += tagsIn(text);
-            if (spent.wholeTags > MAX_PACKAGE_XML_TAGS) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
+            wholeBytes.charge(text.length);
+            wholeTags.charge(tagsIn(text));
         },
     };
 }
