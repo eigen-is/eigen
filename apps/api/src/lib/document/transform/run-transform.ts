@@ -216,12 +216,11 @@ export async function runImportToDocumentUpdate(
     job: DocImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
-): Promise<DocImportWorkerResult> {
-    const { result } = await runTransformRequest({ ...job, data }, opts);
-    return result;
+): Promise<DocImportWorkerResult & { warnings: TransformWarning[] }> {
+    const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
+    return { ...result, warnings };
 }
 
-// The warnings come back too: a pptx import's counted losses are the summary its caller answers with.
 export async function runImportToSlidesUpdate(
     job: SlidesImportJob,
     data: ArrayBuffer,

@@ -312,6 +312,23 @@ describe('Sheets xlsx import/convert', () => {
         expect(await listVersions(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual([]);
     });
 
+    test('an import answers with what the file held that did not come over', async () => {
+        const sheetsDoc = await uploadAndConvert(buildXlsxBuffer([{ a1: 'A1', value: 'Mine' }]), 'summary-target.xlsx');
+        const iconSet = '<cfRule type="iconSet" priority="1"><iconSet iconSet="3Arrows"/></cfRule>';
+        const bytes = xlsxFixture({
+            sheets: [
+                {
+                    data: rowsXml([['A1', 5]]),
+                    after: `<conditionalFormatting sqref="A1">${iconSet}</conditionalFormatting>`,
+                },
+            ],
+        });
+        const result = await assertJson<ImportResult>(
+            await importRequest(sheetsDoc.id, toTransferableBuffer(bytes), 'replace'),
+        );
+        expect(result).toEqual({ success: true, summary: '1 conditional format was not imported.' });
+    });
+
     test('a replace saves a version first, which restores the workbook as it was', async () => {
         const sheetsDoc = await uploadAndConvert(
             buildXlsxBuffer([{ a1: 'A1', value: 'Before' }], 'Old'),

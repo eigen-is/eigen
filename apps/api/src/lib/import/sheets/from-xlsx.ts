@@ -164,6 +164,7 @@ export function readXlsx(
                     dates: grid.dates,
                     charge,
                     chargeElements: reads.chargeElements,
+                    lost: losses.lost,
                 }),
             };
             sheets.push(sheet);

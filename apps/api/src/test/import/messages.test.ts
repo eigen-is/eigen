@@ -38,7 +38,7 @@ describe("an import's error", () => {
     });
 });
 
-// The toast after a pptx Convert or Import: one short line per kind of loss, from the counted warnings.
+// The toast after an Import…: one short line per kind of loss, from the counted warnings of any format's reader.
 describe('importSummary', () => {
     test('nothing lost says nothing', () => {
         expect(importSummary([])).toBeNull();
@@ -78,5 +78,39 @@ describe('importSummary', () => {
                 { code: 'fills-simplified', count: 396 },
             ]),
         ).toBe('396 fills, 1 text box and 2 flipped pictures were simplified.');
+    });
+
+    test("a docx's losses have their nouns", () => {
+        expect(
+            importSummary([
+                { code: 'graphics-dropped', count: 2 },
+                { code: 'section-pages-dropped', count: 1 },
+                { code: 'even-bands-dropped', count: 2 },
+                { code: 'band-content-dropped', count: 1 },
+                { code: 'blocks-flattened', count: 3 },
+                { code: 'band-images-unanchored', count: 1 },
+            ]),
+        ).toBe(
+            '2 SmartArt graphics, 1 section page setup, 2 even-page headers or footers and 1 header or footer item ' +
+                'were not imported; 3 blocks and 1 header or footer picture were simplified.',
+        );
+    });
+
+    test("an xlsx's dropped conditional formats have their noun", () => {
+        expect(
+            importSummary([
+                { code: 'conditional-formats-dropped', count: 4 },
+                { code: 'charts-dropped', count: 1 },
+            ]),
+        ).toBe('1 chart and 4 conditional formats were not imported.');
+    });
+
+    test("SmartArt is one kind, whether a deck's or a document's", () => {
+        expect(
+            importSummary([
+                { code: 'diagrams-dropped', count: 1 },
+                { code: 'graphics-dropped', count: 1 },
+            ]),
+        ).toBe('2 SmartArt graphics were not imported.');
     });
 });

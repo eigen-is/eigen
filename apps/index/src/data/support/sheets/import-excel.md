@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into a spreadsheet you have open, as new sheets or in place of its content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
@@ -64,9 +64,12 @@ Fonts from Excel are mapped to the four fonts Sheets supports. Common sans-serif
 
 ## What does not carry over
 
+After an import into an open spreadsheet, a message counts the charts, images, and conditional formatting rules that didn't come across, for example "2 charts and 1 conditional format were not imported."
+
 The following are not imported:
 
 - Charts Sheets can't draw the way Excel does, such as area, scatter, doughnut, combo, and waterfall charts. A chart sheet holding one comes in as an empty sheet.
+- Conditional formatting rules Sheets has no rule for, such as icon sets
 - Images placed inside cells, and shapes such as text boxes
 - Comments and notes
 

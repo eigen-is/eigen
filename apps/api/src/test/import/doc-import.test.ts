@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import type { DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
+import type { DocumentImportOptions, DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
@@ -180,6 +180,14 @@ describe('Eigendoc docx import/convert', () => {
         expect(JSON.stringify(json)).not.toContain('PRIOR CONTENT');
         expect(nodeTypes(json)).toEqual(['heading', 'paragraph', 'bulletList', 'paragraph']);
         expect(await readDocMedia(docPath.id, await docImageName(docPath.id))).toEqual(Buffer.from(TEST_PNG_BYTES));
+    }, 120_000);
+
+    test('an import answers with what the file held that did not come over', async () => {
+        const docPath = await createDoc('import-summary-target');
+        const pgSz = (w: number, h: number) => `<w:sectPr><w:pgSz w:w="${w}" w:h="${h}"/></w:sectPr>`;
+        const body = `<w:p><w:pPr>${pgSz(11906, 16838)}</w:pPr><w:r><w:t>One</w:t></w:r></w:p><w:p><w:r><w:t>Two</w:t></w:r></w:p>${pgSz(15840, 12240)}`;
+        const result = await assertJson<ImportResult>(await importRequest(docPath.id, await buildDocxWithBody(body)));
+        expect(result).toEqual({ success: true, summary: '1 section page setup was not imported.' });
     }, 120_000);
 
     test('import saves a version first, which restores the document as it was', async () => {

@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit, docs/page-setup]
 order: 100
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file: its text and formatting, headings, lists, tables, page breaks, images, charts, and equations.
@@ -57,6 +57,8 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - A Word file you downloaded from Eigen keeps its code blocks' languages.
 
 ## What doesn't come across
+
+After an import into an open document, a message counts what didn't come across, for example "1 chart and 2 SmartArt graphics were not imported."
 
 - Comments aren't imported. The commented text stays.
 - A Word file with different headers or footers for even and odd pages comes in with the odd pages' ones on every page.

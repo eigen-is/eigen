@@ -61,33 +61,56 @@ export const SAVE_AS_PPTX =
 
 type Noun = readonly [one: string, many: string];
 
-// What a pptx import left out, per kind, for the toast after Import…: each warning counts source shapes,
-// so a master's background is one fill however many slides show it.
-const NOT_IMPORTED: [readonly CountedWarningCode[], Noun][] = [
-    [['tables-dropped'], ['table', 'tables']],
-    [['charts-dropped'], ['chart', 'charts']],
-    [['diagrams-dropped'], ['SmartArt graphic', 'SmartArt graphics']],
-    [['objects-dropped'], ['embedded object', 'embedded objects']],
-    [
-        ['images-dropped', 'images-unshown'],
-        ['picture', 'pictures'],
-    ],
-];
-const SIMPLIFIED: [readonly CountedWarningCode[], Noun][] = [
-    [['shapes-simplified'], ['shape', 'shapes']],
-    [['fills-simplified'], ['fill', 'fills']],
-    [['text-simplified'], ['text box', 'text boxes']],
-    [['mirrors-dropped'], ['flipped picture', 'flipped pictures']],
+// What an import left out or drew simpler, per kind, for the toast after Import…, whichever format's reader counted it.
+// Each kind lists in this order within its clause. A pptx's warnings count source shapes, so a master's background is
+// one fill however many slides show it.
+const LOSSES: { codes: readonly CountedWarningCode[]; noun: Noun; what: 'not imported' | 'simplified' }[] = [
+    { codes: ['tables-dropped'], noun: ['table', 'tables'], what: 'not imported' },
+    { codes: ['charts-dropped'], noun: ['chart', 'charts'], what: 'not imported' },
+    {
+        codes: ['diagrams-dropped', 'graphics-dropped'],
+        noun: ['SmartArt graphic', 'SmartArt graphics'],
+        what: 'not imported',
+    },
+    { codes: ['objects-dropped'], noun: ['embedded object', 'embedded objects'], what: 'not imported' },
+    { codes: ['images-dropped', 'images-unshown'], noun: ['picture', 'pictures'], what: 'not imported' },
+    {
+        codes: ['conditional-formats-dropped'],
+        noun: ['conditional format', 'conditional formats'],
+        what: 'not imported',
+    },
+    { codes: ['section-pages-dropped'], noun: ['section page setup', 'section page setups'], what: 'not imported' },
+    {
+        codes: ['even-bands-dropped'],
+        noun: ['even-page header or footer', 'even-page headers or footers'],
+        what: 'not imported',
+    },
+    {
+        codes: ['band-content-dropped'],
+        noun: ['header or footer item', 'header or footer items'],
+        what: 'not imported',
+    },
+    { codes: ['shapes-simplified'], noun: ['shape', 'shapes'], what: 'simplified' },
+    { codes: ['fills-simplified'], noun: ['fill', 'fills'], what: 'simplified' },
+    { codes: ['text-simplified'], noun: ['text box', 'text boxes'], what: 'simplified' },
+    { codes: ['mirrors-dropped'], noun: ['flipped picture', 'flipped pictures'], what: 'simplified' },
+    { codes: ['blocks-flattened'], noun: ['block', 'blocks'], what: 'simplified' },
+    {
+        codes: ['band-images-unanchored'],
+        noun: ['header or footer picture', 'header or footer pictures'],
+        what: 'simplified',
+    },
 ];
 
 // "2 tables and 1 SmartArt graphic were not imported", or nothing when no kind was met.
-function clause(warnings: TransformWarning[], kinds: [readonly CountedWarningCode[], Noun][], what: string): string[] {
+function clause(warnings: TransformWarning[], what: (typeof LOSSES)[number]['what']): string[] {
     const items: string[] = [];
     let total = 0;
-    for (const [codes, [one, many]] of kinds) {
+    for (const { codes, noun, what: kind } of LOSSES) {
+        if (kind !== what) continue;
         let count = 0;
         for (const warning of warnings) if ('count' in warning && codes.includes(warning.code)) count += warning.count;
-        if (count > 0) items.push(`${count} ${count === 1 ? one : many}`);
+        if (count > 0) items.push(`${count} ${count === 1 ? noun[0] : noun[1]}`);
         total += count;
     }
     if (items.length === 0) return [];
@@ -96,6 +119,6 @@ function clause(warnings: TransformWarning[], kinds: [readonly CountedWarningCod
 }
 
 export function importSummary(warnings: TransformWarning[]): string | null {
-    const clauses = [...clause(warnings, NOT_IMPORTED, 'not imported'), ...clause(warnings, SIMPLIFIED, 'simplified')];
+    const clauses = [...clause(warnings, 'not imported'), ...clause(warnings, 'simplified')];
     return clauses.length > 0 ? `${clauses.join('; ')}.` : null;
 }

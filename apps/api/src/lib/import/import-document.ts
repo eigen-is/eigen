@@ -59,7 +59,10 @@ function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<Sheet
     return runImportToSnapshotJson(job, toTransferableBuffer(buffer), { signal });
 }
 
-function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
+function importDocxUpdate(
+    buffer: Buffer,
+    signal?: AbortSignal,
+): Promise<DocImportWorkerResult & { warnings: TransformWarning[] }> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'docx');
     return runImportToDocumentUpdate(
@@ -235,7 +238,7 @@ export async function importIntoDocument(
     if (containerMime === DRIVE_MIME_DOC) {
         // The file's page setup, Normal style and bands can't sit beside the doc's, so a docx only ever replaces.
         if (mode !== 'replace') throw new ApiError(400, 'A document import replaces the document');
-        const { update, page, style, images } = await importDocxUpdate(buffer, signal);
+        const { update, page, style, images, warnings } = await importDocxUpdate(buffer, signal);
         // Media before the update that names it: an open tab looks each name up once, as the update arrives. The open
         // and the abort check come before the version and the write check that guards the save.
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
@@ -245,7 +248,7 @@ export async function importIntoDocument(
         await saveDocImages(drive, path, images, user);
         await requireWritePermission(drive, path, user);
         commitEigendocImport(collabDoc.doc, { update: new Uint8Array(update), page, style });
-        return null;
+        return importSummary(warnings);
     }
 
     if (containerMime === DRIVE_MIME_SLIDES) {
