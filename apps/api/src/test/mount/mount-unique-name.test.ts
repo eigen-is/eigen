@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -207,6 +207,41 @@ describe('concurrent same-name create → exactly one 409', () => {
 
     test('path-based (local) mount', () => raceOnBackend('local'));
     test('id-based (local-key) mount', () => raceOnBackend('local-key'));
+
+    // The second write lands after the first create's row. On `local` both creates share one name path,
+    // so a second write that got that far would replace the winner's bytes.
+    test("two same-name creates keep the winner's bytes, path-based (local)", async () => {
+        const config = createTestMountConfig('race-bytes-local', 'local');
+        const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+
+        const write = mount.storage.write.bind(mount.storage);
+        let writes = 0;
+        const spy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
+            await Bun.sleep(writes++ === 0 ? 5 : 30);
+            return write(key, data);
+        });
+        let results: PromiseSettledResult<string>[];
+        try {
+            results = await Promise.allSettled([
+                mount.createFile(rootId, 'same.txt', 'text/plain', 5, Buffer.from('AAAAA')),
+                mount.createFile(rootId, 'same.txt', 'text/plain', 5, Buffer.from('BBBBB')),
+            ]);
+        } finally {
+            spy.mockRestore();
+        }
+
+        const [winner, loser] = results;
+        expect(winner.status).toBe('fulfilled');
+        expect(((loser as PromiseRejectedResult).reason as ApiError).status).toBe(409);
+        const row = await mount.getPath((winner as PromiseFulfilledResult<string>).value);
+        const bytes = readFileSync(join(mount.dataDir, 'same.txt'));
+        expect(bytes.toString()).toBe('AAAAA');
+        expect(row!.hash).toBe(new Bun.CryptoHasher('sha256').update(bytes).digest('hex'));
+
+        await mount.closeAllDatabases();
+    });
 
     // The index also constrains UPDATEs: a raced rename/move that would collide must surface as the
     // same 409 the create path raises, not a raw UNIQUE-constraint 500.

@@ -513,7 +513,7 @@ export class Mount {
         const mimeType = type === DRIVE_TYPE_FOLDER ? DRIVE_MIME_FOLDER : EIGEN_DOC_TYPE_INFO[type].mime;
         const fileValue = this.isPathBased ? name : '';
 
-        await this.withTreeShared(async () => {
+        await this.withCreateLock(parentId, name, async () => {
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
             await this.assertUniqueName(parentId, name);
@@ -585,7 +585,7 @@ export class Mount {
         const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
 
         const searchable = isSearchableTextFile(mimeType, name);
-        await this.withTreeShared(async () => {
+        await this.withCreateLock(parentId, name, async () => {
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
             await this.assertUniqueName(parentId, name);
@@ -1249,6 +1249,14 @@ export class Mount {
 
     public async withTreeExclusive<T>(fn: () => Promise<T>): Promise<T> {
         return this.isPathBased ? this.treeLock.exclusive(fn) : fn();
+    }
+
+    // On `local` two creates of one name in one folder would write to one name path. So a create also
+    // holds a path lock on its folder and name. The second create then sees the first one's row and
+    // answers 409 before it writes. Like every path lock, this one is taken before the tree lock.
+    private async withCreateLock<T>(parentId: string, name: string, fn: () => Promise<T>): Promise<T> {
+        if (!this.isPathBased) return fn();
+        return this.withPathLock(`${parentId}/${name.toLowerCase()}`, () => this.withTreeShared(fn));
     }
 
     // ---- Document databases and versions ----
