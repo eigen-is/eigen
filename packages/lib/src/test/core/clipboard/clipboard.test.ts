@@ -1,13 +1,9 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { toast } from 'sonner';
 import { FLAT_CHART_LOOK } from '../../../charts';
-import {
-    MAX_CHART_SPEC_BYTES,
-    MAX_CHART_SPEC_DEPTH,
-    newChartSpecParts,
-    newSheetChartSpecParts,
-    sampleChartSpec,
-} from '../../../charts/spec';
+import { sampleChartSpec } from '../../../charts/defaults';
+import { MAX_CHART_SPEC_BYTES, MAX_CHART_SPEC_DEPTH } from '../../../charts/limits';
+import { newChartSpecParts, newSheetChartSpecParts } from '../../../charts/spec';
 import {
     buildChartClipboardItem,
     clipboardTextItemHasContent,
