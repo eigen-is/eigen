@@ -16,7 +16,8 @@ import {
     rectOutline,
 } from '@workspace/lib/vector';
 import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
-import { addChartPart, chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
+import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
+import { addOfficeChart } from '../../office-chart';
 import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';
 import type { Slide } from './package';
 import { pictureXml } from './pictures';
@@ -155,19 +156,18 @@ export function elementXml(el: VectorElement, slide: Slide): string {
 
 // A graphic frame showing the chart's own part, drawn plain, upright and opaque: a frame turns and fades no chart, and a
 // chart part paints no sketch, hatch, gradient or dash. A spec that doesn't parse or holds range data draws nothing, as
-// on the canvas it draws only its placeholder. PowerPoint draws the numbers the part holds inline: a pptx embeds no
-// workbook for Edit Data to open.
+// on the canvas it draws only its placeholder. Its numbers go in a workbook of its own, which Edit Data opens.
 function chartXml(el: VectorChartElement, slide: Slide): string {
     const { spec } = readChartSpec(el);
-    if (spec?.data.source !== 'inline') return '';
-    const parts = {
-        parts: slide.deck.charts,
-        path: 'ppt/charts/chart',
-        target: '../charts/chart',
-        relate: slide.part.relate,
-    };
+    if (!spec) return '';
     const frame = { width: el.width, height: el.height, emuPerPx: slide.deck.scale };
-    const rId = addChartPart(parts, spec, { look: readChartLook(el), frame });
+    const rId = addOfficeChart(
+        slide.deck.charts,
+        spec,
+        { look: readChartLook(el), frame },
+        { target: '../charts/', relate: slide.part.relate },
+    );
+    if (!rId) return '';
     const id = ++slide.shapes;
     const offset = `<a:off x="${toEmu(slide, el.x)}" y="${toEmu(slide, el.y)}"/>`;
     const extent = `<a:ext cx="${toEmu(slide, el.width)}" cy="${toEmu(slide, el.height)}"/>`;

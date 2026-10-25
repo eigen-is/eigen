@@ -430,7 +430,11 @@ describe('doc export — charts', () => {
         const { data } = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => [], undefined);
         const names = openZip(new Uint8Array(data)).names();
         expect(names.filter((name) => name.startsWith('word/media/'))).toEqual([]);
-        expect(names.filter((name) => name.startsWith('word/charts/'))).toEqual(['word/charts/chart1.xml']);
+        expect(names.filter((name) => name.startsWith('word/charts/'))).toEqual([
+            'word/charts/chart1.xml',
+            'word/charts/_rels/chart1.xml.rels',
+        ]);
+        expect(names).toContain('word/embeddings/Microsoft_Excel_Worksheet1.xlsx');
     });
 
     test("a chart wider than the column shrinks to it, its text and lines with it, at Eigen's size for its box", async () => {

@@ -1,7 +1,8 @@
 // A ChartSpec as a DrawingML chart part, c:chartSpace, which the xlsx, docx and pptx exports write: the mirror of
 // ooxml-chart.ts, which reads it back as the same spec and look. Office draws what Eigen draws: an automatic colour is
 // written as the palette's at its place, which the reader reads back as automatic, and the look as Office's shape
-// properties, its text at the size Eigen's layout gives the chart's box.
+// properties, its text at the size Eigen's layout gives the chart's box. A docx's or pptx's inline numbers go as refs
+// into the workbook embedded beside the part, whose sheet embeddedChartSheet lays out, so Office's Edit Data opens them.
 
 import { gradientStops } from '@workspace/lib/background';
 import {
@@ -12,6 +13,7 @@ import {
     chartSeriesStyle,
     GRIDLINE_OPACITY,
 } from '@workspace/lib/charts';
+import type { Sheet } from '@workspace/lib/sheets';
 import type {
     CellRangeRef,
     ChartData,
@@ -43,10 +45,13 @@ export type ChartWriteOptions = {
     cache?: ChartData;
     look: ChartLook;
     frame: ChartFrame;
+    // A docx's or pptx's: the r:id of the part's relationship to the workbook holding its inline data, which the refs
+    // name, each with its cache. Without it inline data goes as literals.
+    workbook?: string;
 };
 
-// Where a package keeps its chart parts, `path` and the part's number, and `target`, that path as the relationships of
-// the part showing a chart name it.
+// Where an xlsx keeps its chart parts, `path` and the part's number, and `target`, that path as the relationships of
+// the part showing a chart name it. A docx's and a pptx's charts embed a workbook each (export/office-chart.ts).
 export type ChartParts = {
     parts: PackagePart[];
     path: string;
@@ -81,12 +86,13 @@ export function addChartPart(
 
 export function writeChart(
     spec: ChartSpec,
-    { ranges = () => undefined, cache, look, frame }: ChartWriteOptions,
+    { ranges = () => undefined, cache, look, frame, workbook }: ChartWriteOptions,
 ): string {
     const sizes = textSizes(frame);
     const width = Math.round(look.strokeWidth * frame.emuPerPx);
     const text = textProperties(look.color, spec.chart.fontFamily, sizes.text);
-    const group = groupXml(spec, width, ranges, cache);
+    const embedded = workbook !== undefined && spec.data.source === 'inline';
+    const group = groupXml(spec, width, sourcesOf(spec, ranges, cache, embedded));
     const plot = spec.chart.type === 'pie' ? group : `${group}${axesXml(spec, look, width, sizes.text)}`;
     const { position } = spec.legend;
     const legend = position === 'none' ? '' : legendXml(position);
@@ -105,7 +111,10 @@ export function writeChart(
         `<c:plotArea><c:layout/>${plot}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}`,
         // Eigen reads a hidden row's cells like any other.
         `<c:plotVisOnly val="0"/><c:dispBlanksAs val="${spec.chart.blanks}"/></c:chart>`,
-        `<c:spPr>${solidFillXml(color, opacity)}<a:ln><a:noFill/></a:ln></c:spPr>${text}</c:chartSpace>`,
+        `<c:spPr>${solidFillXml(color, opacity)}<a:ln><a:noFill/></a:ln></c:spPr>${text}`,
+        // The workbook is the part's own, no linked file for Office to refresh the caches from.
+        embedded ? `<c:externalData r:id="${workbook}"><c:autoUpdate val="0"/></c:externalData>` : '',
+        '</c:chartSpace>',
     ].join('');
 }
 
@@ -120,8 +129,8 @@ function textSizes({ width, height, emuPerPx }: ChartFrame): { text: number; tit
 }
 
 // width is every line's, in EMU.
-function groupXml(spec: ChartSpec, width: number, ranges: Ranges, cache: ChartData | undefined): string {
-    const series = seriesXml(spec, width, ranges, cache);
+function groupXml(spec: ChartSpec, width: number, sources: Source[]): string {
+    const series = seriesXml(spec, width, sources);
     const axes = `<c:axId val="${CATEGORY_AXIS}"/><c:axId val="${VALUE_AXIS}"/>`;
     const { type } = spec.chart;
     if (type === 'pie') return `<c:pieChart><c:varyColors val="1"/>${series}<c:firstSliceAng val="0"/></c:pieChart>`;
@@ -138,16 +147,9 @@ function groupXml(spec: ChartSpec, width: number, ranges: Ranges, cache: ChartDa
 }
 
 // Each series in the spec's order, its place its idx and order, so the reader's palette slot is the one written.
-function seriesXml(spec: ChartSpec, width: number, ranges: Ranges, cache: ChartData | undefined): string {
-    const { data } = spec;
-    // A pie has no value axis to carry the values' format, so the values do, as Excel reads a pie's.
-    const format = escapeXml(spec.axes.y.labels.format ?? 'General');
-    const sources =
-        data.source === 'inline'
-            ? data.series.map(({ name, values }) => inlineSource(data.categories, name, values, format))
-            : rangeSources(data, ranges, cache, format);
+function seriesXml(spec: ChartSpec, width: number, sources: Source[]): string {
     const { type } = spec.chart;
-    return data.series
+    return spec.data.series
         .map(({ id }, i) => {
             const style = chartSeriesStyle(spec, id);
             const color = style.color ?? chartColor(i);
@@ -184,11 +186,67 @@ function slicesXml(spec: ChartSpec, id: string, points: number): string {
 // A series' name, categories and values, and how many points it plots: a range series its cache's, none without one.
 type Source = { name: string; data: string; points: number };
 
-function inlineSource(categories: string[], name: string, values: (number | null)[], format: string): Source {
+function sourcesOf(spec: ChartSpec, ranges: Ranges, cache: ChartData | undefined, embedded: boolean): Source[] {
+    const { data } = spec;
+    // A pie has no value axis to carry the values' format, so the values do, as Excel reads a pie's.
+    const format = escapeXml(spec.axes.y.labels.format ?? 'General');
+    if (data.source === 'range') return rangeSources(data, ranges, cache, format);
+    return data.series.map((series, i) =>
+        embedded ? embeddedSource(data.categories, series, i, format) : inlineSource(data.categories, series, format),
+    );
+}
+
+function inlineSource(categories: string[], { name, values }: InlineChartSeries, format: string): Source {
     return {
         name: `<c:tx><c:v>${escapeXml(name)}</c:v></c:tx>`,
-        data: `<c:cat><c:strLit>${pointsXml(categories)}</c:strLit></c:cat><c:val><c:numLit><c:formatCode>${format}</c:formatCode>${pointsXml(values)}</c:numLit></c:val>`,
+        data: `<c:cat>${strLit(categories)}</c:cat><c:val>${numLit(values, format)}</c:val>`,
         points: Math.max(categories.length, values.length),
+    };
+}
+
+// Office's layout of a chart's own workbook, which the refs name and embeddedChartSheet fills from the same data: the
+// names along row 1 from B, the categories down A from row 2, a series' values down its column, A1 empty.
+const EMBEDDED_SHEET = 'Sheet1';
+const seriesColumn = (index: number) => index + 1;
+
+// A range holds a point at least, so no categories or no values are an empty literal.
+function embeddedSource(
+    categories: string[],
+    { name, values }: InlineChartSeries,
+    index: number,
+    format: string,
+): Source {
+    const column = seriesColumn(index);
+    const cells = (row: [number, number], at: number) =>
+        `${quoteSheetName(EMBEDDED_SHEET)}!${rangeToA1({ row, column: [at, at] }, true)}`;
+    return {
+        name: `<c:tx>${strRef(cells([0, 0], column), [name])}</c:tx>`,
+        data: [
+            `<c:cat>${categories.length > 0 ? strRef(cells([1, categories.length], 0), categories) : strLit([])}</c:cat>`,
+            `<c:val>${values.length > 0 ? numRef(cells([1, values.length], column), values, format) : numLit([], format)}</c:val>`,
+        ].join(''),
+        points: Math.max(categories.length, values.length),
+    };
+}
+
+// The sheet a docx's or pptx's chart embeds as its workbook, laid out as embeddedSource's refs name it: each value in
+// the format its cache carries, a gap no cell. Range data names a workbook's own cells, so it embeds none.
+export function embeddedChartSheet(spec: ChartSpec): Sheet | undefined {
+    if (spec.data.source !== 'inline') return undefined;
+    const { categories, series } = spec.data;
+    const format = spec.axes.y.labels.format;
+    const number = format === null || format === 'General' ? {} : { ct: { fa: format, t: 'n' } };
+    return {
+        name: EMBEDDED_SHEET,
+        celldata: [
+            ...series.map(({ name }, i) => ({ r: 0, c: seriesColumn(i), v: { v: name } })),
+            ...categories.map((category, r) => ({ r: r + 1, c: 0, v: { v: category } })),
+            ...series.flatMap(({ values }, i) =>
+                values.flatMap((value, r) =>
+                    value === null ? [] : [{ r: r + 1, c: seriesColumn(i), v: { v: value, ...number } }],
+                ),
+            ),
+        ],
     };
 }
 
@@ -210,23 +268,37 @@ function rangeSource(
     format: string,
     cache: { categories: string[] | undefined; series: InlineChartSeries | undefined },
 ): Source {
-    const strCache = (points: string[] | undefined) => (points ? `<c:strCache>${pointsXml(points)}</c:strCache>` : '');
-    const numCache = cache.series
-        ? `<c:numCache><c:formatCode>${format}</c:formatCode>${pointsXml(cache.series.values)}</c:numCache>`
-        : '';
-    const formula = (ref: CellRangeRef) => `<c:f>${escapeXml(cellRange(ref, ranges))}</c:f>`;
-    const named = cache.series && [cache.series.name];
+    const formula = (ref: CellRangeRef) => cellRange(ref, ranges);
     return {
         name:
             typeof name === 'string'
                 ? `<c:tx><c:v>${escapeXml(name)}</c:v></c:tx>`
-                : `<c:tx><c:strRef>${formula(name)}${strCache(named)}</c:strRef></c:tx>`,
+                : `<c:tx>${strRef(formula(name), cache.series && [cache.series.name])}</c:tx>`,
         data: [
-            categories ? `<c:cat><c:strRef>${formula(categories)}${strCache(cache.categories)}</c:strRef></c:cat>` : '',
-            values ? `<c:val><c:numRef>${formula(values)}${numCache}</c:numRef></c:val>` : '',
+            categories ? `<c:cat>${strRef(formula(categories), cache.categories)}</c:cat>` : '',
+            values ? `<c:val>${numRef(formula(values), cache.series?.values, format)}</c:val>` : '',
         ].join(''),
         points: cache.series?.values.length ?? 0,
     };
+}
+
+// A ref with its cache when there is one, and a literal: their points, the values' in their format.
+function strRef(formula: string, points: readonly string[] | undefined): string {
+    const cache = points ? `<c:strCache>${pointsXml(points)}</c:strCache>` : '';
+    return `<c:strRef><c:f>${escapeXml(formula)}</c:f>${cache}</c:strRef>`;
+}
+
+function numRef(formula: string, points: readonly (number | null)[] | undefined, format: string): string {
+    const cache = points ? `<c:numCache><c:formatCode>${format}</c:formatCode>${pointsXml(points)}</c:numCache>` : '';
+    return `<c:numRef><c:f>${escapeXml(formula)}</c:f>${cache}</c:numRef>`;
+}
+
+function strLit(points: readonly string[]): string {
+    return `<c:strLit>${pointsXml(points)}</c:strLit>`;
+}
+
+function numLit(points: readonly (number | null)[], format: string): string {
+    return `<c:numLit><c:formatCode>${format}</c:formatCode>${pointsXml(points)}</c:numLit>`;
 }
 
 // A cache's or literal's points, a gap none.

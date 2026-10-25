@@ -8,6 +8,7 @@ import { A_NS, EMU_PER_POINT, R_NS } from '../../../ooxml/ooxml';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, writePackage } from '../../../ooxml/opc';
 import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../../ooxml/presentationml';
+import { officeChartContentTypes, officeCharts } from '../../office-chart';
 import type { OfficeMedia } from '../../office-image';
 import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import type { Deck } from './package';
@@ -26,7 +27,7 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
         scale: slidePxToPt(1, slideWidth) * EMU_PER_POINT,
         slideWidth,
         images: officeImages(media, 'ppt/media'),
-        charts: [],
+        charts: officeCharts('ppt'),
         byId: new Map(scene.elements.map((el) => [el.id, el])),
     };
     const slides = scene.frames.map((frame) => slideXml(frame, elementsInFrame(scene.elements, frame.id), deck));
@@ -41,7 +42,7 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
     return writePackage({
         main: 'ppt/presentation.xml',
         title: stripEigenExtension(title),
-        defaults: OFFICE_IMAGE_CONTENT_TYPES,
+        defaults: { ...OFFICE_IMAGE_CONTENT_TYPES, ...officeChartContentTypes(deck.charts) },
         parts: [
             [
                 'ppt/presentation.xml',
@@ -74,8 +75,8 @@ export function writePptx(scene: VectorScene, { title, media }: { title: string;
                 [`ppt/slides/slide${i + 1}.xml`, xml, `${PML}.slide+xml`],
                 [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
             ]),
-            ...deck.charts,
+            ...deck.charts.parts,
         ],
-        files: deck.images.files,
+        files: [...deck.images.files, ...deck.charts.files],
     });
 }

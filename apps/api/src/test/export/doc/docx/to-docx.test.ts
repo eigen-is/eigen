@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
+import { posix } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { sampleChartSpec } from '@workspace/lib/charts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
@@ -25,6 +26,7 @@ import type { ZipReader } from '../../../../lib/ooxml/zip';
 import { openZip } from '../../../../lib/ooxml/zip';
 import { seriesIdsByPlace } from '../../../../scripts/office-audit';
 import { sampleChartParts } from '../../../fixtures/chart-parts';
+import { embeddedWorkbookOf, refsAgainstCells } from '../../../fixtures/chart-workbook';
 import {
     buildAllFeaturesDocJson,
     buildAllFeaturesDocMedia,
@@ -280,7 +282,10 @@ describe('docx writer — package', () => {
         'word/fontTable.xml',
         'word/_rels/fontTable.xml.rels',
         'word/charts/chart1.xml',
+        'word/charts/_rels/chart1.xml.rels',
     ];
+    // The all-features doc's chart's numbers.
+    const WORKBOOK = 'word/embeddings/Microsoft_Excel_Worksheet1.xlsx';
     // The all-features doc's chart picture, photo and SVG, numbered as the figures first show them.
     const MEDIA_PARTS = ['word/media/image1.png', 'word/media/image2.jpeg', 'word/media/image3.png'];
     // The eight faces its runs draw in.
@@ -289,7 +294,9 @@ describe('docx writer — package', () => {
     test('every part is written, parses and has a content type', async () => {
         const zip = await unzip(buildAllFeaturesDocJson());
         const paths = zip.names();
-        expect(paths.sort()).toEqual([...PARTS, ...MEDIA_PARTS, 'word/media/image3.svg', ...FONT_PARTS].sort());
+        expect(paths.sort()).toEqual(
+            [...PARTS, ...MEDIA_PARTS, 'word/media/image3.svg', ...FONT_PARTS, WORKBOOK].sort(),
+        );
 
         const types = await part(zip, '[Content_Types].xml');
         const defaults = new Set(xmlChildren(types, CONTENT_TYPES, 'Default').map((d) => xmlAttr(d, '', 'Extension')));
@@ -299,9 +306,9 @@ describe('docx writer — package', () => {
                 xmlAttr(o, '', 'ContentType'),
             ]),
         );
-        expect([...defaults].sort()).toEqual(['jpeg', 'odttf', 'png', 'rels', 'svg', 'xml']);
+        expect([...defaults].sort()).toEqual(['jpeg', 'odttf', 'png', 'rels', 'svg', 'xlsx', 'xml']);
         for (const path of paths) {
-            if (!MEDIA_PARTS.includes(path) && !FONT_PARTS.includes(path)) await part(zip, path);
+            if (!MEDIA_PARTS.includes(path) && !FONT_PARTS.includes(path) && path !== WORKBOOK) await part(zip, path);
             expect(overrides.has(`/${path}`) || defaults.has(path.split('.').pop())).toBe(true);
         }
         const wml = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
@@ -327,7 +334,7 @@ describe('docx writer — package', () => {
             expect(ids.size).toBe(relationships.length);
             for (const rel of relationships) {
                 if (xmlAttr(rel, '', 'TargetMode') === 'External') continue;
-                expect(zip.entry(`${folder}${xmlAttr(rel, '', 'Target')}`)).toBeDefined();
+                expect(zip.entry(posix.normalize(`${folder}${xmlAttr(rel, '', 'Target')}`))).toBeDefined();
             }
             if (!source) continue;
             for (const id of relationshipRefs(await part(zip, source))) expect(ids).toContain(id);
@@ -418,6 +425,7 @@ describe('docx writer — package', () => {
                 'c:chartSpace',
                 { 'xmlns:c': C_NS, 'xmlns:a': document['xmlns:a'], 'xmlns:r': R },
             ],
+            ['word/charts/_rels/chart1.xml.rels', 'Relationships', { xmlns: RELS }],
         ]);
     });
 
@@ -2443,6 +2451,28 @@ describe('docx writer — figures', () => {
         expect('spec' in read && seriesIdsByPlace(read.spec)).toEqual(seriesIdsByPlace(sample));
     });
 
+    test('a chart embeds its numbers in a workbook of its own, as Word does, whose cells every ref names', async () => {
+        const zip = await unzip(doc(p(chartNode(PARTS_OF_COLUMN)), p(chartNode(sampleChartParts('line')))));
+        for (const [n, chartPath] of ['word/charts/chart1.xml', 'word/charts/chart2.xml'].entries()) {
+            const { chart, sheet, path } = embeddedWorkbookOf(zip, chartPath);
+            expect(path).toBe(`word/embeddings/Microsoft_Excel_Worksheet${n + 1}.xlsx`);
+            const refs = refsAgainstCells(chart, sheet);
+            expect(refs.length).toBeGreaterThan(0);
+            for (const { formula, cache, cells } of refs) expect({ formula, cells }).toEqual({ formula, cells: cache });
+        }
+        const defaults = xmlChildren(await part(zip, '[Content_Types].xml'), CONTENT_TYPES, 'Default');
+        const xlsx = defaults.find((entry) => xmlAttr(entry, '', 'Extension') === 'xlsx');
+        expect(xlsx && xmlAttr(xlsx, '', 'ContentType')).toBe(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+        const plain = xmlChildren(
+            await part(await unzip(doc(p(text('No chart')))), '[Content_Types].xml'),
+            CONTENT_TYPES,
+            'Default',
+        );
+        expect(plain.map((entry) => xmlAttr(entry, '', 'Extension'))).not.toContain('xlsx');
+    });
+
     test("a chart's font is embedded as its text's is", async () => {
         const json = doc(p(chartNode({ ...sampleChartParts('column', 'Source Serif 4'), width: 480, height: 300 })));
         const zip = await unzip(json);
@@ -2457,7 +2487,10 @@ describe('docx writer — figures', () => {
         const look = { roughness: 2, seed: 5, strokeStyle: 'dashed', strokeColor: '#336699', fill };
         const json = doc(p(chartNode({ ...PARTS_OF_COLUMN, ...look })));
         const zip = await unzip(json);
-        expect(zip.names().filter((name) => name.startsWith('word/charts/'))).toEqual(['word/charts/chart1.xml']);
+        expect(zip.names().filter((name) => name.startsWith('word/charts/'))).toEqual([
+            'word/charts/chart1.xml',
+            'word/charts/_rels/chart1.xml.rels',
+        ]);
         expect(zip.names().filter((name) => name.startsWith('word/media/'))).toEqual([]);
         const chart = await part(zip, 'word/charts/chart1.xml');
         expect(descendants(chart, A_NS, 'prstDash')).toEqual([]);

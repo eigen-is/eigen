@@ -18,6 +18,7 @@ import type {
     ChartSpec,
     ChartStacking,
     ChartType,
+    InlineChartSeries,
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
@@ -29,9 +30,10 @@ import { IDENTITY_COLOR_MAP } from '../../lib/ooxml/drawingml';
 import { A_NS, C_NS, EMU_PER_PX, parseOoxml, R_NS } from '../../lib/ooxml/ooxml';
 import type { ChartHost } from '../../lib/ooxml/ooxml-chart';
 import { readChart, readChartPartLook } from '../../lib/ooxml/ooxml-chart';
-import { chartGraphicXml, writeChart } from '../../lib/ooxml/ooxml-chart-writer';
+import { chartGraphicXml, embeddedChartSheet, writeChart } from '../../lib/ooxml/ooxml-chart-writer';
 import { seriesIdsByPlace } from '../../scripts/office-audit';
 import { axesOf } from '../fixtures/chart-parts';
+import { refsAgainstCells } from '../fixtures/chart-workbook';
 
 // A ChartSpec written as a c:chartSpace and read back by Eigen's own reader: the same spec, its ranges by the names the
 // workbook writes and its numbers inline as literals.
@@ -349,6 +351,84 @@ describe('writeChart with inline data', () => {
             writeChart(sampleChartSpec('column'), { look: FLAT_CHART_LOOK, frame: { ...FRAME, emuPerPx: 100 } }),
         );
         expect(new Set(find(chart, 'defRPr', A_NS).map((run) => xmlAttr(run, '', 'sz')))).toEqual(new Set(['100']));
+    });
+});
+
+describe('writeChart with an embedded workbook', () => {
+    const EMBEDDED = { ...INLINE, workbook: 'rId1' };
+    const inline = (
+        type: ChartType,
+        categories: string[],
+        series: InlineChartSeries[],
+        format: string | null = null,
+    ) => {
+        const spec = parsed(defaultChartSpec(type, { source: 'inline', categories, series }));
+        return { ...spec, axes: { ...spec.axes, y: { ...spec.axes.y, labels: { format } } } };
+    };
+    const MANY = Array.from({ length: 30 }, (_, i) => ({ id: `s-${i + 1}`, name: `Series ${i}`, values: [i, -i / 4] }));
+    const SPECS: [string, ChartSpec][] = [
+        [
+            'names and categories that need escaping, a gap and a number as text',
+            inline(
+                'column',
+                ['2025', 'North & <south>', '"quoted"'],
+                [
+                    { id: 's-1', name: "Bob's <sales> & co", values: [1.5, null, -6e-7] },
+                    { id: 's-2', name: '', values: [4, 5, 6] },
+                ],
+                '#,##0.0',
+            ),
+        ],
+        ['a single category', inline('line', ['Only'], [{ id: 's-1', name: 'One', values: [3] }])],
+        [
+            'an empty series beside a ragged one',
+            inline(
+                'line',
+                ['a', 'b', 'c'],
+                [
+                    { id: 's-1', name: 'Empty', values: [] },
+                    { id: 's-2', name: 'Short', values: [1, 2] },
+                ],
+            ),
+        ],
+        ['no categories', inline('column', [], [{ id: 's-1', name: 'Alone', values: [] }])],
+        ['thirty series, past column Z', inline('bar', ['x', 'y'], MANY)],
+        ['a pie in a format of its own', inline('pie', ['a', 'b'], [{ id: 's-1', name: 'Pie', values: [1, 3] }], '0%')],
+    ];
+
+    test.each(SPECS)('%s: every ref names cells of the sheet holding what its cache holds', (_, spec) => {
+        const sheet = embeddedChartSheet(spec);
+        if (!sheet) throw new Error('no sheet');
+        const refs = refsAgainstCells(root(writeChart(spec, EMBEDDED)), sheet);
+        expect(refs.length).toBeGreaterThan(0);
+        for (const { formula, cache, cells } of refs) expect({ formula, cells }).toEqual({ formula, cells: cache });
+    });
+
+    test.each(SPECS)('%s: reads back from the caches as itself', (_, spec) => {
+        expect(read(writeChart(spec, EMBEDDED), 'cache')).toEqual(axesOf(spec));
+    });
+
+    test("the refs name Office's layout: names along row 1 from B, categories down A, each series down its column", () => {
+        const formulas = find(root(writeChart(SPECS[4][1], EMBEDDED)), 'f').map(xmlTrimmedText);
+        expect(formulas.slice(0, 3)).toEqual(["'Sheet1'!$B$1", "'Sheet1'!$A$2:$A$3", "'Sheet1'!$B$2:$B$3"]);
+        expect(formulas.slice(-3)).toEqual(["'Sheet1'!$AE$1", "'Sheet1'!$A$2:$A$3", "'Sheet1'!$AE$2:$AE$3"]);
+    });
+
+    test('the values keep their format in the cells, and the part names its workbook after its text, never to refresh', () => {
+        const [, spec] = SPECS[0];
+        const value = embeddedChartSheet(spec)?.celldata?.find(({ r, c }) => r === 1 && c === 1)?.v;
+        expect(value).toEqual({ v: 1.5, ct: { fa: '#,##0.0', t: 'n' } });
+        const chart = root(writeChart(spec, EMBEDDED));
+        const tail = xmlElements(chart).slice(-2);
+        expect(tail.map((element) => element.local)).toEqual(['txPr', 'externalData']);
+        expect([xmlAttr(tail[1], R_NS, 'id'), val(tail[1], 'autoUpdate')]).toEqual(['rId1', '0']);
+    });
+
+    test('range data names its own cells and embeds no workbook', () => {
+        const spec = rangeSpec('column');
+        expect(embeddedChartSheet(spec)).toBeUndefined();
+        const xml = writeChart(spec, { ranges, look: FLAT_CHART_LOOK, frame: FRAME, workbook: 'rId1' });
+        expect(xml).toBe(writeChart(spec, { ranges, look: FLAT_CHART_LOOK, frame: FRAME }));
     });
 });
 

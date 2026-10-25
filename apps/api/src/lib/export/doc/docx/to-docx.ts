@@ -6,6 +6,7 @@ import type { EigendocBands } from '../../../document/doc';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
 import { NOTE_SEPARATORS, WML } from '../../../ooxml/wordml';
+import { officeChartContentTypes, officeCharts } from '../../office-chart';
 import type { OfficeMedia } from '../../office-image';
 import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
 import type { FontSlot } from './fonts';
@@ -38,7 +39,7 @@ export function writeDocx(
         checkboxes: false,
         languages: new Set(),
         images: officeImages(media, 'word/media'),
-        charts: [],
+        charts: officeCharts('word'),
         drawings: 0,
         footnotes: [],
         // A Spacer's and a figure's mark draw in the Normal's Regular.
@@ -105,6 +106,7 @@ export function writeDocx(
         defaults: {
             ...OFFICE_IMAGE_CONTENT_TYPES,
             odttf: 'application/vnd.openxmlformats-officedocument.obfuscatedFont',
+            ...officeChartContentTypes(pkg.charts),
         },
         parts: [
             [
@@ -115,13 +117,13 @@ export function writeDocx(
             ['word/_rels/document.xml.rels', relationshipsXml(document.relationships)],
             ...noteParts,
             ...bandParts,
-            ...pkg.charts,
+            ...pkg.charts.parts,
             ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
             ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
             ['word/settings.xml', settingsXml(pkg.footnotes.length > 0), `${WML}.settings+xml`],
             ['word/fontTable.xml', fontTableXml(pkg.checkboxes, fonts.embeds), `${WML}.fontTable+xml`],
             ['word/_rels/fontTable.xml.rels', relationshipsXml(fonts.relationships)],
         ],
-        files: [...fonts.files.map(([name, data]) => ({ name, data })), ...pkg.images.files],
+        files: [...fonts.files.map(([name, data]) => ({ name, data })), ...pkg.images.files, ...pkg.charts.files],
     });
 }
