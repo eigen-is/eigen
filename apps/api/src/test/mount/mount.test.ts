@@ -1823,6 +1823,62 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
     });
 });
 
+describe('a create under a folder deleted meanwhile (local-key storage)', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createTestMountConfig('test-create-deleted-parent', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        rootId = (await mount.getRootFolder())!.id;
+    });
+
+    // An id key takes no tree lock, so the folder's trash and permanent delete run while the bytes are in flight.
+    test('a file answers 404 and leaves no object behind', async () => {
+        const folderId = await mount.createFolder(rootId, 'GoneWhileWriting');
+        let entered!: () => void;
+        const inWrite = new Promise<void>((r) => {
+            entered = r;
+        });
+        let release!: () => void;
+        const gate = new Promise<void>((r) => {
+            release = r;
+        });
+        const write = mount.storage.write.bind(mount.storage);
+        const spy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
+            entered();
+            await gate;
+            return write(key, data);
+        });
+        try {
+            const created = mount.createFile(folderId, 'late.bin', 'application/octet-stream', 5, Buffer.from('hello'));
+            const outcome = created.then(
+                () => null,
+                (e: unknown) => e,
+            );
+            await inWrite;
+            await mount.trashPath(folderId);
+            await mount.permanentlyDeleteFromTrash(folderId);
+            release();
+
+            const err = await outcome;
+            expect(err).toBeInstanceOf(ApiError);
+            expect((err as ApiError).status).toBe(404);
+        } finally {
+            spy.mockRestore();
+        }
+        // This mount stores no other object.
+        expect(existsSync(mount.dataDir) ? readdirSync(mount.dataDir) : []).toEqual([]);
+    });
+
+    test('a folder answers 404', async () => {
+        const err = await mount.createFolder('no-such-folder', 'Child').catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).status).toBe(404);
+    });
+});
+
 describe('Folder sizes', () => {
     let mount: Mount;
     let rootId: string;

@@ -199,6 +199,8 @@ describe('concurrent same-name create → exactly one 409', () => {
 
         const children = await mount.listFolder(rootId);
         expect(children.filter((c) => c.name === 'race.txt').length).toBe(1);
+        // Off `local` each create has its own key, so the loser's object goes with its row.
+        if (storageType === 'local-key') expect(readdirSync(mount.dataDir).length).toBe(1);
 
         await mount.closeAllDatabases();
     }

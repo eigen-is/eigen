@@ -590,21 +590,31 @@ export class Mount {
             // whose bytes are missing.
             await writeBytes(storageKey);
 
-            await this.insertPathRow({
-                id: fileId,
-                file: fileValue,
-                name,
-                type: 'file',
-                parentId,
-                ownerId: this.ownerId,
-                mimeType,
-                size,
-                hash,
-                acl: null,
-                contentDirty: searchable ? 1 : 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
+            try {
+                await this.insertPathRow({
+                    id: fileId,
+                    file: fileValue,
+                    name,
+                    type: 'file',
+                    parentId,
+                    ownerId: this.ownerId,
+                    mimeType,
+                    size,
+                    hash,
+                    acl: null,
+                    contentDirty: searchable ? 1 : 0,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                });
+            } catch (e) {
+                // Off `local` the key is this create's own, so no other row can need the object.
+                if (!this.isPathBased) {
+                    await this.removeObject(fileId, storageKey).catch((err) =>
+                        console.error(`[Mount] Could not remove the object of failed create ${fileId}:`, err),
+                    );
+                }
+                throw e;
+            }
         });
 
         await this.invalidateSizesFrom(parentId);
@@ -634,12 +644,15 @@ export class Mount {
 
     // assertUniqueName's SELECT leaves a race open: two creates can both pass it before either inserts.
     // The unique index on the active names then refuses the second INSERT, and the loser gets the same
-    // 409 the SELECT gives. It has already written its bytes, since the bytes land first, and that
-    // leftover is accepted.
+    // 409 the SELECT gives. Off `local` no lock keeps a folder's permanent delete out of a create
+    // either. The foreign key on parentId then refuses the INSERT, and that is a 404.
     private async insertPathRow(values: typeof paths.$inferInsert): Promise<void> {
         try {
             await this.db.insert(paths).values(values);
         } catch (e) {
+            if (e instanceof Error && e.message.includes('FOREIGN KEY constraint failed')) {
+                throw new ApiError(404, 'Folder not found');
+            }
             rethrowDuplicateActiveName(e, values.name);
         }
     }
