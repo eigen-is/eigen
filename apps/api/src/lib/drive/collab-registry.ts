@@ -17,6 +17,9 @@ export class CollabRegistry {
     // The mounts destructMount swept, for the same reason. A mount that comes back is a new Mount, so
     // its documents open again.
     private readonly closedMounts = new WeakSet<Mount>();
+    // The keys of a path that is moving to the trash, and of everything under it. The trash closes their
+    // databases before it marks them trashed, so a document opened in between would lose its edits.
+    private readonly trashing = new Set<string>();
 
     public constructor(private ownerId: string) {}
 
@@ -32,6 +35,7 @@ export class CollabRegistry {
         if (this.destructed) throw new ApiError(503, 'Drive is shutting down');
         if (this.closedMounts.has(mount)) throw new ApiError(503, 'Mount is closing');
         const key = this.key(mount.id, pathId);
+        if (this.trashing.has(key)) throw new ApiError(503, 'Document is moving to the trash');
         let getter = this.documents.get(key);
         if (!getter) {
             getter = createAsyncSingleton(async () => {
@@ -66,6 +70,18 @@ export class CollabRegistry {
         // When the document was opened again meanwhile, the new one owns data.db, so it stays open.
         if (doc.dataDbPathId && !this.documents.has(key)) {
             await mount.closeDatabase(doc.dataDbPathId, opts);
+        }
+    }
+
+    // Runs a trash of the path and refuses every open at or below it until the trash is done. The
+    // refused socket tries again, and by then the path is in the trash, so it gets a 404.
+    public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
+        const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
+        for (const key of keys) this.trashing.add(key);
+        try {
+            await trash();
+        } finally {
+            for (const key of keys) this.trashing.delete(key);
         }
     }
 

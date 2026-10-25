@@ -686,7 +686,7 @@ export class Drive {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
         if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-        await deletePath(this, mount, item, user);
+        await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
     }
 
     public async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {

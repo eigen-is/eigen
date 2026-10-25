@@ -21,6 +21,7 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     const members = user ? await drive.getEffectiveMembers(mount.id, item.id) : [];
 
     // Open documents close before trashPath closes their databases, so each one saves its last state.
+    // Drive.deletePath refuses new opens until the trash is done, so one close is enough.
     if (isContainerType(item.type)) {
         await closeCollabDocumentsRecursively(drive, mount, item.id);
         await propagateACLRemovalRecursively(mount, item.id, user);
@@ -29,8 +30,6 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     }
 
     const trashedItem = await mount.trashPath(item.id);
-    // A document opened during the work above still found the path outside the trash, so close again.
-    if (isContainerType(item.type)) await closeCollabDocumentsRecursively(drive, mount, item.id);
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
     if (user) {
         mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
