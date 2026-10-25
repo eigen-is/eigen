@@ -91,7 +91,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         runs: `<w:r>${captionRuns}</w:r>`,
         inset,
     });
-    const key = node.type === 'chart' ? null : figureMediaKey(node);
+    const key = figureMediaKey(node);
     const image = node.type === 'chart' ? wordChartOf(node, context.pkg) : key ? imageOf(key, context.pkg) : undefined;
     // The caption alone is the figure's box, as the HTML's.
     if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
