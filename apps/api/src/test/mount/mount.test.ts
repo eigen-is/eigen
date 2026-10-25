@@ -629,6 +629,28 @@ describe('Mount (local path-based storage)', () => {
         expect(found).not.toBeNull();
         expect(found!.id).toBe(fileId);
     });
+
+    // A corrupt tree, built in the table: the move resolves the target's key before any other check.
+    test('a move, a breadcrumb and a copy check into a parent loop answer 500', async () => {
+        const looped = new Mount(
+            OWNER_ID,
+            TEST_DIR,
+            createTestMountConfig('test-local-loop', 'local'),
+            createGetLocalDatabase(TEST_DIR),
+        );
+        await looped.init();
+        const loopRootId = (await looped.getRootFolder())!.id;
+        const pId = await looped.createFolder(loopRootId, 'LoopP');
+        const qId = await looped.createFolder(loopRootId, 'LoopQ');
+        const fileId = await looped.createFile(loopRootId, 'outside.txt', 'text/plain', 1, Buffer.from('o'));
+        await looped.db.update(paths).set({ parentId: qId }).where(eq(paths.id, pId));
+        await looped.db.update(paths).set({ parentId: pId }).where(eq(paths.id, qId));
+
+        await expect(looped.updatePath(fileId, { parentId: pId })).rejects.toMatchObject({ status: 500 });
+        expect((await looped.getPath(fileId))!.parentId).toBe(loopRootId);
+        await expect(looped.getBreadcrumb(pId)).rejects.toMatchObject({ status: 500 });
+        await expect(looped.isSelfOrDescendant(fileId, pId)).rejects.toMatchObject({ status: 500 });
+    });
 });
 
 describe('Upload queue gating', () => {

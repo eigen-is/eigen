@@ -71,6 +71,12 @@ function locksFor(folder: string): FolderLocks {
     return locks;
 }
 
+// A walk up the tree throws this when it meets a folder twice. No write makes a parentId loop, but a
+// corrupt table can hold one, and the walk must still end.
+function treeCycleError(id: string): ApiError {
+    return new ApiError(500, `Folder tree has a cycle at ${id}`);
+}
+
 export class Mount {
     public readonly id: string;
     public readonly config: MountConfig;
@@ -386,8 +392,11 @@ export class Mount {
     // transaction of its row write (assertMovableInTx).
     public async isSelfOrDescendant(ancestorId: string, candidateId: string): Promise<boolean> {
         if (ancestorId === candidateId) return true;
+        const seen = new Set<string>();
         let current = await this.getPath(candidateId);
         while (current?.parentId) {
+            if (seen.has(current.id)) throw treeCycleError(current.id);
+            seen.add(current.id);
             if (current.parentId === ancestorId) return true;
             current = await this.getPath(current.parentId);
         }
@@ -424,8 +433,11 @@ export class Mount {
         const byId = new Map(rows.map((r) => [r.id, this.toDrivePath(r)]));
         return pathIds.map((pathId) => {
             const ordered: DrivePath[] = [];
+            const seen = new Set<string>();
             let current = byId.get(pathId);
             while (current) {
+                if (seen.has(current.id)) throw treeCycleError(current.id);
+                seen.add(current.id);
                 ordered.unshift(current);
                 current = current.parentId ? byId.get(current.parentId) : undefined;
             }
@@ -876,7 +888,7 @@ export class Mount {
             if (current === pathId) {
                 return new ApiError(400, 'Cannot move a folder into itself or its own descendant');
             }
-            if (seen.has(current)) throw new ApiError(500, `Folder tree has a cycle at ${current}`);
+            if (seen.has(current)) throw treeCycleError(current);
             seen.add(current);
             const row = tx
                 .select({ parentId: paths.parentId, trashedAt: paths.trashedAt })
@@ -990,8 +1002,11 @@ export class Mount {
 
         const byId = new Map(rows.map((r) => [r.id, r]));
         const segments: string[] = [];
+        const seen = new Set<string>();
         let current = byId.get(pathId);
         while (current?.parentId) {
+            if (seen.has(current.id)) throw treeCycleError(current.id);
+            seen.add(current.id);
             if (current.file) segments.unshift(current.file);
             current = byId.get(current.parentId);
         }
