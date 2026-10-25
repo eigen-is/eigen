@@ -80,6 +80,7 @@ import {
     classify,
     message,
     officeMedia,
+    PIE_AXES_LISTED,
     roundtripChild,
     roundtripLine,
     runRoundtrip as runGate,
@@ -2164,6 +2165,7 @@ export function asWritten(
 // The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
 // matches is unlisted, and fails the gate.
 export const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = [
+    PIE_AXES_LISTED,
     {
         kind: 'figures and display equations split their textblock',
         why: 'Word holds a picture in a paragraph and a display equation in a paragraph of their own, so the writer splits the textblock around each block figure and display equation, the pieces sharing its margins',
