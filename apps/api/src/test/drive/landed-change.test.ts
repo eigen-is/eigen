@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
+import { ApiError } from '../../lib/core/errors';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import type { Mount } from '../../lib/mount';
@@ -50,6 +51,33 @@ describe('a change that has landed', () => {
         } finally {
             lookup.mockRestore();
             mount.history.removeWatcher(rootId, bobId);
+        }
+    });
+
+    test('an overwrite of a file that is deleted as the write lands is a 404, and leaves no temp file', async () => {
+        const file = await home.drive.createFileFromData(
+            mount.id,
+            rootId,
+            'landed-overwrite.txt',
+            'text/plain',
+            Buffer.from('one'),
+        );
+        const before = await settledTempFiles();
+        const writeFileFromTemp = mount.writeFileFromTemp.bind(mount);
+        const write = spyOn(mount, 'writeFileFromTemp').mockImplementationOnce(async (...args) => {
+            await writeFileFromTemp(...args);
+            await mount.deletePath(file.id);
+        });
+        try {
+            const result = await home.drive
+                .writeFileContent(mount.id, file.id, new Blob(['two']).stream(), alice)
+                .catch((e: unknown) => e);
+
+            expect(result).toBeInstanceOf(ApiError);
+            expect(result instanceof ApiError && result.status).toBe(404);
+            expect(await settledTempFiles()).toEqual(before);
+        } finally {
+            write.mockRestore();
         }
     });
 });

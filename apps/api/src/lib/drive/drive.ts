@@ -516,11 +516,11 @@ export class Drive {
             throw new ApiError(404, 'File not found');
         }
 
-        let thumbnailSource: Buffer | string | null = null;
-        let thumbnailCleanup: (() => Promise<void>) | undefined;
+        // The thumbnail job starts as soon as the bytes land, so no error after that leaves its temp
+        // file behind. A content write never changes the name or the type of the file.
         if (Buffer.isBuffer(data)) {
             await mount.writeFile(pathId, data, expectedUpdatedAt);
-            if (data.length > 0) thumbnailSource = data;
+            if (data.length > 0) regenerateThumbnailAsync(this, mount, pathId, data, path.mimeType, path.name);
         } else {
             // A stream goes through a temp file, so the bytes never sit in memory. The size and hash
             // come from that write, so the mount doesn't read the file again to compute them.
@@ -529,8 +529,15 @@ export class Drive {
                 const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
                 await mount.writeFileFromTemp(pathId, tempId, size, hash, expectedUpdatedAt);
                 if (size > 0) {
-                    thumbnailSource = mount.getTempPath(tempId);
-                    thumbnailCleanup = () => mount.cleanupTemp(tempId);
+                    regenerateThumbnailAsync(
+                        this,
+                        mount,
+                        pathId,
+                        mount.getTempPath(tempId),
+                        path.mimeType,
+                        path.name,
+                        () => mount.cleanupTemp(tempId),
+                    );
                 } else {
                     await mount.cleanupTemp(tempId);
                 }
@@ -540,26 +547,14 @@ export class Drive {
             }
         }
 
-        const updated = await mount.getPath(pathId);
-        if (!updated) throw new ApiError(500, 'Failed to get updated file');
+        // The file can be deleted or trashed right after the write. That is a 404, the same as during it.
+        const updated = await mount.getActivePath(pathId);
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
         if (user) {
             await this.recordFileEvent(mountId, pathId, user, {
                 eventType: 'uploaded',
                 details: { size: updated.size },
             });
-        }
-
-        if (thumbnailSource !== null) {
-            regenerateThumbnailAsync(
-                this,
-                mount,
-                pathId,
-                thumbnailSource,
-                updated.mimeType,
-                updated.name,
-                thumbnailCleanup,
-            );
         }
         return updated;
     }
