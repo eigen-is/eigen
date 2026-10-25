@@ -207,6 +207,14 @@ export function ownTextLook(
 
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };
 
+const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
+
+// A cell's padding in twips: a table nested in a cell fits inside it.
+export const TABLE_CELL_PADDING = {
+    vertical: twips(cssPt(boxSide(CELL_PADDING, 'top'), BODY.sizePt)),
+    horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
+};
+
 // In twips: the writer spaces the block after an in-flow table by it, and the reader takes that space as the table's.
 export const TABLE_MARGIN = twips(cssPt(boxSide(proseValue('.eigen-prose table', 'margin'), 'bottom'), BODY.sizePt));
 

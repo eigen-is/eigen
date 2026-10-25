@@ -152,12 +152,13 @@ describe('column widths', () => {
         expect(colwidths(json)).toEqual([[200], [192]]);
     });
 
-    test("a nested table scales down to its cell's width", async () => {
+    // Inside the cell's padding, as the editor draws it: 200 px less 2 × 8.8 pt.
+    test("a nested table scales down to its cell's width inside its padding", async () => {
         const nested = gridded([4500, 4500], [cell('x'), cell('y')]);
         const { json } = await importDocxBody(
             gridded([3000, 3000], [`<w:tc>${nested}${paragraph('')}</w:tc>`, cell('b')]),
         );
-        expect(colwidths(json)).toEqual([[200], [100], [100], [200]]);
+        expect(colwidths(json)).toEqual([[200], [88], [88], [200]]);
     });
 });
 

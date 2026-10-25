@@ -18,7 +18,7 @@ import { openZip } from '../../../lib/ooxml/zip';
 import { sampleChartParts } from '../../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 import type { DocxParts } from '../../fixtures/golden-docx';
-import { importDocxBody, marksOfType } from '../../fixtures/golden-docx';
+import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
 
@@ -1161,6 +1161,35 @@ describe('a Word file, imported, written and imported again', () => {
                 footnotes: `<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' Note')}`, '<w:pStyle w:val="FootnoteText"/><w:spacing w:after="0"/>')}</w:footnote>`,
             },
         );
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
+    // Word fits a nested table inside its cell's margins, Eigen inside its cell's padding; a table without a grid sizes
+    // its columns by its cells' widths.
+    test("a nested table's and a gridless table's widths come back as the first import read them", async () => {
+        const cell = (width: number, inner: string) =>
+            `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/></w:tcPr>${inner}</w:tc>`;
+        const table = (grid: number[], cells: string, tblPr = '') =>
+            `<w:tbl><w:tblPr>${tblPr}</w:tblPr>${grid.length > 0 ? `<w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>` : ''}<w:tr>${cells}</w:tr></w:tbl>`;
+        const nested = table([8404], cell(8404, paragraph(run('Inner'))));
+        const { first, second } = await twice(
+            [
+                table([8630], cell(8630, paragraph(run('Outer')) + nested + paragraph(''))),
+                paragraph(''),
+                table(
+                    [],
+                    cell(1133, paragraph(run('One'))) + cell(5102, paragraph(run('Two'))),
+                    '<w:tblLayout w:type="fixed"/>',
+                ),
+                paragraph(''),
+            ].join(''),
+        );
+        expect(nodesOfType(first.json, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([
+            [575],
+            [551],
+            [76],
+            [340],
+        ]);
         expect(stored(second.json)).toEqual(stored(first.json));
     });
 });

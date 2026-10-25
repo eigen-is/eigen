@@ -1,7 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX, readCellBackground } from '@workspace/lib/docs/eigendoc';
-import { BODY, boxSide, cssPt, HEADER_CELL_LOOK, proseBorder, TABLE_MARGIN, twips } from '../../../document/looks';
-import { proseValue } from '../../../document/prose-css';
+import { HEADER_CELL_LOOK, proseBorder, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
 import { BORDER_SIDES, JUSTIFICATION, MAX_TABLE_COLUMNS, STYLE_NAMES, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import type { Context } from './package';
 import type { Block } from './paragraphs';
@@ -164,13 +163,8 @@ const TABLE_HEADER_STYLE: StyleDef = {
     semiHidden: true,
 };
 
-const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
-
 export const TABLE_LOOK = {
     border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
-    padding: {
-        vertical: twips(cssPt(boxSide(CELL_PADDING, 'top'), BODY.sizePt)),
-        horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
-    },
+    padding: TABLE_CELL_PADDING,
     margin: TABLE_MARGIN,
 };
