@@ -1,4 +1,6 @@
-// Ported from d3-array 3.2 (ISC, Mike Bostock): src/ticks.js and src/nice.js, ascending domains only.
+// A chart's value ticks: where they fall, the axis's nice ends, and the text of each tick label. The layout asks
+// for a count by pixels and draws what comes back. Ported from d3-array 3.2 (ISC, Mike Bostock): src/ticks.js and
+// src/nice.js, ascending domains only.
 
 const E10 = Math.sqrt(50);
 const E5 = Math.sqrt(10);
@@ -69,8 +71,8 @@ export function nice(start: number, stop: number, count: number): [number, numbe
 
 // Intl caps fraction digits; a step this small has no readable labels anyway.
 const MAX_FRACTION_DIGITS = 20;
-// Chart.js's bounds for fixed labels: past six decimals a label is a row of zeros, and from 1e15 on its
-// digits are more than a double holds, so the ticks read in scientific notation.
+// Past six decimals a label is a row of zeros, and from 1e15 on its digits are more than a double holds, so the
+// ticks read in scientific notation.
 const MAX_FIXED_DIGITS = 6;
 const MIN_SCIENTIFIC_STEP = 1e15;
 
