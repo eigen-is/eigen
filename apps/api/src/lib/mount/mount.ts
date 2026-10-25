@@ -45,6 +45,8 @@ type LocalDatabaseGetter = <S extends SchemaType>(
     relativePath: string,
 ) => Promise<ManagedDatabase<S>>;
 
+type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
+
 type FolderLocks = { paths: Map<string, Promise<void>>; tree: RWLock };
 
 // By mount folder, not Mount object: a backup's own Mount of a disabled mount and the Mount an enable or a
@@ -80,9 +82,6 @@ export class Mount {
 
     // Write-behind upload queue — only for isRemote (s3) mounts; undefined otherwise.
     public uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
-    // Set for an s3 mount only — see buildUploadDestinationKey, which is also the gate Mount.init
-    // stands the upload queue up behind.
-    private readonly uploadDestinationKey?: string;
 
     // Per-mount content reindexer — built in init() only when an extractor is injected (the
     // document-loader stack is wired from Drive so it never enters this module's graph).
@@ -119,7 +118,6 @@ export class Mount {
         this.extractContent = extractContent;
 
         this.storage = createMountStorage(config, this.baseDir);
-        this.uploadDestinationKey = buildUploadDestinationKey(config);
     }
 
     // Read live off config so a settings rename (TeamHome.updateMount) shows up without rebuilding.
@@ -167,24 +165,10 @@ export class Mount {
     public async init(opts?: { passive?: boolean }): Promise<void> {
         const passive = opts?.passive === true;
         if (!passive) {
-            if (!fs.existsSync(this.baseDir)) {
-                fs.mkdirSync(this.baseDir, { recursive: true });
-            }
-            if (!fs.existsSync(this.tmpDir)) {
-                fs.mkdirSync(this.tmpDir, { recursive: true });
-            }
-            if (!fs.existsSync(this.thumbsDir)) {
-                fs.mkdirSync(this.thumbsDir, { recursive: true });
-            }
-            if (!fs.existsSync(this.previewsDir)) {
-                fs.mkdirSync(this.previewsDir, { recursive: true });
-            }
-            if (this.isRemote && !fs.existsSync(this.stagingDir)) {
-                fs.mkdirSync(this.stagingDir, { recursive: true });
-            }
-            if (this.isPathBased && !fs.existsSync(this.trashDir)) {
-                fs.mkdirSync(this.trashDir, { recursive: true });
-            }
+            const dirs = [this.thumbsDir, this.previewsDir];
+            if (this.isRemote) dirs.push(this.stagingDir);
+            if (this.isPathBased) dirs.push(this.trashDir);
+            for (const dir of dirs) fs.mkdirSync(dir, { recursive: true });
         }
 
         const dbPath = path.join(PATHS.DRIVE.ROOT, this.config.id, PATHS.DRIVE.METADATA_DB);
@@ -194,12 +178,13 @@ export class Mount {
 
         // The destination key groups uploads to the same provider onto one concurrency limiter, so
         // a slow bucket can't block uploads to other buckets.
-        if (this.uploadDestinationKey) {
+        const destinationKey = buildUploadDestinationKey(this.config);
+        if (destinationKey) {
             this.uploadQueue = new UploadQueue({
                 db: this.db,
                 storage: this.storage,
                 stagingDir: this.stagingDir,
-                destinationKey: this.uploadDestinationKey,
+                destinationKey,
                 label: this.id,
             });
         }
@@ -393,9 +378,8 @@ export class Mount {
             .split('/')
             .filter((s) => s.length > 0)
             .map((s) => s.normalize('NFC'));
-        for (const seg of segments) {
-            if (seg === '..' || seg === '.') throw new ApiError(400, 'Invalid path');
-            if (CONTROL_CHARS.test(seg)) throw new ApiError(400, 'Invalid path');
+        if (segments.some((seg) => seg === '..' || seg === '.' || CONTROL_CHARS.test(seg))) {
+            throw new ApiError(400, 'Invalid path');
         }
         let current: DrivePath | null = await this.getRootFolder();
         for (const seg of segments) {
@@ -427,10 +411,6 @@ export class Mount {
         }
     }
 
-    private buildFileValue(id: string, name: string): string {
-        return this.isPathBased ? name : buildStorageKey(id, name);
-    }
-
     // Insert a path row, translating the v7 unique-index violation into the SAME 409 assertUniqueName
     // raises. assertUniqueName's SELECT still handles the friendly common case; this closes the RACE —
     // two racers both pass the SELECT, the DB serializes their INSERTs, and the second trips the index
@@ -446,7 +426,9 @@ export class Mount {
     }
 
     private async resolveWriteKey(parentId: string, fileValue: string): Promise<string> {
-        return this.isPathBased ? this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
+        if (!this.isPathBased) return fileValue;
+        const parentKey = await this.getStorageKey(parentId);
+        return parentKey ? `${parentKey}/${fileValue}` : fileValue;
     }
 
     // Under the tree lock, right before a create's write: on `local` the disk folds names the check above misses
@@ -514,42 +496,10 @@ export class Mount {
         data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined,
     ): Promise<string> {
         name = validateName(name);
-        const fileId = randomUUID();
-        const fileValue = this.buildFileValue(fileId, name);
         const hash = data !== undefined ? await this.computeHash(data) : null;
-
-        const searchable = isSearchableTextFile(mimeType, name);
-        await this.withTreeShared(async () => {
-            // Under the lock: on `local` a rename that took it first owns the key this write replaces.
-            await this.assertUniqueName(parentId, name);
-            const storageKey = await this.resolveWriteKey(parentId, fileValue);
-            await this.claimCreateKey(parentId, storageKey, fileId, name);
-            // Storage write before DB insert (crash safety: orphaned file > orphaned row)
-            if (data !== undefined) {
-                await this.storage.write(storageKey, data);
-            }
-
-            await this.insertPathRow({
-                id: fileId,
-                file: fileValue,
-                name,
-                type: 'file',
-                parentId,
-                ownerId: this.ownerId,
-                mimeType,
-                size,
-                hash,
-                acl: null,
-                contentDirty: searchable ? 1 : 0,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
+        return this.insertFile(parentId, name, mimeType, size, hash, async (storageKey) => {
+            if (data !== undefined) await this.storage.write(storageKey, data);
         });
-
-        await this.invalidateSizesFrom(parentId);
-        if (searchable) this.reindexQueue?.markDirty(fileId);
-
-        return fileId;
     }
 
     public async createFileFromTemp(
@@ -560,9 +510,21 @@ export class Mount {
         hash: string,
         tempId: string,
     ): Promise<string> {
-        name = validateName(name);
+        return this.insertFile(parentId, validateName(name), mimeType, size, hash, (storageKey) =>
+            this.uploadFromTemp(storageKey, tempId),
+        );
+    }
+
+    private async insertFile(
+        parentId: string,
+        name: string,
+        mimeType: string,
+        size: number,
+        hash: string | null,
+        writeBytes: (storageKey: string) => Promise<void>,
+    ): Promise<string> {
         const fileId = randomUUID();
-        const fileValue = this.buildFileValue(fileId, name);
+        const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
 
         const searchable = isSearchableTextFile(mimeType, name);
         await this.withTreeShared(async () => {
@@ -570,8 +532,8 @@ export class Mount {
             await this.assertUniqueName(parentId, name);
             const storageKey = await this.resolveWriteKey(parentId, fileValue);
             await this.claimCreateKey(parentId, storageKey, fileId, name);
-
-            await this.uploadFromTemp(storageKey, tempId);
+            // Storage write before DB insert (crash safety: orphaned file > orphaned row)
+            await writeBytes(storageKey);
 
             await this.insertPathRow({
                 id: fileId,
@@ -826,18 +788,11 @@ export class Mount {
         const byId = new Map(rows.map((r) => [r.id, r]));
         const segments: string[] = [];
         let current = byId.get(pathId);
-        while (current) {
-            if (current.parentId === null) break;
+        while (current?.parentId) {
             if (current.file) segments.unshift(current.file);
-            current = current.parentId ? byId.get(current.parentId) : undefined;
+            current = byId.get(current.parentId);
         }
-
         return segments.join('/');
-    }
-
-    private async resolveStoragePathForNew(parentId: string, fileValue: string): Promise<string> {
-        const parentPath = await this.getStorageKey(parentId);
-        return parentPath ? `${parentPath}/${fileValue}` : fileValue;
     }
 
     public async deletePath(pathId: string): Promise<void> {
@@ -899,11 +854,7 @@ export class Mount {
 
     // A trash that committed while a move waited keeps its row: on `local` a move would carry it out of .trash/.
     // `seen` bounds the walk, so a tree that already holds a cycle fails instead of spinning.
-    private assertMovableInTx(
-        tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
-        pathId: string,
-        targetParentId: string | null | undefined,
-    ): void {
+    private assertMovableInTx(tx: Tx, pathId: string, targetParentId: string | null | undefined): void {
         const row = tx.select({ trashedAt: paths.trashedAt }).from(paths).where(eq(paths.id, pathId)).get();
         if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
         if (targetParentId === undefined) return;
@@ -922,10 +873,7 @@ export class Mount {
 
     // Deletes the folder and everything under it. Returns the deleted files: only they own a
     // thumbnail and an object, which go after the rows.
-    private deleteSubtreeInTx(
-        tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
-        folderId: string,
-    ): { id: string; file: string }[] {
+    private deleteSubtreeInTx(tx: Tx, folderId: string): { id: string; file: string }[] {
         const children = tx
             .select({ id: paths.id, type: paths.type, file: paths.file })
             .from(paths)
@@ -1005,12 +953,8 @@ export class Mount {
     }
 
     public async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
-        const storageKey = await this.getStorageKey(pathId);
-        // Freshest-first, same as readFile: a Range GET or content extraction must not read the stale object.
-        const staged = this.pendingStagedCopy(storageKey);
-        if (staged) return Bun.file(staged).slice(start, end);
-        if (!(await this.storage.exists(storageKey))) return null;
-        return this.storage.read(storageKey).slice(start, end);
+        const file = await this.readFile(pathId);
+        return file ? file.slice(start, end) : null;
     }
 
     // A file's bytes, the first `limit` with one, freshest-first; the teardown abort ends the read too.
@@ -1019,38 +963,20 @@ export class Mount {
         return file ? readStorageFile(file, { signal: this.downloads.signal }) : null;
     }
 
-    // Overwrites aren't handed mimeType/name like createFile — resolve the searchable gate from the row.
-    private async isSearchableRow(pathId: string): Promise<boolean> {
-        const row = await this.db
-            .select({ name: paths.name, mimeType: paths.mimeType })
-            .from(paths)
-            .where(eq(paths.id, pathId))
-            .get();
-        return !!row && isSearchableTextFile(row.mimeType, row.name);
-    }
-
     public async writeFile(
         pathId: string,
         data: Buffer | Uint8Array | ArrayBuffer | BunFile,
         expectedUpdatedAt?: Date,
-    ): Promise<number> {
-        let size: number;
-        if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
-            size = data.length;
-        } else if (data instanceof ArrayBuffer) {
-            size = data.byteLength;
-        } else {
-            size = data.size;
-        }
+    ): Promise<void> {
+        const size = data instanceof Blob ? data.size : data.byteLength;
         const hash = await this.computeHash(data);
 
-        return this.withPathLock(pathId, () =>
+        await this.withPathLock(pathId, () =>
             this.withTreeShared(async () => {
                 await this.assertOverwritable(pathId, expectedUpdatedAt);
                 const storageKey = await this.getStorageKey(pathId);
-                const written = await this.storage.write(storageKey, data);
+                await this.storage.write(storageKey, data);
                 await this.commitOverwrite(pathId, storageKey, size, hash);
-                return written;
             }),
         );
     }
@@ -1088,7 +1014,12 @@ export class Mount {
     // delete that ran during the PUT left the bytes behind. Off `local` an ancestor's trash takes no
     // lock the overwrite holds either: the row still records the bytes its object now holds, then refuses.
     private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<void> {
-        const searchable = await this.isSearchableRow(pathId);
+        const row = await this.db
+            .select({ name: paths.name, mimeType: paths.mimeType })
+            .from(paths)
+            .where(eq(paths.id, pathId))
+            .get();
+        const searchable = !!row && isSearchableTextFile(row.mimeType, row.name);
         if (searchable) this.reindexQueue?.bumpGeneration(pathId);
         const committed = await this.db
             .update(paths)
@@ -1212,7 +1143,7 @@ export class Mount {
 
     // internal — used by mount/*.ts + versioning/snapshot.ts
     public get isRemote(): boolean {
-        return this.config.storageType !== 'local-key' && this.config.storageType !== 'local';
+        return this.config.storageType === 's3';
     }
 
     // internal — used by mount/*.ts + lib/backup
@@ -1386,7 +1317,7 @@ export class Mount {
     public toDrivePath(row: typeof paths.$inferSelect): DrivePath {
         let size = row.size;
         if (row.type !== 'file' && size === null) {
-            size = this.computeAndCacheFolderSize(row.id);
+            size = this.db.transaction((tx) => this.computeFolderSizeInTx(tx, row.id));
         }
         return {
             id: row.id,
@@ -1447,14 +1378,7 @@ export class Mount {
         }
     }
 
-    private computeAndCacheFolderSize(folderId: string): number {
-        return this.db.transaction((tx) => this.computeFolderSizeInTx(tx, folderId));
-    }
-
-    private computeFolderSizeInTx(
-        tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
-        folderId: string,
-    ): number {
+    private computeFolderSizeInTx(tx: Tx, folderId: string): number {
         const row = tx.select({ size: paths.size, type: paths.type }).from(paths).where(eq(paths.id, folderId)).get();
         if (!row) return 0;
         if (row.type === 'file') return row.size ?? 0;
