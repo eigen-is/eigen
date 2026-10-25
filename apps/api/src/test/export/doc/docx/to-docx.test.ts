@@ -1467,8 +1467,11 @@ describe('docx writer — task lists', () => {
 
 describe('docx writer — tables', () => {
     const tablesIn = async (json: JSONContent) => xmlChildren(await bodyOf(json), W, 'tbl');
-    const cell = (width: number, runs: string, tcPr = '', pPr = '<w:spacing w:after="0"/>') =>
-        `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${tcPr}</w:tcPr><w:p><w:pPr>${pPr}</w:pPr>${runs}</w:p></w:tc>`;
+    // A column without a width is laid out by the grid, and its cells say they have none.
+    const tcW = (width: number | null) =>
+        width === null ? '<w:tcW w:w="0" w:type="nil"/>' : `<w:tcW w:w="${width}" w:type="dxa"/>`;
+    const cell = (width: number | null, runs: string, tcPr = '', pPr = '<w:spacing w:after="0"/>') =>
+        `<w:tc><w:tcPr>${tcW(width)}${tcPr}</w:tcPr><w:p><w:pPr>${pPr}</w:pPr>${runs}</w:p></w:tc>`;
     const SHADED = '<w:shd w:val="clear" w:color="auto" w:fill="F9FAFB"/>';
     const SPACER = '<w:p><w:pPr><w:pStyle w:val="Spacer"/><w:spacing w:before="165"/></w:pPr></w:p>';
     const gridOf = (tbl: XmlElement | undefined) => {
@@ -1612,11 +1615,9 @@ describe('docx writer — tables', () => {
         const tbl = only(
             await tablesIn(doc(table(tr(td({}, p(text('a'))), td({}, p(text('b')))), tr(td({}, p(text('c'))))))),
         );
-        // A column without a width is laid out by the grid, and its cells say they have none.
-        const unsized = '<w:tcW w:w="0" w:type="nil"/>';
         expect(gridOf(tbl)).toEqual([4815, 4815]);
         expect(xmlOf(xmlChildren(tbl, W, 'tr')[1])).toBe(
-            `<w:tr>${cell(4815, run('c')).replace('<w:tcW w:w="4815" w:type="dxa"/>', unsized)}<w:tc><w:tcPr>${unsized}</w:tcPr><w:p/></w:tc></w:tr>`,
+            `<w:tr>${cell(null, run('c'))}<w:tc><w:tcPr>${tcW(null)}</w:tcPr><w:p/></w:tc></w:tr>`,
         );
     });
 
