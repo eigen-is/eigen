@@ -1,3 +1,8 @@
+// readLatex and writeLatex: the LaTeX a person types, read into the tree and written back out. The reader is a
+// tokenizer that pairs every brace, \left and \begin up front, then a recursive-descent parser over a small TeX
+// subset. The writer writes the same subset and marks the tree where LaTeX alone is ambiguous. Both go through
+// LATEX_COMMANDS, so a new command is a row in that table, not code.
+
 import { MathError } from './error';
 import type { LatexCommand } from './latex-commands';
 import { BARE_ENVIRONMENTS, LATEX_COMMANDS, LATEX_ENVIRONMENTS } from './latex-commands';
@@ -1083,8 +1088,8 @@ function writeNode(node: MathNode, upright: boolean): string {
             return writeToken(node, upright);
         case 'text': {
             // In text TeX reads a run of spaces as one, so a run is written as control spaces.
-            const text = node.text.replace(/ {2,}|[\\^~{}%&#$_\u00A0]/g, (match) =>
-                match.startsWith(' ') ? '\\ '.repeat(match.length) : TEXT_ESCAPES[match],
+            const text = node.text.replace(/ {2,}|[^ ]/gu, (match) =>
+                match.startsWith(' ') ? '\\ '.repeat(match.length) : (TEXT_ESCAPES[match] ?? match),
             );
             return colored(node.color, `\\text{${text}}`);
         }
