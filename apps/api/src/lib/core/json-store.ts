@@ -1,3 +1,7 @@
+// A small settings object kept in one JSON file, such as a home's settings or the server settings.
+// It loads the file once, serves reads from memory and saves the whole object again on every change.
+// A change deep-merges into what is there, so a caller sends only the fields it changes.
+
 import type { DeepPartial } from '@workspace/lib/types/util';
 import type { LocalFilesystem } from './local-filesystem';
 
@@ -16,13 +20,16 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
     return result;
 }
 
-// deepMerge works on untyped records; only this seam asserts the merged shape is still a T.
+// deepMerge works on untyped records. This is the one place that says the result is still a T.
 function merge<T extends Record<string, unknown>>(target: T, source: DeepPartial<T>): T {
     return deepMerge(target, source) as T;
 }
 
 export class JsonStore<T extends Record<string, unknown>> {
     private data: T;
+    // Every set waits for the one before it. Two saves at once could otherwise each start from the
+    // same old data, and the one that lands last would undo the other.
+    private writes: Promise<unknown> = Promise.resolve();
 
     public constructor(
         private fs: LocalFilesystem,
@@ -34,7 +41,7 @@ export class JsonStore<T extends Record<string, unknown>> {
 
     public async load(): Promise<void> {
         const file = this.fs.file(this.filename);
-        // Fail-closed: a corrupt existing file must reject, or the next set() persists defaults over the real bytes.
+        // A file that doesn't parse makes load reject. Otherwise the next set would save the defaults over it.
         if (await file.exists()) {
             this.data = merge(this.defaults, await file.json());
         }
@@ -44,22 +51,15 @@ export class JsonStore<T extends Record<string, unknown>> {
         return this.data;
     }
 
-    public async set(update: DeepPartial<T>): Promise<T> {
-        const prev = this.data;
-        this.data = merge(this.data, update);
-        try {
-            await this.save();
-        } catch (e) {
-            this.data = prev;
-            throw e;
-        }
-        return this.data;
-    }
-
-    private async save(): Promise<void> {
-        const json = JSON.stringify(this.data, null, 2);
-        const tmpFile = `${this.filename}.tmp`;
-        await this.fs.write(tmpFile, json);
-        await this.fs.rename(tmpFile, this.filename);
+    // Memory shows a change only once it is on disk, so a failed save changes nothing.
+    public set(update: DeepPartial<T>): Promise<T> {
+        const run = this.writes.then(async () => {
+            const next = merge(this.data, update);
+            await this.fs.writeAtomic(this.filename, JSON.stringify(next, null, 2));
+            this.data = next;
+            return next;
+        });
+        this.writes = run.catch(() => {});
+        return run;
     }
 }

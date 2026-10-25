@@ -138,7 +138,7 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
         }
     });
 
-    // The Drive is called directly. Two saves of the settings file at once collide on their own.
+    // The Drive is called directly, so both changes reach it at the same moment.
     test('two storage changes at once leave one open mount, on the change made last', async () => {
         const home = await freshTeamHome();
         const built: Mount[] = [];
