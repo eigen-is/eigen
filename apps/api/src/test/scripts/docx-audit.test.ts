@@ -18,6 +18,7 @@ import {
     runAudit,
     runRoundtrip,
 } from '../../scripts/docx-audit';
+import { sampleChartParts } from '../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../fixtures/golden-documents';
 import { buildDocxWithBody } from '../fixtures/golden-docx';
 import { PIXEL_PNG } from '../fixtures/pptx';
@@ -948,7 +949,7 @@ describe('round trip', () => {
         ]);
     }, 60_000);
 
-    test('a chart that comes back a picture is listed; one that comes back as anything else is not', () => {
+    test('a chart compares as one spec, its series ids by place; one that comes back as anything else is unlisted', () => {
         const imported = (...content: JSONContent[]) => ({
             json: { type: 'doc', content: [{ type: 'paragraph', content }] },
             bands: {},
@@ -957,7 +958,12 @@ describe('round trip', () => {
             images: [],
             warnings: [],
         });
-        const chart = { type: 'chart', attrs: { width: 200, height: 100 } };
+        const parts = sampleChartParts('column');
+        const chart = { type: 'chart', attrs: { ...parts, width: 200, height: 100 } };
+        // As a reader names them by c:idx.
+        const ids = Object.entries(parts).map(([key, part]) => [key, part.replaceAll('"s-', '"x-')]);
+        const renamed = { ...chart, attrs: { ...chart.attrs, ...Object.fromEntries(ids) } };
+        expect(renamed.attrs.specData).toContain('"x-1"');
         const groups = (back: JSONContent) =>
             classifyDocx({
                 a: imported(chart),
@@ -965,7 +971,8 @@ describe('round trip', () => {
                 pictures: { a: new Map(), b: new Map() },
                 prepared: new Map(),
             }).map(({ kind, listed }) => [kind, listed]);
-        expect(groups({ type: 'figure', attrs: { mediaName: 'chart.svg' } })).toEqual([['charts as pictures', true]]);
+        expect(groups(renamed)).toEqual([]);
+        expect(groups({ type: 'figure', attrs: { mediaName: 'chart.svg' } })).toEqual([['node', false]]);
         expect(groups(text('Chart'))).toEqual([['node', false]]);
     });
 });
