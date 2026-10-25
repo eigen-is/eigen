@@ -1,3 +1,8 @@
+// The document databases of a mount, such as a container's data.db and comments.db. Each one is a
+// SQLite working copy that is opened from storage, synced back to it and closed, one call at a time per
+// path. Mount is how callers reach it, and closeAllDatabases tears every one down when a Home closes or
+// a mount goes away.
+
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { settlesWithin } from '../../utils/timing';
@@ -9,10 +14,6 @@ import { isViableRecoveryTemp } from './helpers';
 import type { Mount } from './mount';
 import { paths } from './schema';
 import { markContainerContentDirty } from './search-index';
-
-// Managed document-DB lifecycle: the cached working copies behind every container's
-// data.db/comments.db — open/create, the onOpen/onSync/onClose callbacks (crash
-// recovery, write-behind staging — see docs/SYNC.md), and teardown.
 
 export type DocumentDbSlot = {
     db: ManagedDatabase<SchemaType> | null; // the live instance while open; null while a build or a close is in flight
@@ -281,6 +282,8 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     // First, so neither the reindex drain nor a close below waits on a download. The mount is not
     // reused after this, so the abort is for good.
     mount.downloads.abort();
+    // The abort stops the trash purge between items. The one in flight finishes before metadata.db closes.
+    await mount.trashPurge;
 
     // Cancel the init-scheduled history prune so a fast teardown doesn't fire it against a
     // metadata.db the Home is about to close (the mount stops its own timers here — the same seam
