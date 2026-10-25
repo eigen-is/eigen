@@ -2288,7 +2288,7 @@ async function docxRoundtripChild(
         const bytes = await step('export', async () => {
             const roots = [a.json, ...Object.values(a.bands)];
             const drawn = [...(await pastedFigureMedia(roots)), ...(await chartFigureMedia(roots))];
-            media = await officeMedia(a.images, drawn);
+            media = await officeMedia(a.media, drawn);
             return write(a, { title: path.basename(file), media });
         });
         const b = await step('reimport', () => read(Buffer.from(bytes)));
@@ -2296,7 +2296,7 @@ async function docxRoundtripChild(
             classifyDocx({
                 a,
                 b,
-                pictures: { a: await picturesOf(a.images), b: await picturesOf(b.images) },
+                pictures: { a: await picturesOf(a.media), b: await picturesOf(b.media) },
                 prepared: await picturesOf(media),
             }),
         );
@@ -2335,12 +2335,12 @@ if (!Bun.isMainThread) {
             }
             if (!importer) throw new Error('no importer loaded');
             // An importer from before the doc's Normal returns no style: its text draws in the document font.
-            const { json, images, style } = await importer(Buffer.from(request.bytes));
+            const { json, media, style } = await importer(Buffer.from(request.bytes));
             postMessage({
                 kind: 'imported',
                 json,
                 font: style?.font ?? DOCUMENT_FONT,
-                images: images.length,
+                images: media.length,
                 ms: performance.now() - started,
             } satisfies WorkerReply);
         } catch (error) {

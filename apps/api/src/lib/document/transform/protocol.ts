@@ -179,6 +179,9 @@ export type LossCounter = {
     warnings(): TransformWarning[];
 };
 
+// Counts one loss of this kind, where the caller has no source to count it once for.
+export type Lost = (code: CountedWarningCode) => void;
+
 // What a reader or a writer left out, counted by kind as it goes.
 export function lossCounter(): LossCounter {
     const losses = new Map<CountedWarningCode, { count: number; sources: Set<object> }>();
@@ -235,6 +238,8 @@ export type DocImportWorkerResult = {
     style: NormalStyle;
     images: TransformMedia[];
 };
+// The same with the warnings the reader counted, which the import's summary phrases.
+export type DocImportResult = DocImportWorkerResult & { warnings: TransformWarning[] };
 // A pptx's update plus its pictures: the main thread only applies the update and writes the media through Mount.
 export type SlidesImportWorkerResult = { update: ArrayBuffer; images: TransformMedia[] };
 

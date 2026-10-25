@@ -130,7 +130,7 @@ export function walkInline(reader: Reader, elements: XmlElement[], context: RunC
 function pushEquation(reader: Reader, oMath: XmlElement, display: boolean, context: RunContext): void {
     try {
         const mathml = writeMathml(readOmml(oMath));
-        reader.pkg.chargeMathml(mathml.length);
+        reader.pkg.mathml.charge(mathml.length);
         context.pieces.push({ kind: 'node', node: { type: 'equation', attrs: { mathml, display } } });
     } catch (error) {
         if (!(error instanceof MathError)) throw error;
@@ -385,7 +385,7 @@ function marksOf(
     const full = mergeRun(styles.docRun, paraRun, charRun, direct);
     if (full.vanish) return [];
     if (absorbed === 'all') {
-        const faces = byFace(text, full.fonts, full, false, reader.pkg.chargePiece);
+        const faces = byFace(text, full.fonts, full, false, () => reader.pkg.pieces.charge(1));
         return faces.map((face) => ({ ...face, marks: [], small: false }));
     }
     const own = { ...paraRun };
@@ -418,7 +418,7 @@ function marksOf(
         !!props.boldCs !== !!props.bold ||
         !!props.italicCs !== !!props.italic ||
         fontSizeOf(true) !== fontSizeOf(false);
-    const faces = byFace(text, full.fonts, full, complexLook, reader.pkg.chargePiece);
+    const faces = byFace(text, full.fonts, full, complexLook, () => reader.pkg.pieces.charge(1));
 
     const shade = props.highlight || props.shading || '';
     const marks: Marks = [];

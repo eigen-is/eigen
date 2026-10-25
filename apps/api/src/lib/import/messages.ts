@@ -1,6 +1,6 @@
-// What an import answers in the format's words: past a cap or the memory of the transform process, for a file it can't
-// read, and for an encrypted one, naming the application that removes the password. Light on purpose: run-transform.ts
-// maps an out-of-memory with these, and must not load a reader to do it.
+// What an import answers in the format's words: past a cap or the memory of the transform process, for a file it
+// can't read, and for an encrypted one, naming the application that removes the password; and the toast's summary of
+// what it left out. Light on purpose: the transform runner maps an out-of-memory with these, and must not load a reader.
 
 import { ApiError, isOutOfMemory } from '../core/errors';
 import { XmlError } from '../core/xml';

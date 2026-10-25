@@ -209,7 +209,7 @@ function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): Doc
     if (!root) return NOT_IMPORTED;
     const known = reader.charts.get(root);
     if (known) return known;
-    const read = reader.pkg.spendChart(chartCost(root)) && readChart(root, { theme: reader.colors, data: 'cache' });
+    const read = reader.pkg.charts.spend(chartCost(root)) && readChart(root, { theme: reader.colors, data: 'cache' });
     const chart: DocxChart = !read
         ? NOT_IMPORTED
         : 'spec' in read

@@ -1,3 +1,8 @@
+// One-shot document-transform process: acknowledges one request, asks for the media an export's document names, sends
+// one response, and is killed by the runner. Operation dispatch stays a closed switch over the request union, so nothing
+// from the message can select a module or path. Format-specific modules load via dynamic import, so a doc preview never
+// evaluates the sheet engine and a deck export never loads lowlight.
+
 // The leaf module, not the vector barrel, so a doc export's child loads no canvas code.
 import { isSafeMediaName } from '@workspace/lib/vector/media-refs';
 import type * as Y from 'yjs';
@@ -25,12 +30,6 @@ import type {
     TransformWarning,
 } from './protocol';
 import { toTransformError } from './protocol';
-
-// One-shot document-transform process: acknowledges one request, asks for the media an
-// export's document names, sends one response, and is killed by the runner. Operation
-// dispatch stays a closed switch over the request union — nothing from the message can
-// select a module or path. Format-specific modules load via dynamic import so a doc
-// preview never evaluates the sheet engine, and a deck export never loads lowlight.
 
 async function renderPreview(
     request: CollabPreviewJob,

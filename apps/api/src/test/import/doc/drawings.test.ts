@@ -37,45 +37,45 @@ const lines = (json: JSONContent) =>
 describe('media', () => {
     // Decision 1: kept under its real name, though no browser draws it; the import logs it.
     test('a WMF part is image-N.wmf, image/x-wmf, and counts as unshown once for every figure that shows it', async () => {
-        const { json, images, warnings } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId9')}`), {
+        const { json, media, warnings } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId9')}`), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.wmf"/>`,
             contentTypes: '<Default Extension="wmf" ContentType="image/x-wmf"/>',
             media: { 'word/media/image1.wmf': BYTES },
         });
-        expect(images.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+        expect(media.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
             ['image-1.wmf', 'image/x-wmf'],
         ]);
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(
-            images.flatMap(({ name }) => [name, name]),
+            media.flatMap(({ name }) => [name, name]),
         );
         expect(warnings).toEqual([{ code: 'images-unshown', count: 2 }]);
     });
 
     test('an undeclared part takes its extension, and image/jpg reads as image/jpeg', async () => {
-        const { images } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
+        const { media } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/a.gif"/><Relationship Id="rId10" Type="${IMAGE_REL}" Target="media/b.jpg"/>`,
             contentTypes: '<Override PartName="/word/media/b.jpg" ContentType="image/jpg"/>',
             media: { 'word/media/a.gif': BYTES, 'word/media/b.jpg': BYTES },
         });
-        expect(images.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+        expect(media.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
             ['image-1.gif', 'image/gif'],
             ['image-2.jpeg', 'image/jpeg'],
         ]);
     });
 
     test('a part shown twice is stored once', async () => {
-        const { json, images } = await importDocxBody(paragraph(`${picture('rId4')}${picture('rId4')}`));
-        expect(images).toHaveLength(1);
+        const { json, media } = await importDocxBody(paragraph(`${picture('rId4')}${picture('rId4')}`));
+        expect(media).toHaveLength(1);
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual([
-            images[0]?.name,
-            images[0]?.name,
+            media[0]?.name,
+            media[0]?.name,
         ]);
     });
 
     test(`past ${MAX_MEDIA_PARTS} parts a picture is left out and counted`, async () => {
         const count = MAX_MEDIA_PARTS + 2;
         const ids = Array.from({ length: count }, (_, i) => i + 1);
-        const { json, images, warnings } = await importDocxBody(
+        const { json, media, warnings } = await importDocxBody(
             ids.map((i) => paragraph(picture(`rIdP${i}`))).join(''),
             {
                 rels: ids
@@ -84,12 +84,12 @@ describe('media', () => {
                 media: Object.fromEntries(ids.map((i) => [`word/media/p${i}.png`, BYTES])),
             },
         );
-        expect([images.length, nodesOfType(json, 'figure').length]).toEqual([MAX_MEDIA_PARTS, MAX_MEDIA_PARTS]);
+        expect([media.length, nodesOfType(json, 'figure').length]).toEqual([MAX_MEDIA_PARTS, MAX_MEDIA_PARTS]);
         expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
     });
 
     test('past the upload cap in bytes a picture is left out and counted, the ones before it kept', async () => {
-        const { doc, images, warnings } = readDocx(
+        const { doc, media, warnings } = readDocx(
             Buffer.from(
                 await buildDocxWithBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
                     rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/a.png"/><Relationship Id="rId10" Type="${IMAGE_REL}" Target="media/b.png"/>`,
@@ -98,19 +98,19 @@ describe('media', () => {
             ),
             { publicOrigin: undefined, maxMediaBytes: BYTES.length + 1 },
         );
-        expect(images.map(({ name }) => unprefixed(name))).toEqual(['image-1.png']);
+        expect(media.map(({ name }) => unprefixed(name))).toEqual(['image-1.png']);
         expect(nodesOfType(doc.toJSON(), 'figure')).toHaveLength(1);
         expect(lines(doc.toJSON())).toEqual([PICTURE_NOT_IMPORTED]);
         expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 
     test('a picture whose part is missing, or not of an image type, is left out and counted', async () => {
-        const { json, images, warnings } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
+        const { json, media, warnings } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/gone.png"/><Relationship Id="rId10" Type="${IMAGE_REL}" Target="media/a.bin"/>`,
             contentTypes: '<Override PartName="/word/media/a.bin" ContentType="application/octet-stream"/>',
             media: { 'word/media/a.bin': BYTES },
         });
-        expect([images.length, nodesOfType(json, 'figure').length]).toEqual([0, 0]);
+        expect([media.length, nodesOfType(json, 'figure').length]).toEqual([0, 0]);
         expect(lines(json)).toEqual([PICTURE_NOT_IMPORTED, PICTURE_NOT_IMPORTED]);
         expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
     });
@@ -120,12 +120,12 @@ describe('media', () => {
             '<a:blip r:embed="rId4"/>',
             '<a:blip r:embed="rId4"><a:extLst><a:ext uri="{96DAC541-7B7A-43D3-8B79-37D633B846F1}"><asvg:svgBlip xmlns:asvg="http://schemas.microsoft.com/office/drawing/2016/SVG/main" r:embed="rId9"/></a:ext></a:extLst></a:blip>',
         );
-        const { images } = await importDocxBody(paragraph(svg), {
+        const { media } = await importDocxBody(paragraph(svg), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.svg"/>`,
             contentTypes: '<Default Extension="svg" ContentType="image/svg+xml"/>',
             media: { 'word/media/pixel.png': BYTES, 'word/media/image1.svg': new TextEncoder().encode('<svg/>') },
         });
-        expect(images.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+        expect(media.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
             ['image-1.svg', 'image/svg+xml'],
         ]);
     });
@@ -138,7 +138,7 @@ describe('relationship targets', () => {
                 rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="${target}"${mode}/>`,
                 media: { [path]: BYTES },
             })
-        ).images.map(({ name, contentType }) => [unprefixed(name), contentType]);
+        ).media.map(({ name, contentType }) => [unprefixed(name), contentType]);
 
     test("a target with '..' resolves against the part's folder", async () => {
         expect(await imageAt('../media/x.png', 'media/x.png')).toEqual([['image-1.png', 'image/png']]);

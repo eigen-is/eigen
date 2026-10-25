@@ -4,6 +4,7 @@
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
+import type { Budget } from '../../ooxml/budget';
 import { budget } from '../../ooxml/budget';
 import { isOn, parseOoxml, R_NS, SML_NS } from '../../ooxml/ooxml';
 import type { OoxmlPackage } from '../../ooxml/opc';
@@ -73,10 +74,8 @@ export const MAX_BATCH_BYTES = 12 * 1024 * 1024;
 export const MAX_XLSX_ELEMENTS = 16_000_000;
 
 export type ReadBudget = {
-    // Throws past MAX_XLSX_ELEMENTS.
-    chargeElements(count: number): void;
-    // Charged only when what is left covers it: a chart past it is left out, not the workbook.
-    spendElements(count: number): boolean;
+    // MAX_XLSX_ELEMENTS: charged by what is parsed, and spent by a chart, which past it is left out, not the workbook.
+    elements: Budget;
     // Called with what is about to be parsed whole: a sheet's or the shared strings' part past its batches, or a part
     // whose cut can't be checked. These never pass through openPackage's part(), so they have a budget of its values
     // of their own, together across the parts; the corpus's most is 1.6 MB and 50,000 tags. Throws past it.
@@ -85,12 +84,10 @@ export type ReadBudget = {
 
 export function readBudget(): ReadBudget {
     const { tooLarge } = IMPORT_MESSAGES.xlsx;
-    const elements = budget(MAX_XLSX_ELEMENTS, tooLarge);
     const wholeBytes = budget(MAX_PACKAGE_XML_BYTES, tooLarge);
     const wholeTags = budget(MAX_PACKAGE_XML_TAGS, tooLarge);
     return {
-        chargeElements: elements.charge,
-        spendElements: elements.spend,
+        elements: budget(MAX_XLSX_ELEMENTS, tooLarge),
         chargeWhole(text) {
             wholeBytes.charge(text.length);
             wholeTags.charge(tagsIn(text));
@@ -125,7 +122,7 @@ export function readInBatches(
         return { rest: whole, children: childrenOf(whole) };
     }
     holder.children = holder.children.filter((node) => !isMarker(node));
-    budget.chargeElements(elementsIn(text.subarray(span.start, span.end)));
+    budget.elements.charge(elementsIn(text.subarray(span.start, span.end)));
     function* batches(within: Span): Generator<XmlElement> {
         const open = Buffer.from(`<${within.prefix}${child}`);
         const step = Math.max(BATCH_BYTES, within.wrapper.length);
@@ -136,7 +133,7 @@ export function readInBatches(
             const next = at + step < within.end ? findTag(text, open, at + step) : -1;
             const end = next < 0 || next > within.end ? within.end : next;
             if (end - at > MAX_BATCH_BYTES) throw new ApiError(413, IMPORT_MESSAGES.xlsx.tooLarge);
-            budget.chargeElements(wrapperElements);
+            budget.elements.charge(wrapperElements);
             const batch = parseCut(Buffer.concat([within.wrapper, text.subarray(at, end), within.closing]));
             if (!batch) {
                 // A cut a comment, CDATA or an instruction hides breaks the batch it ends; the batches before it ended at

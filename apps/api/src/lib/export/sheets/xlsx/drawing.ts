@@ -1,10 +1,13 @@
+// The xlsx writer's drawings: a sheet's floating charts and pictures as one drawing part of anchors over its cells,
+// with the chart parts it names. The workbook writer adds them to the package beside the sheet.
+
 import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { Sheet, SheetFloatingObject } from '@workspace/lib/sheets';
 import { floatingItems, sheetFloatingBox, sheetTrackAt } from '@workspace/lib/sheets';
 import { normalizeAngle } from '@workspace/lib/vector';
 import type { CellResolver } from '@workspace/sheet/engine';
 import { resolveRangeChartData } from '@workspace/sheet/engine';
-import type { CountedWarningCode } from '../../../document/transform/protocol';
+import type { Lost } from '../../../document/transform/protocol';
 import { anchoredBox, blipXml, DEGREE } from '../../../ooxml/drawingml';
 import { A_NS, C_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../ooxml/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
@@ -31,7 +34,7 @@ export function drawingOf(
     number: number,
     sheets: Sheet[],
     pictures: OfficeImages,
-    lost: (code: CountedWarningCode) => void,
+    lost: Lost,
 ): SheetDrawing | undefined {
     const names = new Map<string, string>();
     for (const { id, name } of sheets) if (!names.has(id ?? name)) names.set(id ?? name, name);

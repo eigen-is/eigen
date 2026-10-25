@@ -1,8 +1,12 @@
+// The workbook as a package: the sheets' names, workbook.xml and its relationships, and every part declared before any
+// is written. A part's body is pulled when the zip writer reaches it, so the sheets come first, then the shared strings
+// and the styles they filled.
+
 import type { Sheet } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
 import { MAX_SHEET_NAME_LENGTH, quoteSheetName, rangeToA1, SHEET_NAME_FORBIDDEN } from '@workspace/sheet/engine';
-import type { CountedWarningCode } from '../../../document/transform/protocol';
+import type { Lost } from '../../../document/transform/protocol';
 import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';
 import type { PackagePart } from '../../../ooxml/opc';
@@ -15,16 +19,7 @@ import { sharedStringTable } from './strings';
 import { styleRegistry } from './styles';
 import { filterArea, worksheetPart } from './worksheet';
 
-// The workbook as a package: the sheets' names, workbook.xml and its relationships, and every part declared before any
-// is written. A part's body is pulled when the zip writer reaches it, so the sheets come first, then the shared strings
-// and the styles they filled.
-
-export function writeWorkbook(
-    sheets: Sheet[],
-    title: string,
-    media: OfficeMedia[],
-    lost: (code: CountedWarningCode) => void,
-): Uint8Array {
+export function writeWorkbook(sheets: Sheet[], title: string, media: OfficeMedia[], lost: Lost): Uint8Array {
     const names = sheetNames(sheets, lost);
     const active = activeTabOf(sheets);
     const written = new Map<string, string>();
@@ -113,7 +108,7 @@ export function workbookXml(sheets: Sheet[], names: string[], ids: string[], act
 // one another sheet holds in any case. A name it takes is kept, the first of a name keeping it; any other is repaired
 // and, when that clashes, numbered as Excel numbers a copy, past every name the workbook holds. Formulas naming a
 // repaired sheet keep the name they had.
-export function sheetNames(sheets: Pick<Sheet, 'name'>[], lost: (code: CountedWarningCode) => void): string[] {
+export function sheetNames(sheets: Pick<Sheet, 'name'>[], lost: Lost): string[] {
     const taken = new Set(['history']);
     const kept = sheets.map(({ name }) => {
         if (name !== legalName(name) || taken.has(name.toLowerCase())) return undefined;

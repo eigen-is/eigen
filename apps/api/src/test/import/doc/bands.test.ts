@@ -169,7 +169,7 @@ describe('docx import — headers and footers', () => {
             '<wp:inline>',
             '<wp:anchor><wp:positionH relativeFrom="margin"><wp:align>right</wp:align></wp:positionH><wp:wrapSquare wrapText="bothSides"/>',
         ).replace('</wp:inline>', '</wp:anchor>');
-        const { bands, images, warnings } = await docxWith([
+        const { bands, media, warnings } = await docxWith([
             {
                 id: 'h1',
                 kind: 'header',
@@ -178,8 +178,8 @@ describe('docx import — headers and footers', () => {
             },
         ]);
         const [figure] = nodesOfType(bands.header ?? {}, 'figure');
-        expect(images.map(({ name }) => name)).toEqual([expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME)]);
-        expect(figure?.attrs).toMatchObject({ mediaName: images[0]?.name, layout: 'block', alignment: 'right' });
+        expect(media.map(({ name }) => name)).toEqual([expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME)]);
+        expect(figure?.attrs).toMatchObject({ mediaName: media[0]?.name, layout: 'block', alignment: 'right' });
         expect(warnings).toContainEqual({ code: 'band-images-unanchored', count: 1 });
     });
 
@@ -191,7 +191,7 @@ describe('docx import — headers and footers', () => {
         );
         const inFront = behind.replace('behindDoc="1"', 'behindDoc="0"');
         const watermark = `<w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml" style="width:400pt;height:600pt"><v:imagedata r:id="rId4"/></v:shape></w:pict></w:r>`;
-        const { bands, images, warnings } = await docxWith([
+        const { bands, media, warnings } = await docxWith([
             {
                 id: 'h1',
                 kind: 'header',
@@ -201,7 +201,7 @@ describe('docx import — headers and footers', () => {
         ]);
         expect(nodesOfType(bands.header ?? {}, 'figure')).toHaveLength(1);
         expect(texts(bands.header)).toEqual(['Acme']);
-        expect(images).toHaveLength(1);
+        expect(media).toHaveLength(1);
         expect(warnings).toContainEqual({ code: 'band-content-dropped', count: 2 });
         expect(warnings).toContainEqual({ code: 'band-images-unanchored', count: 1 });
     });

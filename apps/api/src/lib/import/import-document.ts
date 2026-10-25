@@ -23,7 +23,7 @@ import { appendSheetsToYjs, writeSheetsSnapshotToYjs } from '../document/sheets'
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
 import type {
     DocImportJob,
-    DocImportWorkerResult,
+    DocImportResult,
     ImportTransformJob,
     SheetsImportJob,
     SlidesImportJob,
@@ -64,10 +64,7 @@ function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<Sheet
     return runImportToSnapshotJson(job, toTransferableBuffer(buffer), { signal });
 }
 
-function importDocxUpdate(
-    buffer: Buffer,
-    signal?: AbortSignal,
-): Promise<DocImportWorkerResult & { warnings: TransformWarning[] }> {
+function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportResult> {
     documentTransformRunner.assertAdmissible('foreground');
     assertWithinByteCap(buffer.byteLength, 'docx');
     const job: DocImportJob = {

@@ -1,3 +1,6 @@
+// A pptx as the deck reader opens it: the presentation, its slides in order and the layouts, masters, themes, charts and
+// pictures they name, each read only through its relationships; and what one walk over the deck shares.
+
 import type { NewVectorElement } from '@workspace/lib/vector';
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
@@ -74,9 +77,6 @@ export type DeckWalk = {
     // however many slides show that shape.
     lost(code: CountedWarningCode, source: XmlElement): void;
 };
-
-// A loss in the shape or background being drawn.
-export type Lost = (code: CountedWarningCode) => void;
 
 // The package is read only through relationships and [Content_Types].xml, so an entry named outside them is never read.
 export function readPackage(bytes: Uint8Array): PptxPackage {

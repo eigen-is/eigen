@@ -8,7 +8,7 @@ import { prosemirrorToYDoc, prosemirrorToYXmlFragment } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { docSchema } from '../../document/doc-schema';
-import type { DocImportJob, DocImportWorkerResult, TransformWarning } from '../../document/transform/protocol';
+import type { DocImportJob, DocImportResult } from '../../document/transform/protocol';
 import { toTransferableBuffer, toTransferableMedia } from '../../document/transform/protocol';
 import { IMPORT_MESSAGES, importError } from '../messages';
 import { readDocx } from './from-docx';
@@ -18,8 +18,8 @@ import { readDocx } from './from-docx';
 export function importDocxToEigendocUpdate(
     data: ArrayBuffer,
     job: Pick<DocImportJob, 'publicOrigin' | 'maxMediaBytes'>,
-): DocImportWorkerResult & { warnings: TransformWarning[] } {
-    const { doc, bands, page, style, images, warnings } = readDocx(Buffer.from(data), job);
+): DocImportResult {
+    const { doc, bands, page, style, media, warnings } = readDocx(Buffer.from(data), job);
     let update: Uint8Array;
     try {
         // The bands ride in the update beside the body; the commit clears every root before it applies.
@@ -36,7 +36,7 @@ export function importDocxToEigendocUpdate(
         update: toTransferableBuffer(update),
         page,
         style,
-        images: toTransferableMedia(images),
+        images: toTransferableMedia(media),
         warnings,
     };
 }

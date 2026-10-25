@@ -163,7 +163,7 @@ export function readXlsx(
                     columns: grid.columns,
                     dates: grid.dates,
                     charge,
-                    chargeElements: reads.chargeElements,
+                    chargeElements: reads.elements.charge,
                     lost: losses.lost,
                 }),
             };
@@ -178,7 +178,7 @@ export function readXlsx(
             pkg: book.pkg,
             theme: drawingTheme(book.theme),
             sheetIds,
-            spend: reads.spendElements,
+            spend: reads.elements.spend,
             charge,
             mediaName: files.name,
             lost: losses.lost,

@@ -7,7 +7,8 @@ import { BAND_ROOTS, bandEdge, FIRST_PAGE_BAND, TWIPS_PER_POINT } from '@workspa
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
-import type { LossCounter } from '../../document/transform/protocol';
+import type { Lost } from '../../document/transform/protocol';
+import type { Budget } from '../../ooxml/budget';
 import { budget } from '../../ooxml/budget';
 import { alternativeFor, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
 import type { OoxmlPackage, Part } from '../../ooxml/opc';
@@ -49,23 +50,20 @@ export type DocxPackage = {
     readMedia: OoxmlPackage['readMedia'];
     // A piece a run's text splits into past its first is a node no XML tag counts, so it has a cap of its own, as has
     // each node of a note's copy past its first.
-    chargePiece(count?: number): void;
+    pieces: Budget;
     // An equation's MathML is charged as it is written: a space in m:t writes 26 characters, so a few KB zipped would
     // build hundreds of MB before the output is weighed.
-    chargeMathml(length: number): void;
-    // A chart's read cost (chartCost), charged only when the allowance left covers it: one it can't is left out. Its spec
+    mathml: Budget;
+    // A chart's read cost (chartCost), spent only when the allowance left covers it: one it can't is left out. Its spec
     // string still weighs in the output budget, so enough charts can refuse the document.
-    spendChart(cost: number): boolean;
+    charts: Budget;
 };
 
 // Counts in `lost` the bands the file names that no doc holds: an even page's, which Word draws only with
 // evenAndOddHeaders, and one in a part that is missing or damaged.
-export function readPackage(bytes: Uint8Array, lost: LossCounter['lost']): DocxPackage {
+export function readPackage(bytes: Uint8Array, lost: Lost): DocxPackage {
     const pkg = openPackage(bytes, IMPORT_MESSAGES.docx);
     const { tooLarge } = IMPORT_MESSAGES.docx;
-    const pieces = budget(MAX_DOCX_PIECES, tooLarge);
-    const mathml = budget(MAX_DOCX_WEIGHT * CHARS_PER_UNIT, tooLarge);
-    const charts = budget(MAX_DOCX_CHART_WORK, tooLarge);
     const documentPath = relOfType(pkg.relationships(''), 'officeDocument') ?? 'word/document.xml';
     const documentRels = pkg.relationships(documentPath);
     // By relationship, else where Word puts the part.
@@ -120,9 +118,9 @@ export function readPackage(bytes: Uint8Array, lost: LossCounter['lost']): DocxP
         contentTypeOf: pkg.contentTypeOf,
         part: (path) => optional(() => pkg.part(path)),
         readMedia: pkg.readMedia,
-        chargePiece: (count = 1) => pieces.charge(count),
-        chargeMathml: mathml.charge,
-        spendChart: charts.spend,
+        pieces: budget(MAX_DOCX_PIECES, tooLarge),
+        mathml: budget(MAX_DOCX_WEIGHT * CHARS_PER_UNIT, tooLarge),
+        charts: budget(MAX_DOCX_CHART_WORK, tooLarge),
     };
 }
 

@@ -1,3 +1,5 @@
+// A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
+
 import { escapeHtml } from '@workspace/lib/html';
 import type {
     Arrowhead,
@@ -19,7 +21,7 @@ import {
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
-import type { CountedWarningCode } from '../../document/transform/protocol';
+import type { CountedWarningCode, Lost } from '../../document/transform/protocol';
 import { ARROWHEAD_BY_LINE_END, DEGREE, drawingLines, isSideways, strokeStyleOf } from '../../ooxml/drawingml';
 import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
@@ -51,12 +53,10 @@ import {
     textColorOf,
 } from './inherit';
 import { cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
-import type { DeckWalk, Lost } from './package';
+import type { DeckWalk } from './package';
 import { alternative, blipMedia } from './package';
 import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
-
-// A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
 
 export const MAX_ELEMENTS = 20_000;
 export const MAX_GROUP_DEPTH = 32;

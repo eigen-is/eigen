@@ -1,17 +1,18 @@
+// What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
+// map, the background, and the shapes the layout and master draw beneath the slide's own.
+
 import type { BackgroundFill, FillPaint } from '@workspace/lib/types/background';
 import { normalizeAngle, SLIDES_STYLE_DEFAULTS, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlElements } from '../../core/xml';
+import type { Lost } from '../../document/transform/protocol';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { DEGREE, drawingColor, NO_DRAWING_THEME, percent, readColorMap, readColorScheme } from '../../ooxml/drawingml';
 import { A_NS, emu, isOn, P_NS } from '../../ooxml/ooxml';
 import type { Part } from '../../ooxml/opc';
 import { cachedBy, charge, childOf, childrenOf, firstChildOf } from './lookup';
-import type { DeckWalk, Lost, PptxPackage } from './package';
+import type { DeckWalk, PptxPackage } from './package';
 import { blipMedia } from './package';
-
-// What a slide takes from its layout, master and theme (SPEC X-D4): placeholders matched down the chain, the colour
-// map, the background, and the shapes the layout and master draw beneath the slide's own.
 
 export type SlideTheme = {
     colors: DrawingTheme;

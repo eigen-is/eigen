@@ -15,7 +15,7 @@ import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/shee
 import { iscelldata, parseA1Range, toA1 } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
-import type { CountedWarningCode } from '../../document/transform/protocol';
+import type { Lost } from '../../document/transform/protocol';
 import { isOn, SML_NS, X14_NS, XM_NS } from '../../ooxml/ooxml';
 import {
     CF_CELL_IS_CONDITION,
@@ -50,7 +50,7 @@ export type RulesContext = {
     chargeElements(count: number): void;
     // Counts a rule left out: a conditional format or a validation the engine has no rule for, or a conditional format
     // over no range of the grid.
-    lost(code: CountedWarningCode): void;
+    lost: Lost;
 };
 
 export function readRules(

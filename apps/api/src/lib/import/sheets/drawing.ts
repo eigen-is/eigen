@@ -1,3 +1,7 @@
+// A worksheet's or a chart sheet's drawing: the anchors that place its charts and pictures over the grid, each read into
+// a SheetChart or a SheetImage. Shapes are not read. A chart's refs may name any sheet, so the drawings are placed once
+// every sheet has its id.
+
 import { newSheetChartSpecParts } from '@workspace/lib/charts';
 import type { Sheet, SheetChart, SheetImage } from '@workspace/lib/sheets';
 import {
@@ -12,7 +16,7 @@ import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlTrimmedText } from '../../core/xml';
-import type { CountedWarningCode } from '../../document/transform/protocol';
+import type { Lost } from '../../document/transform/protocol';
 import type { Box, DrawingTheme } from '../../ooxml/drawingml';
 import { anchoredBox, blipEmbeds, DEGREE } from '../../ooxml/drawingml';
 import { A_NS, alternativeFor, C_NS, EMU_PER_PX, emu, ooxmlElements, R_NS, SML_NS, XDR_NS } from '../../ooxml/ooxml';
@@ -21,10 +25,6 @@ import type { OoxmlPackage, Relationship } from '../../ooxml/opc';
 import { optional, relTarget } from '../../ooxml/opc';
 import type { MediaPart } from '../image-types';
 import { pictureMediaPart } from '../image-types';
-
-// A worksheet's or a chart sheet's drawing: the anchors that place its charts and pictures over the grid, each read into
-// a SheetChart or a SheetImage. Shapes are not read. A chart's refs may name any sheet, so the drawings are placed once
-// every sheet has its id.
 
 export type Drawing = {
     sheet: Sheet;
@@ -72,7 +72,7 @@ export type DrawingContext = {
     charge(cells: number, text: number): void;
     // A picture part's media file; none past the import's picture caps or for bytes that don't read.
     mediaName(part: MediaPart): string | undefined;
-    lost(code: CountedWarningCode): void;
+    lost: Lost;
 };
 
 // Each drawing's charts and pictures onto its sheet, painted in file order, the charts as chart-0, chart-1, … across the

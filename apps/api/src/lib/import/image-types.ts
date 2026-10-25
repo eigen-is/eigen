@@ -1,6 +1,6 @@
 // The pictures an Office import brings in: which parts, by type, each read raw and never parsed, and each one media
-// file named per import, so an import beside an earlier one's pictures overwrites none. The docx, pptx and xlsx readers
-// share these rules and the caps on how many and how many bytes.
+// file named per import, so an import beside an earlier one's pictures overwrites none. Every Office reader shares these
+// rules, the caps on how many and how many bytes, and the words a picture left out leaves.
 
 import { IMAGE_EXTENSION_BY_MIME, MIME_ALIASES } from '../ooxml/drawingml';
 import type { OoxmlPackage, Relationship } from '../ooxml/opc';

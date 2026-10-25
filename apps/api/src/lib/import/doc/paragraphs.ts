@@ -1,5 +1,5 @@
 // The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
-// text boxes and notes; assemble.ts turns the items into blocks.
+// text boxes and notes; the assembly step turns the items into blocks.
 
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
@@ -20,7 +20,7 @@ import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements, xmlText } from '../../core/xml';
 import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
-import type { LossCounter } from '../../document/transform/protocol';
+import type { Lost } from '../../document/transform/protocol';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
@@ -75,7 +75,7 @@ export type Reader = {
     // What the doc can't hold, by kind: SmartArt, whose graphic the schema can't hold, a chart that came in as words, an
     // earlier section whose page differs from the doc's, a picture a band anchored, which it holds as a block figure,
     // and what a band drops (a picture behind the text or a VML one, a letterhead or a watermark, a note reference).
-    lost: LossCounter['lost'];
+    lost: Lost;
     publicOrigin: string | undefined;
 };
 
@@ -95,7 +95,7 @@ export type Scope = {
 export function createReader(
     pkg: DocxPackage,
     files: MediaFiles,
-    lost: LossCounter['lost'],
+    lost: Lost,
     publicOrigin: string | undefined,
 ): Reader {
     const defaults = wChild(wChild(wChild(pkg.styles, 'docDefaults'), 'rPrDefault'), 'rPr');
@@ -224,7 +224,7 @@ export function readNote(reader: Reader, type: 'footnote' | 'endnote', id: strin
     const key = `${note}@${reader.openNotes.length}`;
     const read = reader.notes.get(key);
     if (read) {
-        reader.pkg.chargePiece(read.weight);
+        reader.pkg.pieces.charge(read.weight);
         return read.content;
     }
     const found = reader.noteElements.get(note);
@@ -545,7 +545,7 @@ function textFaces(reader: Reader, p: XmlElement, paraRun: DocxRunProps) {
         const props = mergeRun(paraRun, reader.styles.run(direct.style), direct);
         return xmlElements(run)
             .filter((child) => hasXmlName(child, W_NS, 't'))
-            .flatMap((t) => byFace(xmlText(t), props.fonts, props, true, reader.pkg.chargePiece))
+            .flatMap((t) => byFace(xmlText(t), props.fonts, props, true, () => reader.pkg.pieces.charge(1)))
             .filter((face) => face.text.trim())
             .map((face) => ({ ...face, direct }));
     });

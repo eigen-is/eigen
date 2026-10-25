@@ -1341,7 +1341,7 @@ describe('document transform (docx round trip)', () => {
     async function roundTrip(
         fileName: string,
         json: JSONContent,
-    ): Promise<{ json: JSONContent; images: ImportedMedia[] }> {
+    ): Promise<{ json: JSONContent; media: ImportedMedia[] }> {
         const created = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -1475,17 +1475,17 @@ describe('document transform (docx round trip)', () => {
             .toJSON();
         const imported = await roundTrip('kept', json);
         expect(numberMedia(imported.json)).toEqual(numberMedia(json));
-        expect(imported.images.map((image) => image.contentType)).toEqual(['image/png']);
+        expect(imported.media.map((image) => image.contentType)).toEqual(['image/png']);
     }, 120_000);
 
     // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
     test('the all-features doc comes back with all its text, its links into Eigen root-relative', async () => {
         const original = buildAllFeaturesDocJson();
-        const { json, images } = await roundTrip('all-features', original);
+        const { json, media } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);
         // One media file per image part, an SVG as itself rather than its PNG fallback; the chart comes back as its SVG.
-        expect(images.map((image) => image.contentType)).toEqual([
+        expect(media.map((image) => image.contentType)).toEqual([
             'image/svg+xml',
             'image/png',
             'image/jpeg',
@@ -1680,12 +1680,12 @@ describe('document transform (docx import)', () => {
     }
 
     test('the reference parse + Yjs commit pipeline matches the pinned goldens', async () => {
-        const { json, images } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
+        const { json, media } = docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
         expect(sha256(unprefixed(JSON.stringify(json)))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
-        expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
+        expect(media.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
             { name: expect.stringMatching(GOLDEN_DOCX_IMAGE_NAME), contentType: 'image/png' },
         ]);
-        expect(images[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
+        expect(media[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
 
         const doc = new Y.Doc();
         seedEigendoc(doc, json);

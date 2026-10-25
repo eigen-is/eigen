@@ -14,7 +14,7 @@ import type {
     BytesPreviewJob,
     CollabPreviewJob,
     DocImportJob,
-    DocImportWorkerResult,
+    DocImportResult,
     DocumentTransformRequest,
     ExportTransformJob,
     ExtractTextJob,
@@ -211,7 +211,7 @@ export async function runImportToDocumentUpdate(
     job: DocImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
-): Promise<DocImportWorkerResult & { warnings: TransformWarning[] }> {
+): Promise<DocImportResult> {
     const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
     return { ...result, warnings };
 }

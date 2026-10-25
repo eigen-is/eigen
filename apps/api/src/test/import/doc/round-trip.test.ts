@@ -28,11 +28,11 @@ const ORIGIN = 'https://eigen.example';
 type Mark = NonNullable<JSONContent['marks']>[number];
 
 // Each imported media name is the source's whose bytes it holds.
-function sourceNames(images: ImportedMedia[]): Map<string, string> {
-    const media = buildAllFeaturesDocMedia();
+function sourceNames(media: ImportedMedia[]): Map<string, string> {
+    const sources = buildAllFeaturesDocMedia();
     return new Map(
-        images.flatMap((image) => {
-            const source = media.find((item) => Buffer.from(item.data).equals(image.data));
+        media.flatMap((image) => {
+            const source = sources.find((item) => Buffer.from(item.data).equals(image.data));
             return source ? [[image.name, source.name]] : [];
         }),
     );
@@ -150,8 +150,8 @@ describe('the all-features doc', () => {
             { json: buildAllFeaturesDocJson(), bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
             { title: 'All features', media: buildAllFeaturesDocMedia(), publicOrigin: ORIGIN },
         );
-        const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
-        const imported = withSourceNames(json, sourceNames(images));
+        const { json, media } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
+        const imported = withSourceNames(json, sourceNames(media));
         expect(stored(imported)).toEqual(stored(expected(source, imported)));
     });
 });
@@ -169,12 +169,12 @@ describe('a chart', () => {
             },
         };
         const source = { type: 'doc', content: [{ type: 'paragraph', content: [chart] }] };
-        const media = await withSvgFallbacks(await chartFigureMedia([source]));
+        const prepared = await withSvgFallbacks(await chartFigureMedia([source]));
         const docx = writeDocx(
             { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-            { title: 'Chart', media, publicOrigin: ORIGIN },
+            { title: 'Chart', media: prepared, publicOrigin: ORIGIN },
         );
-        const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
+        const { json, media } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
         expect(json.content?.[0]?.content).toEqual([
             {
                 type: 'figure',
@@ -190,7 +190,7 @@ describe('a chart', () => {
                 },
             },
         ]);
-        expect(images.map((image) => image.contentType)).toEqual(['image/svg+xml']);
+        expect(media.map((image) => image.contentType)).toEqual(['image/svg+xml']);
     });
 });
 

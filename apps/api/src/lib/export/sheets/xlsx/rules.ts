@@ -1,3 +1,6 @@
+// A sheet's conditional formats and data validations as the xlsx writer writes them, the reader's mirror: each rule in
+// the 2007 schema's form, which the reader reads as the rule it was. What Excel can't hold is dropped and counted.
+
 import type {
     ConditionalFormatRule,
     DataVerificationRule,
@@ -8,7 +11,7 @@ import type {
 import { parseCellKey } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { iscelldata, rangeToA1, toA1 } from '@workspace/sheet/engine';
-import type { CountedWarningCode } from '../../../document/transform/protocol';
+import type { Lost } from '../../../document/transform/protocol';
 import {
     CF_CELL_IS_CONDITION,
     DAY_MS,
@@ -28,11 +31,8 @@ import {
 import type { StyleRegistry } from './styles';
 import { argbOf } from './styles';
 
-// The reader's mirror (import/sheets/rules.ts): each rule in the 2007 schema's form, which the reader reads as the
-// rule it was. What Excel can't hold is dropped and counted.
-
 // A sheet's conditional formats and data validations: the slot CT_Worksheet keeps for them after mergeCells.
-export function rulesXml(sheet: Sheet, styles: StyleRegistry, lost: (code: CountedWarningCode) => void): string {
+export function rulesXml(sheet: Sheet, styles: StyleRegistry, lost: Lost): string {
     return (
         conditionalFormattingXml(sheet.conditionalFormatRules ?? [], styles, lost) +
         dataValidationsXml(sheet.dataVerification ?? {}, lost)
@@ -47,11 +47,7 @@ type CfRule = {
     body?: string;
 };
 
-function conditionalFormattingXml(
-    rules: ConditionalFormatRule[],
-    styles: StyleRegistry,
-    lost: (code: CountedWarningCode) => void,
-): string {
+function conditionalFormattingXml(rules: ConditionalFormatRule[], styles: StyleRegistry, lost: Lost): string {
     const written: { sqref: string; rule: CfRule }[] = [];
     for (const rule of rules) {
         const cfRule = cfRuleOf(rule);
@@ -148,10 +144,7 @@ function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
     return undefined;
 }
 
-function dataValidationsXml(
-    verification: NonNullable<Sheet['dataVerification']>,
-    lost: (code: CountedWarningCode) => void,
-): string {
+function dataValidationsXml(verification: NonNullable<Sheet['dataVerification']>, lost: Lost): string {
     // The editor stores a copy of a rule per cell, so equal rules are one validation over their cells' rectangles,
     // ordered by their first cell.
     const cells = Object.keys(verification)

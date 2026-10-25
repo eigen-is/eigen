@@ -258,7 +258,7 @@ describe("a part's children, a batch at a time", () => {
         // Five elements: two rows, two cells and a value.
         const part = encode(sheetXml({ data: '<row><c/></row><row r="2"><c><v>1</v></c></row>' }));
         const budget = readBudget();
-        budget.chargeElements(MAX_XLSX_ELEMENTS - 8);
+        budget.elements.charge(MAX_XLSX_ELEMENTS - 8);
         readInBatches(part, 'sheetData', 'row', budget);
         expect(thrown(() => readInBatches(part, 'sheetData', 'row', budget))).toMatchObject({
             status: 413,
@@ -274,7 +274,11 @@ describe("a part's children, a batch at a time", () => {
             `${'<?a?>'.repeat(WRAPPER_ELEMENTS - 2)}<worksheet xmlns="${SML}"><sheetData>${manyRows(COUNT)}</sheetData></worksheet>`,
         );
         const charged: number[] = [];
-        const budget = { ...readBudget(), chargeElements: (count: number) => void charged.push(count) };
+        const reads = readBudget();
+        const budget = {
+            ...reads,
+            elements: { ...reads.elements, charge: (count: number) => void charged.push(count) },
+        };
         const { children } = readInBatches(part, 'sheetData', 'row', budget);
         expect([...children]).toHaveLength(COUNT);
         const [, ...perBatch] = charged;

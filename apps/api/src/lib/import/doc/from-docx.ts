@@ -39,15 +39,15 @@ export function docxToPmJson(
     bands: Partial<Record<BandRoot, JSONContent>>;
     page: PageSetup;
     style: NormalStyle;
-    images: ImportedMedia[];
+    media: ImportedMedia[];
     warnings: TransformWarning[];
 } {
-    const { doc, bands, page, style, images, warnings } = readDocx(buffer, {
+    const { doc, bands, page, style, media, warnings } = readDocx(buffer, {
         publicOrigin,
         maxMediaBytes: MAX_DECOMPRESSED_BYTES,
     });
     const json = Object.fromEntries(Object.entries(bands).map(([root, band]) => [root, band.toJSON()]));
-    return { json: doc.toJSON(), bands: json, page, style, images, warnings };
+    return { json: doc.toJSON(), bands: json, page, style, media, warnings };
 }
 
 export function readDocx(
@@ -58,7 +58,7 @@ export function readDocx(
     bands: Partial<Record<BandRoot, Node>>;
     page: PageSetup;
     style: NormalStyle;
-    images: ImportedMedia[];
+    media: ImportedMedia[];
     warnings: TransformWarning[];
 } {
     try {
@@ -119,7 +119,7 @@ export function readDocx(
                 if (unshown.has(child.attrs['mediaName'])) losses.lost('images-unshown');
             });
         const media = files.media.filter((image) => named.has(image.name));
-        return { doc, bands, page: reader.page, style: reader.normal, images: media, warnings: losses.warnings() };
+        return { doc, bands, page: reader.page, style: reader.normal, media, warnings: losses.warnings() };
     } catch (error) {
         throw importError(error, 'docx');
     }

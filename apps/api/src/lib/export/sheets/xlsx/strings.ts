@@ -1,12 +1,14 @@
+// The xlsx writer's shared strings: each interned once as the sheets are written, then written after them, and a text
+// longer than Excel holds cut and counted.
+
 import type { InlineStringSegment } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import type { CountedWarningCode } from '../../../document/transform/protocol';
+import type { Lost } from '../../../document/transform/protocol';
 import { SML_NS } from '../../../ooxml/ooxml';
 import { encodeEscapes, MAX_TEXT_LENGTH } from '../../../ooxml/spreadsheetml';
 import { runPropertiesXml } from './styles';
 
-// The shared strings, each interned once as the sheets are written, then written after them. A plain string is keyed
-// by the text the sheet already holds; a rich one by its runs' XML.
+// A plain string is keyed by the text the sheet already holds; a rich one by its runs' XML.
 export type SharedStringTable = {
     text(value: string): number;
     // Undefined when no run has text.
@@ -16,7 +18,7 @@ export type SharedStringTable = {
 
 export const BATCH_CHARS = 1024 * 1024;
 
-export function sharedStringTable(lost: (code: CountedWarningCode) => void): SharedStringTable {
+export function sharedStringTable(lost: Lost): SharedStringTable {
     const plain = new Map<string, number>();
     const rich = new Map<string, number>();
     // By index: a plain string's text, a rich one's runs.
@@ -59,7 +61,7 @@ export function sharedStringTable(lost: (code: CountedWarningCode) => void): Sha
 }
 
 // Past Excel's limit a cell's text is cut.
-export function cutText(text: string, lost: (code: CountedWarningCode) => void): string {
+export function cutText(text: string, lost: Lost): string {
     if (text.length <= MAX_TEXT_LENGTH) return text;
     lost('texts-cut');
     return text.slice(0, MAX_TEXT_LENGTH);

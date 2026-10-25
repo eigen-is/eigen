@@ -1,5 +1,5 @@
 // pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
-// process; transform.ts writes the result as a Yjs update.
+// process; the import's transform step writes the result as a Yjs update.
 
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
