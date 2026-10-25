@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_FONT, EIGEN_FONT_NAMES, fontLineHeight, readFontSize } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, fontLineHeight, readFontSize } from '@workspace/lib/constants/fonts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     flattenNestedFootnotes,
@@ -406,42 +406,50 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         });
 
     // What the paragraph sets apart from the docx's Normal, or a heading, a title, a quote or a note from its style,
-    // whose look is the node's. Word draws a line in the tallest face in it, so it is stored as a multiple of Inter's
-    // from the taller of the runs' family, when they are all in one, and the paragraph mark's; the writer scales the
-    // line of a paragraph all in one taller family than its mark's by that family's line (familyLine), which this
-    // undoes, so a line Word draws as Normal's reads as none.
+    // whose look is the node's. Word draws an auto line in the tallest face on it, the paragraph mark's included, at its
+    // size, and the editor at the multiple of Inter's line times the largest size; the writer rescales a paragraph all
+    // in one family by the two (familyLine), which this undoes over the same faces, so a line Word draws as Normal's
+    // reads as none.
     const { normal } = reader;
     const normalBase = role.kind === 'paragraph' && scope.story !== 'note';
     const base = normalBase ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
     const autoLine = (para: ParaProps) => ((para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : undefined);
     const line = autoLine(props);
     const baseLine = autoLine(base);
-    const families = new Set(
-        texts.flatMap((piece) =>
-            piece.kind === 'node' && piece.node.text?.trim()
-                ? [piece.node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'] ?? normal.font]
-                : [],
-        ),
-    );
-    const [family] = families;
     const scaleOf = (font: string) => fontLineHeight(font) / fontLineHeight(DOCUMENT_FONT);
-    const markFont =
-        fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font;
-    const scale = Math.max(
-        families.size === 1 && EIGEN_FONT_NAMES.includes(family) ? scaleOf(family) : 0,
-        scaleOf(markFont),
-    );
+    const mark = {
+        family:
+            fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font,
+        size: paraRun.size ?? 20,
+    };
+    // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the mark's face;
+    // not the space a task's text starts with, which goes, as the writer writes its checkbox and the tab after it apart.
+    const start = task ? pieces.findIndex((piece) => !(piece.kind === 'node' && isWhitespace(piece.node))) : 0;
+    const faces = pieces.slice(Math.max(0, start)).flatMap((piece) => {
+        if (piece.kind !== 'node') return [];
+        if (piece.node.type === 'pageNumber' || piece.node.type === 'footnote') return [mark];
+        if (piece.node.type !== 'text' || !piece.node.text || piece.size === undefined) return [];
+        return [{ family: fontMark(piece.font, reader.fontTable, normal.font) ?? normal.font, size: piece.size }];
+    });
+    const unscaled = (written: number) => {
+        const family = faces[0]?.family;
+        if (family === undefined || faces.some((face) => face.family !== family)) return written;
+        const tallest = Math.max(...[mark, ...faces].map((face) => fontLineHeight(face.family) * face.size));
+        const css = fontLineHeight(mark.family) * Math.max(...[mark, ...faces].map((face) => face.size));
+        return (written * tallest) / css;
+    };
     // An at-least Normal reads as single, so the Normal's own line is the one to compare with.
     const baseSpacing = normalBase
         ? normal.lineSpacing
         : baseLine === undefined
           ? undefined
           : (baseLine * scaleOf(normal.font)) / 240;
+    const multiple = line === undefined ? undefined : (unscaled(line) * scaleOf(mark.family)) / 240;
     const lineSpacing =
-        line !== undefined &&
+        multiple !== undefined &&
         line !== baseLine &&
-        (baseSpacing === undefined || Math.round((line * scale) / 2.4) !== Math.round(baseSpacing * 100))
-            ? (line * scale) / 240
+        (baseSpacing === undefined || Math.round(multiple * 100) !== Math.round(baseSpacing * 100))
+            ? multiple
             : undefined;
     const before = props.before ?? 0;
     const after = props.after ?? 0;

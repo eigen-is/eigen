@@ -1193,6 +1193,35 @@ describe('a Word file, imported, written and imported again', () => {
         expect(stored(second.json)).toEqual(stored(first.json));
     });
 
+    // Word draws an auto line in the tallest face on it, the paragraph mark's included, at its size; the writer rescales a
+    // paragraph all in one family by that (familyLine), and the reader undoes it the same way, whitespace runs counted.
+    test.each<[string, string, string[]]>([
+        [
+            'smaller code under a larger Normal',
+            'Inter',
+            [run('code()', '<w:rFonts w:ascii="JetBrains Mono" w:hAnsi="JetBrains Mono"/><w:sz w:val="19"/>')],
+        ],
+        [
+            'larger runs under a smaller Normal in a taller family',
+            'Source Serif 4',
+            [run('Body', '<w:rFonts w:ascii="Inter" w:hAnsi="Inter"/><w:sz w:val="22"/>')],
+        ],
+        [
+            'spaces in another family',
+            'Inter',
+            [run('   ', '<w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4"/>')],
+        ],
+    ])("a paragraph's line spacing comes back as the first import read it: %s", async (_name, font, runs) => {
+        const defaults = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/><w:sz w:val="20"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`;
+        const { first, second } = await twice(
+            [240, 276, 360]
+                .map((line) => paragraph(runs.join(''), `<w:spacing w:line="${line}" w:lineRule="auto"/>`))
+                .join(''),
+            { styles: defaults },
+        );
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
     // A table without widths, and a row run past its grid: the editor sizes those columns, and so do Word's.
     test('a column without a width comes back without one, beside one with a width', async () => {
         const cell = (inner: string) => `<w:tc>${paragraph(run(inner))}</w:tc>`;
