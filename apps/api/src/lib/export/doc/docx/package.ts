@@ -1,5 +1,9 @@
+// The docx writer's document frame: the part's namespaces, its section, its settings and the notes' separators, and the
+// state one export carries as it walks the doc.
+
 import type { JSONContent } from '@tiptap/core';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import type { Lost } from '../../../document/transform/protocol';
 import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../../ooxml/ooxml';
 import type { PackagePart, PartRelationships } from '../../../ooxml/opc';
 import type { NOTE_SEPARATORS, StyleId } from '../../../ooxml/wordml';
@@ -9,9 +13,6 @@ import type { FontSlot } from './fonts';
 import type { List } from './numbering';
 import type { Block, NumberingRef } from './paragraphs';
 import type { Styles } from './styles';
-
-// The document part's frame, its namespaces, section, settings and notes' separators, and what one export accumulates
-// as it walks.
 
 export const DOCUMENT_NAMESPACES = [
     `xmlns:w="${W_NS}"`,
@@ -48,6 +49,8 @@ export type Package = {
     // The doc's Normal, which docDefaults and the Normal style write, and the styles built on it.
     normal: NormalStyle;
     styles: Styles;
+    // Counts what the docx leaves out or draws simpler, for the export's warnings.
+    lost: Lost;
 };
 
 // The walk's surroundings, so a nested block sizes and indents itself against its parent: column and indent in twips.

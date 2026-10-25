@@ -618,7 +618,7 @@ describe('both sides', () => {
         const json = buildAllFeaturesDocJson();
         const docx = writeDocx(
             { json, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-            { title: 'Report.eigendoc', media: buildAllFeaturesDocMedia() },
+            { title: 'Report.eigendoc', media: buildAllFeaturesDocMedia(), lost: () => {} },
         );
         const written = auditSource(docx);
         const cached = (node: JSONContent): JSONContent =>
@@ -879,6 +879,7 @@ describe('round trip', () => {
                             height: 1,
                         },
                     ],
+                    lost: () => {},
                 },
             ),
         );
@@ -1003,7 +1004,7 @@ describe('round trip', () => {
             width: 1,
             height: 1,
         }));
-        const b = docxToPmJson(Buffer.from(writeDocx(a, { title: 'Split', media })));
+        const b = docxToPmJson(Buffer.from(writeDocx(a, { title: 'Split', media, lost: () => {} })));
         const picture = { contentType: 'image/png', width: 1, height: 1 };
         const pictures = (images: { name: string }[]) => new Map(images.map(({ name }) => [name, picture]));
         const groups = classifyDocx({

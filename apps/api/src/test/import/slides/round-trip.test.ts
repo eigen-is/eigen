@@ -125,7 +125,7 @@ function roundTrip(elements = ELEMENTS, name = '') {
         writeElementInDoc(doc, { ...element, frameId: 'f1' }, keys[i], SLIDES_STYLE_DEFAULTS, `el-${i}`);
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
     const media = [{ name: 'pic.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG.slice()) }];
-    const bytes = writePptx(scene, { title: 'Round trip.eigenslides', media });
+    const bytes = writePptx(scene, { title: 'Round trip.eigenslides', media, lost: () => {} });
     return { sent: scene.elements, deck: readPptx(bytes, { deck: scene.meta, maxMediaBytes: 1024 * 1024 }) };
 }
 

@@ -1328,7 +1328,7 @@ describe('document transform (eigendoc)', () => {
                 page: readEigendocPage(persisted),
                 style: readEigendocStyle(persisted),
             },
-            { title: path.name, media },
+            { title: path.name, media, lost: () => {} },
         );
         persisted.destroy();
         expect(docx.equals(Buffer.from(direct))).toBe(true);

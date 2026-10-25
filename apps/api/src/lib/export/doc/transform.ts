@@ -1,3 +1,6 @@
+// A doc's export inside the transform process: the HTML download, the document WeasyPrint prints, and the docx. Each
+// returns its bytes and the warnings that count what it left out.
+
 import type { JSONContent } from '@tiptap/core';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
 import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
@@ -23,7 +26,12 @@ import { BODY, FOOTNOTE_LOOK } from '../../document/looks';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
 import type { EigendocExportFormat, ExportMediaLoader, TransformWarning } from '../../document/transform/protocol';
-import { htmlExportMode, toTransferableBuffer, toTransferableText } from '../../document/transform/protocol';
+import {
+    htmlExportMode,
+    lossCounter,
+    toTransferableBuffer,
+    toTransferableText,
+} from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_SVG_EQUATIONS, mathmlToSvg, SVG_LIMIT } from '../math-svg';
 import { withSvgFallbacks } from '../office-image';
@@ -63,12 +71,12 @@ export async function renderEigendocExport(
         const { pastedFigureMedia } = await import('./docx/drawings');
         const drawn = await pastedFigureMedia([json, ...Object.values(bands)]);
         const docxMedia = await withSvgFallbacks([...media, ...drawn]);
-        return {
-            data: toTransferableBuffer(
-                writeDocx({ json, bands, page, style }, { title, media: docxMedia, publicOrigin }),
-            ),
-            warnings: [],
-        };
+        const losses = lossCounter();
+        const docx = writeDocx(
+            { json, bands, page, style },
+            { title, media: docxMedia, publicOrigin, lost: losses.lost },
+        );
+        return { data: toTransferableBuffer(docx), warnings: losses.warnings() };
     }
     const dataUriMap = toDataUriMap(media);
     const pdf = htmlExportMode(format) === 'pdf';

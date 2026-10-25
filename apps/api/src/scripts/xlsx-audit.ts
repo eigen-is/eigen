@@ -27,7 +27,7 @@ import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@work
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { parseA1Range, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
 import { peakRss } from '../lib/core/peak-rss';
-import type { TransformWarning } from '../lib/document/transform/protocol';
+import { lossCounter } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/office-image';
 import { sheetNames } from '../lib/export/sheets/xlsx/package';
@@ -55,6 +55,7 @@ import {
     classify,
     DEFAULT_MAX_RSS_MB,
     listCorpus,
+    lossCounts,
     MB,
     message,
     officeMedia,
@@ -1190,14 +1191,14 @@ async function xlsxRoundtripChild(
     await roundtripChild(options, async (step) => {
         const data = new Uint8Array(await Bun.file(file).arrayBuffer());
         const a = await step('import', () => readXlsx(data, limits));
-        const exported: TransformWarning[] = [];
+        const losses = lossCounter();
         let prepared: OfficeMedia[] = [];
         const bytes = await step('export', async () => {
             prepared = await officeMedia(a.media);
-            return write(a.sheets, { title: '', media: prepared, warnings: exported });
+            return write(a.sheets, { title: '', media: prepared, lost: losses.lost });
         });
         const b = await step('reimport', () => readXlsx(bytes, limits));
-        const warnings = new Map(exported.map((warning) => [warning.code, 'count' in warning ? warning.count : 1]));
+        const warnings = lossCounts(losses.warnings());
         const groups = await step('compare', async () => {
             const media = { a: await mediaFacts(prepared), b: await mediaFacts(b.media) };
             return classifyDifferences({ warnings, a: a.sheets, b: b.sheets, media });

@@ -315,6 +315,25 @@ describe('doc export — fonts', () => {
     });
 });
 
+describe('doc export — losses', () => {
+    // The writer counts what it leaves out, and the transform returns the counts; the HTML draws the chart's placeholder.
+    test('a docx export returns the chart it left out as a warning, and the HTML export counts nothing', async () => {
+        const doc = seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [{ type: 'chart', attrs: { ...sampleChartParts('column'), specData: '{' } }],
+                },
+            ],
+        });
+        const docx = await renderEigendocExport(doc, 'docx', 'Report.eigendoc', async () => [], undefined);
+        expect(docx.warnings).toEqual([{ code: 'charts-dropped', count: 1 }]);
+        const html = await renderEigendocExport(doc, 'html', 'Report.eigendoc', async () => [], undefined);
+        expect(html.warnings).toEqual([]);
+    });
+});
+
 describe('doc export — tasks', () => {
     // A line-through reaches every descendant and none can undo it, so what each strike rule hits is what prints struck.
     test.each(['html', 'pdf-html'] as const)(

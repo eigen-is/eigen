@@ -1,8 +1,16 @@
+// A spreadsheet's export inside the transform process: the HTML download, the document WeasyPrint prints, and the
+// xlsx. Each returns its bytes and the warnings that count what it left out.
+
 import type * as Y from 'yjs';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { readSheetsFromDoc } from '../../document/sheets';
 import type { ExportMediaLoader, SheetExportFormat, TransformWarning } from '../../document/transform/protocol';
-import { htmlExportMode, toTransferableBuffer, toTransferableText } from '../../document/transform/protocol';
+import {
+    htmlExportMode,
+    lossCounter,
+    toTransferableBuffer,
+    toTransferableText,
+} from '../../document/transform/protocol';
 import { withSvgFallbacks } from '../office-image';
 
 // Materialized doc → export bytes. Runs inside the transform process (child.ts owns
@@ -37,7 +45,9 @@ export async function renderEigensheetsExport(
         case 'xlsx': {
             const { writeXlsx } = await import('./xlsx/to-xlsx');
             const media = await withSvgFallbacks(await loadMedia(mediaNamesIn(sheets.map((sheet) => sheet.images))));
-            return { data: toTransferableBuffer(writeXlsx(sheets, { title, media, warnings })), warnings };
+            const losses = lossCounter();
+            const xlsx = writeXlsx(sheets, { title, media, lost: losses.lost });
+            return { data: toTransferableBuffer(xlsx), warnings: [...warnings, ...losses.warnings()] };
         }
     }
 }

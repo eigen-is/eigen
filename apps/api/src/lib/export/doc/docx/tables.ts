@@ -1,3 +1,5 @@
+// The docx writer's tables: a doc's table as a Word table, its grid laid out as the editor lays it out.
+
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX, readCellBackground } from '@workspace/lib/docs/eigendoc';
 import { HEADER_CELL_LOOK, proseBorder, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
@@ -14,8 +16,6 @@ import type { Block } from './paragraphs';
 import { blocksOf, blocksXml, bordersXml, clampInt, paragraphXml, textProps } from './paragraphs';
 import type { StyleDef } from './styles';
 
-// Tables: the grid as the editor lays it out.
-
 const CELL_TYPES = new Set(['tableCell', 'tableHeader']);
 
 export const TABLE_BORDER_SIDES = [...BORDER_SIDES, 'insideH', 'insideV'] as const;
@@ -23,6 +23,7 @@ export const TABLE_BORDER_SIDES = [...BORDER_SIDES, 'insideH', 'insideV'] as con
 type GridCell = { node: JSONContent; content: JSONContent[]; column: number; colspan: number; rowspan: number };
 
 // Spans hold their columns; stray content gets a cell, one past the last column joins the cell there: no text is lost.
+// A table wider than Word's 63 columns loses its last columns' layout, so it is counted once as simplified.
 export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     const rows = rowNodes.map((row) =>
         (row.type === 'tableRow' ? (row.content ?? []) : [row]).map((cell) =>
@@ -33,6 +34,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     const carry: number[] = [];
     const holders: GridCell[] = [];
     const widths: (number | undefined)[] = [];
+    let cut = false;
     const grid = rows.map((cells, rowIndex) => {
         let column = 0;
         const placed: GridCell[] = [];
@@ -41,9 +43,11 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const last = holders[MAX_TABLE_COLUMNS - 1];
             if (column >= MAX_TABLE_COLUMNS && last) {
                 for (const block of node.content ?? []) last.content.push(block);
+                cut = true;
                 continue;
             }
             const colspan = clampInt(node.attrs?.['colspan'], 1, MAX_TABLE_COLUMNS - column, 1);
+            cut ||= clampInt(node.attrs?.['colspan'], 1, Number.MAX_SAFE_INTEGER, 1) > colspan;
             const rowspan = clampInt(node.attrs?.['rowspan'], 1, rows.length - rowIndex, 1);
             const colwidth = node.attrs?.['colwidth'];
             const cell = { node, content: [...(node.content ?? [])], column, colspan, rowspan };
@@ -64,6 +68,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
         return placed;
     });
     if (widths.length === 0) return [];
+    if (cut) context.pkg.lost('tables-simplified');
 
     const { dxa, fixed } = gridWidths(widths, columnPx);
     const spanWidth = (column: number, colspan: number) =>

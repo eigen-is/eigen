@@ -13,8 +13,8 @@ import type { EigendocBands } from '../../../../lib/document/doc';
 import { docSchema } from '../../../../lib/document/doc-schema';
 import { cssPt, QUOTE_LOOK, twips } from '../../../../lib/document/looks';
 import { proseValue, proseValueIfSet } from '../../../../lib/document/prose-css';
-import type { ExportMedia } from '../../../../lib/document/transform/protocol';
-import { toTransferableText } from '../../../../lib/document/transform/protocol';
+import type { ExportMedia, TransformWarning } from '../../../../lib/document/transform/protocol';
+import { lossCounter, toTransferableText } from '../../../../lib/document/transform/protocol';
 import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/fonts';
 import type { DrawingTheme } from '../../../../lib/ooxml/drawingml';
@@ -54,7 +54,20 @@ function docx(
     bands: EigendocBands = {},
     normal: NormalStyle = DEFAULT_NORMAL_STYLE,
 ): Uint8Array {
-    return writeDocx({ json, bands, page, style: normal }, { title: 'Report.eigendoc', media, publicOrigin });
+    return writeDocx(
+        { json, bands, page, style: normal },
+        { title: 'Report.eigendoc', media, publicOrigin, lost: () => {} },
+    );
+}
+
+// What the writer counted as left out or drawn simpler, the export's warnings.
+function lossesOf(json: JSONContent, media = buildAllFeaturesDocMedia()): TransformWarning[] {
+    const losses = lossCounter();
+    writeDocx(
+        { json, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+        { title: 'Report.eigendoc', media, lost: losses.lost },
+    );
+    return losses.warnings();
 }
 
 async function unzip(
@@ -1697,6 +1710,12 @@ describe('docx writer — tables', () => {
         expect(xmlChildren(third ?? tbl, W, 'tc').map(texts)).toEqual(['']);
     });
 
+    test("a table wider than Word's 63 columns counts as simplified, once, and one that fits counts nothing", () => {
+        const row = (columns: number) => tr(...Array.from({ length: columns }, (_, i) => td({}, p(text(`${i}`)))));
+        expect(lossesOf(doc(table(row(65), row(64))))).toEqual([{ code: 'tables-simplified', count: 1 }]);
+        expect(lossesOf(doc(table(tr(td({ colspan: 62 }, p(text('a'))), td({}, p(text('b')))))))).toEqual([]);
+    });
+
     test('a known colwidth past the column is scaled beside an unknown one, in whole twips', async () => {
         const tbl = only(await tablesIn(doc(table(tr(td({ colwidth: [1e20] }, p()), td({ colwidth: null }, p()))))));
         expect(gridOf(tbl)).toEqual([9630, 375]);
@@ -2482,6 +2501,8 @@ describe('docx writer — figures', () => {
         );
         expect(await blocksOf(charts)).toEqual(await blocksOf(figures));
         expect((await unzip(charts)).names().filter((name) => name.startsWith('word/charts/'))).toEqual([]);
+        expect(lossesOf(charts)).toEqual([{ code: 'charts-dropped', count: 3 }]);
+        expect(lossesOf(figures)).toEqual([{ code: 'images-dropped', count: 3 }]);
     });
 
     test('an SVG is its PNG blip with the SVG beside it, each a part and an image relationship', async () => {
@@ -2577,10 +2598,17 @@ describe('docx writer — figures', () => {
         const zip = await unzip(json, undefined, prepared);
         expect(zip.names().filter((path) => path.startsWith('word/media/'))).toEqual([]);
         expect((await relationshipsOf(zip)).map(([, type]) => type)).not.toContain(IMAGE_REL);
+        expect(lossesOf(json, prepared)).toEqual([{ code: 'images-dropped', count: 2 }]);
         const plain = await unzip(json, undefined, media({}));
         expect(plain.names().filter((path) => path.startsWith('word/media/'))).toEqual(
             'mediaName' in attrs && attrs.mediaName === 'x' ? ['word/media/image1.png'] : [],
         );
+    });
+
+    test('a figure that names no picture writes its caption and loses nothing', async () => {
+        const json = doc(p(figure({ caption: 'Only words' })));
+        expect(await blocksOf(json)).toHaveLength(1);
+        expect(lossesOf(json)).toEqual([]);
     });
 });
 
