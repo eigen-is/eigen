@@ -1,7 +1,7 @@
-// Reads a DrawingML chart part, the same in a docx, an xlsx and a pptx, into a ChartSpec and the look the chart writer
-// maps onto it. Each format's importer calls it for the charts its drawings name, and the writer shares its tables of
-// OOXML names. A chart the spec can't draw as the file does is no spec, with its title for the caller to show instead:
-// never a different chart.
+// Reads a DrawingML chart part, the same c:chartSpace in a docx, an xlsx and a pptx, as a ChartSpec and the look the
+// chart writer maps onto the part. Each format's importer calls it for the charts its drawings name. A chart the spec
+// can't draw as the file draws it is never read as a different chart: it is no spec, with its title and kind for the
+// caller to show instead. The writer shares this module's tables of OOXML names.
 
 import { gradientStops } from '@workspace/lib/background';
 import {
@@ -50,22 +50,60 @@ import { A_NS, alternativeFor, C_NS, C16_NS, isOn, isOnElement, ooxmlElements } 
 import type { OoxmlPackage, Relationship } from './opc';
 import { optional, relTarget } from './opc';
 
-// docx and pptx draw from the caches, which hold every value; an xlsx's refs name its own sheets, by the importer's ids,
-// and a ref they can't follow (a literal, a defined name, several areas, an area, a sheet not in the workbook, a pie's
-// range past its slices) brings the caches' numbers inline instead, which show but follow no cell.
-export type ChartSource = 'cache' | { ranges: (sheetName: string) => string | undefined };
+// Where a chart's data comes from. A docx or pptx chart is drawn from its caches, which hold every value. An xlsx
+// chart's refs name the workbook's own sheets, which the importer gives ids. A ref the reader can't follow, such as a
+// literal, a defined name, several areas, an area, a sheet not in the workbook, or a pie's range past its slices,
+// brings in the caches' numbers inline instead. Those show, but follow no cell.
+type ChartSource = 'cache' | { ranges: (sheetName: string) => string | undefined };
 
-// name is PowerPoint's for the chart's type, as Insert Chart lists it (Clustered Column, Pie of Pie, Combo), or none.
+// `name` is PowerPoint's name for the chart's type, as Insert Chart lists it, such as Clustered Column, Pie of Pie or
+// Combo. It is empty for a kind PowerPoint has no name for.
 export type ChartRead = { spec: ChartSpec } | { unsupported: { title: string; name: string } };
 
-// The package a chart part sits in, whose application draws what the part doesn't state.
+// The package a chart part sits in, whose application draws whatever the part doesn't state.
 export type ChartHost = 'docx' | 'xlsx' | 'pptx';
 
 export const CHART_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml';
 
-// The c:chartSpace an r:id names: only through a chart relationship, under the format's charts folder (ppt/charts/,
-// word/charts/, xl/charts/) and of the chart content type, never its own relationships. A missing or damaged part is
-// none, and costs only its chart.
+export const CHART_NOT_IMPORTED = 'Chart not imported';
+
+// ── Tables the writer shares ────────────────────────────────────────────────────────────────────────────────────
+
+const TYPES = new Map<string, ChartType>([
+    ['barChart', 'column'],
+    ['bar3DChart', 'column'],
+    ['lineChart', 'line'],
+    ['line3DChart', 'line'],
+    ['pieChart', 'pie'],
+    ['pie3DChart', 'pie'],
+]);
+
+// The groups a line chart is drawn from, whose series' line has a width of its own.
+const LINE_GROUPS = new Set([...TYPES].flatMap(([local, type]) => (type === 'line' ? [local] : [])));
+
+export const STACKING_BY_GROUPING: ReadonlyMap<string, ChartStacking> = new Map<string, ChartStacking>([
+    ['clustered', 'none'],
+    ['standard', 'none'],
+    ['stacked', 'stacked'],
+    ['percentStacked', 'percent'],
+]);
+
+// The format the writer gives a percent-stacked value axis that has none of its own. It reads back as none.
+export const PERCENT_AXIS_FORMAT = '0%';
+
+export const LEGEND_BY_POSITION: ReadonlyMap<string, LegendPosition> = new Map<string, LegendPosition>([
+    ['t', 'top'],
+    ['b', 'bottom'],
+    ['l', 'left'],
+    ['r', 'right'],
+    ['tr', 'right'],
+]);
+
+// ── Finding and weighing a chart ────────────────────────────────────────────────────────────────────────────────
+
+// The c:chartSpace an r:id names. It is read only through a chart relationship, only under the format's charts folder
+// (such as word/charts/) and only when it has the chart content type, so a part's own relationships never lead to
+// it. A missing or damaged part is undefined, so it costs only its chart.
 export function chartPart(
     pkg: Pick<OoxmlPackage, 'part' | 'contentTypeOf'>,
     rels: ReadonlyMap<string, Relationship>,
@@ -77,9 +115,10 @@ export function chartPart(
     return optional(() => pkg.part(path));
 }
 
-// A part's elements and the points readChart builds from them: what a format charges before it reads a chart. A cache
-// sizes its points by its c:ptCount, else by its last c:pt, whatever it holds, and the reader builds each series, the
-// categories and the slices up to the longest before the spec's cap on all points together refuses them.
+// What a format charges before it reads a chart: the part's elements, plus the points readChart builds from them. A
+// cache counts its points by its c:ptCount, else by its last c:pt, whatever it holds. The reader builds each series,
+// the categories and the slices, each as long as the longest, before the spec's cap on all points together refuses
+// them.
 export function chartCost(root: XmlElement): number {
     let nodes = 0;
     let series = 0;
@@ -102,45 +141,9 @@ export function chartCost(root: XmlElement): number {
     return nodes + (Math.min(series, MAX_CHART_SERIES) + 2) * longest;
 }
 
-export const CHART_NOT_IMPORTED = 'Chart not imported';
+// ── The spec ────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// What a format shows for a chart readChart can't draw: which kind it was, and its title.
-export function droppedChart({ title, name }: { title: string; name: string }): string[] {
-    const label = name ? `${name} chart not imported` : CHART_NOT_IMPORTED;
-    return title ? [label, title] : [label];
-}
-
-const TYPES = new Map<string, ChartType>([
-    ['barChart', 'column'],
-    ['bar3DChart', 'column'],
-    ['lineChart', 'line'],
-    ['line3DChart', 'line'],
-    ['pieChart', 'pie'],
-    ['pie3DChart', 'pie'],
-]);
-
-// The groups a line chart is drawn from, whose series' line has a width of its own.
-const LINE_GROUPS = new Set([...TYPES].flatMap(([local, type]) => (type === 'line' ? [local] : [])));
-
-export const STACKING_BY_GROUPING: ReadonlyMap<string, ChartStacking> = new Map<string, ChartStacking>([
-    ['clustered', 'none'],
-    ['standard', 'none'],
-    ['stacked', 'stacked'],
-    ['percentStacked', 'percent'],
-]);
-
-// The format the writer gives a percent-stacked value axis that has none of its own; it reads back as none.
-export const PERCENT_AXIS_FORMAT = '0%';
-
-export const LEGEND_BY_POSITION: ReadonlyMap<string, LegendPosition> = new Map<string, LegendPosition>([
-    ['t', 'top'],
-    ['b', 'bottom'],
-    ['l', 'left'],
-    ['r', 'right'],
-    ['tr', 'right'],
-]);
-
-// Requires names prefixes, not namespaces: the chart vocabulary this reader reads; c14's style and the like fall back.
+// The prefixes this reader understands in a Requires. A Choice that needs more, such as c14's style, falls back.
 const alternative = alternativeFor(new Set(['c', 'a', 'r']));
 
 const UNSUPPORTED = new Error('unsupported chart');
@@ -149,6 +152,7 @@ function unsupported(): never {
     throw UNSUPPORTED;
 }
 
+// Reads the chart as a spec, or as unsupported. Range data that can't be followed is read again from the caches.
 export function readChart(root: XmlElement, { theme, data }: { theme: DrawingTheme; data: ChartSource }): ChartRead {
     const chart = hasXmlName(root, C_NS, 'chartSpace') ? child(root, 'chart') : undefined;
     const plotArea = child(chart, 'plotArea');
@@ -172,104 +176,6 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
     return { unsupported: { title, name: chartName(groups) } };
 }
 
-// Where a part states no look of its own, Office draws chart style 2's automatic one. LibreOffice's oox chart
-// ObjectFormatter reads it so (spChartSpaceFill, spAxisLines, spMajorGridLines, PptGraphicHelper): the background bg1,
-// but none on a slide, and every line tx1 at a 75% tint, 9525 EMU wide.
-const BG1 = automatic('<a:solidFill><a:schemeClr val="bg1"/></a:solidFill>');
-const AUTOMATIC_BACKGROUND: Record<ChartHost, XmlElement | undefined> = {
-    docx: BG1,
-    xlsx: BG1,
-    pptx: automatic('<a:noFill/>'),
-};
-const AUTOMATIC_LINE = automatic(
-    '<a:solidFill><a:schemeClr val="tx1"><a:tint val="75000"/></a:schemeClr></a:solidFill>',
-);
-const AUTOMATIC_LINE_WIDTH = 9525;
-// A line series' own width where it states none, 2.25 pt, as Office draws it.
-const AUTOMATIC_SERIES_WIDTH = 28575;
-
-function automatic(fill: string): XmlElement | undefined {
-    return parseXml(`<a:spPr xmlns:a="${A_NS}">${fill}</a:spPr>`) ?? undefined;
-}
-
-// The look writeChart maps onto the part, read back: the background from c:chartSpace's c:spPr, the label colour from
-// its c:txPr, else the theme's tx1 as Office draws a label without one, and the stroke's colour and width from the
-// category axis's line, as the writer strokes every axis and gridline with it. An axis Office draws no line along
-// still shows its gridlines, so the stroke is theirs then. A line chart's series width is its first series' line's, unset when it equals the stroke's. A
-// gradient reads as its middle colour and a pattern as its foreground, as the writer writes one colour. emuPerPx is the
-// EMU one px of the chart's own box is in the file. A pie has no stroke to read, so it reads flat.
-export function readChartPartLook(
-    root: XmlElement,
-    { theme, emuPerPx, host }: { theme: DrawingTheme; emuPerPx: number; host: ChartHost },
-): Pick<ChartLook, 'fill' | 'color' | 'strokeColor' | 'strokeWidth' | 'seriesStrokeWidth'> {
-    const colors = chartColors(root, theme);
-    const drawn = (shape: XmlElement | undefined): string | undefined => {
-        if (!shape) return undefined;
-        if (xmlChild(shape, A_NS, 'noFill')) return TRANSPARENT_COLOR;
-        const gradient = xmlChild(shape, A_NS, 'gradFill');
-        if (gradient) return gradientMiddle(gradient, colors);
-        const pattern = xmlChild(shape, A_NS, 'pattFill');
-        return drawingColor(pattern ? xmlChild(pattern, A_NS, 'fgClr') : xmlChild(shape, A_NS, 'solidFill'), colors);
-    };
-    let text = child(root, 'txPr');
-    for (const local of ['p', 'pPr', 'defRPr']) text = text && xmlChild(text, A_NS, local);
-    const tx1 = colors.map.get('tx1');
-    const background = drawn(child(root, 'spPr')) ?? drawn(AUTOMATIC_BACKGROUND[host]);
-    const plotArea = child(child(root, 'chart'), 'plotArea');
-    const lineOf = (owner: XmlElement | undefined) => {
-        const shape = child(owner, 'spPr');
-        return shape && xmlChild(shape, A_NS, 'ln');
-    };
-    const widthOf = (line: XmlElement | undefined, automatic: number) => {
-        const width = Number(line && xmlAttr(line, '', 'w'));
-        return Math.round(((Number.isFinite(width) && width >= 0 ? width : automatic) / emuPerPx) * 100) / 100;
-    };
-    const lines = elements(plotArea).find((group) => group.ns === C_NS && LINE_GROUPS.has(group.local));
-    const look = {
-        fill: background ? solidFill(background) : FLAT_CHART_LOOK.fill,
-        color: drawn(text) ?? (tx1 && colors.scheme.get(tx1)) ?? FLAT_CHART_LOOK.color,
-    };
-    // A series drawn at the stroke's width is the unset one, so the Stroke row still moves it.
-    const seriesWidth = lines && widthOf(lineOf(child(lines, 'ser')), AUTOMATIC_SERIES_WIDTH);
-    const withSeries = (strokeWidth: number) => ({
-        ...look,
-        strokeWidth,
-        ...(seriesWidth !== undefined && seriesWidth !== strokeWidth && { seriesStrokeWidth: seriesWidth }),
-    });
-    const axis = child(plotArea, 'catAx') ?? child(plotArea, 'dateAx');
-    if (!axis) return { ...withSeries(FLAT_CHART_LOOK.strokeWidth), strokeColor: FLAT_CHART_LOOK.strokeColor };
-    const gridlines = child(child(plotArea, 'valAx'), 'majorGridlines');
-    const axisLine = lineOf(axis);
-    const line = gridlines && drawn(axisLine) === TRANSPARENT_COLOR ? lineOf(gridlines) : axisLine;
-    return {
-        ...withSeries(widthOf(line, AUTOMATIC_LINE_WIDTH)),
-        strokeColor: drawn(line) ?? drawn(AUTOMATIC_LINE) ?? FLAT_CHART_LOOK.strokeColor,
-    };
-}
-
-// The colour halfway along a gradient's stops that show one, by position, as the writer writes a gradient background.
-function gradientMiddle(gradient: XmlElement, colors: DrawingTheme): string | undefined {
-    const list = xmlChild(gradient, A_NS, 'gsLst');
-    const stops = (list ? xmlChildren(list, A_NS, 'gs') : [])
-        .map((stop) => ({ color: drawingColor(stop, colors), at: Number(xmlAttr(stop, '', 'pos')) || 0 }))
-        .filter((stop) => stop.color !== undefined)
-        .sort((a, b) => a.at - b.at);
-    const from = stops[0]?.color;
-    const to = stops.at(-1)?.color;
-    if (!from || !to) return undefined;
-    const { color, opacity } = gradientStops(from, to, 3)[1];
-    const alpha = Math.round(opacity * 255)
-        .toString(16)
-        .padStart(2, '0');
-    return opacity < 1 ? `${color}${alpha}` : color;
-}
-
-// The host's colours through the part's own c:clrMapOvr, which replaces the host's map.
-export function chartColors(root: XmlElement, theme: DrawingTheme): DrawingTheme {
-    const override = child(root, 'clrMapOvr');
-    return override ? { scheme: theme.scheme, map: readColorMap(override) } : theme;
-}
-
 function chartSpec(
     chart: XmlElement | undefined,
     plotArea: XmlElement | undefined,
@@ -281,7 +187,8 @@ function chartSpec(
     const kind = TYPES.get(group.local) ?? unsupported();
     const type = kind === 'column' && val(child(group, 'barDir')) === 'bar' ? 'bar' : kind;
     const grouping = val(child(group, 'grouping')) ?? (type === 'line' ? 'standard' : 'clustered');
-    // A pie has no grouping; the spec draws no stacked line.
+    // A pie has no grouping, so it reads as clustered. The spec draws no stacked line, so a line chart must be
+    // standard.
     const stacking = type === 'line' && grouping !== 'standard' ? undefined : STACKING_BY_GROUPING.get(grouping);
     if (!stacking) unsupported();
     const valueAxes = children(plotArea, 'valAx');
@@ -292,8 +199,8 @@ function chartSpec(
     const orientation = (axis: XmlElement | undefined) => val(child(child(axis, 'scaling'), 'orientation'));
     if (valueAxes.length > 1 || categoryAxes.length > 1 || child(scaling, 'logBase')) unsupported();
     if (orientation(valueAxis) === 'maxMin') unsupported();
-    // Excel's minMax category axis runs from the origin, so up a bar chart's side, where Google's runs down it. The
-    // spec turns the whole axis rather than the data, since Excel's turns each category's series with it.
+    // Excel's minMax category axis runs from the origin, which is up a bar chart's side, while Google's runs down it.
+    // The spec turns the whole axis rather than the data, since Excel's turns each category's series with it.
     const reversed = (type === 'bar') !== (orientation(categoryAxis) === 'maxMin');
     // A deleted axis, or one whose tick labels are none, shows no labels.
     const visible = (axis: XmlElement | undefined) =>
@@ -313,7 +220,8 @@ function chartSpec(
     };
     const fillColor = (shape: XmlElement | undefined) =>
         drawingColor(shape && xmlChild(shape, A_NS, 'solidFill'), colors);
-    // Eigen's writer writes an automatic colour as the palette's at its place, so that colour reads back automatic.
+    // Eigen's writer writes an automatic colour as the palette's colour at its place, so that colour reads back as
+    // automatic.
     const automatic = (color: string, index: number) => (color === chartColor(index) ? null : color);
     const markers = type === 'line' && isOnElement(child(group, 'marker')) !== false;
     const seriesColor = (ser: XmlElement) => {
@@ -343,7 +251,7 @@ function chartSpec(
     const presentation: Omit<ChartSpec, 'title' | 'points' | 'data'> = {
         chart: {
             type,
-            // CT_DispBlanksAs: present without a val is zero.
+            // A CT_DispBlanksAs element without a val means zero.
             blanks: CHART_BLANKS.find((option) => option === (blanks ? (val(blanks) ?? 'zero') : 'gap')) ?? 'gap',
             fontFamily,
         },
@@ -359,7 +267,7 @@ function chartSpec(
                 ...y,
                 title: { text: axisTitle(valueAxis) },
                 visible: visible(valueAxis),
-                // A pie has no value axis, so it keeps its type's.
+                // A pie has no value axis, so it keeps its type's gridlines.
                 gridlines: {
                     visible: valueAxis ? child(valueAxis, 'majorGridlines') !== undefined : y.gridlines.visible,
                 },
@@ -379,8 +287,8 @@ function chartSpec(
         plots: { ...defaults.plots, [type]: { stacking } },
         series: Object.fromEntries(series.map((ser, i) => [ids[i], style(ser, i)])),
     };
-    // A pie's slices are its first series' points: each c:dPt's colour, else the palette's or the series' as
-    // c:varyColors says, an automatic one left out.
+    // A pie's slices are its first series' points. Each takes its c:dPt's colour, else the palette's or the series'
+    // colour as c:varyColors says. A slice in its automatic colour is left out.
     const slices = (total: number): ChartSpec['points'] => {
         if (type !== 'pie' || !first) return {};
         if (total > MAX_CHART_POINTS) unsupported();
@@ -425,18 +333,19 @@ function chartSpec(
         };
     }
 
-    // A literal has no cells to name; an empty c:cat or c:val names none.
+    // A literal has no cells to name, so it is unsupported. An empty c:cat or c:val names no cells.
     const range = (source: XmlElement | undefined): CellRangeRef | null => {
         const ref = child(source, 'numRef') ?? child(source, 'strRef') ?? child(source, 'multiLvlStrRef');
         if (ref) return cellRange(xmlTrimmedText(child(ref, 'f')), data.ranges);
         return child(source, 'numLit') || child(source, 'strLit') ? unsupported() : null;
     };
-    // The sheet draws a row or a column of values or categories, never an area.
+    // A sheet chart draws a row or a column of values or categories, never an area.
     const line = (ref: CellRangeRef | null) =>
         ref && ref.row[0] !== ref.row[1] && ref.column[0] !== ref.column[1] ? unsupported() : ref;
     const firstValues = line(range(child(first, 'val')));
     let categoryRange = range(categories);
-    // A multi-level ref spans a column per level, or a row when the values run across, the innermost last.
+    // A multi-level ref spans a column per level, or a row per level when the values run across. Its innermost level is
+    // the last, which is the one read.
     if (categoryRange && child(categories, 'multiLvlStrRef')) {
         const { row, column } = categoryRange;
         categoryRange =
@@ -466,8 +375,9 @@ function chartSpec(
     };
 }
 
-// Office's c16:uniqueId without its GUID's braces where it is a series id no series before took, else x- and the
-// c:idx, else that and the series' place. A forged file whose last fallback is taken reads as unsupported.
+// A series' id: Office's c16:uniqueId without its GUID's braces, when it is a valid series id no earlier series took.
+// Else x- and the c:idx, else that and the series' place. A crafted file that takes even the last one reads as
+// unsupported.
 function seriesIds(series: XmlElement[]): string[] {
     const ids: string[] = [];
     for (const [i, ser] of series.entries()) {
@@ -483,13 +393,118 @@ function seriesIds(series: XmlElement[]): string[] {
     return ids;
 }
 
+// Excel's chart title. A chart without a title element shows its only series' name, unless the automatic title was
+// deleted. A title element without text shows that name too, or a placeholder when there are more series. A series
+// without a name gives no title.
+function chartTitle(chart: XmlElement | undefined, groups: XmlElement[]): string {
+    const title = child(chart, 'title');
+    const text = cachedText(child(title, 'tx'));
+    if (text !== undefined) return chartLabel(text);
+    if (!title && isOnElement(child(chart, 'autoTitleDeleted')) !== false) return '';
+    const series = groups.flatMap((group) => children(group, 'ser'));
+    if (series.length === 1) return chartLabel(cachedText(child(series[0], 'tx')) ?? '');
+    return title ? 'Chart Title' : '';
+}
+
+// Excel shows a placeholder for an axis title element without text.
+function axisTitle(axis: XmlElement | undefined): string {
+    const title = child(axis, 'title');
+    if (!title) return '';
+    return chartLabel(cachedText(child(title, 'tx')) ?? 'Axis Title');
+}
+
+function legendPosition(legend: XmlElement | undefined): LegendPosition {
+    if (!legend) return 'none';
+    return LEGEND_BY_POSITION.get(val(child(legend, 'legendPos')) ?? 'r') ?? 'right';
+}
+
+// Excel names a series without a name by its index.
+function seriesName(ser: XmlElement | undefined): string {
+    const text = cachedText(child(ser, 'tx'));
+    return chartLabel(text ?? `Series${(count(val(child(ser, 'idx'))) ?? 0) + 1}`);
+}
+
+// A c:tx's text: rich text, a literal, or a ref's cached cells, joined as Excel joins a name over several cells. A
+// label is one line, so a line break in a cell becomes a space, as one in rich text does.
+function cachedText(tx: XmlElement | undefined): string | undefined {
+    if (!tx) return undefined;
+    const rich = child(tx, 'rich');
+    if (rich) return drawingLines(rich).join(' ').trim();
+    const literal = child(tx, 'v');
+    const points = children(child(child(tx, 'strRef'), 'strCache'), 'pt');
+    const text = literal ? xmlText(literal) : points.map((point) => xmlTrimmedText(child(point, 'v'))).join(' ');
+    return text.replace(/\r?\n|\r/g, ' ');
+}
+
+// A c:cat's or c:val's container of points: a ref's cache, or a literal.
+function cacheOf(source: XmlElement | undefined): XmlElement | undefined {
+    const ref = child(source, 'numRef') ?? child(source, 'strRef') ?? child(source, 'multiLvlStrRef');
+    return ref
+        ? (child(ref, 'numCache') ?? child(ref, 'strCache') ?? child(ref, 'multiLvlStrCache'))
+        : (child(source, 'numLit') ?? child(source, 'strLit'));
+}
+
+// A cache's points by index, with a missing point undefined. A multi-level cache gives its innermost level. The count
+// comes from the file, so it is checked against the cap before anything is built.
+function cachedPoints(cache: XmlElement | undefined): (string | undefined)[] {
+    const points = children(child(cache, 'lvl') ?? cache, 'pt');
+    let total = count(val(child(cache, 'ptCount')));
+    if (total === undefined) {
+        total = 0;
+        for (const point of points) total = Math.max(total, (count(xmlAttr(point, '', 'idx')) ?? -1) + 1);
+    }
+    if (total > MAX_CHART_POINTS) unsupported();
+    const values = new Array<string | undefined>(total).fill(undefined);
+    for (const point of points) {
+        const index = count(xmlAttr(point, '', 'idx'));
+        if (index !== undefined && index < total) values[index] = xmlTrimmedText(child(point, 'v'));
+    }
+    return values;
+}
+
+// A chart's c:f as a sheet's A1 cell or area. A ref Excel shows as #REF! is null, and a shape a range can't hold is
+// unsupported. The ref is split at its last '!' rather than by the engine's sheet prefix, because Excel leaves a sheet
+// name of any script's letters unquoted.
+function cellRange(formula: string, sheetId: (sheetName: string) => string | undefined): CellRangeRef | null {
+    if (formula.includes('#REF!')) return null;
+    const bang = formula.lastIndexOf('!');
+    if (bang < 1 || formula.startsWith('(')) unsupported();
+    const range = parseA1Range(formula.slice(bang + 1));
+    if (!range) unsupported();
+    const rows: [number, number] = [Math.min(range.start.row, range.end.row), Math.max(range.start.row, range.end.row)];
+    const columns: [number, number] = [
+        Math.min(range.start.col, range.end.col),
+        Math.max(range.start.col, range.end.col),
+    ];
+    if (rows[1] >= REFERENCE_ROW_COUNT || columns[1] >= REFERENCE_COLUMN_COUNT) unsupported();
+    const id = sheetId(unquoteSheetName(formula.slice(0, bang))) ?? unsupported();
+    return { sheetId: id, row: rows, column: columns };
+}
+
+// The Latin typeface of the chart-wide text properties, as a bundled font. A theme font (+mn-lt) or a font Eigen
+// doesn't bundle reads as the default.
+function chartFont(root: XmlElement): string {
+    let latin = child(root, 'txPr');
+    for (const local of ['p', 'pPr', 'defRPr', 'latin']) latin = latin && xmlChild(latin, A_NS, local);
+    const typeface = latin && xmlAttr(latin, '', 'typeface');
+    return (typeface && bundledFont(typeface)) ?? DEFAULT_CHART_FONT;
+}
+
+// ── A chart the spec cannot draw ────────────────────────────────────────────────────────────────────────────────
+
+// What a format shows in place of a chart readChart can't draw: which kind it was, and its title.
+export function droppedChart({ title, name }: { title: string; name: string }): string[] {
+    const label = name ? `${name} chart not imported` : CHART_NOT_IMPORTED;
+    return title ? [label, title] : [label];
+}
+
 const GROUPINGS = new Map([
     ['stacked', 'Stacked'],
     ['percentStacked', '100% Stacked'],
 ]);
 
-// PowerPoint's name for a plot's groups: a group's kind with its depth, direction, grouping, markers, lines or
-// wireframe; a volume bar group with a stock group is one stock chart, any other two groups a combo.
+// PowerPoint's name for a plot's groups. One group is named by its kind with its depth, direction, grouping, markers,
+// lines or wireframe. A volume bar group with a stock group is one stock chart, and any other two groups are a combo.
 function chartName(groups: XmlElement[]): string {
     const kinds = groups.map((group) => group.local).join(' ');
     const stock = (group: XmlElement) =>
@@ -530,7 +545,7 @@ function chartName(groups: XmlElement[]): string {
         case 'ofPieChart':
             return option('ofPieType') === 'bar' ? 'Bar of Pie' : 'Pie of Pie';
         case 'scatterChart': {
-            // Excel writes lineMarker for every scatter it makes: its series say which it is.
+            // Excel writes lineMarker for every scatter chart it makes, so the series tell which kind it is.
             const style = option('scatterStyle') ?? 'marker';
             const shape = child(first, 'spPr');
             const line = shape && xmlChild(shape, A_NS, 'ln');
@@ -555,101 +570,107 @@ function chartName(groups: XmlElement[]): string {
     }
 }
 
-// Excel's: no title of its own shows the only series' name unless the auto title was deleted; a title element with no
-// text shows that name too, or a placeholder when there are more series. A series without a name gives none.
-function chartTitle(chart: XmlElement | undefined, groups: XmlElement[]): string {
-    const title = child(chart, 'title');
-    const text = cachedText(child(title, 'tx'));
-    if (text !== undefined) return chartLabel(text);
-    if (!title && isOnElement(child(chart, 'autoTitleDeleted')) !== false) return '';
-    const series = groups.flatMap((group) => children(group, 'ser'));
-    if (series.length === 1) return chartLabel(cachedText(child(series[0], 'tx')) ?? '');
-    return title ? 'Chart Title' : '';
+// ── The look ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// Where a part states no look of its own, Office draws chart style 2's automatic look. LibreOffice's oox chart
+// ObjectFormatter reads it the same way (spChartSpaceFill, spAxisLines, spMajorGridLines, PptGraphicHelper). The
+// background is bg1, but none on a slide, and every line is tx1 at a 75% tint, 9525 EMU wide.
+const BG1 = automatic('<a:solidFill><a:schemeClr val="bg1"/></a:solidFill>');
+const AUTOMATIC_BACKGROUND: Record<ChartHost, XmlElement | undefined> = {
+    docx: BG1,
+    xlsx: BG1,
+    pptx: automatic('<a:noFill/>'),
+};
+const AUTOMATIC_LINE = automatic(
+    '<a:solidFill><a:schemeClr val="tx1"><a:tint val="75000"/></a:schemeClr></a:solidFill>',
+);
+const AUTOMATIC_LINE_WIDTH = 9525;
+// A line series' own width where it states none, 2.25 pt, as Office draws it.
+const AUTOMATIC_SERIES_WIDTH = 28575;
+
+function automatic(fill: string): XmlElement | undefined {
+    return parseXml(`<a:spPr xmlns:a="${A_NS}">${fill}</a:spPr>`) ?? undefined;
 }
 
-// Excel shows a placeholder for an axis title element with no text.
-function axisTitle(axis: XmlElement | undefined): string {
-    const title = child(axis, 'title');
-    if (!title) return '';
-    return chartLabel(cachedText(child(title, 'tx')) ?? 'Axis Title');
+// The look writeChart maps onto the part, read back. The background comes from c:chartSpace's c:spPr. The label
+// colour comes from its c:txPr, else from the theme's tx1, as Office draws a label without one. The stroke's colour
+// and width come from the category axis's line, as the writer strokes every axis and gridline with it. An axis Office
+// draws no line along still shows its gridlines, so then the stroke is theirs. A line chart's series width is its
+// first series' line's. A gradient reads as its middle colour and a pattern as its foreground, since the writer writes
+// one colour. `emuPerPx` is how many EMU one px of the chart's own box is in the file. A pie has no stroke to read, so
+// it reads flat.
+export function readChartPartLook(
+    root: XmlElement,
+    { theme, emuPerPx, host }: { theme: DrawingTheme; emuPerPx: number; host: ChartHost },
+): Pick<ChartLook, 'fill' | 'color' | 'strokeColor' | 'strokeWidth' | 'seriesStrokeWidth'> {
+    const colors = chartColors(root, theme);
+    const drawn = (shape: XmlElement | undefined): string | undefined => {
+        if (!shape) return undefined;
+        if (xmlChild(shape, A_NS, 'noFill')) return TRANSPARENT_COLOR;
+        const gradient = xmlChild(shape, A_NS, 'gradFill');
+        if (gradient) return gradientMiddle(gradient, colors);
+        const pattern = xmlChild(shape, A_NS, 'pattFill');
+        return drawingColor(pattern ? xmlChild(pattern, A_NS, 'fgClr') : xmlChild(shape, A_NS, 'solidFill'), colors);
+    };
+    const lineOf = (owner: XmlElement | undefined) => {
+        const shape = child(owner, 'spPr');
+        return shape && xmlChild(shape, A_NS, 'ln');
+    };
+    const widthOf = (line: XmlElement | undefined, automatic: number) => {
+        const width = Number(line && xmlAttr(line, '', 'w'));
+        return Math.round(((Number.isFinite(width) && width >= 0 ? width : automatic) / emuPerPx) * 100) / 100;
+    };
+    let text = child(root, 'txPr');
+    for (const local of ['p', 'pPr', 'defRPr']) text = text && xmlChild(text, A_NS, local);
+    const tx1 = colors.map.get('tx1');
+    const background = drawn(child(root, 'spPr')) ?? drawn(AUTOMATIC_BACKGROUND[host]);
+    const plotArea = child(child(root, 'chart'), 'plotArea');
+    const axis = child(plotArea, 'catAx') ?? child(plotArea, 'dateAx');
+    const gridlines = child(child(plotArea, 'valAx'), 'majorGridlines');
+    const axisLine = lineOf(axis);
+    const line = gridlines && drawn(axisLine) === TRANSPARENT_COLOR ? lineOf(gridlines) : axisLine;
+    const strokeWidth = axis ? widthOf(line, AUTOMATIC_LINE_WIDTH) : FLAT_CHART_LOOK.strokeWidth;
+    const lineGroup = elements(plotArea).find((group) => group.ns === C_NS && LINE_GROUPS.has(group.local));
+    const seriesWidth = lineGroup && widthOf(lineOf(child(lineGroup, 'ser')), AUTOMATIC_SERIES_WIDTH);
+    return {
+        fill: background ? solidFill(background) : FLAT_CHART_LOOK.fill,
+        color: drawn(text) ?? (tx1 && colors.scheme.get(tx1)) ?? FLAT_CHART_LOOK.color,
+        strokeWidth,
+        // A series drawn at the stroke's width is left unset, so the Stroke row still moves it.
+        ...(seriesWidth !== undefined && seriesWidth !== strokeWidth && { seriesStrokeWidth: seriesWidth }),
+        strokeColor: axis
+            ? (drawn(line) ?? drawn(AUTOMATIC_LINE) ?? FLAT_CHART_LOOK.strokeColor)
+            : FLAT_CHART_LOOK.strokeColor,
+    };
 }
 
-function legendPosition(legend: XmlElement | undefined): LegendPosition {
-    if (!legend) return 'none';
-    return LEGEND_BY_POSITION.get(val(child(legend, 'legendPos')) ?? 'r') ?? 'right';
+// The colour halfway along a gradient's stops that show a colour, by position, as the writer writes a gradient
+// background.
+function gradientMiddle(gradient: XmlElement, colors: DrawingTheme): string | undefined {
+    const list = xmlChild(gradient, A_NS, 'gsLst');
+    const stops = (list ? xmlChildren(list, A_NS, 'gs') : [])
+        .map((stop) => ({ color: drawingColor(stop, colors), at: Number(xmlAttr(stop, '', 'pos')) || 0 }))
+        .filter((stop) => stop.color !== undefined)
+        .sort((a, b) => a.at - b.at);
+    const from = stops[0]?.color;
+    const to = stops.at(-1)?.color;
+    if (!from || !to) return undefined;
+    const { color, opacity } = gradientStops(from, to, 3)[1];
+    const alpha = Math.round(opacity * 255)
+        .toString(16)
+        .padStart(2, '0');
+    return opacity < 1 ? `${color}${alpha}` : color;
 }
 
-// Excel names a series without a name by its index.
-function seriesName(ser: XmlElement | undefined): string {
-    const text = cachedText(child(ser, 'tx'));
-    return chartLabel(text ?? `Series${(count(val(child(ser, 'idx'))) ?? 0) + 1}`);
+// ── Elements ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// The host's colours through the part's own c:clrMapOvr, which replaces the host's colour map.
+function chartColors(root: XmlElement, theme: DrawingTheme): DrawingTheme {
+    const override = child(root, 'clrMapOvr');
+    return override ? { scheme: theme.scheme, map: readColorMap(override) } : theme;
 }
 
-// A c:tx's text: rich text, a literal, or a ref's cached cells, joined as Excel joins a name over several cells. A label
-// is one line, so a cell's line break is a space, as a rich text's is.
-function cachedText(tx: XmlElement | undefined): string | undefined {
-    if (!tx) return undefined;
-    const rich = child(tx, 'rich');
-    if (rich) return drawingLines(rich).join(' ').trim();
-    const literal = child(tx, 'v');
-    const points = children(child(child(tx, 'strRef'), 'strCache'), 'pt');
-    const text = literal ? xmlText(literal) : points.map((point) => xmlTrimmedText(child(point, 'v'))).join(' ');
-    return text.replace(/\r?\n|\r/g, ' ');
-}
-
-// A c:cat's or c:val's point container: a ref's cache or a literal.
-function cacheOf(source: XmlElement | undefined): XmlElement | undefined {
-    const ref = child(source, 'numRef') ?? child(source, 'strRef') ?? child(source, 'multiLvlStrRef');
-    return ref
-        ? (child(ref, 'numCache') ?? child(ref, 'strCache') ?? child(ref, 'multiLvlStrCache'))
-        : (child(source, 'numLit') ?? child(source, 'strLit'));
-}
-
-// A cache's points by index, a missing point undefined, a multi-level cache's innermost level. The count comes from
-// the file, so it is bounded before anything is built.
-function cachedPoints(cache: XmlElement | undefined): (string | undefined)[] {
-    const points = children(child(cache, 'lvl') ?? cache, 'pt');
-    let total = count(val(child(cache, 'ptCount')));
-    if (total === undefined) {
-        total = 0;
-        for (const point of points) total = Math.max(total, (count(xmlAttr(point, '', 'idx')) ?? -1) + 1);
-    }
-    if (total > MAX_CHART_POINTS) unsupported();
-    const values = new Array<string | undefined>(total).fill(undefined);
-    for (const point of points) {
-        const index = count(xmlAttr(point, '', 'idx'));
-        if (index !== undefined && index < total) values[index] = xmlTrimmedText(child(point, 'v'));
-    }
-    return values;
-}
-
-// A chart's c:f: a sheet's A1 cell or area. null for a ref Excel shows as #REF!; no spec for a shape it can't hold.
-// Split at the last '!', not by the engine's sheet prefix: Excel leaves a name of any script's letters unquoted.
-function cellRange(formula: string, sheetId: (sheetName: string) => string | undefined): CellRangeRef | null {
-    if (formula.includes('#REF!')) return null;
-    const bang = formula.lastIndexOf('!');
-    if (bang < 1 || formula.startsWith('(')) unsupported();
-    const range = parseA1Range(formula.slice(bang + 1));
-    if (!range) unsupported();
-    const rows: [number, number] = [Math.min(range.start.row, range.end.row), Math.max(range.start.row, range.end.row)];
-    const columns: [number, number] = [
-        Math.min(range.start.col, range.end.col),
-        Math.max(range.start.col, range.end.col),
-    ];
-    if (rows[1] >= REFERENCE_ROW_COUNT || columns[1] >= REFERENCE_COLUMN_COUNT) unsupported();
-    const id = sheetId(unquoteSheetName(formula.slice(0, bang))) ?? unsupported();
-    return { sheetId: id, row: rows, column: columns };
-}
-
-// The chart-wide text properties' Latin typeface, as a bundled font; a theme font (+mn-lt) or an unbundled one is the default.
-function chartFont(root: XmlElement): string {
-    let latin = child(root, 'txPr');
-    for (const local of ['p', 'pPr', 'defRPr', 'latin']) latin = latin && xmlChild(latin, A_NS, local);
-    const typeface = latin && xmlAttr(latin, '', 'typeface');
-    return (typeface && bundledFont(typeface)) ?? DEFAULT_CHART_FONT;
-}
-
-// An element's children, an mc:AlternateContent read as the choice this reader understands.
+// An element's children, with each mc:AlternateContent read as the branch this reader understands.
 function elements(element: XmlElement | undefined): XmlElement[] {
     return element ? ooxmlElements(element, alternative) : [];
 }
