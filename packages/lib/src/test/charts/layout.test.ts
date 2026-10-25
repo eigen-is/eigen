@@ -933,6 +933,31 @@ describe('pie', () => {
         expect(rest?.anchor).toBe('end');
     });
 
+    // Two small neighbors near 6 o'clock put their middle-anchored labels on one line, closer than a label's width.
+    test('a label that would touch one already placed hides, the largest slices placed first', () => {
+        const out = layout(
+            'pie',
+            { title: { text: '' } },
+            {
+                data: {
+                    categories: ['Delta', 'Alpha region', 'Beta region', 'Gamma region', 'Eps'],
+                    series: [series('S', [44, 6, 6, 6, 38])],
+                },
+                width: 400,
+                height: 300,
+            },
+        );
+        const texts = out.labels.map((label) => label.text);
+        expect(texts).toContain('Delta 44%');
+        expect(texts).toContain('Eps 38%');
+        expect(texts).toContain('Alpha region 6%');
+        expect(texts).not.toContain('Beta region 6%');
+        const bounds = out.labels.map(labelBounds);
+        for (let i = 0; i < bounds.length; i++) {
+            for (let j = i + 1; j < bounds.length; j++) expect(overlaps(bounds[i], bounds[j])).toBe(false);
+        }
+    });
+
     test('one slice of 100% sweeps the full circle', () => {
         const out = layout('pie', {}, { data: { categories: ['All', 'None'], series: [series('S', [5, 0])] } });
         const pie = slices(out);

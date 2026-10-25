@@ -737,7 +737,7 @@ function layoutPie(
             const anchor: Anchor = cos > 0.2 ? 'start' : cos < -0.2 ? 'end' : 'middle';
             const width = measure(ctx, text);
             const left = anchor === 'start' ? 0 : anchor === 'middle' ? -width / 2 : -width;
-            return { text, cos, sin, anchor, left, right: left + width };
+            return { text, share: slice.share, cos, sin, anchor, left, right: left + width };
         })
         .filter((entry) => entry.text !== '');
 
@@ -770,10 +770,17 @@ function layoutPie(
         );
     });
     if (labeled) {
-        for (const entry of placed) {
+        // Largest slices first, as Highcharts ranks its data labels, and a label that would touch one already
+        // placed hides, so the biggest slices keep theirs.
+        const boxes: Frame[] = [];
+        for (const entry of [...placed].sort((a, b) => b.share - a.share)) {
             const x = cx + (radius + gap) * entry.cos;
             const y = cy + (radius + gap) * entry.sin - lh / 2 + (lh / 2) * entry.sin;
-            ctx.labels.push(label(ctx, entry.text, x, y, entry.anchor));
+            const sliceLabel = label(ctx, entry.text, x, y, entry.anchor);
+            const box = labelBox(ctx, sliceLabel);
+            if (boxes.some((other) => touches(ctx, other, box))) continue;
+            boxes.push(box);
+            ctx.labels.push(sliceLabel);
         }
     }
     return shapes;
