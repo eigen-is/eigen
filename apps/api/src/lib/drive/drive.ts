@@ -212,22 +212,6 @@ export class Drive {
         this.mounts.delete(mountId);
     }
 
-    // Runs fn after every earlier call with the same key has finished.
-    private async runInOrder<T>(key: string, fn: () => Promise<T>): Promise<T> {
-        const run = (this.chains.get(key) ?? Promise.resolve()).then(fn);
-        // The chain keeps a copy that never fails, so one refused change doesn't stop the next one.
-        // The caller still gets the real error from run.
-        const tail = run.then(
-            () => {},
-            () => {},
-        );
-        this.chains.set(key, tail);
-        tail.then(() => {
-            if (this.chains.get(key) === tail) this.chains.delete(key);
-        });
-        return run;
-    }
-
     public getMounts(): Mount[] {
         return [...this.mounts.values()];
     }
@@ -1234,5 +1218,23 @@ export class Drive {
     // Tells the open tabs of this owner that a path changed.
     public emit(type: SSEventDrive['type'], path: DrivePath, oldParentId?: string): void {
         this.home.broadcast(buildDriveEvent(type, path, oldParentId));
+    }
+
+    // ---- One change at a time ----
+
+    // Runs fn after every earlier call with the same key has finished.
+    private async runInOrder<T>(key: string, fn: () => Promise<T>): Promise<T> {
+        const run = (this.chains.get(key) ?? Promise.resolve()).then(fn);
+        // The chain keeps a copy that never fails, so one refused change doesn't stop the next one.
+        // The caller still gets the real error from run.
+        const tail = run.then(
+            () => {},
+            () => {},
+        );
+        this.chains.set(key, tail);
+        tail.then(() => {
+            if (this.chains.get(key) === tail) this.chains.delete(key);
+        });
+        return run;
     }
 }
