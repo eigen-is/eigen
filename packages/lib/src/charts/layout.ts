@@ -51,8 +51,8 @@ const TEXT_SCALE = 0.035;
 const MIN_FONT_SIZE = 9;
 const MAX_FONT_SIZE = 64;
 const TITLE_SCALE = 1.3;
-// Observable Plot's band padding, inner and outer.
-const BAND_PADDING = 0.1;
+// Share of its category's band a category's bars fill, side by side or stacked: Google's bar.groupWidth, the golden ratio.
+const BAR_GROUP_WIDTH = 0.618;
 // Ems between value ticks: vertical axes stack one-line labels, horizontal ones sit numbers side by side.
 const VERTICAL_TICK_SPACING = 4;
 const HORIZONTAL_TICK_SPACING = 6;
@@ -564,19 +564,16 @@ type Band = {
     center: (i: number) => number;
 };
 
-// Bands from `from` to `to`, the first at `from` unless reversed. The end bands' centers keep at least `edge` in
-// from the ends, the range inset where thin bands would put them closer.
+// One band per category tiling `from` to `to`, as Office and Google lay out a category axis, the first at `from`
+// unless reversed; `width` is the bars' share, centered. The end bands' centers keep at least `edge` in from the
+// ends, the range inset where thin bands would put them closer.
 function bandScale(count: number, from: number, to: number, reversed = false, edge = 0): Band {
-    const span = Math.max(1, count - BAND_PADDING + 2 * BAND_PADDING);
-    // The first band's center, in steps from the range's start.
-    const first = (1 + BAND_PADDING) / 2;
     const length = to - from;
-    const inset =
-        span > 2 * first && (first * length) / span < edge ? (edge * span - first * length) / (span - 2 * first) : 0;
-    const step = (length - 2 * inset) / span;
-    const width = step * (1 - BAND_PADDING);
-    const start = (i: number) => from + inset + step * BAND_PADDING + (reversed ? count - 1 - i : i) * step;
-    return { step, width, reversed, start, center: (i) => start(i) + width / 2 };
+    const inset = count > 1 && length / count / 2 < edge ? (edge * count - length / 2) / (count - 1) : 0;
+    const step = (length - 2 * inset) / count;
+    const width = step * BAR_GROUP_WIDTH;
+    const center = (i: number) => from + inset + ((reversed ? count - 1 - i : i) + 0.5) * step;
+    return { step, width, reversed, start: (i) => center(i) - width / 2, center };
 }
 
 // Upright and centered under their bands while they fit; else turned -45° and ellipsized to the room

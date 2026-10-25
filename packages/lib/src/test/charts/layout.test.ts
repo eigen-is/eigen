@@ -337,6 +337,35 @@ describe('column and bar', () => {
         expect(axis.width).toBe(0);
     });
 
+    test("a category's bars fill 61.8% of its band, Google's group width, centered in bands that tile the plot", () => {
+        const three = {
+            categories: ['A', 'B', 'C', 'D'],
+            series: [series('S1', [3, 5, 2, 4]), series('S2', [1, 2, 3, 4]), series('S3', [4, 3, 2, 1])],
+        };
+        for (const type of ['column', 'bar'] as const) {
+            for (const stacking of ['none', 'stacked'] as const) {
+                for (const chartData of [data, three]) {
+                    const out = layout(type, { plots: plots(stacking) }, { data: chartData });
+                    const across = (bar: VectorRectangleElement) =>
+                        type === 'column' ? [bar.x, bar.x + bar.width] : [bar.y, bar.y + bar.height];
+                    const group = (c: number) => {
+                        const spans = rects(out, 'bar')
+                            .filter((bar) => bar.id.endsWith(`:${c}`))
+                            .map(across);
+                        return [Math.min(...spans.map(([from]) => from)), Math.max(...spans.map(([, to]) => to))];
+                    };
+                    const [first, second] = [group(0), group(1)];
+                    const step = Math.abs(second[0] - first[0]);
+                    expect(first[1] - first[0]).toBeCloseTo(0.618 * step, 6);
+                    // The plot's edge, where a gridline ends, is half a band from the first group's center.
+                    const [gridline] = lines(out, 'gridline');
+                    const edge = type === 'column' ? gridline.x : gridline.y;
+                    expect(Math.abs((first[0] + first[1]) / 2 - edge)).toBeCloseTo(step / 2, 6);
+                }
+            }
+        }
+    });
+
     test('bars run top to bottom in category order', () => {
         const bars = rects(layout('bar', {}, { data }), 'bar').filter((bar) => bar.id.startsWith('c1:bar:0:'));
         expect(bars.map((bar) => bar.y)).toEqual([...bars.map((bar) => bar.y)].sort((x, y) => x - y));
