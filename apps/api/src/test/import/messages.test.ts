@@ -67,9 +67,7 @@ describe('importSummary', () => {
                 { code: 'charts-dropped', count: 1 },
                 { code: 'objects-dropped', count: 3 },
             ]),
-        ).toBe(
-            "1 chart, 3 embedded objects and 1 picture were not imported; 2 pictures were kept, but can't be shown.",
-        );
+        ).toBe("1 chart, 3 embedded objects and 1 picture were not imported; 2 pictures can't be shown.");
     });
 
     test('every simplification has its noun', () => {
@@ -94,9 +92,17 @@ describe('importSummary', () => {
             ]),
         ).toBe(
             "2 SmartArt graphics, 1 section's page setup, 2 even-page headers or footers and 1 header or footer item " +
-                'were not imported; 1 header or footer picture was simplified; 3 parts of the document were kept as ' +
-                'plain text.',
+                'were not imported; 1 header or footer picture was simplified; 3 parts of the document lost their layout.',
         );
+    });
+
+    test('a clause says its verb of one as of one', () => {
+        expect(
+            importSummary([
+                { code: 'images-unshown', count: 1 },
+                { code: 'blocks-flattened', count: 1 },
+            ]),
+        ).toBe("1 part of the document lost its layout; 1 picture can't be shown.");
     });
 
     test("an xlsx's dropped conditional formats and validations have their nouns", () => {

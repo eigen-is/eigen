@@ -62,27 +62,35 @@ export const SAVE_AS_PPTX =
 type Noun = readonly [one: string, many: string];
 
 // What happened to a kind, one clause each, in this order.
-const OUTCOMES = ['not imported', 'simplified', 'kept as plain text', "kept, but can't be shown"] as const;
+const OUTCOMES = ['dropped', 'simplified', 'flattened', 'unshown'] as const;
 type Outcome = (typeof OUTCOMES)[number];
+
+// Each outcome said of one and of more.
+const PREDICATES: Record<Outcome, readonly [one: string, many: string]> = {
+    dropped: ['was not imported', 'were not imported'],
+    simplified: ['was simplified', 'were simplified'],
+    flattened: ['lost its layout', 'lost their layout'],
+    unshown: ["can't be shown", "can't be shown"],
+};
 
 // What an import left out or drew simpler, per kind, for the toast after Import…, whichever format's reader counted it.
 // Each kind lists in this order within its clause. A pptx's warnings count source shapes, so a master's background is
 // one fill however many slides show it.
 const LOSSES: { code: CountedWarningCode; noun: Noun; what: Outcome }[] = [
-    { code: 'tables-dropped', noun: ['table', 'tables'], what: 'not imported' },
-    { code: 'charts-dropped', noun: ['chart', 'charts'], what: 'not imported' },
-    { code: 'diagrams-dropped', noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'not imported' },
-    { code: 'objects-dropped', noun: ['embedded object', 'embedded objects'], what: 'not imported' },
-    { code: 'images-dropped', noun: ['picture', 'pictures'], what: 'not imported' },
-    { code: 'conditional-formats-dropped', noun: ['conditional format', 'conditional formats'], what: 'not imported' },
-    { code: 'validations-dropped', noun: ['data validation rule', 'data validation rules'], what: 'not imported' },
-    { code: 'section-pages-dropped', noun: ["section's page setup", "sections' page setups"], what: 'not imported' },
+    { code: 'tables-dropped', noun: ['table', 'tables'], what: 'dropped' },
+    { code: 'charts-dropped', noun: ['chart', 'charts'], what: 'dropped' },
+    { code: 'diagrams-dropped', noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'dropped' },
+    { code: 'objects-dropped', noun: ['embedded object', 'embedded objects'], what: 'dropped' },
+    { code: 'images-dropped', noun: ['picture', 'pictures'], what: 'dropped' },
+    { code: 'conditional-formats-dropped', noun: ['conditional format', 'conditional formats'], what: 'dropped' },
+    { code: 'validations-dropped', noun: ['data validation rule', 'data validation rules'], what: 'dropped' },
+    { code: 'section-pages-dropped', noun: ["section's page setup", "sections' page setups"], what: 'dropped' },
     {
         code: 'even-bands-dropped',
         noun: ['even-page header or footer', 'even-page headers or footers'],
-        what: 'not imported',
+        what: 'dropped',
     },
-    { code: 'band-content-dropped', noun: ['header or footer item', 'header or footer items'], what: 'not imported' },
+    { code: 'band-content-dropped', noun: ['header or footer item', 'header or footer items'], what: 'dropped' },
     { code: 'shapes-simplified', noun: ['shape', 'shapes'], what: 'simplified' },
     { code: 'fills-simplified', noun: ['fill', 'fills'], what: 'simplified' },
     { code: 'text-simplified', noun: ['text box', 'text boxes'], what: 'simplified' },
@@ -92,8 +100,8 @@ const LOSSES: { code: CountedWarningCode; noun: Noun; what: Outcome }[] = [
         noun: ['header or footer picture', 'header or footer pictures'],
         what: 'simplified',
     },
-    { code: 'blocks-flattened', noun: ['part of the document', 'parts of the document'], what: 'kept as plain text' },
-    { code: 'images-unshown', noun: ['picture', 'pictures'], what: "kept, but can't be shown" },
+    { code: 'blocks-flattened', noun: ['part of the document', 'parts of the document'], what: 'flattened' },
+    { code: 'images-unshown', noun: ['picture', 'pictures'], what: 'unshown' },
 ];
 
 // "2 tables and 1 SmartArt graphic were not imported", or nothing when no kind was met.
@@ -109,7 +117,7 @@ function clause(warnings: TransformWarning[], what: Outcome): string[] {
     }
     if (items.length === 0) return [];
     const list = items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
-    return [`${list} ${total === 1 ? 'was' : 'were'} ${what}`];
+    return [`${list} ${PREDICATES[what][total === 1 ? 0 : 1]}`];
 }
 
 export function importSummary(warnings: TransformWarning[]): string | null {
