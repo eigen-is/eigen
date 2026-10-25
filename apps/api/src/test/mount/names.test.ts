@@ -28,6 +28,8 @@ describe('foldName folds the way APFS does', () => {
         ['ϑ', 'Θ'],
         ['µ', 'μ'],
         ['ǰ', 'J̌'.normalize('NFC')],
+        ['ΐ', 'Ϊ́'.normalize('NFC')],
+        ['ΰ', 'Ϋ́'.normalize('NFC')],
     ])('%s is %s', (a, b) => {
         expect(foldName(a)).toBe(foldName(b));
     });
