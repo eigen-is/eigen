@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-10-23
+updated: 2026-10-25
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into a spreadsheet you have open, as new sheets or in place of its content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
@@ -54,7 +54,7 @@ The import reads every sheet in the workbook and preserves:
 - The gridlines setting (hidden or visible)
 - Conditional formatting rules, data validation rules, and hyperlinks
 - Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)
-- Column, bar, line, and pie charts, with their colors and title, over the same cells as in Excel. A 3-D chart comes in flat. See [Add a chart to a spreadsheet](/support/sheets/add-a-chart).
+- Column, bar, line, and pie charts, with their colors, title, background, and text and line colors, over the same cells as in Excel. A 3-D chart comes in flat. See [Add a chart to a spreadsheet](/support/sheets/add-a-chart).
 - Chart sheets, each as a sheet of its own with its chart in the top-left corner
 - Images floating over the cells, at the same size and angle, in front of or behind the charts as in Excel. An image in a format Sheets can't show, such as EMF, WMF, or TIFF, is left out.
 
