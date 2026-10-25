@@ -19,8 +19,8 @@ export type FrameChart =
     | { parts: Record<ChartSpecPartKey, string>; look: Omit<ChartLook, 'seed'> }
     | Extract<ChartRead, { unsupported: unknown }>;
 
-// What the part doesn't say is flat, as a document's and a sheet's charts draw.
-const { seed: _, ...FLAT } = FLAT_CHART_LOOK;
+// A chart part paints no sketch, so a chart reads flat and solid; the reader reads the rest.
+const SKETCH = { strokeStyle: FLAT_CHART_LOOK.strokeStyle, roughness: FLAT_CHART_LOOK.roughness };
 
 const read = cachedBy<DrawingTheme, FrameChart | undefined>();
 // Counted once per part, however many colour maps it is read in.
@@ -43,7 +43,7 @@ export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors:
             const answer = readChart(root, { theme: colors, data: 'cache' });
             if (!('spec' in answer)) return answer;
             const look = readChartPartLook(root, { theme: colors, emuPerPx: 1 / deck.scale });
-            return { parts: newChartSpecParts(answer.spec), look: { ...FLAT, ...look } };
+            return { parts: newChartSpecParts(answer.spec), look: { ...look, ...SKETCH } };
         })
     );
 }

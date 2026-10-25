@@ -9,6 +9,7 @@ import {
     DEFAULT_CHART_FONT,
     DEFAULT_CHART_SERIES_STYLE,
     defaultChartSpec,
+    FLAT_CHART_LOOK,
     isChartSeriesId,
     MAX_CHART_POINTS,
     MAX_CHART_SERIES,
@@ -158,11 +159,12 @@ export function readChart(root: XmlElement, { theme, data }: { theme: DrawingThe
 // The look writeChart maps onto the part, read back: the background from c:chartSpace's c:spPr, the label colour from
 // its c:txPr, else the theme's tx1 as Office draws a label without one, and the stroke's colour and width from the
 // category axis's line, as the writer strokes every axis and gridline with it. emuPerPx is the EMU one px of the
-// chart's own box is in the file. A field the part doesn't say, a pie's stroke among them, is left out, for the host's.
+// chart's own box is in the file. What the part doesn't say, a pie's stroke among them, reads flat, so every host
+// stores the same four fields and a re-import reads what the first import stored.
 export function readChartPartLook(
     root: XmlElement,
     { theme, emuPerPx }: { theme: DrawingTheme; emuPerPx: number },
-): Partial<ChartLook> {
+): Pick<ChartLook, 'fill' | 'color' | 'strokeColor' | 'strokeWidth'> {
     const colors = chartColors(root, theme);
     const drawn = (shape: XmlElement | undefined): string | undefined => {
         if (!shape) return undefined;
@@ -172,20 +174,19 @@ export function readChartPartLook(
     let text = child(root, 'txPr');
     for (const local of ['p', 'pPr', 'defRPr']) text = text && xmlChild(text, A_NS, local);
     const tx1 = colors.map.get('tx1');
-    const color = drawn(text) ?? (tx1 && colors.scheme.get(tx1));
     const background = drawn(child(root, 'spPr'));
     const plotArea = child(child(root, 'chart'), 'plotArea');
     const axis = child(child(plotArea, 'catAx') ?? child(plotArea, 'dateAx'), 'spPr');
     const line = axis && xmlChild(axis, A_NS, 'ln');
-    const strokeColor = drawn(line);
     const width = Number(line && xmlAttr(line, '', 'w'));
     return {
-        ...(background && { fill: solidFill(background) }),
-        ...(color && { color }),
-        ...(strokeColor && { strokeColor }),
-        ...(line &&
-            Number.isFinite(width) &&
-            width >= 0 && { strokeWidth: Math.round((width / emuPerPx) * 100) / 100 }),
+        fill: background ? solidFill(background) : FLAT_CHART_LOOK.fill,
+        color: drawn(text) ?? (tx1 && colors.scheme.get(tx1)) ?? FLAT_CHART_LOOK.color,
+        strokeColor: drawn(line) ?? FLAT_CHART_LOOK.strokeColor,
+        strokeWidth:
+            line && Number.isFinite(width) && width >= 0
+                ? Math.round((width / emuPerPx) * 100) / 100
+                : FLAT_CHART_LOOK.strokeWidth,
     };
 }
 

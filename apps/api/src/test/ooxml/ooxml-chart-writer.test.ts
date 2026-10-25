@@ -369,11 +369,13 @@ describe('readChartPartLook', () => {
         },
     );
 
-    test('no background and no label colour read back as themselves; a pie has no stroke to read', () => {
+    test('no background and no label colour read back as themselves; a pie has no stroke to read, so it reads flat', () => {
         const look = { ...LOOK, fill: FLAT_CHART_LOOK.fill, color: 'transparent' };
         expect(lookOf(sampleChartSpec('pie'), look, EMU_PER_PX)).toEqual({
             fill: FLAT_CHART_LOOK.fill,
             color: 'transparent',
+            strokeColor: FLAT_CHART_LOOK.strokeColor,
+            strokeWidth: FLAT_CHART_LOOK.strokeWidth,
         });
     });
 
@@ -383,10 +385,16 @@ describe('readChartPartLook', () => {
         expect(lookOf(sampleChartSpec('column'), { ...LOOK, fill }, EMU_PER_PX).fill).toBe(solidFill(middle.color));
     });
 
-    test("a label without a colour of its own takes the theme's tx1, as Office draws it", () => {
+    test("a label without a colour of its own takes the theme's tx1, as Office draws it, and the rest reads flat", () => {
         const dark: DrawingTheme = { scheme: new Map([['lt1', '#fefefe']]), map: new Map([['tx1', 'lt1']]) };
         const chart = root(`<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}"><c:chart/></c:chartSpace>`);
-        expect(readChartPartLook(chart, { theme: dark, emuPerPx: EMU_PER_PX })).toEqual({ color: '#fefefe' });
+        const { fill, strokeColor, strokeWidth } = FLAT_CHART_LOOK;
+        expect(readChartPartLook(chart, { theme: dark, emuPerPx: EMU_PER_PX })).toEqual({
+            fill,
+            color: '#fefefe',
+            strokeColor,
+            strokeWidth,
+        });
     });
 });
 

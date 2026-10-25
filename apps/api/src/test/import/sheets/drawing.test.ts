@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CHART_MAX_SIDE, readChartSpec } from '@workspace/lib/charts';
+import { CHART_MAX_SIDE, FLAT_CHART_LOOK, readChartSpec } from '@workspace/lib/charts';
 import type { Sheet } from '@workspace/lib/sheets';
 import {
     floatingItems,
@@ -619,8 +619,11 @@ describe('a chart sheet', () => {
                 width: 977,
                 height: 638,
                 angle: 0,
-                // The theme's tx1, as Excel draws a label without a colour of its own.
+                // The theme's tx1, as Excel draws a label without a colour of its own; the rest flat.
+                fill: FLAT_CHART_LOOK.fill,
                 color: '#000000',
+                strokeColor: FLAT_CHART_LOOK.strokeColor,
+                strokeWidth: FLAT_CHART_LOOK.strokeWidth,
                 specChart: expect.any(String),
                 specTitle: expect.any(String),
                 specLegend: expect.any(String),
