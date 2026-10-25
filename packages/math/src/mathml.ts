@@ -9,6 +9,7 @@ import {
     COLOR_NAMES,
     COMBINING_ACCENTS,
     FENCES,
+    isNoLine,
     LARGE_OPERATORS,
     LINES,
     MINUS,
@@ -71,8 +72,6 @@ const NOTATIONS: ReadonlyMap<string, readonly MathEnclosure[]> = new Map([
     ['madruwb', ['right', 'bottom']],
     ['longdiv', ['left', 'top']],
 ]);
-
-const NO_LINE = /^0(?:px|em|pt)?$/;
 
 // ── Reader ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -460,7 +459,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer
             const line =
                 attribute(element, 'bevelled') === 'true'
                     ? 'skewed'
-                    : NO_LINE.test(attribute(element, 'linethickness') ?? '')
+                    : isNoLine(attribute(element, 'linethickness') ?? '')
                       ? 'none'
                       : 'bar';
             row.node({ kind: 'fraction', numerator: argument(0), denominator: argument(1), line });

@@ -52,6 +52,10 @@ export const SPACES: Readonly<Record<MathSpace, { text: string; width: string }>
 // Unicode normalisation turns them into the CJK U+3008 and U+3009.
 export const FENCES: ReadonlySet<string> = new Set(['\u2329', '\u232A', ...'()[]{}|‖⌈⌉⌊⌋⟨⟩⟦⟧⟮⟯⦃⦄']);
 
+// A line thickness whose number is zero, in any unit (`0`, `0.0em`, `0pt`, `0%`), draws no bar. MathML's linethickness
+// and LaTeX's \genfrac both read it.
+export const isNoLine = (thickness: string): boolean => Number.parseFloat(thickness) === 0;
+
 export const PRIME = '′';
 
 // CSS's basic colour names and the rest LaTeX's xcolor shares with CSS, as browsers draw them: KaTeX and MathJax hand

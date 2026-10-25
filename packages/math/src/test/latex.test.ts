@@ -382,6 +382,10 @@ describe('readLatex', () => {
             '\\genfrac{}{}{0pt}{}{a}{b}',
             [{ kind: 'fraction', numerator: letter('a'), denominator: letter('b'), line: 'none' }],
         ],
+        [
+            '\\genfrac{}{}{0.0em}{}{a}{b}',
+            [{ kind: 'fraction', numerator: letter('a'), denominator: letter('b'), line: 'none' }],
+        ],
         ['{\\sum}_i', [{ kind: 'scripts', base: [{ kind: 'operator', text: '∑' }], sub: letter('i') }]],
         [
             '\\overbrace{x}^{n}',

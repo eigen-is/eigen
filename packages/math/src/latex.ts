@@ -6,7 +6,7 @@
 import { MathError } from './error';
 import type { LatexCommand } from './latex-commands';
 import { BARE_ENVIRONMENTS, LATEX_COMMANDS, LATEX_ENVIRONMENTS } from './latex-commands';
-import { ACCENTS, COLOR_NAMES, MINUS, naryLimits, PRIME, SPACES } from './notation';
+import { ACCENTS, COLOR_NAMES, isNoLine, MINUS, naryLimits, PRIME, SPACES } from './notation';
 import type { MathBudget, MathNode, MathRow, MathToken, MathVariant, RowSlot } from './tree';
 import {
     bound,
@@ -724,7 +724,7 @@ class LatexReader {
             case 'genfrac': {
                 const open = this.#genfracDelimiter();
                 const close = this.#genfracDelimiter();
-                const line = Number.parseFloat(this.#raw()) === 0 ? 'none' : 'bar';
+                const line = isNoLine(this.#raw()) ? 'none' : 'bar';
                 this.#raw();
                 into.push({ node: this.#fraction(open, close, line, style, depth) });
                 return;
