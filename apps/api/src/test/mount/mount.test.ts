@@ -1765,6 +1765,62 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
     test('permanentlyDeleteFromTrash on non-existent item is a no-op', async () => {
         await expect(mount.permanentlyDeleteFromTrash('nonexistent-id-xyz')).resolves.toBeUndefined();
     });
+
+    // The delete has read the row as trashed and sits in deletePath when the restore arrives. The
+    // restore must then wait, and find the item gone.
+    test('a restore that races a permanent delete never reports a deleted item as restored', async () => {
+        const fileId = await mount.createFile(rootId, 'raced-restore.txt', 'text/plain', 2, Buffer.from('hi'));
+        await mount.trashPath(fileId);
+
+        let restored: Promise<string | number> | undefined;
+        const deletePath = mount.deletePath.bind(mount);
+        const spy = spyOn(mount, 'deletePath').mockImplementation(async (id) => {
+            restored = mount.restorePath(fileId).then(
+                () => 'restored',
+                (e: ApiError) => e.status,
+            );
+            await Bun.sleep(5);
+            return deletePath(id);
+        });
+        try {
+            await mount.permanentlyDeleteFromTrash(fileId);
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(await restored).toBe(404);
+        expect(await mount.getPath(fileId)).toBeNull();
+    });
+
+    // The same race on a separately trashed child, which the folder's delete takes with it.
+    test('a child restored while its trashed folder is deleted is reported gone', async () => {
+        const folderId = await mount.createFolder(rootId, 'RacedChildParent');
+        const childId = await mount.createFile(folderId, 'raced-child.txt', 'text/plain', 1, Buffer.from('c'));
+        await mount.trashPath(childId);
+        await mount.trashPath(folderId);
+
+        let restored: Promise<string | number> | undefined;
+        const deletePath = mount.deletePath.bind(mount);
+        const spy = spyOn(mount, 'deletePath').mockImplementation(async (id) => {
+            if (id === childId) {
+                restored = mount.restorePath(childId).then(
+                    () => 'restored',
+                    (e: ApiError) => e.status,
+                );
+                await Bun.sleep(5);
+            }
+            return deletePath(id);
+        });
+        try {
+            await mount.permanentlyDeleteFromTrash(folderId);
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(await restored).toBe(404);
+        expect(await mount.getPath(childId)).toBeNull();
+        expect(await mount.getPath(folderId)).toBeNull();
+    });
 });
 
 describe('Folder sizes', () => {

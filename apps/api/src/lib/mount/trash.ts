@@ -267,29 +267,7 @@ function restoreDescendants(mount: Mount, parentId: string, now: Date): void {
 }
 
 export async function permanentlyDeleteFromTrash(mount: Mount, pathId: string): Promise<void> {
-    const row = await mount.db.select().from(paths).where(eq(paths.id, pathId)).get();
-    if (!row) return;
-    if (!row.trashedAt) throw new ApiError(400, 'Item is not in trash');
-
-    if (row.type !== 'file') {
-        const descendantIds = mount.collectDescendantIds(pathId);
-        const allIds = [pathId, ...descendantIds];
-        const orphans = await mount.db
-            .select({ id: paths.id })
-            .from(paths)
-            .where(
-                sql`${paths.trashedFrom} IN (${sql.join(
-                    allIds.map((id) => sql`${id}`),
-                    sql`, `,
-                )})`,
-            )
-            .all();
-        for (const orphan of orphans) {
-            await mount.deletePath(orphan.id);
-        }
-    }
-
-    await mount.deletePath(pathId);
+    if (!(await deleteIfTrashed(mount, pathId))) throw new ApiError(400, 'Item is not in trash');
 }
 
 export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void> {
@@ -300,6 +278,41 @@ export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void
         .where(sql`${paths.trashedFrom} IS NOT NULL AND ${paths.trashedAt} < ${cutoffEpoch}`)
         .all();
     for (const row of expired) {
-        await permanentlyDeleteFromTrash(mount, row.id);
+        await deleteIfTrashed(mount, row.id);
     }
+}
+
+// Runs under the item's path lock, which trash and restore take too, and reads the row inside it. So a
+// restore that got the lock first is never undone. It returns false when the item is not in trash.
+async function deleteIfTrashed(mount: Mount, pathId: string): Promise<boolean> {
+    return mount.withPathLock(pathId, async () => {
+        const row = await mount.db
+            .select({ type: paths.type, trashedAt: paths.trashedAt })
+            .from(paths)
+            .where(eq(paths.id, pathId))
+            .get();
+        if (!row) return true;
+        if (!row.trashedAt) return false;
+
+        if (row.type !== 'file') {
+            const allIds = [pathId, ...mount.collectDescendantIds(pathId)];
+            const orphans = await mount.db
+                .select({ id: paths.id })
+                .from(paths)
+                .where(
+                    sql`${paths.trashedFrom} IN (${sql.join(
+                        allIds.map((id) => sql`${id}`),
+                        sql`, `,
+                    )})`,
+                )
+                .all();
+            // Each one is a trash root of its own, so a restore may race it too.
+            for (const orphan of orphans) {
+                await deleteIfTrashed(mount, orphan.id);
+            }
+        }
+
+        await mount.deletePath(pathId);
+        return true;
+    });
 }
