@@ -1,6 +1,7 @@
-// What an Office reader may still do for a crafted file: each cap is one budget of units. Work the file can't be
-// read without is charged, and past the cap the whole file is a 413 in the format's words; work that may be left
-// out, a chart, asks first and is spent only when what is left covers it.
+// One of an Office reader's caps for a crafted file, counted in units of work. Work the reader can't do without is
+// charged, and once the charges pass the limit the whole file is refused as a 413 in the format's words. Work the
+// reader may leave out, such as a chart, is spent only when what is left covers it. A reader keeps each running
+// total in one, such as the parts openPackage parses or the shapes a pptx holds.
 
 import { ApiError } from '../core/errors';
 

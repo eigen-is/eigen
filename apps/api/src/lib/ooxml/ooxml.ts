@@ -1,5 +1,6 @@
-// The OOXML every format's reader and writer share: namespaces, Strict read as transitional, markup compatibility and
-// the units. Word's own vocabulary has a module of its own.
+// The XML vocabulary every OOXML format shares, for its readers and its writers alike: the namespaces, a part parsed
+// with Strict OOXML read as transitional, markup compatibility (mc:AlternateContent), the units and their lengths, and
+// on/off values. What only one format uses, such as Word's style names, sits in that format's vocabulary module.
 
 import { MARKUP_COMPATIBILITY_NAMESPACE, OMML_NAMESPACE, WORDML_NAMESPACE } from '@workspace/math';
 import type { XmlElement } from '../core/xml';
@@ -42,7 +43,8 @@ export const DC_NS = 'http://purl.org/dc/elements/1.1/';
 
 const STRICT = 'http://purl.oclc.org/ooxml';
 
-// Strict OOXML names the same vocabulary in other namespaces; read as transitional, it reads the same.
+// Strict OOXML puts the same vocabulary in namespaces of its own. Each maps onto its transitional twin, so a reader
+// handles one set of names.
 const STRICT_NAMESPACES = new Map([
     [`${STRICT}/wordprocessingml/main`, W_NS],
     [`${STRICT}/officeDocument/relationships`, R_NS],
@@ -57,7 +59,7 @@ const STRICT_NAMESPACES = new Map([
     [`${STRICT}/presentationml/main`, P_NS],
 ]);
 
-// A part read with Strict's namespaces as their transitional twins, wherever it declares them.
+// Parses a part, reading every Strict namespace it declares as the transitional one.
 export function parseOoxml(input: string | Uint8Array): XmlElement | null {
     return parseXml(input, STRICT_NAMESPACES);
 }
@@ -68,7 +70,8 @@ export function isAlternateContent(element: XmlElement): boolean {
     return hasXmlName(element, MC_NS, 'AlternateContent');
 }
 
-// The first mc:Choice whose Requires prefixes the format's reader all understands, else the mc:Fallback, else nothing.
+// Picks the branch of an mc:AlternateContent a reader can read. That is the first mc:Choice whose Requires prefixes
+// the reader all understands, else the mc:Fallback, else nothing. Each format passes the prefixes it understands.
 export function alternativeFor(understood: ReadonlySet<string>): (element: XmlElement) => XmlElement[] {
     return (element) => {
         for (const choice of xmlElements(element)) {
@@ -82,12 +85,12 @@ export function alternativeFor(understood: ReadonlySet<string>): (element: XmlEl
     };
 }
 
-// An element's children, an mc:AlternateContent read as the branch the format's reader understands (alternativeFor).
+// An element's children, with each mc:AlternateContent replaced by the branch that `alternative` picks.
 export function ooxmlElements(element: XmlElement, alternative: (element: XmlElement) => XmlElement[]): XmlElement[] {
     return xmlElements(element).flatMap((item) => (isAlternateContent(item) ? alternative(item) : [item]));
 }
 
-// An element's first child of this name, read through its mc:AlternateContent as ooxmlElements reads them.
+// The first of ooxmlElements' children with this name.
 export function ooxmlChild(
     element: XmlElement,
     ns: string,
@@ -102,7 +105,7 @@ export function ooxmlChild(
 export const EMU_PER_PX = 9525;
 export const EMU_PER_POINT = 12_700;
 
-// ST_UniversalMeasure, which Strict OOXML writes where transitional writes a number: points per unit.
+// The points in one of each unit of ST_UniversalMeasure, which Strict OOXML writes where transitional writes a number.
 export const POINTS_PER_UNIT = new Map([
     ['pt', 1],
     ['pc', 12],
@@ -112,10 +115,12 @@ export const POINTS_PER_UNIT = new Map([
     ['mm', 72 / 25.4],
 ]);
 
-// Past 64 characters a length is none unread: no length needs more, and a file's 4 MB one would be parsed at each use.
+// No real length needs more characters. A longer one is ignored unread, so a crafted 4 MB value is not scanned at
+// every use.
 const MAX_MEASURE_CHARS = 64;
 
-// ST_Coordinate in EMU, or Strict's universal measure; anything else, or past what a double holds exactly, is none.
+// An ST_Coordinate in EMU, or a universal measure converted to EMU. Anything else is undefined, and so is a value
+// too large for a double to hold exactly.
 export function emu(value: string | undefined): number | undefined {
     if (value === undefined || value.length > MAX_MEASURE_CHARS) return undefined;
     const [, number, unit = ''] = value.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
@@ -125,8 +130,8 @@ export function emu(value: string | undefined): number | undefined {
     return Number.isFinite(result) && Math.abs(result) <= Number.MAX_SAFE_INTEGER ? result : undefined;
 }
 
-// A length in a unit `perPoint` to the point, twips or half-points, rounded: a universal measure is converted, anything
-// else read as a number in that unit.
+// A length in a unit with `perPoint` of them to the point, such as twips (20) or half-points (2), rounded. A
+// universal measure is converted. Anything else is read as a plain number in that unit.
 export function measure(value: string | undefined, perPoint: number): number | undefined {
     if (value === undefined || value.length > MAX_MEASURE_CHARS) return undefined;
     const [, number, unit = ''] = value.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]+)$/) ?? [];
@@ -137,7 +142,7 @@ export function measure(value: string | undefined, perPoint: number): number | u
 
 // ── Values ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-// ST_OnOff attribute value: 1, true, on / 0, false, off, whitespace around it allowed; anything else is no answer.
+// An ST_OnOff value: 1, true or on, and 0, false or off, with whitespace around it allowed. Anything else is undefined.
 export function isOn(value: string | undefined): boolean | undefined {
     const trimmed = value?.trim();
     if (trimmed === undefined) return undefined;
@@ -145,7 +150,8 @@ export function isOn(value: string | undefined): boolean | undefined {
     return ['0', 'false', 'off'].includes(trimmed) ? false : undefined;
 }
 
-// CT_OnOff and CT_Boolean: a bare element is on; no element is no answer. WordprocessingML puts its val in its namespace.
+// A CT_OnOff or CT_Boolean element. An element without a val is on, and a missing element is undefined.
+// WordprocessingML puts the val attribute in its own namespace, so its readers pass that as `ns`.
 export function isOnElement(element: XmlElement | undefined, ns = ''): boolean | undefined {
     return element ? (isOn(xmlAttr(element, ns, 'val')) ?? true) : undefined;
 }
