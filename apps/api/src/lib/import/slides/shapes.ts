@@ -55,7 +55,7 @@ import { alternative, blipMedia } from './package';
 import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
 
-// A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
+// A slide's shape tree → canvas elements: groups flattened, layout and master shapes beneath.
 
 export const MAX_ELEMENTS = 20_000;
 export const MAX_GROUP_DEPTH = 32;
