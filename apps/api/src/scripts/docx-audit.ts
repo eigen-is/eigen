@@ -2077,12 +2077,13 @@ export function asWritten(
     const captions = new Set<string>();
     const paragraphAttrs = docSchema().nodeFromJSON({ type: 'paragraph' }).toJSON().attrs;
     const unwritten = (node: JSONContent) => node.type === 'figure' && !prepared.has(String(node.attrs?.['mediaName']));
-    const blocks = (nodes: JSONContent[], at: string): JSONContent[] => {
+    // nested: inside a list, a quote or a cell, which owns the spacing of what it holds.
+    const blocks = (nodes: JSONContent[], at: string, nested: boolean): JSONContent[] => {
         const out: JSONContent[] = [];
         for (const node of nodes) {
             const place = `${at}.${out.length}`;
             if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
-                out.push(node.content ? { ...node, content: blocks(node.content, place) } : node);
+                out.push(node.content ? { ...node, content: blocks(node.content, place, true) } : node);
                 continue;
             }
             const pieces: JSONContent[] = [];
@@ -2140,11 +2141,11 @@ export function asWritten(
                     out.push(piece);
                     continue;
                 }
-                // No space at a split, so the pieces draw as one paragraph: a 0 where the node draws one, else none, as in
-                // a list, a quote or a cell, which owns the spacing of what it holds.
+                // No space at a split, so the pieces draw as one paragraph: a 0 where the node draws one, else none, and
+                // none at all when nested.
                 const attrs = { ...piece.attrs };
                 const level = typeof attrs['level'] === 'number' ? attrs['level'] : 1;
-                const look = at.includes('.') ? undefined : ownTextLook(piece.type ?? '', level, imported.style, false);
+                const look = nested ? undefined : ownTextLook(piece.type ?? '', level, imported.style, false);
                 if (i > 0) attrs['spaceBefore'] = look?.before ? 0 : null;
                 if (i < pieces.length - 1) attrs['spaceAfter'] = look?.after ? 0 : null;
                 out.push({ ...piece, attrs, content: piece.content?.length ? piece.content : undefined });
@@ -2155,13 +2156,13 @@ export function asWritten(
     const bands = Object.fromEntries(
         Object.entries(imported.bands).map(([root, band]) => [
             root,
-            { ...band, content: blocks(band.content ?? [], root) },
+            { ...band, content: blocks(band.content ?? [], root, false) },
         ]),
     );
     return {
         imported: {
             ...imported,
-            json: { ...imported.json, content: blocks(imported.json.content ?? [], 'body') },
+            json: { ...imported.json, content: blocks(imported.json.content ?? [], 'body', false) },
             bands,
         },
         changes,
