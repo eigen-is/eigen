@@ -457,7 +457,7 @@ describe('a bordered picture exported and read back', () => {
         const shapes = sp({
             xfrm: box(100, 100, 200, 100),
             geom: 'rect',
-            spPr: `${solidFill('993300')}<a:ln w="0">${solidFill('00305e')}</a:ln>`,
+            spPr: `${solid('993300')}<a:ln w="0">${solid('00305e')}</a:ln>`,
         });
         const [first] = readPptx(buildPptx({ slides: [{ shapes }] }), { maxMediaBytes: 1024 * 1024 }).slides[0]
             .elements;

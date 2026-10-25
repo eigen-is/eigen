@@ -1484,13 +1484,9 @@ describe('document transform (docx round trip)', () => {
         const { json, media } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);
-        // One media file per image part, an SVG as itself rather than its PNG fallback; the chart comes back as its SVG.
-        expect(media.map((image) => image.contentType)).toEqual([
-            'image/svg+xml',
-            'image/png',
-            'image/jpeg',
-            'image/svg+xml',
-        ]);
+        // One media file per image part, and an SVG comes back as itself rather than its PNG fallback.
+        // The chart is a Word chart, so it brings no media file.
+        expect(media.map((image) => image.contentType)).toEqual(['image/png', 'image/jpeg', 'image/svg+xml']);
     }, 120_000);
 });
 
