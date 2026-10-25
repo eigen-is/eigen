@@ -27,6 +27,7 @@ export const PAINT: ChartPaint = {
     background: solidFill('#ffffff'),
     strokeColor: '#1e1e1e',
     strokeWidth: 1,
+    seriesStrokeWidth: 1,
     strokeStyle: 'solid',
     roughness: 0,
     seed: 7,

@@ -529,6 +529,14 @@ describe('line', () => {
     const categories = ['A', 'B', 'C', 'D', 'E'];
     const values = [1, 2, null, 4, 5];
 
+    test("a line series draws at the series width, the axes and gridlines at the stroke's", () => {
+        const out = layout('line', {}, { paint: { strokeWidth: 1, seriesStrokeWidth: 3 } });
+        expect(new Set(lines(out, 'line').map((line) => line.strokeWidth))).toEqual(new Set([3]));
+        const rules = [...lines(out, 'gridline'), ...lines(out, 'baseline')];
+        expect(rules.length).toBeGreaterThan(0);
+        expect(new Set(rules.map((line) => line.strokeWidth))).toEqual(new Set([1]));
+    });
+
     function lineOf(
         blanks: ChartSpec['chart']['blanks'],
         patch: Partial<ChartSeriesStyle> = { marker: { visible: true } },

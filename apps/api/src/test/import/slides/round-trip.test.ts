@@ -276,6 +276,8 @@ describe('charts exported and read back', () => {
         strokeColor: '#44556680',
         strokeWidth: 3,
     });
+    // A line series of its own width, over thinner axes.
+    CHARTS.push({ ...CHARTS[3], y: 400, x: 400, strokeWidth: 1, seriesStrokeWidth: 3 });
     const { sent, deck } = roundTrip(CHARTS);
     const found = deck.slides[0].elements;
     // A series id is identity, not content, and the writer writes none.
@@ -297,6 +299,11 @@ describe('charts exported and read back', () => {
             // A pie has no axis line to carry the stroke, so it comes back flat.
             const stroke = spec?.chart.type === 'pie' ? FLAT_CHART_LOOK : element;
             expect(back).toMatchObject({ strokeColor: stroke.strokeColor, strokeWidth: stroke.strokeWidth });
+            // Unset, a line series is written at the stroke's width and comes back unset, so the Stroke row still drives it.
+            if (spec?.chart.type === 'line') {
+                const own = element.seriesStrokeWidth ?? element.strokeWidth;
+                expect(back.seriesStrokeWidth).toBe(own === element.strokeWidth ? undefined : own);
+            }
         }
     });
 });

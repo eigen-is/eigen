@@ -49,7 +49,7 @@ const UNCOMPARED = new Set(['id', 'index', 'frameId', 'seed', 'commentCardIds'])
 
 // The writer's units (export/slides/pptx/): lengths in EMU at the deck's scale, text sizes in 100ths of a point, angles in
 // 60,000ths of a degree, shares in 1000ths of a percent.
-const LENGTHS = new Set(['x', 'y', 'width', 'height', 'strokeWidth', 'padding']);
+const LENGTHS = new Set(['x', 'y', 'width', 'height', 'strokeWidth', 'seriesStrokeWidth', 'padding']);
 const TEXT_SIZES = new Set(['fontSize', 'letterSpacing']);
 const ANGLES = new Set(['angle', 'startAngle', 'sweepAngle']);
 

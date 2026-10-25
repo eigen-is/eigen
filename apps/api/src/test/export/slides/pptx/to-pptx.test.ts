@@ -28,6 +28,7 @@ import type { ZipReader } from '../../../../lib/ooxml/zip';
 import { openZip } from '../../../../lib/ooxml/zip';
 import { seriesIdsByPlace } from '../../../../scripts/office-audit';
 import { sampleChartParts } from '../../../fixtures/chart-parts';
+import { embeddedWorkbookOf, refsAgainstCells } from '../../../fixtures/chart-workbook';
 
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
@@ -800,6 +801,17 @@ describe('pptx shapes', () => {
             data: 'cache',
         });
         expect('spec' in read && seriesIdsByPlace(read.spec).data).toEqual(seriesIdsByPlace(sample).data);
+        for (const [n, chartPath] of ['ppt/charts/chart1.xml', 'ppt/charts/chart2.xml'].entries()) {
+            const { chart, sheet, path } = embeddedWorkbookOf(zip, chartPath);
+            expect(path).toBe(`ppt/embeddings/Microsoft_Excel_Worksheet${n + 1}.xlsx`);
+            const refs = refsAgainstCells(chart, sheet);
+            expect(refs.length).toBeGreaterThan(0);
+            for (const { formula, cache, cells } of refs) expect({ formula, cells }).toEqual({ formula, cells: cache });
+        }
+        const defaults = descendants(part(zip, '[Content_Types].xml'), CONTENT_TYPES, 'Default');
+        expect(defaults.find((entry) => attr(entry, 'Extension') === 'xlsx')?.attributes['ContentType']).toBe(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
     });
 
     // A graphic frame turns no chart and fades none, and a chart part paints no sketch, hatch or dash.

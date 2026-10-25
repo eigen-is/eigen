@@ -222,6 +222,14 @@ describe('a chart', () => {
         expect(back?.attrs).toMatchObject({ roughness: null, strokeStyle: null });
     });
 
+    test("a line series' own width comes back as it was, the axes keeping theirs", async () => {
+        const look = { strokeWidth: 1, seriesStrokeWidth: 3.5 };
+        const chart = { type: 'chart', attrs: { ...sampleChartParts('line'), ...look, width: 480, height: 300 } };
+        const { json } = await exported(chart);
+        const [back] = json.content?.[0]?.content ?? [];
+        expect(back?.attrs).toMatchObject(look);
+    });
+
     test('its background, label colour and stroke come back as they were', async () => {
         const look = { fill: solidFill('#fafaf0'), color: '#112233', strokeColor: '#44556680', strokeWidth: 3 };
         const chart = { type: 'chart', attrs: { ...sampleChartParts('line'), ...look, width: 480, height: 300 } };

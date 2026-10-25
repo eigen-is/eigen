@@ -14,8 +14,9 @@ import {
 import { escapeXml } from '@workspace/lib/xml';
 import type { LossCounter } from '../../../document/transform/protocol';
 import { A_NS, P_NS, R_NS } from '../../../ooxml/ooxml';
-import type { PackagePart, PartRelationships, Relationship } from '../../../ooxml/opc';
+import type { PartRelationships, Relationship } from '../../../ooxml/opc';
 import { partRelationships } from '../../../ooxml/opc';
+import type { OfficeCharts } from '../../office-chart';
 import type { OfficeImages } from '../../office-image';
 import { backgroundXml } from './pictures';
 import { elementXml } from './shapes';
@@ -36,8 +37,8 @@ export type Deck = {
     scale: number;
     slideWidth: number;
     images: OfficeImages;
-    // The chart parts the slides wrote, each under ppt/charts/.
-    charts: PackagePart[];
+    // The charts the slides wrote, each part under ppt/charts/ and its workbook under ppt/embeddings/.
+    charts: OfficeCharts;
     // The elbow router reads the shapes an arrow is bound to.
     byId: Map<string, VectorElement>;
     // Counts what the pptx leaves out or draws simpler, once per element or frame.

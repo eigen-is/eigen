@@ -11,9 +11,10 @@ import type { ExportMedia } from '../../../document/transform/protocol';
 import { toTransferableBuffer } from '../../../document/transform/protocol';
 import { blipXml } from '../../../ooxml/drawingml';
 import { EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
-import { addChartPart, chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
+import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { BORDER_SIDES, EMU_PER_TWIP, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { splitDataUri } from '../../../shared/data-uri';
+import { addOfficeChart } from '../../office-chart';
 import type { OfficeImage } from '../../office-image';
 import { encodeOfficeImage } from '../../office-image';
 import { useFace } from './fonts';
@@ -187,8 +188,8 @@ function imageOf(name: string | null, pkg: Package): Image | undefined {
 
 // Drawn plain, as a chart part paints no sketch, hatch, gradient or dash, and at the scale `extent` draws it at. A doc
 // has no sheet, so a spec that doesn't parse or holds range data draws nothing. It is counted as a chart left out, and
-// its caption stands alone. The labels draw in the spec's font, embedded as a run's is, the title in the bold. Word
-// draws the numbers the part holds inline: a docx embeds no workbook for Edit Data to open.
+// its caption stands alone. The labels draw in the spec's font, embedded as a run's is, the title in the bold. Its
+// numbers go in a workbook of its own, the format desktop Word's Edit Data opens.
 function wordChartOf(node: JSONContent, pkg: Package, extent: (natural: number) => number): WordChart | undefined {
     const attrs = readChartAttrs(node.attrs ?? {});
     const { spec } = readChartSpec(node.attrs ?? {});
@@ -198,8 +199,14 @@ function wordChartOf(node: JSONContent, pkg: Package, extent: (natural: number) 
     }
     const width = attrs.width ?? CHART_DEFAULT_SIZE.width;
     const height = attrs.height ?? CHART_DEFAULT_SIZE.height;
-    const parts = { parts: pkg.charts, path: 'word/charts/chart', target: 'charts/chart', relate: pkg.part.relate };
-    const rId = addChartPart(parts, spec, { look: attrs, frame: { width, height, emuPerPx: extent(width) / width } });
+    const frame = { width, height, emuPerPx: extent(width) / width };
+    const rId = addOfficeChart(
+        pkg.charts,
+        spec,
+        { look: attrs, frame },
+        { target: 'charts/', relate: pkg.part.relate },
+    );
+    if (!rId) return undefined;
     const font = spec.chart.fontFamily;
     useFace(pkg, { font }, undefined);
     if (spec.title.text) useFace(pkg, { font, bold: true }, undefined);

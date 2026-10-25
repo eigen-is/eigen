@@ -12,8 +12,9 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Word files** — keep their equations, headers and footers, footnotes and page setup
 - **Excel files** — keep their hidden sheets and pictures
 - **PowerPoint files** — keep their shapes, pictures and backgrounds
-- **Charts in these files** — come in as charts you can edit, not as pictures, with their background, text color and line color
+- **Charts in these files** — come in as charts you can edit, not as pictures, with their background, text color, line color and line widths
 - **Charts in downloads** — a chart in a Word, Excel or PowerPoint download is a chart there too, not a picture. A sketched or hatched chart draws plain, a rotated one sits upright, and a see-through one on a slide is solid
+- **Chart data in Word and PowerPoint downloads** — a chart keeps its numbers in a small spreadsheet inside the file, the way Word and PowerPoint keep a chart's data
 - **Import into a spreadsheet or deck** — add a file's sheets or slides to the one you have open, or replace it with the file. Eigen saves a version before it replaces anything, so you can go back
 - **What didn't come across** — after you import a file into an open document, spreadsheet or deck, a message counts what Eigen left out or simplified, such as a chart it can't draw
 - **Pictures left out** — a Word or PowerPoint picture Eigen can't bring in leaves a **Picture not imported** mark where it was, in Docs and in Slides, so you can see what is missing

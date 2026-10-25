@@ -29,7 +29,7 @@ You do not need to open the document to export it. In Drive, right-click the doc
 
 ## What is included
 
-The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Comment threads are not included in the exported file. In the Word file, a chart is a Word chart with its numbers, but you can't change its data in Word, and a sketched or hatched look is drawn plain.
+The exported file contains the document text and all formatting: headings, lists, tables, images, charts, code blocks, and other content. Comment threads are not included in the exported file. In the Word file, a chart is a Word chart with its numbers, kept the way Word keeps a chart's data, and a sketched or hatched look is drawn plain.
 
 The PDF and the Word file put the header and footer on every page, with the page numbers and page count filled in, and give the first page its own when you set one. The web page shows the header at the top and the footer at the end, with **#** for a page number. See [Add headers, footers, and page numbers](/support/docs/headers-and-footers).
 

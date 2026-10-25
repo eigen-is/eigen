@@ -163,6 +163,12 @@ describe('drawingOf', () => {
         expect(inline).toMatchObject({ fill, color, strokeColor, strokeWidth });
     });
 
+    test("a line series' own width reads back as it was, the axes keeping theirs", () => {
+        const look = { strokeWidth: 1, seriesStrokeWidth: 3 };
+        const { sheets } = roundTrip([{ ...SUMMARY, charts: byId({ ...INLINE, ...look }) }, MY_DATA]);
+        expect(Object.values(sheets[0].charts ?? {})).toEqual([expect.objectContaining(look)]);
+    });
+
     test('a two-cell anchor names the cells its corners land in, past hidden tracks', () => {
         const drawing = drawingOf(SUMMARY, 1, [SUMMARY, MY_DATA], noPictures(), () => {});
         const root = drawing && parseOoxml(xml(drawing.parts[0]));

@@ -3,13 +3,21 @@
 
 import type { ChartLook, ChartPaint } from '../types/chart';
 import { parseFill, serializeFill, TRANSPARENT_FILL } from '../vector/fill';
-import { color, fillField, oneOf, roughness, seed, strokeWidth } from '../vector/kinds/read-fields';
+import {
+    color,
+    fillField,
+    oneOf,
+    optionalStrokeWidth,
+    roughness,
+    seed,
+    strokeWidth,
+} from '../vector/kinds/read-fields';
 import { STROKE_STYLES } from '../vector/types';
 
 // Google's flat look on the page's own background, which a chart that stores no look draws. strokeColor draws the
 // baseline at full strength and the gridlines faint, so a mid gray gives a clear baseline and Google's light
-// gridlines. strokeWidth is every line's; 2 is Google's series line width, so a line series reads at page scale. Solid
-// marks draw no outline.
+// gridlines. strokeWidth is every line's, a line series' too unless seriesStrokeWidth is set; 2 is Google's series line
+// width, so a line series reads at page scale. Solid marks draw no outline.
 export const FLAT_CHART_LOOK: ChartLook = {
     fill: serializeFill(TRANSPARENT_FILL),
     color: '#202124',
@@ -21,13 +29,14 @@ export const FLAT_CHART_LOOK: ChartLook = {
 };
 
 // Through the canvas reader's validators, any peer or paste having written them. A missing field reads flat; a
-// missing fill is no background, as the flat look has none.
+// missing fill is no background, as the flat look has none, and a missing series width draws at the stroke's.
 export function readChartLook(src: Record<string, unknown>): ChartLook {
     return {
         fill: fillField(src['fill']),
         color: color(src['color'], FLAT_CHART_LOOK.color),
         strokeColor: color(src['strokeColor'], FLAT_CHART_LOOK.strokeColor),
         strokeWidth: strokeWidth(src['strokeWidth'], FLAT_CHART_LOOK.strokeWidth),
+        seriesStrokeWidth: optionalStrokeWidth(src['seriesStrokeWidth']),
         strokeStyle: oneOf(src['strokeStyle'], STROKE_STYLES, FLAT_CHART_LOOK.strokeStyle),
         roughness: roughness(src['roughness'], FLAT_CHART_LOOK.roughness),
         seed: seed(src['seed'], FLAT_CHART_LOOK.seed),
@@ -41,6 +50,7 @@ export function chartPaintOf(look: ChartLook): ChartPaint {
         background: look.fill,
         strokeColor: look.strokeColor,
         strokeWidth: look.strokeWidth,
+        seriesStrokeWidth: look.seriesStrokeWidth ?? look.strokeWidth,
         strokeStyle: look.strokeStyle,
         roughness: look.roughness,
         seed: look.seed,
