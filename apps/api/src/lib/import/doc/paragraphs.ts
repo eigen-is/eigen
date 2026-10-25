@@ -1,6 +1,10 @@
+// The docx reader's block walk: it turns every paragraph into items in document order, so Word's counters run in
+// order across tables, text boxes and notes, and build turns the items into blocks. A paragraph keeps what it sets
+// apart from the docx's Normal or its style.
+
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_FONT, fontLineHeight, readFontSize } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     flattenNestedFootnotes,
@@ -21,6 +25,7 @@ import {
     CAPTION_LOOK,
     CODE_BLOCK_LOOK,
     familyLineScale,
+    lineMultiple,
     nodeLook,
     ownTextLook,
     QUOTE_LOOK,
@@ -47,9 +52,6 @@ import { walkInline } from './runs';
 import type { DocxRunProps, ParaProps, Role } from './styles';
 import { isFill, isLightNeutral, markColor, mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
 import { readTable } from './tables';
-
-// The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
-// text boxes and notes; assemble.ts turns the items into blocks.
 
 export type Reader = {
     pkg: DocxPackage;
@@ -125,7 +127,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
     const font = fontMark(byFace(' ', body.fonts, body, false)[0]?.font, fontTable) ?? DOCUMENT_FONT;
     const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
     // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
-    const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) / 240 : 1;
+    const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : 240;
     return {
         pkg,
         theme,
@@ -150,7 +152,7 @@ export function createReader(pkg: DocxPackage, publicOrigin: string | undefined)
         normal: readNormalStyle({
             font,
             size: bodySize / 2,
-            lineSpacing: (line * fontLineHeight(font)) / fontLineHeight(DOCUMENT_FONT),
+            lineSpacing: lineMultiple(line, font),
             spaceBefore: twipsToPt(para.before ?? 0),
             spaceAfter: twipsToPt(para.after ?? 0),
             color: body.color?.hex && markColor(body.color.hex),
@@ -423,15 +425,12 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const autoLine = (para: ParaProps) => ((para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : undefined);
     const line = autoLine(props);
     const baseLine = autoLine(base);
-    // An auto line as the multiple the editor draws, read in the font Word draws it in.
-    const multipleOf = (written: number, font: string) =>
-        (written * fontLineHeight(font)) / fontLineHeight(DOCUMENT_FONT) / 240;
     const mark: RunFace = {
         family:
             fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font,
         size: paraRun.size ?? 20,
     };
-    // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the mark's face;
+    // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the style's run;
     // not the space a task's or a note's text starts with, which goes, as the writer writes the checkbox or the note's
     // number and the space after it apart.
     const noteNumbered =
@@ -446,15 +445,17 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         return [{ family: fontMark(piece.font, reader.fontTable, normal.font) ?? normal.font, size: piece.size }];
     });
     // An at-least Normal reads as single, so the Normal's own line is the one to compare with. A style draws its line in
-    // its own font, which is the mark's, so a heading at its style's line reads as none in any theme.
+    // its own font, the style's run's. The writer writes a rescaled line on the paragraph itself, so a node read against
+    // its style that takes its line from the style reads as none, whatever family its runs are in.
     const baseSpacing = normalBase
         ? normal.lineSpacing
         : baseLine === undefined
           ? undefined
-          : multipleOf(baseLine, mark.family);
-    const multiple = line === undefined ? undefined : multipleOf(line / familyLineScale(mark, faces), mark.family);
+          : lineMultiple(baseLine, mark.family);
+    const multiple = line === undefined ? undefined : lineMultiple(line / familyLineScale(mark, faces), mark.family);
     const lineSpacing =
         multiple !== undefined &&
+        (normalBase || direct.line !== undefined || list?.pPr.line !== undefined) &&
         (baseSpacing === undefined || Math.round(multiple * 100) !== Math.round(baseSpacing * 100))
             ? multiple
             : undefined;
@@ -515,7 +516,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         const unlessOwn = (pt: number | undefined, ownTwips: number | undefined) =>
             pt !== undefined && ownTwips !== undefined && pt === twipsToPt(ownTwips) ? undefined : pt;
         // The writer's styles write a node's own line in the Normal's font.
-        const ownLine = own && Math.round(multipleOf(own.line, normal.font) * 100);
+        const ownLine = own && Math.round(lineMultiple(own.line, normal.font) * 100);
         const lineSpacing =
             format.lineSpacing !== undefined && Math.round(format.lineSpacing * 100) === ownLine
                 ? undefined

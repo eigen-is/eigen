@@ -1,3 +1,6 @@
+// The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a
+// re-save drops the writer's styles and keeps it as direct formatting.
+
 import {
     DOCUMENT_LINE_RATIO,
     EIGEN_FONT_NAMES,
@@ -10,9 +13,6 @@ import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips } from '@workspace/lib/docs
 import { LIST_FORMATS, LIST_LEVELS } from '../ooxml/wordml';
 import { cssColorToHex } from './colors';
 import { proseValue, proseValueIfSet } from './prose-css';
-
-// The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognises it where a
-// re-save drops the writer's styles and keeps it as direct formatting.
 
 // rem against the 16 px root, px at 96 dpi, em against the element's own size.
 export function cssPt(length: string, emPt: number): number {
@@ -199,6 +199,11 @@ export function autoLine(linePt: number, sizePt: number, font: string): number {
 // A line spacing, which CSS draws in Inter's line, in the Normal's font, as Word draws it.
 export function normalLine(lineSpacing: number, normal: NormalStyle): number {
     return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
+}
+
+// normalLine's inverse: the line spacing an auto line written in this font draws.
+export function lineMultiple(written: number, font: string): number {
+    return (written * fontLineHeight(font)) / DOCUMENT_LINE_RATIO / 240;
 }
 
 // A run's family and size in half-points, which the height of its line follows.

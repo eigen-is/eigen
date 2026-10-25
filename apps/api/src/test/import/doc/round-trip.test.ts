@@ -1260,6 +1260,23 @@ describe('a Word file, imported, written and imported again', () => {
         expect(stored(second.json)).toEqual(stored(first.json));
     });
 
+    // The writer writes a rescaled line on the paragraph itself, so a line the heading takes from its style was never
+    // rescaled, even when its runs are another family than the style's font.
+    test('a heading in Times under a Calibri style, at the style line, keeps no line spacing', async () => {
+        const theme =
+            '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>';
+        const styles =
+            '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:keepNext/><w:spacing w:line="240" w:lineRule="auto"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorHAnsi"/><w:b/><w:sz w:val="28"/></w:rPr></w:style>';
+        const times = '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>';
+        const { first, second } = await twice(
+            paragraph(run('Plan', times), '<w:pStyle w:val="Heading1"/>') + paragraph(run('Body')),
+            { styles, theme },
+        );
+        const [found] = nodesOfType(first.json, 'heading');
+        expect(found?.attrs?.['lineSpacing']).toBeNull();
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
     // A table without widths, and a row run past its grid: the editor sizes those columns, and so do Word's.
     test('a column without a width comes back without one, beside one with a width', async () => {
         const cell = (inner: string) => `<w:tc>${paragraph(run(inner))}</w:tc>`;
