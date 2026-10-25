@@ -1,7 +1,8 @@
-// One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads
-// the document from its database, saves every edit back to it, and syncs edits and cursors with
-// every socket that has the document open. The Drive opens each document once and closes it a
-// while after the last socket leaves.
+// One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the
+// document from its data.db, saves every edit back to it, and relays edits and cursors between the
+// sockets that have it open. Server-side writers, such as an import or a version restore, edit the
+// same Y.Doc, so their changes reach every editor too. The Drive opens each document once, however
+// many sockets connect, and closes it a while after the last one leaves.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -28,72 +29,63 @@ import { loadYjsState } from './yjs-loader';
 export const MESSAGE_SYNC = 0;
 export const MESSAGE_AWARENESS = 1;
 
-// A real y-websocket client owns exactly one awareness client id per doc; a tab that reloads or
-// reconnects opens a fresh socket with a new id, so one connection never legitimately declares many.
-// 8 tolerates a client that churns a few ids on one socket while stopping a flood that bloats the
-// shared map (fanned out to every peer, replayed to every joiner).
+// A y-websocket client owns one awareness client id per document, and a tab that reconnects opens a
+// new socket with a new id. So 8 ids per socket tolerate a client that changes its id a few times.
+// The cap stops a flood that would grow the map every peer receives.
 const MAX_AWARENESS_CLIENT_IDS = 8;
-// A legitimate awareness state is name + color + userId + a cursor/selection — ~100-300 bytes, a
-// few KiB for a large multi-element canvas selection. 16 KiB leaves generous headroom while capping
-// the per-state bytes fanned out to every peer and replayed to every joiner.
+// A real awareness state is a name, a color, a user id and a cursor. That is a few hundred bytes, or a
+// few KiB for a large canvas selection. The cap bounds what one state costs every peer.
 const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
 
-// Bun negotiates permessage-deflate but only deflates a frame when send() asks. A large sheet's raw
-// whole-state sync reply can't finish inside y-websocket's 30s silence window on a slow link.
+// Bun negotiates permessage-deflate, but it only deflates a frame when send() asks. Without that, a
+// large sheet's whole-state sync reply can't arrive within y-websocket's 30 s silence window on a slow link.
 const COMPRESS_FRAME_MIN_BYTES = 1024;
 
-function sendFrame(conn: ServerWebSocket<unknown>, message: Uint8Array): void {
-    conn.send(Buffer.from(message), message.byteLength >= COMPRESS_FRAME_MIN_BYTES);
-}
-
+// The stored updates fold into one snapshot after 100 of them or after 1 MB. A sheet writes its whole
+// workbook as one update when a tab closes, so counting alone would let data.db grow to about 100 times
+// the document before it folds. With the byte limit too, data.db stays near twice the document.
 const SNAPSHOT_INTERVAL = 100;
-// Sheets' flushSnapshot dumps the whole sheet JSON into one update row on tab
-// close; a count-only threshold lets data.db balloon to ~100× the doc size
-// before consolidation. Trigger on bytes too so a single fat update collapses
-// straight away. Bounds steady-state data.db to ~2× the doc.
 const SNAPSHOT_BYTES = 1_000_000;
-// In-DB checkpoint kept inside data.db so cold-open can hydrate from one row + tail updates.
-// Long-term history lives under the container's `versions/` folder (see versioning routes).
-const MAX_DOC_SNAPSHOTS = 1;
+
+// Typing fires many updates a second, so Modified is stamped at most once a minute.
 const TOUCH_THROTTLE_MS = 60_000;
-// Grace between the last unsubscribe and teardown: an instant reconnect (tab
-// reload, y-websocket's retry loop) reattaches to the loaded doc instead of
-// re-paying S3 download + Yjs materialization.
+// The wait between the last unsubscribe and the close. A reload or a y-websocket retry within it
+// reattaches to the loaded document instead of loading it again.
 const CLOSE_LINGER_MS = 60_000;
-// One 'edited' history row per user per window. Per-instance state, so a doc
-// close+reopen within the window records an extra row, which is cheaper than persisting it.
+// One 'edited' history row per user per window. The window lives in memory, so a document that closes
+// and opens again within it records an extra row. That is cheaper than storing the window.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
+// Saves a Y.Doc's updates to data.db and folds them into a snapshot from time to time.
 class DbProvider {
-    private db: BunSQLiteDatabase<typeof schema>;
-    private doc: Y.Doc;
-    private label: string;
-    private updatesSinceSnapshot = 0;
-    private bytesSinceSnapshot = 0;
-    private updateHandler: (update: Uint8Array) => void;
+    private readonly db: BunSQLiteDatabase<typeof schema>;
+    private readonly doc: Y.Doc;
+    private readonly label: string;
+    private updatesSinceSnapshot: number;
+    private bytesSinceSnapshot: number;
 
     public constructor(doc: Y.Doc, label: string, managedDb: ManagedDatabase<typeof schema>) {
         this.db = managedDb.db;
         this.doc = doc;
         this.label = label;
 
-        const { updatesApplied, bytesApplied } = loadYjsState(managedDb, this.doc, label);
+        // The stored state loads before the provider listens, so loading saves nothing.
+        const { updatesApplied, bytesApplied } = loadYjsState(managedDb, doc, label);
         this.updatesSinceSnapshot = updatesApplied;
         this.bytesSinceSnapshot = bytesApplied;
-
-        this.updateHandler = (update: Uint8Array) => {
-            this.storeUpdate(update);
-        };
-        doc.on('update', this.updateHandler);
+        doc.on('update', this.storeUpdate);
     }
 
-    private storeUpdate(update: Uint8Array): void {
+    public destroy(): void {
+        this.doc.off('update', this.storeUpdate);
+        this.createSnapshot();
+    }
+
+    private readonly storeUpdate = (update: Uint8Array): void => {
         try {
             this.db
                 .insert(schema.docUpdates)
-                .values({
-                    updateData: compressBlob(update),
-                })
+                .values({ updateData: compressBlob(update) })
                 .run();
             this.updatesSinceSnapshot++;
             this.bytesSinceSnapshot += update.byteLength;
@@ -102,13 +94,12 @@ class DbProvider {
                 this.createSnapshot();
             }
         } catch (error) {
-            // Never rethrow: 'update' handlers run inside yjs's transaction-cleanup
-            // finally — a throw leaves the cleanup queue stale and silently wedges every
-            // later update on this doc (no persistence, no broadcast). A later snapshot
-            // self-heals the gap: it encodes the full doc state.
+            // Never rethrow. An 'update' handler runs inside the cleanup of a Yjs transaction, and a throw
+            // there leaves that cleanup unfinished. Every later update on the document would then be
+            // neither saved nor broadcast. The next snapshot fills the gap, because it holds the whole state.
             console.error(`[DbProvider] Error storing update for ${this.label}:`, error);
         }
-    }
+    };
 
     private createSnapshot(): void {
         try {
@@ -121,53 +112,49 @@ class DbProvider {
                     .orderBy(desc(schema.docUpdates.id))
                     .limit(1)
                     .get();
-
                 if (!lastUpdate) return;
 
-                tx.insert(schema.docSnapshots)
-                    .values({
-                        stateData,
-                        lastUpdateId: lastUpdate.id,
-                    })
-                    .run();
-
+                const snapshot = tx
+                    .insert(schema.docSnapshots)
+                    .values({ stateData, lastUpdateId: lastUpdate.id })
+                    .returning({ id: schema.docSnapshots.id })
+                    .get();
                 tx.delete(schema.docUpdates).where(lte(schema.docUpdates.id, lastUpdate.id)).run();
-
-                const allSnapshots = tx
-                    .select({ id: schema.docSnapshots.id })
-                    .from(schema.docSnapshots)
-                    .orderBy(desc(schema.docSnapshots.id))
-                    .all();
-
-                if (allSnapshots.length > MAX_DOC_SNAPSHOTS) {
-                    const cutoffId = allSnapshots[MAX_DOC_SNAPSHOTS - 1].id;
-                    tx.delete(schema.docSnapshots).where(lt(schema.docSnapshots.id, cutoffId)).run();
-                }
+                // data.db keeps only the newest snapshot, so a load reads one row and the updates after
+                // it. The version history lives in the container's versions folder.
+                tx.delete(schema.docSnapshots).where(lt(schema.docSnapshots.id, snapshot.id)).run();
             });
 
             this.updatesSinceSnapshot = 0;
             this.bytesSinceSnapshot = 0;
         } catch (error) {
-            // Swallow: the update rows all survive (deleted only inside the successful
-            // transaction), and the un-reset counters make the next update retry.
+            // The update rows survive, because they are only deleted inside the transaction. The counters
+            // stay as they are, so the next update tries again.
             console.error(`[DbProvider] Error creating snapshot for ${this.label}:`, error);
         }
     }
-
-    public destroy(): void {
-        this.doc.off('update', this.updateHandler);
-        this.createSnapshot();
-    }
 }
 
-// Yjs and awareness hand back whatever origin was passed in; ours is the socket, anything else is server-side.
+function encodeFrame(messageType: number, write: (encoder: encoding.Encoder) => void): Uint8Array {
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, messageType);
+    write(encoder);
+    return encoding.toUint8Array(encoder);
+}
+
+function sendFrame(conn: ServerWebSocket<unknown>, message: Uint8Array): void {
+    conn.send(Buffer.from(message), message.byteLength >= COMPRESS_FRAME_MIN_BYTES);
+}
+
+// Yjs and awareness hand back whatever origin the change was made with. A socket means a peer made
+// it, anything else means the server did.
 function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
     return origin !== null && typeof origin === 'object' && 'readyState' in origin;
 }
 
-// A client may publish presence for itself only: an awareness `user` field must carry the session
-// user's id, so a reader can't publish under another user's id. The display name stays client-set.
-// A state with no `user` field (the initial empty handshake state) carries no identity to spoof.
+// A client may publish presence for itself only, so the `user` in its awareness state must carry the
+// session user's id. The display name is the client's choice. A state without a `user`, such as the
+// empty one of the handshake, claims no identity.
 function awarenessIdentityMatches(state: unknown, userId: string): boolean {
     if (!isRecord(state)) return true;
     const identity = state['user'];
@@ -176,29 +163,25 @@ function awarenessIdentityMatches(state: unknown, userId: string): boolean {
 }
 
 export class CollabDocument {
-    private drive: Drive;
-    private path: DrivePath;
-    // Exposed for server-side import/export dispatchers that write directly into the Yjs doc.
-    // See docs/DOCUMENT-CONTENT-LAYER.md.
-    public doc!: Y.Doc;
+    public readonly doc = new Y.Doc();
+    public dataDbPathId: string | null = null;
+    private readonly drive: Drive;
+    private readonly path: DrivePath;
     private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;
-    private connections: Map<ServerWebSocket<unknown>, User> = new Map();
-
-    private connectionClientIds: Map<ServerWebSocket<unknown>, Set<number>> = new Map();
-    // Reverse index of connectionClientIds: which connection currently owns each awareness client id.
-    // An id may only be written or removed by the connection that first declared it, so a reader can't
-    // evict or overwrite a peer's presence. Released on removal and on disconnect.
-    private clientIdOwners: Map<number, ServerWebSocket<unknown>> = new Map();
-    private closed: boolean = false;
-    private lastTouchedAt = 0;
-    // An update the touch throttle skipped; destruct stamps it, so closing a document that was only
-    // read leaves Modified alone and the 60 s linger never shows as the edit time.
-    private untouchedUpdateAt: number | null = null;
-    private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
+    private readonly connections = new Map<ServerWebSocket<unknown>, User>();
+    // The awareness client ids each connection declared, and the connection that owns each id. Only the
+    // owner may write or remove an id, so no peer can evict or overwrite another's cursor.
+    private readonly connectionClientIds = new Map<ServerWebSocket<unknown>, Set<number>>();
+    private readonly clientIdOwners = new Map<number, ServerWebSocket<unknown>>();
+    private closed = false;
     private closeTimer: ReturnType<typeof setTimeout> | undefined;
     private closeLingerMs = CLOSE_LINGER_MS;
-    public dataDbPathId: string | null = null;
+    private lastTouchedAt = 0;
+    // The time of an update the touch throttle skipped. The close stamps it, so a document that was only
+    // read keeps its Modified time, and the linger never shows as the time of the last edit.
+    private untouchedUpdateAt: number | null = null;
+    private readonly editRecordedAtByUser = new Map<string, number>();
 
     public constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
@@ -209,10 +192,9 @@ export class CollabDocument {
         return this.connections.size;
     }
 
+    // Sets up a new document's container. If comments.db fails after data.db was made,
+    // provisionManagedDbs removes both, so a retry starts clean.
     public static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
-        // Atomic provisioning across both managed dbs. If comments.db fails
-        // after data.db succeeded, the helper rolls both back so a retry of
-        // the outer create() starts from a clean slate.
         await drive.provisionManagedDbs(mountId, docId, [
             { name: 'data.db', config: COLLAB_DB_CONFIG },
             { name: 'comments.db', config: COMMENT_INDEX_DB_CONFIG },
@@ -222,23 +204,20 @@ export class CollabDocument {
     }
 
     public async init(): Promise<CollabDocument> {
-        let [dataDbPath, commentsDbPath] = await Promise.all([
-            this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db'),
-            this.drive.getChildByName(this.path.mountId, this.path.id, 'comments.db'),
-        ]);
-        if (!dataDbPath) {
-            await CollabDocument.create(this.drive, this.path.mountId, this.path.id);
-            [dataDbPath, commentsDbPath] = await Promise.all([
+        const findDatabases = () =>
+            Promise.all([
                 this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db'),
                 this.drive.getChildByName(this.path.mountId, this.path.id, 'comments.db'),
             ]);
-            if (!dataDbPath) {
-                throw new ApiError(500, `Failed to create data.db in ${this.path.name}`);
-            }
+        let [dataDbPath, commentsDbPath] = await findDatabases();
+        if (!dataDbPath) {
+            await CollabDocument.create(this.drive, this.path.mountId, this.path.id);
+            [dataDbPath, commentsDbPath] = await findDatabases();
+            if (!dataDbPath) throw new ApiError(500, `Failed to create data.db in ${this.path.name}`);
         }
 
-        // Speculatively warm comments.db so /comments hits Mount.documentDbs' cache.
-        // Fire-and-forget: the /comments request will surface any genuine problem.
+        // comments.db opens now, so the editor's first comments request finds it ready. Nothing waits for
+        // it, because that request reports any real problem itself.
         if (commentsDbPath) {
             this.drive.openDatabase(this.path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id).catch(() => {});
         }
@@ -246,18 +225,15 @@ export class CollabDocument {
         const managedDb = await this.drive.openDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
         this.dataDbPathId = dataDbPath.id;
 
-        this.doc = new Y.Doc();
-        this.doc.gc = true;
         this.provider = new DbProvider(this.doc, this.path.name, managedDb);
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         this.doc.on('update', (update: Uint8Array, origin: unknown) => {
-            const encoder = encoding.createEncoder();
-            encoding.writeVarUint(encoder, MESSAGE_SYNC);
-            syncProtocol.writeUpdate(encoder, update);
-            const message = encoding.toUint8Array(encoder);
             const conn = isConnection(origin) ? origin : null;
-            this.broadcastMessage(conn, message);
+            this.broadcastMessage(
+                conn,
+                encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.writeUpdate(encoder, update)),
+            );
             const user = conn && this.connections.get(conn);
             if (user) this.recordEditThrottled(user);
             this.throttledTouchUpdatedAt();
@@ -271,41 +247,15 @@ export class CollabDocument {
             ) => {
                 const changedClients = added.concat(updated, removed);
                 if (changedClients.length === 0) return;
-                const encoder = encoding.createEncoder();
-                encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
-                encoding.writeVarUint8Array(
-                    encoder,
-                    awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients),
-                );
-                this.broadcastMessage(isConnection(origin) ? origin : null, encoding.toUint8Array(encoder));
+                this.broadcastMessage(isConnection(origin) ? origin : null, this.encodeAwareness(changedClients));
             },
         );
 
         return this;
     }
 
-    private throttledTouchUpdatedAt(): void {
-        const now = Date.now();
-        if (now - this.lastTouchedAt < TOUCH_THROTTLE_MS) {
-            this.untouchedUpdateAt = now;
-            return;
-        }
-        this.lastTouchedAt = now;
-        this.untouchedUpdateAt = null;
-        this.drive.touchUpdatedAt(this.path.mountId, this.path.id, new Date(now)).catch(() => {});
-    }
-
-    private recordEditThrottled(user: User): void {
-        // Stickies activity is fully covered by specific sticky-*/comment events; a generic
-        // 'edited' row would double-report every drag.
-        if (this.path.type === DRIVE_TYPE_STICKIES) return;
-        const now = Date.now();
-        if (now - (this.lastEditRecordedAt.get(user.id) ?? 0) < EDIT_RECORD_THROTTLE_MS) return;
-        this.lastEditRecordedAt.set(user.id, now);
-        this.drive.recordFileEvent(this.path.mountId, this.path.id, user, { eventType: 'edited' }).catch(() => {});
-    }
-
-    public destruct() {
+    // The provider writes a last snapshot as it stops, so data.db closes after this, never before.
+    public destruct(): void {
         if (this.closed) return;
         this.closed = true;
         clearTimeout(this.closeTimer);
@@ -323,27 +273,7 @@ export class CollabDocument {
         this.doc.destroy();
     }
 
-    // Replaces the live Y.Doc's state with the snapshot's. Runs as one
-    // transaction → one update → existing 'update' handler persists to data.db
-    // and broadcasts to every connected WebSocket. Connected editors converge
-    // live; disconnected sessions pick up the new state via the next sync
-    // handshake. The caller (versioning/restore.ts) deliberately holds no
-    // container lock: the surgery is synchronous, so nothing interleaves with it.
-    public applySnapshotState(state: Uint8Array): void {
-        // Internal invariants — the only caller (versioning/restore) already
-        // branched on isCollabType, and every Yjs type declares yjsRoots.
-        if (this.closed) throw new Error('applySnapshotState: CollabDocument is closed');
-        if (!isCollabType(this.path.type)) {
-            throw new Error(`applySnapshotState called on non-collab path ${this.path.type}`);
-        }
-        const roots = EIGEN_DOC_TYPE_INFO[this.path.type].yjsRoots;
-        if (!roots) {
-            throw new Error(`No yjsRoots schema declared for ${this.path.type}`);
-        }
-        restoreYjsDoc(this.doc, state, roots);
-    }
-
-    public subscribe(user: User, conn: ServerWebSocket<unknown>) {
+    public subscribe(user: User, conn: ServerWebSocket<unknown>): void {
         // A mount sweep can close a document while a socket still waits for it to load. That socket
         // gets a 503 and connects again, to a new document.
         if (this.closed) throw new ApiError(503, 'Document is closing');
@@ -352,54 +282,22 @@ export class CollabDocument {
         this.sendSyncStep1(conn);
     }
 
-    public unsubscribe(conn: ServerWebSocket<unknown>) {
-        if (this.closed) {
-            return;
-        }
+    public unsubscribe(conn: ServerWebSocket<unknown>): void {
+        if (this.closed) return;
         this.dropConnection(conn);
-
+        // Sockets that are already closing go too, so they don't hold off the close.
         for (const connection of this.connections.keys()) {
-            if (connection.readyState >= WebSocket.CLOSING) {
-                this.dropConnection(connection);
-            }
+            if (connection.readyState >= WebSocket.CLOSING) this.dropConnection(connection);
         }
-        if (this.connections.size === 0) {
-            this.scheduleClose();
-        }
+        if (this.connections.size === 0) this.scheduleClose();
     }
 
-    private dropConnection(conn: ServerWebSocket<unknown>): void {
-        this.connections.delete(conn);
-        const clientIds = this.connectionClientIds.get(conn);
-        if (clientIds) {
-            // Release ownership so a reconnecting tab reusing the same clientID isn't locked out.
-            for (const id of clientIds) this.clientIdOwners.delete(id);
-            if (clientIds.size > 0) {
-                awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(clientIds), null);
-            }
-        }
-        this.connectionClientIds.delete(conn);
-    }
-
-    private scheduleClose(): void {
-        clearTimeout(this.closeTimer);
-        this.closeTimer = setTimeout(() => {
-            if (this.closed || this.connections.size > 0) return;
-            this.drive.closeCollabDocument(this.path.mountId, this.path.id).catch(() => {});
-        }, this.closeLingerMs);
-        // A lingering doc must never hold the process open at shutdown.
-        this.closeTimer.unref();
-    }
-
-    // Read is checked only when a connection opens (routes/collab.ts), whereas write is
-    // re-checked per message. Enforcing read here on an ACL change restores the symmetry:
-    // a user whose read was revoked is dropped from the live doc immediately, instead of
-    // receiving broadcasts until they happen to disconnect. Called by Drive.updateACL.
-    public async enforceReadAccess() {
-        if (this.closed) {
-            return;
-        }
-        // Snapshot: unsubscribe() mutates `connections` while we iterate.
+    // Read is checked once, when a socket opens, while write is checked on every message. So when
+    // sharing changes, the Drive calls this to drop each user who may no longer read. Otherwise they
+    // would keep receiving edits until they disconnect.
+    public async enforceReadAccess(): Promise<void> {
+        if (this.closed) return;
+        // A copy, because unsubscribe changes the map.
         for (const [conn, user] of [...this.connections]) {
             if (!(await this.drive.canRead(this.path.mountId, this.path.id, user))) {
                 conn.close(1008, 'Access revoked');
@@ -408,46 +306,41 @@ export class CollabDocument {
         }
     }
 
-    public handleMessage(conn: ServerWebSocket<unknown>, update: Uint8Array, canWrite: boolean) {
-        if (this.closed) {
-            return;
-        }
-        const decoder = decoding.createDecoder(update);
+    public handleMessage(conn: ServerWebSocket<unknown>, message: Uint8Array, canWrite: boolean): void {
+        if (this.closed) return;
+        const decoder = decoding.createDecoder(message);
         const messageType = decoding.readVarUint(decoder);
 
         if (messageType === MESSAGE_SYNC) {
-            const updateType = decoding.peekUint8(decoder);
-            if (!canWrite && (updateType === 1 || updateType === 2)) {
+            // A reader still gets the handshake. Only a step 2 or an update changes the document.
+            const syncType = decoding.peekUint8(decoder);
+            if (
+                !canWrite &&
+                (syncType === syncProtocol.messageYjsSyncStep2 || syncType === syncProtocol.messageYjsUpdate)
+            ) {
                 return;
             }
-
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MESSAGE_SYNC);
             syncProtocol.readSyncMessage(decoder, encoder, this.doc, conn);
-
-            if (encoding.length(encoder) > 1) {
-                const responseMessage = encoding.toUint8Array(encoder);
-                sendFrame(conn, responseMessage);
-            }
+            // Only a step 1 has a reply.
+            if (encoding.length(encoder) > 1) sendFrame(conn, encoding.toUint8Array(encoder));
         } else if (messageType === MESSAGE_AWARENESS) {
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
             const user = this.connections.get(conn);
             if (!user) return;
 
-            // Validate before applying: a read-only peer could otherwise flood the shared awareness
-            // map (fanned out to every peer, replayed to every joiner) with unbounded client ids or
-            // state, spoof another user's identity, or evict/overwrite a peer's presence. Drop the
-            // whole frame on any violation.
+            // A reader may send awareness too, so the update is checked before it is applied. Any entry
+            // that breaks a rule drops the whole frame.
             const owned = new Set(this.connectionClientIds.get(conn));
             const removed: number[] = [];
             try {
-                const trackDecoder = decoding.createDecoder(awarenessUpdate);
-                const len = decoding.readVarUint(trackDecoder);
-                for (let i = 0; i < len; i++) {
-                    const clientId = decoding.readVarUint(trackDecoder);
-                    decoding.readVarUint(trackDecoder); // clock
-                    const stateJson = decoding.readVarString(trackDecoder);
-                    // A client id may only be written or removed by the connection that first declared it.
+                const entries = decoding.createDecoder(awarenessUpdate);
+                const count = decoding.readVarUint(entries);
+                for (let i = 0; i < count; i++) {
+                    const clientId = decoding.readVarUint(entries);
+                    decoding.readVarUint(entries); // the clock
+                    const stateJson = decoding.readVarString(entries);
                     const ownerConn = this.clientIdOwners.get(clientId);
                     if (ownerConn !== undefined && ownerConn !== conn) return;
                     if (stateJson === 'null') {
@@ -460,12 +353,12 @@ export class CollabDocument {
                     if (owned.size > MAX_AWARENESS_CLIENT_IDS) return;
                 }
             } catch {
-                return; // malformed frame
+                return; // a malformed frame
             }
 
-            // Applying fires the awareness 'update' handler, which is the one fan-out to the other peers.
+            // Applying fires the awareness 'update' handler, which sends the change to the other peers.
             awarenessProtocol.applyAwarenessUpdate(this.awareness, awarenessUpdate, conn);
-            // Removals shrink the owned set (and free the id) so a client that recycles clientIDs isn't wedged at the cap.
+            // A removed id is freed, so a client that recycles its ids never gets stuck at the cap.
             for (const id of removed) {
                 owned.delete(id);
                 this.clientIdOwners.delete(id);
@@ -477,10 +370,55 @@ export class CollabDocument {
         }
     }
 
-    private broadcastMessage(originConn: ServerWebSocket<unknown> | null, message: Uint8Array): void {
-        if (this.closed) {
-            return;
+    // Replaces the document's state with a version's, for a version restore. It runs as one Yjs
+    // transaction, so it makes one update, which is saved and sent to every editor like any edit. It is
+    // synchronous, so nothing can change the document halfway, and the caller needs no lock.
+    public applySnapshotState(state: Uint8Array): void {
+        if (this.closed) throw new Error('applySnapshotState: CollabDocument is closed');
+        if (!isCollabType(this.path.type)) {
+            throw new Error(`applySnapshotState called on non-collab path ${this.path.type}`);
         }
+        const roots = EIGEN_DOC_TYPE_INFO[this.path.type].yjsRoots;
+        if (!roots) throw new Error(`No yjsRoots schema declared for ${this.path.type}`);
+        restoreYjsDoc(this.doc, state, roots);
+    }
+
+    private dropConnection(conn: ServerWebSocket<unknown>): void {
+        this.connections.delete(conn);
+        const clientIds = this.connectionClientIds.get(conn);
+        if (clientIds) {
+            // Freed, so a reconnecting tab that reuses its client id isn't locked out.
+            for (const id of clientIds) this.clientIdOwners.delete(id);
+            if (clientIds.size > 0) awarenessProtocol.removeAwarenessStates(this.awareness, [...clientIds], null);
+        }
+        this.connectionClientIds.delete(conn);
+    }
+
+    private scheduleClose(): void {
+        clearTimeout(this.closeTimer);
+        this.closeTimer = setTimeout(() => {
+            if (this.closed || this.connections.size > 0) return;
+            this.drive.closeCollabDocument(this.path.mountId, this.path.id).catch(() => {});
+        }, this.closeLingerMs);
+        // A lingering document must never keep the process alive at shutdown.
+        this.closeTimer.unref();
+    }
+
+    private sendSyncStep1(conn: ServerWebSocket<unknown>): void {
+        try {
+            sendFrame(
+                conn,
+                encodeFrame(MESSAGE_SYNC, (encoder) => syncProtocol.writeSyncStep1(encoder, this.doc)),
+            );
+            const awarenessStates = this.awareness.getStates();
+            if (awarenessStates.size > 0) sendFrame(conn, this.encodeAwareness([...awarenessStates.keys()]));
+        } catch (err) {
+            console.error('Error sending sync step 1:', err);
+        }
+    }
+
+    private broadcastMessage(originConn: ServerWebSocket<unknown> | null, message: Uint8Array): void {
+        if (this.closed) return;
         for (const conn of this.connections.keys()) {
             if (conn !== originConn && conn.readyState === WebSocket.OPEN) {
                 try {
@@ -492,28 +430,30 @@ export class CollabDocument {
         }
     }
 
-    private sendSyncStep1(conn: ServerWebSocket<unknown>): void {
-        try {
-            const encoder = encoding.createEncoder();
-            encoding.writeVarUint(encoder, MESSAGE_SYNC);
-            syncProtocol.writeSyncStep1(encoder, this.doc);
-            const syncMessage = encoding.toUint8Array(encoder);
-            sendFrame(conn, syncMessage);
+    private encodeAwareness(clientIds: number[]): Uint8Array {
+        return encodeFrame(MESSAGE_AWARENESS, (encoder) =>
+            encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(this.awareness, clientIds)),
+        );
+    }
 
-            const awarenessStates = this.awareness.getStates();
-            if (awarenessStates.size > 0) {
-                const awarenessEncoder = encoding.createEncoder();
-                encoding.writeVarUint(awarenessEncoder, MESSAGE_AWARENESS);
-                encoding.writeVarUint8Array(
-                    awarenessEncoder,
-                    awarenessProtocol.encodeAwarenessUpdate(this.awareness, Array.from(awarenessStates.keys())),
-                );
-
-                const awarenessMessage = encoding.toUint8Array(awarenessEncoder);
-                sendFrame(conn, awarenessMessage);
-            }
-        } catch (err) {
-            console.error('Error sending sync step 1:', err);
+    private throttledTouchUpdatedAt(): void {
+        const now = Date.now();
+        if (now - this.lastTouchedAt < TOUCH_THROTTLE_MS) {
+            this.untouchedUpdateAt = now;
+            return;
         }
+        this.lastTouchedAt = now;
+        this.untouchedUpdateAt = null;
+        this.drive.touchUpdatedAt(this.path.mountId, this.path.id, new Date(now)).catch(() => {});
+    }
+
+    private recordEditThrottled(user: User): void {
+        // A stickies board records its own event for every action, so an 'edited' row would report
+        // each drag twice.
+        if (this.path.type === DRIVE_TYPE_STICKIES) return;
+        const now = Date.now();
+        if (now - (this.editRecordedAtByUser.get(user.id) ?? 0) < EDIT_RECORD_THROTTLE_MS) return;
+        this.editRecordedAtByUser.set(user.id, now);
+        this.drive.recordFileEvent(this.path.mountId, this.path.id, user, { eventType: 'edited' }).catch(() => {});
     }
 }
