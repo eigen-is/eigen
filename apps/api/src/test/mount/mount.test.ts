@@ -1758,6 +1758,35 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         expect(await mount4.getPath(newId)).not.toBeNull();
     });
 
+    // A move that races a trash can leave a trash root's original folder inside its own subtree, or two
+    // trash roots whose original folders sit inside each other. The delete must not wait on a lock it holds.
+    test('permanent delete ends when trashedFrom points back into the subtree', async () => {
+        const outerId = await mount.createFolder(rootId, 'CycleOuter');
+        const innerId = await mount.createFolder(outerId, 'CycleInner');
+        await mount.trashPath(innerId);
+        await mount.updatePath(outerId, { parentId: innerId });
+
+        const pId = await mount.createFolder(rootId, 'CycleP');
+        const xId = await mount.createFolder(pId, 'CycleX');
+        const qId = await mount.createFolder(rootId, 'CycleQ');
+        const yId = await mount.createFolder(qId, 'CycleY');
+        await mount.trashPath(xId);
+        await mount.trashPath(yId);
+        await mount.updatePath(pId, { parentId: yId });
+        await mount.updatePath(qId, { parentId: xId });
+
+        const deleted = (id: string) =>
+            Promise.race([
+                mount.permanentlyDeleteFromTrash(id).then(() => 'deleted'),
+                Bun.sleep(1000).then(() => 'timed out'),
+            ]);
+        expect(await deleted(innerId)).toBe('deleted');
+        expect(await deleted(xId)).toBe('deleted');
+        for (const id of [outerId, innerId, pId, xId, qId, yId]) {
+            expect(await mount.getPath(id)).toBeNull();
+        }
+    });
+
     test('permanentlyDeleteFromTrash on non-trashed item throws 400', async () => {
         const fileId = await mount.createFile(rootId, 'not-trashed2.txt', 'text/plain', 3, Buffer.from('nop'));
         await expect(mount.permanentlyDeleteFromTrash(fileId)).rejects.toThrow('Item is not in trash');

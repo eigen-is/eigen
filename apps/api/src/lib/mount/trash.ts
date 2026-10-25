@@ -283,7 +283,10 @@ export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void
 
 // Runs under the item's path lock, which trash and restore take too, and reads the row inside it. So a
 // restore that got the lock first is never undone. It returns false when the item is not in trash.
-async function deleteIfTrashed(mount: Mount, pathId: string): Promise<boolean> {
+// A move that raced a trash can point a trashedFrom back into the folder being deleted. Path locks are
+// not reentrant, so the delete skips every item it has already taken on (`seen`).
+async function deleteIfTrashed(mount: Mount, pathId: string, seen = new Set<string>()): Promise<boolean> {
+    seen.add(pathId);
     return mount.withPathLock(pathId, async () => {
         const row = await mount.db
             .select({ type: paths.type, trashedAt: paths.trashedAt })
@@ -307,7 +310,7 @@ async function deleteIfTrashed(mount: Mount, pathId: string): Promise<boolean> {
                 .all();
             // Each one is a trash root of its own, so a restore may race it too.
             for (const orphan of orphans) {
-                await deleteIfTrashed(mount, orphan.id);
+                if (!seen.has(orphan.id)) await deleteIfTrashed(mount, orphan.id, seen);
             }
         }
 
