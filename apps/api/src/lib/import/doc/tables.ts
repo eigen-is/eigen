@@ -1,3 +1,7 @@
+// The docx reader's tables: readTable turns a w:tbl into the editor's table, its grid as Word lays it out from the
+// grid and the cells' widths, scaled into the room the editor gives it, with merged cells, header rows and fills.
+// A table nested in a cell fits inside the cell's padding. The paragraph reader calls it for each table it meets.
+
 import type { JSONContent } from '@tiptap/core';
 import {
     isFigureFrameNode,
@@ -277,24 +281,29 @@ function tableRows(table: XmlElement): Row[] {
     return rows;
 }
 
-// Word builds a grid the file leaves out from its cells' widths: a column the grid gives none takes the width of a cell
-// over it alone, past the grid's columns only where it declares none.
-function withCellWidths(declared: number[], rows: Row[]): number[] {
-    if (declared.every((width) => width > 0) && declared.length > 0) return declared;
-    const grid = [...declared];
-    const end = declared.length || MAX_TABLE_COLUMNS;
+// Each cell over one grid column alone, with that column, past the row's gridBefore.
+function* cellsAlone(rows: Row[]): Generator<{ column: number; tcW: XmlElement | undefined }> {
     for (const row of rows) {
         let column = Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0);
         for (const cell of row.cells) {
-            if (column >= end) break;
+            if (column >= MAX_TABLE_COLUMNS) break;
             const tcPr = wChild(cell, 'tcPr');
             const span = Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1);
-            const tcW = wChild(tcPr, 'tcW');
-            if (span === 1 && !((grid[column] ?? 0) > 0) && w(tcW, 'type') === 'dxa')
-                grid[column] = twipsOf(w(tcW, 'w')) ?? 0;
+            if (span === 1) yield { column, tcW: wChild(tcPr, 'tcW') };
             column += span;
         }
     }
+}
+
+// Word builds a grid the file leaves out from its cells' widths: a column the grid gives none takes the width of a cell
+// over it alone, past the grid's columns only where it declares none.
+function withCellWidths(declared: number[], rows: Row[]): number[] {
+    if (declared.length > 0 && declared.every((width) => width > 0)) return declared;
+    const grid = [...declared];
+    const end = declared.length || MAX_TABLE_COLUMNS;
+    for (const { column, tcW } of cellsAlone(rows))
+        if (column < end && !((grid[column] ?? 0) > 0) && w(tcW, 'type') === 'dxa')
+            grid[column] = twipsOf(w(tcW, 'w')) ?? 0;
     return Array.from(grid, (width) => width ?? 0);
 }
 
@@ -302,16 +311,7 @@ function withCellWidths(declared: number[], rows: Row[]): number[] {
 function unsizedColumns(rows: Row[]): Set<number> {
     const sized = new Set<number>();
     const unsized = new Set<number>();
-    for (const row of rows) {
-        let column = Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0);
-        for (const cell of row.cells) {
-            if (column >= MAX_TABLE_COLUMNS) break;
-            const tcPr = wChild(cell, 'tcPr');
-            const span = Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1);
-            if (span === 1) (w(wChild(tcPr, 'tcW'), 'type') === NO_STORED_WIDTH ? unsized : sized).add(column);
-            column += span;
-        }
-    }
+    for (const { column, tcW } of cellsAlone(rows)) (w(tcW, 'type') === NO_STORED_WIDTH ? unsized : sized).add(column);
     for (const column of sized) unsized.delete(column);
     return unsized;
 }

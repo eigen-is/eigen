@@ -1,3 +1,7 @@
+// The docx reader's runs: walkInline turns a paragraph's runs, fields, hyperlinks, notes and equations into pieces,
+// each text with the marks Word draws it in as far as the Normal and the node don't already. The paragraph reader
+// calls it and sorts the pieces into blocks.
+
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { readFontSize } from '@workspace/lib/constants/fonts';
@@ -29,8 +33,9 @@ import {
 } from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
-// italic is whether Word draws a run italic: whether that is the mark waits for the paragraph's node.
-// equation is the text of an equation past a bound, which the text beside it is set off from.
+// font and size are the face Word draws a run in, its size in half points, 20 where nothing sets one, which the
+// paragraph's line height counts. italic is whether Word draws a run italic: whether that is the mark waits for the
+// paragraph's node. equation is the text of an equation past a bound, which the text beside it is set off from.
 export type Piece =
     | {
           kind: 'node';
