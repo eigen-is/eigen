@@ -1777,7 +1777,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
 
         const deleted = (id: string) =>
             Promise.race([
-                mount.permanentlyDeleteFromTrash(id).then(() => 'deleted'),
+                mount.permanentlyDeleteFromTrash(id).then((deleted) => (deleted ? 'deleted' : 'kept')),
                 Bun.sleep(1000).then(() => 'timed out'),
             ]);
         expect(await deleted(innerId)).toBe('deleted');
@@ -1787,13 +1787,14 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         }
     });
 
-    test('permanentlyDeleteFromTrash on non-trashed item throws 400', async () => {
+    test('permanentlyDeleteFromTrash keeps an item that is not in trash', async () => {
         const fileId = await mount.createFile(rootId, 'not-trashed2.txt', 'text/plain', 3, Buffer.from('nop'));
-        await expect(mount.permanentlyDeleteFromTrash(fileId)).rejects.toThrow('Item is not in trash');
+        expect(await mount.permanentlyDeleteFromTrash(fileId)).toBe(false);
+        expect(await mount.getPath(fileId)).not.toBeNull();
     });
 
     test('permanentlyDeleteFromTrash on non-existent item is a no-op', async () => {
-        await expect(mount.permanentlyDeleteFromTrash('nonexistent-id-xyz')).resolves.toBeUndefined();
+        expect(await mount.permanentlyDeleteFromTrash('nonexistent-id-xyz')).toBe(false);
     });
 
     // The delete has read the row as trashed and sits in deletePath when the restore arrives. The

@@ -929,7 +929,7 @@ export class Mount {
         return trash.restorePath(this, pathId);
     }
 
-    public async permanentlyDeleteFromTrash(pathId: string): Promise<void> {
+    public async permanentlyDeleteFromTrash(pathId: string): Promise<boolean> {
         return trash.permanentlyDeleteFromTrash(this, pathId);
     }
 

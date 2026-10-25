@@ -703,13 +703,17 @@ export class Drive {
     public async permanentlyDelete(mountId: string, pathId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
-        if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
-        await permanentlyDelete(this, mount, item, user);
+        if (!item?.trashedAt || !(await permanentlyDelete(this, mount, item, user))) {
+            throw new ApiError(404, 'Trashed item not found');
+        }
     }
 
+    // A folder's delete takes its separately trashed children with it, and a restore can win an item's
+    // lock. Both leave an item in the list that is no longer in trash, and the loop goes past it.
     public async emptyTrash(mountId: string, user?: User): Promise<void> {
-        for (const item of await this.getMount(mountId).listTrash()) {
-            await this.permanentlyDelete(mountId, item.id, user);
+        const mount = this.getMount(mountId);
+        for (const item of await mount.listTrash()) {
+            await permanentlyDelete(this, mount, item, user);
         }
     }
 

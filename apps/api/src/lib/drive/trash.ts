@@ -63,7 +63,8 @@ export async function restorePath(drive: Drive, mount: Mount, pathId: string, us
     }
 }
 
-export async function permanentlyDelete(drive: Drive, mount: Mount, item: DrivePath, user?: User): Promise<void> {
+// Returns false when the item is gone or no longer in trash by the time the delete holds its lock.
+export async function permanentlyDelete(drive: Drive, mount: Mount, item: DrivePath, user?: User): Promise<boolean> {
     // A deleted path gets no history row, because deleting the path deletes its rows too. The watchers
     // only get a notification. Who watches, and the folder it was trashed from, are read before the
     // delete removes them.
@@ -74,7 +75,7 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
         watcherIds = mount.history.collectWatcherIds(trashedFrom ? [item.id, trashedFrom] : [item.id], user.id);
     }
 
-    await mount.permanentlyDeleteFromTrash(item.id);
+    if (!(await mount.permanentlyDeleteFromTrash(item.id))) return false;
 
     if (isContainerType(item.type)) {
         drive.emit(SSEventType.DRIVE_FOLDER_DELETED, item);
@@ -94,6 +95,7 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
             verifyAncestors: [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item],
         });
     }
+    return true;
 }
 
 async function propagateACLRemovalRecursively(mount: Mount, pathId: string, user?: User): Promise<void> {

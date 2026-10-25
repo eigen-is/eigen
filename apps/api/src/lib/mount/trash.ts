@@ -263,10 +263,6 @@ function restoreDescendants(mount: Mount, parentId: string, now: Date): void {
     `);
 }
 
-export async function permanentlyDeleteFromTrash(mount: Mount, pathId: string): Promise<void> {
-    if (!(await deleteIfTrashed(mount, pathId))) throw new ApiError(400, 'Item is not in trash');
-}
-
 export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void> {
     const cutoffEpoch = Math.floor((Date.now() - maxAgeDays * 24 * 60 * 60 * 1000) / 1000);
     const expired = await mount.db
@@ -277,15 +273,19 @@ export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void
     for (const row of expired) {
         // A mount close aborts its downloads and then waits for this loop, so the loop stops here.
         if (mount.downloads.signal.aborted) return;
-        await deleteIfTrashed(mount, row.id);
+        await permanentlyDeleteFromTrash(mount, row.id);
     }
 }
 
 // Runs under the item's path lock, which trash and restore take too, and reads the row inside it. So a
-// restore that got the lock first is never undone. It returns false when the item is not in trash.
+// restore that got the lock first is never undone. It returns false when the item is gone or not in trash.
 // A move that raced a trash can point a trashedFrom back into the folder being deleted. Path locks are
 // not reentrant, so the delete skips every item it has already taken on (`seen`).
-async function deleteIfTrashed(mount: Mount, pathId: string, seen = new Set<string>()): Promise<boolean> {
+export async function permanentlyDeleteFromTrash(
+    mount: Mount,
+    pathId: string,
+    seen = new Set<string>(),
+): Promise<boolean> {
     seen.add(pathId);
     return mount.withPathLock(pathId, async () => {
         const row = await mount.db
@@ -293,8 +293,7 @@ async function deleteIfTrashed(mount: Mount, pathId: string, seen = new Set<stri
             .from(paths)
             .where(eq(paths.id, pathId))
             .get();
-        if (!row) return true;
-        if (!row.trashedAt) return false;
+        if (!row?.trashedAt) return false;
 
         if (row.type !== 'file') {
             const allIds = [pathId, ...mount.collectDescendantIds(pathId)];
@@ -310,7 +309,7 @@ async function deleteIfTrashed(mount: Mount, pathId: string, seen = new Set<stri
                 .all();
             // Each one is a trash root of its own, so a restore may race it too.
             for (const orphan of orphans) {
-                if (!seen.has(orphan.id)) await deleteIfTrashed(mount, orphan.id, seen);
+                if (!seen.has(orphan.id)) await permanentlyDeleteFromTrash(mount, orphan.id, seen);
             }
         }
 
