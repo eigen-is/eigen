@@ -219,36 +219,38 @@ export function familyLineScale(mark: RunFace, faces: RunFace[]): number {
     return (fontLineHeight(mark.family) * largest) / tallest;
 }
 
-// What a text node draws with no mark or format of its own, as the docx writer's styles write it: its size in points,
-// its space before and after in twips and its auto line in the Normal's font. A note's paragraph draws Word's
-// FootnoteText over the Normal.
-export function ownTextLook(
-    type: string,
-    level: number,
-    normal: NormalStyle,
-    inNote: boolean,
-): { sizePt: number; before: number; after: number; line: number } | undefined {
-    if (inNote)
-        return {
-            sizePt: FOOTNOTE_LOOK.sizePt,
-            before: twips(normal.spaceBefore),
-            after: FOOTNOTE_LOOK.after,
-            line: FOOTNOTE_LOOK.line,
-        };
-    if (type === 'paragraph')
-        return {
-            sizePt: normal.size,
-            before: twips(normal.spaceBefore),
-            after: twips(normal.spaceAfter),
-            line: normalLine(normal.lineSpacing, normal),
-        };
-    const selector =
-        type === 'heading'
-            ? `.eigen-prose h${Math.min(level, HEADING_LOOKS.length)}`
-            : type === 'title' || type === 'subtitle'
-              ? TITLE_SELECTORS[type]
-              : undefined;
-    if (selector === undefined) return undefined;
+type OwnLook = { sizePt: number; before: number; after: number; line: number };
+
+// What a text node draws with no mark or format of its own, which the docx writer's styles write, and so what the reader
+// and the audit take as none: its size in points, its space before and after in twips and its auto line in the
+// Normal's font. A note's paragraph draws Word's FootnoteText over the Normal.
+export function ownTextLook(type: string, level: number, normal: NormalStyle, inNote: boolean): OwnLook | undefined {
+    if (inNote) return noteTextLook(normal);
+    if (type === 'paragraph') return normalTextLook(normal);
+    if (type === 'heading') return sizedTextLook(`.eigen-prose h${Math.min(level, HEADING_LOOKS.length)}`, normal);
+    return type === 'title' || type === 'subtitle' ? sizedTextLook(TITLE_SELECTORS[type], normal) : undefined;
+}
+
+export function normalTextLook(normal: NormalStyle): OwnLook {
+    return {
+        sizePt: normal.size,
+        before: twips(normal.spaceBefore),
+        after: twips(normal.spaceAfter),
+        line: normalLine(normal.lineSpacing, normal),
+    };
+}
+
+export function noteTextLook(normal: NormalStyle): OwnLook {
+    return {
+        sizePt: FOOTNOTE_LOOK.sizePt,
+        before: twips(normal.spaceBefore),
+        after: FOOTNOTE_LOOK.after,
+        line: FOOTNOTE_LOOK.line,
+    };
+}
+
+// A heading's or a title's, by its selector, with its letter spacing.
+export function sizedTextLook(selector: string, normal: NormalStyle): OwnLook & { tracking: number | undefined } {
     const metrics = textMetrics(selector, normal.size);
     return { ...metrics, line: autoLine(metrics.line, metrics.sizePt, normal.font) };
 }
