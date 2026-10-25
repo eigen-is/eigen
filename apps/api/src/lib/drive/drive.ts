@@ -612,13 +612,14 @@ export class Drive {
         const oldName = item.name;
 
         const renamedItem = await mount.updatePath(pathId, { name: newName });
-        // The people the path is shared with keep a copy of it, and this gives them the new name. The
-        // actor stays null, because a rename must not email them.
-        await propagateSharedPathChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
         this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
         if (user) {
             await this.recordFileEvent(mountId, pathId, user, { eventType: 'renamed', details: { oldName, newName } });
         }
+        // The people the path is shared with keep a copy of it, and this gives them the new name. It
+        // reaches other homes, so it goes last: when it fails, this owner's tabs and history are up to
+        // date already. The actor stays null, because a rename must not email them.
+        await propagateSharedPathChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
     }
 
     public async copyPath(
@@ -806,7 +807,6 @@ export class Drive {
         if (sharingRestricted !== undefined) updates.sharingRestricted = sharingRestricted;
         const oldACL = item.acl;
         const updatedItem = await mount.updatePath(pathId, updates);
-        await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
         this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
         if (actor) {
             const { added, removed } = diffACLPrincipals(oldACL, normalizedACL);
@@ -820,6 +820,8 @@ export class Drive {
         // Someone who lost read access loses their open documents now, not when they next reconnect.
         // Every connection to this owner's documents lives in this Drive, shared users included.
         await this.documents.enforceReadAccessBelow(mount, pathId);
+        // The copies in the homes of the people it is shared with go last, the same as in renamePath.
+        await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
     }
 
     // Every user who can reach the path, through its own ACL or a folder above it. A team in an

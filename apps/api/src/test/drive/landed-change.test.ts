@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { ApiError } from '../../lib/core/errors';
+import * as aclPropagation from '../../lib/drive/acl-propagation';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import type { Mount } from '../../lib/mount';
@@ -79,5 +81,81 @@ describe('a change that has landed', () => {
         } finally {
             write.mockRestore();
         }
+    });
+
+    // A shared path keeps a copy in the homes of the people it is shared with. Updating those copies
+    // is the last step, so a failure there leaves the owner's tabs and the history up to date.
+    async function sharedFile(name: string) {
+        const file = await home.drive.createFileFromData(mount.id, rootId, name, 'text/plain', Buffer.from('x'));
+        await home.drive.updateACLDelta(mount.id, file.id, {
+            add: [{ id: 'bob@test.eigen.is', read: true, write: false }],
+        });
+        return file;
+    }
+
+    async function failingPropagation<T>(change: () => Promise<T>): Promise<{ events: string[]; error: unknown }> {
+        const events: string[] = [];
+        const broadcast = spyOn(home, 'broadcast').mockImplementation((event) => {
+            events.push(event.type);
+        });
+        const propagate = spyOn(aclPropagation, 'propagateSharedPathChange').mockRejectedValue(
+            new Error('auth db down'),
+        );
+        try {
+            const error = await change().then(
+                () => null,
+                (e: unknown) => e,
+            );
+            return { events, error };
+        } finally {
+            propagate.mockRestore();
+            broadcast.mockRestore();
+        }
+    }
+
+    async function historyOf(pathId: string): Promise<string[]> {
+        return (await home.drive.getFileHistory(mount.id, pathId)).map((event) => event.eventType);
+    }
+
+    test('a rename of a shared path reaches the open tabs and the history when the share copies fail', async () => {
+        const file = await sharedFile('landed-rename.txt');
+
+        const { events, error } = await failingPropagation(() =>
+            home.drive.renamePath(mount.id, file.id, 'landed-renamed.txt', alice),
+        );
+
+        expect(error).toBeInstanceOf(Error);
+        expect(events).toContain(SSEventType.DRIVE_PATH_RENAMED);
+        expect(await historyOf(file.id)).toContain('renamed');
+    });
+
+    test('a sharing change reaches the open tabs and the history when the share copies fail', async () => {
+        const file = await sharedFile('landed-share.txt');
+
+        const { events, error } = await failingPropagation(() =>
+            home.drive.updateACLDelta(
+                mount.id,
+                file.id,
+                { add: [{ id: 'charlie@test.eigen.is', read: true, write: false }] },
+                undefined,
+                undefined,
+                alice,
+            ),
+        );
+
+        expect(error).toBeInstanceOf(Error);
+        expect(events).toContain(SSEventType.DRIVE_ACL_UPDATED);
+        expect(await historyOf(file.id)).toContain('acl-changed');
+    });
+
+    test('a restore of a shared path reaches the open tabs and the history when the share copies fail', async () => {
+        const file = await sharedFile('landed-restore.txt');
+        await home.drive.deletePath(mount.id, file.id, alice);
+
+        const { events, error } = await failingPropagation(() => home.drive.restorePath(mount.id, file.id, alice));
+
+        expect(error).toBeInstanceOf(Error);
+        expect(events).toContain(SSEventType.DRIVE_PATH_RESTORED);
+        expect(await historyOf(file.id)).toContain('restored');
     });
 });

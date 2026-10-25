@@ -49,18 +49,18 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
 
 export async function restorePath(drive: Drive, mount: Mount, pathId: string, user?: User): Promise<void> {
     const restoredItem = await mount.restorePath(pathId);
+    drive.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
+    // recordFileEvent reads the path again, so it walks the parent chain of the restored path.
+    if (user) await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' });
 
-    // The sharing comes back. Passing the same ACL as old and new adds nobody, so nobody gets an email again.
+    // The sharing comes back last, the same as in Drive.renamePath. Passing the same ACL as old and
+    // new adds nobody, so nobody gets an email again.
     if (restoredItem.acl) {
         await propagateSharedPathChange(restoredItem, restoredItem.acl, restoredItem.acl, user ?? null);
     }
     if (isContainerType(restoredItem.type)) {
         await propagateACLRestoreRecursively(mount, restoredItem.id, user);
     }
-
-    drive.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
-    // recordFileEvent reads the path again, so it walks the parent chain of the restored path.
-    if (user) await drive.recordFileEvent(mount.id, pathId, user, { eventType: 'restored' });
 }
 
 export async function permanentlyDelete(drive: Drive, mount: Mount, item: DrivePath, user?: User): Promise<void> {
