@@ -1236,8 +1236,8 @@ export class Mount {
     // On `local` a storage key is a name path. A write that derives its key holds the tree lock shared,
     // from resolving the key through the row write, and a folder rename holds it exclusive. Other
     // backends have id keys and take no tree lock. The order is path lock, then document database slot,
-    // then tree lock. A holder never takes the tree lock again: a shared lock inside a shared lock
-    // deadlocks once an exclusive one waits.
+    // then tree lock. A create's lock comes right before the tree lock. A holder never takes the tree lock
+    // again: a shared lock inside a shared lock deadlocks once an exclusive one waits.
     public async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
         return this.isPathBased ? this.treeLock.shared(fn) : fn();
     }
@@ -1248,8 +1248,9 @@ export class Mount {
 
     // On `local` two creates of one name in one folder would write to one name path. So a create also
     // holds a path lock on its folder and its name, folded the way the disk folds it. The second create
-    // then sees the first one's row, or its bytes on disk, and answers 409 before it writes. Like every
-    // path lock, this one is taken before the tree lock.
+    // then sees the first one's row, or its bytes on disk, and answers 409 before it writes. It is taken
+    // right before the tree lock, and its holder takes no database slot. So a snapshot that holds a slot
+    // can take it without a deadlock.
     private async withCreateLock<T>(parentId: string, name: string, fn: () => Promise<T>): Promise<T> {
         if (!this.isPathBased) return fn();
         return this.withPathLock(`${parentId}/${foldName(name)}`, () => this.withTreeShared(fn));
