@@ -151,20 +151,6 @@ export function chartFields(chart: Record<string, unknown>): Record<string, unkn
     return { ...Object.fromEntries(rest), spec: spec ? seriesIdsByPlace(spec) : stored };
 }
 
-const isPie = (spec: unknown): spec is ChartSpec =>
-    typeof spec === 'object' && spec !== null && 'chart' in spec && Object(spec.chart).type === 'pie';
-
-// A difference in a pie's axes alone, which the docx and pptx writers explain the same way.
-export const PIE_AXES_LISTED: Listed<RoundtripDifference, unknown> = {
-    kind: "a pie's axis fields",
-    why: "A pie has no axes in Office, so the axis fields its spec keeps for a change of type, such as a number format the reader takes from the values' cache, come back as a new pie's",
-    matches: ({ feature, a, b }) =>
-        feature === 'chart spec' &&
-        isPie(a) &&
-        isPie(b) &&
-        canonical({ ...a, axes: null }) === canonical({ ...b, axes: null }),
-};
-
 const shown = (value: unknown) => (value === undefined ? '–' : canonical(value));
 
 // By kind, the listed ones under their own name, the rest under their feature, most first.

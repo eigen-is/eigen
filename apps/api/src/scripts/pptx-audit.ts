@@ -26,7 +26,6 @@ import {
     chartFields,
     classify,
     officeMedia,
-    PIE_AXES_LISTED,
     roundtripChild,
     roundtripLine,
     runRoundtrip as runGate,
@@ -214,7 +213,6 @@ export function diffDecks(a: Deck, b: Deck): RoundtripDifference[] {
 // The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
 // matches is unlisted, and fails the gate.
 export const PPTX_LISTED: Listed<RoundtripDifference, PptxRoundtripContext>[] = [
-    PIE_AXES_LISTED,
     {
         kind: 'pictures re-encoded',
         why: 'The export re-encodes a raster as PNG (a lossless source) or JPEG, no larger than OFFICE_IMAGE_MAX_SIZE, so its type or size comes back as the export made it',

@@ -4,7 +4,6 @@ import * as os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JSONContent } from '@tiptap/core';
-import { newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
 import { writeDocx } from '../../lib/export/doc/docx/to-docx';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
@@ -973,19 +972,6 @@ describe('round trip', () => {
                 prepared: new Map(),
             }).map(({ kind, listed }) => [kind, listed]);
         expect(groups(renamed)).toEqual([]);
-        const pie = (format: string | null) => {
-            const spec = sampleChartSpec('pie');
-            const { y } = spec.axes;
-            const axes = { ...spec.axes, y: { ...y, labels: { format } } };
-            return { type: 'chart', attrs: { ...newChartSpecParts({ ...spec, axes }), width: 200, height: 100 } };
-        };
-        const pies = classifyDocx({
-            a: imported(pie('0.0%')),
-            b: imported(pie(null)),
-            pictures: { a: new Map(), b: new Map() },
-            prepared: new Map(),
-        });
-        expect(pies.map(({ kind, listed }) => [kind, listed])).toEqual([["a pie's axis fields", true]]);
         expect(groups({ type: 'figure', attrs: { mediaName: 'chart.svg' } })).toEqual([['node', false]]);
         expect(groups(text('Chart'))).toEqual([['node', false]]);
     });
