@@ -108,11 +108,12 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
             if (!row) throw new ApiError(404, 'Path not found');
             if (!row.trashedFrom) throw new ApiError(400, 'Item is not in trash');
 
-            let targetParentId = root.id;
-            const originalParent = await mount.getPath(row.trashedFrom);
-            if (originalParent && !originalParent.trashedAt) {
-                targetParentId = originalParent.id;
-            }
+            // The original folder takes the item back only where a move could put it. Otherwise the
+            // item goes to the root.
+            const trashedFrom = row.trashedFrom;
+            const targetParentId = mount.db.transaction((tx) => mount.targetFolderErrorInTx(tx, pathId, trashedFrom))
+                ? root.id
+                : trashedFrom;
 
             // A row named `.trash` from before the name rule counts as a conflict too, because restoring
             // it under that name would alias the real trash folder. The row is still trashed, so it never
@@ -136,7 +137,8 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
             const writeRow = async (): Promise<void> => {
                 try {
                     mount.db.transaction((tx) => {
-                        mount.assertTargetFolderInTx(tx, pathId, targetParentId);
+                        const error = mount.targetFolderErrorInTx(tx, pathId, targetParentId);
+                        if (error) throw error;
                         tx.update(paths)
                             .set({
                                 parentId: targetParentId,

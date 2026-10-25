@@ -859,19 +859,22 @@ export class Mount {
     private assertMovableInTx(tx: Tx, pathId: string, targetParentId: string | null | undefined): void {
         const row = tx.select({ trashedAt: paths.trashedAt }).from(paths).where(eq(paths.id, pathId)).get();
         if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
-        if (targetParentId !== undefined) this.assertTargetFolderInTx(tx, pathId, targetParentId);
+        if (targetParentId === undefined) return;
+        const error = this.targetFolderErrorInTx(tx, pathId, targetParentId);
+        if (error) throw error;
     }
 
-    // A move or a restore runs this in the transaction of its row write. It refuses a target in the
-    // row's own subtree. It also refuses a target that went to trash after the caller checked it, with
+    // Why pathId can't go into targetParentId, or null when it can. A move or a restore runs this in the
+    // transaction of its row write, and a restore also runs it to pick its folder. The target must not be in
+    // the row's own subtree. No folder from the target up to the root may be in trash either: that answers
     // the 404 of a deleted folder, because the folder's permanent delete would take the row with it.
     // `seen` stops the walk on a tree that already has a cycle.
-    public assertTargetFolderInTx(tx: Tx, pathId: string, targetParentId: string | null): void {
+    public targetFolderErrorInTx(tx: Tx, pathId: string, targetParentId: string | null): ApiError | null {
         const seen = new Set<string>();
         let current = targetParentId;
         while (current) {
             if (current === pathId) {
-                throw new ApiError(400, 'Cannot move a folder into itself or its own descendant');
+                return new ApiError(400, 'Cannot move a folder into itself or its own descendant');
             }
             if (seen.has(current)) throw new ApiError(500, `Folder tree has a cycle at ${current}`);
             seen.add(current);
@@ -880,9 +883,10 @@ export class Mount {
                 .from(paths)
                 .where(eq(paths.id, current))
                 .get();
-            if (row?.trashedAt) throw new ApiError(404, 'Folder not found');
-            current = row?.parentId ?? null;
+            if (!row || row.trashedAt) return new ApiError(404, 'Folder not found');
+            current = row.parentId;
         }
+        return null;
     }
 
     // Deletes the folder and everything under it. It returns the deleted files, because only a file

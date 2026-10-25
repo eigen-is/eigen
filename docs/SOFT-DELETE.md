@@ -51,7 +51,7 @@ The `acl` column survives trashing. Trash calls `propagateSharedPathChange(path,
 
 ## Restore goes back to the original folder when it still can
 
-The item returns to `trashedFrom` if that folder exists and is not trashed itself, else to the mount root. A name conflict there, or a reserved name, gets a ` (n)` suffix. The folder and name are picked under the lock, because on `local` a storage rename would replace a file a create put there in the meantime, so a restore that raced a same-name create gets the suffix too. A descendant with its own `trashedFrom` stays in trash, since the user trashed it separately.
+The item returns to `trashedFrom` if that folder exists and no folder from it up to the root is in trash, else to the mount root. A name conflict there, or a reserved name, gets a ` (n)` suffix. The folder and name are picked under the lock, because on `local` a storage rename would replace a file a create put there in the meantime, so a restore that raced a same-name create gets the suffix too. A descendant with its own `trashedFrom` stays in trash, since the user trashed it separately.
 
 ## Permanent delete takes the separately trashed descendants with it
 

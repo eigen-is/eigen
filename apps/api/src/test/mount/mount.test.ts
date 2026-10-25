@@ -1435,6 +1435,20 @@ describe('restorePath (local-key storage)', () => {
         expect(restored.trashedAt).toBeNull();
     });
 
+    // A live folder inside a trashed one is legacy data, or a create that raced the trash off `local`.
+    test('restore when an ancestor of the original parent is trashed restores to root', async () => {
+        const outerId = await mount.createFolder(rootId, 'RestoreTrashedAncestor');
+        const innerId = await mount.createFolder(outerId, 'Inner');
+        const fileId = await mount.createFile(innerId, 'deep-orphan.txt', 'text/plain', 1, Buffer.from('d'));
+        await mount.trashPath(fileId);
+        await mount.trashPath(outerId);
+        await mount.db.update(paths).set({ trashedAt: null }).where(eq(paths.id, innerId));
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(rootId);
+        expect(restored.trashedAt).toBeNull();
+    });
+
     test('restore with name conflict auto-renames', async () => {
         const folderId = await mount.createFolder(rootId, 'RestoreConflict');
         const data1 = Buffer.from('original');
@@ -1539,6 +1553,19 @@ describe('restorePath (local path-based storage)', () => {
         expect(restored.parentId).toBe(rootId);
         // File should exist at root on disk
         expect(existsSync(join(mount.dataDir, restored.name))).toBe(true);
+    });
+
+    test('restore when an ancestor of the original parent is trashed restores to root', async () => {
+        const outerId = await mount.createFolder(rootId, 'RestoreLocalTrashedAncestor');
+        const innerId = await mount.createFolder(outerId, 'Inner');
+        const fileId = await mount.createFile(innerId, 'deep-orphan-local.txt', 'text/plain', 1, Buffer.from('d'));
+        await mount.trashPath(fileId);
+        await mount.trashPath(outerId);
+        await mount.db.update(paths).set({ trashedAt: null }).where(eq(paths.id, innerId));
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(rootId);
+        expect(await (await mount.readFile(fileId))!.text()).toBe('d');
     });
 
     // Rows named .trash created before the reserved-name guard can exist on live installs;
