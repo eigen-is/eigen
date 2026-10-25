@@ -401,8 +401,8 @@ describe('a bordered picture exported and read back', () => {
         expect(back[0]).toMatchObject({ strokeColor: '#c0504d', strokeWidth: 4, strokeStyle: 'dashed' });
     });
 
-    // PowerPoint keeps a line's colour at 0 wide; the canvas draws none, and the writer writes none.
-    test('a line 0 wide reads as none, and comes back as none', () => {
+    // PowerPoint and LibreOffice draw a line 0 wide as a hairline, in its colour.
+    test('a line 0 wide reads as the thinnest stroke, and comes back as it', () => {
         const shapes = sp({
             xfrm: box(100, 100, 200, 100),
             geom: 'rect',
@@ -411,11 +411,9 @@ describe('a bordered picture exported and read back', () => {
         const [first] = readPptx(buildPptx({ slides: [{ shapes }] }), { maxMediaBytes: 1024 * 1024 }).slides[0]
             .elements;
         const [back] = roundTrip([first]).deck.slides[0].elements;
-        expect([first.strokeColor, back.strokeColor, back.strokeWidth]).toEqual([
-            'transparent',
-            'transparent',
-            first.strokeWidth,
-        ]);
+        expect(first).toMatchObject({ strokeColor: '#00305e', strokeWidth: 1 });
+        expect(back?.strokeColor).toBe('#00305e');
+        expect(back?.strokeWidth).toBeCloseTo(1, 3);
     });
 });
 
