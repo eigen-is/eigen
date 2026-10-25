@@ -1,3 +1,7 @@
+// LATEX_COMMANDS is the one table of LaTeX commands. Each name maps to what it means, such as a symbol, a function, a
+// large operator, a font or a fraction, with how many braced arguments it takes. The LaTeX reader parses through it,
+// the writer reads it backwards, and a caller may list it, for example to complete a command as the user types.
+
 import { LARGE_OPERATOR_NAMES, PRIME } from './notation';
 import type { MathEnclosure, MathSpace, MathVariant } from './tree';
 import { CASES } from './tree';
