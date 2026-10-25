@@ -450,7 +450,7 @@ function layoutCartesian(
         // The baseline draws zero's line; without it a gridline does, as Office keeps its 0 line.
         if (y.gridlines.visible && (t !== zero || !showNames)) shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
     });
-    ctx.labels.push(...parity(ctx, tickLabels));
+    ctx.labels.push(...parity(ctx, tickLabels, Math.max(0, axis.ticks.indexOf(zero))));
     if (type === 'line') shapes.push(...lineMarks(marks, spec, series, values, band, scale));
     else shapes.push(...barMarks(marks, spec, series, values, band, scale, horizontal, stacked));
     if (showNames) shapes.push(rule('baseline', scale(zero)));
@@ -463,12 +463,17 @@ function layoutCartesian(
     return shapes;
 }
 
-// Every other label hides until none touch, Vega's parity rule, so the first stays; every tick keeps its gridline.
-function parity(ctx: Context, labels: ChartLabel[]): ChartLabel[] {
+// Every other label hides until none touch, Vega's parity rule, keeping the one at `keep` (zero's, when the axis
+// has it); every tick keeps its gridline.
+function parity(ctx: Context, labels: ChartLabel[], keep: number): ChartLabel[] {
     let kept = labels;
+    let at = keep;
     const crowded = () =>
         kept.some((next, i) => i > 0 && touches(ctx, labelBox(ctx, kept[i - 1]), labelBox(ctx, next)));
-    while (kept.length > 1 && crowded()) kept = kept.filter((_, i) => i % 2 === 0);
+    while (kept.length > 1 && crowded()) {
+        kept = kept.filter((_, i) => (i - at) % 2 === 0);
+        at = Math.floor(at / 2);
+    }
     return kept;
 }
 

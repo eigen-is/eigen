@@ -521,6 +521,7 @@ describe('column and bar', () => {
             const bounds = ticks.map(labelBounds);
             for (let i = 1; i < bounds.length; i++) expect(overlaps(bounds[i - 1], bounds[i])).toBe(false);
         }
+        expect(narrow.labels.filter(isTick).map((label) => label.text)).toContain('0');
     });
 
     test('the caller formats the ticks', () => {
