@@ -129,6 +129,41 @@ describe('media', () => {
             ['image-1.svg', 'image/svg+xml'],
         ]);
     });
+
+    // Word for Mac's logo: a PDF for Mac Office (ma) first, the PNG every other Word draws as the fallback.
+    test("a picture's blip is the branch Word reads, a choice for a namespace the reader doesn't know left for its fallback", async () => {
+        const blipFill = (rid: string) =>
+            `<pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`;
+        const logo = GOLDEN_DOCX_IMAGE_RUN.replace(
+            /<pic:blipFill>.*<\/pic:blipFill>/,
+            `<ve:AlternateContent xmlns:ve="http://schemas.openxmlformats.org/markup-compatibility/2006"><ve:Choice xmlns:ma="http://schemas.microsoft.com/office/mac/drawingml/2008/main" Requires="ma">${blipFill('rId1')}</ve:Choice><ve:Fallback>${blipFill('rId2')}</ve:Fallback></ve:AlternateContent>`,
+        );
+        const { bands, media, warnings } = docxToPmJson(
+            Buffer.from(
+                await buildDocxWithBands(
+                    [
+                        {
+                            id: 'h1',
+                            kind: 'header',
+                            xml: paragraph(logo),
+                            rels: `<Relationship Id="rId1" Type="${IMAGE_REL}" Target="media/image1.pdf"/><Relationship Id="rId2" Type="${IMAGE_REL}" Target="media/image2.png"/>`,
+                        },
+                    ],
+                    {
+                        contentTypes: '<Default Extension="pdf" ContentType="application/pdf"/>',
+                        media: { 'word/media/image1.pdf': BYTES, 'word/media/image2.png': BYTES },
+                    },
+                ),
+            ),
+        );
+        expect(media.map(({ name, contentType }) => [unprefixed(name), contentType])).toEqual([
+            ['image-1.png', 'image/png'],
+        ]);
+        expect(nodesOfType(bands.header ?? {}, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(
+            media.map(({ name }) => name),
+        );
+        expect([bands.header && lines(bands.header), warnings]).toEqual([[], []]);
+    });
 });
 
 describe('relationship targets', () => {

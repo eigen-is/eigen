@@ -10,7 +10,7 @@ import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import type { Lost } from '../../document/transform/protocol';
 import type { Budget } from '../../ooxml/budget';
 import { budget } from '../../ooxml/budget';
-import { alternativeFor, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
+import { alternativeFor, isAlternateContent, isOnElement, measure, R_NS, W_NS } from '../../ooxml/ooxml';
 import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType } from '../../ooxml/opc';
 import type { ZipReader } from '../../ooxml/zip';
@@ -181,14 +181,15 @@ export function halfPointsOf(value: string | undefined): number | undefined {
     return measure(value, 2);
 }
 
-// Document order; a match's own content and a text box's are not searched.
+// Document order; a match's own content and a text box's are not searched, and of an mc:AlternateContent only the
+// branch Word reads.
 export function descendants(root: XmlElement, ns: string, local: string): XmlElement[] {
     const found: XmlElement[] = [];
     const stack = xmlElements(root).reverse();
     for (let element = stack.pop(); element; element = stack.pop()) {
         if (hasXmlName(element, ns, local)) found.push(element);
         else if (!hasXmlName(element, W_NS, 'txbxContent')) {
-            const children = xmlElements(element);
+            const children = isAlternateContent(element) ? alternative(element) : xmlElements(element);
             for (let index = children.length - 1; index >= 0; index--) stack.push(children[index]);
         }
     }
