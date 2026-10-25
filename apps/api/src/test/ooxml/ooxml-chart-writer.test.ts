@@ -456,10 +456,22 @@ describe('readChartPartLook', () => {
                     color: LOOK.color,
                     strokeColor: LOOK.strokeColor,
                     strokeWidth: LOOK.strokeWidth,
+                    // Unset, a line series is written at the stroke's width.
+                    ...(type === 'line' && { seriesStrokeWidth: LOOK.strokeWidth }),
                 });
             }
         },
     );
+
+    test("a line series' own width reads back at any scale, the axes keeping theirs", () => {
+        for (const emuPerPx of [EMU_PER_PX, 6350]) {
+            const look = lookOf(sampleChartSpec('line'), { ...LOOK, strokeWidth: 1, seriesStrokeWidth: 2.5 }, emuPerPx);
+            expect(look).toMatchObject({ strokeWidth: 1, seriesStrokeWidth: 2.5 });
+        }
+        expect(lookOf(sampleChartSpec('column'), { ...LOOK, seriesStrokeWidth: 2.5 }, EMU_PER_PX)).not.toHaveProperty(
+            'seriesStrokeWidth',
+        );
+    });
 
     test('no background and no label colour read back as themselves; a pie has no stroke to read, so it reads flat', () => {
         const look = { ...LOOK, fill: FLAT_CHART_LOOK.fill, color: 'transparent' };
@@ -523,6 +535,16 @@ describe('readChartPartLook', () => {
         }
         const widthOnly = part('<c:barChart/><c:catAx><c:spPr><a:ln w="19050"/></c:spPr></c:catAx><c:valAx/>');
         expect(look(widthOnly)).toMatchObject({ strokeColor: AUTOMATIC_LINE, strokeWidth: 2 });
+    });
+
+    test("an Office line chart whose series state no line draws them 2.25 pt, Office's own, its axes 0.75 pt", () => {
+        const chart = part('<c:lineChart><c:ser><c:idx val="0"/></c:ser></c:lineChart><c:catAx/><c:valAx/>');
+        expect(look(chart)).toMatchObject({ strokeWidth: 1, seriesStrokeWidth: 3 });
+        expect(look(chart, 'pptx', 6350)).toMatchObject({ strokeWidth: 1.5, seriesStrokeWidth: 4.5 });
+        const stated = part(
+            '<c:lineChart><c:ser><c:spPr><a:ln w="12700" cap="rnd"/></c:spPr></c:ser></c:lineChart><c:catAx/><c:valAx/>',
+        );
+        expect(look(stated)).toMatchObject({ strokeWidth: 1, seriesStrokeWidth: 1.33 });
     });
 
     test('an axis drawn without a line keeps its gridlines, which the stroke draws then', () => {

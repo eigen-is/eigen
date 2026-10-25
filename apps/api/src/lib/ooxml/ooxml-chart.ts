@@ -119,6 +119,9 @@ const TYPES = new Map<string, ChartType>([
     ['pie3DChart', 'pie'],
 ]);
 
+// The groups a line chart is drawn from, whose series' line has a width of its own.
+const LINE_GROUPS = new Set([...TYPES].flatMap(([local, type]) => (type === 'line' ? [local] : [])));
+
 export const STACKING_BY_GROUPING: ReadonlyMap<string, ChartStacking> = new Map<string, ChartStacking>([
     ['clustered', 'none'],
     ['standard', 'none'],
@@ -182,6 +185,8 @@ const AUTOMATIC_LINE = automatic(
     '<a:solidFill><a:schemeClr val="tx1"><a:tint val="75000"/></a:schemeClr></a:solidFill>',
 );
 const AUTOMATIC_LINE_WIDTH = 9525;
+// A line series' own width where it states none, 2.25 pt, as Office draws it.
+const AUTOMATIC_SERIES_WIDTH = 28575;
 
 function automatic(fill: string): XmlElement | undefined {
     return parseXml(`<a:spPr xmlns:a="${A_NS}">${fill}</a:spPr>`) ?? undefined;
@@ -190,13 +195,13 @@ function automatic(fill: string): XmlElement | undefined {
 // The look writeChart maps onto the part, read back: the background from c:chartSpace's c:spPr, the label colour from
 // its c:txPr, else the theme's tx1 as Office draws a label without one, and the stroke's colour and width from the
 // category axis's line, as the writer strokes every axis and gridline with it. An axis Office draws no line along
-// still shows its gridlines, so the stroke is theirs then. A gradient reads as its middle colour and a pattern as its
-// foreground, as the writer writes one colour. emuPerPx is the EMU one px of the chart's own box is in the file. A pie
-// has no stroke to read, so it reads flat.
+// still shows its gridlines, so the stroke is theirs then. A line chart's series width is its first series' line's. A
+// gradient reads as its middle colour and a pattern as its foreground, as the writer writes one colour. emuPerPx is the
+// EMU one px of the chart's own box is in the file. A pie has no stroke to read, so it reads flat.
 export function readChartPartLook(
     root: XmlElement,
     { theme, emuPerPx, host }: { theme: DrawingTheme; emuPerPx: number; host: ChartHost },
-): Pick<ChartLook, 'fill' | 'color' | 'strokeColor' | 'strokeWidth'> {
+): Pick<ChartLook, 'fill' | 'color' | 'strokeColor' | 'strokeWidth' | 'seriesStrokeWidth'> {
     const colors = chartColors(root, theme);
     const drawn = (shape: XmlElement | undefined): string | undefined => {
         if (!shape) return undefined;
@@ -210,26 +215,30 @@ export function readChartPartLook(
     for (const local of ['p', 'pPr', 'defRPr']) text = text && xmlChild(text, A_NS, local);
     const tx1 = colors.map.get('tx1');
     const background = drawn(child(root, 'spPr')) ?? drawn(AUTOMATIC_BACKGROUND[host]);
-    const look = {
-        fill: background ? solidFill(background) : FLAT_CHART_LOOK.fill,
-        color: drawn(text) ?? (tx1 && colors.scheme.get(tx1)) ?? FLAT_CHART_LOOK.color,
-    };
     const plotArea = child(child(root, 'chart'), 'plotArea');
-    const axis = child(plotArea, 'catAx') ?? child(plotArea, 'dateAx');
-    if (!axis) return { ...look, strokeColor: FLAT_CHART_LOOK.strokeColor, strokeWidth: FLAT_CHART_LOOK.strokeWidth };
     const lineOf = (owner: XmlElement | undefined) => {
         const shape = child(owner, 'spPr');
         return shape && xmlChild(shape, A_NS, 'ln');
     };
+    const widthOf = (line: XmlElement | undefined, automatic: number) => {
+        const width = Number(line && xmlAttr(line, '', 'w'));
+        return Math.round(((Number.isFinite(width) && width >= 0 ? width : automatic) / emuPerPx) * 100) / 100;
+    };
+    const lines = elements(plotArea).find((group) => group.ns === C_NS && LINE_GROUPS.has(group.local));
+    const look = {
+        fill: background ? solidFill(background) : FLAT_CHART_LOOK.fill,
+        color: drawn(text) ?? (tx1 && colors.scheme.get(tx1)) ?? FLAT_CHART_LOOK.color,
+        ...(lines && { seriesStrokeWidth: widthOf(lineOf(child(lines, 'ser')), AUTOMATIC_SERIES_WIDTH) }),
+    };
+    const axis = child(plotArea, 'catAx') ?? child(plotArea, 'dateAx');
+    if (!axis) return { ...look, strokeColor: FLAT_CHART_LOOK.strokeColor, strokeWidth: FLAT_CHART_LOOK.strokeWidth };
     const gridlines = child(child(plotArea, 'valAx'), 'majorGridlines');
     const axisLine = lineOf(axis);
     const line = gridlines && drawn(axisLine) === TRANSPARENT_COLOR ? lineOf(gridlines) : axisLine;
-    const width = Number(line && xmlAttr(line, '', 'w'));
     return {
         ...look,
         strokeColor: drawn(line) ?? drawn(AUTOMATIC_LINE) ?? FLAT_CHART_LOOK.strokeColor,
-        strokeWidth:
-            Math.round(((Number.isFinite(width) && width >= 0 ? width : AUTOMATIC_LINE_WIDTH) / emuPerPx) * 100) / 100,
+        strokeWidth: widthOf(line, AUTOMATIC_LINE_WIDTH),
     };
 }
 

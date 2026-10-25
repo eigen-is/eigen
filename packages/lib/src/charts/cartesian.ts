@@ -294,7 +294,8 @@ function lineMarks(
         for (const run of runs) {
             if (run.points.length < 2) continue;
             const roundness = s.style.line.smooth ? 'round' : 'sharp';
-            lines.push(line(ctx, `line:${si}:${run.first}`, run.points, s.color, roundness));
+            const drawn = line(ctx, `line:${si}:${run.first}`, run.points, s.color, roundness);
+            lines.push({ ...drawn, strokeWidth: ctx.paint.seriesStrokeWidth });
         }
     }
     return [...lines, ...markers];

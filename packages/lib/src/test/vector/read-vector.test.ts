@@ -739,6 +739,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         ...newChartSpecParts({ ...sampleChartSpec('pie'), title: { text: 'Drift' } }),
         fontFamily: 'JetBrains Mono',
         color: '#0a0b0c',
+        seriesStrokeWidth: 3,
     });
     const richtext = base({
         id: 'rich1',
@@ -808,7 +809,14 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         { record: path, fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, 'path', 'closed'] },
         {
             record: chart,
-            fields: [...BASE_FIELDS, ...PAINT_FIELDS, ...SKETCH_FIELDS, ...CHART_SPEC_PART_KEYS, 'color'],
+            fields: [
+                ...BASE_FIELDS,
+                ...PAINT_FIELDS,
+                ...SKETCH_FIELDS,
+                ...CHART_SPEC_PART_KEYS,
+                'color',
+                'seriesStrokeWidth',
+            ],
         },
         {
             record: richtext,

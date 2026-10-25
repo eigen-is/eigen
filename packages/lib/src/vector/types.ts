@@ -161,11 +161,13 @@ export type TextLine = {
 // A chart: its ChartSpec as a JSON string per part, `specChart` … `specData` (charts/spec.ts), so two peers who edit
 // two parts both keep their edit; inline data only on a canvas. `fill` is its background and the hatch style of its
 // bars and slices; the stroke draws its axes and gridlines. `color` is its labels' color; their font is the spec's.
+// `seriesStrokeWidth` is a line series' width, the stroke's where unset, as an Office import sets it.
 export type VectorChartElement = VectorElementBase &
     Fillable &
     Record<ChartSpecPartKey, string> & {
         type: 'chart';
         color: string;
+        seriesStrokeWidth?: number;
     };
 
 // What an arrow endpoint may dock to: the closed shapes, the pie slice, a closed path, the chart and the two

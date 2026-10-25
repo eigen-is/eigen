@@ -21,8 +21,8 @@ describe('FLAT_CHART_LOOK', () => {
         expect(FLAT_CHART_LOOK).toMatchObject({ strokeStyle: 'solid', roughness: 0, strokeWidth: 2 });
     });
 
-    test('names exactly the look fields a canvas chart stores', () => {
-        expect(Object.keys(FLAT_CHART_LOOK).sort()).toEqual([...CHART_LOOK_FIELDS].sort());
+    test('names the look fields a canvas chart stores, all but the series width, which draws at the stroke unset', () => {
+        expect([...Object.keys(FLAT_CHART_LOOK), 'seriesStrokeWidth'].sort()).toEqual([...CHART_LOOK_FIELDS].sort());
     });
 });
 
@@ -34,6 +34,15 @@ describe('readChartLook', () => {
 
     test('keeps a stored look, a gradient and its hatch included', () => {
         expect(readChartLook({ ...SKETCH, spec: '{}', width: 3 })).toEqual(SKETCH);
+        expect(readChartLook({ ...SKETCH, seriesStrokeWidth: 3 })).toEqual({ ...SKETCH, seriesStrokeWidth: 3 });
+    });
+
+    test('a series width that is no number is unset, and one out of range clamps as the stroke does', () => {
+        for (const value of [null, '3', Number.NaN]) {
+            expect(readChartLook({ seriesStrokeWidth: value }).seriesStrokeWidth).toBeUndefined();
+        }
+        expect(readChartLook({ seriesStrokeWidth: -5 }).seriesStrokeWidth).toBe(0);
+        expect(readChartLook({ seriesStrokeWidth: 500 }).seriesStrokeWidth).toBe(100);
     });
 
     // A peer, a paste or the clipboard writes these; the canvas reader's own validators judge them.
@@ -64,10 +73,16 @@ describe('chartPaintOf', () => {
             background: SKETCH.fill,
             strokeColor: '#336699',
             strokeWidth: 4,
+            seriesStrokeWidth: 4,
             strokeStyle: 'dashed',
             roughness: 2,
             seed: 1234,
             fillStyle: 'cross-hatch',
         });
+    });
+
+    test("a line series draws at its own width, else at the stroke's", () => {
+        expect(chartPaintOf({ ...SKETCH, seriesStrokeWidth: 1.5 }).seriesStrokeWidth).toBe(1.5);
+        expect(chartPaintOf(FLAT_CHART_LOOK).seriesStrokeWidth).toBe(FLAT_CHART_LOOK.strokeWidth);
     });
 });

@@ -14,7 +14,7 @@ import { DEFAULT_ELEMENT_PROPS } from '../types';
 import { chartToElements } from './chart-convert';
 import { chartLayout, renderChartSvg } from './chart-render';
 import { defineKind } from './kind';
-import { color, fillField } from './read-fields';
+import { color, fillField, optionalStrokeWidth } from './read-fields';
 
 const PART_KEYS: ReadonlySet<string> = new Set(CHART_SPEC_PART_KEYS);
 
@@ -34,10 +34,13 @@ export const chartKind = defineKind<VectorChartElement>({
         creation: 'none',
     },
     // The host's font goes into the spec, which every label reads it from.
+    // A new chart's line series draw at its stroke, so it starts with no series width; listed, so one an Office import
+    // sets is stored.
     defaults: (style) => ({
         ...newChartSpecParts(sampleChartSpec('column', style.fontFamily)),
         fill: style.fill,
         color: style.color,
+        seriesStrokeWidth: undefined,
     }),
     // Each part is kept as stored, never re-serialized: one that doesn't parse draws a placeholder and stays in the
     // doc for recovery, and a newer build's part is kept on the element too. Past the byte limit, summed over every
@@ -51,6 +54,7 @@ export const chartKind = defineKind<VectorChartElement>({
             ...mapChartSpecParts((part) => texts[CHART_SPEC_PART_KEY[part]] ?? ''),
             fill: fillField(src.get('fill')),
             color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
+            seriesStrokeWidth: optionalStrokeWidth(src.get('seriesStrokeWidth')),
         };
     },
     hitTest: (el, point) => hitTestBox(el, point),

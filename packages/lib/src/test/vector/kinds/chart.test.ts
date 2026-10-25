@@ -68,6 +68,7 @@ function layoutOf(el: VectorChartElement, spec: ChartSpec): ChartLayout {
             background: el.fill,
             strokeColor: el.strokeColor,
             strokeWidth: el.strokeWidth,
+            seriesStrokeWidth: el.seriesStrokeWidth ?? el.strokeWidth,
             strokeStyle: el.strokeStyle,
             roughness: el.roughness,
             seed: el.seed,

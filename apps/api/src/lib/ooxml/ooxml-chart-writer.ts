@@ -92,7 +92,8 @@ export function writeChart(
     const width = Math.round(look.strokeWidth * frame.emuPerPx);
     const text = textProperties(look.color, spec.chart.fontFamily, sizes.text);
     const embedded = workbook !== undefined && spec.data.source === 'inline';
-    const group = groupXml(spec, width, sourcesOf(spec, ranges, cache, embedded));
+    const series = Math.round((look.seriesStrokeWidth ?? look.strokeWidth) * frame.emuPerPx);
+    const group = groupXml(spec, series, sourcesOf(spec, ranges, cache, embedded));
     const plot = spec.chart.type === 'pie' ? group : `${group}${axesXml(spec, look, width, sizes.text)}`;
     const { position } = spec.legend;
     const legend = position === 'none' ? '' : legendXml(position);
@@ -128,7 +129,7 @@ function textSizes({ width, height, emuPerPx }: ChartFrame): { text: number; tit
     return { text: size(1), title: size(CHART_TITLE_SCALE) };
 }
 
-// width is every line's, in EMU.
+// width is a line series', in EMU.
 function groupXml(spec: ChartSpec, width: number, sources: Source[]): string {
     const series = seriesXml(spec, width, sources);
     const axes = `<c:axId val="${CATEGORY_AXIS}"/><c:axId val="${VALUE_AXIS}"/>`;

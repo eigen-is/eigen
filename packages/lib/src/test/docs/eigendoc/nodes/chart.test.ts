@@ -28,6 +28,7 @@ const LOOK: ChartLook = {
     color: '#334455',
     strokeColor: '#556677',
     strokeWidth: 4,
+    seriesStrokeWidth: 3,
     strokeStyle: 'dashed',
     roughness: 2,
     seed: 4242,
