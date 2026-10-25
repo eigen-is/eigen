@@ -478,15 +478,17 @@ export class Drive {
         if (!isContainerType(parent.type)) throw new ApiError(400, 'Target is not a folder');
 
         const tempId = randomUUID();
+        let created: DrivePath;
         try {
             const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
-            const created = await finalizeUpload(this, mount, { parentId, name, mimeType, size, hash, tempId, user });
-            if (user) await this.fanOutUpload(mount, user, created);
-            return created;
+            created = await finalizeUpload(this, mount, { parentId, name, mimeType, size, hash, tempId, user });
         } catch (e) {
             await mount.cleanupTemp(tempId);
             throw e;
         }
+        // Outside the try: the file is created, and its thumbnail job owns the temp file now.
+        if (user) await this.fanOutUpload(mount, user, created);
+        return created;
     }
 
     private async fanOutUpload(mount: Mount, user: User, path: DrivePath): Promise<void> {
