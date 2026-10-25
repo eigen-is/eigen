@@ -156,6 +156,41 @@ describe('collab documents when a team mount changes', () => {
         }
     });
 
+    test('a socket that waited for a document the mount closed meanwhile is refused', async () => {
+        const { home, mountId, docId } = await homeWithDoc();
+        const { promise: loaded, resolve: finishLoad } = Promise.withResolvers<void>();
+        const realInit = CollabDocument.prototype.init;
+        let loading = false;
+        const init = spyOn(CollabDocument.prototype, 'init').mockImplementationOnce(async function (
+            this: CollabDocument,
+        ) {
+            loading = true;
+            await loaded;
+            return realInit.call(this);
+        });
+        try {
+            const opening = home.drive.getCollabDocument(mountId, docId);
+            await waitFor(() => loading);
+            const turnedOff = home.updateMount(mountId, { enabled: false });
+            finishLoad();
+            await turnedOff;
+
+            const doc = await opening;
+            const refusal = (() => {
+                try {
+                    doc.subscribe(home.user, makeSpyConn());
+                } catch (error) {
+                    return error;
+                }
+            })();
+            expect(refusal).toBeInstanceOf(ApiError);
+            expect(refusal instanceof ApiError && refusal.status).toBe(503);
+        } finally {
+            init.mockRestore();
+            await home.close();
+        }
+    });
+
     test('an open that starts while the mount closes is refused', async () => {
         const { home, mountId, docId } = await homeWithDoc();
         const [mount] = home.drive.getMounts();
