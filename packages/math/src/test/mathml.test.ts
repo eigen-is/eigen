@@ -304,6 +304,12 @@ describe('foreign MathML', () => {
         });
     });
 
+    test('units are case-insensitive in an mspace width', () => {
+        expect(readMathml(math('<mspace width="1EM"/><mspace width="1Em"/>'))).toEqual(
+            readMathml(math('<mspace width="1em"/><mspace width="1em"/>')),
+        );
+    });
+
     test('ms is text without quotes; mpadded and mphantom read as their content', () => {
         expect(readMathml(math('<ms lquote="«">a b</ms>'))).toEqual([{ kind: 'text', text: 'a b' }]);
         expect(readMathml(math('<mpadded width="+1em"><mi>x</mi></mpadded><mphantom><mn>1</mn></mphantom>'))).toEqual([

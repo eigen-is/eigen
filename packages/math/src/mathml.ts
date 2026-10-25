@@ -124,7 +124,8 @@ function scopeOf(element: MathXmlElement, scope: Scope): Scope {
 
 // The space nearest a width: KaTeX writes a thin space 0.1667em, MathJax 0.167em.
 function spaceOf(width = ''): MathSpace | undefined {
-    const em = width.endsWith('em') ? Number(width.slice(0, -2)) : Number.NaN;
+    const lower = width.toLowerCase();
+    const em = lower.endsWith('em') ? Number(lower.slice(0, -2)) : Number.NaN;
     return MATH_SPACES.find((space) => Math.abs(Number.parseFloat(SPACES[space].width) - em) < 0.01);
 }
 
