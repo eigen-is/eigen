@@ -24,6 +24,7 @@ import { ARROWHEAD_BY_LINE_END, DEGREE, drawingLines, isSideways, strokeStyleOf 
 import { A_NS, C_NS, DGM_NS, emu, isAlternateContent, isOn, OLE_NS, P_NS, R_NS, TBL_NS } from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
 import type { Part } from '../../ooxml/opc';
+import { PICTURE_NOT_IMPORTED } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
 import { CHART_PAINT, frameChart } from './chart';
 import type { CustomGeometry } from './custom-geometry';
@@ -81,7 +82,7 @@ const DROPPED = {
     diagram: { label: 'SmartArt not imported', code: 'diagrams-dropped' },
     ole: { label: 'Embedded object not imported', code: 'objects-dropped' },
     object: { label: 'Object not imported', code: 'objects-dropped' },
-    picture: { label: 'Picture not imported', code: 'images-dropped' },
+    picture: { label: PICTURE_NOT_IMPORTED, code: 'images-dropped' },
 } satisfies Record<string, { label: string; code: CountedWarningCode }>;
 type Dropped = keyof typeof DROPPED;
 

@@ -13,6 +13,7 @@ import { docxToPmJson, MAX_DOCX_TEXT } from '../../../lib/import/doc/from-docx';
 import { CHARS_PER_UNIT, MAX_DOCX_CHART_WORK, MAX_DOCX_PIECES, MAX_DOCX_WEIGHT } from '../../../lib/import/doc/package';
 import { MAX_INLINE_NODES } from '../../../lib/import/doc/paragraphs';
 import { MAX_MERGED_ROWS, MAX_TABLE_DEPTH } from '../../../lib/import/doc/tables';
+import { PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
 import { C_NS, M_NS, parseOoxml } from '../../../lib/ooxml/ooxml';
 import { CHART_NOT_IMPORTED, chartCost } from '../../../lib/ooxml/ooxml-chart';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS } from '../../../lib/ooxml/opc';
@@ -1075,6 +1076,7 @@ describe('figures and media', () => {
         const { json, images, warnings } = docxToPmJson(input);
         expect(images).toEqual([]);
         expect(nodesOfType(json, 'figure')).toEqual([]);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toContain(PICTURE_NOT_IMPORTED);
         expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
     });
 
@@ -1110,7 +1112,7 @@ describe('figures and media', () => {
         }
     });
 
-    test('a part of a type no image has is not stored: the figure goes, its caption stays', async () => {
+    test('a part of a type no image has is not stored: the figure goes, a line saying so and its caption stay', async () => {
         const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
         const { json, images } = await importDocxBody(
             `${paragraph(GOLDEN_DOCX_IMAGE_RUN.replace('rId4', 'rId9'))}${paragraph(run('Figure 1'), '<w:pStyle w:val="Caption"/>')}`,
@@ -1123,7 +1125,7 @@ describe('figures and media', () => {
         );
         expect(images).toEqual([]);
         expect(nodesOfType(json, 'figure')).toEqual([]);
-        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual(['Figure 1']);
+        expect(nodesOfType(json, 'text').map((node) => node.text)).toEqual([PICTURE_NOT_IMPORTED, 'Figure 1']);
     });
 
     test('a linked picture is dropped, its alt text kept as text', async () => {

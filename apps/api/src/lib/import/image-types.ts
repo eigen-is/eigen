@@ -13,6 +13,9 @@ import type { ZipReader } from '../ooxml/zip';
 export const IMAGE_TYPES: ReadonlySet<string> = new Set(IMAGE_EXTENSION_BY_MIME.keys());
 const PICTURE_TYPES: ReadonlySet<string> = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/svg+xml']);
 
+// What a picture left out leaves in its place: a slide's box, a document's line.
+export const PICTURE_NOT_IMPORTED = 'Picture not imported';
+
 // The picture parts one import brings in, at most.
 export const MAX_MEDIA_PARTS = 1000;
 

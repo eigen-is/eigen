@@ -26,7 +26,7 @@ import {
 } from '../../ooxml/ooxml';
 import { CHART_NOT_IMPORTED, chartCost, chartPart, droppedChart, readChart } from '../../ooxml/ooxml-chart';
 import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
-import { IMAGE_TYPES, mediaPart } from '../image-types';
+import { IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
 import type { Item, Para } from './assemble';
 import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
 import { descendants, int } from './package';
@@ -52,13 +52,24 @@ function imageType(reader: Reader, path: string): string | undefined {
 // sharp has no loader for these, so no screen preview shows them.
 export const UNSHOWN_IMAGE_TYPES = new Set(['image/bmp', 'image/x-wmf', 'image/x-emf']);
 
-// One media file per image part, named in encounter order. A part that isn't there or of no image type is no picture;
-// one whose bytes don't read, or past the pictures' caps, is left out and counted.
-function mediaName(reader: Reader, path: string): string | undefined {
+// One media file per image part, named in encounter order. A picture whose part is missing or of no image type, whose
+// bytes don't read, or past the pictures' caps is left out and counted, and leaves a line saying so, as a slide leaves
+// a box.
+function pictureName(reader: Reader, path: string, context: RunContext): string | undefined {
     const part = mediaPart(reader.pkg.zip, path, imageType(reader, path), IMAGE_TYPES);
     const name = part && reader.files.name(part);
-    if (part && !name) reader.lost('images-dropped');
-    return name;
+    if (name) return name;
+    reader.lost('images-dropped');
+    leaveLines(context, [PICTURE_NOT_IMPORTED]);
+    return undefined;
+}
+
+// What a drawing left out says in its place, a paragraph after the one it stood in.
+function leaveLines(context: RunContext, lines: string[]): void {
+    if (lines.length === 0) return;
+    context.pending.push(
+        paraOf(lines.flatMap((text, index) => [...(index > 0 ? [{ type: 'hardBreak' }] : []), { type: 'text', text }])),
+    );
 }
 
 function partPath(id: string | undefined, scope: Scope): string | undefined {
@@ -91,7 +102,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             const [blip] = descendants(picture, A_NS, 'blip');
             const [svg, raster] = blipEmbeds(blip);
             const path = partPath(svg, context.scope) ?? partPath(raster, context.scope);
-            const name = path && mediaName(reader, path);
+            const name = path && pictureName(reader, path, context);
             if (!name) {
                 // A linked picture lives outside the file; its alt text says what it was.
                 if (blip && !raster && xmlAttr(blip, R_NS, 'link') && alt) pushText(reader, alt, {}, context);
@@ -116,16 +127,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
                 continue;
             }
             reader.lost('charts-dropped');
-            const lines = inBody && 'dropped' in chart ? chart.dropped : [chart.title].filter(Boolean);
-            if (lines.length > 0)
-                context.pending.push(
-                    paraOf(
-                        lines.flatMap((text, index) => [
-                            ...(index > 0 ? [{ type: 'hardBreak' }] : []),
-                            { type: 'text', text },
-                        ]),
-                    ),
-                );
+            leaveLines(context, inBody && 'dropped' in chart ? chart.dropped : [chart.title].filter(Boolean));
         }
         // A shape's text boxes: the caption of a grouped picture, a picture with its caption, or text that follows.
         const boxed = descendants(frame, W_NS, 'txbxContent').flatMap((box) =>
@@ -270,7 +272,7 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
                 continue;
             }
             const path = partPath(xmlAttr(data, R_NS, 'id') ?? xmlAttr(data, O_NS, 'relid'), context.scope);
-            const name = path && mediaName(reader, path);
+            const name = path && pictureName(reader, path, context);
             if (!name) continue;
             const width = vmlWidthPx(shape.attributes['style'] ?? '', reader.columnPx);
             const alt = shape.attributes['alt'] || xmlAttr(data, O_NS, 'title') || null;

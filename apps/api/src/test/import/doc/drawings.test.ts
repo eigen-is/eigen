@@ -3,7 +3,7 @@ import type { JSONContent } from '@tiptap/core';
 import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
 import { CAPTION_LOOK } from '../../../lib/document/looks';
 import { docxToPmJson, readDocx } from '../../../lib/import/doc/from-docx';
-import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
+import { MAX_MEDIA_PARTS, PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
 import { C_NS } from '../../../lib/ooxml/ooxml';
 import * as ooxmlChart from '../../../lib/ooxml/ooxml-chart';
 import { CHART_CONTENT_TYPE, CHART_NOT_IMPORTED } from '../../../lib/ooxml/ooxml-chart';
@@ -26,6 +26,13 @@ const HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relatio
 const paragraph = (inner: string) => `<w:p>${inner}</w:p>`;
 const picture = (rid: string) => GOLDEN_DOCX_IMAGE_RUN.replace('r:embed="rId4"', `r:embed="${rid}"`);
 const BYTES = new Uint8Array([1, 2, 3]);
+// Each paragraph's text, a break as a newline; empty ones left out.
+const lines = (json: JSONContent) =>
+    nodesOfType(json, 'paragraph')
+        .map((node) =>
+            (node.content ?? []).map((child) => child.text ?? (child.type === 'hardBreak' ? '\n' : '')).join(''),
+        )
+        .filter(Boolean);
 
 describe('media', () => {
     // Decision 1: kept under its real name, though no browser draws it; the import logs it.
@@ -93,7 +100,19 @@ describe('media', () => {
         );
         expect(images.map(({ name }) => unprefixed(name))).toEqual(['image-1.png']);
         expect(nodesOfType(doc.toJSON(), 'figure')).toHaveLength(1);
+        expect(lines(doc.toJSON())).toEqual([PICTURE_NOT_IMPORTED]);
         expect(warnings).toEqual([{ code: 'images-dropped', count: 1 }]);
+    });
+
+    test('a picture whose part is missing, or not of an image type, is left out and counted', async () => {
+        const { json, images, warnings } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId10')}`), {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/gone.png"/><Relationship Id="rId10" Type="${IMAGE_REL}" Target="media/a.bin"/>`,
+            contentTypes: '<Override PartName="/word/media/a.bin" ContentType="application/octet-stream"/>',
+            media: { 'word/media/a.bin': BYTES },
+        });
+        expect([images.length, nodesOfType(json, 'figure').length]).toEqual([0, 0]);
+        expect(lines(json)).toEqual([PICTURE_NOT_IMPORTED, PICTURE_NOT_IMPORTED]);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
     });
 
     test('an SVG wins over its PNG fallback', async () => {
@@ -372,10 +391,6 @@ describe('SmartArt', () => {
     const shape = (paragraphs: string) => `<dsp:sp><dsp:txBody><a:bodyPr/>${paragraphs}</dsp:txBody></dsp:sp>`;
     const drawing = `<dsp:drawing xmlns:dsp="http://schemas.microsoft.com/office/drawing/2008/diagram" xmlns:a="${A}"><dsp:spTree>${shape('<a:p><a:r><a:t>foo</a:t></a:r></a:p>')}${shape('<a:p><a:endParaRPr/></a:p>')}${shape('<a:p><a:r><a:t>bar</a:t></a:r><a:br/><a:fld type="slidenum"><a:t>baz</a:t></a:fld></a:p><a:p><a:r><a:t>qux</a:t></a:r></a:p>')}</dsp:spTree></dsp:drawing>`;
     const diagramRels = `<Relationship Id="rId20" Type="${RELS}/diagramData" Target="diagrams/data1.xml"/><Relationship Id="rId24" Type="http://schemas.microsoft.com/office/2007/relationships/diagramDrawing" Target="diagrams/drawing1.xml"/>`;
-    const lines = (json: Parameters<typeof nodesOfType>[0]) =>
-        nodesOfType(json, 'paragraph')
-            .map((node) => (node.content ?? []).map((child) => child.text ?? '\n').join(''))
-            .filter(Boolean);
 
     test("a SmartArt's shapes read as paragraphs in place, from its drawing part", async () => {
         const { json, warnings } = await importDocxBody(
@@ -419,12 +434,6 @@ describe('charts', () => {
     const THEME = `<a:theme xmlns:a="${A}" name="Office"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:accent1><a:srgbClr val="C00000"/></a:accent1><a:accent2><a:srgbClr val="00B050"/></a:accent2></a:clrScheme></a:themeElements></a:theme>`;
     const imported = (body: string, parts: string[]) => importDocxBody(body, { ...chartParts(parts), theme: THEME });
     const charts = (json: Parameters<typeof nodesOfType>[0]) => nodesOfType(json, 'chart');
-    const lines = (json: Parameters<typeof nodesOfType>[0]) =>
-        nodesOfType(json, 'paragraph')
-            .map((node) =>
-                (node.content ?? []).map((child) => child.text ?? (child.type === 'hardBreak' ? '\n' : '')).join(''),
-            )
-            .filter(Boolean);
 
     test("a column chart is a chart node at its extent in px, its series in the theme's colours, aligned as its paragraph", async () => {
         const centered = `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${chartRun('rId20')}</w:p>`;
