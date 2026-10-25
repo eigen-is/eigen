@@ -187,7 +187,7 @@ describe('Eigendoc docx import/convert', () => {
         const pgSz = (w: number, h: number) => `<w:sectPr><w:pgSz w:w="${w}" w:h="${h}"/></w:sectPr>`;
         const body = `<w:p><w:pPr>${pgSz(11906, 16838)}</w:pPr><w:r><w:t>One</w:t></w:r></w:p><w:p><w:r><w:t>Two</w:t></w:r></w:p>${pgSz(15840, 12240)}`;
         const result = await assertJson<ImportResult>(await importRequest(docPath.id, await buildDocxWithBody(body)));
-        expect(result).toEqual({ success: true, summary: '1 section page setup was not imported.' });
+        expect(result).toEqual({ success: true, summary: "1 section's page setup was not imported." });
     }, 120_000);
 
     test('import saves a version first, which restores the document as it was', async () => {

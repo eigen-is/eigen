@@ -403,7 +403,7 @@ export function paintOf(fill: XmlElement | undefined, theme: SlideTheme, options
         case 'grpFill':
             return options.group?.(lost) ?? TRANSPARENT_PAINT;
         case 'blipFill':
-            lost('images-unshown');
+            lost('images-dropped');
             return TRANSPARENT_PAINT;
         default:
             return TRANSPARENT_PAINT;
@@ -529,7 +529,7 @@ function pictureBackground(blipFill: XmlElement, owner: Part, deck: DeckWalk, lo
     const media = blipMedia(deck.pkg, owner, blip);
     const mediaName = media && deck.mediaName(media);
     if (!blip || !mediaName) {
-        if (blip) lost('images-unshown');
+        if (blip) lost('images-dropped');
         return null;
     }
     if (firstChildOf(blip, isEffect) || childOf(blipFill, A_NS, 'tile')) lost('fills-simplified');

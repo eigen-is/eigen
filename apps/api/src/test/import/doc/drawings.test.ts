@@ -36,8 +36,8 @@ const lines = (json: JSONContent) =>
 
 describe('media', () => {
     // Decision 1: kept under its real name, though no browser draws it; the import logs it.
-    test('a WMF part is image-N.wmf, image/x-wmf, and counts as unshown', async () => {
-        const { json, images, warnings } = await importDocxBody(paragraph(picture('rId9')), {
+    test('a WMF part is image-N.wmf, image/x-wmf, and counts as unshown once for every figure that shows it', async () => {
+        const { json, images, warnings } = await importDocxBody(paragraph(`${picture('rId9')}${picture('rId9')}`), {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.wmf"/>`,
             contentTypes: '<Default Extension="wmf" ContentType="image/x-wmf"/>',
             media: { 'word/media/image1.wmf': BYTES },
@@ -46,9 +46,9 @@ describe('media', () => {
             ['image-1.wmf', 'image/x-wmf'],
         ]);
         expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['mediaName'])).toEqual(
-            images.map(({ name }) => name),
+            images.flatMap(({ name }) => [name, name]),
         );
-        expect(warnings).toEqual([{ code: 'images-unshown', count: 1 }]);
+        expect(warnings).toEqual([{ code: 'images-unshown', count: 2 }]);
     });
 
     test('an undeclared part takes its extension, and image/jpg reads as image/jpeg', async () => {

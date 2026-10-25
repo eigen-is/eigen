@@ -59,7 +59,7 @@ describe('importSummary', () => {
         ).toBe('2 tables and 1 SmartArt graphic were not imported; 5 shapes were simplified.');
     });
 
-    test('a picture that is not shown and one that is not imported are one kind', () => {
+    test('a picture left out is not imported, and one kept that no browser shows is said apart', () => {
         expect(
             importSummary([
                 { code: 'images-dropped', count: 1 },
@@ -67,7 +67,9 @@ describe('importSummary', () => {
                 { code: 'charts-dropped', count: 1 },
                 { code: 'objects-dropped', count: 3 },
             ]),
-        ).toBe('1 chart, 3 embedded objects and 3 pictures were not imported.');
+        ).toBe(
+            "1 chart, 3 embedded objects and 1 picture were not imported; 2 pictures were kept, but can't be shown.",
+        );
     });
 
     test('every simplification has its noun', () => {
@@ -91,8 +93,9 @@ describe('importSummary', () => {
                 { code: 'band-images-unanchored', count: 1 },
             ]),
         ).toBe(
-            '2 SmartArt graphics, 1 section page setup, 2 even-page headers or footers and 1 header or footer item ' +
-                'were not imported; 3 blocks and 1 header or footer picture were simplified.',
+            "2 SmartArt graphics, 1 section's page setup, 2 even-page headers or footers and 1 header or footer item " +
+                'were not imported; 1 header or footer picture was simplified; 3 parts of the document were kept as ' +
+                'plain text.',
         );
     });
 

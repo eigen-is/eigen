@@ -61,51 +61,48 @@ export const SAVE_AS_PPTX =
 
 type Noun = readonly [one: string, many: string];
 
+// What happened to a kind, one clause each, in this order.
+const OUTCOMES = ['not imported', 'simplified', 'kept as plain text', "kept, but can't be shown"] as const;
+type Outcome = (typeof OUTCOMES)[number];
+
 // What an import left out or drew simpler, per kind, for the toast after Import…, whichever format's reader counted it.
 // Each kind lists in this order within its clause. A pptx's warnings count source shapes, so a master's background is
 // one fill however many slides show it.
-const LOSSES: { codes: readonly CountedWarningCode[]; noun: Noun; what: 'not imported' | 'simplified' }[] = [
-    { codes: ['tables-dropped'], noun: ['table', 'tables'], what: 'not imported' },
-    { codes: ['charts-dropped'], noun: ['chart', 'charts'], what: 'not imported' },
-    { codes: ['diagrams-dropped'], noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'not imported' },
-    { codes: ['objects-dropped'], noun: ['embedded object', 'embedded objects'], what: 'not imported' },
-    { codes: ['images-dropped', 'images-unshown'], noun: ['picture', 'pictures'], what: 'not imported' },
+const LOSSES: { code: CountedWarningCode; noun: Noun; what: Outcome }[] = [
+    { code: 'tables-dropped', noun: ['table', 'tables'], what: 'not imported' },
+    { code: 'charts-dropped', noun: ['chart', 'charts'], what: 'not imported' },
+    { code: 'diagrams-dropped', noun: ['SmartArt graphic', 'SmartArt graphics'], what: 'not imported' },
+    { code: 'objects-dropped', noun: ['embedded object', 'embedded objects'], what: 'not imported' },
+    { code: 'images-dropped', noun: ['picture', 'pictures'], what: 'not imported' },
+    { code: 'conditional-formats-dropped', noun: ['conditional format', 'conditional formats'], what: 'not imported' },
+    { code: 'section-pages-dropped', noun: ["section's page setup", "sections' page setups"], what: 'not imported' },
     {
-        codes: ['conditional-formats-dropped'],
-        noun: ['conditional format', 'conditional formats'],
-        what: 'not imported',
-    },
-    { codes: ['section-pages-dropped'], noun: ['section page setup', 'section page setups'], what: 'not imported' },
-    {
-        codes: ['even-bands-dropped'],
+        code: 'even-bands-dropped',
         noun: ['even-page header or footer', 'even-page headers or footers'],
         what: 'not imported',
     },
+    { code: 'band-content-dropped', noun: ['header or footer item', 'header or footer items'], what: 'not imported' },
+    { code: 'shapes-simplified', noun: ['shape', 'shapes'], what: 'simplified' },
+    { code: 'fills-simplified', noun: ['fill', 'fills'], what: 'simplified' },
+    { code: 'text-simplified', noun: ['text box', 'text boxes'], what: 'simplified' },
+    { code: 'mirrors-dropped', noun: ['flipped picture', 'flipped pictures'], what: 'simplified' },
     {
-        codes: ['band-content-dropped'],
-        noun: ['header or footer item', 'header or footer items'],
-        what: 'not imported',
-    },
-    { codes: ['shapes-simplified'], noun: ['shape', 'shapes'], what: 'simplified' },
-    { codes: ['fills-simplified'], noun: ['fill', 'fills'], what: 'simplified' },
-    { codes: ['text-simplified'], noun: ['text box', 'text boxes'], what: 'simplified' },
-    { codes: ['mirrors-dropped'], noun: ['flipped picture', 'flipped pictures'], what: 'simplified' },
-    { codes: ['blocks-flattened'], noun: ['block', 'blocks'], what: 'simplified' },
-    {
-        codes: ['band-images-unanchored'],
+        code: 'band-images-unanchored',
         noun: ['header or footer picture', 'header or footer pictures'],
         what: 'simplified',
     },
+    { code: 'blocks-flattened', noun: ['part of the document', 'parts of the document'], what: 'kept as plain text' },
+    { code: 'images-unshown', noun: ['picture', 'pictures'], what: "kept, but can't be shown" },
 ];
 
 // "2 tables and 1 SmartArt graphic were not imported", or nothing when no kind was met.
-function clause(warnings: TransformWarning[], what: (typeof LOSSES)[number]['what']): string[] {
+function clause(warnings: TransformWarning[], what: Outcome): string[] {
     const items: string[] = [];
     let total = 0;
-    for (const { codes, noun, what: kind } of LOSSES) {
-        if (kind !== what) continue;
+    for (const { code, noun, what: outcome } of LOSSES) {
+        if (outcome !== what) continue;
         let count = 0;
-        for (const warning of warnings) if ('count' in warning && codes.includes(warning.code)) count += warning.count;
+        for (const warning of warnings) if ('count' in warning && warning.code === code) count += warning.count;
         if (count > 0) items.push(`${count} ${count === 1 ? noun[0] : noun[1]}`);
         total += count;
     }
@@ -115,6 +112,6 @@ function clause(warnings: TransformWarning[], what: (typeof LOSSES)[number]['wha
 }
 
 export function importSummary(warnings: TransformWarning[]): string | null {
-    const clauses = [...clause(warnings, 'not imported'), ...clause(warnings, 'simplified')];
+    const clauses = OUTCOMES.flatMap((what) => clause(warnings, what));
     return clauses.length > 0 ? `${clauses.join('; ')}.` : null;
 }

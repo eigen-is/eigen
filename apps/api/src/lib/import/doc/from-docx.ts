@@ -106,16 +106,20 @@ export function readDocx(
             const band = checked(blocks);
             if (bandHasContent(band, readStoredEquation)) bands[root] = band;
         }
-        // Only the media a kept figure names: a flattened block's figures went with it.
+        // Only the media a kept figure names: a flattened block's figures went with it. No browser draws an unshown type:
+        // each figure of one shows its alt text in a broken image.
+        const unshown = new Set(
+            files.media.filter((image) => UNSHOWN_IMAGE_TYPES.has(image.contentType)).map((image) => image.name),
+        );
         const named = new Set<string>();
         for (const node of [doc, ...Object.values(bands)])
             node.descendants((child) => {
-                if (child.type.name === 'figure') named.add(child.attrs['mediaName']);
+                if (child.type.name !== 'figure') return;
+                named.add(child.attrs['mediaName']);
+                if (unshown.has(child.attrs['mediaName'])) losses.lost('images-unshown');
             });
-        const images = files.media.filter((image) => named.has(image.name));
-        // No browser draws these: the figure shows its alt text in a broken image.
-        for (const image of images) if (UNSHOWN_IMAGE_TYPES.has(image.contentType)) losses.lost('images-unshown');
-        return { doc, bands, page: reader.page, style: reader.normal, images, warnings: losses.warnings() };
+        const media = files.media.filter((image) => named.has(image.name));
+        return { doc, bands, page: reader.page, style: reader.normal, images: media, warnings: losses.warnings() };
     } catch (error) {
         throw importError(error, 'docx');
     }

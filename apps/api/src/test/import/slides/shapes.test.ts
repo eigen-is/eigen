@@ -588,7 +588,7 @@ describe('paint', () => {
         expect(JSON.parse(String(found.fill))).toMatchObject({ color: 'transparent' });
         expect(found.strokeColor).toBe('#000000');
         expect(deck.media).toEqual([]);
-        expect(deck.warnings).toContainEqual({ code: 'images-unshown', count: 1 });
+        expect(deck.warnings).toContainEqual({ code: 'images-dropped', count: 1 });
     });
 
     test('dots and dashes map to the dotted and dashed strokes', () => {
