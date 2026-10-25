@@ -122,6 +122,61 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
         }
     });
 
+    test('a rename made while a storage change waits on its S3 check is kept', async () => {
+        const s3Storage = await import('../../lib/storage/s3-storage');
+        const { promise: checked, resolve: passCheck } = Promise.withResolvers<void>();
+        const spy = spyOn(s3Storage, 'checkS3Connection')
+            .mockResolvedValueOnce({ ok: true, message: 'Connection successful', versioning: 'enabled' })
+            .mockImplementationOnce(async () => {
+                await checked;
+                return { ok: true, message: 'Connection successful', versioning: 'enabled' };
+            });
+
+        const home = await freshTeamHome();
+        try {
+            const s3Config = {
+                endpoint: 'http://127.0.0.1:1',
+                bucket: 'team-bucket',
+                prefix: '',
+                accessKeyId: 'AK',
+                secretAccessKey: 'SK',
+            };
+            const mount = await home.addMount({ name: 'Before', storageType: 's3', s3Config });
+
+            const repointed = { ...s3Config, bucket: 'other-bucket' };
+            const storageChange = home.updateMount(mount.id, { s3Config: repointed });
+            await home.updateMount(mount.id, { name: 'After' });
+            passCheck();
+            await storageChange;
+
+            expect(home.settings.get().mounts?.[mount.id]).toMatchObject({ name: 'After', s3Config: repointed });
+            const listed = await home.drive.listMounts();
+            expect(listed.find((m) => m.id === mount.id)?.name).toBe('After');
+        } finally {
+            spy.mockRestore();
+            await home.close();
+        }
+    });
+
+    test('two changes to one mount at once both land', async () => {
+        const home = await freshTeamHome();
+        try {
+            const mount = await home.addMount({ name: 'Before', maxSizeMB: 100 });
+
+            await Promise.all([
+                home.updateMount(mount.id, { name: 'After' }),
+                home.updateMount(mount.id, { maxSizeMB: 300 }),
+            ]);
+
+            expect(home.settings.get().mounts?.[mount.id]).toMatchObject({ name: 'After', maxSizeMB: 300 });
+            expect(home.drive.getMountConfig(mount.id).maxSizeMB).toBe(300);
+            const listed = await home.drive.listMounts();
+            expect(listed.find((m) => m.id === mount.id)?.name).toBe('After');
+        } finally {
+            await home.close();
+        }
+    });
+
     test('disabling a mount drops it from the live Drive', async () => {
         const home = await freshTeamHome();
         try {
