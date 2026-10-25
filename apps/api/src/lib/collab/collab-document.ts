@@ -160,7 +160,7 @@ export class CollabDocument {
         return this;
     }
 
-    // The provider writes a last snapshot as it stops, so data.db closes after this, never before.
+    // The provider writes a last snapshot as it stops, so the caller closes data.db only after this.
     public destruct(): void {
         if (this.closed) return;
         this.closed = true;
@@ -293,7 +293,7 @@ export class CollabDocument {
         this.connections.delete(conn);
         const clientIds = this.connectionClientIds.get(conn);
         if (clientIds) {
-            // Freed, so a reconnecting tab that reuses its client id isn't locked out.
+            // Its ids are freed, so a reconnecting tab that reuses one isn't locked out.
             for (const id of clientIds) this.clientIdOwners.delete(id);
             if (clientIds.size > 0) awarenessProtocol.removeAwarenessStates(this.awareness, [...clientIds], null);
         }

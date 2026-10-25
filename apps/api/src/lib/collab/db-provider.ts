@@ -24,23 +24,6 @@ export class DbProvider {
     private updatesSinceSnapshot: number;
     private bytesSinceSnapshot: number;
 
-    public constructor(doc: Y.Doc, label: string, managedDb: ManagedDatabase<typeof schema>) {
-        this.db = managedDb.db;
-        this.doc = doc;
-        this.label = label;
-
-        // The stored state loads before the provider listens, so loading saves nothing.
-        const { updatesApplied, bytesApplied } = loadYjsState(managedDb, doc, label);
-        this.updatesSinceSnapshot = updatesApplied;
-        this.bytesSinceSnapshot = bytesApplied;
-        doc.on('update', this.storeUpdate);
-    }
-
-    public destroy(): void {
-        this.doc.off('update', this.storeUpdate);
-        this.createSnapshot();
-    }
-
     private readonly storeUpdate = (update: Uint8Array): void => {
         try {
             this.db
@@ -60,6 +43,23 @@ export class DbProvider {
             console.error(`[DbProvider] Error storing update for ${this.label}:`, error);
         }
     };
+
+    public constructor(doc: Y.Doc, label: string, managedDb: ManagedDatabase<typeof schema>) {
+        this.db = managedDb.db;
+        this.doc = doc;
+        this.label = label;
+
+        // The stored state loads before the provider listens, so loading saves nothing.
+        const { updatesApplied, bytesApplied } = loadYjsState(managedDb, doc, label);
+        this.updatesSinceSnapshot = updatesApplied;
+        this.bytesSinceSnapshot = bytesApplied;
+        doc.on('update', this.storeUpdate);
+    }
+
+    public destroy(): void {
+        this.doc.off('update', this.storeUpdate);
+        this.createSnapshot();
+    }
 
     private createSnapshot(): void {
         try {

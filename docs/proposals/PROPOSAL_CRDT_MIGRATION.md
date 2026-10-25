@@ -73,7 +73,7 @@ format 1.
 
 **Compaction already happens.** `DbProvider.createSnapshot` (in `db-provider.ts`) squashes the
 doc into a fresh snapshot every 100 updates or 1 MB, deletes the covered `doc_updates`, and keeps
-only `MAX_DOC_SNAPSHOTS = 1` snapshot. Long-term history lives *outside* `data.db`, as whole-file
+only the newest snapshot. Long-term history lives *outside* `data.db`, as whole-file
 copies under the container's `versions/` folder (`../../apps/api/src/lib/versioning`). So
 "migration compacts in-file update history" is not a new loss — it is the steady state.
 
@@ -243,8 +243,8 @@ tombstones that no transform can preserve coherently. The persistent mechanic is
 
 Consequences, stated plainly:
 
-- **In-file granular history is compacted.** Already the norm (`SNAPSHOT_INTERVAL`,
-  `MAX_DOC_SNAPSHOTS = 1`); user-visible history is `versions/*.db`, untouched.
+- **In-file granular history is compacted.** Already the norm (`SNAPSHOT_INTERVAL` in `db-provider.ts`,
+  which keeps only the newest snapshot); user-visible history is `versions/*.db`, untouched.
 - **The squashed doc is a fresh `Y.Doc`** — new client IDs, no tombstones. Any update produced
   against the pre-migration doc can never merge meaningfully. That is a feature (the handshake
   makes it an explicit refusal, not silent garbage) and the reason the handshake must ship
