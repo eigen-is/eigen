@@ -85,6 +85,17 @@ export function addChartPart(
     return relate('chart', `${target}${name}`);
 }
 
+// Whether the look holds anything a chart part can't paint: a sketch, a hatch or a dashed or dotted stroke, which writeChart
+// draws plain. A host whose frame would turn or fade the chart passes that as `layer`, which no chart part carries either.
+export function chartLookSimplified(look: ChartLook, layer?: { angle: number; opacity: number }): boolean {
+    return (
+        look.roughness > 0 ||
+        look.strokeStyle !== 'solid' ||
+        parseFill(look.fill).style !== 'solid' ||
+        (layer !== undefined && (layer.angle !== 0 || layer.opacity !== 100))
+    );
+}
+
 export function writeChart(
     spec: ChartSpec,
     { ranges = () => undefined, cache, look, frame, workbook }: ChartWriteOptions,

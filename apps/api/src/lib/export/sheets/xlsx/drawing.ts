@@ -11,7 +11,7 @@ import { resolveRangeChartData } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import { anchoredBox, blipXml, DEGREE } from '../../../ooxml/drawingml';
 import { A_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../ooxml/ooxml';
-import { addChartPart, chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
+import { addChartPart, chartGraphicXml, chartLookSimplified } from '../../../ooxml/ooxml-chart-writer';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
 import { DRAWING_CONTENT_TYPE } from '../../../ooxml/spreadsheetml';
@@ -68,13 +68,15 @@ export function drawingOf(
         resolver ??= sheetsResolver(sheets);
         const data = spec.data.source === 'range' ? resolveRangeChartData(spec.data, resolver) : undefined;
         const placed = placedBox({ ...chart, angle: 0 });
+        const look = readChartLook(chart);
+        if (chartLookSimplified(look)) lost('charts-simplified');
         const rId = addChartPart(
             { parts: charts, path: `xl/charts/chart${number}_`, target: `../charts/chart${number}_`, relate },
             spec,
             {
                 ranges,
                 cache: typeof data === 'object' ? data : undefined,
-                look: readChartLook(chart),
+                look,
                 frame: { width: placed.width, height: placed.height, emuPerPx: EMU_PER_PX },
             },
         );

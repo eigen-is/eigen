@@ -91,6 +91,7 @@ const LOSSES: { code: CountedWarningCode; noun: Noun; what: Outcome }[] = [
         what: 'dropped',
     },
     { code: 'band-content-dropped', noun: ['header or footer item', 'header or footer items'], what: 'dropped' },
+    { code: 'charts-simplified', noun: ['chart', 'charts'], what: 'simplified' },
     { code: 'shapes-simplified', noun: ['shape', 'shapes'], what: 'simplified' },
     { code: 'fills-simplified', noun: ['fill', 'fills'], what: 'simplified' },
     { code: 'text-simplified', noun: ['text box', 'text boxes'], what: 'simplified' },

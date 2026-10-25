@@ -1166,6 +1166,21 @@ describe('pptx losses', () => {
         expect(await lossesOf(charts)).toEqual([{ code: 'charts-dropped', count: 2 }]);
     });
 
+    test('a chart whose look no chart part paints, or a frame that would turn or fade it, is counted once', async () => {
+        const chart = (fields: Fields) => [element('chart', { ...sampleChartParts('pie'), ...fields })];
+        expect(await lossesOf(chart({}))).toEqual([]);
+        for (const fields of [
+            { roughness: 1 },
+            { fill: hatched },
+            { strokeStyle: 'dashed' },
+            { angle: 30 },
+            { opacity: 50 },
+            { roughness: 2, strokeStyle: 'dotted', angle: 10, opacity: 40 },
+        ]) {
+            expect(await lossesOf(chart(fields))).toEqual([{ code: 'charts-simplified', count: 1 }]);
+        }
+    });
+
     test('a picture or background whose media the prep has none is a picture left out; an empty image is not', async () => {
         const pictures = [
             element('image', { mediaName: 'gone.png', index: 'a0', id: 'gone' }),

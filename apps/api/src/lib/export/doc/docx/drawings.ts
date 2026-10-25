@@ -11,7 +11,7 @@ import type { ExportMedia } from '../../../document/transform/protocol';
 import { toTransferableBuffer } from '../../../document/transform/protocol';
 import { blipXml } from '../../../ooxml/drawingml';
 import { EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
-import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
+import { chartGraphicXml, chartLookSimplified } from '../../../ooxml/ooxml-chart-writer';
 import { BORDER_SIDES, EMU_PER_TWIP, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { splitDataUri } from '../../../shared/data-uri';
 import { addOfficeChart } from '../../office-chart';
@@ -200,6 +200,7 @@ function wordChartOf(node: JSONContent, pkg: Package, extent: (natural: number) 
     const width = attrs.width ?? CHART_DEFAULT_SIZE.width;
     const height = attrs.height ?? CHART_DEFAULT_SIZE.height;
     const frame = { width, height, emuPerPx: extent(width) / width };
+    if (chartLookSimplified(attrs)) pkg.lost('charts-simplified');
     const rId = addOfficeChart(
         pkg.charts,
         spec,

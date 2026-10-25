@@ -17,7 +17,7 @@ import {
     rectOutline,
 } from '@workspace/lib/vector';
 import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
-import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
+import { chartGraphicXml, chartLookSimplified } from '../../../ooxml/ooxml-chart-writer';
 import { addOfficeChart } from '../../office-chart';
 import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';
 import type { Slide } from './package';
@@ -174,7 +174,7 @@ function countPlainLook(el: VectorElement, slide: Slide): void {
 }
 
 // A graphic frame showing the chart's own part, drawn plain, upright and opaque: a frame turns and fades no chart, and a
-// chart part paints no sketch, hatch, gradient or dash. A spec that doesn't parse or holds range data draws nothing, as
+// chart part paints no sketch, hatch or dash, which counts the chart as simplified once. A spec that doesn't parse or holds range data draws nothing, as
 // on the canvas it draws only its placeholder, and counts as a chart left out. Its numbers go in a workbook of its own,
 // the format desktop PowerPoint's Edit Data opens.
 function chartXml(el: VectorChartElement, slide: Slide): string {
@@ -184,10 +184,12 @@ function chartXml(el: VectorChartElement, slide: Slide): string {
         return '';
     }
     const frame = { width: el.width, height: el.height, emuPerPx: slide.deck.scale };
+    const look = readChartLook(el);
+    if (chartLookSimplified(look, el)) slide.deck.lost('charts-simplified', el);
     const rId = addOfficeChart(
         slide.deck.charts,
         spec,
-        { look: readChartLook(el), frame },
+        { look, frame },
         { target: '../charts/', relate: slide.part.relate },
     );
     if (!rId) return '';

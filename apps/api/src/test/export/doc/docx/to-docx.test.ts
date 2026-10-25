@@ -2470,6 +2470,24 @@ describe('docx writer — figures', () => {
         expect('spec' in read && seriesIdsByPlace(read.spec)).toEqual(seriesIdsByPlace(sample));
     });
 
+    test('a chart whose look no chart part paints is counted once, a flat one not', () => {
+        const hatched = serializeFill({ type: 'solid', color: '#ff0000', style: 'hachure' });
+        const flat = chartNode(PARTS_OF_COLUMN);
+        expect(lossesOf(doc(p(flat)))).toEqual([]);
+        for (const look of [
+            { roughness: 1 },
+            { fill: hatched },
+            { strokeStyle: 'dashed' },
+            { strokeStyle: 'dotted' },
+        ]) {
+            expect(
+                lossesOf(doc(p(flat), p(chartNode({ ...PARTS_OF_COLUMN, ...look, roughness: look.roughness ?? 0 })))),
+            ).toEqual([{ code: 'charts-simplified', count: 1 }]);
+        }
+        const both = chartNode({ ...PARTS_OF_COLUMN, roughness: 2, strokeStyle: 'dashed', fill: hatched });
+        expect(lossesOf(doc(p(both)))).toEqual([{ code: 'charts-simplified', count: 1 }]);
+    });
+
     test('a chart embeds its numbers in a workbook of its own, as Word does, whose cells every ref names', async () => {
         const zip = await unzip(doc(p(chartNode(PARTS_OF_COLUMN)), p(chartNode(sampleChartParts('line')))));
         for (const [n, chartPath] of ['word/charts/chart1.xml', 'word/charts/chart2.xml'].entries()) {

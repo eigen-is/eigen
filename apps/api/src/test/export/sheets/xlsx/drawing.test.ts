@@ -212,6 +212,21 @@ describe('drawingOf', () => {
         expect(lost).toEqual(['charts-dropped', 'charts-dropped']);
     });
 
+    test('a chart whose look no chart part paints is counted once, a flat one not', () => {
+        const hatched = solidFill('#ff0000', 'hachure');
+        const lostFor = (look: Partial<SheetChart>) => {
+            const lost: CountedWarningCode[] = [];
+            const sheet: Sheet = { ...SUMMARY, charts: byId({ ...INLINE, ...look }) };
+            drawingOf(sheet, 1, [sheet], noPictures(), (code) => lost.push(code));
+            return lost;
+        };
+        expect(lostFor({})).toEqual([]);
+        for (const look of [{ roughness: 1 }, { fill: hatched }, { strokeStyle: 'dashed' as const }]) {
+            expect(lostFor(look)).toEqual(['charts-simplified']);
+        }
+        expect(lostFor({ roughness: 2, strokeStyle: 'dotted', fill: hatched })).toEqual(['charts-simplified']);
+    });
+
     // B2:B4 resolves to three slices; a whole column, an area and one point too many resolve to none.
     test.each([
         ['B2:B4', range([1, 3], [1, 1]), 3],
