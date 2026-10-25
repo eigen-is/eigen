@@ -1145,4 +1145,22 @@ describe('a Word file, imported, written and imported again', () => {
         expect(marksOfType(first.json, 'textStyle').map(({ attrs }) => attrs['fontSize'])).toEqual([20, 14]);
         expect(stored(second.json)).toEqual(stored(first.json));
     });
+
+    // Spacing set apart from a style unlike Eigen's, at what the node draws in Eigen: none, so it stays none.
+    test('a space at what its node draws keeps no format, in an empty heading, a title and a note', async () => {
+        const spaced = '<w:pPr><w:spacing w:before="240" w:after="240"/></w:pPr>';
+        const { first, second } = await twice(
+            [
+                paragraph('<w:r><w:tab/></w:r>', '<w:pStyle w:val="Heading2"/><w:spacing w:before="0" w:after="0"/>'),
+                paragraph(run('Title'), '<w:pStyle w:val="Title"/><w:spacing w:before="0"/>'),
+                paragraph(run('Body'), '<w:spacing w:before="0" w:after="0"/>'),
+                paragraph(`${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r>`),
+            ].join(''),
+            {
+                styles: `<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/>${spaced}</w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/>${spaced}</w:style><w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/>${spaced}</w:style>`,
+                footnotes: `<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' Note')}`, '<w:pStyle w:val="FootnoteText"/><w:spacing w:after="0"/>')}</w:footnote>`,
+            },
+        );
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
 });

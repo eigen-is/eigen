@@ -494,9 +494,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
               : role.kind === 'heading'
                 ? { kind: 'paragraph' }
                 : role;
-        // A size the node draws in Eigen is no mark: the writer's style holds it, so it would come back as none.
+        // A size or a space the node draws in Eigen is none: the writer's style holds it, so it would come back as none.
         const own = ownTextLook(kind.kind, kind.kind === 'heading' ? kind.level : 1, normal, scope.story === 'note');
         if (own) for (const node of content) dropOwn(node, 'fontSize', own.sizePt);
+        const unlessOwn = (pt: number | undefined, ownTwips: number | undefined) =>
+            pt !== undefined && ownTwips !== undefined && pt === twipsToPt(ownTwips) ? undefined : pt;
         const para: Para = {
             kind: 'para',
             role: kind,
@@ -521,9 +523,9 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             // Word spaces a split paragraph above its first line and below its last.
             format: {
                 lineSpacing: format.lineSpacing,
-                spaceBefore: index === 0 ? format.spaceBefore : undefined,
+                spaceBefore: index === 0 ? unlessOwn(format.spaceBefore, own?.before) : undefined,
                 baseBefore: twipsToPt(base.before ?? 0),
-                spaceAfter: index === halves.length - 1 ? format.spaceAfter : undefined,
+                spaceAfter: index === halves.length - 1 ? unlessOwn(format.spaceAfter, own?.after) : undefined,
             },
             indent,
         };
