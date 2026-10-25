@@ -299,9 +299,10 @@ describe('charts exported and read back', () => {
             // A pie has no axis line to carry the stroke, so it comes back flat.
             const stroke = spec?.chart.type === 'pie' ? FLAT_CHART_LOOK : element;
             expect(back).toMatchObject({ strokeColor: stroke.strokeColor, strokeWidth: stroke.strokeWidth });
-            // Unset, a line series is written at the stroke's width and comes back so.
+            // Unset, a line series is written at the stroke's width and comes back unset, so the Stroke row still drives it.
             if (spec?.chart.type === 'line') {
-                expect(back).toMatchObject({ seriesStrokeWidth: element.seriesStrokeWidth ?? element.strokeWidth });
+                const own = element.seriesStrokeWidth ?? element.strokeWidth;
+                expect(back.seriesStrokeWidth).toBe(own === element.strokeWidth ? undefined : own);
             }
         }
     });

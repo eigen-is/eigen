@@ -456,12 +456,16 @@ describe('readChartPartLook', () => {
                     color: LOOK.color,
                     strokeColor: LOOK.strokeColor,
                     strokeWidth: LOOK.strokeWidth,
-                    // Unset, a line series is written at the stroke's width.
-                    ...(type === 'line' && { seriesStrokeWidth: LOOK.strokeWidth }),
                 });
             }
         },
     );
+
+    test("a line series written at the stroke's width reads back unset, so the Stroke row still drives it", () => {
+        const look = lookOf(sampleChartSpec('line'), LOOK, EMU_PER_PX);
+        expect(look.strokeWidth).toBe(LOOK.strokeWidth);
+        expect(look).not.toHaveProperty('seriesStrokeWidth');
+    });
 
     test("a line series' own width reads back at any scale, the axes keeping theirs", () => {
         for (const emuPerPx of [EMU_PER_PX, 6350]) {

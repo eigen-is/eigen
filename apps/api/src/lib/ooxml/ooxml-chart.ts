@@ -195,7 +195,7 @@ function automatic(fill: string): XmlElement | undefined {
 // The look writeChart maps onto the part, read back: the background from c:chartSpace's c:spPr, the label colour from
 // its c:txPr, else the theme's tx1 as Office draws a label without one, and the stroke's colour and width from the
 // category axis's line, as the writer strokes every axis and gridline with it. An axis Office draws no line along
-// still shows its gridlines, so the stroke is theirs then. A line chart's series width is its first series' line's. A
+// still shows its gridlines, so the stroke is theirs then. A line chart's series width is its first series' line's, unset when it equals the stroke's. A
 // gradient reads as its middle colour and a pattern as its foreground, as the writer writes one colour. emuPerPx is the
 // EMU one px of the chart's own box is in the file. A pie has no stroke to read, so it reads flat.
 export function readChartPartLook(
@@ -228,17 +228,22 @@ export function readChartPartLook(
     const look = {
         fill: background ? solidFill(background) : FLAT_CHART_LOOK.fill,
         color: drawn(text) ?? (tx1 && colors.scheme.get(tx1)) ?? FLAT_CHART_LOOK.color,
-        ...(lines && { seriesStrokeWidth: widthOf(lineOf(child(lines, 'ser')), AUTOMATIC_SERIES_WIDTH) }),
     };
+    // A series drawn at the stroke's width is the unset one, so the Stroke row still moves it.
+    const seriesWidth = lines && widthOf(lineOf(child(lines, 'ser')), AUTOMATIC_SERIES_WIDTH);
+    const withSeries = (strokeWidth: number) => ({
+        ...look,
+        strokeWidth,
+        ...(seriesWidth !== undefined && seriesWidth !== strokeWidth && { seriesStrokeWidth: seriesWidth }),
+    });
     const axis = child(plotArea, 'catAx') ?? child(plotArea, 'dateAx');
-    if (!axis) return { ...look, strokeColor: FLAT_CHART_LOOK.strokeColor, strokeWidth: FLAT_CHART_LOOK.strokeWidth };
+    if (!axis) return { ...withSeries(FLAT_CHART_LOOK.strokeWidth), strokeColor: FLAT_CHART_LOOK.strokeColor };
     const gridlines = child(child(plotArea, 'valAx'), 'majorGridlines');
     const axisLine = lineOf(axis);
     const line = gridlines && drawn(axisLine) === TRANSPARENT_COLOR ? lineOf(gridlines) : axisLine;
     return {
-        ...look,
+        ...withSeries(widthOf(line, AUTOMATIC_LINE_WIDTH)),
         strokeColor: drawn(line) ?? drawn(AUTOMATIC_LINE) ?? FLAT_CHART_LOOK.strokeColor,
-        strokeWidth: widthOf(line, AUTOMATIC_LINE_WIDTH),
     };
 }
 
