@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { JsonStore, LocalFilesystem } from '../../lib/core';
 import { TEST_DATA_DIR } from '../setup';
@@ -143,13 +143,45 @@ describe('JsonStore', () => {
         expect(readFileSync(join(dir, 'config.json'), 'utf-8')).toBe(original);
     });
 
-    test('atomic write: no .tmp file left after save', async () => {
-        const { store, fs } = createStore('atomic');
+    test('atomic write: no temp file left after save', async () => {
+        const { store } = createStore('atomic');
         await store.load();
         await store.set({ name: 'atomic-test' });
 
-        expect(await fs.file('config.json').exists()).toBe(true);
-        expect(await fs.file('config.json.tmp').exists()).toBe(false);
+        expect(readdirSync(join(TEST_DIR, 'atomic'))).toEqual(['config.json']);
+    });
+
+    test('sets made at the same time all land, in memory and on disk', async () => {
+        const { store } = createStore('concurrent');
+        await store.load();
+
+        const results = await Promise.allSettled([
+            store.set({ name: 'both' }),
+            store.set({ count: 5 }),
+            store.set({ nested: { enabled: false } }),
+            store.set({ nested: { deep: { value: 7 } } }),
+        ]);
+        await store.set({ nested: { tags: ['last'] } });
+
+        expect(results.map((r) => r.status)).toEqual(['fulfilled', 'fulfilled', 'fulfilled', 'fulfilled']);
+        const expected = { name: 'both', count: 5, nested: { enabled: false, tags: ['last'], deep: { value: 7 } } };
+        expect(store.get()).toEqual(expected);
+        expect(JSON.parse(readFileSync(join(TEST_DIR, 'concurrent', 'config.json'), 'utf-8'))).toEqual(expected);
+    });
+
+    test('a failed set leaves memory as it was, and the next set still lands', async () => {
+        const { store, fs } = createStore('failed-set');
+        await store.load();
+        await store.set({ name: 'kept' });
+        const writeAtomic = spyOn(fs, 'writeAtomic').mockRejectedValueOnce(new Error('disk full'));
+        try {
+            await expect(store.set({ count: 1 })).rejects.toThrow('disk full');
+            expect(store.get().count).toBe(0);
+            await store.set({ count: 2 });
+            expect(store.get()).toMatchObject({ name: 'kept', count: 2 });
+        } finally {
+            writeAtomic.mockRestore();
+        }
     });
 
     test('multiple sets accumulate changes', async () => {

@@ -10,7 +10,7 @@ import {
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import * as decoding from 'lib0/decoding';
 import { MESSAGE_SYNC } from '../../lib/collab/collabDocument';
-import type Drive from '../../lib/drive/drive';
+import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';

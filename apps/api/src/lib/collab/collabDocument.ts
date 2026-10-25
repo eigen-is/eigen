@@ -1,3 +1,8 @@
+// One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads
+// the document from its database, saves every edit back to it, and syncs edits and cursors with
+// every socket that has the document open. The Drive opens each document once and closes it a
+// while after the last socket leaves.
+
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -180,9 +185,6 @@ export default class CollabDocument {
     private awareness!: awarenessProtocol.Awareness;
     private connections: Map<ServerWebSocket<unknown>, User> = new Map();
 
-    public get connectionCount(): number {
-        return this.connections.size;
-    }
     private connectionClientIds: Map<ServerWebSocket<unknown>, Set<number>> = new Map();
     // Reverse index of connectionClientIds: which connection currently owns each awareness client id.
     // An id may only be written or removed by the connection that first declared it, so a reader can't
@@ -201,6 +203,10 @@ export default class CollabDocument {
     public constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
         this.path = path;
+    }
+
+    public get connectionCount(): number {
+        return this.connections.size;
     }
 
     public static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
@@ -338,9 +344,9 @@ export default class CollabDocument {
     }
 
     public subscribe(user: User, conn: ServerWebSocket<unknown>) {
-        if (this.closed) {
-            return;
-        }
+        // A mount sweep can close a document while a socket still waits for it to load. That socket
+        // gets a 503 and connects again, to a new document.
+        if (this.closed) throw new ApiError(503, 'Document is closing');
         clearTimeout(this.closeTimer);
         this.connections.set(conn, user);
         this.sendSyncStep1(conn);

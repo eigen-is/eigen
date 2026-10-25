@@ -1,3 +1,7 @@
+// Puts a document back to one of its saved versions. Drive.restoreContainer calls it when a user
+// picks a version in the history panel. It first saves the current state as a version of its own. An
+// open document then takes the old state in place, so connected editors follow without a reload.
+
 import { randomUUID } from 'node:crypto';
 import { isCurrentSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -6,7 +10,7 @@ import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
 import { readSheetsSnapshotJson } from '../document/sheets';
-import type Drive from '../drive/drive';
+import type { Drive } from '../drive';
 import type { Mount } from '../mount/mount';
 import type { RetentionPolicy } from './retention';
 import { DEFAULT_RETENTION } from './retention';
@@ -24,13 +28,11 @@ export async function restoreContainer(
     const target = await mount.getChildByName(versions.id, snapshotName);
     if (!target) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
 
-    // Grab the target into a mount temp file BEFORE the pre-restore snapshot runs — that
-    // snapshot prunes old versions and could otherwise drop the very snapshot we're
-    // restoring. Read raw (downloadToTemp works on every backend); opening via
-    // Mount.openDatabase would migrate and cache an immutable archive. Every step
-    // self-serializes on the container lock; we never hold a lock across them.
-    // The temp id is unique per invocation: concurrent restores of the same snapshot
-    // must not share a temp file (one's cleanup would delete it under the other's read).
+    // The version is copied to a temp file before the current state is saved. Saving prunes old
+    // versions, and it could prune the very version this restores. The copy reads the raw bytes,
+    // because Mount.openDatabase would migrate and cache a version that must never change. Each step
+    // takes the container lock on its own, and no lock is held from one step to the next. Every
+    // restore gets its own temp file, so one restore's cleanup can't delete the file another still reads.
     const tempId = randomUUID();
     const tempPath = await mount.downloadToTemp(target.id, tempId);
     try {
@@ -39,7 +41,7 @@ export async function restoreContainer(
             ? readYjsStateFromFile(tempPath, { label: `restore:${target.name}` })
             : null;
         if (state && container.type === DRIVE_TYPE_SHEETS) {
-            // A snapshot in an older encoding would lock every open editor read-only (SHEETS.md).
+            // A version in an older sheet format would turn every open editor read-only.
             const doc = new Y.Doc();
             try {
                 Y.applyUpdate(doc, state);
@@ -51,8 +53,8 @@ export async function restoreContainer(
                 doc.destroy();
             }
         }
-        // A gone data.db (410, once the temp and staged copy were checked) has no bytes to preserve and no
-        // live Y.Doc to converge.
+        // A 410 means data.db is gone, after the temp and staged copies were checked too. Then there
+        // are no bytes to save first and no live document to update.
         const gone = await mount.snapshotContainerDataDb(container.id, policy).then(
             () => false,
             (error: unknown) => {
@@ -61,11 +63,11 @@ export async function restoreContainer(
             },
         );
         if (!gone && state) {
-            // Yjs (doc/sheets/slides/stickies): replay the snapshot's state into the
-            // live Y.Doc so connected editors converge with no reload.
+            // A collab document, such as a doc or a sheet, takes the old state in place. Connected
+            // editors follow without a reload.
             await restoreYjsContainer(drive, mount, container.id, state);
         } else {
-            // Chat, or a gone data.db: overwrite data.db's bytes with the snapshot's.
+            // A chat, or a gone data.db, gets the bytes of the version written over data.db.
             await mount.replaceContainerDataDb(container.id, tempPath);
         }
     } finally {
@@ -79,20 +81,17 @@ async function restoreYjsContainer(
     containerId: string,
     snapshotState: Uint8Array,
 ): Promise<void> {
-    // getCollabDocument creates the singleton if no one is connected.
-    // applySnapshotState runs the surgery inside one transaction; the resulting
-    // update fires CollabDocument's existing 'update' handler → DbProvider persists
-    // to data.db AND every connected WebSocket receives the diff. Disconnected
-    // sessions catch up via the next sync handshake. Check whether an editor session
-    // already held the doc open BEFORE getCollabDocument creates it.
+    // getCollabDocument opens the document when nobody has it open. The old state goes in as one
+    // change, which the document saves to data.db and sends to every connected editor. An editor
+    // that is offline catches up when it next syncs. Whether the document was open is read first,
+    // because getCollabDocument opens it.
     const wasOpen = drive.hasCollabDocument(mount.id, containerId);
     const collabDoc = await drive.getCollabDocument(mount.id, containerId);
     collabDoc.applySnapshotState(snapshotState);
 
-    // A restore from the file list opens the doc with no subscriber; close it so it
-    // doesn't leak. If it was already open (live editor), that owner manages its
-    // lifecycle. skipFinalSnapshot: we don't snapshot a doc opened only to run
-    // surgery — the pre-restore snapshot already captured the prior state.
+    // A document this restore opened, with nobody connected, closes again so it doesn't leak. One
+    // that was already open stays with its editors. No final version is saved, because the restore
+    // saved the state before it already.
     if (!wasOpen && collabDoc.connectionCount === 0) {
         await drive.closeCollabDocument(mount.id, containerId, { skipFinalSnapshot: true });
     }

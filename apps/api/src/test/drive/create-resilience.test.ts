@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { ApiError } from '../../lib/core';
-import type Drive from '../../lib/drive/drive';
+import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';

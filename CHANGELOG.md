@@ -52,6 +52,8 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 
 - **Access** — when someone removes your write access to a document you have open in Docs, the editor turns read-only right away
 - **Sharing** — a sharing change applies right away to every open document in that drive
+- **Team drives** — edits in an open document stay saved when an admin gives its team drive new storage or turns the drive off
+- **Settings** — two settings changes saved at the same moment both stick, and neither shows an error
 - **Links in Docs** — a collaborator's edit or an undo no longer turns a file name like plan.md into a link
 - **Wrapped images in Docs** — a wrapped image leaves room for the text and lists beside it
 - **Copying from Sheets** — cells you paste into another app keep their rows and columns

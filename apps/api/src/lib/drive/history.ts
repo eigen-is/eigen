@@ -1,3 +1,7 @@
+// The file history of one mount: a row for each change to a path, such as an upload, a rename or a
+// share, and the users who watch a path. After a change, the watchers of the path and of the folders
+// above it get a notification. Each Mount builds one, and Drive records changes through it.
+
 import { randomUUID } from 'node:crypto';
 import type { DrivePath, DrivePathType } from '@workspace/lib/types/drive';
 import { isDocumentType } from '@workspace/lib/types/drive';
@@ -207,7 +211,13 @@ export class FileHistory {
         // The body is persisted, so the team names an acl-changed row shows are resolved here
         // rather than at render time; describeFileEvent prints every other principal id verbatim.
         const d = opts.details;
-        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d));
+        // The change has landed by now. A notification that can't be written is logged, and never
+        // fails the change.
+        const names = await getBatchPublicInfo(aclPrincipalsToResolve(d)).catch((error: unknown) => {
+            console.error(`[FileHistory] Failed to notify the watchers of ${opts.tagPathId}:`, error);
+            return null;
+        });
+        if (!names) return;
         const lines = describeFileEvent(
             {
                 eventType: opts.eventType,

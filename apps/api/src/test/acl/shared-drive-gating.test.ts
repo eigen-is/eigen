@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { ApiError } from '../../lib/core';
-import SharedDrive from '../../lib/drive/sharedDrive';
+import { SharedDrive } from '../../lib/drive/shared-drive';
 import { getHome } from '../../lib/home';
 import type { User } from '../../lib/user';
 import { getUserById } from '../../lib/user';
