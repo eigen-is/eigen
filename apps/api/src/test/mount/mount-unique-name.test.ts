@@ -209,9 +209,14 @@ describe('concurrent same-name create → exactly one 409', () => {
     test('id-based (local-key) mount', () => raceOnBackend('local-key'));
 
     // The second write lands after the first create's row. On `local` both creates share one name path,
-    // so a second write that got that far would replace the winner's bytes.
-    test("two same-name creates keep the winner's bytes, path-based (local)", async () => {
-        const config = createTestMountConfig('race-bytes-local', 'local');
+    // so a second write that got that far would replace the winner's bytes. APFS treats ß as ss and ſ as s.
+    test.each([
+        ['same.txt', 'same.txt'],
+        ['strasse.txt', 'straße.txt'],
+        ['s.txt', 'ſ.txt'],
+        ['office.txt', 'oﬃce.txt'],
+    ])("creates of %s and %s keep the winner's bytes, path-based (local)", async (first, second) => {
+        const config = createTestMountConfig(`race-bytes-local-${randomUUID()}`, 'local');
         const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
@@ -225,8 +230,8 @@ describe('concurrent same-name create → exactly one 409', () => {
         let results: PromiseSettledResult<string>[];
         try {
             results = await Promise.allSettled([
-                mount.createFile(rootId, 'same.txt', 'text/plain', 5, Buffer.from('AAAAA')),
-                mount.createFile(rootId, 'same.txt', 'text/plain', 5, Buffer.from('BBBBB')),
+                mount.createFile(rootId, first, 'text/plain', 5, Buffer.from('AAAAA')),
+                mount.createFile(rootId, second, 'text/plain', 5, Buffer.from('BBBBB')),
             ]);
         } finally {
             spy.mockRestore();
@@ -236,7 +241,7 @@ describe('concurrent same-name create → exactly one 409', () => {
         expect(winner.status).toBe('fulfilled');
         expect(((loser as PromiseRejectedResult).reason as ApiError).status).toBe(409);
         const row = await mount.getPath((winner as PromiseFulfilledResult<string>).value);
-        const bytes = readFileSync(join(mount.dataDir, 'same.txt'));
+        const bytes = readFileSync(join(mount.dataDir, first));
         expect(bytes.toString()).toBe('AAAAA');
         expect(row!.hash).toBe(new Bun.CryptoHasher('sha256').update(bytes).digest('hex'));
 

@@ -12,6 +12,16 @@ export function isReservedName(name: string): boolean {
     return name.normalize('NFKC').toLowerCase() === '.trash';
 }
 
+// Two names that fold alike are one file on a case-insensitive disk such as APFS, which folds more than
+// toLowerCase() does (ß onto ss, ſ onto s, ﬃ onto ffi). The round trip through upper case gets those.
+// The dotless ı is kept as it is: the round trip would make it i, but APFS keeps ı and i apart.
+export function foldName(name: string): string {
+    return name
+        .split('ı')
+        .map((part) => part.toLowerCase().toUpperCase().toLowerCase())
+        .join('ı');
+}
+
 // Filesystem ENAMETOOLONG is a byte limit, not a character limit.
 export const MAX_NAME_BYTES = 255;
 

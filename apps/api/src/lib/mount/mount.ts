@@ -41,7 +41,7 @@ import {
     renameThenWriteRow,
     rethrowDuplicateActiveName,
 } from './helpers';
-import { buildStorageKey, isReservedName, trashStorageKey, validateName } from './names';
+import { buildStorageKey, foldName, isReservedName, trashStorageKey, validateName } from './names';
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
@@ -487,20 +487,20 @@ export class Mount {
     }
 
     // SQLite's LOWER() folds ASCII only. A case-insensitive disk such as APFS also treats non-ASCII
-    // case pairs as one file, so on `local` those names must match too, and toLowerCase() folds them.
+    // case pairs as one file, so on `local` those names must match too (foldName).
     // It runs only for a non-ASCII name on `local`. Every other lookup keeps SQLite's fold, and the
-    // unique index stays the safety net for races. Some pairs still pass, such as an ASCII name whose
-    // stored twin has the Kelvin sign, or ſ and s. On `local` the disk check of a create, rename, move
-    // or restore catches those (trash.renameTarget).
+    // unique index stays the safety net for races. An ASCII name whose stored twin is not ASCII still
+    // passes, such as strasse beside straße. On `local` the disk check of a create, rename, move or
+    // restore catches those (trash.renameTarget).
     private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
         if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;
-        const folded = name.toLowerCase();
+        const folded = foldName(name);
         const siblings = await this.db
             .select({ id: paths.id, name: paths.name })
             .from(paths)
             .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
             .all();
-        return siblings.find((s) => s.name.toLowerCase() === folded) ?? null;
+        return siblings.find((s) => foldName(s.name) === folded) ?? null;
     }
 
     // ---- Creating ----
@@ -1252,11 +1252,12 @@ export class Mount {
     }
 
     // On `local` two creates of one name in one folder would write to one name path. So a create also
-    // holds a path lock on its folder and name. The second create then sees the first one's row and
-    // answers 409 before it writes. Like every path lock, this one is taken before the tree lock.
+    // holds a path lock on its folder and its name, folded the way the disk folds it. The second create
+    // then sees the first one's row, or its bytes on disk, and answers 409 before it writes. Like every
+    // path lock, this one is taken before the tree lock.
     private async withCreateLock<T>(parentId: string, name: string, fn: () => Promise<T>): Promise<T> {
         if (!this.isPathBased) return fn();
-        return this.withPathLock(`${parentId}/${name.toLowerCase()}`, () => this.withTreeShared(fn));
+        return this.withPathLock(`${parentId}/${foldName(name)}`, () => this.withTreeShared(fn));
     }
 
     // ---- Document databases and versions ----
