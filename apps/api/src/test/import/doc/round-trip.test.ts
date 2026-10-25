@@ -1222,6 +1222,24 @@ describe('a Word file, imported, written and imported again', () => {
         expect(stored(second.json)).toEqual(stored(first.json));
     });
 
+    // A note draws single in its FootnoteText; the writer writes the note's number and the space after it apart.
+    test.each<[string, string, string]>([
+        ['in another family than the Normal', 'Inter', '<w:spacing w:line="240" w:lineRule="auto"/>'],
+        [
+            'single, apart from a FootnoteText that is not',
+            'Source Serif 4',
+            '<w:spacing w:line="240" w:lineRule="auto"/>',
+        ],
+    ])("a note's line spacing comes back as the first import read it: %s", async (_name, font, spacing) => {
+        const defaults = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:pPr><w:spacing w:line="276" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style>`;
+        const serif = '<w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4"/>';
+        const { first, second } = await twice(paragraph(`${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r>`), {
+            styles: defaults,
+            footnotes: `<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' ')}${run('Note', serif)}`, `<w:pStyle w:val="FootnoteText"/>${spacing}`)}</w:footnote>`,
+        });
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
     // A table without widths, and a row run past its grid: the editor sizes those columns, and so do Word's.
     test('a column without a width comes back without one, beside one with a width', async () => {
         const cell = (inner: string) => `<w:tc>${paragraph(run(inner))}</w:tc>`;

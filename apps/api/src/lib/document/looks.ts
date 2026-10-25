@@ -1,4 +1,10 @@
-import { EIGEN_FONT_NAMES, FOOTNOTE_FONT_SIZE, getFontName } from '@workspace/lib/constants/fonts';
+import {
+    DOCUMENT_LINE_RATIO,
+    EIGEN_FONT_NAMES,
+    FOOTNOTE_FONT_SIZE,
+    fontLineHeight,
+    getFontName,
+} from '@workspace/lib/constants/fonts';
 import type { NormalStyle, TitleType } from '@workspace/lib/docs/eigendoc';
 import { DOC_PROSE_CLASS, listTypeOfStyle, ptToTwips } from '@workspace/lib/docs/eigendoc';
 import { LIST_FORMATS, LIST_LEVELS } from '../ooxml/wordml';
@@ -131,8 +137,8 @@ export const CAPTION_LOOK = {
 
 // A note's text at Google's and Word's footnote size, which eigen-prose.css can't give: the editor lists its notes off
 // the page's prose.
-// Word's FootnoteText, which Google's notes take too: 10 pt, no space after.
-export const FOOTNOTE_LOOK = { sizePt: FOOTNOTE_FONT_SIZE, after: 0 };
+// Word's FootnoteText, which Google's notes take too: 10 pt, single spaced, no space after.
+export const FOOTNOTE_LOOK = { sizePt: FOOTNOTE_FONT_SIZE, line: 240, after: 0 };
 
 type TextLook = { color?: string; italic?: true };
 
@@ -185,24 +191,48 @@ export function textMetrics(selector: string, normalPt: number) {
     };
 }
 
+// A multiple of the font's own line height, so the pitch is the CSS one: Google Docs reads every atLeast as single.
+export function autoLine(linePt: number, sizePt: number, font: string): number {
+    return Math.round((240 * linePt) / (sizePt * fontLineHeight(font)));
+}
+
+// A line spacing, which CSS draws in Inter's line, in the Normal's font, as Word draws it.
+export function normalLine(lineSpacing: number, normal: NormalStyle): number {
+    return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
+}
+
 // What a text node draws with no mark or format of its own, as the docx writer's styles write it: its size in points,
-// its space before and after in twips. A note's paragraph draws Word's FootnoteText over the Normal.
+// its space before and after in twips and its auto line in the Normal's font. A note's paragraph draws Word's
+// FootnoteText over the Normal.
 export function ownTextLook(
     type: string,
     level: number,
     normal: NormalStyle,
     inNote: boolean,
-): { sizePt: number; before: number; after: number } | undefined {
-    if (inNote) return { sizePt: FOOTNOTE_LOOK.sizePt, before: twips(normal.spaceBefore), after: FOOTNOTE_LOOK.after };
+): { sizePt: number; before: number; after: number; line: number } | undefined {
+    if (inNote)
+        return {
+            sizePt: FOOTNOTE_LOOK.sizePt,
+            before: twips(normal.spaceBefore),
+            after: FOOTNOTE_LOOK.after,
+            line: FOOTNOTE_LOOK.line,
+        };
     if (type === 'paragraph')
-        return { sizePt: normal.size, before: twips(normal.spaceBefore), after: twips(normal.spaceAfter) };
+        return {
+            sizePt: normal.size,
+            before: twips(normal.spaceBefore),
+            after: twips(normal.spaceAfter),
+            line: normalLine(normal.lineSpacing, normal),
+        };
     const selector =
         type === 'heading'
             ? `.eigen-prose h${Math.min(level, HEADING_LOOKS.length)}`
             : type === 'title' || type === 'subtitle'
               ? TITLE_SELECTORS[type]
               : undefined;
-    return selector === undefined ? undefined : textMetrics(selector, normal.size);
+    if (selector === undefined) return undefined;
+    const metrics = textMetrics(selector, normal.size);
+    return { ...metrics, line: autoLine(metrics.line, metrics.sizePt, normal.font) };
 }
 
 export const HEADER_CELL_LOOK = { fill: proseColor('.eigen-prose th', 'background-color') };

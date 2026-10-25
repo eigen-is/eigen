@@ -423,8 +423,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         size: paraRun.size ?? 20,
     };
     // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the mark's face;
-    // not the space a task's text starts with, which goes, as the writer writes its checkbox and the tab after it apart.
-    const start = task ? pieces.findIndex((piece) => !(piece.kind === 'node' && isWhitespace(piece.node))) : 0;
+    // not the space a task's or a note's text starts with, which goes, as the writer writes the checkbox or the note's
+    // number and the space after it apart.
+    const noteNumbered = descendants(p, W_NS, 'footnoteRef').length + descendants(p, W_NS, 'endnoteRef').length > 0;
+    const start =
+        task || noteNumbered ? pieces.findIndex((piece) => !(piece.kind === 'node' && isWhitespace(piece.node))) : 0;
     const faces = pieces.slice(Math.max(0, start)).flatMap((piece) => {
         if (piece.kind !== 'node') return [];
         if (piece.node.type === 'pageNumber' || piece.node.type === 'footnote') return [mark];
@@ -447,7 +450,6 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     const multiple = line === undefined ? undefined : (unscaled(line) * scaleOf(mark.family)) / 240;
     const lineSpacing =
         multiple !== undefined &&
-        line !== baseLine &&
         (baseSpacing === undefined || Math.round(multiple * 100) !== Math.round(baseSpacing * 100))
             ? multiple
             : undefined;
@@ -507,6 +509,11 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (own) for (const node of content) dropOwn(node, 'fontSize', own.sizePt);
         const unlessOwn = (pt: number | undefined, ownTwips: number | undefined) =>
             pt !== undefined && ownTwips !== undefined && pt === twipsToPt(ownTwips) ? undefined : pt;
+        const ownLine = own && Math.round((own.line * scaleOf(normal.font)) / 2.4);
+        const lineSpacing =
+            format.lineSpacing !== undefined && Math.round(format.lineSpacing * 100) === ownLine
+                ? undefined
+                : format.lineSpacing;
         const para: Para = {
             kind: 'para',
             role: kind,
@@ -530,7 +537,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
             // Word spaces a split paragraph above its first line and below its last.
             format: {
-                lineSpacing: format.lineSpacing,
+                lineSpacing,
                 spaceBefore: index === 0 ? unlessOwn(format.spaceBefore, own?.before) : undefined,
                 baseBefore: twipsToPt(base.before ?? 0),
                 spaceAfter: index === halves.length - 1 ? unlessOwn(format.spaceAfter, own?.after) : undefined,

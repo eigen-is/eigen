@@ -1,7 +1,7 @@
-import { DOCUMENT_LINE_RATIO, fontLineHeight } from '@workspace/lib/constants/fonts';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from '../../../document/colors';
 import {
+    autoLine,
     BODY,
     boxSide,
     CAPTION_LOOK,
@@ -13,6 +13,7 @@ import {
     halfPoints,
     LINK_LOOK,
     lineHeightPt,
+    normalLine,
     proseBorder,
     proseColor,
     QUOTE_LOOK,
@@ -33,16 +34,6 @@ import type { RunProps } from './runs';
 import { rPrXml } from './runs';
 
 // Styles, every value from eigen-prose.css.
-
-// A multiple of the font's own line height, so the pitch is the CSS one: Google Docs reads every atLeast as single.
-function autoLine(linePt: number, sizePt: number, font: string): number {
-    return Math.round((240 * linePt) / (sizePt * fontLineHeight(font)));
-}
-
-// A line spacing, which CSS draws in Inter's line, in the Normal's font, as Word draws it.
-export function normalLine(lineSpacing: number, normal: NormalStyle): number {
-    return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
-}
 
 // A length an element in the body text takes, in twips.
 export function proseTwips(selector: string, property: string): number {
@@ -309,7 +300,7 @@ export function styleDefinitions(normal: NormalStyle): StyleDef[] {
             uiPriority: 99,
             semiHidden: true,
             unhideWhenUsed: true,
-            pPr: { spacing: { after: FOOTNOTE_LOOK.after, line: 240 } },
+            pPr: { spacing: { after: FOOTNOTE_LOOK.after, line: FOOTNOTE_LOOK.line } },
             rPr: { size: halfPoints(FOOTNOTE_LOOK.sizePt) },
         },
         {
