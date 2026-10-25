@@ -1,3 +1,4 @@
+export { GRIDLINE_OPACITY } from './cartesian';
 export { applyChartSpecChange, chartPointMoves, chartSpecChange } from './change';
 export {
     CHART_DEFAULT_SIZE,
@@ -12,7 +13,6 @@ export {
 export {
     CHART_MESSAGES,
     chartPointCount,
-    GRIDLINE_OPACITY,
     isInlineSketchCapped,
     isSketchCapped,
     layoutChart,
