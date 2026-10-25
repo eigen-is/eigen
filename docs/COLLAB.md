@@ -70,9 +70,11 @@ A revoked read would otherwise keep receiving broadcasts until the socket drops.
 
 So a server-side writer opens the document right before it writes, never before an await that can outlast the linger, such as a transform. A write into a closed document's Y.Doc throws nothing and is neither saved nor broadcast. An import reads what it needs early as a value and opens the document again for the commit (`importIntoDocument`).
 
-## A drive that is shutting down refuses a new open
+## A drive or mount that is closing refuses a new open
 
 Once `Drive.destruct` starts its sweep of the open documents, the registry (`apps/api/src/lib/drive/collab-registry.ts`) answers every open with a 503. A document that registered after that sweep would never be destructed, and the mount teardown that follows would close its database under it.
+
+One mount closes the same way. When a team mount gets new storage or is turned off, `Drive.removeMount` destructs that mount's open documents before it closes the mount's databases, so each document saves its last edits. The registry then answers an open on the old `Mount` with a 503. The closed sockets reconnect to the new `Mount`, and the handshake syncs the edits a tab made in between. `apps/api/src/test/drive/collab-registry.test.ts` pins it.
 
 ## Modified moves for an update, never for an open or a close
 

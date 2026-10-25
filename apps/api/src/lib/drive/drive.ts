@@ -194,7 +194,14 @@ export class Drive {
         if (mountId === this.defaultMountId) {
             throw new ApiError(400, 'Cannot remove default mount');
         }
-        await this.mounts.get(mountId)?.closeAllDatabases();
+        const mount = this.mounts.get(mountId);
+        if (!mount) return;
+        // The same order as destruct, for one mount. A document that is still loading would keep
+        // destructMount waiting on its download, so the downloads stop first. The documents close
+        // before the databases do, so each one saves its last edits.
+        mount.downloads.abort();
+        await this.documents.destructMount(mount);
+        await mount.closeAllDatabases();
         this.mounts.delete(mountId);
     }
 
