@@ -1032,6 +1032,25 @@ describe('pptx images and backgrounds', () => {
         expect(new Set(embeds.map((rel) => rel?.target))).toEqual(new Set(['../media/image1.png']));
     });
 
+    // A contained picture draws in the box it fits, so its border keeps the element's box as a shape of its own.
+    test("a bordered picture's border is its a:ln, a contained one's a shape around it", () => {
+        const border = { strokeColor: '#c0504d', strokeWidth: 4, strokeStyle: 'solid' } as const;
+        const zip = pptx(
+            sceneOf([
+                element('image', { ...square, ...border, index: 'a0', objectFit: 'fill', corners: 'straight' }),
+                element('image', { ...square, ...border, index: 'a1', objectFit: 'contain', corners: 'straight' }),
+            ]),
+            [PNG_MEDIA],
+        );
+        const [fill, contain, frame] = shapes(zip);
+        expect([fill?.local, contain?.local, frame?.local]).toEqual(['pic', 'pic', 'sp']);
+        expect(descendants(fill, A, 'ln')).toHaveLength(1);
+        expect(descendants(contain, A, 'ln')).toHaveLength(0);
+        expect(xfrm(contain)).toEqual({ x: 100 * EMU, y: 125 * EMU, cx: 200 * EMU, cy: 50 * EMU, rot: 0 });
+        expect(xfrm(frame)).toEqual({ x: 100 * EMU, y: 50 * EMU, cx: 200 * EMU, cy: 200 * EMU, rot: 0 });
+        expect(attr(first(frame, A, 'ln'), 'w')).toBe(String(4 * EMU));
+    });
+
     test('an SVG goes in beside its PNG, a picture with no media writes nothing', () => {
         const svg: OfficeMedia = {
             name: 'd.svg',
