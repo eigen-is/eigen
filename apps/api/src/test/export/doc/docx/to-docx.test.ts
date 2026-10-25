@@ -20,9 +20,13 @@ import { chartFigureMedia } from '../../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
 import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/fonts';
 import { withSvgFallbacks } from '../../../../lib/export/office-image';
-import { A_NS, parseOoxml } from '../../../../lib/ooxml/ooxml';
+import type { DrawingTheme } from '../../../../lib/ooxml/drawingml';
+import { IDENTITY_COLOR_MAP } from '../../../../lib/ooxml/drawingml';
+import { A_NS, C_NS, parseOoxml } from '../../../../lib/ooxml/ooxml';
+import { CHART_CONTENT_TYPE, readChart } from '../../../../lib/ooxml/ooxml-chart';
 import type { ZipReader } from '../../../../lib/ooxml/zip';
 import { openZip } from '../../../../lib/ooxml/zip';
+import { seriesIdsByPlace } from '../../../../scripts/office-audit';
 import { sampleChartParts } from '../../../fixtures/chart-parts';
 import {
     buildAllFeaturesDocJson,
@@ -278,8 +282,9 @@ describe('docx writer — package', () => {
         'word/settings.xml',
         'word/fontTable.xml',
         'word/_rels/fontTable.xml.rels',
+        'word/charts/chart1.xml',
     ];
-    // The all-features doc's chart, photo and SVG, numbered as the figures first show them.
+    // The all-features doc's chart picture, photo and SVG, numbered as the figures first show them.
     const MEDIA_PARTS = ['word/media/image1.png', 'word/media/image2.jpeg', 'word/media/image3.png'];
     // The eight faces its runs draw in.
     const FONT_PARTS = Array.from({ length: 8 }, (_, i) => `word/fonts/font${i + 1}.odttf`);
@@ -311,6 +316,7 @@ describe('docx writer — package', () => {
             '/word/numbering.xml': `${wml}.numbering+xml`,
             '/word/settings.xml': `${wml}.settings+xml`,
             '/word/fontTable.xml': `${wml}.fontTable+xml`,
+            '/word/charts/chart1.xml': CHART_CONTENT_TYPE,
         });
     });
 
@@ -410,6 +416,11 @@ describe('docx writer — package', () => {
             ['word/settings.xml', 'w:settings', wml],
             ['word/fontTable.xml', 'w:fonts', { 'xmlns:w': W, 'xmlns:r': R }],
             ['word/_rels/fontTable.xml.rels', 'Relationships', { xmlns: RELS }],
+            [
+                'word/charts/chart1.xml',
+                'c:chartSpace',
+                { 'xmlns:c': C_NS, 'xmlns:a': document['xmlns:a'], 'xmlns:r': R },
+            ],
         ]);
     });
 
@@ -1973,6 +1984,9 @@ function figure(attrs: Record<string, unknown>): JSONContent {
 
 const PARTS_OF_COLUMN = sampleChartParts('column');
 
+// The writer paints every colour itself, so a chart reads back the same through any theme.
+const CHART_THEME: DrawingTheme = { scheme: new Map(), map: IDENTITY_COLOR_MAP };
+
 function chartNode(attrs: Record<string, unknown>): JSONContent {
     return { type: 'chart', attrs };
 }
@@ -2398,9 +2412,47 @@ describe('docx writer — figures', () => {
     // The media the transform process draws for a doc's charts, as the export hands it to the writer.
     const chartMedia = async (json: JSONContent) => withSvgFallbacks(await chartFigureMedia([json]));
 
-    test("a chart is a picture of its SVG beside the SVG's PNG, at its width, its caption kept", async () => {
+    test('a chart is a Word chart, its part drawn from the spec with its numbers inline, at its width, its caption kept', async () => {
         const sample = sampleChartSpec('column');
         const json = doc(p(chartNode({ ...PARTS_OF_COLUMN, width: 480, height: 300, caption: 'Points' })));
+        const media = await chartMedia(json);
+        expect(media).toEqual([]);
+        const cx = 480 * 9525;
+        const cy = 300 * 9525;
+        expect(await blocksOf(json, media)).toEqual([
+            imageParagraph(
+                `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="1" name="Chart 1" descr="Where a star's light goes"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="${C_NS}"><c:chart r:id="rId5"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+                'center',
+                23,
+            ),
+            `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="23" w:after="385"/><w:jc w:val="center"/></w:pPr>${run('Points')}</w:p>`,
+        ]);
+        const zip = await unzip(json, undefined, media);
+        expect((await relationshipsOf(zip)).slice(4)).toEqual([['rId5', `${R}/chart`, 'charts/chart1.xml']]);
+        expect(zip.names().filter((name) => name.startsWith('word/media/'))).toEqual([]);
+        const overrides = xmlChildren(await part(zip, '[Content_Types].xml'), CONTENT_TYPES, 'Override');
+        expect(
+            overrides.find((override) => xmlAttr(override, '', 'PartName') === '/word/charts/chart1.xml')?.attributes[
+                'ContentType'
+            ],
+        ).toBe(CHART_CONTENT_TYPE);
+        const read = readChart(await part(zip, 'word/charts/chart1.xml'), { theme: CHART_THEME, data: 'cache' });
+        expect('spec' in read && seriesIdsByPlace(read.spec)).toEqual(seriesIdsByPlace(sample));
+    });
+
+    test("a chart's font is embedded as its text's is", async () => {
+        const json = doc(p(chartNode({ ...sampleChartParts('column', 'Source Serif 4'), width: 480, height: 300 })));
+        const zip = await unzip(json, undefined, await chartMedia(json));
+        const fonts = xmlChildren(await part(zip, 'word/fontTable.xml'), W, 'font');
+        const serif = fonts.find((font) => xmlAttr(font, W, 'name') === 'Source Serif 4');
+        expect(serif && xmlElements(serif).map((element) => element.local)).toContain('embedRegular');
+        expect(serif && xmlElements(serif).map((element) => element.local)).toContain('embedBold');
+    });
+
+    test("a sketched chart, a look a chart part can't paint, is a picture of its SVG beside the SVG's PNG", async () => {
+        const json = doc(
+            p(chartNode({ ...PARTS_OF_COLUMN, width: 480, height: 300, roughness: 1, caption: 'Points' })),
+        );
         const media = await chartMedia(json);
         expect(await blocksOf(json, media)).toEqual([
             imageParagraph(
@@ -2419,16 +2471,21 @@ describe('docx writer — figures', () => {
             `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:spacing w:before="23" w:after="385"/><w:jc w:val="center"/></w:pPr>${run('Points')}</w:p>`,
         ]);
         const zip = await unzip(json, undefined, media);
+        expect(zip.names().filter((name) => name.startsWith('word/charts/'))).toEqual([]);
         const svg = await part(zip, 'word/media/image1.svg');
         expect([xmlAttr(svg, '', 'width'), xmlAttr(svg, '', 'height')]).toEqual(['480', '300']);
-        expect(entryText(zip, 'word/media/image1.svg')).toContain(`>${sample.axes.x.title.text}</text>`);
         const { format, width, height } = await sharp(zip.read('word/media/image1.png')).metadata();
         expect([format, width, height]).toEqual(['png', 480, 300]);
     });
 
     test('two charts of one spec and size but different looks draw two pictures, each in its own look', async () => {
         const parts = sampleChartParts('column');
-        const json = doc(p(chartNode(parts), chartNode({ ...parts, roughness: 2, seed: 5, strokeColor: '#336699' })));
+        const json = doc(
+            p(
+                chartNode({ ...parts, roughness: 1 }),
+                chartNode({ ...parts, roughness: 2, seed: 5, strokeColor: '#336699' }),
+            ),
+        );
         const media = await chartMedia(json);
         const svgs = media.filter((item) => item.contentType === 'image/svg+xml');
         expect(svgs).toHaveLength(2);
@@ -2767,7 +2824,7 @@ const DRAWING_SEQUENCES: Record<string, string[]> = {
     'wp:inline': ['wp:extent', 'wp:effectExtent', 'wp:docPr', 'wp:cNvGraphicFramePr', 'a:graphic'],
     'wp:cNvGraphicFramePr': ['a:graphicFrameLocks', 'a:extLst'],
     'a:graphic': ['a:graphicData'],
-    'a:graphicData': ['pic:pic'],
+    'a:graphicData': ['pic:pic', 'c:chart'],
     'pic:pic': ['pic:nvPicPr', 'pic:blipFill', 'pic:spPr', 'pic:style', 'pic:extLst'],
     'pic:nvPicPr': ['pic:cNvPr', 'pic:cNvPicPr', 'pic:nvPr'],
     'pic:blipFill': ['a:blip', 'a:srcRect', 'a:tile', 'a:stretch'],

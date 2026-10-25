@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core';
-import { readChartSpec } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, readChartLook, readChartSpec } from '@workspace/lib/charts';
 import { chartSvg, readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { BODY, boxSide, cssPt, twips } from '../../../document/looks';
@@ -8,7 +8,9 @@ import { proseValue } from '../../../document/prose-css';
 import type { ExportMedia } from '../../../document/transform/protocol';
 import { toTransferableBuffer, toTransferableText } from '../../../document/transform/protocol';
 import { blipXml } from '../../../ooxml/drawingml';
-import { EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
+import { C_NS, EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
+import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
+import { chartGraphicXml, officeDrawsChartLook, writeChart } from '../../../ooxml/ooxml-chart-writer';
 import { BORDER_SIDES, EMU_PER_TWIP, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { splitDataUri } from '../../../shared/data-uri';
 import type { OfficeImage } from '../../office-image';
@@ -20,7 +22,8 @@ import { indentOf, paragraphXml, quoteBar, styleSpacing } from './paragraphs';
 import { textXml } from './runs';
 import { TABLE_BORDER_SIDES } from './tables';
 
-// Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback.
+// Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback, and charts, each a Word chart, or a
+// picture of its SVG in a look a chart part can't paint.
 
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
 // under that src, as it draws a chart under its drawing's hash. A media name holds no `/`, so no two keys meet.
@@ -32,8 +35,8 @@ function figureMediaKey(node: JSONContent): string | null {
 
 // A chart's SVG, named for what it draws, so two charts that draw the same, a chart repeated or two whose ids differ,
 // are one picture. A docx holds each SVG in a file of its own, so every drawing takes one id. Drawn once per node,
-// though the media and the writer both ask; a spec that doesn't parse draws nothing. The alt text is the one its HTML
-// gives its image.
+// though the media and the writer both ask; a spec that doesn't parse draws nothing, and a Word chart needs no picture.
+// The alt text is the one its HTML gives its image.
 type ChartDrawing = { name: string; svg: string; alt: string };
 
 const drawings = new WeakMap<JSONContent, ChartDrawing | null>();
@@ -43,7 +46,7 @@ function chartDrawing(node: JSONContent): ChartDrawing | null {
     if (known !== undefined) return known;
     const attrs = node.attrs ?? {};
     const { spec } = readChartSpec(attrs);
-    const svg = spec && chartSvg(spec, readChartAttrs(attrs), 'chart');
+    const svg = spec && !officeDrawsChartLook(readChartLook(attrs)) && chartSvg(spec, readChartAttrs(attrs), 'chart');
     const drawing = svg
         ? { name: `chart/${Bun.CryptoHasher.hash('sha256', svg, 'hex')}`, svg, alt: spec.title.text || 'Chart' }
         : null;
@@ -102,6 +105,9 @@ export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMed
 // extension.
 type Image = OfficeImage & { width: number; height: number; rId: string; svgRId?: string };
 
+// A chart part of its own per chart node, related from the part that shows it.
+type WordChart = { width: number; height: number; rId: string; alt: string };
+
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 export function figureOf(node: JSONContent, context: Context): Block[] {
     const attrs = readFigureAttrs(node.attrs ?? {});
@@ -125,8 +131,9 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         runs: `<w:r>${captionRuns}</w:r>`,
         inset,
     });
-    const key = figureMediaKey(node);
-    const image = key ? imageOf(key, context.pkg) : undefined;
+    const chart = node.type === 'chart' ? wordChartOf(node, context.pkg) : undefined;
+    const key = chart ? null : figureMediaKey(node);
+    const image = chart ?? (key ? imageOf(key, context.pkg) : undefined);
     // The caption alone is the figure's box, as the HTML's.
     if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
     const columnPx = Math.floor((context.column - context.indent) / TWIPS_PER_PX);
@@ -138,7 +145,7 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         cx,
         // Observed in Word: a fractional-twip height refits the width (a 1204×4 px divider drew 466.5 pt wide), so the height is whole.
         Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
-        (node.type === 'chart' ? chartDrawing(node)?.alt : alt) ?? '',
+        chart?.alt ?? (node.type === 'chart' ? chartDrawing(node)?.alt : alt) ?? '',
         context.pkg,
     );
     if (!side) {
@@ -213,17 +220,44 @@ function imageOf(name: string, pkg: Package): Image | undefined {
     };
 }
 
+// The chart's labels draw in the spec's font, embedded as a run's is, its title in the bold. Word draws the numbers the
+// part holds inline: a docx embeds no workbook for Edit Data to open.
+function wordChartOf(node: JSONContent, pkg: Package): WordChart | undefined {
+    const attrs = readChartAttrs(node.attrs ?? {});
+    const { spec } = readChartSpec(node.attrs ?? {});
+    if (!spec || !officeDrawsChartLook(attrs)) return undefined;
+    const path = `charts/chart${pkg.charts.length + 1}.xml`;
+    pkg.charts.push([`word/${path}`, writeChart(spec, { ranges: () => undefined, look: attrs }), CHART_CONTENT_TYPE]);
+    const font = spec.chart.fontFamily;
+    useFace(pkg, { font }, undefined);
+    if (spec.title.text) useFace(pkg, { font, bold: true }, undefined);
+    return {
+        width: attrs.width ?? CHART_DEFAULT_SIZE.width,
+        height: attrs.height ?? CHART_DEFAULT_SIZE.height,
+        rId: pkg.part.relate('chart', path),
+        alt: spec.title.text || 'Chart',
+    };
+}
+
 function isPositive(value: number | undefined): value is number {
     return value !== undefined && Number.isFinite(value) && value > 0;
 }
 
-// Word and LibreOffice draw the svgBlip; a reader without SVG draws the PNG.
-function drawingXml(image: Image, cx: number, cy: number, alt: string, pkg: Package): string {
+// Word and LibreOffice draw the svgBlip; a reader without SVG draws the PNG. A chart's frame declares the c: prefix,
+// which the document's root doesn't.
+function drawingXml(image: Image | WordChart, cx: number, cy: number, alt: string, pkg: Package): string {
     const n = ++pkg.drawings;
     const descr = escapeXml(alt);
+    const inline = `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`;
+    if (!('part' in image)) {
+        return [
+            `<w:r><w:drawing xmlns:c="${C_NS}">${inline}<wp:docPr id="${n}" name="Chart ${n}" descr="${descr}"/>`,
+            `<wp:cNvGraphicFramePr/>${chartGraphicXml(image.rId)}</wp:inline></w:drawing></w:r>`,
+        ].join('');
+    }
     const blip = blipXml(image.rId, image.svgRId);
     return [
-        `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`,
+        `<w:r><w:drawing>${inline}`,
         `<wp:docPr id="${n}" name="Picture ${n}" descr="${descr}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>`,
         `<a:graphic><a:graphicData uri="${PIC_NS}"><pic:pic><pic:nvPicPr><pic:cNvPr id="${n}" name="${image.part}" descr="${descr}"/><pic:cNvPicPr/></pic:nvPicPr>`,
         `<pic:blipFill>${blip}<a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,

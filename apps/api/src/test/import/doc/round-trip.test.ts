@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
+import { defaultChartSpec, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import type { ChartStacking } from '@workspace/lib/types/chart';
 import { readOmml, writeMathml } from '@workspace/math';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { docSchema } from '../../../lib/document/doc-schema';
@@ -15,6 +17,7 @@ import type { DocxImage } from '../../../lib/import/doc/from-docx';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
+import { seriesIdsByPlace } from '../../../scripts/office-audit';
 import { sampleChartParts } from '../../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 import { importDocxBody } from '../../fixtures/golden-docx';
@@ -41,8 +44,8 @@ function sourceNames(images: DocxImage[]): Map<string, string> {
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
 // column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
-// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) The fixture's media holds no chart drawing,
-// which the transform process makes, so a chart writes nothing; 'a chart' round-trips one. (9) Small is written as its
+// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) A chart is a paragraph of its own in Word,
+// as a display equation is (11), and its series ids are compared by place (byPlace). (9) Small is written as its
 // look and comes back as that size. (10) OMML has no slot for the typed LaTeX. (11) In Word a display equation is a
 // paragraph of its own, and every piece but the last keeps the writer's no space after, so the pieces draw as one
 // paragraph. (12) A header cell beside a body cell is marked by the Table Header style on its plain paragraphs, so
@@ -80,8 +83,8 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
     });
     const mixed = source.type === 'tableRow' && source.content?.some((cell) => cell.type === 'tableCell');
     const kept = source.content
-        ?.filter((child, index, siblings) => child.type !== 'chart' && !blankBeforeBreak(siblings, index))
-        .flatMap(splitAtDisplayEquations)
+        ?.filter((_, index, siblings) => !blankBeforeBreak(siblings, index))
+        .flatMap(splitAtOwnParagraphs)
         .map((child) =>
             mixed && child.type === 'tableHeader' && !child.content?.some(isPlain) ? asBodyCell(child) : child,
         );
@@ -104,13 +107,14 @@ const asBodyCell = (cell: JSONContent): JSONContent => ({
     attrs: { ...cell.attrs, backgroundColor: cell.attrs?.['backgroundColor'] ?? HEADER_GREY },
 });
 
-const isDisplayEquation = (node: JSONContent) => node.type === 'equation' && node.attrs?.['display'] === true;
+const isOwnParagraph = (node: JSONContent) =>
+    node.type === 'chart' || (node.type === 'equation' && node.attrs?.['display'] === true);
 
-function splitAtDisplayEquations(node: JSONContent): JSONContent[] {
-    if (!node.content?.some(isDisplayEquation)) return [node];
+function splitAtOwnParagraphs(node: JSONContent): JSONContent[] {
+    if (!node.content?.some(isOwnParagraph)) return [node];
     const pieces: JSONContent[][] = [[]];
     for (const child of node.content) {
-        if (isDisplayEquation(child)) pieces.push([child], []);
+        if (isOwnParagraph(child)) pieces.push([child], []);
         else pieces.at(-1)?.push(child);
     }
     return pieces
@@ -140,6 +144,16 @@ function withSourceNames(node: JSONContent, names: Map<string, string>): JSONCon
     };
 }
 
+// A series id is identity, not content, and the writer writes none, so a chart's parts compare with its ids by place.
+function byPlace(node: JSONContent): JSONContent {
+    const { spec } = node.type === 'chart' ? readChartSpec(node.attrs ?? {}) : { spec: null };
+    return {
+        ...node,
+        ...(spec && { attrs: { ...node.attrs, ...newChartSpecParts(seriesIdsByPlace(spec)) } }),
+        ...(node.content && { content: node.content.map(byPlace) }),
+    };
+}
+
 // JSON round trips drop undefined keys, so both sides compare as stored.
 const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(json));
 
@@ -152,29 +166,67 @@ describe('the all-features doc', () => {
         );
         const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
         const imported = withSourceNames(json, sourceNames(images));
-        expect(stored(imported)).toEqual(stored(expected(source, imported)));
+        expect(stored(byPlace(imported))).toEqual(stored(byPlace(expected(source, imported))));
     });
 });
 
 describe('a chart', () => {
-    test('comes back as an image of its SVG, at its width, its title its alt, its caption and layout kept', async () => {
-        const chart = {
-            type: 'chart',
-            attrs: {
-                ...sampleChartParts('column'),
-                width: 480,
-                height: 300,
-                caption: 'Points',
-                layout: 'wrap-left',
-            },
-        };
+    const exported = async (chart: JSONContent) => {
         const source = { type: 'doc', content: [{ type: 'paragraph', content: [chart] }] };
         const media = await withSvgFallbacks(await chartFigureMedia([source]));
         const docx = writeDocx(
             { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
             { title: 'Chart', media, publicOrigin: ORIGIN },
         );
-        const { json, images } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
+        return docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
+    };
+    // A series id is identity, not content, and the writer writes none.
+    const specOf = (attrs: Record<string, unknown> | undefined) => {
+        const { spec } = readChartSpec(attrs ?? {});
+        return spec && seriesIdsByPlace(spec);
+    };
+    const stacked = (type: 'column' | 'bar', stacking: ChartStacking) => {
+        const spec = sampleChartSpec(type);
+        return newChartSpecParts({ ...spec, plots: { ...spec.plots, [type]: { stacking } } });
+    };
+
+    test.each([
+        ['column', sampleChartParts('column')],
+        ['stacked bar', stacked('bar', 'normal')],
+        ['100% stacked column', stacked('column', 'percent')],
+        ['line', sampleChartParts('line')],
+        ['pie', sampleChartParts('pie')],
+        ['column in Source Serif', sampleChartParts('column', 'Source Serif 4')],
+    ])('a %s comes back as the same chart, at its size, its caption and layout kept', async (_, parts) => {
+        const chart = {
+            type: 'chart',
+            attrs: { ...parts, width: 480, height: 300, caption: 'Points', layout: 'wrap-left' },
+        };
+        const { json, images } = await exported(chart);
+        const [back] = json.content?.[0]?.content ?? [];
+        expect(back?.type).toBe('chart');
+        const sent = specOf(chart.attrs);
+        // A pie has no axes in Office, so its axis fields come back as Excel's pie's: no titles, no gridlines.
+        const { x, y } = defaultChartSpec('pie', { source: 'inline', categories: [], series: [] }).axes;
+        const axes = sent?.chart.type === 'pie' ? { x, y: { ...y, gridlines: { visible: false } } } : sent?.axes;
+        expect(specOf(back?.attrs)).toEqual(sent && { ...sent, axes });
+        expect(back?.attrs).toMatchObject({ width: 480, height: 300, caption: 'Points', layout: 'wrap-left' });
+        expect(images).toEqual([]);
+    });
+
+    test("a sketched one, which a chart part can't paint, comes back as an image of its SVG, its title its alt", async () => {
+        const chart = {
+            type: 'chart',
+            attrs: {
+                ...sampleChartParts('column'),
+                roughness: 1,
+                width: 480,
+                height: 300,
+                caption: 'Points',
+                layout: 'wrap-left',
+            },
+        };
+        const { json, images } = await exported(chart);
         expect(json.content?.[0]?.content).toEqual([
             {
                 type: 'figure',
@@ -883,15 +935,20 @@ describe("the all-features doc's Google Docs re-save", () => {
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
         // The recording predates the title, the subtitle, the note's paragraph, the equations' paragraph and the page
-        // number, so it holds none of them.
-        source.content = source.content.filter(
-            (block: JSONContent) =>
-                block.type !== 'title' &&
-                block.type !== 'subtitle' &&
-                !block.content?.some((inline: JSONContent) =>
-                    ['pageNumber', 'equation', 'footnote'].includes(inline.type ?? ''),
-                ),
-        );
+        // number, so it holds none of them, and its export wrote no chart.
+        source.content = source.content
+            .filter(
+                (block: JSONContent) =>
+                    block.type !== 'title' &&
+                    block.type !== 'subtitle' &&
+                    !block.content?.some((inline: JSONContent) =>
+                        ['pageNumber', 'equation', 'footnote'].includes(inline.type ?? ''),
+                    ),
+            )
+            .map((block: JSONContent) => ({
+                ...block,
+                ...(block.content && { content: block.content.filter((inline) => inline.type !== 'chart') }),
+            }));
         expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));
     });
 });

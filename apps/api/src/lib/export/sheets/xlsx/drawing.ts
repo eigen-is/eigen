@@ -8,7 +8,7 @@ import type { CountedWarningCode } from '../../../document/transform/protocol';
 import { anchoredBox, blipXml, DEGREE } from '../../../ooxml/drawingml';
 import { A_NS, C_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../ooxml/ooxml';
 import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
-import { writeChart } from '../../../ooxml/ooxml-chart-writer';
+import { chartGraphicXml, writeChart } from '../../../ooxml/ooxml-chart-writer';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
 import { DRAWING_CONTENT_TYPE } from '../../../ooxml/spreadsheetml';
@@ -114,7 +114,7 @@ function chartFrameXml(id: number, rId: string): string {
     return [
         `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${id}" name="Chart ${id - 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>`,
         '<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>',
-        `<a:graphic><a:graphicData uri="${C_NS}"><c:chart r:id="${rId}"/></a:graphicData></a:graphic></xdr:graphicFrame>`,
+        `${chartGraphicXml(rId)}</xdr:graphicFrame>`,
     ].join('');
 }
 

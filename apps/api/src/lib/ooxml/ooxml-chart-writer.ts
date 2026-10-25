@@ -16,10 +16,9 @@ import { DEGREE, solidFillXml } from './drawingml';
 import { A_NS, C_NS, EMU_PER_PX, R_NS } from './ooxml';
 import { LEGEND_BY_POSITION, PERCENT_AXIS_FORMAT, STACKING_BY_GROUPING } from './ooxml-chart';
 
-// A ChartSpec as a DrawingML chart part, c:chartSpace, which a docx, an xlsx and a pptx share and only the xlsx export
-// writes today: the mirror of ooxml-chart.ts, which reads it back as the same spec. Excel draws what Eigen draws: an
-// automatic colour is written as the palette's at its place, which the reader reads back as automatic, and the look as
-// Excel's shape properties.
+// A ChartSpec as a DrawingML chart part, c:chartSpace, which the xlsx, docx and pptx exports write: the mirror of
+// ooxml-chart.ts, which reads it back as the same spec. Office draws what Eigen draws: an automatic colour is written as
+// the palette's at its place, which the reader reads back as automatic, and the look as Office's shape properties.
 
 export type ChartWriteOptions = {
     // Range data's sheets by the names the workbook writes them under; a ref to a sheet it doesn't name is #REF!.
@@ -37,6 +36,18 @@ const VALUE_AXIS = 2;
 // The reader's spellings turned around, the first of each the one written: clustered, not standard; r, not tr.
 const GROUPING = turned(STACKING_BY_GROUPING);
 const LEGEND = turned(LEGEND_BY_POSITION);
+
+// Whether a chart part paints the look as Eigen does: flat, a solid or no background, solid marks and lines. A docx or
+// pptx writes a chart in any other look as its own drawing, a picture or shapes, which keep it.
+export function officeDrawsChartLook(look: ChartLook): boolean {
+    const fill = parseFill(look.fill);
+    return look.roughness === 0 && look.strokeStyle === 'solid' && fill.type === 'solid' && fill.style === 'solid';
+}
+
+// A frame's graphic showing the chart part its relationship names; the frame's part declares the c: prefix.
+export function chartGraphicXml(rId: string): string {
+    return `<a:graphic><a:graphicData uri="${C_NS}"><c:chart r:id="${rId}"/></a:graphicData></a:graphic>`;
+}
 
 export function writeChart(spec: ChartSpec, { ranges, cache, look }: ChartWriteOptions): string {
     const text = textProperties(look.color, spec.chart.fontFamily);
