@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
-import { EIGEN_FONTS, fontLineHeight } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { escapeXml } from '@workspace/lib/xml';
+import type { RunFace } from '../../../document/looks';
 import { halfPoints } from '../../../document/looks';
 import { R_NS, W_NS } from '../../../ooxml/ooxml';
 import type { Relationship } from '../../../ooxml/opc';
@@ -78,9 +79,6 @@ export function embeddedFonts(faces: Map<string, Set<FontSlot>>): {
     return { embeds, relationships, files };
 }
 
-// A run's family and size in half-points, which the height of its line follows.
-export type RunFace = { family: string; size: number };
-
 // As Word resolves a face: the run over its character style over its paragraph style, whose toggles flip each other.
 export function useFace(pkg: Package, run: RunProps, paragraphStyle: StyleId | undefined): RunFace {
     const character = styleFace(pkg.styles, run.style);
@@ -110,19 +108,4 @@ function styleFace(styles: Styles, style: StyleId | undefined): Pick<RunProps, '
         id = definition?.basedOn;
     }
     return face;
-}
-
-// Word's auto line scales with the tallest face's own line height, CSS's unitless one with the largest size alone: a
-// paragraph all in one family other than its mark's gets its line rescaled, unless the mark's taller.
-export function familyLine(line: number, markFace: RunFace, faces: RunFace[]): number | undefined {
-    const family = faces[0]?.family;
-    if (family === undefined || faces.some((face) => face.family !== family)) return undefined;
-    let tallest = fontLineHeight(markFace.family) * markFace.size;
-    let largest = markFace.size;
-    for (const face of faces) {
-        tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
-        largest = Math.max(largest, face.size);
-    }
-    const css = fontLineHeight(markFace.family) * largest;
-    return tallest === css ? undefined : Math.round((line * css) / tallest);
 }

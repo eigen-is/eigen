@@ -7,7 +7,7 @@ import { readOmml, writeMathml } from '@workspace/math';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
-import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK } from '../../../lib/document/looks';
+import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK, textMetrics } from '../../../lib/document/looks';
 import { chartFigureMedia } from '../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
 import { withSvgFallbacks } from '../../../lib/export/office-image';
@@ -17,7 +17,8 @@ import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
 import { sampleChartParts } from '../../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
-import { importDocxBody } from '../../fixtures/golden-docx';
+import type { DocxParts } from '../../fixtures/golden-docx';
+import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
 
 // Eigen → docx → Eigen loses nothing the schema holds, except exactly what the list below names.
 
@@ -1111,3 +1112,188 @@ function isValid(content: JSONContent[]): boolean {
         return false;
     }
 }
+
+// A Word file imported, written and imported again comes back as the first import read it: what the first import holds
+// is what the docx carries.
+describe('a Word file, imported, written and imported again', () => {
+    const run = (text: string, rPr = '') =>
+        `<w:r>${rPr && `<w:rPr>${rPr}</w:rPr>`}<w:t xml:space="preserve">${text}</w:t></w:r>`;
+    const paragraph = (inner: string, pPr = '') => `<w:p>${pPr && `<w:pPr>${pPr}</w:pPr>`}${inner}</w:p>`;
+    const twice = async (body: string, parts: DocxParts = {}) => {
+        const first = await importDocxBody(body, parts);
+        const second = docxToPmJson(Buffer.from(writeDocx(first, { title: 'Word', media: [] })));
+        return { first, second };
+    };
+
+    // A size, a heading's style or a note's FootnoteText unlike Eigen's, the runs at the size the node draws in Eigen.
+    test('a run at the size its node draws keeps no size, in a heading, an empty heading and a note', async () => {
+        const h2 = textMetrics('.eigen-prose h2', 10).sizePt;
+        const { first, second } = await twice(
+            [
+                paragraph(
+                    run(`Plan`, `<w:sz w:val="${h2 * 2}"/>`) + run(' big', '<w:sz w:val="40"/>'),
+                    '<w:pStyle w:val="Heading2"/>',
+                ),
+                paragraph('<w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:tab/></w:r>', '<w:pStyle w:val="Heading2"/>'),
+                paragraph(`${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r>`),
+            ].join(''),
+            {
+                styles: '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:rPr><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:rPr><w:sz w:val="24"/></w:rPr></w:style>',
+                footnotes: `<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' Small', '<w:sz w:val="20"/>')}${run(' big', '<w:sz w:val="28"/>')}`, '<w:pStyle w:val="FootnoteText"/>')}</w:footnote>`,
+            },
+        );
+        expect(marksOfType(first.json, 'textStyle').map(({ attrs }) => attrs['fontSize'])).toEqual([20, 14]);
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
+    // Spacing set apart from a style unlike Eigen's, at what the node draws in Eigen: none, so it stays none.
+    test('a space at what its node draws keeps no format, in an empty heading, a title and a note', async () => {
+        const spaced = '<w:pPr><w:spacing w:before="240" w:after="240"/></w:pPr>';
+        const { first, second } = await twice(
+            [
+                paragraph('<w:r><w:tab/></w:r>', '<w:pStyle w:val="Heading2"/><w:spacing w:before="0" w:after="0"/>'),
+                paragraph(run('Title'), '<w:pStyle w:val="Title"/><w:spacing w:before="0"/>'),
+                paragraph(run('Body'), '<w:spacing w:before="0" w:after="0"/>'),
+                paragraph(`${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r>`),
+            ].join(''),
+            {
+                styles: `<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/>${spaced}</w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/>${spaced}</w:style><w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/>${spaced}</w:style>`,
+                footnotes: `<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' Note')}`, '<w:pStyle w:val="FootnoteText"/><w:spacing w:after="0"/>')}</w:footnote>`,
+            },
+        );
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
+    // Word fits a nested table inside its cell's margins, Eigen inside its cell's padding; a table without a grid sizes
+    // its columns by its cells' widths.
+    test("a nested table's and a gridless table's widths come back as the first import read them", async () => {
+        const cell = (width: number, inner: string) =>
+            `<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/></w:tcPr>${inner}</w:tc>`;
+        const table = (grid: number[], cells: string, tblPr = '') =>
+            `<w:tbl><w:tblPr>${tblPr}</w:tblPr>${grid.length > 0 ? `<w:tblGrid>${grid.map((width) => `<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>` : ''}<w:tr>${cells}</w:tr></w:tbl>`;
+        const nested = table([8404], cell(8404, paragraph(run('Inner'))));
+        const { first, second } = await twice(
+            [
+                table([8630], cell(8630, paragraph(run('Outer')) + nested + paragraph(''))),
+                paragraph(''),
+                table(
+                    [],
+                    cell(1133, paragraph(run('One'))) + cell(5102, paragraph(run('Two'))),
+                    '<w:tblLayout w:type="fixed"/>',
+                ),
+                paragraph(''),
+            ].join(''),
+        );
+        expect(nodesOfType(first.json, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([
+            [575],
+            [551],
+            [76],
+            [340],
+        ]);
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
+    // Word draws an auto line in the tallest face on it, the paragraph mark's included, at its size; the writer rescales a
+    // paragraph all in one family by that (familyLine), and the reader undoes it the same way, whitespace runs counted.
+    test.each<[string, string, string[]]>([
+        [
+            'smaller code under a larger Normal',
+            'Inter',
+            [run('code()', '<w:rFonts w:ascii="JetBrains Mono" w:hAnsi="JetBrains Mono"/><w:sz w:val="19"/>')],
+        ],
+        [
+            'larger runs under a smaller Normal in a taller family',
+            'Source Serif 4',
+            [run('Body', '<w:rFonts w:ascii="Inter" w:hAnsi="Inter"/><w:sz w:val="22"/>')],
+        ],
+        [
+            'spaces in another family',
+            'Inter',
+            [run('   ', '<w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4"/>')],
+        ],
+    ])("a paragraph's line spacing comes back as the first import read it: %s", async (_name, font, runs) => {
+        const defaults = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/><w:sz w:val="20"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`;
+        const { first, second } = await twice(
+            [240, 276, 360]
+                .map((line) => paragraph(runs.join(''), `<w:spacing w:line="${line}" w:lineRule="auto"/>`))
+                .join(''),
+            { styles: defaults },
+        );
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
+    // A note draws single in its FootnoteText; the writer writes the note's number and the space after it apart.
+    test.each<[string, string, string]>([
+        ['in another family than the Normal', 'Inter', '<w:spacing w:line="240" w:lineRule="auto"/>'],
+        [
+            'single, apart from a FootnoteText that is not',
+            'Source Serif 4',
+            '<w:spacing w:line="240" w:lineRule="auto"/>',
+        ],
+    ])("a note's line spacing comes back as the first import read it: %s", async (_name, font, spacing) => {
+        const defaults = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:pPr><w:spacing w:line="276" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style>`;
+        const serif = '<w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4"/>';
+        const { first, second } = await twice(paragraph(`${run('Text')}<w:r><w:footnoteReference w:id="1"/></w:r>`), {
+            styles: defaults,
+            footnotes: `<w:footnote w:id="1">${paragraph(`<w:r><w:footnoteRef/></w:r>${run(' ')}${run('Note', serif)}`, `<w:pStyle w:val="FootnoteText"/>${spacing}`)}</w:footnote>`,
+        });
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
+    // Office 2007's theme: Calibri body, Cambria headings. A heading at its own style's line is the node's look, whatever
+    // family its style's font maps to.
+    test.each<[string, string, string, string]>([
+        ['Cambria headings over a Calibri Normal', 'minor', 'major', '<w:spacing w:line="240" w:lineRule="auto"/>'],
+        ['Calibri headings over a Cambria Normal', 'major', 'minor', '<w:spacing w:line="240" w:lineRule="auto"/>'],
+        ['Cambria headings at the defaults line', 'minor', 'major', ''],
+    ])('a heading at its style line keeps no line spacing: %s', async (_name, body, heading, spacing) => {
+        const theme =
+            '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Cambria"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>';
+        const fonts = (scheme: string) => `<w:rFonts w:asciiTheme="${scheme}HAnsi" w:hAnsiTheme="${scheme}HAnsi"/>`;
+        const styles = `<w:docDefaults><w:rPrDefault><w:rPr>${fonts(body)}<w:sz w:val="22"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="200" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:keepNext/>${spacing}<w:outlineLvl w:val="0"/></w:pPr><w:rPr>${fonts(heading)}<w:b/><w:sz w:val="28"/></w:rPr></w:style>`;
+        const { first, second } = await twice(
+            paragraph(run('Plan'), '<w:pStyle w:val="Heading1"/>') + paragraph(run('Body')),
+            { styles, theme },
+        );
+        const [found] = nodesOfType(first.json, 'heading');
+        expect(found?.attrs?.['lineSpacing']).toBeNull();
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
+    // The writer writes a rescaled line on the paragraph itself, so a line the heading takes from its style was never
+    // rescaled, even when its runs are another family than the style's font.
+    test('a heading in Times under a Calibri style, at the style line, keeps no line spacing', async () => {
+        const theme =
+            '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>';
+        const styles =
+            '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:asciiTheme="minorHAnsi" w:hAnsiTheme="minorHAnsi"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:keepNext/><w:spacing w:line="240" w:lineRule="auto"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:rFonts w:asciiTheme="majorHAnsi" w:hAnsiTheme="majorHAnsi"/><w:b/><w:sz w:val="28"/></w:rPr></w:style>';
+        const times = '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/>';
+        const { first, second } = await twice(
+            paragraph(run('Plan', times), '<w:pStyle w:val="Heading1"/>') + paragraph(run('Body')),
+            { styles, theme },
+        );
+        const [found] = nodesOfType(first.json, 'heading');
+        expect(found?.attrs?.['lineSpacing']).toBeNull();
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+
+    // A table without widths, and a row run past its grid: the editor sizes those columns, and so do Word's.
+    test('a column without a width comes back without one, beside one with a width', async () => {
+        const cell = (inner: string) => `<w:tc>${paragraph(run(inner))}</w:tc>`;
+        const { first, second } = await twice(
+            [
+                `<w:tbl><w:tr>${cell('A')}${cell('B')}</w:tr></w:tbl>`,
+                paragraph(''),
+                `<w:tbl><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr>${cell('C')}${cell('D')}</w:tr></w:tbl>`,
+                paragraph(''),
+            ].join(''),
+        );
+        expect(nodesOfType(first.json, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([
+            null,
+            null,
+            [200],
+            null,
+        ]);
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
+});

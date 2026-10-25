@@ -1,9 +1,10 @@
-// The block walk turns every paragraph into items in document order, so Word's counters run in order across tables,
-// text boxes and notes; the assembly step turns the items into blocks.
+// The docx reader's block walk: it turns every paragraph into items in document order, so Word's counters run in
+// order across tables, text boxes and notes, and build turns the items into blocks. A paragraph keeps what it sets
+// apart from the docx's Normal or its style.
 
 import { isDeepStrictEqual } from 'node:util';
 import type { JSONContent } from '@tiptap/core';
-import { DOCUMENT_FONT, EIGEN_FONT_NAMES, fontLineHeight, readFontSize } from '@workspace/lib/constants/fonts';
+import { DOCUMENT_FONT, readFontSize } from '@workspace/lib/constants/fonts';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     flattenNestedFootnotes,
@@ -19,7 +20,17 @@ import {
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
+import type { RunFace } from '../../document/looks';
+import {
+    CAPTION_LOOK,
+    CODE_BLOCK_LOOK,
+    familyLineScale,
+    lineMultiple,
+    nodeLook,
+    ownTextLook,
+    QUOTE_LOOK,
+    TASK_DONE_LOOK,
+} from '../../document/looks';
 import type { Lost } from '../../document/transform/protocol';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
@@ -114,7 +125,7 @@ export function createReader(
     const font = fontMark(byFace(' ', body.fonts, body, false)[0]?.font, fontTable) ?? DOCUMENT_FONT;
     const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
     // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
-    const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) / 240 : 1;
+    const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : 240;
     for (const section of descendants(pkg.document.root, W_NS, 'sectPr'))
         if (section !== sectPr && !isDeepStrictEqual(sectionPage(section), size)) lost('section-pages-dropped');
     return {
@@ -137,7 +148,7 @@ export function createReader(
         normal: readNormalStyle({
             font,
             size: bodySize / 2,
-            lineSpacing: (line * fontLineHeight(font)) / fontLineHeight(DOCUMENT_FONT),
+            lineSpacing: lineMultiple(line, font),
             spaceBefore: twipsToPt(para.before ?? 0),
             spaceAfter: twipsToPt(para.after ?? 0),
             color: body.color?.hex && markColor(body.color.hex),
@@ -399,42 +410,47 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         });
 
     // What the paragraph sets apart from the docx's Normal, or a heading, a title, a quote or a note from its style,
-    // whose look is the node's. Word draws a line in the tallest face in it, so it is stored as a multiple of Inter's
-    // from the taller of the runs' family, when they are all in one, and the paragraph mark's; the writer scales the
-    // line of a paragraph all in one taller family than its mark's by that family's line (familyLine), which this
-    // undoes, so a line Word draws as Normal's reads as none.
+    // whose look is the node's. The writer rescales the line of a paragraph all in one family (familyLineScale), which
+    // this undoes over the same faces, so a line Word draws as the Normal's reads as none.
     const { normal } = reader;
     const normalBase = role.kind === 'paragraph' && scope.story !== 'note';
     const base = normalBase ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
     const autoLine = (para: ParaProps) => ((para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : undefined);
     const line = autoLine(props);
     const baseLine = autoLine(base);
-    const families = new Set(
-        texts.flatMap((piece) =>
-            piece.kind === 'node' && piece.node.text?.trim()
-                ? [piece.node.marks?.find((mark) => mark.type === 'textStyle')?.attrs?.['fontFamily'] ?? normal.font]
-                : [],
-        ),
-    );
-    const [family] = families;
-    const scaleOf = (font: string) => fontLineHeight(font) / fontLineHeight(DOCUMENT_FONT);
-    const markFont =
-        fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font;
-    const scale = Math.max(
-        families.size === 1 && EIGEN_FONT_NAMES.includes(family) ? scaleOf(family) : 0,
-        scaleOf(markFont),
-    );
-    // An at-least Normal reads as single, so the Normal's own line is the one to compare with.
+    const mark: RunFace = {
+        family:
+            fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font,
+        size: paraRun.size ?? 20,
+    };
+    // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the style's run;
+    // not the space a task's or a note's text starts with, which goes, as the writer writes the checkbox or the note's
+    // number and the space after it apart.
+    const noteNumbered =
+        scope.story === 'note' &&
+        descendants(p, W_NS, 'footnoteRef').length + descendants(p, W_NS, 'endnoteRef').length > 0;
+    const start =
+        task || noteNumbered ? pieces.findIndex((piece) => !(piece.kind === 'node' && isWhitespace(piece.node))) : 0;
+    const faces = pieces.slice(Math.max(0, start)).flatMap((piece) => {
+        if (piece.kind !== 'node') return [];
+        if (piece.node.type === 'pageNumber' || piece.node.type === 'footnote') return [mark];
+        if (piece.node.type !== 'text' || !piece.node.text || piece.size === undefined) return [];
+        return [{ family: fontMark(piece.font, reader.fontTable, normal.font) ?? normal.font, size: piece.size }];
+    });
+    // An at-least Normal reads as single, so the Normal's own line is the one to compare with. A style draws its line in
+    // its own font, the style's run's. The writer writes a rescaled line on the paragraph itself, so a node read against
+    // its style that takes its line from the style reads as none, whatever family its runs are in.
     const baseSpacing = normalBase
         ? normal.lineSpacing
         : baseLine === undefined
           ? undefined
-          : (baseLine * scaleOf(normal.font)) / 240;
+          : lineMultiple(baseLine, mark.family);
+    const multiple = line === undefined ? undefined : lineMultiple(line / familyLineScale(mark, faces), mark.family);
     const lineSpacing =
-        line !== undefined &&
-        line !== baseLine &&
-        (baseSpacing === undefined || Math.round((line * scale) / 2.4) !== Math.round(baseSpacing * 100))
-            ? (line * scale) / 240
+        multiple !== undefined &&
+        (normalBase || direct.line !== undefined || list?.pPr.line !== undefined) &&
+        (baseSpacing === undefined || Math.round(multiple * 100) !== Math.round(baseSpacing * 100))
+            ? multiple
             : undefined;
     const before = props.before ?? 0;
     const after = props.after ?? 0;
@@ -478,11 +494,29 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         const halfTexts = half.filter(
             (piece) => piece.kind === 'node' && piece.node.type === 'text' && piece.node.text?.trim(),
         );
+        // An empty heading is the blank line Word shows, not a heading's height; an empty title stays one, as Word
+        // draws it at the title's height.
+        const kind: Role = visible
+            ? role
+            : isRule
+              ? { kind: 'hr' }
+              : role.kind === 'heading'
+                ? { kind: 'paragraph' }
+                : role;
+        // A size or a space the node draws in Eigen is none: the writer's style holds it, so it would come back as none.
+        const own = ownTextLook(kind.kind, kind.kind === 'heading' ? kind.level : 1, normal, scope.story === 'note');
+        if (own) for (const node of content) dropOwn(node, 'fontSize', own.sizePt);
+        const unlessOwn = (pt: number | undefined, ownTwips: number | undefined) =>
+            pt !== undefined && ownTwips !== undefined && pt === twipsToPt(ownTwips) ? undefined : pt;
+        // The writer's styles write a node's own line in the Normal's font.
+        const ownLine = own && Math.round(lineMultiple(own.line, normal.font) * 100);
+        const lineSpacing =
+            format.lineSpacing !== undefined && Math.round(format.lineSpacing * 100) === ownLine
+                ? undefined
+                : format.lineSpacing;
         const para: Para = {
             kind: 'para',
-            // An empty heading is the blank line Word shows, not a heading's height; an empty title stays one, as Word
-            // draws it at the title's height.
-            role: visible ? role : isRule ? { kind: 'hr' } : role.kind === 'heading' ? { kind: 'paragraph' } : role,
+            role: kind,
             inlines: content,
             textAlign,
             continued: numbered,
@@ -503,10 +537,10 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             hairline: (props.exactLine !== undefined && props.exactLine <= 40) || markSize <= 4,
             // Word spaces a split paragraph above its first line and below its last.
             format: {
-                lineSpacing: format.lineSpacing,
-                spaceBefore: index === 0 ? format.spaceBefore : undefined,
+                lineSpacing,
+                spaceBefore: index === 0 ? unlessOwn(format.spaceBefore, own?.before) : undefined,
                 baseBefore: twipsToPt(base.before ?? 0),
-                spaceAfter: index === halves.length - 1 ? format.spaceAfter : undefined,
+                spaceAfter: index === halves.length - 1 ? unlessOwn(format.spaceAfter, own?.after) : undefined,
             },
             indent,
         };
@@ -623,15 +657,20 @@ function trimStart(inlines: JSONContent[]): void {
 }
 
 function stripLook(pieces: Piece[], toggle: string | undefined, color: string): void {
-    const hex = markColor(color);
     for (const piece of pieces) {
-        if (piece.kind !== 'node' || !piece.node.marks) continue;
-        piece.node.marks = piece.node.marks.flatMap((mark) => {
-            if (mark.type === toggle) return [];
-            if (mark.type !== 'textStyle' || mark.attrs?.['color'] !== hex) return [mark];
-            const attrs = { ...mark.attrs, color: null };
-            return Object.values(attrs).some((value) => value !== null) ? [{ ...mark, attrs }] : [];
-        });
-        if (piece.node.marks.length === 0) delete piece.node.marks;
+        if (piece.kind !== 'node') continue;
+        if (piece.node.marks && toggle) piece.node.marks = piece.node.marks.filter((mark) => mark.type !== toggle);
+        dropOwn(piece.node, 'color', markColor(color));
     }
+}
+
+// A font mark's value the node draws itself goes, and the mark with it when nothing else is left.
+function dropOwn(node: JSONContent, key: 'color' | 'fontSize', value: string | number): void {
+    if (!node.marks) return;
+    node.marks = node.marks.flatMap((mark) => {
+        if (mark.type !== 'textStyle' || mark.attrs?.[key] !== value) return [mark];
+        const attrs = { ...mark.attrs, [key]: null };
+        return Object.values(attrs).some((held) => held !== null) ? [{ ...mark, attrs }] : [];
+    });
+    if (node.marks.length === 0) delete node.marks;
 }

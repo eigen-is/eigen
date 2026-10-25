@@ -1,4 +1,6 @@
-// A slide's shape tree → canvas elements (SPEC X-D3, X-D5): groups flattened, layout and master shapes beneath.
+// The pptx reader's shapes: readSlideShapes turns a slide's shape tree into canvas elements, the layout's and the
+// master's shapes beneath the slide's own, groups flattened into their children. A shape takes what it leaves out
+// from its placeholder and the theme, and anything past the caps is refused. The deck reader calls it once per slide.
 
 import { escapeHtml } from '@workspace/lib/html';
 import type {
@@ -493,6 +495,10 @@ function linesOf(chain: ShapeProperties[], walk: Walk, style: XmlElement | undef
     return { lns: entry ? [...lns, entry] : lns, entry, reference };
 }
 
+// PowerPoint and LibreOffice draw a line 0 wide as the thinnest they can, one device pixel; the canvas's thinnest is the
+// width field's first step.
+const HAIRLINE_PX = 1;
+
 // No a:ln and no lnRef, or neither stating a colour, is no stroke. A gradient line strokes in its first colour.
 function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     const ln = lines.lns.find((found) => fillIn(found) !== undefined);
@@ -502,12 +508,13 @@ function strokeOf(lines: Lines, walk: Walk, lost: Lost): Stroke {
     if (fill && paint?.type === 'gradient') lost('fills-simplified');
     const color = paint?.type === 'gradient' ? paint.from : paint?.color;
     if (!color || color === TRANSPARENT_COLOR) return NO_STROKE;
-    const width = lines.lns.map((found) => emu(xmlAttr(found, '', 'w'))).find((found) => found !== undefined);
+    const width =
+        lines.lns.map((found) => emu(xmlAttr(found, '', 'w'))).find((found) => found !== undefined) ?? DEFAULT_LINE_EMU;
     const preset = lines.lns.map((found) => childOf(found, A_NS, 'prstDash')).find((found) => found !== undefined);
     const dash = preset && xmlAttr(preset, '', 'val');
     return {
         strokeColor: color,
-        strokeWidth: Math.max(0, width ?? DEFAULT_LINE_EMU) * walk.deck.scale,
+        strokeWidth: width > 0 ? width * walk.deck.scale : HAIRLINE_PX,
         strokeStyle: strokeStyleOf(dash),
     };
 }

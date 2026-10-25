@@ -1,8 +1,14 @@
 import type { JSONContent } from '@tiptap/core';
 import { MIN_TABLE_COLUMN_PX, readCellBackground } from '@workspace/lib/docs/eigendoc';
-import { BODY, boxSide, cssPt, HEADER_CELL_LOOK, proseBorder, TABLE_MARGIN, twips } from '../../../document/looks';
-import { proseValue } from '../../../document/prose-css';
-import { BORDER_SIDES, JUSTIFICATION, MAX_TABLE_COLUMNS, STYLE_NAMES, TWIPS_PER_PX } from '../../../ooxml/wordml';
+import { HEADER_CELL_LOOK, proseBorder, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
+import {
+    BORDER_SIDES,
+    JUSTIFICATION,
+    MAX_TABLE_COLUMNS,
+    NO_STORED_WIDTH,
+    STYLE_NAMES,
+    TWIPS_PER_PX,
+} from '../../../ooxml/wordml';
 import type { Context } from './package';
 import type { Block } from './paragraphs';
 import { blocksOf, blocksXml, bordersXml, clampInt, paragraphXml, textProps } from './paragraphs';
@@ -85,8 +91,12 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const fill =
                 readCellBackground(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
                 (owner?.node.type === 'tableHeader' ? HEADER_CELL_LOOK.fill : undefined);
+            // A cell over columns without a width has none either: the grid lays it out, and the reader reads it back unset.
+            const tcW = widths.slice(column, column + colspan).every((known) => known === undefined)
+                ? `<w:tcW w:w="0" w:type="${NO_STORED_WIDTH}"/>`
+                : `<w:tcW w:w="${width}" w:type="dxa"/>`;
             const tcPr = (merge: string) =>
-                `<w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}</w:tcPr>`;
+                `<w:tcPr>${tcW}${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}</w:tcPr>`;
             if (cell) {
                 const merge = cell.rowspan > 1 ? '<w:vMerge w:val="restart"/>' : '';
                 const marked = !header && cell.node.type === 'tableHeader';
@@ -164,13 +174,8 @@ const TABLE_HEADER_STYLE: StyleDef = {
     semiHidden: true,
 };
 
-const CELL_PADDING = proseValue('.eigen-prose td', 'padding');
-
 export const TABLE_LOOK = {
     border: { ...proseBorder('.eigen-prose td', 'border'), space: 0 },
-    padding: {
-        vertical: twips(cssPt(boxSide(CELL_PADDING, 'top'), BODY.sizePt)),
-        horizontal: twips(cssPt(boxSide(CELL_PADDING, 'left'), BODY.sizePt)),
-    },
+    padding: TABLE_CELL_PADDING,
     margin: TABLE_MARGIN,
 };

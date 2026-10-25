@@ -1,5 +1,6 @@
-// A docx paragraph's inline content, run by run: text with its marks and fonts, breaks, fields, checkboxes, notes and
-// equations, which the paragraph walk turns into blocks.
+// The docx reader's runs: walkInline turns a paragraph's runs, fields, hyperlinks, notes and equations into pieces,
+// each text with the marks Word draws it in as far as the Normal and the node don't already. The paragraph reader
+// calls it and sorts the pieces into blocks.
 
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
@@ -32,10 +33,19 @@ import {
 } from './styles';
 
 // A paragraph's content, run by run: text with its marks, breaks, checkboxes and rules, which the paragraph sorts out.
-// italic is whether Word draws a run italic: whether that is the mark waits for the paragraph's node.
-// equation is the text of an equation past a bound, which the text beside it is set off from.
+// font and size are the face Word draws a run in, its size in half points, 20 where nothing sets one, which the
+// paragraph's line height counts. italic is whether Word draws a run italic: whether that is the mark waits for the
+// paragraph's node. equation is the text of an equation past a bound, which the text beside it is set off from.
 export type Piece =
-    | { kind: 'node'; node: JSONContent; small?: boolean; font?: string; italic?: boolean; equation?: true }
+    | {
+          kind: 'node';
+          node: JSONContent;
+          small?: boolean;
+          font?: string;
+          size?: number;
+          italic?: boolean;
+          equation?: true;
+      }
     | { kind: 'break' }
     | { kind: 'clear' }
     | { kind: 'checkbox'; checked: boolean }
@@ -336,9 +346,9 @@ export function pushText(
     const before = last?.kind === 'node' && last.node.type === 'text' ? last : undefined;
     const joins = before && !/\s$/.test(before.node.text ?? '') && !/^\s/.test(text);
     const spaced = joins && (equation || before.equation) ? ` ${text}` : text;
-    for (const { text: part, marks, small, font, italic } of marksOf(reader, spaced, direct, context)) {
+    for (const { text: part, marks, small, font, size, italic } of marksOf(reader, spaced, direct, context)) {
         const node = marks.length > 0 ? { type: 'text', text: part, marks } : { type: 'text', text: part };
-        context.pieces.push({ kind: 'node', node, small, font, italic, ...(equation && { equation }) });
+        context.pieces.push({ kind: 'node', node, small, font, size, italic, ...(equation && { equation }) });
     }
 }
 
@@ -368,7 +378,7 @@ function marksOf(
     text: string,
     direct: DocxRunProps,
     context: RunContext,
-): { text: string; marks: Marks; small: boolean; font?: string; italic?: boolean }[] {
+): { text: string; marks: Marks; small: boolean; font?: string; size: number; italic?: boolean }[] {
     const { styles } = reader;
     const { role, scope, link } = context;
     const absorbed = ABSORBED[role.kind];
@@ -388,7 +398,7 @@ function marksOf(
     if (full.vanish) return [];
     if (absorbed === 'all') {
         const faces = byFace(text, full.fonts, full, false, () => reader.pkg.pieces.charge(1));
-        return faces.map((face) => ({ ...face, marks: [], small: false }));
+        return faces.map((face) => ({ ...face, marks: [], small: false, size: full.size ?? 20 }));
     }
     const own = { ...paraRun };
     for (const key of absorbed) delete own[key];
@@ -411,10 +421,11 @@ function marksOf(
         absorbed.includes('size') || scope.story === 'note'
             ? mergeRun(styles.docRun, paraRun)
             : { size: reader.bodySize, sizeCs: reader.bodySizeCs };
+    // In half points, Word's default 10 pt where none is set.
+    const sizeOf = (run: DocxRunProps, complex: boolean) => (complex ? (run.sizeCs ?? run.size) : run.size) ?? 20;
     const fontSizeOf = (complex: boolean) => {
-        const sizeOf = (run: DocxRunProps) => (complex ? (run.sizeCs ?? run.size) : run.size) ?? 20;
-        const size = sizeOf(full);
-        return size === sizeOf(nodeRun) ? undefined : readFontSize(size / 2);
+        const size = sizeOf(full, complex);
+        return size === sizeOf(nodeRun, complex) ? undefined : readFontSize(size / 2);
     };
     const complexLook =
         !!props.boldCs !== !!props.bold ||
@@ -457,7 +468,8 @@ function marksOf(
         // monospace run alone is a font.
         const code =
             isMonospaceFont(font, reader.fontTable) && (styles.isCodeCharacter(direct.style) || isLightNeutral(shade));
-        if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font };
+        const size = sizeOf(full, complex);
+        if (code && !link?.href) return { text: part, marks: [{ type: 'code' }], small: false, font, size };
         const fontFamily = fontMark(font, reader.fontTable, reader.normal.font);
         const fontSize = fontSizeOf(complex);
         const textStyle: Marks =
@@ -474,6 +486,6 @@ function marksOf(
                       },
                   ]
                 : [];
-        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font, italic };
+        return { text: part, marks: [...marks, ...shape, ...textStyle, ...highlight], small, font, size, italic };
     });
 }

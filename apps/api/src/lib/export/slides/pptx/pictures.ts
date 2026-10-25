@@ -26,14 +26,13 @@ function fitOf(image: OfficeImage, width: number, height: number): { wide: boole
     return cut > 0 ? { wide: picture > box, cut } : null;
 }
 
-// Contain draws the picture in the box it fits, unrounded: Eigen's corner clip misses a fitted picture's corners. Its
-// border keeps the element's box, as a shape of its own.
+// A picture's border is its own a:ln, as PowerPoint writes one. Contain draws the picture in the box it fits, unrounded:
+// Eigen's corner clip misses a fitted picture's corners, and its border keeps the element's box, as a shape of its own.
 export function pictureXml(el: VectorImageElement, slide: Slide, opacity: number): string {
     const image = slide.deck.images.image(el.mediaName);
-    const border = isBordered(el)
-        ? spXml(slide, 'Border', el, boxGeometry(el), '<a:noFill/>', lineXml(slide, el, opacity))
-        : '';
-    if (!image) return border;
+    const bordered = isBordered(el);
+    const border = () => spXml(slide, 'Border', el, boxGeometry(el), '<a:noFill/>', lineXml(slide, el, opacity));
+    if (!image) return bordered ? border() : '';
     const fit = fitOf(image, el.width, el.height);
     const contain = el.objectFit === 'contain' && fit;
     const box = contain
@@ -54,8 +53,9 @@ export function pictureXml(el: VectorImageElement, slide: Slide, opacity: number
             : '';
     const geometry = contain ? presetXml('rect') : boxGeometry(el);
     const id = ++slide.shapes;
-    const picture = `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${slideBlipXml(image, slide, opacity)}${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(slide, box)}${geometry}</p:spPr></p:pic>`;
-    return picture + border;
+    const ln = bordered && !contain ? lineXml(slide, el, opacity) : '';
+    const picture = `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${slideBlipXml(image, slide, opacity)}${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(slide, box)}${geometry}${ln}</p:spPr></p:pic>`;
+    return bordered && contain ? picture + border() : picture;
 }
 
 // A background places its picture with the fill rectangle, which LibreOffice reads where it ignores a background's

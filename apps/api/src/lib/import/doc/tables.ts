@@ -1,3 +1,7 @@
+// The docx reader's tables: readTable turns a w:tbl into the editor's table, its grid as Word lays it out from the
+// grid and the cells' widths, scaled into the room the editor gives it, with merged cells, header rows and fills.
+// A table nested in a cell fits inside the cell's padding. The paragraph reader calls it for each table it meets.
+
 import type { JSONContent } from '@tiptap/core';
 import {
     isFigureFrameNode,
@@ -7,9 +11,9 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
-import { HEADER_CELL_LOOK } from '../../document/looks';
+import { HEADER_CELL_LOOK, TABLE_CELL_PADDING } from '../../document/looks';
 import { isOn, W_NS } from '../../ooxml/ooxml';
-import { MAX_TABLE_COLUMNS, STYLE_NAMES, TWIPS_PER_PX } from '../../ooxml/wordml';
+import { MAX_TABLE_COLUMNS, NO_STORED_WIDTH, STYLE_NAMES, TWIPS_PER_PX } from '../../ooxml/wordml';
 import type { Item, Para } from './assemble';
 import { build, inlineText, isWhitespace } from './assemble';
 import { int, onOff, twipsOf, w, wChild } from './package';
@@ -30,11 +34,13 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
     if (scope.tables >= MAX_TABLE_DEPTH)
         return rows.flatMap((row) => row.cells.flatMap((cell) => readBlocks(reader, cellContent(cell), scope)));
     const tblPr = wChild(table, 'tblPr');
-    const grid = xmlElements(wChild(table, 'tblGrid') ?? table)
+    const declared = xmlElements(wChild(table, 'tblGrid') ?? table)
         .filter((col) => hasXmlName(col, W_NS, 'gridCol'))
         .map((col) => twipsOf(w(col, 'w')) ?? 0)
         .slice(0, MAX_TABLE_COLUMNS);
-    const columns = grid.length || MAX_TABLE_COLUMNS;
+    const columns = declared.length || MAX_TABLE_COLUMNS;
+    const unsized = unsizedColumns(rows);
+    const grid = withCellWidths(declared, rows).map((width, column) => (unsized.has(column) ? 0 : width));
     const columnPx = scaled(grid, scope.room ?? reader.columnPx);
     const tableStyle = reader.styles.get(w(wChild(tblPr, 'tblStyle'), 'val'));
     const look = wChild(tblPr, 'tblLook');
@@ -61,7 +67,9 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             ...scope,
             tables: scope.tables + 1,
             tableRun: first ? mergeRun(tableRun ?? {}, first) : tableRun,
-            room: colwidth ? colwidth.reduce((sum, width) => sum + width, 0) : scope.room,
+            room: colwidth
+                ? colwidth.reduce((sum, width) => sum + width, 0) - (2 * TABLE_CELL_PADDING.horizontal) / TWIPS_PER_PX
+                : scope.room,
             // A plain cell lets the fill around it show.
             fill: isFill(fill) ? fill : scope.fill,
         };
@@ -273,12 +281,48 @@ function tableRows(table: XmlElement): Row[] {
     return rows;
 }
 
-// Twips to px, within the room: a column too thin to draw takes the floor and the others scale into what is left,
-// rounded at the running sum so they fill it exactly. At most one pass per column, of at most 63.
+// Each cell over one grid column alone, with that column, past the row's gridBefore.
+function* cellsAlone(rows: Row[]): Generator<{ column: number; tcW: XmlElement | undefined }> {
+    for (const row of rows) {
+        let column = Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0);
+        for (const cell of row.cells) {
+            if (column >= MAX_TABLE_COLUMNS) break;
+            const tcPr = wChild(cell, 'tcPr');
+            const span = Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1);
+            if (span === 1) yield { column, tcW: wChild(tcPr, 'tcW') };
+            column += span;
+        }
+    }
+}
+
+// Word builds a grid the file leaves out from its cells' widths: a column the grid gives none takes the width of a cell
+// over it alone, past the grid's columns only where it declares none.
+function withCellWidths(declared: number[], rows: Row[]): number[] {
+    if (declared.length > 0 && declared.every((width) => width > 0)) return declared;
+    const grid = [...declared];
+    const end = declared.length || MAX_TABLE_COLUMNS;
+    for (const { column, tcW } of cellsAlone(rows))
+        if (column < end && !((grid[column] ?? 0) > 0) && w(tcW, 'type') === 'dxa')
+            grid[column] = twipsOf(w(tcW, 'w')) ?? 0;
+    return Array.from(grid, (width) => width ?? 0);
+}
+
+// The columns whose cells over them alone all have no stored width, as the writer writes a column the editor gives none.
+function unsizedColumns(rows: Row[]): Set<number> {
+    const sized = new Set<number>();
+    const unsized = new Set<number>();
+    for (const { column, tcW } of cellsAlone(rows)) (w(tcW, 'type') === NO_STORED_WIDTH ? unsized : sized).add(column);
+    for (const column of sized) unsized.delete(column);
+    return unsized;
+}
+
+// Twips to px, within the room's whole px, which the writer's column holds: a column too thin to draw takes the floor
+// and the others scale into what is left, rounded at the running sum so they fill it exactly. At most one pass per
+// column, of at most 63.
 function scaled(grid: number[], room: number): number[] {
     const px = grid.map((width) => (width > 0 ? width / TWIPS_PER_PX : 0));
     const total = px.reduce((sum, width) => sum + width, 0);
-    const target = Math.min(room, total);
+    const target = Math.min(Math.floor(room), total);
     const thin = new Set<number>();
     let scale = 1;
     for (let grew = true; grew; ) {

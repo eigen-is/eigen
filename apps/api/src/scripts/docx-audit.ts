@@ -31,7 +31,7 @@ import { trimXmlSpace, XML_NAMESPACE, xmlAttr, xmlChild, xmlChildren, xmlElement
 import { cssColorToHex } from '../lib/document/colors';
 import { docSchema } from '../lib/document/doc-schema';
 import { readStoredEquation } from '../lib/document/equation';
-import { nodeLook } from '../lib/document/looks';
+import { nodeLook, ownTextLook } from '../lib/document/looks';
 import type { writeDocx } from '../lib/export/doc/docx/to-docx';
 import type { Fonts, Script } from '../lib/import/doc/docx-fonts';
 import { FONT_SLOTS, fontMark, readFontTable, readTheme } from '../lib/import/doc/docx-fonts';
@@ -2067,7 +2067,7 @@ function joined(nodes: JSONContent[]): JSONContent[] {
 
 // The first import as the writer lays it out (blocksOf and figureOf in export/doc/docx/), each change a difference of its own:
 // a textblock's block figures each stand in a paragraph of their own and a display equation in a piece of its own, the
-// pieces sharing the textblock's margins, the first the one above, the last the one below, none at a split; a wrapped
+// pieces sharing the textblock's margins, the first the one above, the last the one below, no space at a split; a wrapped
 // figure floats before the piece that holds it, which the reader reads back at its start; a figure the export has no
 // picture for writes its caption alone, as a paragraph, or nothing. `captions` holds those paragraphs' places.
 export function asWritten(
@@ -2078,15 +2078,18 @@ export function asWritten(
     const captions = new Set<string>();
     const paragraphAttrs = docSchema().nodeFromJSON({ type: 'paragraph' }).toJSON().attrs;
     const unwritten = (node: JSONContent) => node.type === 'figure' && !prepared.has(String(node.attrs?.['mediaName']));
-    const blocks = (nodes: JSONContent[], at: string): JSONContent[] => {
+    // nested: inside a list, a quote or a cell, which owns the spacing of what it holds.
+    const blocks = (nodes: JSONContent[], at: string, nested: boolean): JSONContent[] => {
         const out: JSONContent[] = [];
         for (const node of nodes) {
             const place = `${at}.${out.length}`;
             if (!PROSE_TEXTBLOCKS.includes(node.type ?? '')) {
-                out.push(node.content ? { ...node, content: blocks(node.content, place) } : node);
+                out.push(node.content ? { ...node, content: blocks(node.content, place, true) } : node);
                 continue;
             }
             const pieces: JSONContent[] = [];
+            // The paragraphs a block figure or a left-out picture's caption stands in, which take none of its margins.
+            const fresh = new Set<JSONContent>();
             let inline: JSONContent[] = [];
             const floating: JSONContent[] = [];
             let split = false;
@@ -2101,11 +2104,13 @@ export function asWritten(
                     if (inline.length > 0) flush();
                     if (typeof caption === 'string' && caption) {
                         captions.add(`${at}.${out.length + pieces.length}`);
-                        pieces.push({
+                        const piece = {
                             type: 'paragraph',
                             attrs: paragraphAttrs,
                             content: [{ type: 'text', text: caption }],
-                        });
+                        };
+                        fresh.add(piece);
+                        pieces.push(piece);
                     }
                 } else if (isFigureFrameNode(child.type) && !isBlockFigure(child)) {
                     if (inline.some((held) => held.type !== 'text' || held.text?.trim()))
@@ -2113,7 +2118,9 @@ export function asWritten(
                     floating.push(child);
                 } else if (isBlockFigure(child)) {
                     if (inline.length > 0) flush();
-                    pieces.push({ type: 'paragraph', attrs: paragraphAttrs, content: [child] });
+                    const piece = { type: 'paragraph', attrs: paragraphAttrs, content: [child] };
+                    fresh.add(piece);
+                    pieces.push(piece);
                     split = true;
                 } else if (child.type === 'equation' && child.attrs?.['display'] === true) {
                     if (inline.length > 0) flush();
@@ -2131,13 +2138,17 @@ export function asWritten(
             }
             if (split) changes.push({ feature: 'textblock split', at: place, a: node.type, b: pieces.length });
             for (const [i, piece] of pieces.entries()) {
-                if (piece.attrs === paragraphAttrs) {
+                if (fresh.has(piece)) {
                     out.push(piece);
                     continue;
                 }
+                // No space at a split, so the pieces draw as one paragraph: a 0 where the node draws one, else none, and
+                // none at all when nested.
                 const attrs = { ...piece.attrs };
-                if (i > 0) attrs['spaceBefore'] = null;
-                if (i < pieces.length - 1) attrs['spaceAfter'] = null;
+                const level = typeof attrs['level'] === 'number' ? attrs['level'] : 1;
+                const look = nested ? undefined : ownTextLook(piece.type ?? '', level, imported.style, false);
+                if (i > 0) attrs['spaceBefore'] = look?.before ? 0 : null;
+                if (i < pieces.length - 1) attrs['spaceAfter'] = look?.after ? 0 : null;
                 out.push({ ...piece, attrs, content: piece.content?.length ? piece.content : undefined });
             }
         }
@@ -2146,13 +2157,13 @@ export function asWritten(
     const bands = Object.fromEntries(
         Object.entries(imported.bands).map(([root, band]) => [
             root,
-            { ...band, content: blocks(band.content ?? [], root) },
+            { ...band, content: blocks(band.content ?? [], root, false) },
         ]),
     );
     return {
         imported: {
             ...imported,
-            json: { ...imported.json, content: blocks(imported.json.content ?? [], 'body') },
+            json: { ...imported.json, content: blocks(imported.json.content ?? [], 'body', false) },
             bands,
         },
         changes,

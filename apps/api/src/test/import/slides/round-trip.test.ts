@@ -379,3 +379,61 @@ describe("a shape's overlapping paths imported, exported and read back", () => {
             expect(parseFill(String(found.fill))).toMatchObject({ type: 'solid', color: '#993300' });
     });
 });
+
+// A picture's border is its own a:ln, as PowerPoint writes one, so it comes back on the picture and not as a shape.
+describe('a bordered picture exported and read back', () => {
+    test('is one picture with its border', () => {
+        const picture: NewVectorElement = {
+            type: 'image',
+            x: 100,
+            y: 100,
+            width: 320,
+            height: 180,
+            angle: 0,
+            mediaName: 'pic.png',
+            objectFit: 'fill',
+            strokeColor: '#c0504d',
+            strokeWidth: 4,
+            strokeStyle: 'dashed',
+        };
+        const back = roundTrip([picture]).deck.slides[0].elements;
+        expect(back.map((found) => found.type)).toEqual(['image']);
+        expect(back[0]).toMatchObject({ strokeColor: '#c0504d', strokeWidth: 4, strokeStyle: 'dashed' });
+    });
+
+    // PowerPoint and LibreOffice draw a line 0 wide as a hairline, in its colour.
+    test('a line 0 wide reads as the thinnest stroke, and comes back as it', () => {
+        const shapes = sp({
+            xfrm: box(100, 100, 200, 100),
+            geom: 'rect',
+            spPr: `${solidFill('993300')}<a:ln w="0">${solidFill('00305e')}</a:ln>`,
+        });
+        const [first] = readPptx(buildPptx({ slides: [{ shapes }] }), { maxMediaBytes: 1024 * 1024 }).slides[0]
+            .elements;
+        const [back] = roundTrip([first]).deck.slides[0].elements;
+        expect(first).toMatchObject({ strokeColor: '#00305e', strokeWidth: 1 });
+        expect(back?.strokeColor).toBe('#00305e');
+        expect(back?.strokeWidth).toBeCloseTo(1, 3);
+    });
+});
+
+// The canvas fills only a looping line, but a two-point one keeps the fill it holds, as a connector's spPr does.
+describe('a two-point line exported and read back', () => {
+    test('keeps its fill', () => {
+        const line: NewVectorElement = {
+            type: 'line',
+            x: 100,
+            y: 100,
+            width: 300,
+            height: 200,
+            angle: 0,
+            points: twoPoints(300, 200),
+            strokeColor: '#233a75',
+            fill: serializeFill({ type: 'solid', color: '#70ad47', style: 'solid' }),
+        };
+        const back = roundTrip([line]).deck.slides[0].elements;
+        expect(back.map((found) => [found.type, parseFill(String(found.fill))])).toEqual([
+            ['line', { type: 'solid', color: '#70ad47', style: 'solid' }],
+        ]);
+    });
+});

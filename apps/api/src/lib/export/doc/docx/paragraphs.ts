@@ -1,15 +1,18 @@
 import type { JSONContent } from '@tiptap/core';
 import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import { isFigureFrameNode, readParagraphFormat } from '@workspace/lib/docs/eigendoc';
-import type { Border } from '../../../document/looks';
+import type { Border, RunFace } from '../../../document/looks';
 import {
     BLOCK_MARGINS,
     CODE_BLOCK_LOOK,
     cssPt,
+    familyLineScale,
     nodeLook,
+    normalLine,
     proseTextLook,
     QUOTE_LOOK,
     TITLE_SELECTORS,
+    textMetrics,
     twips,
     untypedListFormat,
 } from '../../../document/looks';
@@ -20,14 +23,13 @@ import { BORDER_SIDES, codeBlockStyle, JUSTIFICATION, LIST_FORMATS, LIST_LEVELS 
 import type { HastNode } from '../render';
 import { highlightCode } from '../render';
 import { figureOf } from './drawings';
-import type { RunFace } from './fonts';
-import { familyLine, useFace } from './fonts';
+import { useFace } from './fonts';
 import { CLEAR_FLOATS, checkboxXml, itemOf, LIST_LEVEL, listOf } from './numbering';
 import type { Context, Package } from './package';
 import type { RunProps } from './runs';
 import { INLINES, LINE_BREAK, rPrXml, runsXml, textXml } from './runs';
 import type { Styles } from './styles';
-import { HAIRLINE_TWIPS, normalLine, proseTwips, textMetrics } from './styles';
+import { HAIRLINE_TWIPS, proseTwips } from './styles';
 import { TABLE_LOOK, tableOf } from './tables';
 
 // Each block as paragraphs and tables, a paragraph's properties written in the ECMA-376 sequence: Word reports a
@@ -251,12 +253,9 @@ export function blocksOf(nodes: JSONContent[], props: ParagraphProps, context: C
     const flush = () => {
         const faces: RunFace[] = [];
         const runs = runsXml(inline, context, props.style, faces);
-        const line = familyLine(
-            props.spacing?.line ?? styleSpacing(context.pkg.styles, props.style, 'line'),
-            useFace(context.pkg, {}, props.style),
-            faces,
-        );
-        let own = line === undefined ? props : { ...props, spacing: { ...props.spacing, line } };
+        const scale = familyLineScale(useFace(context.pkg, {}, props.style), faces);
+        const line = props.spacing?.line ?? styleSpacing(context.pkg.styles, props.style, 'line');
+        let own = scale === 1 ? props : { ...props, spacing: { ...props.spacing, line: Math.round(line * scale) } };
         // Word's navigator lists every paragraph at an outline level, so a heading a figure splits keeps one entry.
         if (pieces.length > 0 && props.style && context.pkg.styles.get(props.style)?.pPr?.outlineLvl !== undefined)
             own = { ...own, outlineLvl: 9 };

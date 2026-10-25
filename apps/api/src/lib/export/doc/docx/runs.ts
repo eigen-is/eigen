@@ -6,13 +6,13 @@ import { escapeXml, escapeXmlText, stripNonXmlChars } from '@workspace/lib/xml';
 import { writeOmml } from '@workspace/math';
 import { cssColorToHex, isTransparentCssColor } from '../../../document/colors';
 import { readStoredEquation } from '../../../document/equation';
+import type { RunFace } from '../../../document/looks';
 import { cssPt, halfPoints, SMALL_LOOK, twips } from '../../../document/looks';
 import { proseValue } from '../../../document/prose-css';
 import { uriReference } from '../../../ooxml/opc';
 import type { StyleId } from '../../../ooxml/wordml';
 import { DEFAULT_HIGHLIGHT, PAGE_NUMBER_FIELDS } from '../../../ooxml/wordml';
 import { absoluteHref } from '../render';
-import type { RunFace } from './fonts';
 import { useFace } from './fonts';
 import type { Context } from './package';
 

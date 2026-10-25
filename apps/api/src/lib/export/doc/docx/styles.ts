@@ -1,26 +1,29 @@
-import { DOCUMENT_LINE_RATIO, fontLineHeight } from '@workspace/lib/constants/fonts';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { cssColorToHex } from '../../../document/colors';
 import {
+    autoLine,
     BODY,
     boxSide,
     CAPTION_LOOK,
     CODE_BLOCK_LOOK,
     CODE_LOOK,
     cssPt,
-    FOOTNOTE_LOOK,
     HEADING_LOOKS,
     halfPoints,
     LINK_LOOK,
+    lineHeightPt,
+    normalTextLook,
+    noteTextLook,
     proseBorder,
     proseColor,
     QUOTE_LOOK,
+    sizedTextLook,
     TASK_DONE_LOOK,
     TITLE_LOOKS,
     TITLE_SELECTORS,
     twips,
 } from '../../../document/looks';
-import { proseValue, proseValueIfSet } from '../../../document/prose-css';
+import { proseValue } from '../../../document/prose-css';
 import { W_NS } from '../../../ooxml/ooxml';
 import type { StyleId } from '../../../ooxml/wordml';
 import { codeBlockStyle, headingStyleName, JUSTIFICATION, STYLE_NAMES } from '../../../ooxml/wordml';
@@ -32,39 +35,9 @@ import { rPrXml } from './runs';
 
 // Styles, every value from eigen-prose.css.
 
-function lineHeightPt(value: string, sizePt: number): number {
-    return /^[\d.]+$/.test(value) ? Number(value) * sizePt : cssPt(value, sizePt);
-}
-
-// A multiple of the font's own line height, so the pitch is the CSS one: Google Docs reads every atLeast as single.
-function autoLine(linePt: number, sizePt: number, font: string): number {
-    return Math.round((240 * linePt) / (sizePt * fontLineHeight(font)));
-}
-
-// A line spacing, which CSS draws in Inter's line, in the Normal's font, as Word draws it.
-export function normalLine(lineSpacing: number, normal: NormalStyle): number {
-    return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
-}
-
 // A length an element in the body text takes, in twips.
 export function proseTwips(selector: string, property: string): number {
     return twips(cssPt(proseValue(selector, property), BODY.sizePt));
-}
-
-// A heading or title without its own size or line height inherits the prose root's, as h5 and h6 do: its size the
-// Normal's.
-export function textMetrics(selector: string, normalPt: number) {
-    const size = proseValueIfSet(selector, 'font-size');
-    const sizePt = size === undefined ? normalPt : cssPt(size, BODY.sizePt);
-    const line = proseValueIfSet(selector, 'line-height') ?? proseValue('.eigen-prose', 'line-height');
-    const tracking = proseValueIfSet(selector, 'letter-spacing');
-    return {
-        sizePt,
-        before: twips(cssPt(proseValue(selector, 'margin-top'), sizePt)),
-        after: twips(cssPt(proseValue(selector, 'margin-bottom'), sizePt)),
-        line: lineHeightPt(line, sizePt),
-        tracking: tracking === undefined ? undefined : twips(cssPt(tracking, sizePt)),
-    };
 }
 
 export type Styles = Map<StyleId, StyleDef>;
@@ -145,13 +118,15 @@ export function stylesXml({ normal, styles, languages }: Package): string {
 
 // Built per export on the doc's Normal. A quote's paragraphs take none of its space before, as the editor draws them.
 export function styleDefinitions(normal: NormalStyle): StyleDef[] {
+    const body = normalTextLook(normal);
+    const note = noteTextLook(normal);
     const before = normal.spaceBefore > 0 ? { before: 0 } : {};
     const codePt = cssPt(proseValue('.eigen-prose pre code', 'font-size'), BODY.sizePt);
     const codeMargin = proseValue('.eigen-prose pre', 'margin');
     const rule = { ...proseBorder('.eigen-prose hr', 'border-top'), space: 1 };
     const ruleMargin = proseValue('.eigen-prose hr', 'margin');
     const titles = TITLE_STYLES.map(({ type, id, uiPriority }): StyleDef => {
-        const { sizePt, before, after, line, tracking } = textMetrics(TITLE_SELECTORS[type], normal.size);
+        const { sizePt, before, after, line, tracking } = sizedTextLook(TITLE_SELECTORS[type], normal);
         return {
             type: 'paragraph',
             id,
@@ -163,14 +138,14 @@ export function styleDefinitions(normal: NormalStyle): StyleDef[] {
             pPr: {
                 keepNext: true,
                 keepLines: true,
-                spacing: { before, after, line: autoLine(line, sizePt, normal.font) },
+                spacing: { before, after, line },
             },
             rPr: { spacing: tracking, size: halfPoints(sizePt), ...TITLE_LOOKS[type] },
         };
     });
     const headings = HEADING_LOOKS.map((look, index): StyleDef => {
         const level = index + 1;
-        const { sizePt, before, after, line, tracking } = textMetrics(`.eigen-prose h${level}`, normal.size);
+        const { sizePt, before, after, line, tracking } = sizedTextLook(`.eigen-prose h${level}`, normal);
         return {
             type: 'paragraph',
             id: `Heading${level}`,
@@ -182,7 +157,7 @@ export function styleDefinitions(normal: NormalStyle): StyleDef[] {
             pPr: {
                 keepNext: true,
                 keepLines: true,
-                spacing: { before, after, line: autoLine(line, sizePt, normal.font) },
+                spacing: { before, after, line },
                 outlineLvl: level - 1,
             },
             rPr: { spacing: tracking, size: halfPoints(sizePt), ...look },
@@ -195,13 +170,7 @@ export function styleDefinitions(normal: NormalStyle): StyleDef[] {
             name: STYLE_NAMES.Normal,
             isDefault: true,
             qFormat: true,
-            pPr: {
-                spacing: {
-                    before: normal.spaceBefore > 0 ? twips(normal.spaceBefore) : undefined,
-                    after: twips(normal.spaceAfter),
-                    line: normalLine(normal.lineSpacing, normal),
-                },
-            },
+            pPr: { spacing: { before: body.before || undefined, after: body.after, line: body.line } },
         },
         {
             type: 'character',
@@ -327,8 +296,8 @@ export function styleDefinitions(normal: NormalStyle): StyleDef[] {
             uiPriority: 99,
             semiHidden: true,
             unhideWhenUsed: true,
-            pPr: { spacing: { after: 0, line: 240 } },
-            rPr: { size: halfPoints(FOOTNOTE_LOOK.sizePt) },
+            pPr: { spacing: { after: note.after, line: note.line } },
+            rPr: { size: halfPoints(note.sizePt) },
         },
         {
             type: 'character',

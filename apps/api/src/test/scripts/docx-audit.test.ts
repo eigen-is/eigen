@@ -968,4 +968,46 @@ describe('round trip', () => {
         expect(groups({ type: 'figure', attrs: { mediaName: 'chart.svg' } })).toEqual([['charts as pictures', true]]);
         expect(groups(text('Chart'))).toEqual([['node', false]]);
     });
+
+    // The writer writes no space at a split, so the pieces draw as one paragraph; a node that draws a space there reads
+    // that 0 back.
+    test('a paragraph, a heading and a cell paragraph a picture splits are listed, the space at the split included', async () => {
+        const image =
+            '<w:r><w:drawing><wp:inline><wp:extent cx="381000" cy="381000"/><wp:docPr id="1" name="Picture 1"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:blipFill><a:blip r:embed="rId4"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
+        const split = (pPr: string) =>
+            `<w:p><w:pPr>${pPr}</w:pPr><w:r><w:t>Before</w:t></w:r>${image}<w:r><w:t>after</w:t></w:r></w:p>`;
+        const a = docxToPmJson(
+            Buffer.from(
+                await buildDocxWithBody(
+                    split('') +
+                        split('<w:pStyle w:val="Heading1"/>') +
+                        `<w:tbl><w:tr><w:tc>${split('')}</w:tc></w:tr></w:tbl>`,
+                    {
+                        styles: '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="200"/></w:pPr></w:style>',
+                        media: { 'word/media/pixel.png': PIXEL_PNG },
+                    },
+                ),
+            ),
+        );
+        const media = a.media.map(({ name, data }) => ({
+            name,
+            contentType: 'image/png',
+            data: data.slice().buffer,
+            width: 1,
+            height: 1,
+        }));
+        const b = docxToPmJson(Buffer.from(writeDocx(a, { title: 'Split', media })));
+        const picture = { contentType: 'image/png', width: 1, height: 1 };
+        const pictures = (images: { name: string }[]) => new Map(images.map(({ name }) => [name, picture]));
+        const groups = classifyDocx({
+            a,
+            b,
+            pictures: { a: pictures(a.media), b: pictures(b.media) },
+            prepared: pictures(a.media),
+        });
+        expect(groups.filter(({ listed }) => !listed).map(({ kind }) => kind)).toEqual([]);
+        expect(groups.find(({ kind }) => kind === 'figures and display equations split their textblock')?.count).toBe(
+            3,
+        );
+    });
 });
