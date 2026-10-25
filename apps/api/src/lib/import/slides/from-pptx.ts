@@ -4,7 +4,6 @@
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
 import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, nearestSlideSize, SLIDE_SIZES } from '@workspace/lib/vector';
-import { ApiError } from '../../core/errors';
 import { xmlAttr } from '../../core/xml';
 import type { TransformWarning } from '../../document/transform/protocol';
 import { lossCounter } from '../../document/transform/protocol';
@@ -12,7 +11,7 @@ import { EMU_PER_POINT, P_NS } from '../../ooxml/ooxml';
 import { MAX_SLIDE_EMU, MIN_SLIDE_EMU } from '../../ooxml/presentationml';
 import type { ImportedMedia } from '../image-types';
 import { importMedia } from '../image-types';
-import { IMPORT_MESSAGES, importError } from '../messages';
+import { importError } from '../messages';
 import { backgroundOf, createInheritance } from './inherit';
 import { childOf, withWorkBudget } from './lookup';
 import type { DeckWalk } from './package';
@@ -91,12 +90,8 @@ function readDeck(bytes: Uint8Array, options: PptxOptions): PptxDeck {
         weight: 0,
         decorations: new Map(),
         lost: losses.lost,
-        // Read as it is named, so a picture whose bytes don't read is dropped where it is shown.
-        mediaName: (part) => {
-            const name = files.name(part);
-            if (name === null) throw new ApiError(413, IMPORT_MESSAGES.pptx.tooLarge);
-            return name;
-        },
+        // Read as it is named, so a picture past the caps or whose bytes don't read is dropped where it is shown.
+        mediaName: files.name,
     };
 
     const inheritance = createInheritance(pkg);

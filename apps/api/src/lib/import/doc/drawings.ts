@@ -58,7 +58,7 @@ function mediaName(reader: Reader, path: string): string | undefined {
     const part = mediaPart(reader.pkg.zip, path, imageType(reader, path), IMAGE_TYPES);
     const name = part && reader.files.name(part);
     if (part && !name) reader.lost('images-dropped');
-    return name ?? undefined;
+    return name;
 }
 
 function partPath(id: string | undefined, scope: Scope): string | undefined {

@@ -70,8 +70,8 @@ export type DrawingContext = {
     spend(count: number): boolean;
     // Throws past the output budget, which a chart's parts' text counts toward: enough charts refuse the workbook.
     charge(cells: number, text: number): void;
-    // A picture part's media file, null past the import's media budget (import/image-types.ts).
-    mediaName(part: MediaPart): string | undefined | null;
+    // A picture part's media file; none past the import's picture caps or for bytes that don't read.
+    mediaName(part: MediaPart): string | undefined;
     lost(code: CountedWarningCode): void;
 };
 

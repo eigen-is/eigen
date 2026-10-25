@@ -163,8 +163,8 @@ describe('limits', () => {
         }
     });
 
-    test(`more than ${MAX_MEDIA_PARTS} pictures, or more picture bytes than the upload cap, is too large`, () => {
-        const pictures = (count: number) => {
+    test(`past ${MAX_MEDIA_PARTS} pictures, or past the upload cap in bytes, a picture is a "Picture not imported" box, counted`, () => {
+        const pictures = (count: number, options = OPTIONS) => {
             const parts = pptxParts({
                 slides: [
                     {
@@ -178,13 +178,27 @@ describe('limits', () => {
                 ],
             });
             for (let i = 0; i < count; i++) parts[`ppt/media/image${i}.png`] = PIXEL_PNG;
-            return zipParts(parts);
+            const deck = readPptx(zipParts(parts), options);
+            const types = deck.slides[0].elements.map((element) => element.type);
+            return {
+                media: deck.media.length,
+                images: types.filter((type) => type === 'image').length,
+                boxes: types.filter((type) => type === 'richtext').length,
+                warnings: deck.warnings,
+            };
         };
-        expect(refusal(pictures(MAX_MEDIA_PARTS))).toBe('read');
-        expect(refusal(pictures(MAX_MEDIA_PARTS + 1))).toEqual([413, TOO_LARGE]);
-        const tight = { ...OPTIONS, maxMediaBytes: PIXEL_PNG.length * 2 };
-        expect(refusal(pictures(2), tight)).toBe('read');
-        expect(refusal(pictures(3), tight)).toEqual([413, TOO_LARGE]);
+        expect(pictures(MAX_MEDIA_PARTS + 1)).toEqual({
+            media: MAX_MEDIA_PARTS,
+            images: MAX_MEDIA_PARTS,
+            boxes: 1,
+            warnings: [{ code: 'images-dropped', count: 1 }],
+        });
+        expect(pictures(3, { ...OPTIONS, maxMediaBytes: PIXEL_PNG.length * 2 })).toEqual({
+            media: 2,
+            images: 2,
+            boxes: 1,
+            warnings: [{ code: 'images-dropped', count: 1 }],
+        });
     });
 
     test(`the elements and their text are weighed against ${MAX_PPTX_WEIGHT} as they are written`, () => {

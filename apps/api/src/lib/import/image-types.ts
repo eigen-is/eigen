@@ -47,11 +47,11 @@ export function pictureMediaPart(
 export type ImportedMedia = { name: string; contentType: string; data: Buffer };
 
 // An import's pictures as it names them: the media files read, and the name of a part, which reads it.
-export type MediaFiles = { media: ImportedMedia[]; name(part: MediaPart): string | undefined | null };
+export type MediaFiles = { media: ImportedMedia[]; name(part: MediaPart): string | undefined };
 
 // One media file per picture part, read as it is first named: its format, a prefix of its own per import and the
-// order of first use. A part past MAX_MEDIA_PARTS or the pictures' bytes past `maxBytes` is `null`, which the format
-// refuses or leaves out; one whose bytes don't read is undefined.
+// order of first use. A part past MAX_MEDIA_PARTS, past `maxBytes` of pictures, or whose bytes don't read has no name,
+// and the format leaves it out and counts it.
 export function importMedia(
     format: 'docx' | 'pptx' | 'xlsx',
     read: (path: string) => Uint8Array | undefined,
@@ -65,7 +65,7 @@ export function importMedia(
         media,
         name: (part) => {
             if (names.has(part.path)) return names.get(part.path);
-            if (names.size >= MAX_MEDIA_PARTS || bytes + part.size > maxBytes) return null;
+            if (names.size >= MAX_MEDIA_PARTS || bytes + part.size > maxBytes) return undefined;
             bytes += part.size;
             const data = read(part.path);
             const name = data && `${prefix}-image-${media.length + 1}.${part.extension}`;
