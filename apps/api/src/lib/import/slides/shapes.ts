@@ -1,3 +1,7 @@
+// The pptx reader's shapes: readSlideShapes turns a slide's shape tree into canvas elements, the layout's and the
+// master's shapes beneath the slide's own, groups flattened into their children. A shape takes what it leaves out
+// from its placeholder and the theme, and anything past the caps is refused. The deck reader calls it once per slide.
+
 import { escapeHtml } from '@workspace/lib/html';
 import type {
     Arrowhead,
@@ -54,8 +58,6 @@ import type { DeckWalk, Lost } from './package';
 import { alternative, blipMedia } from './package';
 import { PRESET_KINDS, presetGeometry } from './preset-geometry';
 import { richTextOf, verticalTurnOf } from './text';
-
-// A slide's shape tree → canvas elements: groups flattened, layout and master shapes beneath.
 
 export const MAX_ELEMENTS = 20_000;
 export const MAX_GROUP_DEPTH = 32;
