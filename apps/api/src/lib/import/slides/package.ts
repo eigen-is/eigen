@@ -11,7 +11,7 @@ import { A_NS, ASVG_NS, alternativeFor, P_NS, R_NS } from '../../ooxml/ooxml';
 import { chartPart } from '../../ooxml/ooxml-chart';
 import type { OoxmlPackage, Part } from '../../ooxml/opc';
 import { openPackage, optional, relOfType, relTarget } from '../../ooxml/opc';
-import { PML, PRESENTATION_TYPE } from '../../ooxml/presentationml';
+import { PML, PRESENTATION_TYPE, SLIDE_LAYOUT_TYPE, SLIDE_MASTER_TYPE, SLIDE_TYPE } from '../../ooxml/presentationml';
 import type { MediaPart } from '../image-types';
 import { pictureMediaPart } from '../image-types';
 import { IMPORT_MESSAGES, SAVE_AS_PPTX } from '../messages';
@@ -29,11 +29,12 @@ const NOT_A_PRESENTATION = new Set([
 ]);
 
 // The content parts the reader parses, by relationship type: a part is parsed only when its content type agrees, so
-// a relationship can't hand the reader notes, a diagram or a part of another kind.
+// a relationship can't hand the reader notes, a diagram or a part of another kind. contentTypeOf answers in lower
+// case.
 const PART_TYPES = {
-    slide: `${PML}.slide+xml`,
-    slideLayout: `${PML}.slidelayout+xml`,
-    slideMaster: `${PML}.slidemaster+xml`,
+    slide: SLIDE_TYPE.toLowerCase(),
+    slideLayout: SLIDE_LAYOUT_TYPE.toLowerCase(),
+    slideMaster: SLIDE_MASTER_TYPE.toLowerCase(),
     theme: THEME_TYPE,
 };
 export type PartKind = keyof typeof PART_TYPES;

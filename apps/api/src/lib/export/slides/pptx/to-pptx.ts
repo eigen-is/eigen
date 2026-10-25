@@ -11,7 +11,15 @@ import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import { A_NS, EMU_PER_POINT, R_NS } from '../../../ooxml/ooxml';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, writePackage } from '../../../ooxml/opc';
-import { PML, PRESENTATION_TYPE, SCREEN_SLIDE_TYPES, SCREEN_SLIDE_WIDTH } from '../../../ooxml/presentationml';
+import {
+    PML,
+    PRESENTATION_TYPE,
+    SCREEN_SLIDE_TYPES,
+    SCREEN_SLIDE_WIDTH,
+    SLIDE_LAYOUT_TYPE,
+    SLIDE_MASTER_TYPE,
+    SLIDE_TYPE,
+} from '../../../ooxml/presentationml';
 import { officeChartContentTypes, officeCharts } from '../../office-chart';
 import type { OfficeMedia } from '../../office-image';
 import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
@@ -65,7 +73,7 @@ export function writePptx(
                 `<a:tblStyleLst xmlns:a="${A_NS}" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>`,
                 `${PML}.tableStyles+xml`,
             ],
-            ['ppt/slideMasters/slideMaster1.xml', MASTER_XML, `${PML}.slideMaster+xml`],
+            ['ppt/slideMasters/slideMaster1.xml', MASTER_XML, SLIDE_MASTER_TYPE],
             [
                 'ppt/slideMasters/_rels/slideMaster1.xml.rels',
                 relationshipsXml([
@@ -73,14 +81,14 @@ export function writePptx(
                     { type: `${R_NS}/theme`, target: '../theme/theme1.xml' },
                 ]),
             ],
-            ['ppt/slideLayouts/slideLayout1.xml', LAYOUT_XML, `${PML}.slideLayout+xml`],
+            ['ppt/slideLayouts/slideLayout1.xml', LAYOUT_XML, SLIDE_LAYOUT_TYPE],
             [
                 'ppt/slideLayouts/_rels/slideLayout1.xml.rels',
                 relationshipsXml([{ type: `${R_NS}/slideMaster`, target: '../slideMasters/slideMaster1.xml' }]),
             ],
             ['ppt/theme/theme1.xml', themeXml(DOCUMENT_FONT), THEME_TYPE],
             ...slides.flatMap(({ xml, relationships }, i): PackagePart[] => [
-                [`ppt/slides/slide${i + 1}.xml`, xml, `${PML}.slide+xml`],
+                [`ppt/slides/slide${i + 1}.xml`, xml, SLIDE_TYPE],
                 [`ppt/slides/_rels/slide${i + 1}.xml.rels`, relationshipsXml(relationships)],
             ]),
             ...deck.charts.parts,
