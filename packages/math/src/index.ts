@@ -1,3 +1,6 @@
+// The package's one entry point: the equation tree, a reader and a writer per format, the bounds and the LaTeX
+// command table. Callers import from here only; every other module is internal.
+
 export { fromDom } from './dom';
 export { MathError } from './error';
 export { readLatex, writeLatex } from './latex';
