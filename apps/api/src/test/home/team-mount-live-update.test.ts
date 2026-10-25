@@ -177,6 +177,24 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
         }
     });
 
+    test('disabling a mount whose databases fail to close still drops it', async () => {
+        const home = await freshTeamHome();
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const mount = await home.addMount({ name: 'Stuck', maxSizeMB: 100 });
+            const [live] = home.drive.getMounts();
+            spyOn(live, 'closeAllDatabases').mockRejectedValueOnce(new Error('disk gone'));
+
+            await home.updateMount(mount.id, { enabled: false });
+
+            expect(() => home.drive.getMountConfig(mount.id)).toThrow('Mount not found');
+            expect(errors.mock.calls.some((call) => call.some((arg) => String(arg).includes('disk gone')))).toBe(true);
+        } finally {
+            errors.mockRestore();
+            await home.close();
+        }
+    });
+
     test('disabling a mount drops it from the live Drive', async () => {
         const home = await freshTeamHome();
         try {

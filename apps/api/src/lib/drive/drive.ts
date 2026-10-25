@@ -203,7 +203,12 @@ export class Drive {
         // before the databases do, so each one saves its last edits.
         mount.downloads.abort();
         await this.documents.destructMount(mount);
-        await mount.closeAllDatabases();
+        // The mount can't serve anything by now, so it goes even when its databases fail to close.
+        try {
+            await mount.closeAllDatabases();
+        } catch (error) {
+            console.error(`Failed to close mount databases:`, error);
+        }
         this.mounts.delete(mountId);
     }
 
