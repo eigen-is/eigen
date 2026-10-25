@@ -1,13 +1,15 @@
+// Reads and writes zip archives as OOXML packages use them: stored and deflated entries, ZIP64, one disk. The reader
+// takes untrusted uploads. It caps the sizes the directory declares before it inflates anything, and it never
+// inflates an entry past its declared size. Inflating is synchronous, so its callers run in the transform process.
+// The writer writes our own exports, the same bytes for the same input.
+
 import { constants, deflateRawSync, inflateRawSync } from 'node:zlib';
 import { ApiError, isOutOfMemory } from '../core/errors';
 
-// What OOXML packages use: stored and deflated entries, ZIP64, one disk. The directory's sizes are capped
-// when the archive opens and every inflate stops at its entry's declared size, so a lying entry can't grow
-// past it. Inflating is synchronous: callers run in the transform process.
-
-// The bytes an archive may declare in total, for docx and xlsx: room for a dense sheet at the importer's cell cap.
+// The bytes an archive may declare in total, once inflated. It leaves room for a dense sheet at the xlsx reader's cell
+// cap.
 export const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;
-// Far past the parts a real document holds.
+// Far more entries than a real document holds.
 export const MAX_ZIP_ENTRIES = 10_000;
 
 export type ZipErrorCode =
@@ -28,8 +30,8 @@ export type ZipErrorCode =
     | 'too-large'
     | 'corrupt';
 
-// Every refusal of openZip and of a read: 413 for an archive past the caps, 400 for any other. The message
-// reaches the user, so it names no entry: those are the archive's own bytes.
+// Every refusal of openZip and of a read. An archive past the caps is a 413, and any other refusal a 400. The message
+// reaches the user, so it never names an entry, whose name is the archive's own bytes.
 export class ZipError extends ApiError {
     public constructor(
         public readonly code: ZipErrorCode,
@@ -63,63 +65,16 @@ const MAX32 = 0xffffffff;
 const ENCRYPTED_FLAGS = 0x0001 | 0x0040;
 const UTF8_FLAG = 0x0800;
 
-// Names are kept verbatim and found only by their exact name: a BOM stays, so it can't alias another name.
+// Names are kept verbatim and found only by their exact name. A leading BOM stays part of the name, so it can't make
+// one name alias another.
 const utf8 = new TextDecoder('utf-8', { ignoreBOM: true });
-
-export class ZipReader {
-    readonly #bytes: Uint8Array;
-    readonly #entries: Map<string, Located>;
-
-    public constructor(bytes: Uint8Array, entries: Map<string, Located>) {
-        this.#bytes = bytes;
-        this.#entries = entries;
-    }
-
-    public names(): string[] {
-        return [...this.#entries.keys()];
-    }
-
-    public entry(name: string): ZipEntry | undefined {
-        return this.#entries.get(name)?.entry;
-    }
-
-    public read(name: string): Uint8Array | undefined {
-        const located = this.#entries.get(name);
-        return located && this.#inflate(located);
-    }
-
-    // Every entry in the directory's order, inflated only when read: a rewrite replaces some unread.
-    public *files(): Generator<[name: string, read: () => Uint8Array]> {
-        for (const [name, located] of this.#entries) yield [name, () => this.#inflate(located)];
-    }
-
-    #inflate({ entry, dataStart }: Located): Uint8Array {
-        const raw = this.#bytes.subarray(dataStart, dataStart + entry.compressedSize);
-        const data = entry.method === 0 ? raw : inflate(raw, entry.size);
-        if (data.length !== entry.size) throw new ZipError('bad-size');
-        if (Bun.hash.crc32(data) !== entry.crc32) throw new ZipError('bad-crc');
-        return data;
-    }
-}
-
-function inflate(raw: Uint8Array, size: number): Uint8Array {
-    try {
-        // zlib stops at maxOutputLength; Bun.inflateSync has no such bound.
-        return inflateRawSync(raw, { maxOutputLength: Math.max(1, size) });
-    } catch (error) {
-        if (error instanceof RangeError && 'code' in error && error.code === 'ERR_BUFFER_TOO_LARGE') {
-            throw new ZipError('bad-size');
-        }
-        if (isOutOfMemory(error)) throw error;
-        throw new ZipError('corrupt', { cause: error });
-    }
-}
 
 export function openZip(bytes: Uint8Array): ZipReader {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const u16 = (at: number) => view.getUint16(at, true);
     const u32 = (at: number) => view.getUint32(at, true);
-    // Exact below 2^53; rounding above it keeps a value far past every cap and offset.
+    // Exact below 2^53. A larger value rounds, but it stays far past every cap and offset, so it is refused all the
+    // same.
     const u64 = (at: number) => u32(at + 4) * 2 ** 32 + u32(at);
     const inside = (start: number, length: number, end: number) => start + length <= end;
 
@@ -130,14 +85,15 @@ export function openZip(bytes: Uint8Array): ZipReader {
     let directoryEnd = end;
     if (end >= 20 && u32(end - 20) === END64_LOCATOR) {
         const end64 = u64(end - 12);
-        // Info-ZIP reads the plain record instead when its disk is neither the sentinel nor the locator's last.
+        // Info-ZIP reads the plain record instead of the ZIP64 one when its disk numbers are neither 0 nor the
+        // sentinel. Such an archive is refused rather than read two ways.
         const plainDisk = (at: number) => u16(at) === 0 || u16(at) === MAX16;
         if (u32(end - 16) !== 0 || u32(end - 4) !== 1 || !plainDisk(end + 4) || !plainDisk(end + 6)) {
             throw new ZipError('multi-disk');
         }
         if (!inside(end64, 56, end - 20) || u32(end64) !== END64) throw new ZipError('corrupt');
-        // The record holds no extensible data and runs up to its locator, so no bytes hide between them: Python reads
-        // the 56 bytes before the locator.
+        // Python reads the ZIP64 end record as the 56 bytes before the locator. So the record must hold no extensible
+        // data and end right at the locator, which leaves no bytes hidden between them.
         if (u64(end64 + 4) !== 44 || end64 + 56 !== end - 20) throw new ZipError('misplaced');
         if (u32(end64 + 16) !== 0 || u32(end64 + 20) !== 0 || u64(end64 + 24) !== u64(end64 + 32)) {
             throw new ZipError('multi-disk');
@@ -146,7 +102,8 @@ export function openZip(bytes: Uint8Array): ZipReader {
         directorySize = u64(end64 + 40);
         directoryStart = u64(end64 + 48);
         directoryEnd = end64;
-        // Info-ZIP, Java and Go read a plain field that is neither its sentinel nor the ZIP64 value, so it must agree.
+        // Info-ZIP, Java and Go read a plain field instead of the ZIP64 one unless it holds the sentinel. So a plain
+        // field must hold the sentinel or agree.
         const agrees = (plain: number, value: number, sentinel: number) => plain === value || plain === sentinel;
         if (
             !agrees(u16(end + 8), count, MAX16) ||
@@ -160,7 +117,7 @@ export function openZip(bytes: Uint8Array): ZipReader {
         if (u16(end + 4) !== 0 || u16(end + 6) !== 0 || u16(end + 8) !== count) throw new ZipError('multi-disk');
         if (count === MAX16 || directorySize === MAX32 || directoryStart === MAX32) throw new ZipError('missing-zip64');
     }
-    // The directory ends where the end record starts, and each entry takes at least 46 bytes of it.
+    // The directory ends where the end record starts, and each of its entries takes at least 46 bytes.
     if (directoryStart + directorySize !== directoryEnd || count * 46 > directorySize) throw new ZipError('misplaced');
     if (count > MAX_ZIP_ENTRIES) throw new ZipError('too-many-entries');
 
@@ -178,7 +135,8 @@ export function openZip(bytes: Uint8Array): ZipReader {
         const next = extraStart + extraLength + u16(at + 32);
         if (next > directoryEnd) throw new ZipError('corrupt');
         const nameBytes = bytes.subarray(at + 46, extraStart);
-        // UTF-8 whatever the flag: OOXML names are ASCII, which CP437 reads alike, and a name is found only exactly.
+        // Decoded as UTF-8 whatever the flag says. OOXML names are ASCII, which CP437 reads the same, and a name is
+        // only ever matched exactly.
         const name = utf8.decode(nameBytes);
         if (flags & ENCRYPTED_FLAGS) throw new ZipError('encrypted');
         if (method !== 0 && method !== 8) throw new ZipError('unsupported-method');
@@ -219,7 +177,7 @@ export function openZip(bytes: Uint8Array): ZipReader {
     if (at !== directoryEnd) throw new ZipError('misplaced');
 
     spans.sort((a, b) => a[0] - b[0]);
-    // A prefix would let the bytes read as another format too.
+    // Bytes before the first entry could make the file read as another format too.
     if ((spans[0]?.[0] ?? directoryStart) !== 0) throw new ZipError('misplaced');
     for (let index = 1; index < spans.length; index++) {
         if (spans[index][0] < spans[index - 1][1]) throw new ZipError('overlap');
@@ -227,11 +185,11 @@ export function openZip(bytes: Uint8Array): ZipReader {
     return new ZipReader(bytes, entries);
 }
 
-// The end record is the last in the file's final 22 + 65,535 bytes, and its comment reaches the end of the file. As
-// Info-ZIP, Office and java.util.zip read some real files, one without ZIP64 may leave bytes after it when its own
-// fields put the directory right before it and the first entry at the start. Another reader may take any such record
-// for the archive, or the last signature whatever follows it, so a second end, or an end-record signature after the end, is
-// refused.
+// Finds the end record. It is the last one in the file's final 22 + 65,535 bytes, and its comment reaches the end of
+// the file. Some real files have bytes after the record, and Info-ZIP, Office and java.util.zip read them anyway. So a
+// record without ZIP64 may be followed by other bytes when its own fields put the directory right before it and the
+// first entry at the start of the file. Another reader may pick a different record, or the last signature whatever
+// follows it. So a second end record, or an end-record signature after the one found, is refused.
 function findEnd(bytes: Uint8Array, view: DataView): number {
     const found: number[] = [];
     let last: number | undefined;
@@ -241,7 +199,7 @@ function findEnd(bytes: Uint8Array, view: DataView): number {
         if (at + 22 > bytes.length) continue;
         const commentEnd = at + 22 + view.getUint16(at + 20, true);
         const directoryStart = view.getUint32(at + 16, true);
-        // java.util.zip's check, which it makes on these fields alone, so a ZIP64 archive gets no leeway.
+        // This is java.util.zip's check. It looks only at the plain fields, so a ZIP64 archive gets no leeway.
         const trailed =
             commentEnd < bytes.length &&
             directoryStart + view.getUint32(at + 12, true) === at &&
@@ -262,7 +220,7 @@ function findExtra(
     id: number,
 ): { start: number; end: number } | undefined {
     for (let at = start; at + 4 <= start + length; at += 4 + view.getUint16(at + 2, true)) {
-        // An extra's declared length doesn't reach past the header's extras.
+        // An extra field's declared length is cut off where the header's extras end.
         if (view.getUint16(at, true) === id) {
             return { start: at + 4, end: Math.min(at + 4 + view.getUint16(at + 2, true), start + length) };
         }
@@ -270,7 +228,53 @@ function findExtra(
     return undefined;
 }
 
-// A part too large to hold whole may come as chunks, pulled when the writer reaches it.
+// The entries openZip found, each inflated and checked when it is read.
+export class ZipReader {
+    readonly #bytes: Uint8Array;
+    readonly #entries: Map<string, Located>;
+
+    public constructor(bytes: Uint8Array, entries: Map<string, Located>) {
+        this.#bytes = bytes;
+        this.#entries = entries;
+    }
+
+    public names(): string[] {
+        return [...this.#entries.keys()];
+    }
+
+    public entry(name: string): ZipEntry | undefined {
+        return this.#entries.get(name)?.entry;
+    }
+
+    public read(name: string): Uint8Array | undefined {
+        const located = this.#entries.get(name);
+        return located && this.#inflate(located);
+    }
+
+    #inflate({ entry, dataStart }: Located): Uint8Array {
+        const raw = this.#bytes.subarray(dataStart, dataStart + entry.compressedSize);
+        const data = entry.method === 0 ? raw : inflate(raw, entry.size);
+        if (data.length !== entry.size) throw new ZipError('bad-size');
+        if (Bun.hash.crc32(data) !== entry.crc32) throw new ZipError('bad-crc');
+        return data;
+    }
+}
+
+function inflate(raw: Uint8Array, size: number): Uint8Array {
+    try {
+        // zlib stops at maxOutputLength. Bun.inflateSync has no such bound.
+        return inflateRawSync(raw, { maxOutputLength: Math.max(1, size) });
+    } catch (error) {
+        if (error instanceof RangeError && 'code' in error && error.code === 'ERR_BUFFER_TOO_LARGE') {
+            throw new ZipError('bad-size');
+        }
+        if (isOutOfMemory(error)) throw error;
+        throw new ZipError('corrupt', { cause: error });
+    }
+}
+
+// An entry's data is whole, or a function that yields it as chunks once the writer reaches it. Chunks let a part too
+// large to hold whole be written.
 export type ZipWriteEntry = {
     name: string;
     data: Uint8Array | string | (() => Iterable<Uint8Array | string>);
@@ -278,12 +282,13 @@ export type ZipWriteEntry = {
 };
 
 const utf8Encoder = new TextEncoder();
-// Every entry is dated the DOS epoch, 1 January 1980 at midnight, so one input always zips to the same bytes.
+// Every entry is dated the DOS epoch, 1 January 1980 at midnight, so the same input always zips to the same bytes.
 const DOS_TIME = 0;
 const DOS_DAY = (1 << 5) | 1;
 const EMPTY_FINAL_BLOCK = new Uint8Array([0x03, 0x00]);
 
-// Deflates unless `store`. No ZIP64: past 4 GB or 65,534 entries it throws, as a sentinel value would need one.
+// Writes the entries in order, each deflated unless `store` is set. It writes no ZIP64, so an archive past 4 GB or
+// 65,534 entries throws.
 export function writeZip(files: Iterable<ZipWriteEntry>): Uint8Array {
     const names = new Set<string>();
     const chunks: Uint8Array[] = [];
@@ -338,7 +343,8 @@ export function writeZip(files: Iterable<ZipWriteEntry>): Uint8Array {
     return out;
 }
 
-// libdeflate can't stream, and holding a 4M-cell sheet whole for it costs 0.4 GB, so chunks go through zlib.
+// Whole data is deflated by libdeflate, which is smaller and faster than zlib. libdeflate can't stream, and holding a
+// 4M-cell sheet whole for it costs 0.4 GB, so chunks go through zlib one at a time.
 function entryBody(file: ZipWriteEntry): { body: Uint8Array[]; size: number; crc32: number } {
     if (typeof file.data !== 'function') {
         const data = typeof file.data === 'string' ? utf8Encoder.encode(file.data) : file.data;
@@ -354,14 +360,14 @@ function entryBody(file: ZipWriteEntry): { body: Uint8Array[]; size: number; crc
         const data = typeof chunk === 'string' ? utf8Encoder.encode(chunk) : chunk;
         size += data.length;
         crc32 = Bun.hash.crc32(data, crc32);
-        // A sync flush ends each chunk on a byte boundary, so the next deflate continues the stream.
+        // A sync flush ends each chunk on a byte boundary, so the next chunk's blocks continue the same stream.
         body.push(file.store ? data : deflateRawSync(data, { finishFlush: constants.Z_SYNC_FLUSH }));
     }
     if (!file.store) body.push(EMPTY_FINAL_BLOCK);
     return { body, size, crc32 };
 }
 
-// Bun's types take no view of a SharedArrayBuffer, which no entry is.
+// Bun's types refuse a view of a SharedArrayBuffer. No entry is one, but the type still has to be narrowed.
 function onArrayBuffer(data: Uint8Array): data is Uint8Array<ArrayBuffer> {
     return data.buffer instanceof ArrayBuffer;
 }

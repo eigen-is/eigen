@@ -681,10 +681,15 @@ describe("the reader's output budget", () => {
     // Imported, a workbook of no sheets would replace a document's with none.
     test('a workbook without a sheet it can read is no xlsx file', () => {
         const fixture = xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1"><v>1</v></c></row>' }] });
+        const zip = openZip(fixture);
         const without = writeZip(
-            [...openZip(fixture).files()]
-                .filter(([name]) => name !== 'xl/worksheets/sheet1.xml')
-                .map(([name, read]) => ({ name, data: read() })),
+            zip
+                .names()
+                .filter((name) => name !== 'xl/worksheets/sheet1.xml')
+                .flatMap((name) => {
+                    const data = zip.read(name);
+                    return data ? [{ name, data }] : [];
+                }),
         );
         expect(refused(without)).toEqual({ status: 400, message: 'Not a valid xlsx file' });
         expect(refused(xlsxFixture({ sheets: [] }))).toEqual({ status: 400, message: 'Not a valid xlsx file' });
