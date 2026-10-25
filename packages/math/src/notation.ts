@@ -1,3 +1,7 @@
+// The character tables every format shares, such as the accents with their spacing twins, the spaces and their
+// widths, the large operators by name, the colour names and Unicode's mathematical alphanumerics. Readers and writers
+// look a character up here, so each fact about one is written once.
+
 import type { MathSpace, MathVariant } from './tree';
 
 // Each accent as OMML and the tree hold it (combining) and as MathML draws it (spacing). U+203E stays the line's.
@@ -89,7 +93,8 @@ export const SCRIPT_CHARS: ReadonlyMap<string, readonly ['sub' | 'sup', string]>
     ),
 );
 
-// The large operators by their unicode-math names, which LaTeX writes.
+// The large operators by their unicode-math names, which LaTeX writes. The integrals stand apart, since Word puts
+// their limits beside them.
 const INTEGRAL_NAMES: Readonly<Record<string, string>> = {
     int: '∫',
     iint: '∬',
