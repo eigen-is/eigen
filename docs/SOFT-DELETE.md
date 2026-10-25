@@ -65,7 +65,7 @@ A folder's permanent delete first removes every trash root whose `trashedFrom` l
 
 ## Expired trash is purged only when a Home loads
 
-`Mount.init` purges trash roots older than `quotas.trashRetentionDays` (30 by default, `apps/api/src/lib/config/server-settings.ts`). A Home opens its mounts when it loads, so that is the only time the purge runs. A disabled mount never opens, and neither does a mount whose Home nobody loads, so both keep their trash past the window. A value of 0 turns the purge off. The purge calls `Mount.permanentlyDeleteFromTrash` directly, so it sends no SSE and notifies no watcher.
+`Mount.init` purges trash roots older than `quotas.trashRetentionDays` (30 by default, `apps/api/src/lib/config/server-settings.ts`). A Home opens its mounts when it loads, so that is the only time the purge runs. A disabled mount never opens, and neither does a mount whose Home nobody loads, so both keep their trash past the window. A value of 0 turns the purge off. The purge runs in the background, and a mount close stops it between items and waits for the item in flight. What is left keeps its rows, so the next open finishes it. The purge calls `Mount.permanentlyDeleteFromTrash` directly, so it sends no SSE and notifies no watcher.
 
 History and watcher notifications for trash, restore and permanent delete are in [FILE-HISTORY.md](FILE-HISTORY.md#chain-rewriting-mutations-record-their-own-events).
 

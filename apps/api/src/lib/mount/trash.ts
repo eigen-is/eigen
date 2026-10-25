@@ -278,6 +278,8 @@ export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void
         .where(sql`${paths.trashedFrom} IS NOT NULL AND ${paths.trashedAt} < ${cutoffEpoch}`)
         .all();
     for (const row of expired) {
+        // A mount close aborts its downloads and then waits for this loop, so the loop stops here.
+        if (mount.downloads.signal.aborted) return;
         await deleteIfTrashed(mount, row.id);
     }
 }

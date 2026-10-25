@@ -2,10 +2,11 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { MountConfig } from '@workspace/lib/types/mount';
 import type { SQL } from 'drizzle-orm';
 import { eq, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import type { DatabaseConfig } from '../../lib/core';
+import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../../lib/core';
 import { ApiError, eventLoopTurn, storageGone } from '../../lib/core';
 import { getUniqueFileName } from '../../lib/drive/naming';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
@@ -1820,6 +1821,61 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         expect(await restored).toBe(404);
         expect(await mount.getPath(childId)).toBeNull();
         expect(await mount.getPath(folderId)).toBeNull();
+    });
+});
+
+describe('the trash purge at mount open', () => {
+    // Each Mount gets its own handle on metadata.db, so the test can close it the way a Home does.
+    function openMount(config: MountConfig, handles: ManagedDatabase<SchemaType>[]): Mount {
+        const getDb = createGetLocalDatabase(TEST_DIR);
+        return new Mount(OWNER_ID, TEST_DIR, config, async (dbConfig, relativePath) => {
+            const handle = await getDb(dbConfig, relativePath);
+            handles.push(handle);
+            return handle;
+        });
+    }
+
+    test('a mount close waits for the purge, which stops between items', async () => {
+        const config = createTestMountConfig('test-purge-on-close', 'local-key');
+        const handles: ManagedDatabase<SchemaType>[] = [];
+        const first = openMount(config, handles);
+        await first.init();
+        const rootId = (await first.getRootFolder())!.id;
+        for (let i = 0; i < 20; i++) {
+            const id = await first.createFile(
+                rootId,
+                `expired-${i}.bin`,
+                'application/octet-stream',
+                3,
+                Buffer.from('abc'),
+            );
+            await first.trashPath(id);
+        }
+        first.db.run(sql`UPDATE paths SET trashedAt = 1 WHERE trashedAt IS NOT NULL`);
+        await first.closeAllDatabases();
+        await handles[0].close();
+
+        const errors = spyOn(console, 'error');
+        try {
+            const second = openMount(config, handles);
+            await second.init();
+            const deletes = spyOn(second, 'deletePath');
+            await second.closeAllDatabases();
+            const deletesAtClose = deletes.mock.calls.length;
+            await handles[1].close();
+            await Bun.sleep(50);
+
+            expect(deletes.mock.calls.length).toBe(deletesAtClose);
+            expect(errors.mock.calls.filter(([message]) => String(message).includes('purge'))).toEqual([]);
+        } finally {
+            errors.mockRestore();
+        }
+
+        // Whatever the purge left keeps its row, so the next open finishes it.
+        const third = openMount(config, handles);
+        await third.init({ passive: true });
+        expect((await third.listTrash()).length).toBe(readdirSync(third.dataDir).length);
+        await handles[2].close();
     });
 });
 

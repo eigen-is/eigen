@@ -93,6 +93,9 @@ export class Mount {
     // init schedules the history prune after it returns. The timer is kept so a fast teardown can
     // cancel it before the Home closes metadata.db.
     public pruneTimer: ReturnType<typeof setTimeout> | null = null;
+    // The purge of expired trash that init starts. closeAllDatabases stops it between items and waits
+    // for it, so no row delete runs against a closed metadata.db.
+    public trashPurge?: Promise<void>;
     // Thumbnail jobs run in the background. closeAllDatabases waits for them, so no sharp worker or
     // row update outlives metadata.db.
     public thumbnailJobs = new Set<Promise<void>>();
@@ -231,7 +234,9 @@ export class Mount {
 
         const retentionDays = getServerSettings().quotas.trashRetentionDays;
         if (retentionDays > 0) {
-            this.purgeTrash(retentionDays).catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
+            this.trashPurge = this.purgeTrash(retentionDays).catch((e) =>
+                console.error(`[Mount] Failed to purge expired trash:`, e),
+            );
         }
         // The prune scans whole tables, so it runs after the mount is ready.
         this.pruneTimer = setTimeout(() => {
