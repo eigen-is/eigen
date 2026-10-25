@@ -26,7 +26,7 @@ import type {
 } from '@workspace/lib/types/chart';
 import { parseFill } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
-import { quoteSheetName, rangeToA1 } from '@workspace/sheet/engine/a1-notation';
+import { rangeToA1, sheetRefName } from '@workspace/sheet/engine/a1-notation';
 import { DEGREE, solidFillXml } from './drawingml';
 import { A_NS, C_NS, EMU_PER_POINT, R_NS } from './ooxml';
 import { CHART_CONTENT_TYPE, LEGEND_BY_POSITION, PERCENT_AXIS_FORMAT, STACKING_BY_GROUPING } from './ooxml-chart';
@@ -219,7 +219,7 @@ function embeddedSource(
 ): Source {
     const column = seriesColumn(index);
     const cells = (row: [number, number], at: number) =>
-        `${quoteSheetName(EMBEDDED_SHEET)}!${rangeToA1({ row, column: [at, at] }, true)}`;
+        `${sheetRefName(EMBEDDED_SHEET)}!${rangeToA1({ row, column: [at, at] }, true)}`;
     return {
         name: `<c:tx>${strRef(cells([0, 0], column), [name])}</c:tx>`,
         data: [
@@ -310,10 +310,10 @@ function pointsXml(points: readonly (string | number | null)[]): string {
     return `<c:ptCount val="${points.length}"/>${written.join('')}`;
 }
 
-// 'Sheet'!$A$2:$A$9 by the name the workbook writes.
+// Sheet!$A$2:$A$9 by the name the workbook writes.
 function cellRange(ref: CellRangeRef, ranges: Ranges): string {
     const name = ranges(ref.sheetId);
-    return name === undefined ? '#REF!' : `${quoteSheetName(name)}!${rangeToA1(ref, true)}`;
+    return name === undefined ? '#REF!' : `${sheetRefName(name)}!${rangeToA1(ref, true)}`;
 }
 
 // x, the category axis, then y, the value axis. A bar chart lies on its side. CHARTS.md: the category axis is maxMin

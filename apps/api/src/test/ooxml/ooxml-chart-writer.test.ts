@@ -228,13 +228,13 @@ describe('writeChart with range data', () => {
         expect(orientation(rangeSpec('bar', reversed))).toEqual(['minMax', 'autoZero']);
     });
 
-    test("refs name the workbook's sheets quoted, and a sheet it doesn't write is #REF!", () => {
+    test("refs name the workbook's sheets, quoted only where the name needs it, and a sheet it doesn't write is #REF!", () => {
         const xml = writeChart(rangeSpec('column'), { ranges, look: FLAT_CHART_LOOK, frame: FRAME });
         expect(find(root(xml), 'f').map(xmlTrimmedText)).toEqual([
-            "'Data'!$B$1",
-            "'Data'!$A$2:$A$4",
-            "'Data'!$B$2:$B$4",
-            "'Data'!$A$2:$A$4",
+            'Data!$B$1',
+            'Data!$A$2:$A$4',
+            'Data!$B$2:$B$4',
+            'Data!$A$2:$A$4',
             "'Bob''s <sheet>'!$C$2:$C$4",
         ]);
         const lost = read(
@@ -410,8 +410,8 @@ describe('writeChart with an embedded workbook', () => {
 
     test("the refs name Office's layout: names along row 1 from B, categories down A, each series down its column", () => {
         const formulas = find(root(writeChart(SPECS[4][1], EMBEDDED)), 'f').map(xmlTrimmedText);
-        expect(formulas.slice(0, 3)).toEqual(["'Sheet1'!$B$1", "'Sheet1'!$A$2:$A$3", "'Sheet1'!$B$2:$B$3"]);
-        expect(formulas.slice(-3)).toEqual(["'Sheet1'!$AE$1", "'Sheet1'!$A$2:$A$3", "'Sheet1'!$AE$2:$AE$3"]);
+        expect(formulas.slice(0, 3)).toEqual(['Sheet1!$B$1', 'Sheet1!$A$2:$A$3', 'Sheet1!$B$2:$B$3']);
+        expect(formulas.slice(-3)).toEqual(['Sheet1!$AE$1', 'Sheet1!$A$2:$A$3', 'Sheet1!$AE$2:$AE$3']);
     });
 
     test('the values keep their format in the cells, and the part names its workbook after its text, never to refresh', () => {
