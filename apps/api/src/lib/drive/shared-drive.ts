@@ -1,3 +1,8 @@
+// SharedDrive is how someone other than the owner reaches a Drive. It wraps each Drive method that a
+// route may call, and checks the caller's access before it passes the call on. It does not extend
+// Drive, on purpose: getSharedDrive returns Drive | SharedDrive, so a route can only call a method
+// that has a wrapper here.
+
 import type {
     DriveACLDelta,
     DriveAccessCheckResult,
@@ -20,37 +25,29 @@ import { ApiError } from '../core';
 import type { Home } from '../home';
 import type { Mount } from '../mount';
 import type { StorageFile } from '../storage';
-import type { User } from '../user';
-import type { Memberships } from '../user/';
-import { getMemberships } from '../user/';
+import type { Memberships, User } from '../user';
+import { getMemberships } from '../user';
 import { canReadFromAncestors } from './acl';
 import type { ACLPropagationOptions } from './acl-propagation';
-import type Drive from './drive';
+import type { Drive } from './drive';
 import type { LockManager } from './lock-manager';
 
-// Composition over inheritance: SharedDrive deliberately does NOT extend Drive. Pairing this
-// with `getSharedDrive(): Promise<Drive | SharedDrive>` (see ./get-drive.ts) means routes can
-// only call methods present on the union — i.e., methods explicitly wrapped here. A new
-// public method on Drive without a matching wrapper here is unreachable from routes (TS error
-// at the callsite), which closes the recurring "forgot the SharedDrive wrapper, ACL bypassed"
-// hole. The `_user`/`_actor` params below exist only to match Drive's signatures: SharedDrive
-// always derives the actor from `this.user`, so the route's value is deliberately ignored.
-export default class SharedDrive {
-    private sharedDrive: Drive;
-    private user: User;
-    private owner: User;
+// The `_user` and `_actor` parameters only keep each signature the same as Drive's. The actor is
+// always this.user, whatever the route passes.
+export class SharedDrive {
+    private readonly drive: Drive;
+    private readonly user: User;
+    private readonly owner: User;
 
     public constructor(sharedHome: Home, user: User) {
-        this.sharedDrive = sharedHome.drive;
+        this.drive = sharedHome.drive;
         this.user = user;
         this.owner = sharedHome.user;
     }
 
-    // WebDAV LockManager lives on the underlying Drive (and shares the Home's lifecycle).
-    // Lock state is per-user (acquire/release check userId), so no extra ACL gate needed
-    // beyond the path-resolution that already happened in the route handler.
+    // Each lock belongs to the user who took it, so the locks need no access check of their own.
     public get lockManager(): LockManager {
-        return this.sharedDrive.lockManager;
+        return this.drive.lockManager;
     }
 
     private async getUserMemberships(): Promise<Memberships> {
@@ -75,16 +72,15 @@ export default class SharedDrive {
 
     private async withParentWritePermission<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
         const memberships = await this.getUserMemberships();
-        const path = await this.sharedDrive.getPath(mountId, pathId);
+        const path = await this.drive.getPath(mountId, pathId);
         if (path?.parentId && (await this.canWrite(mountId, path.parentId, this.user, memberships))) {
             return fn();
         }
         throw new ApiError(403, 'No write permission');
     }
 
-    // Mount and mime-type listings span every path in the owner's drive — there's no single
-    // pathId to ACL-check, so we gate on team membership of the owner. Cross-user (non-team)
-    // SharedDrive instances cannot enumerate mounts or list by mime type at all.
+    // Listing mounts or a file type covers the whole drive, so there is no single path to check. Only a
+    // member of the owning team may do it. On another user's drive nobody may.
     private async requireTeamMembership(): Promise<void> {
         const parsed = parseOwnerId(this.owner.id);
         if (parsed.type !== 'team') throw new ApiError(403, 'No read permission');
@@ -92,13 +88,21 @@ export default class SharedDrive {
         if (!memberships.teamIds.includes(parsed.id)) throw new ApiError(403, 'No read permission');
     }
 
+    // Nobody logs in as a team, so the members of a team always come through SharedDrive. They own the
+    // team's drive together, so sharing restrictions don't apply to them.
+    private isEffectiveOwnerSync(ownerId: string, memberships: Memberships): boolean {
+        const parsed = parseOwnerId(ownerId);
+        if (parsed.type !== 'team') return false;
+        return memberships.teamIds.includes(parsed.id);
+    }
+
     public async listMounts(): Promise<MountInfo[]> {
         await this.requireTeamMembership();
-        return this.sharedDrive.listMounts();
+        return this.drive.listMounts();
     }
 
     public async getRootFolder(mountId: string): Promise<DrivePath | null> {
-        const root = await this.sharedDrive.getRootFolder(mountId);
+        const root = await this.drive.getRootFolder(mountId);
         if (!root) return null;
         const memberships = await this.getUserMemberships();
         return (await this.canRead(mountId, root.id, this.user, memberships)) ? root : null;
@@ -106,44 +110,42 @@ export default class SharedDrive {
 
     public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
         await this.requireTeamMembership();
-        return this.sharedDrive.getMimeTypeContents(mimeType);
+        return this.drive.getMimeTypeContents(mimeType);
     }
 
     public async getMountMimeTypeContents(mountId: string, mimeType: string): Promise<DrivePath[]> {
         await this.requireTeamMembership();
-        return this.sharedDrive.getMountMimeTypeContents(mountId, mimeType);
+        return this.drive.getMountMimeTypeContents(mountId, mimeType);
     }
 
     public async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
-        return this.sharedDrive.canWrite(mountId, pathId, user, memberships);
+        return this.drive.canWrite(mountId, pathId, user, memberships);
     }
 
     public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
-        return this.sharedDrive.canRead(mountId, pathId, user, memberships);
+        return this.drive.canRead(mountId, pathId, user, memberships);
     }
 
     public async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getFolderContents(mountId, pathId));
+        return this.withReadPermission(mountId, pathId, () => this.drive.getFolderContents(mountId, pathId));
     }
 
     public async getPath(mountId: string, pathId: string): Promise<DrivePath | null> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getPath(mountId, pathId));
+        return this.withReadPermission(mountId, pathId, () => this.drive.getPath(mountId, pathId));
     }
 
     public async resolvePath(mountId: string, pathStr: string): Promise<DrivePath | null> {
-        const path = await this.sharedDrive.resolvePath(mountId, pathStr);
+        const path = await this.drive.resolvePath(mountId, pathStr);
         if (!path) return null;
         return this.withReadPermission(mountId, path.id, async () => path);
     }
 
     public async downloadFile(mountId: string, pathId: string): Promise<StorageFile | null> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.downloadFile(mountId, pathId));
+        return this.withReadPermission(mountId, pathId, () => this.drive.downloadFile(mountId, pathId));
     }
 
     public async flushContainerDb(mountId: string, containerId: string): Promise<void> {
-        return this.withReadPermission(mountId, containerId, () =>
-            this.sharedDrive.flushContainerDb(mountId, containerId),
-        );
+        return this.withReadPermission(mountId, containerId, () => this.drive.flushContainerDb(mountId, containerId));
     }
 
     public async copyPath(
@@ -160,11 +162,11 @@ export default class SharedDrive {
         if (!(await this.canWrite(mountId, destParentId, this.user, memberships))) {
             throw new ApiError(403, 'No write permission on target folder');
         }
-        return this.sharedDrive.copyPath(mountId, srcPathId, destParentId, name, this.user);
+        return this.drive.copyPath(mountId, srcPathId, destParentId, name, this.user);
     }
 
     public async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.readRange(mountId, pathId, start, end));
+        return this.withReadPermission(mountId, pathId, () => this.drive.readRange(mountId, pathId, start, end));
     }
 
     public async writeFileContent(
@@ -175,16 +177,16 @@ export default class SharedDrive {
         expectedUpdatedAt?: Date,
     ): Promise<DrivePath> {
         return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.writeFileContent(mountId, pathId, data, this.user, expectedUpdatedAt),
+            this.drive.writeFileContent(mountId, pathId, data, this.user, expectedUpdatedAt),
         );
     }
 
     public async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.resolveFile(mountId, pathId));
+        return this.withReadPermission(mountId, pathId, () => this.drive.resolveFile(mountId, pathId));
     }
 
     public async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getCollabDocument(mountId, pathId));
+        return this.withReadPermission(mountId, pathId, () => this.drive.getCollabDocument(mountId, pathId));
     }
 
     public async createFolder(
@@ -195,7 +197,7 @@ export default class SharedDrive {
         containerType?: DriveContainerType,
     ): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createFolder(mountId, parentId, folderName, this.user, containerType),
+            this.drive.createFolder(mountId, parentId, folderName, this.user, containerType),
         );
     }
 
@@ -207,7 +209,7 @@ export default class SharedDrive {
         _user?: User,
     ): Promise<DrivePath[]> {
         return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.uploadFiles(mountId, parentId, request, maxSize, this.user),
+            this.drive.uploadFiles(mountId, parentId, request, maxSize, this.user),
         );
     }
 
@@ -220,7 +222,7 @@ export default class SharedDrive {
         _user?: User,
     ): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createFileFromData(mountId, parentId, name, mimeType, data, this.user),
+            this.drive.createFileFromData(mountId, parentId, name, mimeType, data, this.user),
         );
     }
 
@@ -232,22 +234,20 @@ export default class SharedDrive {
         _user?: User,
     ): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.create(mountId, parentId, name, type, this.user),
+            this.drive.create(mountId, parentId, name, type, this.user),
         );
     }
 
     public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
-        return this.withReadPermission(mountId, chatId, () => this.sharedDrive.getChat(mountId, chatId));
+        return this.withReadPermission(mountId, chatId, () => this.drive.getChat(mountId, chatId));
     }
 
     public async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
-        return this.withReadPermission(mountId, parentId, () =>
-            this.sharedDrive.getChildByName(mountId, parentId, name),
-        );
+        return this.withReadPermission(mountId, parentId, () => this.drive.getChildByName(mountId, parentId, name));
     }
 
     public async getEffectiveMembers(mountId: string, pathId: string): Promise<EffectiveMember[]> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getEffectiveMembers(mountId, pathId));
+        return this.withReadPermission(mountId, pathId, () => this.drive.getEffectiveMembers(mountId, pathId));
     }
 
     public async emailCollaborators(
@@ -259,7 +259,7 @@ export default class SharedDrive {
         sender: { name: string; email: string },
     ): Promise<{ sent: number }> {
         return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, sender),
+            this.drive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, sender),
         );
     }
 
@@ -275,10 +275,10 @@ export default class SharedDrive {
             throw new ApiError(403, 'No write permission');
         }
 
-        const chatPath = await this.sharedDrive.getPath(mountId, chatId);
+        const chatPath = await this.drive.getPath(mountId, chatId);
         if (!chatPath) throw new ApiError(404, 'Chat not found');
 
-        const container = await this.sharedDrive.findContainerPath(mountId, chatPath.parentId ?? '');
+        const container = await this.drive.findContainerPath(mountId, chatPath.parentId ?? '');
         const targetPath = container ?? chatPath;
 
         if (container && !(await this.canWrite(mountId, targetPath.id, this.user, memberships))) {
@@ -289,8 +289,7 @@ export default class SharedDrive {
             throw new ApiError(403, 'Sharing is restricted by the owner');
         }
 
-        // Delegate directly — Drive.inviteToChat would resolve the container again
-        return this.sharedDrive.inviteToChat(mountId, chatId, email, this.user);
+        return this.drive.inviteToChat(mountId, chatId, email, this.user);
     }
 
     public async checkAccessForEmails(
@@ -303,16 +302,16 @@ export default class SharedDrive {
             throw new ApiError(403, 'No read permission');
         }
 
-        const path = await this.sharedDrive.getPath(mountId, pathId);
+        const path = await this.drive.getPath(mountId, pathId);
         if (!path) throw new ApiError(404, 'Path not found');
 
-        // Same gate as updateACLDelta: write access, unless sharing is owner-restricted and the
-        // caller is not an (effective team) owner.
+        // The same rule as updateACLDelta: the caller needs write access. When the owner restricted
+        // sharing, the caller must also be an owner.
         const canWrite = await this.canWrite(mountId, pathId, this.user, memberships);
         const effectiveOwner = this.isEffectiveOwnerSync(path.ownerId, memberships);
         const canShare = canWrite && !(path.sharingRestricted && !effectiveOwner);
 
-        const { recipients } = await this.sharedDrive.checkAccessForEmails(mountId, pathId, emails);
+        const { recipients } = await this.drive.checkAccessForEmails(mountId, pathId, emails);
         return { canShare, recipients };
     }
 
@@ -330,7 +329,7 @@ export default class SharedDrive {
             throw new ApiError(403, 'No write permission');
         }
 
-        const path = await this.sharedDrive.getPath(mountId, pathId);
+        const path = await this.drive.getPath(mountId, pathId);
         if (!path) throw new ApiError(404, 'Path not found');
 
         const effectiveOwner = this.isEffectiveOwnerSync(path.ownerId, memberships);
@@ -339,7 +338,7 @@ export default class SharedDrive {
             throw new ApiError(403, 'Sharing is restricted by the owner');
         }
 
-        return this.sharedDrive.updateACLDelta(
+        return this.drive.updateACLDelta(
             mountId,
             pathId,
             delta,
@@ -353,19 +352,12 @@ export default class SharedDrive {
     public async deletePath(mountId: string, pathId: string, _user?: User): Promise<void> {
         // A path shared directly with the caller is left, not trashed: only their ACL entry goes,
         // whatever their permission level. Paths reached through a shared folder trash as usual.
-        const path = await this.sharedDrive.getPath(mountId, pathId);
+        const path = await this.drive.getPath(mountId, pathId);
         const own = path?.acl?.find((entry) => entry.id.toLowerCase() === this.user.email.toLowerCase());
         if (path && own && !this.isEffectiveOwnerSync(path.ownerId, await this.getUserMemberships())) {
-            return this.sharedDrive.updateACLDelta(
-                mountId,
-                pathId,
-                { remove: [own.id] },
-                undefined,
-                undefined,
-                this.user,
-            );
+            return this.drive.updateACLDelta(mountId, pathId, { remove: [own.id] }, undefined, undefined, this.user);
         }
-        return this.withWritePermission(mountId, pathId, () => this.sharedDrive.deletePath(mountId, pathId, this.user));
+        return this.withWritePermission(mountId, pathId, () => this.drive.deletePath(mountId, pathId, this.user));
     }
 
     public async restorePath(mountId: string, pathId: string, _user?: User): Promise<void> {
@@ -373,17 +365,16 @@ export default class SharedDrive {
         if (!this.isEffectiveOwnerSync(this.owner.id, memberships)) {
             throw new ApiError(403, 'Only the drive owner can restore from trash');
         }
-        return this.sharedDrive.restorePath(mountId, pathId, this.user);
+        return this.drive.restorePath(mountId, pathId, this.user);
     }
 
     public async listTrash(mountId: string): Promise<DrivePath[]> {
-        // Trash is owner-only — match restorePath / permanentlyDelete / emptyTrash so a
-        // non-owner can't enumerate items the owner deleted.
+        // Only the owner sees the trash, so nobody else can list what the owner deleted.
         const memberships = await this.getUserMemberships();
         if (!this.isEffectiveOwnerSync(this.owner.id, memberships)) {
             throw new ApiError(403, 'Only the drive owner can view trash');
         }
-        return this.sharedDrive.listTrash(mountId);
+        return this.drive.listTrash(mountId);
     }
 
     public async permanentlyDelete(mountId: string, pathId: string, _user?: User): Promise<void> {
@@ -391,7 +382,7 @@ export default class SharedDrive {
         if (!this.isEffectiveOwnerSync(this.owner.id, memberships)) {
             throw new ApiError(403, 'Only the drive owner can permanently delete from trash');
         }
-        return this.sharedDrive.permanentlyDelete(mountId, pathId, this.user);
+        return this.drive.permanentlyDelete(mountId, pathId, this.user);
     }
 
     public async emptyTrash(mountId: string, _user?: User): Promise<void> {
@@ -399,12 +390,12 @@ export default class SharedDrive {
         if (!this.isEffectiveOwnerSync(this.owner.id, memberships)) {
             throw new ApiError(403, 'Only the drive owner can empty trash');
         }
-        return this.sharedDrive.emptyTrash(mountId, this.user);
+        return this.drive.emptyTrash(mountId, this.user);
     }
 
     public async renamePath(mountId: string, pathId: string, newName: string, _user?: User): Promise<void> {
         return this.withParentWritePermission(mountId, pathId, () =>
-            this.sharedDrive.renamePath(mountId, pathId, newName, this.user),
+            this.drive.renamePath(mountId, pathId, newName, this.user),
         );
     }
 
@@ -416,14 +407,14 @@ export default class SharedDrive {
         if (!(await this.canWrite(mountId, targetParentId, this.user, memberships))) {
             throw new ApiError(403, 'No write permission on target folder');
         }
-        return this.sharedDrive.movePath(mountId, pathId, targetParentId, this.user);
+        return this.drive.movePath(mountId, pathId, targetParentId, this.user);
     }
 
     public async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
-        const bread = await this.sharedDrive.breadCrumb(mountId, pathId);
+        const bread = await this.drive.breadCrumb(mountId, pathId);
         const memberships = await this.getUserMemberships();
         const crumb: DrivePath[] = [];
-        // Walk from leaf to root, stopping at the first entry without read access
+        // From the path up, it stops at the first folder the caller can't read.
         while (bread.length > 0) {
             const path = bread.pop()!;
             const ancestorsFromHere = [...bread, path];
@@ -436,22 +427,21 @@ export default class SharedDrive {
         return crumb.reverse();
     }
 
-    // Opening a container's managed DB (comments.db, data.db) reads that path, so gate at read
-    // granularity — the seam's contract is "present on SharedDrive == ACL-checked".
+    // Opening a document's database, such as its comments.db, reads the document. So it needs read access.
     public async openDatabase<S extends SchemaType>(
         mountId: string,
         config: DatabaseConfig<S>,
         pathId: string,
     ): Promise<ManagedDatabase<S>> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.openDatabase(mountId, config, pathId));
+        return this.withReadPermission(mountId, pathId, () => this.drive.openDatabase(mountId, config, pathId));
     }
 
     public async listVersions(mountId: string, containerId: string): Promise<Snapshot[]> {
-        return this.withReadPermission(mountId, containerId, () => this.sharedDrive.listVersions(mountId, containerId));
+        return this.withReadPermission(mountId, containerId, () => this.drive.listVersions(mountId, containerId));
     }
 
     public async saveVersion(mountId: string, containerId: string): Promise<Snapshot> {
-        return this.withWritePermission(mountId, containerId, () => this.sharedDrive.saveVersion(mountId, containerId));
+        return this.withWritePermission(mountId, containerId, () => this.drive.saveVersion(mountId, containerId));
     }
 
     public async restoreContainer(
@@ -461,12 +451,12 @@ export default class SharedDrive {
         _user?: User,
     ): Promise<void> {
         return this.withWritePermission(mountId, containerId, () =>
-            this.sharedDrive.restoreContainer(mountId, containerId, snapshotName, this.user),
+            this.drive.restoreContainer(mountId, containerId, snapshotName, this.user),
         );
     }
 
     public async getFileHistory(mountId: string, pathId: string, opts?: { limit?: number }): Promise<FileEvent[]> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getFileHistory(mountId, pathId, opts));
+        return this.withReadPermission(mountId, pathId, () => this.drive.getFileHistory(mountId, pathId, opts));
     }
 
     public async recordClientFileEvent(
@@ -476,7 +466,7 @@ export default class SharedDrive {
         event: ClientFileEventRecord,
     ): Promise<void> {
         return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.recordClientFileEvent(mountId, pathId, this.user, event),
+            this.drive.recordClientFileEvent(mountId, pathId, this.user, event),
         );
     }
 
@@ -489,7 +479,7 @@ export default class SharedDrive {
         title?: string,
     ): Promise<boolean> {
         return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.assignComment(mountId, pathId, chatName, assignee, this.user, title),
+            this.drive.assignComment(mountId, pathId, chatName, assignee, this.user, title),
         );
     }
 
@@ -502,50 +492,38 @@ export default class SharedDrive {
         title?: string,
     ): Promise<void> {
         return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.setCommentStatus(mountId, pathId, chatName, status, this.user, title),
+            this.drive.setCommentStatus(mountId, pathId, chatName, status, this.user, title),
         );
     }
 
     public async watchPath(mountId: string, pathId: string, _user: User): Promise<void> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.watchPath(mountId, pathId, this.user));
+        return this.withReadPermission(mountId, pathId, () => this.drive.watchPath(mountId, pathId, this.user));
     }
 
-    // No permission gate: unwatching and reading one's own watch state must keep
-    // working after a share is revoked.
+    // No access check: a user must be able to stop watching, and see that they watch, after the share is gone.
     public async unwatchPath(mountId: string, pathId: string, _user: User): Promise<void> {
-        return this.sharedDrive.unwatchPath(mountId, pathId, this.user);
+        return this.drive.unwatchPath(mountId, pathId, this.user);
     }
 
     public async getWatchStatus(mountId: string, pathId: string, _user: User): Promise<PathWatchStatus> {
-        return this.sharedDrive.getWatchStatus(mountId, pathId, this.user);
+        return this.drive.getWatchStatus(mountId, pathId, this.user);
     }
 
     public async getWatches(_user: User): Promise<DrivePath[]> {
-        // Drop items the caller can no longer read (revoked shares keep their watch rows)
-        const breadcrumbs = await this.sharedDrive.getWatchedBreadcrumbs(this.user);
+        // A revoked share keeps its watch rows, so paths the caller can no longer read drop out here.
+        const breadcrumbs = await this.drive.getWatchedBreadcrumbs(this.user);
         const memberships = await this.getUserMemberships();
         return breadcrumbs
             .filter((ancestors) => canReadFromAncestors(ancestors, this.user, memberships))
             .flatMap((ancestors) => ancestors.slice(-1));
     }
 
-    // Team members always go through SharedDrive (no team user logs in),
-    // but they are co-owners and should bypass sharing restrictions.
-    private isEffectiveOwnerSync(ownerId: string, memberships: Memberships): boolean {
-        const parsed = parseOwnerId(ownerId);
-        if (parsed.type !== 'team') return false;
-        return memberships.teamIds.includes(parsed.id);
-    }
-
     public async getSharedWith(user: User): Promise<DrivePath[]> {
-        // No owner/team check — getSharedWith is self-filtering: it only returns
-        // paths where the querying user has ACL read access.
-        return this.sharedDrive.getSharedWith(user);
+        // No access check: the list only holds paths whose ACL lets this user read them.
+        return this.drive.getSharedWith(user);
     }
 
     public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
-        return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.updatePathDetails(mountId, pathId, details),
-        );
+        return this.withWritePermission(mountId, pathId, () => this.drive.updatePathDetails(mountId, pathId, details));
     }
 }

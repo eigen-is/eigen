@@ -1,15 +1,17 @@
+// The last steps of an upload, shared by Drive.uploadFiles and Drive.createFileFromData. They turn a
+// temp file into a file in the tree, tell open tabs and write the history row, and then make a
+// thumbnail in the background.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { User } from '../user';
-import type Drive from './drive';
+import type { Drive } from './drive';
 import { getUniqueFileName } from './naming';
 
-// Shared tail of both upload paths (uploadFiles, createFileFromData): sanitize + dedupe
-// the name against the parent, promote the temp file into the tree, emit + record, kick
-// the thumbnail worker. Fan-out stays with the caller so a multi-file upload notifies
-// watchers once per batch; on throw the caller owns cleanupTemp.
+// The caller tells the watchers, so an upload of many files notifies them once. When this throws, the
+// caller removes the temp file.
 export async function finalizeUpload(
     drive: Drive,
     mount: Mount,
@@ -23,7 +25,7 @@ export async function finalizeUpload(
         user?: User;
     },
 ): Promise<DrivePath> {
-    // NFC so dedup + getUniqueFileName compare against NFC siblings in the same form the store will use.
+    // The store keeps names in NFC, so the name is compared with its siblings in that form too.
     let safeName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
     const originalName = safeName;
 
@@ -46,8 +48,7 @@ export async function finalizeUpload(
         ? await mount.updatePath(pathId, { details: { originalName } })
         : await mount.getActivePath(pathId);
     drive.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-    // History row only — fan-out is the caller's job, so a multi-file upload
-    // notifies watchers once per batch instead of once per file.
+    // Only the history row. The caller tells the watchers.
     if (args.user) {
         mount.history.record({
             pathId,
@@ -58,8 +59,8 @@ export async function finalizeUpload(
     }
 
     if (uploadedFile.size === 0) {
-        // 0-byte placeholders (Finder's two-step copy) can't yield a thumbnail.
-        // Skip the worker spawn; the real bytes will arrive via writeFileContent.
+        // An empty file has no thumbnail. Finder copies in two steps: an empty file first, and the
+        // bytes later through writeFileContent.
         await mount.cleanupTemp(args.tempId);
     } else {
         regenerateThumbnailAsync(drive, mount, pathId, mount.getTempPath(args.tempId), args.mimeType, safeName, () =>

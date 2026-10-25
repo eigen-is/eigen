@@ -9,7 +9,7 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core/errors';
 import * as mailer from '../../lib/core/mailer';
-import Drive from '../../lib/drive/drive';
+import { Drive } from '../../lib/drive/drive';
 import { getEntriesForTarget } from '../../lib/share/registry';
 import {
     addMember,

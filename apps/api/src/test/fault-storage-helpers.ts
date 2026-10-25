@@ -5,7 +5,7 @@ import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { BunFile } from 'bun';
 import type { DatabaseConfig, SchemaType } from '../lib/core';
 import { ManagedDatabase, storageUnavailable } from '../lib/core';
-import type Drive from '../lib/drive/drive';
+import type { Drive } from '../lib/drive/drive';
 import type { Home } from '../lib/home';
 import { Mount } from '../lib/mount/mount';
 import { UPLOAD_PUT_TIMEOUT_MS } from '../lib/mount/upload-queue';

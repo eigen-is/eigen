@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { Snapshot } from '@workspace/lib/types/versioning';
-import type Drive from '../../lib/drive/drive';
+import type { Drive } from '../../lib/drive/drive';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
 import type { TestUser } from '../setup';
