@@ -1,3 +1,8 @@
+// readMathml and writeMathml: MathML, the form an equation is stored and drawn in. The writer marks what its own reader
+// needs to find the tree again, such as a large operator's body, and may carry the typed LaTeX as an annotation, which
+// readMathmlLatex hands back. The reader reads that dialect first, then the MathML other tools paste, such as KaTeX's
+// or MathJax's, as the picture it draws.
+
 import { MathError } from './error';
 import {
     ACCENTS,
@@ -36,7 +41,7 @@ const TEX = 'application/x-tex';
 const FUNCTION_APPLICATION = '\u2061';
 
 // Which children of a script element are the sub- and superscript.
-const SCRIPT_SLOTS = new Map<string, ('sub' | 'sup')[]>([
+const SCRIPT_SLOTS: ReadonlyMap<string, readonly ('sub' | 'sup')[]> = new Map([
     ['msub', ['sub']],
     ['munder', ['sub']],
     ['msup', ['sup']],
