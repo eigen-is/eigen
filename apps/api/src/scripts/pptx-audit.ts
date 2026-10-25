@@ -268,7 +268,7 @@ export const PPTX_LISTED: Listed<RoundtripDifference, PptxRoundtripContext>[] = 
     },
     {
         kind: "a line's box is its points' box",
-        why: 'A line or an arrow is written from its points, which a deck stores to the hundredth of a pixel, so its box comes back as their box, within the EMU its two ends round to apart',
+        why: 'A line or an arrow is written from its points, which a deck stores to the hundredth of a pixel, so its box comes back as their box, within an EMU: linearXml adds el.x and el.y to both points before segmentXml subtracts them, and the float error flips a half-EMU tie',
         matches: ({ feature, at, b }, context) => {
             const element = elementAt(context.a, at);
             if (!element || !('points' in element) || !/^(?:line|arrow|freedraw) (?:width|height)$/.test(feature))
