@@ -38,6 +38,7 @@ Examples per rule: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style)
 - No JSDoc: code should be self-documenting
 - Every `.ts`/`.tsx` source file, `scripts/` and the `packages/sheet` fork included, opens with a header comment and a blank line: two to five plain lines on what the file does, why it exists, and where it sits in the bigger picture (who calls it, when it runs). It stays true whatever other files do: what other files own (kinds, parts, callers) appears only as examples, never as a complete list. No file paths or doc links, which go stale. Test files, generated files and config files have none. An older file without one gets it the first time someone changes it
 - Beyond the header, comments only for high-complexity code or functions whose use isn't obvious to a maintainer of this repo, and they explain WHY, never WHAT. Write plain English that a non-native reader understands on the first read: short sentences, common words. Most code needs zero comments; no comment beats slop, and reviewers flag comment slop the same as dead code
+- A comment exists to clarify. Write it the way you would explain the code to a colleague sitting next to you: whole sentences, one thought each, the reason first. Don't pack several facts into one sentence with commas and semicolons, and don't write in shorthand only the author can decode. If a comment doesn't make the code easier to understand, delete it
 - Every class member states its access: `public`, `private` or `protected`, the narrowest that compiles
 - Class members in this order: fields, constructor, getters, lifecycle (init, close), then the rest
 - File names are kebab-case (`get-home.ts`); route files follow TanStack Router's naming. Named exports only, no `export default`, except in a config file whose tool requires one (`vite.config.ts`, the Drizzle config). An older file that breaks either is fixed when someone cleans it up
@@ -91,6 +92,7 @@ Before declaring any task complete, review every changed file against this list:
 - Do new `useQuery` hooks have `enabled` guards and `staleTime`?
 - Does the new code match the patterns and naming of its neighbors?
 - Does every file you changed open with a header comment that is still true?
+- Would a colleague understand every comment you wrote on the first read, and does each one clarify something the code doesn't say?
 - Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none))
 
 ## Standards Gates
