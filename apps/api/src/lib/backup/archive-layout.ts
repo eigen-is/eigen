@@ -1,6 +1,6 @@
 // What a home archive holds, read without a live home: the home databases, and a mount's paths table turned into
-// archive paths and storage keys. Capture, verify and both restores share it. Nothing it imports opens a file, so
-// ./eigen restore can stage an archive with it while the API runs on the same data/.
+// archive paths and storage keys. The backup steps share it, such as capture, verify and restore. Nothing it
+// imports opens a file, so ./eigen restore can stage an archive with it while the API runs on the same data/.
 
 import type { Database } from 'bun:sqlite';
 import type { DrivePathType } from '@workspace/lib/types/drive';

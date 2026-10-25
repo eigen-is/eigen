@@ -1,8 +1,8 @@
 // A Mount is one storage root of a Drive, such as a user's default drive or one team drive. Its
 // metadata.db holds the tree of files and folders, and a storage backend holds the bytes, such as name
 // paths on local disk or objects in an S3 bucket. Drive calls it for every file read and change, and a
-// backup opens one to read a mount the home does not serve. Trash, copy, search and the document
-// databases live in sibling modules, and Mount is the one way in to them.
+// backup opens one to read a mount the home does not serve. Some of its work lives in sibling modules,
+// such as trash, copy, search and the document databases.
 
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -86,8 +86,8 @@ export class Mount {
     // Only an s3 mount has an upload queue. It takes staged copies, such as document databases, to the
     // bucket in the background.
     public uploadQueue?: UploadQueue;
-    // init builds the reindex queue only when Drive passes a content extractor. Drive brings the
-    // document loaders in that way, so they stay out of this module's imports.
+    // init builds the reindex queue only when Drive passes a content extractor. The extractor is
+    // passed in so the document loaders stay out of this module's imports.
     public reindexQueue?: ContentReindexQueue;
 
     // init schedules the history prune after it returns. The timer is kept so a fast teardown can
@@ -951,8 +951,8 @@ export class Mount {
     // ---- Storage keys ----
 
     // With no row, an id key is still the id, so a read of a deleted file finds no object. A name path
-    // is a 404 then, and never the root's empty key, or a create into a deleted folder would write at
-    // the mount root.
+    // with no row is a 404. It must never be the root's empty key, or a create into a deleted folder
+    // would write at the mount root.
     public async getStorageKey(pathId: string): Promise<string> {
         const storageKey = await this.findStorageKey(pathId);
         if (storageKey !== null) return storageKey;
