@@ -54,6 +54,7 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Sharing** — a sharing change applies right away to every open document in that drive
 - **Links in Docs** — a collaborator's edit or an undo no longer turns a file name like plan.md into a link
 - **Wrapped images in Docs** — a wrapped image leaves room for the text and lists beside it
+- **Tables in Word downloads** — a table you download as Word and import again keeps its column widths. This holds for a table inside a cell and for a table without set widths too
 - **Copying from Sheets** — cells you paste into another app keep their rows and columns
 - **Pasting in Sheets** — a pasted cell keeps its font
 - **Keys in Sheets** — Tab and Ctrl+arrow move the way they do in Excel
