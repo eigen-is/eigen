@@ -1,3 +1,6 @@
+// The xlsx import's step in the transform process: the reader's sheets recalculated and encoded as the snapshot the
+// main thread commits.
+
 import type { Sheet } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';

@@ -1,3 +1,6 @@
+// A docx paragraph's inline content, run by run: text with its marks and fonts, breaks, fields, checkboxes, notes and
+// equations, which the paragraph walk turns into blocks.
+
 import type { JSONContent } from '@tiptap/core';
 import { isAllowedUri } from '@tiptap/extension-link';
 import { readFontSize } from '@workspace/lib/constants/fonts';

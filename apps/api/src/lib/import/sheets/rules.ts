@@ -1,3 +1,7 @@
+// A worksheet's conditional formats and data validations, read from the part beside its grid. Excel 2010 writes what
+// the 2007 schema can't hold, a rule or a list over another sheet, into the extension list, read here too. What a rule
+// emits is charged before it is built: the ranges a format holds, the cells a validation keys and their text.
+
 import { formatInputDate } from '@workspace/lib/date';
 import type {
     ConditionalFormatConditionName,
@@ -30,10 +34,6 @@ import {
 import type { DxfLook, ThemePalette } from './styles';
 import { colorOf, dxfLook, resolveColor } from './styles';
 import { cellKey } from './worksheet';
-
-// A worksheet's conditional formats and data validations, read from the part beside its grid. Excel 2010 writes what
-// the 2007 schema can't hold, a rule or a list over another sheet, into the extension list, read here too. What a rule
-// emits is charged before it is built: the ranges a format holds, the cells a validation keys and their text.
 
 export type RulesContext = {
     dxfs: DxfLook[];

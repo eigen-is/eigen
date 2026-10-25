@@ -1,3 +1,5 @@
+// The xlsx writer's entry: an export's sheets to the bytes of a workbook, run in the transform process.
+
 import type { Sheet } from '@workspace/lib/sheets';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { TransformWarning } from '../../../document/transform/protocol';

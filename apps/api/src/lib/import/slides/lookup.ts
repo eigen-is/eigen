@@ -1,3 +1,6 @@
+// The pptx reader's lookups into an element, each scan of many children done once, and the work budget a read
+// charges, so whatever a file repeats or keys a cache by costs the read no more than its cap.
+
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren, xmlElements } from '../../core/xml';
 import type { Budget } from '../../ooxml/budget';

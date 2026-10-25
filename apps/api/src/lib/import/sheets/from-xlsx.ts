@@ -1,3 +1,5 @@
+// xlsx bytes → Eigen's sheets, straight from the SpreadsheetML. Runs in the transform process.
+
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
@@ -25,8 +27,6 @@ import { readRules } from './rules';
 import { readSharedStrings } from './strings';
 import { defaultFontDigitWidth, readDxfs, readLooks, themePalette } from './styles';
 import { readWorksheet } from './worksheet';
-
-// xlsx bytes → Eigen's sheets, straight from the SpreadsheetML. Runs in the transform process.
 
 // A cell costs about 480 B in the sheets alone, and recalc and the snapshot copy it: the cells emitted count, merged and
 // validated ones among them, and every sheet's span, so a tiny file can't declare far-apart cells whose grid recalc

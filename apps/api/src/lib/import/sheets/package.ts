@@ -1,3 +1,6 @@
+// The xlsx package: the workbook part, its sheets and the parts every sheet shares, and a part's children read a batch
+// at a time, since a sheet's grid and the shared strings can each be the whole decompressed cap.
+
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, XmlError, xmlAttr, xmlChild, xmlChildren } from '../../core/xml';
@@ -6,9 +9,6 @@ import { isOn, parseOoxml, R_NS, SML_NS } from '../../ooxml/ooxml';
 import type { OoxmlPackage } from '../../ooxml/opc';
 import { MAX_PACKAGE_XML_BYTES, MAX_PACKAGE_XML_TAGS, openPackage, optional, relOfType, tagsIn } from '../../ooxml/opc';
 import { IMPORT_MESSAGES } from '../messages';
-
-// The xlsx package: the workbook part, its sheets and the parts every sheet shares, and a part's children read a batch
-// at a time, since a sheet's grid and the shared strings can each be the whole decompressed cap.
 
 // A chart sheet is a sheet without a grid, holding its drawing's chart.
 export type WorkbookSheet = { name: string; path: string; hidden: boolean; chartSheet: boolean };

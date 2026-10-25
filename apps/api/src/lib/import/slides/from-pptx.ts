@@ -1,3 +1,6 @@
+// pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
+// process; transform.ts writes the result as a Yjs update.
+
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { NewVectorElement, SlidePage } from '@workspace/lib/vector';
 import { MAX_SLIDE_WIDTH, MIN_SLIDE_WIDTH, nearestSlideSize, SLIDE_SIZES } from '@workspace/lib/vector';
@@ -15,9 +18,6 @@ import { childOf, withWorkBudget } from './lookup';
 import type { DeckWalk } from './package';
 import { readPackage } from './package';
 import { readSlideShapes } from './shapes';
-
-// pptx bytes → the slides of a deck: frames, the elements on them and the pictures they show. Runs in the transform
-// process; transform.ts writes the result as a Yjs update.
 
 export type PptxSlide = { name: string; background: BackgroundFill | null; elements: NewVectorElement[] };
 

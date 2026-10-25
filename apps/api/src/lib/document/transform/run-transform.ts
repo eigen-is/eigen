@@ -1,3 +1,9 @@
+// The one main-thread path every document transform takes: admit the job, surface its warnings and map its failures,
+// and for a document-sourced job capture the compressed Yjs blobs first. A caller adds only its job fields and what it
+// does with the result, so a new operation is a thin wrapper here plus a pure converter in the transform process. There
+// is no main-thread fallback: a runner 503 and a controlled document error keep their status, an import or a search
+// extract out of memory is a file too large, a search extract that timed out too, and any other failure throws.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
@@ -23,17 +29,6 @@ import type {
 } from './protocol';
 import type { RunOptions, TransformPriority } from './runner';
 import { documentTransformRunner, TRANSFORM_LIMITS } from './runner';
-
-// The one main-thread path every document transform takes: admit the job, surface
-// warnings, map failures — plus, for document-sourced jobs, the capture of the
-// compressed Yjs blobs. A caller adds only its job fields and what it does with
-// the result, so a new operation (doc/slides preview, HTML/PDF/DOCX export, DOCX
-// import) is a thin wrapper plus a pure converter in the transform process — no new
-// orchestration.
-//
-// There is deliberately no main-thread fallback: a runner 503 and controlled
-// document errors keep their HTTP status, an import or a search extract that ran out of
-// memory is a file too large, as is a search extract that timed out, every other failure throws.
 
 // What a caller still decides; the limits belong to the job kind (TRANSFORM_LIMITS),
 // and the capture time is measured here. prepMs: main-thread media preparation time,
