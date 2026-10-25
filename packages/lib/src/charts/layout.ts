@@ -472,8 +472,8 @@ function parity(ctx: Context, labels: ChartLabel[]): ChartLabel[] {
     return kept;
 }
 
-// The data's range, zero included for bars, which grow from it; a line's axis fits its data, as Excel's
-// and Google's do, unless the line is flat. Stacks sum positives and negatives apart.
+// The data's range, zero included for bars, which grow from it; a line's axis fits its data unless the line
+// is flat. Stacks sum positives and negatives apart.
 function valueExtent(
     values: (number | null)[][],
     stacked: boolean,
