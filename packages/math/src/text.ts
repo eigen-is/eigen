@@ -1,8 +1,10 @@
+// writeText writes an equation as plain text on one line, in a small subset of UnicodeMath, Word's linear format:
+// (a+b)/2, x^(n+1), √(x+1). A caller uses it where only text fits, such as a word count or the plain text a copy
+// puts on the clipboard. Nothing reads it back.
+
 import { toAlphanumeric } from './notation';
 import type { MathNode, MathRow } from './tree';
 import { checkedXml } from './xml';
-
-// Word's linear format, a small UnicodeMath subset on one line, as an equation's plain text. Nothing reads it back.
 
 const COMBINING_LINES = { over: '\u0305', under: '\u0332' } as const;
 // UnicodeMath's above and below operators.
