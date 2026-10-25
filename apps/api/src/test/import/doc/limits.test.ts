@@ -117,7 +117,7 @@ function measuredImport(
         let result;
         try {
             if (process.env.THROUGH === 'transform') {
-                importDocxToEigendocUpdate(data, { publicOrigin: undefined, maxMediaBytes: 200 * 1024 * 1024 });
+                importDocxToEigendocUpdate(data, { publicOrigin: undefined, maxMediaBytes: ${MAX_DECOMPRESSED_BYTES} });
                 result = {};
             } else {
                 const { json } = docxToPmJson(Buffer.from(data));
