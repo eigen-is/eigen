@@ -1,3 +1,8 @@
+// Excel's vocabulary, one source for the xlsx writer that writes it and the xlsx reader that recognises it: content
+// types, the date systems, column widths in pixels, Excel's limits, built-in number formats, the _xHHHH_ escapes, the
+// names of conditional formats and data validations, and the prefixes of the functions Excel added after 2007. The
+// OOXML every format shares sits in its own module.
+
 import type { EigenFont } from '@workspace/lib/constants/fonts';
 import type { ConditionalFormatConditionName } from '@workspace/lib/sheets';
 import {
@@ -8,30 +13,28 @@ import {
     SHEET_DEFAULT_FONT,
 } from '@workspace/lib/sheets';
 
-// Excel's vocabulary, which the xlsx writer writes and the xlsx reader recognises, one source both ways. The OOXML every
-// format shares is ooxml/ooxml.ts.
-
-// The prefix of SpreadsheetML's content types, and a sheet's drawing part's, which DrawingML's prefix names.
+// The prefix of SpreadsheetML's content types, and the content type of a sheet's drawing part, which is DrawingML's.
 export const SPREADSHEETML = 'application/vnd.openxmlformats-officedocument.spreadsheetml';
 export const DRAWING_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.drawing+xml';
 
-// The format a date shows in when its own draws no date: Excel's for a bare serial in the US locale.
+// The format a date shows in when its own format draws no date. It is Excel's for a bare serial in the US locale.
 export const DATE_FORMAT = 'm/d/yyyy';
 
-// Day 0 of Excel's 1900 date system is 1899-12-30, as Lotus 1-2-3 counted a 29 February 1900 that never was.
+// Day 0 of Excel's 1900 date system is 1899-12-30, because Lotus 1-2-3 counted a 29 February 1900 that never was.
 export const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 export const DAY_MS = 86_400_000;
 // A 1904 workbook counts its days from 1904-01-01, 1,462 days after the 1900 system's day 0.
 export const DAYS_1904 = 1462;
 
-// A sheet's defaults when its sheetFormatPr names none (ECMA-376 Part 1 § 18.3.1.81): baseColWidth's 8 digits, and
-// Excel's row at Calibri 11 in points.
+// A sheet's defaults when its sheetFormatPr names none (ECMA-376 Part 1 § 18.3.1.81). The column is baseColWidth's 8
+// digits, and the row is Excel's at Calibri 11, in points.
 export const DEFAULT_BASE_COL_WIDTH = 8;
 export const DEFAULT_ROW_HEIGHT_PT = 15;
 
-// The default font's widest digit in pixels as Excel for Windows draws it at 96 dpi, by the least point size each holds
-// from. GDI's hinted advances, not the outline's, so measured: EPPlus' FontSize table, which the corpus' Excel-written
-// widths agree with. Aptos Narrow draws Calibri's grid, and a metric-compatible face counts as the one it stands in for.
+// The default font's widest digit in pixels, as Excel for Windows draws it at 96 dpi. Each entry holds from its point
+// size up. These are GDI's hinted advances, not the outline's, so they are measured: EPPlus' FontSize table, which the
+// corpus's Excel-written widths agree with. Aptos Narrow draws Calibri's grid, and a metric-compatible face counts as
+// the face it stands in for.
 const CALIBRI_DIGIT: [number, number][] = [
     [7.5, 6],
     [9.5, 7],
@@ -67,10 +70,10 @@ const DIGIT_WIDTHS = new Map<string, [number, number][]>([
     ['times new roman', TIMES_DIGIT],
     ['liberation serif', TIMES_DIGIT],
 ]);
-// Calibri 11's, Excel's default since 2007, and Arial 10's before it.
+// The digit of Calibri 11, Excel's default since 2007, and of Arial 10 before it.
 const FALLBACK_DIGIT_WIDTH = 7;
 
-// An Eigen export's default font is Inter, whose digit the writer converts through.
+// An Eigen export's default font is Inter, so the writer converts its widths through Inter's digit.
 export function maxDigitWidth(font: string | undefined, size: number): number {
     if (font === SHEET_DEFAULT_FONT.name) return SHEET_DEFAULT_DIGIT_WIDTH;
     let digit = FALLBACK_DIGIT_WIDTH;
@@ -79,7 +82,7 @@ export function maxDigitWidth(font: string | undefined, size: number): number {
 }
 
 // A column width counts digits plus 5 px of padding, in 256ths of a digit (ECMA-376 Part 1 § 18.3.1.13). The writer
-// truncates to the 256th below, so the reader's half-256th rounding lands back on the pixel.
+// truncates to the 256th below, and the reader rounds by half a 256th, so a width lands back on its pixel.
 export function columnWidthToPx(width: number, digit: number): number {
     return Math.trunc(((256 * width + Math.trunc(128 / digit)) / 256) * digit);
 }
@@ -88,21 +91,21 @@ export function pxToColumnWidth(px: number, digit: number): number {
     return Math.trunc((px * 256) / digit) / 256;
 }
 
-// Excel's limits on a formula's characters and a number format's, and on a string a formula quotes, a list
-// validation's literal among them.
+// Excel's limits on the characters of a formula and of a number format, and of a string a formula quotes, such as a
+// list validation's literal.
 export const MAX_FORMULA_LENGTH = 8192;
 export const MAX_NUMBER_FORMAT_LENGTH = 255;
 export const MAX_FORMULA_STRING_LENGTH = 255;
-// Excel's limits on a cell's text, a workbook's cell formats and a sheet's links; a sheet name's are the engine's
-// (a1-notation.ts).
+// Excel's limits on a cell's text, a workbook's cell formats and a sheet's links. The limits on a sheet name are the
+// formula engine's.
 export const MAX_TEXT_LENGTH = 32_767;
 export const MAX_CELL_FORMATS = 64_000;
 export const MAX_SHEET_LINKS = 65_530;
 // Excel's limit on a validation's input message.
 export const MAX_PROMPT_LENGTH = 255;
 
-// A ref's cells, past its sheet's name, all in Excel's grid: a defined name shaped like a cell (UkRegion2) names a
-// column past XFD.
+// Whether a ref's cells, after its sheet's name, all lie in Excel's grid. A defined name shaped like a cell, such as
+// UkRegion2, names a column past XFD.
 export function inExcelGrid(ref: string): boolean {
     return ref
         .slice(ref.lastIndexOf('!') + 1)
@@ -157,7 +160,7 @@ export const FONT_FAMILY_NUMBER: Record<EigenFont['category'], number> = {
     'hand-drawn': 4,
 };
 
-// A character XML can't hold is written _xHHHH_, and _x005F_ escapes the underscore of a literal one.
+// A character XML can't hold is written as _xHHHH_. An underscore that starts a literal _xHHHH_ is written as _x005F_.
 const ESCAPED = /_x([0-9A-Fa-f]{4})_/g;
 
 export function decodeEscapes(text: string): string {
@@ -166,8 +169,8 @@ export function decodeEscapes(text: string): string {
         : text;
 }
 
-// A control character XML 1.0 can't hold, and a literal escape's underscore. Tab, line feed and carriage return XML
-// holds, and the C1 controls past U+007F.
+// The characters to escape: a control character XML 1.0 can't hold, and the underscore of a literal escape. XML holds
+// tab, line feed and carriage return, and the controls from U+007F on, so those stay as they are.
 const UNESCAPED = /[\p{Cc}\uFFFE\uFFFF]|_(?=x[0-9A-Fa-f]{4}_)/gu;
 
 export function encodeEscapes(text: string): string {
@@ -178,7 +181,7 @@ export function encodeEscapes(text: string): string {
     });
 }
 
-// A number as a rule's operand holds it, unquoted; anything else is a reference, a function or a quoted string.
+// A number as a rule's operand holds it, unquoted. Any other operand is a reference, a function or a quoted string.
 export const NUMERIC = /^-?(?:\d+(?:\.\d*)?|\.\d+)$/;
 
 // A cellIs rule's operators, which the engine's comparisons are named after.
@@ -210,7 +213,8 @@ export const DUPLICATE_XLSX_RULE = new Map(DUPLICATE_RULES);
 export const DUPLICATE_RULE = new Map(DUPLICATE_RULES.map(([value, type]) => [type, value]));
 
 // A data validation's type and the engine's for it, one list both ways. Excel's decimal admits any number, as the
-// engine's number does, while number_decimal rejects integers: it writes as decimal and reads back as number.
+// engine's number does. The engine's number_decimal rejects integers, so it is written as decimal and reads back as
+// number.
 const DV_TYPES: [string, string][] = [
     ['list', 'dropdown'],
     ['whole', 'number_integer'],
@@ -234,7 +238,7 @@ type DvOperator =
     | 'greaterThanOrEqual'
     | 'lessThanOrEqual';
 
-// A data validation's operator and the engine's type2 for it (DataVerificationRule), one list both ways; a date rule
+// A data validation's operator and the engine's type2 for it (DataVerificationRule), one list both ways. A date rule
 // words its comparisons as the date dialog does.
 const DV_COMMON_OPERATORS: [DvOperator, string][] = [
     ['between', 'between'],
@@ -264,8 +268,8 @@ export const DV_XLSX_DATE_OPERATOR = new Map<string, DvOperator>(
     DV_DATE_OPERATORS.map(([operator, type2]) => [type2, operator]),
 );
 
-// The functions Excel added after 2007, which a file stores as `_xlfn.NAME`, so an Excel that lacks one shows #NAME?
-// rather than misreading it. Excel reads one without the prefix as an unknown name, so the writer must add it back.
+// The functions Excel added after 2007. A file stores each as `_xlfn.NAME`, so an older Excel that lacks one shows
+// #NAME? rather than misreading it. Excel reads one without the prefix as an unknown name, so the writer adds it back.
 const FUTURE_FUNCTIONS = new Set([
     'ACOT',
     'ACOTH',
@@ -430,7 +434,7 @@ const WORKSHEET_FUNCTIONS = new Set(['FILTER', 'SORT']);
 
 const PREFIXES = ['_xlfn.', '_xlws.'];
 
-// The engine knows a function by its name alone, so a stored one loses its prefixes and recomputes.
+// The engine knows a function by its name alone, so a stored formula loses its prefixes and recomputes.
 export function withoutFuturePrefixes(formula: string): string {
     return renameFunctions(formula, (name) => {
         let bare = name;
@@ -447,7 +451,7 @@ export function withFuturePrefixes(formula: string): string {
     });
 }
 
-// Each name a `(` follows, outside a string, a quoted sheet name and a structured reference's brackets.
+// Renames each name that a `(` follows. Strings, quoted sheet names and a structured reference's brackets are skipped.
 function renameFunctions(formula: string, rename: (name: string) => string): string {
     let out = '';
     let at = 0;

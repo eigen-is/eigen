@@ -1,17 +1,20 @@
+// Word's vocabulary, one source for the docx writer that writes it and the docx reader that recognises it: content
+// types, style names, list formats and Word's spelling of a list number, alignment, table limits, units, and the
+// names a font table, a drawing's wrap or a link's look uses. The OOXML every format shares sits in its own module.
+
 import type { EigenFont } from '@workspace/lib/constants/fonts';
 import type { PageNumberKind } from '@workspace/lib/docs/eigendoc';
 import { ptToTwips, pxToPt } from '@workspace/lib/docs/eigendoc';
 
-// Word's vocabulary, which the docx writer writes and the docx reader recognises, one source both ways: style names,
-// list formats, units and Word's spelling of a number. The OOXML every format shares is ooxml/ooxml.ts.
-
 // The prefix of WordprocessingML's content types.
 export const WML = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
 
-// Not a namespace: the uri of Word's compatibility settings.
+// The uri of Word's compatibility settings, which looks like a namespace but is not one.
 export const WORD_SETTINGS_URI = 'http://schemas.microsoft.com/office/word';
 
-// ── Styles: Word lists a style by its name, which a re-save keeps where an id may change ────────────────────────────
+// ── Styles ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// Word lists a style by its name. A re-save keeps the name, while the id may change.
 
 export const STYLE_NAMES = {
     Normal: 'Normal',
@@ -48,7 +51,7 @@ export function headingLevel(styleName: string): number | undefined {
     return level === undefined ? undefined : Number(level);
 }
 
-// A code block's language rides on a hidden style of its own, based on Code Block.
+// A code block's language is kept in a hidden style of its own, based on Code Block.
 export function codeBlockStyle(language: string): { id: `CodeBlock-${string}`; name: string } {
     return { id: `CodeBlock-${language}`, name: `${STYLE_NAMES.CodeBlock} (${language})` };
 }
@@ -75,7 +78,7 @@ export const LIST_FORMATS = new Map([
 
 export const LIST_TYPES = new Map([...LIST_FORMATS].map(([type, format]) => [format, type]));
 
-// A number as a level of that numFmt shows it; a format spelled otherwise shows decimal.
+// A number as a list level of that numFmt shows it. Any other format shows it as a decimal.
 export function spellNumber(value: number, format: string): string {
     switch (format) {
         case 'lowerLetter':
@@ -134,7 +137,7 @@ export const CHECKBOX_GLYPHS = { checked: '☒', unchecked: '☐' } as const;
 
 // ── Formatting ─────────────────────────────────────────────────────────────────────────────────────────────────
 
-// A highlight without a color: the UA's yellow <mark>, and Word's yellow highlight.
+// The colour of a highlight that names none: the browser's yellow <mark>, which is also Word's yellow highlight.
 export const DEFAULT_HIGHLIGHT = 'FFFF00';
 
 // A paragraph's w:jc for each of the editor's text alignments.
@@ -145,8 +148,8 @@ export const JUSTIFICATION = new Map([
     ['justify', 'both'],
 ]);
 
-// A w:jc as the editor's text alignment. Left is the default, so no attribute (Google Docs writes it on every
-// paragraph); start and end follow the direction.
+// A w:jc as the editor's text alignment. Left is the default, so it is null, the editor's unset value; Google Docs
+// writes it on every paragraph. Start and end follow the paragraph's direction.
 export function textAlignOf(jc: string | undefined, bidi: boolean | undefined): string | null {
     switch (jc) {
         case 'center':
@@ -165,21 +168,22 @@ export function textAlignOf(jc: string | undefined, bidi: boolean | undefined): 
     }
 }
 
-// Section types that start a new page; continuous and nextColumn don't, and a missing type is nextPage.
+// The section types that start a new page. Continuous and nextColumn don't, and a missing type means nextPage.
 export const PAGE_SECTION_TYPES = new Set(['nextPage', 'oddPage', 'evenPage']);
 
 // The field each page number kind writes, as w:instr names it.
 export const PAGE_NUMBER_FIELDS: Record<PageNumberKind, string> = { page: 'PAGE', pages: 'NUMPAGES' };
 
-// Word's widest table. The reader and the writer cap the grid at it, so no row walks or fills a column past it.
+// Word's widest table. The reader and the writer cap a table's grid at it, so no row walks or fills a column past it.
 export const MAX_TABLE_COLUMNS = 63;
 
-// Eigen's spelling of a column with no stored width, ECMA's No Width on its cells' w:tcW: the grid holds only its
-// layout. Word's own auto is laid out by Word, so it reads as a width.
+// How Eigen writes a column with no stored width: ECMA's No Width on its cells' w:tcW, so the grid holds only its
+// layout. Word's own auto is a width Word lays out, so the reader reads it as a width.
 export const NO_STORED_WIDTH = 'nil';
 
-// The notes a notes part holds that no reference names: the rule above the notes, the one above a note a page break
-// continues, and the notice under one. Word writes the first two as notes -1 and 0 and names them in its settings.
+// The notes in a notes part that no reference names. They are the rule above the notes, the rule above a note that
+// a page break continues, and the notice under such a note. Word writes the first two as notes -1 and 0 and names
+// them in its settings.
 export const NOTE_SEPARATORS = ['separator', 'continuationSeparator', 'continuationNotice'] as const;
 
 // ── Units ───────────────────────────────────────────────────────────────────────────────────────────────────────
