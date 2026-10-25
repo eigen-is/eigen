@@ -1,3 +1,8 @@
+// The equation tree: MathNode, a closed union of the nodes an equation is made of, and MathRow, a row of them.
+// RowBuilder is how every reader builds a row: it takes characters with their style and cuts them into canonical
+// tokens, so a tree comes out the same however the input split its runs. MATH_LIMITS holds the bounds, and bound()
+// checks them as a reader builds, so untrusted input ends in a MathError and never in a stack overflow.
+
 import { MathError } from './error';
 import { ACCENTS, fromAlphanumeric, MINUS, SCRIPT_CHARS, SPACES, UPRIGHT_LETTERS } from './notation';
 import { checkedXml, replaceEdges, trimXmlSpace } from './xml';
@@ -102,11 +107,11 @@ const LETTER = /^\p{L}$/u;
 export const MARK = /^\p{M}$/u;
 export const DIGIT = /^[0-9]$/;
 const SPACE_OF_CHAR = new Map<string, MathSpace>([
-    [SPACES.normal.text, 'normal'],
-    [SPACES.thin.text, 'thin'],
-    [SPACES.medium.text, 'medium'],
-    [SPACES.thick.text, 'thick'],
-    [SPACES.quad.text, 'quad'],
+    // A qquad is two quads, which pair up as a row is built.
+    ...MATH_SPACES.filter((width) => width !== 'qquad').map((width): [string, MathSpace] => [
+        SPACES[width].text,
+        width,
+    ]),
     // The no-break space belongs to text; between math characters, as XML's whitespace, it is a plain space.
     ['\u00A0', 'normal'],
     ['\t', 'normal'],

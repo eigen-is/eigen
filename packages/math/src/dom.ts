@@ -1,3 +1,6 @@
+// fromDom adapts a browser DOM element to MathXmlElement, the shape the MathML and OMML readers take, so a paste or
+// a DOMParser result reads like the XML the API parses.
+
 import type { MathXmlElement } from './xml';
 
 // The DOM, structurally: the package has no DOM types.

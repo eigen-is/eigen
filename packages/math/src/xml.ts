@@ -1,3 +1,7 @@
+// The XML helpers every reader and writer shares. A reader takes MathXmlElement, an element its caller parsed, never
+// a string, so the package holds no XML parser. Around it sit small tools, such as reading an attribute without its
+// prefix, refusing a character XML can't hold and escaping what a writer writes.
+
 import { MathError } from './error';
 
 // Bun's XmlElement as is, or a DOM element through fromDom. Attributes keep their prefix: `m:val` answers to `val`.
@@ -28,7 +32,7 @@ export function attribute(element: MathXmlElement, local: string): string | unde
     return undefined;
 }
 
-// XML 1.0 § 2.2 Char, negated: the package throws on one, where lib's core/xml.ts strips it.
+// XML 1.0 § 2.2 Char, negated: the package throws on one, where lib's stripNonXmlChars strips it.
 export const NOT_XML = /[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/u;
 
 export function checkedXml(text: string): string {
@@ -51,7 +55,7 @@ export function trimXmlSpace(text: string): string {
     return replaceEdges(text, XML_SPACE, '');
 }
 
-const ESCAPES: Record<string, string> = {
+const ESCAPES: Readonly<Record<string, string>> = {
     '&': '&amp;',
     '<': '&lt;',
     '>': '&gt;',
@@ -60,8 +64,9 @@ const ESCAPES: Record<string, string> = {
     '\n': '&#10;',
     '\r': '&#13;',
 };
+const ESCAPED = new RegExp(`[${Object.keys(ESCAPES).join('')}]`, 'g');
 
 // For text and attributes: `>` so `]]>` closes nothing, whitespace as references an attribute won't read as spaces.
 export function escapeXml(text: string): string {
-    return text.replace(/[&<>"\t\n\r]/g, (char) => ESCAPES[char]);
+    return text.replace(ESCAPED, (char) => ESCAPES[char]);
 }

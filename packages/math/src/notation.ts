@@ -1,3 +1,7 @@
+// The character tables every format shares, such as the accents with their spacing twins, the spaces and their
+// widths, the large operators by name, the colour names and Unicode's mathematical alphanumerics. Readers and writers
+// look a character up here, so each fact about one is written once.
+
 import type { MathSpace, MathVariant } from './tree';
 
 // Each accent as OMML and the tree hold it (combining) and as MathML draws it (spacing). U+203E stays the line's.
@@ -48,6 +52,10 @@ export const SPACES: Readonly<Record<MathSpace, { text: string; width: string }>
 // Unicode normalisation turns them into the CJK U+3008 and U+3009.
 export const FENCES: ReadonlySet<string> = new Set(['\u2329', '\u232A', ...'()[]{}|‖⌈⌉⌊⌋⟨⟩⟦⟧⟮⟯⦃⦄']);
 
+// A line thickness whose number is zero, in any unit (`0`, `0.0em`, `0pt`, `0%`), draws no bar. MathML's linethickness
+// and LaTeX's \genfrac both read it.
+export const isNoLine = (thickness: string): boolean => Number.parseFloat(thickness) === 0;
+
 export const PRIME = '′';
 
 // CSS's basic colour names and the rest LaTeX's xcolor shares with CSS, as browsers draw them: KaTeX and MathJax hand
@@ -89,7 +97,8 @@ export const SCRIPT_CHARS: ReadonlyMap<string, readonly ['sub' | 'sup', string]>
     ),
 );
 
-// The large operators by their unicode-math names, which LaTeX writes.
+// The large operators by their unicode-math names, which LaTeX writes. The integrals stand apart, since Word puts
+// their limits beside them.
 const INTEGRAL_NAMES: Readonly<Record<string, string>> = {
     int: '∫',
     iint: '∬',

@@ -1,3 +1,7 @@
+// readOmml and writeOmml: Word's equations, OMML, read into the tree and written back. The reader follows what Word
+// shows, so a tracked deletion, a hidden script or an equation's number drops out, and readOmmlText reads the text of
+// an equation readOmml refuses. A caller, such as the docx import or export, parses and binds the XML around them.
+
 import { COMBINING_ACCENTS, MINUS, naryLimits, SPACES } from './notation';
 import type { MathBudget, MathEnclosure, MathNode, MathRow, MathVariant, RowSlot } from './tree';
 import {
@@ -125,8 +129,8 @@ const SYMBOL_FONT: ReadonlyMap<number, string> = new Map([
 ]);
 
 // Tracked changes: what an insertion or a move's destination holds shows, a deletion or a move's source doesn't.
-const INSERTED = new Set(['ins', 'moveTo']);
-const DELETED = new Set(['del', 'moveFrom']);
+const INSERTED: ReadonlySet<string> = new Set(['ins', 'moveTo']);
+const DELETED: ReadonlySet<string> = new Set(['del', 'moveFrom']);
 
 // ── Reader ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -427,7 +431,7 @@ export function readOmmlText(oMath: MathXmlElement): string {
     // null marks where an object of the row ends.
     const stack: (MathXmlElement | null)[] = [];
     const walk = (elements: MathXmlElement[]) => {
-        for (let index = elements.length - 1; index >= 0; index--) stack.push(elements[index]);
+        for (const element of elements.toReversed()) stack.push(element);
     };
     walk(elementsOf(oMath));
     let inObject = false;

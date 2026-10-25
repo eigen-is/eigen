@@ -90,6 +90,7 @@ test.each<[MathRow, string]>([
     [[{ kind: 'fenced', open: '(', close: ')', separator: ',', parts: [letter('a'), letter('b')] }], '(a,b)'],
     [[{ kind: 'fenced', open: '{', close: '}', separator: '│', parts: [letter('x'), sum('x', 'y')] }], '{x│x+y}'],
     [[{ kind: 'function', name: letter('sin'), body: letter('x') }], 'sin x'],
+    [[{ kind: 'function', name: letter('sin'), body: [] }], 'sin'],
     [
         [
             {

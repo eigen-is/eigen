@@ -1,9 +1,15 @@
+// readMathml and writeMathml: MathML, the form an equation is stored and drawn in. The writer marks what its own reader
+// needs to find the tree again, such as a large operator's body, and may carry the typed LaTeX as an annotation, which
+// readMathmlLatex hands back. The reader reads that dialect first, then the MathML other tools paste, such as KaTeX's
+// or MathJax's, as the picture it draws.
+
 import { MathError } from './error';
 import {
     ACCENTS,
     COLOR_NAMES,
     COMBINING_ACCENTS,
     FENCES,
+    isNoLine,
     LARGE_OPERATORS,
     LINES,
     MINUS,
@@ -36,7 +42,7 @@ const TEX = 'application/x-tex';
 const FUNCTION_APPLICATION = '\u2061';
 
 // Which children of a script element are the sub- and superscript.
-const SCRIPT_SLOTS = new Map<string, ('sub' | 'sup')[]>([
+const SCRIPT_SLOTS: ReadonlyMap<string, readonly ('sub' | 'sup')[]> = new Map([
     ['msub', ['sub']],
     ['munder', ['sub']],
     ['msup', ['sup']],
@@ -66,8 +72,6 @@ const NOTATIONS: ReadonlyMap<string, readonly MathEnclosure[]> = new Map([
     ['madruwb', ['right', 'bottom']],
     ['longdiv', ['left', 'top']],
 ]);
-
-const NO_LINE = /^0(?:px|em|pt)?$/;
 
 // ── Reader ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -120,7 +124,8 @@ function scopeOf(element: MathXmlElement, scope: Scope): Scope {
 
 // The space nearest a width: KaTeX writes a thin space 0.1667em, MathJax 0.167em.
 function spaceOf(width = ''): MathSpace | undefined {
-    const em = width.endsWith('em') ? Number(width.slice(0, -2)) : Number.NaN;
+    const lower = width.toLowerCase();
+    const em = lower.endsWith('em') ? Number(lower.slice(0, -2)) : Number.NaN;
     return MATH_SPACES.find((space) => Math.abs(Number.parseFloat(SPACES[space].width) - em) < 0.01);
 }
 
@@ -455,7 +460,7 @@ function readInto(row: RowBuilder, element: MathXmlElement, depth: number, outer
             const line =
                 attribute(element, 'bevelled') === 'true'
                     ? 'skewed'
-                    : NO_LINE.test(attribute(element, 'linethickness') ?? '')
+                    : isNoLine(attribute(element, 'linethickness') ?? '')
                       ? 'none'
                       : 'bar';
             row.node({ kind: 'fraction', numerator: argument(0), denominator: argument(1), line });

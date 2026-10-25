@@ -294,7 +294,7 @@ describe('foreign MathML', () => {
     });
 
     test('a zero linethickness is no line, in any unit', () => {
-        for (const thickness of ['0', '0px', '0em', '0pt']) {
+        for (const thickness of ['0', '0px', '0em', '0pt', '0.0em', '0%', '0ex', '.0em']) {
             expect(readMathml(math(`<mfrac linethickness="${thickness}"><mi>a</mi><mi>b</mi></mfrac>`))).toEqual([
                 { kind: 'fraction', numerator: letter('a'), denominator: letter('b'), line: 'none' },
             ]);
@@ -302,6 +302,12 @@ describe('foreign MathML', () => {
         expect(readMathml(math('<mfrac linethickness="1px"><mi>a</mi><mi>b</mi></mfrac>'))[0]).toMatchObject({
             line: 'bar',
         });
+    });
+
+    test('units are case-insensitive in an mspace width', () => {
+        expect(readMathml(math('<mspace width="1EM"/><mspace width="1Em"/>'))).toEqual(
+            readMathml(math('<mspace width="1em"/><mspace width="1em"/>')),
+        );
     });
 
     test('ms is text without quotes; mpadded and mphantom read as their content', () => {
