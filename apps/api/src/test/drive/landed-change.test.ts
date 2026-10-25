@@ -1,11 +1,12 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { ApiError } from '../../lib/core/errors';
 import * as aclPropagation from '../../lib/drive/acl-propagation';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import type { Mount } from '../../lib/mount';
+import * as thumbnails from '../../lib/shared/thumbnails';
 import * as publicInfo from '../../lib/space/public';
 import type { User } from '../../lib/user';
 import { getUserById } from '../../lib/user';
@@ -157,5 +158,34 @@ describe('a change that has landed', () => {
         expect(error).toBeInstanceOf(Error);
         expect(events).toContain(SSEventType.DRIVE_PATH_RESTORED);
         expect(await historyOf(file.id)).toContain('restored');
+    });
+
+    test('a failed fan-out leaves the new file its temp file until the thumbnail job is done', async () => {
+        const { promise: fannedOut, resolve: afterFanOut } = Promise.withResolvers<void>();
+        let sourceThere: boolean | undefined;
+        const thumbnail = spyOn(thumbnails, 'saveThumbnail').mockImplementationOnce(async (_dir, _id, source) => {
+            await fannedOut;
+            sourceThere = typeof source === 'string' && existsSync(source);
+            return null;
+        });
+        const fanOut = spyOn(mount.history, 'fanOut').mockRejectedValueOnce(new Error('watchers down'));
+        try {
+            const copy = home.drive.createFileFromData(
+                mount.id,
+                rootId,
+                'fan-out-fails.txt',
+                'text/plain',
+                Buffer.from('hello'),
+                alice,
+            );
+            await expect(copy).rejects.toThrow('watchers down');
+            afterFanOut();
+            await settledTempFiles();
+
+            expect(sourceThere).toBe(true);
+        } finally {
+            fanOut.mockRestore();
+            thumbnail.mockRestore();
+        }
     });
 });
