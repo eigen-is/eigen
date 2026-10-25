@@ -201,6 +201,24 @@ export function normalLine(lineSpacing: number, normal: NormalStyle): number {
     return autoLine(lineSpacing * DOCUMENT_LINE_RATIO * normal.size, normal.size, normal.font);
 }
 
+// A run's family and size in half-points, which the height of its line follows.
+export type RunFace = { family: string; size: number };
+
+// Word draws an auto line in the tallest face on it, the paragraph mark's included; CSS draws its line at the largest
+// size alone, in the mark's family. The writer writes the line of a paragraph all in one family times this, and the
+// reader divides it back out. Mixed families are 1: the writer leaves their line alone.
+export function familyLineScale(mark: RunFace, faces: RunFace[]): number {
+    const family = faces[0]?.family;
+    if (family === undefined || faces.some((face) => face.family !== family)) return 1;
+    let tallest = fontLineHeight(mark.family) * mark.size;
+    let largest = mark.size;
+    for (const face of faces) {
+        tallest = Math.max(tallest, fontLineHeight(face.family) * face.size);
+        largest = Math.max(largest, face.size);
+    }
+    return (fontLineHeight(mark.family) * largest) / tallest;
+}
+
 // What a text node draws with no mark or format of its own, as the docx writer's styles write it: its size in points,
 // its space before and after in twips and its auto line in the Normal's font. A note's paragraph draws Word's
 // FootnoteText over the Normal.

@@ -16,7 +16,16 @@ import {
 import { ApiError } from '../../core/errors';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements, xmlText } from '../../core/xml';
-import { CAPTION_LOOK, CODE_BLOCK_LOOK, nodeLook, ownTextLook, QUOTE_LOOK, TASK_DONE_LOOK } from '../../document/looks';
+import type { RunFace } from '../../document/looks';
+import {
+    CAPTION_LOOK,
+    CODE_BLOCK_LOOK,
+    familyLineScale,
+    nodeLook,
+    ownTextLook,
+    QUOTE_LOOK,
+    TASK_DONE_LOOK,
+} from '../../document/looks';
 import type { DrawingTheme } from '../../ooxml/drawingml';
 import { drawingTheme } from '../../ooxml/drawingml';
 import { isAlternateContent, W_NS } from '../../ooxml/ooxml';
@@ -406,18 +415,18 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         });
 
     // What the paragraph sets apart from the docx's Normal, or a heading, a title, a quote or a note from its style,
-    // whose look is the node's. Word draws an auto line in the tallest face on it, the paragraph mark's included, at its
-    // size, and the editor at the multiple of Inter's line times the largest size; the writer rescales a paragraph all
-    // in one family by the two (familyLine), which this undoes over the same faces, so a line Word draws as Normal's
-    // reads as none.
+    // whose look is the node's. The writer rescales the line of a paragraph all in one family (familyLineScale), which
+    // this undoes over the same faces, so a line Word draws as the Normal's reads as none.
     const { normal } = reader;
     const normalBase = role.kind === 'paragraph' && scope.story !== 'note';
     const base = normalBase ? mergePara(styles.docPara, styles.para(styles.defaultParagraph)) : styled;
     const autoLine = (para: ParaProps) => ((para.lineRule ?? 'auto') === 'auto' ? (para.line ?? 240) : undefined);
     const line = autoLine(props);
     const baseLine = autoLine(base);
-    const scaleOf = (font: string) => fontLineHeight(font) / fontLineHeight(DOCUMENT_FONT);
-    const mark = {
+    // An auto line as the multiple the editor draws, read in the font Word draws it in.
+    const multipleOf = (written: number, font: string) =>
+        (written * fontLineHeight(font)) / fontLineHeight(DOCUMENT_FONT) / 240;
+    const mark: RunFace = {
         family:
             fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font,
         size: paraRun.size ?? 20,
@@ -425,7 +434,9 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
     // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the mark's face;
     // not the space a task's or a note's text starts with, which goes, as the writer writes the checkbox or the note's
     // number and the space after it apart.
-    const noteNumbered = descendants(p, W_NS, 'footnoteRef').length + descendants(p, W_NS, 'endnoteRef').length > 0;
+    const noteNumbered =
+        scope.story === 'note' &&
+        descendants(p, W_NS, 'footnoteRef').length + descendants(p, W_NS, 'endnoteRef').length > 0;
     const start =
         task || noteNumbered ? pieces.findIndex((piece) => !(piece.kind === 'node' && isWhitespace(piece.node))) : 0;
     const faces = pieces.slice(Math.max(0, start)).flatMap((piece) => {
@@ -434,20 +445,13 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (piece.node.type !== 'text' || !piece.node.text || piece.size === undefined) return [];
         return [{ family: fontMark(piece.font, reader.fontTable, normal.font) ?? normal.font, size: piece.size }];
     });
-    const unscaled = (written: number) => {
-        const family = faces[0]?.family;
-        if (family === undefined || faces.some((face) => face.family !== family)) return written;
-        const tallest = Math.max(...[mark, ...faces].map((face) => fontLineHeight(face.family) * face.size));
-        const css = fontLineHeight(mark.family) * Math.max(...[mark, ...faces].map((face) => face.size));
-        return (written * tallest) / css;
-    };
     // An at-least Normal reads as single, so the Normal's own line is the one to compare with.
     const baseSpacing = normalBase
         ? normal.lineSpacing
         : baseLine === undefined
           ? undefined
-          : (baseLine * scaleOf(normal.font)) / 240;
-    const multiple = line === undefined ? undefined : (unscaled(line) * scaleOf(mark.family)) / 240;
+          : multipleOf(baseLine, normal.font);
+    const multiple = line === undefined ? undefined : multipleOf(line / familyLineScale(mark, faces), mark.family);
     const lineSpacing =
         multiple !== undefined &&
         (baseSpacing === undefined || Math.round(multiple * 100) !== Math.round(baseSpacing * 100))
@@ -509,7 +513,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         if (own) for (const node of content) dropOwn(node, 'fontSize', own.sizePt);
         const unlessOwn = (pt: number | undefined, ownTwips: number | undefined) =>
             pt !== undefined && ownTwips !== undefined && pt === twipsToPt(ownTwips) ? undefined : pt;
-        const ownLine = own && Math.round((own.line * scaleOf(normal.font)) / 2.4);
+        const ownLine = own && Math.round(multipleOf(own.line, normal.font) * 100);
         const lineSpacing =
             format.lineSpacing !== undefined && Math.round(format.lineSpacing * 100) === ownLine
                 ? undefined
