@@ -362,7 +362,8 @@ function layoutCartesian(
             ? frame.left + sideReserve + Math.max(0, ...fitted.map((name) => measure(ctx, name))) + gap
             : frame.left + sideReserve;
         // Fewer ticks until their labels stop touching, each try as many as the last one's widest pair has
-        // room for; the end labels overhang the plot by half a label.
+        // room for; the end labels overhang the plot by half a label. Two is the fewest asked, and d3 can answer
+        // it with four, so the labels that still touch hide below.
         let n = Math.min(
             MAX_TICK_COUNT,
             Math.max(2, Math.floor((frame.right - left) / (fontSize * HORIZONTAL_TICK_SPACING))),
@@ -436,10 +437,11 @@ function layoutCartesian(
     const zero = Math.min(hi, Math.max(lo, 0));
     const shapes: ChartShape[] = [];
 
+    const tickLabels: ChartLabel[] = [];
     axis.ticks.forEach((t, i) => {
         const at = scale(t);
         if (showTicks) {
-            ctx.labels.push(
+            tickLabels.push(
                 horizontal
                     ? label(ctx, axis.texts[i], at, plot.bottom + gap, 'middle')
                     : label(ctx, axis.texts[i], plot.left - gap, at - lh / 2, 'end'),
@@ -448,6 +450,7 @@ function layoutCartesian(
         // The baseline draws zero's line; without it a gridline does, as Office keeps its 0 line.
         if (y.gridlines.visible && (t !== zero || !showNames)) shapes.push(rule(`gridline:${i}`, at, GRIDLINE_OPACITY));
     });
+    ctx.labels.push(...parity(ctx, tickLabels));
     if (type === 'line') shapes.push(...lineMarks(marks, spec, series, values, band, scale));
     else shapes.push(...barMarks(marks, spec, series, values, band, scale, horizontal, stacked));
     if (showNames) shapes.push(rule('baseline', scale(zero)));
@@ -458,6 +461,15 @@ function layoutCartesian(
     const below = fit(ctx, bottomTitle, plot.right - plot.left, fontSize, false);
     if (below !== '') ctx.labels.push(label(ctx, below, (plot.left + plot.right) / 2, frame.bottom - lh, 'middle'));
     return shapes;
+}
+
+// Every other label hides until none touch, Vega's parity rule, so the first stays; every tick keeps its gridline.
+function parity(ctx: Context, labels: ChartLabel[]): ChartLabel[] {
+    let kept = labels;
+    const crowded = () =>
+        kept.some((next, i) => i > 0 && touches(ctx, labelBox(ctx, kept[i - 1]), labelBox(ctx, next)));
+    while (kept.length > 1 && crowded()) kept = kept.filter((_, i) => i % 2 === 0);
+    return kept;
 }
 
 // The data's range, zero included for bars, which grow from it; a line's axis fits its data, as Excel's
@@ -782,6 +794,18 @@ function isOutlined(ctx: Context): boolean {
 
 function outlineOf(ctx: Context, color: string): string {
     return isOutlined(ctx) ? color : TRANSPARENT_COLOR;
+}
+
+// An upright label's line box at the chart's text size.
+function labelBox(ctx: Context, { text, x, y, anchor }: ChartLabel): Frame {
+    const width = measure(ctx, text);
+    const left = anchor === 'start' ? x : anchor === 'middle' ? x - width / 2 : x - width;
+    return { left, top: y, right: left + width, bottom: y + ctx.lineHeight };
+}
+
+// Side by side two labels keep a gap apart, as the bar chart's ticks are spaced; stacked lines may meet.
+function touches(ctx: Context, a: Frame, b: Frame): boolean {
+    return a.left < b.right + ctx.gap && b.left < a.right + ctx.gap && a.top < b.bottom && b.top < a.bottom;
 }
 
 function measure(ctx: Context, text: string, fontSize = ctx.fontSize, bold = false): number {

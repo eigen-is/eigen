@@ -492,6 +492,37 @@ describe('column and bar', () => {
         }
     });
 
+    // The fewest ticks d3 gives can still be too many: four on a narrow bar chart, three under turned names
+    // on a short column chart. Every other label hides then, and every tick keeps its gridline.
+    test('value labels never touch, even at the fewest ticks', () => {
+        const isTick = (label: ChartLabel) => label.rotate === 0 && /^-?[\d,]+$/.test(label.text);
+        const untitled: SpecPatch = { ...UNTITLED, title: { text: '' } };
+        const narrow = layout('bar', untitled, {
+            data: { categories: ['North', 'South', 'East'], series: [series('Revenue', [12.5e6, 38e6, -15e6])] },
+            width: 200,
+            height: 220,
+        });
+        const short = layout(
+            'column',
+            { ...untitled, axes: { x: { title: { text: 'Teams' } }, y: {} } },
+            {
+                data: {
+                    categories: ['North', 'Total operating costs', 'Total operating costs', '2019'],
+                    series: [series('Revenue', [-75054, -37087, 74996, -127040])],
+                },
+                width: 318,
+                height: 80,
+            },
+        );
+        for (const out of [narrow, short]) {
+            const ticks = out.labels.filter(isTick);
+            expect(ticks.length).toBeGreaterThanOrEqual(1);
+            expect(ticks.length).toBeLessThan(lines(out, 'gridline').length + lines(out, 'baseline').length);
+            const bounds = ticks.map(labelBounds);
+            for (let i = 1; i < bounds.length; i++) expect(overlaps(bounds[i - 1], bounds[i])).toBe(false);
+        }
+    });
+
     test('the caller formats the ticks', () => {
         const out = layoutChart({
             id: 'c1',
