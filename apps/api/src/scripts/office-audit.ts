@@ -4,6 +4,7 @@
 // explains is unlisted, and the run passes with no crash, no cut and no unlisted difference.
 import * as fs from 'node:fs';
 import path from 'node:path';
+import { isChartSpecKey, readChartSpec } from '@workspace/lib/charts';
 import type { ChartSpec } from '@workspace/lib/types/chart';
 import { peakRss } from '../lib/core/peak-rss';
 import type { ExportMedia } from '../lib/document/transform/protocol';
@@ -141,6 +142,13 @@ export function seriesIdsByPlace(spec: ChartSpec): ChartSpec {
                 ? { ...data, series: data.series.map((series) => ({ ...series, id: id(series.id) })) }
                 : { ...data, series: data.series.map((series) => ({ ...series, id: id(series.id) })) },
     };
+}
+
+// A chart's stored fields with its spec's parts compared as one spec, its series ids by place.
+export function chartFields(chart: Record<string, unknown>): Record<string, unknown> {
+    const { stored, spec } = readChartSpec(chart);
+    const rest = Object.entries(chart).filter(([key]) => !isChartSpecKey(key));
+    return { ...Object.fromEntries(rest), spec: spec ? seriesIdsByPlace(spec) : stored };
 }
 
 const shown = (value: unknown) => (value === undefined ? '–' : canonical(value));

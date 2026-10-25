@@ -9,14 +9,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { gradientStops } from '@workspace/lib/background';
 import type { VectorElement, VectorFrame, VectorScene } from '@workspace/lib/vector';
-import {
-    convertToShapes,
-    elementsInFrame,
-    normalizeAngle,
-    parsePoints,
-    pointsBounds,
-    slidePxToPt,
-} from '@workspace/lib/vector';
+import { elementsInFrame, normalizeAngle, parsePoints, pointsBounds, slidePxToPt } from '@workspace/lib/vector';
 import type { writePptx } from '../lib/export/slides/pptx/to-pptx';
 import type { ImportedMedia } from '../lib/import/image-types';
 import { EMU_PER_POINT } from '../lib/ooxml/ooxml';
@@ -30,6 +23,7 @@ import type {
 } from './office-audit';
 import {
     canonical,
+    chartFields,
     classify,
     officeMedia,
     roundtripChild,
@@ -202,7 +196,9 @@ export function diffDecks(a: Deck, b: Deck): RoundtripDifference[] {
                 differences.push({ feature: 'element', at: place, a: x, b: y });
                 continue;
             }
-            const [left, right] = [fields(x), fields(y)];
+            const [left, right] = [x, y].map((element) =>
+                fields(element.type === 'chart' ? chartFields(element) : element),
+            );
             for (const field of new Set([...left.keys(), ...right.keys()])) {
                 if (UNCOMPARED.has(field)) continue;
                 const valueA = written(x, field, left.get(field), units, a.pictures, orderA);
@@ -217,19 +213,6 @@ export function diffDecks(a: Deck, b: Deck): RoundtripDifference[] {
 // The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
 // matches is unlisted, and fails the gate.
 export const PPTX_LISTED: Listed<RoundtripDifference, PptxRoundtripContext>[] = [
-    {
-        kind: 'charts as shapes',
-        why: 'The writer draws a chart as the shapes convertToShapes makes of it, so it comes back as those shapes; until the writer writes a native chart',
-        matches: ({ feature, a, b }) => {
-            const [x, y] = [elementsOf(a), elementsOf(b)];
-            return (
-                (feature === 'elements' || feature === 'element') &&
-                x.length > 0 &&
-                x.every((element) => element.type === 'chart') &&
-                canonical(x.flatMap(convertToShapes).map(({ type }) => type)) === canonical(y.map(({ type }) => type))
-            );
-        },
-    },
     {
         kind: 'pictures re-encoded',
         why: 'The export re-encodes a raster as PNG (a lossless source) or JPEG, no larger than OFFICE_IMAGE_MAX_SIZE, so its type or size comes back as the export made it',
@@ -310,12 +293,6 @@ const laidOut = (html: string) =>
             /(<a\s[^>]*>)(.*?)<\/a>/g,
             (_link, open: string, inner: string) => `${open}${inner.replace(/<\/?u>/g, '')}</a>`,
         );
-
-const isElement = (value: unknown): value is VectorElement =>
-    typeof value === 'object' && value !== null && 'type' in value && 'id' in value;
-
-const elementsOf = (value: unknown): VectorElement[] =>
-    Array.isArray(value) ? value.filter(isElement) : isElement(value) ? [value] : [];
 
 // The slide and the element a difference's place names in a deck, as diffDecks names them.
 function placeOf(deck: Deck, at: string): { frame?: VectorFrame; index?: number } {
