@@ -30,7 +30,7 @@ import { CHART_NOT_IMPORTED, droppedChart } from '../../ooxml/ooxml-chart';
 import type { Part } from '../../ooxml/opc';
 import { PICTURE_NOT_IMPORTED } from '../image-types';
 import { IMPORT_MESSAGES } from '../messages';
-import { CHART_PAINT, frameChart } from './chart';
+import { frameChart } from './chart';
 import type { CustomGeometry } from './custom-geometry';
 import { closedPath, customGeometry } from './custom-geometry';
 import type { Guides } from './guides';
@@ -611,10 +611,8 @@ function readGraphicFrame(walk: Walk, shape: XmlElement, box: Box): void {
     const kind = GRAPHIC_KINDS.get((data && xmlAttr(data, '', 'uri')) ?? '') ?? 'object';
     const chart =
         kind === 'chart' && data ? frameChart(walk.deck, walk.part, data, walk.inheritance.theme.colors) : undefined;
-    if (chart && 'parts' in chart) {
-        const { parts, ...colors } = chart;
-        push(walk, { type: 'chart', ...box, ...CHART_PAINT, ...parts, ...colors });
-    } else placeholderBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
+    if (chart && 'parts' in chart) push(walk, { type: 'chart', ...box, ...chart.look, ...chart.parts });
+    else placeholderBox(walk, shape, kind, box, chart && droppedChart(chart.unsupported));
 }
 
 // Q5: a loss the user can see on the slide, saying what was there.

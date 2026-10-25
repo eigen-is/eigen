@@ -1,8 +1,11 @@
+// Each element as the DrawingML shape that draws it, its box, geometry and fill, each length in the deck's EMU; a chart
+// as a graphic frame showing its own chart part.
+
 import { gradientStops } from '@workspace/lib/background';
+import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { FillPaint } from '@workspace/lib/types/background';
-import type { Box, Corners, Point, VectorElement } from '@workspace/lib/vector';
+import type { Box, Corners, Point, VectorChartElement, VectorElement } from '@workspace/lib/vector';
 import {
-    convertToShapes,
     cornerRadius,
     diamondOutline,
     isBordered,
@@ -13,12 +16,11 @@ import {
     rectOutline,
 } from '@workspace/lib/vector';
 import { colorXml, DEGREE, HUNDRED_PERCENT, solidFillXml } from '../../../ooxml/drawingml';
+import { addChartPart, chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { arrowXml, freedrawXml, linearXml, lineXml, pathXml } from './lines';
 import type { Slide } from './package';
 import { pictureXml } from './pictures';
 import { paragraphsOf, textBodyXml } from './text';
-
-// Each element as the DrawingML shape that draws it: its box, geometry and fill, each length in the deck's EMU.
 
 // ST_Coordinate's bound, which every offset, extent and path point stays within.
 const MAX_COORDINATE = 27_273_042_316_900;
@@ -147,10 +149,32 @@ export function elementXml(el: VectorElement, slide: Slide): string {
             return spXml(slide, 'Freeform', el, geometry, fill, lineXml(slide, el, opacity));
         }
         case 'chart':
-            return convertToShapes(el)
-                .map((shape) => elementXml(shape, slide))
-                .join('');
+            return chartXml(el, slide);
     }
+}
+
+// A graphic frame showing the chart's own part, drawn plain, upright and opaque: a frame turns and fades no chart, and a
+// chart part paints no sketch, hatch, gradient or dash. A spec that doesn't parse or holds range data draws nothing, as
+// on the canvas it draws only its placeholder. PowerPoint draws the numbers the part holds inline: a pptx embeds no
+// workbook for Edit Data to open.
+function chartXml(el: VectorChartElement, slide: Slide): string {
+    const { spec } = readChartSpec(el);
+    if (spec?.data.source !== 'inline') return '';
+    const parts = {
+        parts: slide.deck.charts,
+        path: 'ppt/charts/chart',
+        target: '../charts/chart',
+        relate: slide.part.relate,
+    };
+    const frame = { width: el.width, height: el.height, emuPerPx: slide.deck.scale };
+    const rId = addChartPart(parts, spec, { look: readChartLook(el), frame });
+    const id = ++slide.shapes;
+    const offset = `<a:off x="${toEmu(slide, el.x)}" y="${toEmu(slide, el.y)}"/>`;
+    const extent = `<a:ext cx="${toEmu(slide, el.width)}" cy="${toEmu(slide, el.height)}"/>`;
+    return [
+        `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Chart ${id}"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>`,
+        `<p:xfrm>${offset}${extent}</p:xfrm>${chartGraphicXml(rId)}</p:graphicFrame>`,
+    ].join('');
 }
 
 export function spXml(

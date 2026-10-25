@@ -1,5 +1,6 @@
-// The xlsx writer's drawings: a sheet's floating charts and pictures as one drawing part of anchors over its cells,
-// with the chart parts it names. The workbook writer adds them to the package beside the sheet.
+// The xlsx writer's drawings: a sheet's floating charts and pictures as one drawing part, each a two-cell anchor over
+// the cells its box covers. A chart becomes its own chart part and a picture its media. The workbook writer adds them
+// to the package beside the sheet.
 
 import { readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { Sheet, SheetFloatingObject } from '@workspace/lib/sheets';
@@ -9,9 +10,8 @@ import type { CellResolver } from '@workspace/sheet/engine';
 import { resolveRangeChartData } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import { anchoredBox, blipXml, DEGREE } from '../../../ooxml/drawingml';
-import { A_NS, C_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../ooxml/ooxml';
-import { CHART_CONTENT_TYPE } from '../../../ooxml/ooxml-chart';
-import { writeChart } from '../../../ooxml/ooxml-chart-writer';
+import { A_NS, EMU_PER_PX, R_NS, XDR_NS } from '../../../ooxml/ooxml';
+import { addChartPart, chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
 import { DRAWING_CONTENT_TYPE } from '../../../ooxml/spreadsheetml';
@@ -67,22 +67,22 @@ export function drawingOf(
         }
         resolver ??= sheetsResolver(sheets);
         const data = spec.data.source === 'range' ? resolveRangeChartData(spec.data, resolver) : undefined;
-        const name = `chart${number}_${charts.length + 1}.xml`;
-        charts.push([
-            `xl/charts/${name}`,
-            writeChart(spec, {
+        const placed = placedBox({ ...chart, angle: 0 });
+        const rId = addChartPart(
+            { parts: charts, path: `xl/charts/chart${number}_`, target: `../charts/chart${number}_`, relate },
+            spec,
+            {
                 ranges,
                 cache: typeof data === 'object' ? data : undefined,
                 look: readChartLook(chart),
-            }),
-            CHART_CONTENT_TYPE,
-        ]);
-        const frame = chartFrameXml(id, relate('chart', `../charts/${name}`));
-        anchors.push(anchorXml(sheet, placedBox({ ...chart, angle: 0 }), frame));
+                frame: { width: placed.width, height: placed.height, emuPerPx: EMU_PER_PX },
+            },
+        );
+        anchors.push(anchorXml(sheet, placed, chartFrameXml(id, rId)));
     }
     if (anchors.length === 0) return undefined;
     const path = `xl/drawings/drawing${number}.xml`;
-    const drawing = `<xdr:wsDr xmlns:xdr="${XDR_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}" xmlns:c="${C_NS}">${anchors.join('')}</xdr:wsDr>`;
+    const drawing = `<xdr:wsDr xmlns:xdr="${XDR_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}">${anchors.join('')}</xdr:wsDr>`;
     return {
         path,
         parts: [[path, drawing, DRAWING_CONTENT_TYPE], [relsPathOf(path), relationshipsXml(relationships)], ...charts],
@@ -117,7 +117,7 @@ function chartFrameXml(id: number, rId: string): string {
     return [
         `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${id}" name="Chart ${id - 1}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>`,
         '<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>',
-        `<a:graphic><a:graphicData uri="${C_NS}"><c:chart r:id="${rId}"/></a:graphicData></a:graphic></xdr:graphicFrame>`,
+        `${chartGraphicXml(rId)}</xdr:graphicFrame>`,
     ].join('');
 }
 

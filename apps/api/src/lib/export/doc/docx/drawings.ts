@@ -1,14 +1,17 @@
+// Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback, and charts, each a Word chart.
+
 import type { JSONContent } from '@tiptap/core';
-import { readChartSpec } from '@workspace/lib/charts';
-import { chartSvg, readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
+import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
+import { readChartAttrs, readFigureAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { BODY, boxSide, cssPt, twips } from '../../../document/looks';
 import { sanitizeMedia } from '../../../document/media';
 import { proseValue } from '../../../document/prose-css';
 import type { ExportMedia } from '../../../document/transform/protocol';
-import { toTransferableBuffer, toTransferableText } from '../../../document/transform/protocol';
+import { toTransferableBuffer } from '../../../document/transform/protocol';
 import { blipXml } from '../../../ooxml/drawingml';
 import { EMU_PER_PX, PIC_NS } from '../../../ooxml/ooxml';
+import { addChartPart, chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import { BORDER_SIDES, EMU_PER_TWIP, TWIPS_PER_PX } from '../../../ooxml/wordml';
 import { splitDataUri } from '../../../shared/data-uri';
 import type { OfficeImage } from '../../office-image';
@@ -20,52 +23,11 @@ import { indentOf, paragraphXml, quoteBar, styleSpacing } from './paragraphs';
 import { textXml } from './runs';
 import { TABLE_BORDER_SIDES } from './tables';
 
-// Figures: the thumbnail Worker's PNG or JPEG, an SVG beside its PNG fallback.
-
 // The media item a figure draws in a docx: its media file, else a pasted data: src, which the transform process encodes
-// under that src, as it draws a chart under its drawing's hash. A media name holds no `/`, so no two keys meet.
+// under that src.
 function figureMediaKey(node: JSONContent): string | null {
-    if (node.type === 'chart') return chartDrawing(node)?.name ?? null;
     const { mediaName, src } = readFigureAttrs(node.attrs ?? {});
     return mediaName ?? (src && splitDataUri(src) ? src : null);
-}
-
-// A chart's SVG, named for what it draws, so two charts that draw the same, a chart repeated or two whose ids differ,
-// are one picture. A docx holds each SVG in a file of its own, so every drawing takes one id. Drawn once per node,
-// though the media and the writer both ask; a spec that doesn't parse draws nothing. The alt text is the one its HTML
-// gives its image.
-type ChartDrawing = { name: string; svg: string; alt: string };
-
-const drawings = new WeakMap<JSONContent, ChartDrawing | null>();
-
-function chartDrawing(node: JSONContent): ChartDrawing | null {
-    const known = drawings.get(node);
-    if (known !== undefined) return known;
-    const attrs = node.attrs ?? {};
-    const { spec } = readChartSpec(attrs);
-    const svg = spec && chartSvg(spec, readChartAttrs(attrs), 'chart');
-    const drawing = svg
-        ? { name: `chart/${Bun.CryptoHasher.hash('sha256', svg, 'hex')}`, svg, alt: spec.title.text || 'Chart' }
-        : null;
-    drawings.set(node, drawing);
-    return drawing;
-}
-
-// A chart has no media file either: it draws as the SVG the HTML export inlines, through the sanitizer a pasted SVG
-// takes. A spec that doesn't parse draws nothing, so its caption stands alone.
-export async function chartFigureMedia(roots: JSONContent[]): Promise<ExportMedia[]> {
-    const charts = new Map<string, string>();
-    const visit = (node: JSONContent) => {
-        const drawing = node.type === 'chart' ? chartDrawing(node) : null;
-        if (drawing) charts.set(drawing.name, drawing.svg);
-        for (const child of node.content ?? []) visit(child);
-    };
-    for (const root of roots) visit(root);
-    if (charts.size === 0) return [];
-    const { sanitizeExportMedia } = await import('../../sanitize');
-    return sanitizeExportMedia(
-        Array.from(charts, ([name, svg]) => ({ name, contentType: 'image/svg+xml', data: toTransferableText(svg) })),
-    );
 }
 
 // A figure pasted with a data: src has no media file, and the main thread never reads the doc, so each src is decoded
@@ -100,7 +62,10 @@ export async function pastedFigureMedia(roots: JSONContent[]): Promise<ExportMed
 
 // One image file per media name, and one relationship per part that shows it; an SVG's PNG is its blip, the SVG its
 // extension.
-type Image = OfficeImage & { width: number; height: number; rId: string; svgRId?: string };
+type Image = OfficeImage & { kind: 'picture'; width: number; height: number; rId: string; svgRId?: string };
+
+// A chart part of its own per chart node, related from the part that shows it.
+type WordChart = { kind: 'chart'; width: number; height: number; rId: string; alt: string };
 
 // Missing media, an external src (a docx fetches nothing) and media without a size or fallback write only the caption.
 export function figureOf(node: JSONContent, context: Context): Block[] {
@@ -125,20 +90,23 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
         runs: `<w:r>${captionRuns}</w:r>`,
         inset,
     });
-    const key = figureMediaKey(node);
-    const image = key ? imageOf(key, context.pkg) : undefined;
-    // The caption alone is the figure's box, as the HTML's.
-    if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
     const columnPx = Math.floor((context.column - context.indent) / TWIPS_PER_PX);
     const set = Math.round(width ?? 0);
-    const natural = Math.min(image.width, side ? Math.floor(columnPx / 2) : columnPx);
-    const cx = Math.max(1, Math.round(set > 0 ? Math.min(set, columnPx) : natural)) * EMU_PER_PX;
+    const room = side ? Math.floor(columnPx / 2) : columnPx;
+    // The EMU a figure of this natural width is drawn across.
+    const extent = (natural: number) =>
+        Math.max(1, Math.round(set > 0 ? Math.min(set, columnPx) : Math.min(natural, room))) * EMU_PER_PX;
+    const image =
+        node.type === 'chart' ? wordChartOf(node, context.pkg, extent) : imageOf(figureMediaKey(node), context.pkg);
+    // The caption alone is the figure's box, as the HTML's.
+    if (!image) return captionRuns ? [captionParagraph(0, { top: top + captionBefore, bottom })] : [];
+    const cx = extent(image.width);
     const drawing = drawingXml(
         image,
         cx,
         // Observed in Word: a fractional-twip height refits the width (a 1204×4 px divider drew 466.5 pt wide), so the height is whole.
         Math.max(EMU_PER_TWIP, Math.round((cx * image.height) / image.width / EMU_PER_TWIP) * EMU_PER_TWIP),
-        (node.type === 'chart' ? chartDrawing(node)?.alt : alt) ?? '',
+        image.kind === 'chart' ? image.alt : (alt ?? ''),
         context.pkg,
     );
     if (!side) {
@@ -197,8 +165,9 @@ export function figureOf(node: JSONContent, context: Context): Block[] {
 }
 
 // The first figure to show a media name adds its files, and the first in each part that part's relationships; no
-// positive size, an SVG without PNG or another type adds none.
-function imageOf(name: string, pkg: Package): Image | undefined {
+// positive size, an SVG without PNG or another type adds none, nor does a figure without media.
+function imageOf(name: string | null, pkg: Package): Image | undefined {
+    if (!name) return undefined;
     const { width, height } = pkg.images.media.get(name) ?? {};
     if (!isPositive(width) || !isPositive(height)) return undefined;
     const image = pkg.images.image(name);
@@ -206,6 +175,7 @@ function imageOf(name: string, pkg: Package): Image | undefined {
     const relate = (target: string) => pkg.part.relate('image', `media/${target}`);
     return {
         ...image,
+        kind: 'picture',
         width,
         height,
         rId: relate(image.part),
@@ -213,17 +183,42 @@ function imageOf(name: string, pkg: Package): Image | undefined {
     };
 }
 
+// Drawn plain, as a chart part paints no sketch, hatch, gradient or dash, and at the scale `extent` draws it at. A doc
+// has no sheet, so a spec that doesn't parse or holds range data draws nothing, and its caption stands alone. The labels
+// draw in the spec's font, embedded as a run's is, the title in the bold. Word draws the numbers the part holds inline:
+// a docx embeds no workbook for Edit Data to open.
+function wordChartOf(node: JSONContent, pkg: Package, extent: (natural: number) => number): WordChart | undefined {
+    const attrs = readChartAttrs(node.attrs ?? {});
+    const { spec } = readChartSpec(node.attrs ?? {});
+    if (spec?.data.source !== 'inline') return undefined;
+    const width = attrs.width ?? CHART_DEFAULT_SIZE.width;
+    const height = attrs.height ?? CHART_DEFAULT_SIZE.height;
+    const parts = { parts: pkg.charts, path: 'word/charts/chart', target: 'charts/chart', relate: pkg.part.relate };
+    const rId = addChartPart(parts, spec, { look: attrs, frame: { width, height, emuPerPx: extent(width) / width } });
+    const font = spec.chart.fontFamily;
+    useFace(pkg, { font }, undefined);
+    if (spec.title.text) useFace(pkg, { font, bold: true }, undefined);
+    return { kind: 'chart', width, height, rId, alt: spec.title.text || 'Chart' };
+}
+
 function isPositive(value: number | undefined): value is number {
     return value !== undefined && Number.isFinite(value) && value > 0;
 }
 
 // Word and LibreOffice draw the svgBlip; a reader without SVG draws the PNG.
-function drawingXml(image: Image, cx: number, cy: number, alt: string, pkg: Package): string {
+function drawingXml(image: Image | WordChart, cx: number, cy: number, alt: string, pkg: Package): string {
     const n = ++pkg.drawings;
     const descr = escapeXml(alt);
+    const inline = `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`;
+    if (image.kind === 'chart') {
+        return [
+            `<w:r><w:drawing>${inline}<wp:docPr id="${n}" name="Chart ${n}" descr="${descr}"/>`,
+            `<wp:cNvGraphicFramePr/>${chartGraphicXml(image.rId)}</wp:inline></w:drawing></w:r>`,
+        ].join('');
+    }
     const blip = blipXml(image.rId, image.svgRId);
     return [
-        `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/>`,
+        `<w:r><w:drawing>${inline}`,
         `<wp:docPr id="${n}" name="Picture ${n}" descr="${descr}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>`,
         `<a:graphic><a:graphicData uri="${PIC_NS}"><pic:pic><pic:nvPicPr><pic:cNvPr id="${n}" name="${image.part}" descr="${descr}"/><pic:cNvPicPr/></pic:nvPicPr>`,
         `<pic:blipFill>${blip}<a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,

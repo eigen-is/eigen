@@ -20,7 +20,7 @@ import type { Lost } from '../../document/transform/protocol';
 import type { Box, DrawingTheme } from '../../ooxml/drawingml';
 import { anchoredBox, blipEmbeds, DEGREE } from '../../ooxml/drawingml';
 import { A_NS, alternativeFor, C_NS, EMU_PER_PX, emu, ooxmlElements, R_NS, SML_NS, XDR_NS } from '../../ooxml/ooxml';
-import { chartCost, chartPart, readChart } from '../../ooxml/ooxml-chart';
+import { chartCost, chartPart, readChart, readChartPartLook } from '../../ooxml/ooxml-chart';
 import type { OoxmlPackage, Relationship } from '../../ooxml/opc';
 import { optional, relTarget } from '../../ooxml/opc';
 import type { MediaPart } from '../image-types';
@@ -121,13 +121,14 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
                 (chartSheet
                     ? rounded({ x: 0, y: 0, ...(sizeOf(anchor) ?? CHART_SHEET_SIZE) })
                     : anchorBox(anchor, from, to, sheet));
-            if (!spec || !box) {
+            if (!root || !spec || !box) {
                 context.lost('charts-dropped');
                 continue;
             }
             const parts = newSheetChartSpecParts(spec);
             context.charge(0, partsText(parts));
-            const chart: SheetChart = { id: `chart-${placed++}`, index: paint(), ...box, ...parts };
+            const look = readChartPartLook(root, { theme: context.theme, emuPerPx: EMU_PER_PX, host: 'xlsx' });
+            const chart: SheetChart = { id: `chart-${placed++}`, index: paint(), ...box, ...look, ...parts };
             (sheet.charts ??= {})[chart.id] = chart;
             if (chartSheet) break;
         }

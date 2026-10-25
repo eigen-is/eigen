@@ -2,20 +2,22 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
+import { FLAT_CHART_LOOK, newChartSpecParts, readChartSpec, sampleChartSpec } from '@workspace/lib/charts';
 import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import type { ChartStacking } from '@workspace/lib/types/chart';
+import { solidFill } from '@workspace/lib/vector';
 import { readOmml, writeMathml } from '@workspace/math';
 import { xmlChild, xmlChildren, xmlElements } from '../../../lib/core/xml';
 import { docSchema } from '../../../lib/document/doc-schema';
 import { readStoredEquation } from '../../../lib/document/equation';
 import { HEADER_CELL_LOOK, HEADING_LOOKS, SMALL_LOOK, textMetrics } from '../../../lib/document/looks';
-import { chartFigureMedia } from '../../../lib/export/doc/docx/drawings';
 import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
-import { withSvgFallbacks } from '../../../lib/export/office-image';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import type { ImportedMedia } from '../../../lib/import/image-types';
 import { M_NS, parseOoxml, W_NS } from '../../../lib/ooxml/ooxml';
 import { openZip } from '../../../lib/ooxml/zip';
-import { sampleChartParts } from '../../fixtures/chart-parts';
+import { seriesIdsByPlace } from '../../../scripts/office-audit';
+import { axesOf, sampleChartParts } from '../../fixtures/chart-parts';
 import { buildAllFeaturesDocJson, buildAllFeaturesDocMedia } from '../../fixtures/golden-documents';
 import type { DocxParts } from '../../fixtures/golden-docx';
 import { importDocxBody, marksOfType, nodesOfType } from '../../fixtures/golden-docx';
@@ -42,13 +44,14 @@ function sourceNames(media: ImportedMedia[]): Map<string, string> {
 // The source as the import gives it back. (1) R5: no comment marks and no figure comment card. (2) The writer gives a
 // column or an image without a width the one it lays it out at. (3) Media are named by order, matched here by bytes.
 // (4) R1: left is no alignment. (5) R2: black is no color. (6) Ruling: the writer percent-encodes a space in an href.
-// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) The fixture's media holds no chart drawing,
-// which the transform process makes, so a chart writes nothing; 'a chart' round-trips one. (9) Small is written as its
+// (7) OWNER: a run of empty paragraphs right before a page break goes. (8) A chart is a paragraph of its own in Word,
+// as a display equation is (11), and its series ids are compared by place (byPlace). (9) Small is written as its
 // look and comes back as that size. (10) OMML has no slot for the typed LaTeX. (11) In Word a display equation is a
 // paragraph of its own, and every piece but the last keeps the writer's no space after, so the pieces draw as one
 // paragraph. (12) A header cell beside a body cell is marked by the Table Header style on its plain paragraphs, so
 // one holding none, only quotes, code, headings, rules or done tasks, comes back a body cell in the header's grey.
 // (13) A paragraph's format is what it sets apart from the Normal, so a value equal to the Normal's comes back as none.
+// (14) The chart part holds the look it draws, so a chart's unset background, label colour and stroke come back flat.
 function expected(source: JSONContent, imported: JSONContent | undefined): JSONContent {
     const attrs = source.attrs && { ...source.attrs };
     if (attrs) {
@@ -60,6 +63,9 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
         if ('commentCardId' in attrs) attrs['commentCardId'] = null;
         if (attrs['textAlign'] === 'left') attrs['textAlign'] = null;
         if (source.type === 'equation') attrs['mathml'] = writeMathml(readStoredEquation(attrs).row);
+        if (source.type === 'chart')
+            for (const name of ['fill', 'color', 'strokeColor', 'strokeWidth'] as const)
+                attrs[name] ??= FLAT_CHART_LOOK[name];
     }
     const small = source.marks?.some((mark) => mark.type === 'small');
     const styled = source.marks?.some((mark) => mark.type === 'textStyle');
@@ -81,8 +87,8 @@ function expected(source: JSONContent, imported: JSONContent | undefined): JSONC
     });
     const mixed = source.type === 'tableRow' && source.content?.some((cell) => cell.type === 'tableCell');
     const kept = source.content
-        ?.filter((child, index, siblings) => child.type !== 'chart' && !blankBeforeBreak(siblings, index))
-        .flatMap(splitAtDisplayEquations)
+        ?.filter((_, index, siblings) => !blankBeforeBreak(siblings, index))
+        .flatMap(splitAtOwnParagraphs)
         .map((child) =>
             mixed && child.type === 'tableHeader' && !child.content?.some(isPlain) ? asBodyCell(child) : child,
         );
@@ -105,13 +111,14 @@ const asBodyCell = (cell: JSONContent): JSONContent => ({
     attrs: { ...cell.attrs, backgroundColor: cell.attrs?.['backgroundColor'] ?? HEADER_GREY },
 });
 
-const isDisplayEquation = (node: JSONContent) => node.type === 'equation' && node.attrs?.['display'] === true;
+const isOwnParagraph = (node: JSONContent) =>
+    node.type === 'chart' || (node.type === 'equation' && node.attrs?.['display'] === true);
 
-function splitAtDisplayEquations(node: JSONContent): JSONContent[] {
-    if (!node.content?.some(isDisplayEquation)) return [node];
+function splitAtOwnParagraphs(node: JSONContent): JSONContent[] {
+    if (!node.content?.some(isOwnParagraph)) return [node];
     const pieces: JSONContent[][] = [[]];
     for (const child of node.content) {
-        if (isDisplayEquation(child)) pieces.push([child], []);
+        if (isOwnParagraph(child)) pieces.push([child], []);
         else pieces.at(-1)?.push(child);
     }
     return pieces
@@ -141,6 +148,16 @@ function withSourceNames(node: JSONContent, names: Map<string, string>): JSONCon
     };
 }
 
+// A series id is identity, not content, and the writer writes none, so a chart's parts compare with its ids by place.
+function byPlace(node: JSONContent): JSONContent {
+    const { spec } = node.type === 'chart' ? readChartSpec(node.attrs ?? {}) : { spec: null };
+    return {
+        ...node,
+        ...(spec && { attrs: { ...node.attrs, ...newChartSpecParts(seriesIdsByPlace(spec)) } }),
+        ...(node.content && { content: node.content.map(byPlace) }),
+    };
+}
+
 // JSON round trips drop undefined keys, so both sides compare as stored.
 const stored = (json: JSONContent): JSONContent => JSON.parse(JSON.stringify(json));
 
@@ -153,45 +170,64 @@ describe('the all-features doc', () => {
         );
         const { json, media } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
         const imported = withSourceNames(json, sourceNames(media));
-        expect(stored(imported)).toEqual(stored(expected(source, imported)));
+        expect(stored(byPlace(imported))).toEqual(stored(byPlace(expected(source, imported))));
     });
 });
 
 describe('a chart', () => {
-    test('comes back as an image of its SVG, at its width, its title its alt, its caption and layout kept', async () => {
-        const chart = {
-            type: 'chart',
-            attrs: {
-                ...sampleChartParts('column'),
-                width: 480,
-                height: 300,
-                caption: 'Points',
-                layout: 'wrap-left',
-            },
-        };
+    const exported = async (chart: JSONContent) => {
         const source = { type: 'doc', content: [{ type: 'paragraph', content: [chart] }] };
-        const prepared = await withSvgFallbacks(await chartFigureMedia([source]));
         const docx = writeDocx(
             { json: source, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
-            { title: 'Chart', media: prepared, publicOrigin: ORIGIN },
+            { title: 'Chart', media: [], publicOrigin: ORIGIN },
         );
-        const { json, media } = docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
-        expect(json.content?.[0]?.content).toEqual([
-            {
-                type: 'figure',
-                attrs: {
-                    mediaName: expect.stringMatching(/^docx-[0-9a-f-]{36}-image-1\.svg$/),
-                    src: null,
-                    alt: "Where a star's light goes",
-                    caption: 'Points',
-                    commentCardId: null,
-                    width: 480,
-                    alignment: 'center',
-                    layout: 'wrap-left',
-                },
-            },
-        ]);
-        expect(media.map((image) => image.contentType)).toEqual(['image/svg+xml']);
+        return docxToPmJson(Buffer.from(docx), { publicOrigin: ORIGIN });
+    };
+    // A series id is identity, not content, and the writer writes none.
+    const specOf = (attrs: Record<string, unknown> | undefined) => {
+        const { spec } = readChartSpec(attrs ?? {});
+        return spec && seriesIdsByPlace(spec);
+    };
+    const stacked = (type: 'column' | 'bar', stacking: ChartStacking) => {
+        const spec = sampleChartSpec(type);
+        return newChartSpecParts({ ...spec, plots: { ...spec.plots, [type]: { stacking } } });
+    };
+
+    test.each([
+        ['column', sampleChartParts('column')],
+        ['stacked bar', stacked('bar', 'stacked')],
+        ['100% stacked column', stacked('column', 'percent')],
+        ['line', sampleChartParts('line')],
+        ['pie', sampleChartParts('pie')],
+        ['column in Source Serif', sampleChartParts('column', 'Source Serif 4')],
+    ])('a %s comes back as the same chart, at its size, its caption and layout kept', async (_, parts) => {
+        const chart = {
+            type: 'chart',
+            attrs: { ...parts, width: 480, height: 300, caption: 'Points', layout: 'wrap-left' },
+        };
+        const { json, media } = await exported(chart);
+        const [back] = json.content?.[0]?.content ?? [];
+        expect(back?.type).toBe('chart');
+        const sent = specOf(chart.attrs);
+        expect(specOf(back?.attrs)).toEqual(sent && axesOf(sent));
+        expect(back?.attrs).toMatchObject({ width: 480, height: 300, caption: 'Points', layout: 'wrap-left' });
+        expect(media).toEqual([]);
+    });
+
+    test('a sketched one comes back as the same chart, flat, as a chart part paints no sketch', async () => {
+        const chart = { type: 'chart', attrs: { ...sampleChartParts('column'), roughness: 1, strokeStyle: 'dashed' } };
+        const { json } = await exported(chart);
+        const [back] = json.content?.[0]?.content ?? [];
+        expect(specOf(back?.attrs)).toEqual(specOf(chart.attrs));
+        expect(back?.attrs).toMatchObject({ roughness: null, strokeStyle: null });
+    });
+
+    test('its background, label colour and stroke come back as they were', async () => {
+        const look = { fill: solidFill('#fafaf0'), color: '#112233', strokeColor: '#44556680', strokeWidth: 3 };
+        const chart = { type: 'chart', attrs: { ...sampleChartParts('line'), ...look, width: 480, height: 300 } };
+        const { json } = await exported(chart);
+        const [back] = json.content?.[0]?.content ?? [];
+        expect(back?.attrs).toMatchObject(look);
     });
 });
 
@@ -884,15 +920,20 @@ describe("the all-features doc's Google Docs re-save", () => {
         const { json } = docxToPmJson(Buffer.from(bytes), { publicOrigin: ORIGIN });
         const source = docSchema().nodeFromJSON(buildAllFeaturesDocJson()).toJSON();
         // The recording predates the title, the subtitle, the note's paragraph, the equations' paragraph and the page
-        // number, so it holds none of them.
-        source.content = source.content.filter(
-            (block: JSONContent) =>
-                block.type !== 'title' &&
-                block.type !== 'subtitle' &&
-                !block.content?.some((inline: JSONContent) =>
-                    ['pageNumber', 'equation', 'footnote'].includes(inline.type ?? ''),
-                ),
-        );
+        // number, so it holds none of them, and its export wrote no chart.
+        source.content = source.content
+            .filter(
+                (block: JSONContent) =>
+                    block.type !== 'title' &&
+                    block.type !== 'subtitle' &&
+                    !block.content?.some((inline: JSONContent) =>
+                        ['pageNumber', 'equation', 'footnote'].includes(inline.type ?? ''),
+                    ),
+            )
+            .map((block: JSONContent) => ({
+                ...block,
+                ...(block.content && { content: block.content.filter((inline) => inline.type !== 'chart') }),
+            }));
         expect(stored(json)).toEqual(stored(googleLosses(expected(source, json), json)));
     });
 });

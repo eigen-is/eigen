@@ -22,7 +22,6 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { isChartSpecKey, readChartSpec } from '@workspace/lib/charts';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
 import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
@@ -51,6 +50,7 @@ import type {
 import {
     canonical,
     cellText,
+    chartFields,
     chartsNotImported,
     classify,
     DEFAULT_MAX_RSS_MB,
@@ -62,7 +62,6 @@ import {
     roundtripLine,
     runRoundtrip as runGate,
     seconds,
-    seriesIdsByPlace,
     spawnChild,
 } from './office-audit';
 
@@ -987,12 +986,9 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
             else if (field === 'charts') {
                 // A chart's parts compared as one spec, its series ids by place.
                 const spec = (value: unknown) =>
-                    Object.values(isRecord(value) ? value : {}).map((chart: unknown) => {
-                        if (!isRecord(chart)) return chart;
-                        const { stored, spec } = readChartSpec(chart);
-                        const rest = Object.entries(chart).filter(([key]) => !isChartSpecKey(key));
-                        return { ...Object.fromEntries(rest), spec: spec ? seriesIdsByPlace(spec) : stored };
-                    });
+                    Object.values(isRecord(value) ? value : {}).map((chart: unknown) =>
+                        isRecord(chart) ? chartFields(chart) : chart,
+                    );
                 keyed('charts', sheet, spec(x), spec(y));
             } else if (field === 'images')
                 keyed('images', sheet, picturesOf(sheetA, media.a), picturesOf(sheetB, media.b));

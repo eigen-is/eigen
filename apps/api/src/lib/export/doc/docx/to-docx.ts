@@ -38,6 +38,7 @@ export function writeDocx(
         checkboxes: false,
         languages: new Set(),
         images: officeImages(media, 'word/media'),
+        charts: [],
         drawings: 0,
         footnotes: [],
         // A Spacer's and a figure's mark draw in the Normal's Regular.
@@ -114,6 +115,7 @@ export function writeDocx(
             ['word/_rels/document.xml.rels', relationshipsXml(document.relationships)],
             ...noteParts,
             ...bandParts,
+            ...pkg.charts,
             ['word/styles.xml', stylesXml(pkg), `${WML}.styles+xml`],
             ['word/numbering.xml', numberingXml(pkg.lists, pkg.nums), `${WML}.numbering+xml`],
             ['word/settings.xml', settingsXml(pkg.footnotes.length > 0), `${WML}.settings+xml`],

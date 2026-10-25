@@ -9,6 +9,7 @@ import {
     REFERENCE_ROW_COUNT,
     SHEET_DEFAULT_COL_WIDTH,
 } from '@workspace/lib/sheets';
+import { solidFill } from '@workspace/lib/vector';
 import type { TransformWarning } from '../../../lib/document/transform/protocol';
 import { MAX_MEDIA_PARTS } from '../../../lib/import/image-types';
 import { IMPORT_MESSAGES } from '../../../lib/import/messages';
@@ -617,6 +618,12 @@ describe('a chart sheet', () => {
                 width: 977,
                 height: 638,
                 angle: 0,
+                // Excel's automatic look where the part states none: the theme's bg1, its tx1 for the labels, and
+                // a 0.75 pt line of tx1 at a 75% tint.
+                fill: solidFill('#ffffff'),
+                color: '#000000',
+                strokeColor: '#8c8c8c',
+                strokeWidth: 1,
                 specChart: expect.any(String),
                 specTitle: expect.any(String),
                 specLegend: expect.any(String),

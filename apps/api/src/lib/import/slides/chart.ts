@@ -1,32 +1,26 @@
+// A graphic frame's chart: its c:chartSpace part through the core chart reader, from the caches, which hold every
+// value, so none of the part's own relationships (workbook, user shapes, colours, style) is followed. Its look is the
+// one the core reader reads for every format, at the slide's scale.
+
 import { FLAT_CHART_LOOK, newChartSpecParts } from '@workspace/lib/charts';
-import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
-import type { VectorElementPatch } from '@workspace/lib/vector';
+import type { ChartLook, ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import type { DrawingTheme } from '../../ooxml/drawingml';
-import { A_NS, C_NS, R_NS } from '../../ooxml/ooxml';
+import { C_NS, R_NS } from '../../ooxml/ooxml';
 import type { ChartRead } from '../../ooxml/ooxml-chart';
-import { chartColors, chartCost, readChart } from '../../ooxml/ooxml-chart';
+import { chartCost, readChart, readChartPartLook } from '../../ooxml/ooxml-chart';
 import type { Part } from '../../ooxml/opc';
-import { colorOf, mutedColor, textColorOf } from './inherit';
 import { affords, cachedBy, charge, childOf, prefixedAttrOf } from './lookup';
 import type { DeckWalk } from './package';
 
-// A graphic frame's chart: its c:chartSpace part through the core chart reader, from the caches, which hold every
-// value, so none of the part's own relationships (workbook, user shapes, colours, style) is followed.
-
-// The spec's parts as the chart kind stores them with the colours its text and axes take, or what the reader names a
-// chart it can't draw as the file does.
+// The spec's parts as the chart kind stores them with its look, or what the reader names a chart it can't draw as the
+// file does.
 export type FrameChart =
-    | { parts: Record<ChartSpecPartKey, string>; color: string; strokeColor: string }
+    | { parts: Record<ChartSpecPartKey, string>; look: Omit<ChartLook, 'seed'> }
     | Extract<ChartRead, { unsupported: unknown }>;
 
-// Painted as a document's and a sheet's charts are, unfilled as PowerPoint's plot area; the font is the spec's.
-export const CHART_PAINT = {
-    fill: FLAT_CHART_LOOK.fill,
-    strokeWidth: FLAT_CHART_LOOK.strokeWidth,
-    strokeStyle: FLAT_CHART_LOOK.strokeStyle,
-    roughness: FLAT_CHART_LOOK.roughness,
-} satisfies VectorElementPatch;
+// A chart part paints no sketch, so a chart reads flat and solid; the reader reads the rest.
+const SKETCH = { strokeStyle: FLAT_CHART_LOOK.strokeStyle, roughness: FLAT_CHART_LOOK.roughness };
 
 const read = cachedBy<DrawingTheme, FrameChart | undefined>();
 // Counted once per part, however many colour maps it is read in.
@@ -48,18 +42,8 @@ export function frameChart(deck: DeckWalk, from: Part, data: XmlElement, colors:
             charge(cost);
             const answer = readChart(root, { theme: colors, data: 'cache' });
             if (!('spec' in answer)) return answer;
-            const color = textColorIn(root, colors);
-            return { parts: newChartSpecParts(answer.spec), color, strokeColor: mutedColor(color) };
+            const look = readChartPartLook(root, { theme: colors, emuPerPx: 1 / deck.scale, host: 'pptx' });
+            return { parts: newChartSpecParts(answer.spec), look: { ...look, ...SKETCH } };
         })
     );
-}
-
-// c:txPr's colour, else tx1, through the chart's colour map as readChart paints its series.
-function textColorIn(root: XmlElement, slide: DrawingTheme): string {
-    const colors = chartColors(root, slide);
-    const properties = childOf(root, C_NS, 'txPr');
-    const paragraph = properties && childOf(properties, A_NS, 'p');
-    const pPr = paragraph && childOf(paragraph, A_NS, 'pPr');
-    const defRPr = pPr && childOf(pPr, A_NS, 'defRPr');
-    return colorOf(defRPr && childOf(defRPr, A_NS, 'solidFill'), colors) ?? textColorOf(colors);
 }

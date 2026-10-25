@@ -47,7 +47,7 @@ Your text keeps its bold, italic, underline, strikethrough, color, highlight, al
 - Checkboxes become a checklist, ticked or not.
 - Tables keep their merged cells, column widths, and cell colors. A table wider than the page shrinks to fit.
 - Images keep their size and caption. An image that floats left or right of the text floats there in Eigen too.
-- Column, bar, line, and pie charts become charts you can edit, with their data, colors, title, size, and caption. A chart floats as an image does, and a 3-D chart comes in flat. See [Insert images, charts, and tables](/support/docs/images-and-tables).
+- Column, bar, line, and pie charts become charts you can edit, with their data, colors, title, background, text and line colors, size, and caption. A chart floats as an image does, and a 3-D chart comes in flat. See [Insert images, charts, and tables](/support/docs/images-and-tables).
 - Footnotes stay footnotes, with their formatting and links, and endnotes become footnotes. A footnote with a custom mark, such as *, gets a number instead.
 - The header and footer come across, with page numbers and page counts, and the first page's own header and footer when the Word file has them. An image that floats in a header or footer comes in on a line of its own.
 - A page break, "Page break before" in Word's paragraph settings, and a section break that starts a new page all start a new page in Eigen.

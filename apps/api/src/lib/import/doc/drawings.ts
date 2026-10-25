@@ -1,6 +1,6 @@
 // A docx's drawings as the doc holds them: pictures as figures, placed and sized as Word places them, charts as chart
-// nodes or the words for one left out, and SmartArt as its text. The paragraph walk calls it for each w:drawing and
-// VML shape it meets.
+// nodes through the shared chart reader or the words for one left out, and the text of SmartArt and text boxes. The
+// paragraph walk calls it for each w:drawing and VML shape it meets.
 
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
@@ -24,7 +24,14 @@ import {
     W_NS,
     WP_NS,
 } from '../../ooxml/ooxml';
-import { CHART_NOT_IMPORTED, chartCost, chartPart, droppedChart, readChart } from '../../ooxml/ooxml-chart';
+import {
+    CHART_NOT_IMPORTED,
+    chartCost,
+    chartPart,
+    droppedChart,
+    readChart,
+    readChartPartLook,
+} from '../../ooxml/ooxml-chart';
 import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
 import { IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
 import type { Item, Para } from './assemble';
@@ -123,10 +130,9 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         for (const [reference, ext] of chartsIn(frame, extent)) {
             const chart = readDocxChart(reader, reference, context.scope);
             if (inBody && 'parts' in chart) {
-                figures.push({
-                    type: 'chart',
-                    attrs: { ...chart.parts, ...chartSize(ext, reader.columnPx), ...layout },
-                });
+                const { emuPerPx, ...size } = chartSize(ext, reader.columnPx);
+                const look = readChartPartLook(chart.root, { theme: reader.colors, emuPerPx, host: 'docx' });
+                figures.push({ type: 'chart', attrs: { ...chart.parts, ...look, ...size, ...layout } });
                 continue;
             }
             reader.lost('charts-dropped');
@@ -181,9 +187,12 @@ function graphicText(reader: Reader, frame: XmlElement, scope: Scope): Item[] {
     return lines.filter((line) => line.some((node) => node.type === 'text')).map(paraOf);
 }
 
-// A chart part as the doc holds it: the parts of the spec the node stores, or the lines a chart left out leaves in its
-// place; and its title, which a band or a note keeps.
-export type DocxChart = { title: string } & ({ parts: Record<ChartSpecPartKey, string> } | { dropped: string[] });
+// A chart part as the doc holds it: the parts of the spec the node stores, with the part its look is read from at each
+// drawing's size, or the lines a chart left out leaves in its place; and its title, which a band or a note keeps.
+export type DocxChart = { title: string } & (
+    | { parts: Record<ChartSpecPartKey, string>; root: XmlElement }
+    | { dropped: string[] }
+);
 
 const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
 
@@ -216,20 +225,22 @@ function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): Doc
     const chart: DocxChart = !read
         ? NOT_IMPORTED
         : 'spec' in read
-          ? { title: read.spec.title.text, parts: newChartSpecParts(read.spec) }
+          ? { title: read.spec.title.text, parts: newChartSpecParts(read.spec), root }
           : { title: read.unsupported.title, dropped: droppedChart(read.unsupported) };
     reader.charts.set(root, chart);
     return chart;
 }
 
-// Its drawn size, shrunk to the text column and to the node's largest side, keeping its shape.
-function chartSize(ext: XmlElement | undefined, columnPx: number): { width: number; height: number } {
+// Its drawn size, shrunk to the text column and to the node's largest side, keeping its shape, and the EMU one px of
+// that size is drawn at in the file.
+function chartSize(ext: XmlElement | undefined, columnPx: number): { width: number; height: number; emuPerPx: number } {
     const cx = int(ext?.attributes['cx']) ?? 0;
     const cy = int(ext?.attributes['cy']) ?? 0;
-    const { width, height } =
-        cx > 0 && cy > 0 ? { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX } : CHART_DEFAULT_SIZE;
+    const drawn = cx > 0 && cy > 0;
+    const { width, height } = drawn ? { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX } : CHART_DEFAULT_SIZE;
     const scale = Math.min(1, columnPx / width, CHART_MAX_SIDE / height);
-    return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+    const size = { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+    return { ...size, emuPerPx: drawn ? cx / size.width : EMU_PER_PX };
 }
 
 // The points a SmartArt draws text for; transitions and presentation points hold none of the document's.

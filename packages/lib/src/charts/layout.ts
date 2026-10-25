@@ -17,7 +17,7 @@ import { isTransparentFill, parseFill, serializeFill, TRANSPARENT_COLOR } from '
 import { getLineHeightPx } from '../vector/font-metrics';
 import { layoutCartesian } from './cartesian';
 import type { Context, Frame } from './context';
-import { chartContext } from './context';
+import { CHART_TITLE_SCALE, chartContext } from './context';
 import { chartColor, chartSeriesStyle } from './defaults';
 import { fit, label } from './labels';
 import type { LegendItem } from './legend';
@@ -41,7 +41,6 @@ export const CHART_MESSAGES = {
 // viewer then parses and paints, and a doc copies as an <img> and prints.
 export const MAX_SKETCH_POINTS = 200;
 
-const TITLE_SCALE = 1.3;
 // Keeps sums and spans finite whatever a cell holds; nothing plots past it anyway.
 const MAX_VALUE = 1e100;
 
@@ -136,7 +135,7 @@ function messageLabel(ctx: Context, text: string): ChartLabel[] {
 // The title on top in bold; returns the frame below it, inside the padding.
 function placeTitle(ctx: Context, title: string): Frame {
     const frame = { left: ctx.pad, top: ctx.pad, right: ctx.width - ctx.pad, bottom: ctx.height - ctx.pad };
-    const size = ctx.fontSize * TITLE_SCALE;
+    const size = ctx.fontSize * CHART_TITLE_SCALE;
     const text = fit(ctx, title, frame.right - frame.left, size, true);
     if (text === '') return frame;
     ctx.labels.push(label(ctx, text, ctx.width / 2, frame.top, 'middle', { fontSize: size, bold: true }));

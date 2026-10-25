@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readChartSpec } from '@workspace/lib/charts';
+import { FLAT_CHART_LOOK, readChartSpec } from '@workspace/lib/charts';
 import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
-import { TRANSPARENT_COLOR } from '@workspace/lib/vector';
+import { solidFill, TRANSPARENT_COLOR } from '@workspace/lib/vector';
 import { MAX_PPTX_WORK, readPptx } from '../../../lib/import/slides/from-pptx';
 import { MAX_PPTX_WEIGHT } from '../../../lib/import/slides/shapes';
 import { CHART_CONTENT_TYPE } from '../../../lib/ooxml/ooxml-chart';
@@ -106,10 +106,10 @@ describe('a chart', () => {
         expect(deck.warnings).toEqual([]);
     });
 
-    test("its text is the chart's txPr colour, else the slide's tx1, light on a dark theme; its axes a muted version", () => {
-        expect(chartOf(COLUMN).element).toMatchObject({ color: '#000000', strokeColor: '#00000099' });
+    test("its text is the chart's txPr colour, else the slide's tx1, light on a dark theme", () => {
+        expect(chartOf(COLUMN).element).toMatchObject({ color: '#000000' });
         const dark = { masters: [{ clrMap: DARK }] };
-        expect(chartOf(COLUMN, dark).element).toMatchObject({ color: '#ffffff', strokeColor: '#ffffff99' });
+        expect(chartOf(COLUMN, dark).element).toMatchObject({ color: '#ffffff' });
         // PowerPoint's own: tx1 at 65% lightened by 35%, grey on a light slide and white on a dark one.
         const txPr = (fill: string) =>
             COLUMN.replace(
@@ -119,11 +119,30 @@ describe('a chart', () => {
         const grey = txPr(
             '<a:solidFill><a:schemeClr val="tx1"><a:lumMod val="65000"/><a:lumOff val="35000"/></a:schemeClr></a:solidFill>',
         );
-        expect(chartOf(grey).element).toMatchObject({ color: '#595959', strokeColor: '#59595999' });
-        expect(chartOf(grey, dark).element).toMatchObject({ color: '#ffffff', strokeColor: '#ffffff99' });
+        expect(chartOf(grey).element).toMatchObject({ color: '#595959' });
+        expect(chartOf(grey, dark).element).toMatchObject({ color: '#ffffff' });
         expect(chartOf(txPr('<a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill>'), dark).element.color).toBe(
             '#d9d9d9',
         );
+    });
+
+    test("its stroke is the category axis's line at the slide's scale and its background the chart's; one the part doesn't say is PowerPoint's", () => {
+        // No background on a slide, and a 0.75 pt line of tx1 at a 75% tint.
+        expect(chartOf(COLUMN).element).toMatchObject({
+            fill: FLAT_CHART_LOOK.fill,
+            strokeColor: '#8c8c8c',
+            strokeWidth: Math.round((9525 / PX) * 100) / 100,
+        });
+        // PowerPoint's own: tx1 at 15% lightened by 85%, three quarters of a point, on a white chart.
+        const styled = COLUMN.replace(
+            '<c:axPos val="b"/>',
+            '<c:axPos val="b"/><c:spPr><a:ln w="9525"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="15000"/><a:lumOff val="85000"/></a:schemeClr></a:solidFill></a:ln></c:spPr>',
+        ).replace('</c:chart>', '</c:chart><c:spPr><a:solidFill><a:schemeClr val="bg1"/></a:solidFill></c:spPr>');
+        expect(chartOf(styled).element).toMatchObject({
+            fill: solidFill('#ffffff'),
+            strokeColor: '#d9d9d9',
+            strokeWidth: Math.round((9525 / PX) * 100) / 100,
+        });
     });
 
     test("its text and series go through the chart's own colour map, which overrides the slide's", () => {
@@ -132,7 +151,7 @@ describe('a chart', () => {
             '<c:clrMapOvr bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent2" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><c:chart>',
         );
         const { element, spec } = chartOf(own, { masters: [{ clrMap: DARK }] });
-        expect(element).toMatchObject({ color: '#000000', strokeColor: '#00000099' });
+        expect(element).toMatchObject({ color: '#000000' });
         expect(spec?.series['x-0']?.color).toBe(ACCENT[2]);
     });
 

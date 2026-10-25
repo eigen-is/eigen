@@ -76,6 +76,7 @@ import type {
 } from './office-audit';
 import {
     canonical,
+    chartFields,
     chartsNotImported,
     classify,
     message,
@@ -1995,7 +1996,8 @@ function diffContent(a: JSONContent[], b: JSONContent[], at: string, pictures: P
             return;
         }
         const type = x.type ?? '';
-        const [left, right] = [entries(x.attrs), entries(y.attrs)];
+        const attrs = (node: JSONContent) => (node.type === 'chart' ? chartFields(node.attrs ?? {}) : node.attrs);
+        const [left, right] = [entries(attrs(x)), entries(attrs(y))];
         for (const key of new Set([...left.keys(), ...right.keys()])) {
             if (type === 'figure' && key === 'mediaName') {
                 const picture = (side: ReadonlyMap<string, Picture>, name: unknown) =>
@@ -2171,17 +2173,9 @@ export function asWritten(
     };
 }
 
-const isNode = (value: unknown): value is JSONContent => typeof value === 'object' && value !== null && 'type' in value;
-
 // The differences the writer explains, each with why it is no loss or a loss the writer accepts. A difference none
 // matches is unlisted, and fails the gate.
 export const DOCX_LISTED: Listed<RoundtripDifference, DocxRoundtripContext>[] = [
-    {
-        kind: 'charts as pictures',
-        why: 'The writer draws a chart as a picture, its SVG with a PNG beside it, so it comes back a figure; until the writer writes a native chart',
-        matches: ({ feature, a, b }) =>
-            feature === 'node' && isNode(a) && isNode(b) && a.type === 'chart' && b.type === 'figure',
-    },
     {
         kind: 'figures and display equations split their textblock',
         why: 'Word holds a picture in a paragraph and a display equation in a paragraph of their own, so the writer splits the textblock around each block figure and display equation, the pieces sharing its margins',
@@ -2282,13 +2276,13 @@ const DOCX_GATE: RoundtripGate = {
 };
 
 // The round trip's child: the file imported, written by our writer with its pictures prepared as an export prepares
-// them, charts and pasted pictures drawn as the export draws them, imported again, and the two imports compared.
+// them, pasted pictures drawn as the export draws them, imported again, and the two imports compared.
 async function docxRoundtripChild(
     file: string,
     options: { writer: string; reports: string; dump?: string },
 ): Promise<void> {
     const { docxToPmJson: read } = await import('../lib/import/doc/from-docx');
-    const { chartFigureMedia, pastedFigureMedia } = await import('../lib/export/doc/docx/drawings');
+    const { pastedFigureMedia } = await import('../lib/export/doc/docx/drawings');
     const module: unknown = await import(options.writer);
     const write = typeof module === 'object' && module !== null && 'writeDocx' in module && module.writeDocx;
     if (!isWriter(write)) throw new Error(`${options.writer} exports no writeDocx`);
@@ -2297,8 +2291,7 @@ async function docxRoundtripChild(
         const a = await step('import', () => read(data));
         let media: Awaited<ReturnType<typeof officeMedia>> = [];
         const bytes = await step('export', async () => {
-            const roots = [a.json, ...Object.values(a.bands)];
-            const drawn = [...(await pastedFigureMedia(roots)), ...(await chartFigureMedia(roots))];
+            const drawn = await pastedFigureMedia([a.json, ...Object.values(a.bands)]);
             media = await officeMedia(a.media, drawn);
             return write(a, { title: path.basename(file), media });
         });

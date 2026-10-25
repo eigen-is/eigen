@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import { A_NS, M_NS, MC_NS, PIC_NS, R_NS, W_NS, W14_NS, WP_NS } from '../../../ooxml/ooxml';
-import type { PartRelationships } from '../../../ooxml/opc';
+import type { PackagePart, PartRelationships } from '../../../ooxml/opc';
 import type { NOTE_SEPARATORS, StyleId } from '../../../ooxml/wordml';
 import { WORD_SETTINGS_URI } from '../../../ooxml/wordml';
 import type { OfficeImages } from '../../office-image';
@@ -39,6 +39,8 @@ export type Package = {
     checkboxes: boolean;
     languages: Set<string>;
     images: OfficeImages;
+    // The chart parts the walk wrote, each under word/charts/.
+    charts: PackagePart[];
     drawings: number;
     faces: Map<string, Set<FontSlot>>;
     // The notes the body references, note n at index n - 1.

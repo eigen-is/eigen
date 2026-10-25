@@ -9,6 +9,8 @@ import { getLineHeightPx } from '../vector/font-metrics';
 const TEXT_SCALE = 0.035;
 const MIN_FONT_SIZE = 9;
 const MAX_FONT_SIZE = 64;
+// The title's size as a multiple of the labels' size.
+export const CHART_TITLE_SCALE = 1.3;
 
 // Share of the room a label column, a legend or turned category labels may take before they ellipsize or drop.
 export const LABEL_SHARE = 0.3;
@@ -28,10 +30,16 @@ export type Context = {
     labels: ChartLabel[];
 };
 
+// The labels' text size in a box of these sides. An Office chart part writes this size too, so Office draws the
+// labels at the size Eigen does.
+export function chartFontSize(width: number, height: number): number {
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, TEXT_SCALE * Math.min(width, height)));
+}
+
 export function chartContext({ id, width: w, height: h, paint }: ChartBox, fontFamily: string): Context {
     const width = Math.max(0, w);
     const height = Math.max(0, h);
-    const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, TEXT_SCALE * Math.min(width, height)));
+    const fontSize = chartFontSize(width, height);
     return {
         id,
         paint,

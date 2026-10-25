@@ -1,5 +1,6 @@
 export { GRIDLINE_OPACITY } from './cartesian';
 export { applyChartSpecChange, chartPointMoves, chartSpecChange } from './change';
+export { CHART_TITLE_SCALE, chartFontSize } from './context';
 export {
     CHART_DEFAULT_SIZE,
     chartColor,
