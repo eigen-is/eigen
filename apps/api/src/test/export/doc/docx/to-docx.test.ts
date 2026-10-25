@@ -1612,8 +1612,11 @@ describe('docx writer — tables', () => {
         const tbl = only(
             await tablesIn(doc(table(tr(td({}, p(text('a'))), td({}, p(text('b')))), tr(td({}, p(text('c'))))))),
         );
+        // A column without a width is laid out by the grid, and its cells say they have none.
+        const unsized = '<w:tcW w:w="0" w:type="nil"/>';
+        expect(gridOf(tbl)).toEqual([4815, 4815]);
         expect(xmlOf(xmlChildren(tbl, W, 'tr')[1])).toBe(
-            `<w:tr>${cell(4815, run('c'))}<w:tc><w:tcPr><w:tcW w:w="4815" w:type="dxa"/></w:tcPr><w:p/></w:tc></w:tr>`,
+            `<w:tr>${cell(4815, run('c')).replace('<w:tcW w:w="4815" w:type="dxa"/>', unsized)}<w:tc><w:tcPr>${unsized}</w:tcPr><w:p/></w:tc></w:tr>`,
         );
     });
 
@@ -1688,7 +1691,10 @@ describe('docx writer — tables', () => {
     test('a known colwidth past the column is scaled beside an unknown one, in whole twips', async () => {
         const tbl = only(await tablesIn(doc(table(tr(td({ colwidth: [1e20] }, p()), td({ colwidth: null }, p()))))));
         expect(gridOf(tbl)).toEqual([9630, 375]);
-        expect(descendants(tbl, W, 'tcW').map((tcW) => w(tcW, 'w'))).toEqual(['9630', '375']);
+        expect(descendants(tbl, W, 'tcW').map((tcW) => [w(tcW, 'w'), w(tcW, 'type')])).toEqual([
+            ['9630', 'dxa'],
+            ['0', 'nil'],
+        ]);
     });
 
     test('known colwidths past the column keep their ratio, scaled to the column', async () => {
@@ -1700,7 +1706,11 @@ describe('docx writer — tables', () => {
         const huge = { colwidth: [1.7e308] };
         const tbl = only(await tablesIn(doc(table(tr(td(huge, p()), td(huge, p()), td({ colwidth: null }, p()))))));
         expect(gridOf(tbl)).toEqual([4815, 4815, 375]);
-        expect(descendants(tbl, W, 'tcW').map((tcW) => w(tcW, 'w'))).toEqual(['4815', '4815', '375']);
+        expect(descendants(tbl, W, 'tcW').map((tcW) => [w(tcW, 'w'), w(tcW, 'type')])).toEqual([
+            ['4815', 'dxa'],
+            ['4815', 'dxa'],
+            ['0', 'nil'],
+        ]);
     });
 
     test('a table that ends the body or a cell is followed by a Spacer, and two tables are kept apart by one', async () => {

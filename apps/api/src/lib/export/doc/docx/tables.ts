@@ -84,8 +84,12 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const fill =
                 readCellBackground(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
                 (owner?.node.type === 'tableHeader' ? HEADER_CELL_LOOK.fill : undefined);
+            // A cell over columns without a width has none either: the grid lays it out, and the reader reads it back unset.
+            const tcW = widths.slice(column, column + colspan).every((known) => known === undefined)
+                ? '<w:tcW w:w="0" w:type="nil"/>'
+                : `<w:tcW w:w="${width}" w:type="dxa"/>`;
             const tcPr = (merge: string) =>
-                `<w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}</w:tcPr>`;
+                `<w:tcPr>${tcW}${colspan > 1 ? `<w:gridSpan w:val="${colspan}"/>` : ''}${merge}${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ''}</w:tcPr>`;
             if (cell) {
                 const merge = cell.rowspan > 1 ? '<w:vMerge w:val="restart"/>' : '';
                 const marked = !header && cell.node.type === 'tableHeader';

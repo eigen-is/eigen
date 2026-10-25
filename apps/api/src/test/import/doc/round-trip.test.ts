@@ -1192,4 +1192,24 @@ describe('a Word file, imported, written and imported again', () => {
         ]);
         expect(stored(second.json)).toEqual(stored(first.json));
     });
+
+    // A table without widths, and a row run past its grid: the editor sizes those columns, and so do Word's.
+    test('a column without a width comes back without one, beside one with a width', async () => {
+        const cell = (inner: string) => `<w:tc>${paragraph(run(inner))}</w:tc>`;
+        const { first, second } = await twice(
+            [
+                `<w:tbl><w:tr>${cell('A')}${cell('B')}</w:tr></w:tbl>`,
+                paragraph(''),
+                `<w:tbl><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr>${cell('C')}${cell('D')}</w:tr></w:tbl>`,
+                paragraph(''),
+            ].join(''),
+        );
+        expect(nodesOfType(first.json, 'tableCell').map((node) => node.attrs?.['colwidth'])).toEqual([
+            null,
+            null,
+            [200],
+            null,
+        ]);
+        expect(stored(second.json)).toEqual(stored(first.json));
+    });
 });

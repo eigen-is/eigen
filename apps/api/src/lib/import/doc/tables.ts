@@ -35,7 +35,8 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
         .map((col) => twipsOf(w(col, 'w')) ?? 0)
         .slice(0, MAX_TABLE_COLUMNS);
     const columns = declared.length || MAX_TABLE_COLUMNS;
-    const grid = withCellWidths(declared, rows);
+    const unsized = unsizedColumns(rows);
+    const grid = withCellWidths(declared, rows).map((width, column) => (unsized.has(column) ? 0 : width));
     const columnPx = scaled(grid, scope.room ?? reader.columnPx);
     const tableStyle = reader.styles.get(w(wChild(tblPr, 'tblStyle'), 'val'));
     const look = wChild(tblPr, 'tblLook');
@@ -295,6 +296,25 @@ function withCellWidths(declared: number[], rows: Row[]): number[] {
         }
     }
     return Array.from(grid, (width) => width ?? 0);
+}
+
+// The columns whose cells over them alone all have no width (nil), as the writer writes a column the editor gives none:
+// the grid's width there is only its layout.
+function unsizedColumns(rows: Row[]): Set<number> {
+    const sized = new Set<number>();
+    const unsized = new Set<number>();
+    for (const row of rows) {
+        let column = Math.max(0, int(w(wChild(row.trPr, 'gridBefore'), 'val')) ?? 0);
+        for (const cell of row.cells) {
+            if (column >= MAX_TABLE_COLUMNS) break;
+            const tcPr = wChild(cell, 'tcPr');
+            const span = Math.max(1, int(w(wChild(tcPr, 'gridSpan'), 'val')) ?? 1);
+            if (span === 1) (w(wChild(tcPr, 'tcW'), 'type') === 'nil' ? unsized : sized).add(column);
+            column += span;
+        }
+    }
+    for (const column of sized) unsized.delete(column);
+    return unsized;
 }
 
 // Twips to px, within the room's whole px, which the writer's column holds: a column too thin to draw takes the floor
