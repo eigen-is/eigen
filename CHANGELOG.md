@@ -13,6 +13,7 @@ The Word, Excel and PowerPoint release. Eigen reads and writes `.docx`, `.xlsx` 
 - **Excel files** — keep their hidden sheets and pictures
 - **PowerPoint files** — keep their shapes, pictures and backgrounds
 - **Charts in these files** — come in as charts you can edit, not as pictures
+- **Charts in downloads** — a chart in a Word, Excel or PowerPoint download is a chart there too, not a picture. A sketched or hatched chart draws plain, and a rotated one sits upright
 - **Import into a spreadsheet or deck** — add a file's sheets or slides to the one you have open, or replace it with the file. Eigen saves a version before it replaces anything, so you can go back
 - **Equations** — write math in Docs in LaTeX and watch the preview as you type, or pick symbols from the menus above the field
 - **Pasted math** — math copied from Word for the web, or from most web pages that show math, pastes as an equation you can edit
