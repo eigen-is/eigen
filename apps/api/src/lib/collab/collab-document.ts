@@ -8,8 +8,6 @@ import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
-import { desc, lt, lte } from 'drizzle-orm';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
@@ -17,14 +15,11 @@ import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
-import type { ManagedDatabase } from '../core';
 import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import type { User } from '../user';
-import { compressBlob } from './blob-codec';
 import { COLLAB_DB_CONFIG } from './db-config';
-import * as schema from './schema';
-import { loadYjsState } from './yjs-loader';
+import { DbProvider } from './db-provider';
 
 export const MESSAGE_SYNC = 0;
 export const MESSAGE_AWARENESS = 1;
@@ -41,12 +36,6 @@ const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
 // large sheet's whole-state sync reply can't arrive within y-websocket's 30 s silence window on a slow link.
 const COMPRESS_FRAME_MIN_BYTES = 1024;
 
-// The stored updates fold into one snapshot after 100 of them or after 1 MB. A sheet writes its whole
-// workbook as one update when a tab closes, so counting alone would let data.db grow to about 100 times
-// the document before it folds. With the byte limit too, data.db stays near twice the document.
-const SNAPSHOT_INTERVAL = 100;
-const SNAPSHOT_BYTES = 1_000_000;
-
 // Typing fires many updates a second, so Modified is stamped at most once a minute.
 const TOUCH_THROTTLE_MS = 60_000;
 // The wait between the last unsubscribe and the close. A reload or a y-websocket retry within it
@@ -55,85 +44,6 @@ const CLOSE_LINGER_MS = 60_000;
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
 // and opens again within it records an extra row. That is cheaper than storing the window.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
-
-// Saves a Y.Doc's updates to data.db and folds them into a snapshot from time to time.
-class DbProvider {
-    private readonly db: BunSQLiteDatabase<typeof schema>;
-    private readonly doc: Y.Doc;
-    private readonly label: string;
-    private updatesSinceSnapshot: number;
-    private bytesSinceSnapshot: number;
-
-    public constructor(doc: Y.Doc, label: string, managedDb: ManagedDatabase<typeof schema>) {
-        this.db = managedDb.db;
-        this.doc = doc;
-        this.label = label;
-
-        // The stored state loads before the provider listens, so loading saves nothing.
-        const { updatesApplied, bytesApplied } = loadYjsState(managedDb, doc, label);
-        this.updatesSinceSnapshot = updatesApplied;
-        this.bytesSinceSnapshot = bytesApplied;
-        doc.on('update', this.storeUpdate);
-    }
-
-    public destroy(): void {
-        this.doc.off('update', this.storeUpdate);
-        this.createSnapshot();
-    }
-
-    private readonly storeUpdate = (update: Uint8Array): void => {
-        try {
-            this.db
-                .insert(schema.docUpdates)
-                .values({ updateData: compressBlob(update) })
-                .run();
-            this.updatesSinceSnapshot++;
-            this.bytesSinceSnapshot += update.byteLength;
-
-            if (this.updatesSinceSnapshot >= SNAPSHOT_INTERVAL || this.bytesSinceSnapshot >= SNAPSHOT_BYTES) {
-                this.createSnapshot();
-            }
-        } catch (error) {
-            // Never rethrow. An 'update' handler runs inside the cleanup of a Yjs transaction, and a throw
-            // there leaves that cleanup unfinished. Every later update on the document would then be
-            // neither saved nor broadcast. The next snapshot fills the gap, because it holds the whole state.
-            console.error(`[DbProvider] Error storing update for ${this.label}:`, error);
-        }
-    };
-
-    private createSnapshot(): void {
-        try {
-            const stateData = compressBlob(Y.encodeStateAsUpdate(this.doc));
-
-            this.db.transaction((tx) => {
-                const lastUpdate = tx
-                    .select({ id: schema.docUpdates.id })
-                    .from(schema.docUpdates)
-                    .orderBy(desc(schema.docUpdates.id))
-                    .limit(1)
-                    .get();
-                if (!lastUpdate) return;
-
-                const snapshot = tx
-                    .insert(schema.docSnapshots)
-                    .values({ stateData, lastUpdateId: lastUpdate.id })
-                    .returning({ id: schema.docSnapshots.id })
-                    .get();
-                tx.delete(schema.docUpdates).where(lte(schema.docUpdates.id, lastUpdate.id)).run();
-                // data.db keeps only the newest snapshot, so a load reads one row and the updates after
-                // it. The version history lives in the container's versions folder.
-                tx.delete(schema.docSnapshots).where(lt(schema.docSnapshots.id, snapshot.id)).run();
-            });
-
-            this.updatesSinceSnapshot = 0;
-            this.bytesSinceSnapshot = 0;
-        } catch (error) {
-            // The update rows survive, because they are only deleted inside the transaction. The counters
-            // stay as they are, so the next update tries again.
-            console.error(`[DbProvider] Error creating snapshot for ${this.label}:`, error);
-        }
-    }
-}
 
 function encodeFrame(messageType: number, write: (encoder: encoding.Encoder) => void): Uint8Array {
     const encoder = encoding.createEncoder();

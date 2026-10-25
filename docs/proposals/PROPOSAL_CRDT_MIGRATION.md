@@ -71,7 +71,7 @@ through untouched — absence of the marker means "old format", old and new rows
 migration needed**. This proposal reuses that stance one level up: absence of a format stamp means
 format 1.
 
-**Compaction already happens.** `DbProvider.createSnapshot` (in `collab-document.ts`) squashes the
+**Compaction already happens.** `DbProvider.createSnapshot` (in `db-provider.ts`) squashes the
 doc into a fresh snapshot every 100 updates or 1 MB, deletes the covered `doc_updates`, and keeps
 only `MAX_DOC_SNAPSHOTS = 1` snapshot. Long-term history lives *outside* `data.db`, as whole-file
 copies under the container's `versions/` folder (`../../apps/api/src/lib/versioning`). So
