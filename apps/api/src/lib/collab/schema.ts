@@ -1,3 +1,6 @@
+// The two tables of a collab document's data.db, for Drizzle. Both hold Yjs state as blobs that may be
+// zstd-compressed: one row per update, and one row for the snapshot the updates fold into.
+
 import { sql } from 'drizzle-orm';
 import { blob, integer, sqliteTable } from 'drizzle-orm/sqlite-core';
 

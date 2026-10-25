@@ -19,7 +19,7 @@ import type { MountInfo } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import type { ChatRoom } from '../chat';
-import type CollabDocument from '../collab/collabDocument';
+import type { CollabDocument } from '../collab/collab-document';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
 import type { Home } from '../home';

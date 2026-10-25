@@ -43,7 +43,7 @@ import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validat
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ChatRoom } from '../chat';
 import { assertCommentChatExists, getCommentIndex, openCommentIndex } from '../chat/comment-index';
-import CollabDocument from '../collab/collabDocument';
+import { CollabDocument } from '../collab/collab-document';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
@@ -686,7 +686,7 @@ export class Drive {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
         if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-        await deletePath(this, mount, item, user);
+        await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
     }
 
     public async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {

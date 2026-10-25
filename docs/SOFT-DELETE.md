@@ -43,7 +43,7 @@ A moved-aside entry is kept, not deleted, because it may hold older versions or 
 
 ## Trash closes what is open under the item first
 
-Before any column changes, `Drive.deletePath` closes every collab document under the item and `Mount.trashPath` flushes and closes every cached database. A still-open database would otherwise keep syncing its `data.db` to the old key: a folder rebuilt outside `.trash/` on `local`, a revived object on `s3`. A collab socket that opens between the collab close and the trash write still gets the document, because `getActivePath` passes until `trashedAt` is set. So the trash closes the collab documents under the item a second time once the row is trashed, which ends any session opened in that window.
+Before any column changes, `Drive.deletePath` closes every collab document under the item and `Mount.trashPath` flushes and closes every cached database. A still-open database would otherwise keep syncing its `data.db` to the old key: a folder rebuilt outside `.trash/` on `local`, a revived object on `s3`. `getActivePath` passes until `trashedAt` is set, so a collab socket could open a document between the collab close and the trash write. Its database would then close under it, and its later edits would be lost. So `Drive.deletePath` has the collab registry refuse every open at or below the item with a 503 until the trash is done. The socket gets the storage-unavailable close and retries, and by then the item is in the trash, so the retry gets a 404 ([COLLAB.md](COLLAB.md#a-drive-mount-or-trash-that-is-closing-refuses-a-new-open)). `apps/api/src/test/drive/trash-collab-close.test.ts` pins it.
 
 ## Trash revokes every share, and restore re-shares without an email
 
