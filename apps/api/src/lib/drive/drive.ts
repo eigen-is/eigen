@@ -786,10 +786,6 @@ export class Drive {
         }
 
         const ancestors = await mount.getBreadcrumb(pathId);
-        const memberships = await getMemberships(this.owner.id);
-        if (!canWriteFromAncestors(ancestors, this.owner, memberships)) {
-            throw new ApiError(403, 'No write permission');
-        }
 
         if (acl && acl.length > 0) {
             const aclError = validateACLEntries(acl);
