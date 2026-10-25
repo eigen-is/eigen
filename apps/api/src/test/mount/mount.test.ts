@@ -2109,6 +2109,48 @@ describe('Folder sizes', () => {
         expect((await m.getPath(bId))!.size).toBe(7);
     });
 
+    // The second move starts first and waits in its first getPath, after any read of the old parent
+    // it does before writing. The first move then lands and Y's size is cached.
+    test('two racing moves of one file leave every folder size right', async () => {
+        const x = await mount.createFolder(rootId, 'RaceMoveX');
+        const y = await mount.createFolder(rootId, 'RaceMoveY');
+        const z = await mount.createFolder(rootId, 'RaceMoveZ');
+        const fileId = await mount.createFile(x, 'raced.bin', 'application/octet-stream', 10, Buffer.alloc(10));
+
+        let entered!: () => void;
+        const waiting = new Promise<void>((r) => {
+            entered = r;
+        });
+        let release!: () => void;
+        const gate = new Promise<void>((r) => {
+            release = r;
+        });
+        const getPath = mount.getPath.bind(mount);
+        let gated = true;
+        const spy = spyOn(mount, 'getPath').mockImplementation(async (id) => {
+            if (gated && id === fileId) {
+                gated = false;
+                entered();
+                await gate;
+            }
+            return getPath(id);
+        });
+        try {
+            const second = mount.updatePath(fileId, { parentId: z });
+            await waiting;
+            await mount.updatePath(fileId, { parentId: y });
+            expect((await mount.getPath(y))!.size).toBe(10);
+            release();
+            await second;
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect((await mount.getPath(x))!.size).toBe(0);
+        expect((await mount.getPath(y))!.size).toBe(0);
+        expect((await mount.getPath(z))!.size).toBe(10);
+    });
+
     test('managed-db growth updates container size on sync', async () => {
         const testDocSchema = {
             items: sqliteTable('items', {

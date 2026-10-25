@@ -705,20 +705,14 @@ export class Mount {
         }
         const values: Partial<typeof paths.$inferInsert> = { ...updates };
 
-        let oldParentId: string | null | undefined;
-        if (updates.parentId !== undefined) {
-            const old = await this.db
-                .select({ parentId: paths.parentId })
-                .from(paths)
-                .where(eq(paths.id, pathId))
-                .get();
-            oldParentId = old?.parentId;
-        }
-
         // The name a racing rename or move would collide on. A sibling of that name can land between
         // assertUniqueName's SELECT and the UPDATE, and the unique index then refuses the UPDATE. It
         // stays empty only when neither the name nor the parent changes, and then the index can't fire.
         let targetName = updates.name ?? '';
+
+        // The folder a move takes the row out of. It is read in the transaction that moves the row, so
+        // a racing move can't make it stale, and the right folder sizes get cleared.
+        let oldParentId: string | null = null;
 
         // Both branches below write the row this way. On `local` it runs once the bytes have moved, so
         // a refused disk rename writes nothing.
@@ -734,6 +728,12 @@ export class Mount {
                     // and the UPDATE.
                     this.db.transaction((tx) => {
                         this.assertMovableInTx(tx, pathId, targetParentId);
+                        const old = tx
+                            .select({ parentId: paths.parentId })
+                            .from(paths)
+                            .where(eq(paths.id, pathId))
+                            .get();
+                        oldParentId = old?.parentId ?? null;
                         tx.update(paths).set(set).where(eq(paths.id, pathId)).run();
                     });
                 }
@@ -802,7 +802,7 @@ export class Mount {
 
         if (!wroteUnderLock) await writeRow();
         if (updates.parentId !== undefined) {
-            await this.invalidateSizesFrom(oldParentId ?? null);
+            await this.invalidateSizesFrom(oldParentId);
             await this.invalidateSizesFrom(updates.parentId);
         }
 
